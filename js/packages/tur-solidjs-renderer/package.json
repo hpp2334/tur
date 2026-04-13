@@ -1,0 +1,25 @@
+{
+  "name": "@tur/solidjs-renderer",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./jsx-runtime": {
+      "import": "./dist/jsx-runtime.js"
+    }
+  },
+  "scripts": {
+    "build": "rspack build"
+  },
+  "dependencies": {
+    "solid-js": "^1.9.0"
+  },
+  "peerDependencies": {
+    "solid-js": "^1.9.0"
+  }
+}

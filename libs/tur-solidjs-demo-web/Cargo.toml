@@ -1,0 +1,30 @@
+[package]
+name = "tur-solidjs-demo-web"
+description = "Web demo: wasm binary running SolidJS todolist via tur"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+default = []
+embedded_js = []
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tur = { workspace = true }
+tur-widget = { workspace = true }
+tur-vello-renderer = { workspace = true }
+tur-boajs = { workspace = true }
+winit = { workspace = true }
+vello = { workspace = true }
+boa_engine = { workspace = true }
+tracing = { workspace = true }
+tracing-wasm = { workspace = true }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true }
+console_error_panic_hook = { workspace = true }
+anyhow = { workspace = true }
+getrandom = { workspace = true, features = ["wasm_js"] }

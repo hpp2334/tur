@@ -1,0 +1,17 @@
+[package]
+name = "tur"
+description = "Facade crate combining tur-widget, tur-vello-renderer, and tur-boajs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-widget = { workspace = true }
+tur-vello-renderer = { workspace = true }
+tur-boajs = { workspace = true }
+boa_engine = { workspace = true }
+vello = { workspace = true }
+winit = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }

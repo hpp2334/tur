@@ -1,0 +1,6 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxlint/main/cli/assets/schema.json",
+  "rules": {
+    "recommended": true
+  }
+}
