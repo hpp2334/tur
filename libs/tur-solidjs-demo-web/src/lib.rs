@@ -3,7 +3,6 @@ mod render;
 
 pub use app::TurDemoApp;
 
-use tracing;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]

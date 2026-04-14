@@ -1,13 +1,16 @@
 [package]
 name = "tur"
-description = "Facade crate combining tur-widget, tur-vello-renderer, and tur-boajs"
+description = "Facade crate combining tur-widget, tur-layout, tur-render-tree, tur-vello-renderer, and tur-boajs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+tur-shared = { workspace = true }
 tur-widget = { workspace = true }
+tur-layout = { workspace = true }
+tur-render-tree = { workspace = true }
 tur-vello-renderer = { workspace = true }
 tur-boajs = { workspace = true }
 boa_engine = { workspace = true }

@@ -1,5 +1,6 @@
-use tur_widget::layout::{Offset, Size};
-use tur_widget::{WidgetKind, WidgetTree};
+use tur_render_tree::render_node::{RenderNode, RenderNodeId};
+use tur_render_tree::RenderTree;
+use tur_shared::{Offset, Size};
 use vello::kurbo::Affine;
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
@@ -22,7 +23,7 @@ impl<'a> PaintContext<'a> {
     }
 }
 
-pub fn paint_tree(ctx: &mut PaintContext, tree: &WidgetTree) {
+pub fn paint_tree(ctx: &mut PaintContext, tree: &RenderTree) {
     let root_id = match tree.root_id() {
         Some(id) => id,
         None => return,
@@ -30,28 +31,25 @@ pub fn paint_tree(ctx: &mut PaintContext, tree: &WidgetTree) {
     paint_node(ctx, tree, root_id, Offset::ZERO);
 }
 
-fn paint_node(ctx: &mut PaintContext, tree: &WidgetTree, id: u64, parent_offset: Offset) {
+fn paint_node(ctx: &mut PaintContext, tree: &RenderTree, id: RenderNodeId, parent_offset: Offset) {
     let node = match tree.get(id) {
         Some(n) => n,
         None => return,
     };
 
-    let computed = match &node.computed_layout {
-        Some(cl) => cl,
-        None => return,
-    };
-
-    let absolute_offset = parent_offset + computed.offset;
+    let absolute_offset = parent_offset + node.computed_layout.offset;
 
     match node.kind {
-        WidgetKind::Text => paint_text(ctx, node, absolute_offset, computed.size),
-        WidgetKind::Container => paint_container(ctx, node, absolute_offset, computed.size),
-        WidgetKind::SizedBox
-        | WidgetKind::Column
-        | WidgetKind::Row
-        | WidgetKind::Expanded
-        | WidgetKind::Stack
-        | WidgetKind::Positioned => {}
+        tur_widget::WidgetKind::Text => paint_text(ctx, node, absolute_offset),
+        tur_widget::WidgetKind::Container => {
+            paint_container(ctx, node, absolute_offset, node.computed_layout.size)
+        }
+        tur_widget::WidgetKind::SizedBox
+        | tur_widget::WidgetKind::Column
+        | tur_widget::WidgetKind::Row
+        | tur_widget::WidgetKind::Expanded
+        | tur_widget::WidgetKind::Stack
+        | tur_widget::WidgetKind::Positioned => {}
     }
 
     for &child_id in &node.children {
@@ -59,10 +57,10 @@ fn paint_node(ctx: &mut PaintContext, tree: &WidgetTree, id: u64, parent_offset:
     }
 }
 
-fn paint_text(ctx: &mut PaintContext, node: &tur_widget::WidgetNode, offset: Offset, _size: Size) {
-    let content = node.prop_str("content").unwrap_or("");
-    let _font_size = node.prop_f64("fontSize").unwrap_or(14.0) as f32;
-    let color = parse_color(node.prop_str("color").unwrap_or("#ffffff"));
+fn paint_text(ctx: &mut PaintContext, node: &RenderNode, offset: Offset) {
+    let content = node.text_content.as_deref().unwrap_or("");
+    let _font_size = node.font_size.unwrap_or(14.0) as f32;
+    let color = parse_color(node.color.as_deref().unwrap_or("#ffffff"));
 
     if content.is_empty() {
         return;
@@ -78,18 +76,11 @@ fn paint_text(ctx: &mut PaintContext, node: &tur_widget::WidgetNode, offset: Off
     );
 }
 
-fn paint_container(
-    ctx: &mut PaintContext,
-    node: &tur_widget::WidgetNode,
-    offset: Offset,
-    size: Size,
-) {
-    let color = match node.prop_str("color") {
+fn paint_container(ctx: &mut PaintContext, node: &RenderNode, offset: Offset, size: Size) {
+    let color = match &node.color {
         Some(c) => parse_color(c),
         None => return,
     };
-
-    let _padding = node.prop_f64("padding").unwrap_or(0.0);
 
     let transform = Affine::translate((offset.x, offset.y));
     ctx.scene.fill(

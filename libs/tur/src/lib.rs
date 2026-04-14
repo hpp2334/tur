@@ -1,13 +1,17 @@
 pub use tur_boajs;
+pub use tur_layout;
+pub use tur_render_tree;
 pub use tur_vello_renderer;
 pub use tur_widget;
 
 use boa_engine::Context;
 use boa_engine::Source;
-use tracing;
 use tur_boajs::widget_tree;
+use tur_layout::LayoutTree;
+use tur_render_tree::RenderTree;
+use tur_shared::Constraints;
 use tur_vello_renderer::VelloRenderer;
-use tur_widget::{Constraints, WidgetTree};
+use tur_widget::WidgetTree;
 
 pub struct TurApp {
     context: Context,
@@ -52,8 +56,16 @@ impl TurApp {
             min_height: 0.0,
             max_height: height,
         };
-        let mut tree = widget_tree().write().unwrap();
-        let result = self.renderer.render_to_scene(&mut tree, &constraints);
+
+        let tree = widget_tree();
+        let tree_guard = tree.read().unwrap();
+
+        let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
+        let result = layout_tree.compute_layout(&constraints);
+        tracing::debug!("layout: {:?}", result.size);
+
+        let render_tree = RenderTree::from_layout_tree(&layout_tree, &tree_guard);
+        self.renderer.render_to_scene(&render_tree);
         tracing::debug!("rendered: {:?}", result.size);
         Ok(())
     }

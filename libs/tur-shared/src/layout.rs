@@ -260,3 +260,16 @@ impl Axis {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ComputedLayout {
+    pub size: Size,
+    pub offset: Offset,
+}
+
+impl ComputedLayout {
+    pub const ZERO: ComputedLayout = ComputedLayout {
+        size: Size::ZERO,
+        offset: Offset::ZERO,
+    };
+}

@@ -1,4 +1,5 @@
 import type { JSX } from "solid-js";
+import { bridge } from "./bridge";
 import type { Style } from "./style";
 import type { Color } from "./generated/Color";
 import type { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
@@ -51,29 +52,25 @@ export interface TextProps extends BaseProps {
   color?: Color;
 }
 
-function widget() {
-  return globalThis.tur.widget;
-}
-
 function applyChildren(el: number, children: JSX.Element | undefined): void {
   if (children == null || children === false) return;
   if (Array.isArray(children)) {
     for (const child of children) {
       if (child != null && child !== false) {
-        widget().appendChild(el, child as number);
+        bridge().appendChild(el, child as number);
       }
     }
   } else {
-    widget().appendChild(el, children as number);
+    bridge().appendChild(el, children as number);
   }
 }
 
 function setAttr(el: number, key: string, value: string | number | boolean): void {
-  widget().setAttribute(el, key, value);
+  bridge().setAttribute(el, key, value);
 }
 
 export function Column(props: ColumnProps): JSX.Element {
-  const el: number = widget().createElement("Column");
+  const el: number = bridge().createElement("Column");
   if (props.mainAlignment != null) setAttr(el, "mainAlignment", props.mainAlignment);
   if (props.crossAlignment != null) setAttr(el, "crossAlignment", props.crossAlignment);
   props.style?.apply(el);
@@ -82,7 +79,7 @@ export function Column(props: ColumnProps): JSX.Element {
 }
 
 export function Row(props: RowProps): JSX.Element {
-  const el: number = widget().createElement("Row");
+  const el: number = bridge().createElement("Row");
   if (props.mainAlignment != null) setAttr(el, "mainAlignment", props.mainAlignment);
   if (props.crossAlignment != null) setAttr(el, "crossAlignment", props.crossAlignment);
   props.style?.apply(el);
@@ -91,7 +88,7 @@ export function Row(props: RowProps): JSX.Element {
 }
 
 export function Expanded(props: ExpandedProps): JSX.Element {
-  const el: number = widget().createElement("Expanded");
+  const el: number = bridge().createElement("Expanded");
   if (props.flex != null) setAttr(el, "flex", props.flex);
   props.style?.apply(el);
   applyChildren(el, props.children);
@@ -99,7 +96,7 @@ export function Expanded(props: ExpandedProps): JSX.Element {
 }
 
 export function Stack(props: StackProps): JSX.Element {
-  const el: number = widget().createElement("Stack");
+  const el: number = bridge().createElement("Stack");
   if (props.fit != null) setAttr(el, "fit", props.fit);
   props.style?.apply(el);
   applyChildren(el, props.children);
@@ -107,7 +104,7 @@ export function Stack(props: StackProps): JSX.Element {
 }
 
 export function Positioned(props: PositionedProps): JSX.Element {
-  const el: number = widget().createElement("Positioned");
+  const el: number = bridge().createElement("Positioned");
   if (props.left != null) setAttr(el, "left", props.left);
   if (props.top != null) setAttr(el, "top", props.top);
   if (props.right != null) setAttr(el, "right", props.right);
@@ -118,7 +115,7 @@ export function Positioned(props: PositionedProps): JSX.Element {
 }
 
 export function SizedBox(props: SizedBoxProps): JSX.Element {
-  const el: number = widget().createElement("SizedBox");
+  const el: number = bridge().createElement("SizedBox");
   if (props.width != null) setAttr(el, "width", props.width);
   if (props.height != null) setAttr(el, "height", props.height);
   props.style?.apply(el);
@@ -127,7 +124,7 @@ export function SizedBox(props: SizedBoxProps): JSX.Element {
 }
 
 export function Container(props: ContainerProps): JSX.Element {
-  const el: number = widget().createElement("Container");
+  const el: number = bridge().createElement("Container");
   if (props.padding != null) setAttr(el, "padding", props.padding);
   if (props.color != null) setAttr(el, "color", String(props.color));
   props.style?.apply(el);
@@ -136,7 +133,7 @@ export function Container(props: ContainerProps): JSX.Element {
 }
 
 export function Text(props: TextProps): JSX.Element {
-  const el: number = widget().createElement("Text");
+  const el: number = bridge().createElement("Text");
   setAttr(el, "content", props.content);
   if (props.fontSize != null) setAttr(el, "fontSize", props.fontSize);
   if (props.color != null) setAttr(el, "color", String(props.color));

@@ -9,8 +9,6 @@ export interface TurWidgetAPI {
   getNextSibling(handle: number): number | null;
 }
 
-declare global {
-  var tur: {
-    widget: TurWidgetAPI;
-  };
+export function bridge(): TurWidgetAPI {
+  return (globalThis as unknown as { tur: { widget: TurWidgetAPI } }).tur.widget;
 }

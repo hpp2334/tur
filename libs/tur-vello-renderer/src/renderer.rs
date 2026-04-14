@@ -1,5 +1,5 @@
 use crate::paint_context::{paint_tree, PaintContext};
-use tur_widget::{layout_tree, Constraints, LayoutResult, WidgetTree};
+use tur_render_tree::RenderTree;
 use vello::{AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
 pub struct VelloRenderer {
@@ -15,16 +15,10 @@ impl VelloRenderer {
         })
     }
 
-    pub fn render_to_scene(
-        &mut self,
-        tree: &mut WidgetTree,
-        constraints: &Constraints,
-    ) -> LayoutResult {
-        let result = layout_tree(tree, constraints);
+    pub fn render_to_scene(&mut self, tree: &RenderTree) {
         self.scene.reset();
         let mut ctx = PaintContext::new(&mut self.scene);
         paint_tree(&mut ctx, tree);
-        result
     }
 
     pub fn scene(&self) -> &Scene {
