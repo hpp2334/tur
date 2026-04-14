@@ -9,11 +9,8 @@ export interface TurWidgetAPI {
   getNextSibling(handle: number): number | null;
 }
 
-export interface TurElement {
-  handle: number;
-  type: string;
-}
-
-export interface TurBridge {
-  widget: TurWidgetAPI;
+declare global {
+  var tur: {
+    widget: TurWidgetAPI;
+  };
 }

@@ -2,8 +2,8 @@
   "name": "@tur/solidjs",
   "version": "0.1.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/index.js",
@@ -11,8 +11,9 @@
     }
   },
   "scripts": {
-    "build": "rspack build",
-    "gen-types": "node ../../../scripts/gen-types.cjs"
+    "build": "rslib build",
+    "gen-types": "node ../../../scripts/gen-types.cjs",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "solid-js": "^1.9.0"

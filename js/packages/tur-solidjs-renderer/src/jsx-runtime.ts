@@ -2,7 +2,9 @@ import { solidRenderer } from "./solid-js-renderer";
 
 const _r = solidRenderer.renderer;
 
-function createComponent(type: any, props: any): any {
+type ComponentType = string | ((props: Record<string, unknown>) => number);
+
+function createComponent(type: ComponentType, props: Record<string, unknown> | null): number {
   if (typeof type === "string") {
     const el = _r.createElement(type);
     if (props) {
@@ -12,7 +14,7 @@ function createComponent(type: any, props: any): any {
         if (key === "children") continue;
         const value = props[key];
         if (value !== undefined && value !== null) {
-          _r.setAttribute(el, key, value);
+          _r.setProp(el, key, value);
         }
       }
       if ("children" in props) {
@@ -21,14 +23,13 @@ function createComponent(type: any, props: any): any {
     }
     return el;
   }
-  return _r.createComponent(type, props);
+  return _r.createComponent(type, props ?? {});
 }
 
 export const createElement = _r.createElement;
 export { createComponent };
 export const insert = _r.insert;
 export const spread = _r.spread;
-export const setAttribute = _r.setAttribute;
 export const setProp = _r.setProp;
 export const effect = _r.effect;
 export const memo = _r.memo;

@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "rspack build"
+    "build": "rspack build",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "solid-js": "^1.9.0",
-    "@tur/solidjs-renderer": "workspace:*"
+    "@tur/solidjs-renderer": "workspace:*",
+    "@tur/solidjs": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "^7.27.0",

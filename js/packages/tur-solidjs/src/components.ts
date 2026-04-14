@@ -52,7 +52,7 @@ export interface TextProps extends BaseProps {
 }
 
 function widget() {
-  return (globalThis as any).tur.widget;
+  return globalThis.tur.widget;
 }
 
 function applyChildren(el: number, children: JSX.Element | undefined): void {
@@ -68,7 +68,7 @@ function applyChildren(el: number, children: JSX.Element | undefined): void {
   }
 }
 
-function setAttr(el: number, key: string, value: any): void {
+function setAttr(el: number, key: string, value: string | number | boolean): void {
   widget().setAttribute(el, key, value);
 }
 

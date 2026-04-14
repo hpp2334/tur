@@ -204,7 +204,7 @@ impl Constraints {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum MainAxisAlignment {
     Start,
     Center,
@@ -215,7 +215,7 @@ pub enum MainAxisAlignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum CrossAxisAlignment {
     Start,
     Center,
@@ -224,14 +224,14 @@ pub enum CrossAxisAlignment {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum FlexFit {
     Tight,
     Loose,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum StackFit {
     Loose,
     Expand,
@@ -239,7 +239,7 @@ pub enum StackFit {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum Axis {
     Horizontal,
     Vertical,

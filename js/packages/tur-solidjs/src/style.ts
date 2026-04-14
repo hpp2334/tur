@@ -86,7 +86,7 @@ export class Style {
   }
 
   apply(handle: number): void {
-    const widget = (globalThis as any).tur.widget;
+    const widget = globalThis.tur.widget;
     if (this.data.flex) {
       if (this.data.flex.mainAlignment != null)
         widget.setAttribute(handle, "mainAlignment", this.data.flex.mainAlignment);
