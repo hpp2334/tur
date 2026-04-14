@@ -6,6 +6,7 @@ members = [
     "libs/tur-layout",
     "libs/tur-render-tree",
     "libs/tur-vello-renderer",
+    "libs/tur-noop-renderer",
     "libs/tur-boajs",
     "libs/tur",
     "libs/tur-solidjs-demo-web",
@@ -24,6 +25,7 @@ tur-widget = { path = "libs/tur-widget" }
 tur-layout = { path = "libs/tur-layout" }
 tur-render-tree = { path = "libs/tur-render-tree" }
 tur-vello-renderer = { path = "libs/tur-vello-renderer" }
+tur-noop-renderer = { path = "libs/tur-noop-renderer" }
 tur-boajs = { path = "libs/tur-boajs" }
 tur = { path = "libs/tur" }
 

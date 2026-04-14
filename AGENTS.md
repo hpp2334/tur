@@ -16,10 +16,11 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
-│  libs/tur (facade crate)                             │
-│  ├── libs/tur-boajs    (boa_engine JS bridge)        │
-│  ├── libs/tur-widget   (widget types & layout)       │
-│  └── libs/tur-vello-renderer (vello painting backend) │
+│  libs/tur (facade crate, generic over Renderer)      │
+│  ├── libs/tur-boajs          (boa_engine JS bridge)  │
+│  ├── libs/tur-widget         (widget types & layout)  │
+│  ├── libs/tur-vello-renderer (vello painting backend) │
+│  └── libs/tur-noop-renderer  (debug/logging backend)  │
 └─────────────────────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -41,6 +42,7 @@ libs/
   tur/                    # Facade crate (re-exports all sub-crates)
   tur-widget/             # Widget types, layout algorithms
   tur-vello-renderer/     # Vello painting backend
+  tur-noop-renderer/      # Debug/logging backend (implements Renderer trait)
   tur-boajs/              # boa_engine JS bridge (globalThis.tur.widget.*)
   tur-solidjs-demo-web/   # wasm binary (winit + boajs + vello)
 js/
@@ -89,5 +91,17 @@ cd js/packages/tur-solidjs-demo && pnpm build
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: oxlint with recommended rules
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned)
-- Rendering: vello (GPU vector graphics via wgpu)
+- Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
+
+### Renderer trait
+
+The `Renderer` trait is defined in `tur-render-tree`:
+
+```rust
+pub trait Renderer {
+    fn render(&mut self, tree: &RenderTree);
+}
+```
+
+`TurApp<R: Renderer>` is generic over the rendering backend. Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.

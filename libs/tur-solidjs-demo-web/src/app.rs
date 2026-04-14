@@ -1,16 +1,18 @@
 use tur::TurApp;
+use tur_vello_renderer::VelloRenderer;
 
 #[cfg(feature = "embedded_js")]
 const JS_BUNDLE: &str = include_str!("../../../../js/packages/tur-solidjs-demo/dist/bundle.js");
 
 pub struct TurDemoApp {
     #[allow(dead_code)]
-    app: TurApp,
+    app: TurApp<VelloRenderer>,
 }
 
 impl TurDemoApp {
     pub fn new() -> anyhow::Result<Self> {
-        let app = TurApp::new()?;
+        let renderer = VelloRenderer::new()?;
+        let app = TurApp::new(renderer)?;
         Ok(TurDemoApp { app })
     }
 

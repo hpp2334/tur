@@ -14,7 +14,7 @@ impl WidgetNodeId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WidgetKind {
     Column,
     Row,
