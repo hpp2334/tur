@@ -16,6 +16,9 @@ dist/
 # Generated TypeScript
 js/packages/tur-solidjs/src/generated
 
+# Build output
+js/packages/tur-wasm-cli/bin/
+
 # Test fixtures
 scripts/tests/fixtures/
 
