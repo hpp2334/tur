@@ -1,14 +1,10 @@
 [package]
-name = "tur-solidjs-demo-web"
-description = "Web demo: wasm binary running SolidJS todolist via tur"
+name = "tur-wasm"
+description = "WebAssembly binary for tur rendering engine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-
-[features]
-default = []
-embedded_js = []
 
 [lib]
 crate-type = ["cdylib", "rlib"]

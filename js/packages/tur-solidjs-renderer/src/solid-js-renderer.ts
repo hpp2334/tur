@@ -1,6 +1,5 @@
 import { createRenderer, type Renderer } from "solid-js/universal";
 import { bridge } from "@tur/solidjs";
-import type { TurWidgetAPI } from "@tur/solidjs";
 
 class SolidJsRenderer {
   renderer: Renderer<number>;
