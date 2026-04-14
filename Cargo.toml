@@ -3,6 +3,8 @@ resolver = "3"
 members = [
     "libs/tur-shared",
     "libs/tur-widget",
+    "libs/tur-layout",
+    "libs/tur-render-tree",
     "libs/tur-vello-renderer",
     "libs/tur-boajs",
     "libs/tur",
@@ -19,13 +21,15 @@ repository = "https://github.com/hpp2334/tur"
 [workspace.dependencies]
 tur-shared = { path = "libs/tur-shared" }
 tur-widget = { path = "libs/tur-widget" }
+tur-layout = { path = "libs/tur-layout" }
+tur-render-tree = { path = "libs/tur-render-tree" }
 tur-vello-renderer = { path = "libs/tur-vello-renderer" }
 tur-boajs = { path = "libs/tur-boajs" }
 tur = { path = "libs/tur" }
 
 winit = "0.30"
 vello = "0.4"
-boa_engine = "0.20"
+boa_engine = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }
 raw-window-handle = "0.6"
 tracing = "0.1"
 tracing-subscriber = "0.3"

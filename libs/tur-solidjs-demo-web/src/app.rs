@@ -1,10 +1,10 @@
-use tracing;
 use tur::TurApp;
 
 #[cfg(feature = "embedded_js")]
 const JS_BUNDLE: &str = include_str!("../../../../js/packages/tur-solidjs-demo/dist/bundle.js");
 
 pub struct TurDemoApp {
+    #[allow(dead_code)]
     app: TurApp,
 }
 

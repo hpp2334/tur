@@ -1,3 +1,5 @@
+export { bridge } from "./bridge";
+export type { TurWidgetAPI } from "./bridge";
 export { style, Style, Flex, TextOpts } from "./style";
 export {
   Column,

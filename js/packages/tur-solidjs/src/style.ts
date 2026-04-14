@@ -1,3 +1,4 @@
+import { bridge } from "./bridge";
 import type { Color } from "./generated/Color";
 import type { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
 import type { MainAxisAlignment } from "./generated/MainAxisAlignment";
@@ -86,7 +87,7 @@ export class Style {
   }
 
   apply(handle: number): void {
-    const widget = globalThis.tur.widget;
+    const widget = bridge();
     if (this.data.flex) {
       if (this.data.flex.mainAlignment != null)
         widget.setAttribute(handle, "mainAlignment", this.data.flex.mainAlignment);
