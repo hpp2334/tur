@@ -9,7 +9,7 @@ members = [
     "libs/tur-noop-renderer",
     "libs/tur-boajs",
     "libs/tur",
-    "libs/tur-solidjs-demo-web",
+    "libs/tur-wasm",
 ]
 
 [workspace.package]

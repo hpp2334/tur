@@ -1,0 +1,14 @@
+{
+  "name": "@tur/wasm-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "tur-wasm-cli": "./bin/cli.cjs"
+  },
+  "scripts": {
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "commander": "^13.0.0"
+  }
+}

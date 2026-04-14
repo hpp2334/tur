@@ -5,8 +5,8 @@ Cargo.lock
 *.rs.bk
 
 # wasm-pack
-libs/tur-solidjs-demo-web/pkg/
-libs/tur-solidjs-demo-web/target/
+libs/tur-wasm/pkg/
+libs/tur-wasm/target/
 
 # Node
 node_modules/

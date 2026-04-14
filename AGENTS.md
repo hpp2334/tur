@@ -24,7 +24,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 └─────────────────────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-solidjs-demo-web                           │
+│  libs/tur-wasm                                        │
 │  (wasm binary via wasm-pack: winit + boajs + vello)  │
 └─────────────────────────────────────────────────────┘
 ```
@@ -44,11 +44,12 @@ libs/
   tur-vello-renderer/     # Vello painting backend
   tur-noop-renderer/      # Debug/logging backend (implements Renderer trait)
   tur-boajs/              # boa_engine JS bridge (globalThis.tur.widget.*)
-  tur-solidjs-demo-web/   # wasm binary (winit + boajs + vello)
+  tur-wasm/               # wasm binary (winit + boajs + vello)
 js/
   packages/
     tur-solidjs-renderer/ # SolidJS universal renderer
     tur-solidjs-demo/     # Demo app (todolist example)
+    tur-wasm-cli/         # CLI for building and serving tur-wasm demos
 ```
 
 ## Commands
@@ -61,13 +62,25 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 ```
 
-### tur-solidjs-demo-web (wasm)
+### tur-wasm (wasm)
+
+```sh
+cd libs/tur-wasm && wasm-pack build --target web
+```
+
+### tur-wasm-cli (serve demos)
 
 ```sh
 # Build JS bundle first
 cd js && pnpm build
-# Build wasm
-cd libs/tur-solidjs-demo-web && wasm-pack build --target web
+# Serve a JS demo
+node js/packages/tur-wasm-cli/bin/cli.cjs serve <path-to-bundle.js>
+```
+
+Or use the convenience script:
+
+```sh
+node scripts/serve-web-demo.cjs
 ```
 
 ### JS (js/ directory)
