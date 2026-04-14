@@ -16,6 +16,9 @@ dist/
 # Generated TypeScript
 js/packages/tur-solidjs/src/generated
 
+# Test fixtures
+scripts/tests/fixtures/
+
 # OS
 .DS_Store
 Thumbs.db
