@@ -1,0 +1,12 @@
+[package]
+name = "tur-boajs"
+description = "boa_engine JS bridge for tur widget tree manipulation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-widget = { workspace = true }
+boa_engine = { workspace = true }
+tracing = { workspace = true }
