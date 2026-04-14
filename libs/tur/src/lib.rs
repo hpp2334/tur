@@ -1,5 +1,6 @@
 pub use tur_boajs;
 pub use tur_layout;
+pub use tur_noop_renderer;
 pub use tur_render_tree;
 pub use tur_vello_renderer;
 pub use tur_widget;
@@ -8,21 +9,19 @@ use boa_engine::Context;
 use boa_engine::Source;
 use tur_boajs::widget_tree;
 use tur_layout::LayoutTree;
-use tur_render_tree::RenderTree;
+use tur_render_tree::{RenderTree, Renderer};
 use tur_shared::Constraints;
-use tur_vello_renderer::VelloRenderer;
 use tur_widget::WidgetTree;
 
-pub struct TurApp {
+pub struct TurApp<R: Renderer> {
     context: Context,
-    renderer: VelloRenderer,
+    renderer: R,
 }
 
-impl TurApp {
-    pub fn new() -> anyhow::Result<Self> {
+impl<R: Renderer> TurApp<R> {
+    pub fn new(renderer: R) -> anyhow::Result<Self> {
         let mut context = Context::default();
         tur_boajs::init_bridge(&mut context);
-        let renderer = VelloRenderer::new()?;
 
         tracing::info!("TurApp initialized");
 
@@ -65,12 +64,12 @@ impl TurApp {
         tracing::debug!("layout: {:?}", result.size);
 
         let render_tree = RenderTree::from_layout_tree(&layout_tree, &tree_guard);
-        self.renderer.render_to_scene(&render_tree);
+        self.renderer.render(&render_tree);
         tracing::debug!("rendered: {:?}", result.size);
         Ok(())
     }
 
-    pub fn renderer_mut(&mut self) -> &mut VelloRenderer {
+    pub fn renderer_mut(&mut self) -> &mut R {
         &mut self.renderer
     }
 }

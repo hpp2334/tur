@@ -1,0 +1,14 @@
+[package]
+name = "tur-noop-renderer"
+description = "Noop rendering backend for tur widgets (logs tree stats)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-shared = { workspace = true }
+tur-widget = { workspace = true }
+tur-render-tree = { workspace = true }
+tracing = { workspace = true }
+anyhow = { workspace = true }
