@@ -2,17 +2,31 @@ use crate::paint_context::{paint_tree, PaintContext};
 use tur_render_tree::{RenderTree, Renderer as TurRenderer};
 use vello::{AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
+#[derive(Debug, thiserror::Error)]
+pub enum VelloRendererError {
+    #[error("renderer not initialized, call ensure_renderer first")]
+    NotInitialized,
+    #[error("vello render failed: {0}")]
+    Render(#[source] vello::Error),
+}
+
 pub struct VelloRenderer {
     renderer: Option<Renderer>,
     scene: Scene,
 }
 
+impl Default for VelloRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VelloRenderer {
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(VelloRenderer {
+    pub fn new() -> Self {
+        VelloRenderer {
             renderer: None,
             scene: Scene::new(),
-        })
+        }
     }
 
     pub fn render_to_scene(&mut self, tree: &RenderTree) {
@@ -57,10 +71,11 @@ impl VelloRenderer {
         surface_texture: &vello::wgpu::SurfaceTexture,
         width: u32,
         height: u32,
-    ) -> anyhow::Result<()> {
-        let renderer = self.renderer.as_mut().ok_or_else(|| {
-            anyhow::anyhow!("renderer not initialized, call ensure_renderer first")
-        })?;
+    ) -> Result<(), VelloRendererError> {
+        let renderer = self
+            .renderer
+            .as_mut()
+            .ok_or(VelloRendererError::NotInitialized)?;
 
         let params = RenderParams {
             base_color: vello::peniko::Color::from_rgba8(0, 0, 0, 255),
@@ -71,7 +86,7 @@ impl VelloRenderer {
 
         renderer
             .render_to_surface(device, queue, &self.scene, surface_texture, &params)
-            .map_err(|e| anyhow::anyhow!("vello render failed: {e}"))?;
+            .map_err(VelloRendererError::Render)?;
         Ok(())
     }
 }

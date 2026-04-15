@@ -6,9 +6,15 @@ use tur_widget::WidgetKind;
 
 pub struct NoopRenderer;
 
+impl Default for NoopRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NoopRenderer {
-    pub fn new() -> anyhow::Result<Self> {
-        Ok(NoopRenderer)
+    pub fn new() -> Self {
+        NoopRenderer
     }
 }
 

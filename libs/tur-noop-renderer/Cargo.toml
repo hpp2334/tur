@@ -11,4 +11,3 @@ tur-shared = { workspace = true }
 tur-widget = { workspace = true }
 tur-render-tree = { workspace = true }
 tracing = { workspace = true }
-anyhow = { workspace = true }

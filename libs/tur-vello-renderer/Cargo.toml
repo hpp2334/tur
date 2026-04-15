@@ -13,4 +13,4 @@ tur-render-tree = { workspace = true }
 vello = { workspace = true }
 raw-window-handle = { workspace = true }
 tracing = { workspace = true }
-anyhow = { workspace = true }
+thiserror = { workspace = true }

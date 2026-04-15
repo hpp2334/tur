@@ -1,3 +1,4 @@
+pub mod error;
 pub use tur_boajs;
 pub use tur_layout;
 pub use tur_noop_renderer;
@@ -7,6 +8,7 @@ pub use tur_widget;
 
 use boa_engine::Context;
 use boa_engine::Source;
+use error::TurError;
 use tur_boajs::widget_tree;
 use tur_layout::LayoutTree;
 use tur_render_tree::{RenderTree, Renderer};
@@ -19,7 +21,7 @@ pub struct TurApp<R: Renderer> {
 }
 
 impl<R: Renderer> TurApp<R> {
-    pub fn new(renderer: R) -> anyhow::Result<Self> {
+    pub fn new(renderer: R) -> Result<Self, TurError> {
         let mut context = Context::default();
         tur_boajs::init_bridge(&mut context);
 
@@ -28,19 +30,11 @@ impl<R: Renderer> TurApp<R> {
         Ok(TurApp { context, renderer })
     }
 
-    pub fn load_js(&mut self, source: &str) -> anyhow::Result<()> {
+    pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
         self.context
             .eval(Source::from_bytes(source))
-            .map_err(|e| anyhow::anyhow!("JS evaluation failed: {e}"))?;
-        tracing::info!("JS source loaded ({} bytes)", source.len());
-        Ok(())
-    }
-
-    pub fn call_start_app(&mut self) -> anyhow::Result<()> {
-        self.context
-            .eval(Source::from_bytes("globalThis.startApp()"))
-            .map_err(|e| anyhow::anyhow!("startApp() failed: {e}"))?;
-        tracing::info!("startApp() called");
+            .map_err(TurError::JsEval)?;
+        tracing::info!("JS source loaded and executed ({} bytes)", source.len());
         Ok(())
     }
 
@@ -48,7 +42,7 @@ impl<R: Renderer> TurApp<R> {
         widget_tree()
     }
 
-    pub fn render(&mut self, width: f64, height: f64) -> anyhow::Result<()> {
+    pub fn render(&mut self, width: f64, height: f64) {
         let constraints = Constraints {
             min_width: 0.0,
             max_width: width,
@@ -66,7 +60,6 @@ impl<R: Renderer> TurApp<R> {
         let render_tree = RenderTree::from_layout_tree(&layout_tree, &tree_guard);
         self.renderer.render(&render_tree);
         tracing::debug!("rendered: {:?}", result.size);
-        Ok(())
     }
 
     pub fn renderer_mut(&mut self) -> &mut R {

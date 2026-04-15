@@ -25,5 +25,4 @@ tracing-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }
 web-sys = { workspace = true }
 console_error_panic_hook = { workspace = true }
-anyhow = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
