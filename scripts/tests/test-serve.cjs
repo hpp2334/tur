@@ -24,7 +24,7 @@ function fetch(url) {
 async function main() {
   fs.mkdirSync(pkgDir, { recursive: true });
   fs.mkdirSync(fixturesDir, { recursive: true });
-  fs.writeFileSync(tmpJs, 'globalThis.startApp = () => {};');
+  fs.writeFileSync(tmpJs, '// test bundle');
   fs.writeFileSync(path.join(pkgDir, "tur_wasm.js"), "export function init() {}");
   fs.writeFileSync(path.join(pkgDir, "tur_wasm_bg.wasm"), Buffer.from([0x00, 0x61, 0x73, 0x6d]));
 
@@ -135,7 +135,7 @@ async function main() {
           resolve(true);
         }
       });
-      fs.writeFileSync(tmpJs, 'globalThis.startApp = () => { console.log("v2"); };');
+      fs.writeFileSync(tmpJs, 'console.log("v2");');
     });
     wsConnected.close();
     if (!reloadReceived) {

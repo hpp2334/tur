@@ -10,7 +10,7 @@ pub struct TurWasmApp {
 #[wasm_bindgen]
 impl TurWasmApp {
     pub fn create() -> Result<TurWasmApp, JsValue> {
-        let renderer = VelloRenderer::new().map_err(|e| JsValue::from_str(&e.to_string()))?;
+        let renderer = VelloRenderer::new();
         let app = TurApp::new(renderer).map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(TurWasmApp { app })
     }
@@ -19,10 +19,7 @@ impl TurWasmApp {
         self.app
             .load_js(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        self.app
-            .call_start_app()
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        tracing::info!("JS loaded and startApp() executed");
+        tracing::info!("JS loaded and executed");
         Ok(())
     }
 }
