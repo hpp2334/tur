@@ -1,4 +1,4 @@
-export type { TurWidgetAPI } from "@tur/solidjs";
+export type { TurApp } from "@tur/solidjs";
 export { bridge } from "@tur/solidjs";
 
 export interface TurElement {

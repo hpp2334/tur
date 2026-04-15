@@ -1,4 +1,4 @@
-export interface TurWidgetAPI {
+export interface TurApp {
   createElement(type: string): number;
   setAttribute(handle: number, key: string, value: string | number | boolean): void;
   appendChild(parent: number, child: number): void;
@@ -9,6 +9,15 @@ export interface TurWidgetAPI {
   getNextSibling(handle: number): number | null;
 }
 
-export function bridge(): TurWidgetAPI {
-  return (globalThis as unknown as { tur: { widget: TurWidgetAPI } }).tur.widget;
+declare global {
+  function createTurApp(): TurApp;
+}
+
+let _app: TurApp | null = null;
+
+export function bridge(): TurApp {
+  if (!_app) {
+    _app = createTurApp();
+  }
+  return _app;
 }
