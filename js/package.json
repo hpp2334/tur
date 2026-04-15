@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "build": "pnpm -r run build",
+    "build": "pnpm -r --sort run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "oxlint ."
   },

@@ -1,6 +1,17 @@
-export { bridge } from "./bridge";
-export type { TurApp } from "./bridge";
-export { style, Style, Flex, TextOpts } from "./style";
+export { createTurApp } from "@tur/solidjs-renderer";
+export type { TurApp } from "@tur/solidjs-renderer";
+export type { ResolvedStyle } from "@tur/solidjs-renderer";
+export type { Color } from "@tur/solidjs-renderer";
+export type { RGB } from "@tur/solidjs-renderer";
+export type { RGBA } from "@tur/solidjs-renderer";
+export { MainAxisAlignment } from "@tur/solidjs-renderer";
+export { CrossAxisAlignment } from "@tur/solidjs-renderer";
+export { StackFit } from "@tur/solidjs-renderer";
+export { FlexFit } from "@tur/solidjs-renderer";
+export { Axis } from "@tur/solidjs-renderer";
+export type { EdgeInsets } from "@tur/solidjs-renderer";
+export type { Size } from "@tur/solidjs-renderer";
+export type { Offset } from "@tur/solidjs-renderer";
 export {
   Column,
   Row,
@@ -21,14 +32,4 @@ export type {
   ContainerProps,
   TextProps,
 } from "./components";
-export type { Color } from "./generated/Color";
-export type { RGB } from "./generated/RGB";
-export type { RGBA } from "./generated/RGBA";
-export { MainAxisAlignment } from "./generated/MainAxisAlignment";
-export { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
-export { StackFit } from "./generated/StackFit";
-export { FlexFit } from "./generated/FlexFit";
-export { Axis } from "./generated/Axis";
-export type { EdgeInsets } from "./generated/EdgeInsets";
-export type { Size } from "./generated/Size";
-export type { Offset } from "./generated/Offset";
+export { style, Style, Flex, TextOpts } from "./style";

@@ -11,7 +11,6 @@ export default defineConfig({
   source: {
     entry: {
       index: "./src/index.ts",
-      "jsx-runtime": "./src/jsx-runtime.ts",
     },
   },
   output: {

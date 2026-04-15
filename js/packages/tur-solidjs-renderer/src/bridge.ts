@@ -1,6 +1,7 @@
 export interface TurApp {
   createElement(type: string): number;
-  setAttribute(handle: number, key: string, value: string | number | boolean): void;
+  createRoot(): number;
+  setAttribute(handle: number, key: string, value: unknown): void;
   appendChild(parent: number, child: number): void;
   removeChild(parent: number, child: number): void;
   insertBefore(parent: number, child: number, ref: number): void;
@@ -9,15 +10,6 @@ export interface TurApp {
   getNextSibling(handle: number): number | null;
 }
 
-declare global {
-  function createTurApp(): TurApp;
-}
-
-let _app: TurApp | null = null;
-
-export function bridge(): TurApp {
-  if (!_app) {
-    _app = createTurApp();
-  }
-  return _app;
+export function createTurApp(): TurApp {
+  return (globalThis as any).createTurApp();
 }

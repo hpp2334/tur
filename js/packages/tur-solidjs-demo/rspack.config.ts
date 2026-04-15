@@ -28,7 +28,7 @@ export default defineConfig({
                 "solid",
                 {
                   generate: "universal",
-                  moduleName: "@tur/solidjs-renderer/jsx-runtime",
+                  moduleName: "@tur/solidjs-renderer",
                 },
               ],
             ],

@@ -39,6 +39,15 @@ impl TurAppContext {
         Ok(id.as_u64() as f64)
     }
 
+    pub fn createRoot(&self) -> JsResult<f64> {
+        let id = self.alloc_id();
+        let node = WidgetNode::new(id, WidgetKind::Column);
+        self.tree.borrow_mut().insert(node);
+
+        tracing::trace!("createRoot() -> {}", id.as_u64());
+        Ok(id.as_u64() as f64)
+    }
+
     pub fn setAttribute(
         &self,
         id: f64,

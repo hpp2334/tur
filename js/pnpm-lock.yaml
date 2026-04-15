@@ -29,9 +29,22 @@ importers:
 
   packages/tur-solidjs:
     dependencies:
+      '@tur/solidjs-renderer':
+        specifier: workspace:*
+        version: link:../tur-solidjs-renderer
       solid-js:
         specifier: ^1.9.0
         version: 1.9.12
+    devDependencies:
+      '@babel/preset-typescript':
+        specifier: ^7.28.5
+        version: 7.28.5(@babel/core@7.29.0)
+      babel-loader:
+        specifier: ^10.1.1
+        version: 10.1.1(@babel/core@7.29.0)(@rspack/core@2.0.0-rc.1(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@swc/helpers@0.5.21))
+      babel-preset-solid:
+        specifier: ^1.9.12
+        version: 1.9.12(@babel/core@7.29.0)(solid-js@1.9.12)
 
   packages/tur-solidjs-demo:
     dependencies:
@@ -60,9 +73,6 @@ importers:
 
   packages/tur-solidjs-renderer:
     dependencies:
-      '@tur/solidjs':
-        specifier: workspace:*
-        version: link:../tur-solidjs
       solid-js:
         specifier: ^1.9.0
         version: 1.9.12

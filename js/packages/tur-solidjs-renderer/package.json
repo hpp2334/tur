@@ -8,18 +8,14 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./jsx-runtime": {
-      "import": "./dist/jsx-runtime.js",
-      "types": "./dist/jsx-runtime.d.ts"
     }
   },
   "scripts": {
     "build": "rslib build",
+    "gen-types": "node ../../../scripts/gen-types.cjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tur/solidjs": "workspace:*",
     "solid-js": "^1.9.0"
   },
   "peerDependencies": {

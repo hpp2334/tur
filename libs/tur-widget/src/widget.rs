@@ -31,14 +31,14 @@ impl FromStr for WidgetKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Column" => Ok(WidgetKind::Column),
-            "Row" => Ok(WidgetKind::Row),
-            "Expanded" => Ok(WidgetKind::Expanded),
-            "Stack" => Ok(WidgetKind::Stack),
-            "Positioned" => Ok(WidgetKind::Positioned),
-            "SizedBox" => Ok(WidgetKind::SizedBox),
-            "Container" => Ok(WidgetKind::Container),
-            "Text" => Ok(WidgetKind::Text),
+            "tur_column" => Ok(WidgetKind::Column),
+            "tur_row" => Ok(WidgetKind::Row),
+            "tur_expanded" => Ok(WidgetKind::Expanded),
+            "tur_stack" => Ok(WidgetKind::Stack),
+            "tur_positioned" => Ok(WidgetKind::Positioned),
+            "tur_sized_box" => Ok(WidgetKind::SizedBox),
+            "tur_container" => Ok(WidgetKind::Container),
+            "tur_text" => Ok(WidgetKind::Text),
             _ => Err(()),
         }
     }
