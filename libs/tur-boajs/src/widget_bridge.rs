@@ -6,12 +6,12 @@ use boa_engine::{Context, JsResult, JsValue};
 use tracing;
 use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
+use crate::BoaOpaque;
+
 #[derive(Debug, Default, boa_engine::JsData, boa_engine::Trace, boa_engine::Finalize)]
 pub struct TurAppContext {
-    #[unsafe_ignore_trace]
-    pub tree: RefCell<WidgetTree>,
-    #[unsafe_ignore_trace]
-    pub next_id: Cell<u64>,
+    pub tree: BoaOpaque<RefCell<WidgetTree>>,
+    pub next_id: BoaOpaque<Cell<u64>>,
 }
 
 #[boa_class(rename = "TurApp")]
@@ -20,8 +20,8 @@ impl TurAppContext {
     #[boa(constructor)]
     pub fn constructor() -> JsResult<Self> {
         Ok(Self {
-            tree: RefCell::new(WidgetTree::new()),
-            next_id: Cell::new(1),
+            tree: BoaOpaque(RefCell::new(WidgetTree::new())),
+            next_id: BoaOpaque(Cell::new(1)),
         })
     }
 
