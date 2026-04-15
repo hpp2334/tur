@@ -7,10 +7,9 @@ pub use tur_vello_renderer;
 pub use tur_widget;
 
 use boa_engine::Context;
-use boa_engine::JsObject;
 use boa_engine::Source;
 use error::TurError;
-use tur_boajs::TurAppContext;
+use tur_boajs::{BoaOpaque, TurAppContext};
 use tur_layout::LayoutTree;
 use tur_render_tree::{RenderTree, Renderer};
 use tur_shared::Constraints;
@@ -18,7 +17,7 @@ use tur_shared::Constraints;
 pub struct TurApp<R: Renderer> {
     context: Context,
     renderer: R,
-    app_context: JsObject,
+    app_context: BoaOpaque<TurAppContext>,
 }
 
 impl<R: Renderer> TurApp<R> {
@@ -43,7 +42,7 @@ impl<R: Renderer> TurApp<R> {
         Ok(())
     }
 
-    pub fn app_context(&self) -> &JsObject {
+    pub fn app_context(&self) -> &BoaOpaque<TurAppContext> {
         &self.app_context
     }
 
@@ -57,9 +56,9 @@ impl<R: Renderer> TurApp<R> {
 
         let ctx = self
             .app_context
-            .downcast_ref::<TurAppContext>()
-            .expect("app_context is not a TurAppContext");
-        let tree_guard = ctx.tree.borrow();
+            .get()
+            .expect("failed to downcast TurAppContext");
+        let tree_guard = ctx.tree().borrow();
 
         let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
         let result = layout_tree.compute_layout(&constraints);

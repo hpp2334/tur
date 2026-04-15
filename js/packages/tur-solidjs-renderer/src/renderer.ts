@@ -1,23 +1,35 @@
 import { createRenderer, type Renderer } from "solid-js/universal";
-import { createTurApp, type TurApp } from "./bridge";
+import {
+  createTurAppContext,
+  tur_createElement,
+  tur_createRoot,
+  tur_setAttribute,
+  tur_appendChild,
+  tur_removeChild,
+  tur_insertBefore,
+  tur_getParent,
+  tur_getFirstChild,
+  tur_getNextSibling,
+  type TurAppContext,
+} from "./bridge";
 import type { ResolvedStyle } from "./style";
 import type { JSX } from "solid-js";
 
-const app: TurApp = createTurApp();
+const ctx: TurAppContext = createTurAppContext();
 
 const _r: Renderer<number> = createRenderer<number>({
   createElement(type: string): number {
-    return app.createElement(type);
+    return tur_createElement(ctx, type);
   },
 
   createTextNode(value: string): number {
-    const handle = app.createElement("tur_text");
-    app.setAttribute(handle, "content", value);
+    const handle = tur_createElement(ctx, "tur_text");
+    tur_setAttribute(ctx, handle, "content", value);
     return handle;
   },
 
   replaceText(textNode: number, value: string): void {
-    app.setAttribute(textNode, "content", value);
+    tur_setAttribute(ctx, textNode, "content", value);
   },
 
   isTextNode(_node: number): boolean {
@@ -32,36 +44,36 @@ const _r: Renderer<number> = createRenderer<number>({
         const key = keys[i];
         const v = rs[key];
         if (v !== null) {
-          app.setAttribute(node, key, v);
+          tur_setAttribute(ctx, node, key, v);
         }
       }
       return;
     }
-    app.setAttribute(node, name, value);
+    tur_setAttribute(ctx, node, name, value);
   },
 
   insertNode(parent: number, node: number, anchor?: number): void {
     if (anchor != null) {
-      app.insertBefore(parent, node, anchor);
+      tur_insertBefore(ctx, parent, node, anchor);
     } else {
-      app.appendChild(parent, node);
+      tur_appendChild(ctx, parent, node);
     }
   },
 
   removeNode(parent: number, node: number): void {
-    app.removeChild(parent, node);
+    tur_removeChild(ctx, parent, node);
   },
 
   getParentNode(node: number): number | undefined {
-    return app.getParent(node) ?? undefined;
+    return tur_getParent(ctx, node) ?? undefined;
   },
 
   getFirstChild(node: number): number | undefined {
-    return app.getFirstChild(node) ?? undefined;
+    return tur_getFirstChild(ctx, node) ?? undefined;
   },
 
   getNextSibling(node: number): number | undefined {
-    return app.getNextSibling(node) ?? undefined;
+    return tur_getNextSibling(ctx, node) ?? undefined;
   },
 });
 
@@ -90,7 +102,7 @@ function createComponent(type: ComponentType, props: Record<string, unknown> | n
 }
 
 export function renderRoot(component: () => JSX.Element): number {
-  const root: number = app.createRoot();
+  const root: number = tur_createRoot(ctx);
   _r.render(
     () => _r.createComponent(component as (props: Record<string, never>) => number, {}),
     root,
