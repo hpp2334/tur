@@ -67,16 +67,6 @@ macro_rules! extract_ctx {
     };
 }
 
-pub(crate) fn tur_create_app_context(
-    _this: &JsValue,
-    _args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let ctx = TurAppContext::new();
-    let opaque = BoaOpaque::new(ctx, context);
-    Ok(opaque.object().clone().into())
-}
-
 pub(crate) fn tur_create_element(
     _this: &JsValue,
     args: &[JsValue],

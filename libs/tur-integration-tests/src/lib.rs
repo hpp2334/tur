@@ -19,10 +19,6 @@ impl TurTestApp {
     }
 
     pub fn load_bundle(&mut self, name: &str) -> Result<(), TurError> {
-        self.inner.load_js(
-            "globalThis.tur_createAppContext = function() { return globalThis.__tur_ctx; };",
-        )?;
-
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let workspace_root = Path::new(&manifest_dir)
             .parent()

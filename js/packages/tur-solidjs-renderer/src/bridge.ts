@@ -1,7 +1,7 @@
 export type TurAppContext = unknown;
 
-export function createTurAppContext(): TurAppContext {
-  return (globalThis as any).tur_createAppContext();
+export function getTurAppContext(): TurAppContext {
+  return (globalThis as any).__tur_ctx;
 }
 
 export function tur_createElement(ctx: TurAppContext, type: string): number {

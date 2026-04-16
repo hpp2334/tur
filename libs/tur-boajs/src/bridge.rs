@@ -9,9 +9,9 @@ use tracing;
 use tur_widget::WidgetTree;
 
 use crate::widget_bridge::{
-    tur_append_child, tur_create_app_context, tur_create_element, tur_create_root,
-    tur_get_first_child, tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child,
-    tur_set_attribute, TurAppContext,
+    tur_append_child, tur_create_element, tur_create_root, tur_get_first_child,
+    tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child, tur_set_attribute,
+    TurAppContext,
 };
 use crate::BoaOpaque;
 
@@ -35,12 +35,6 @@ fn register_global_fn(
 }
 
 pub fn init_bridge(context: &mut Context) -> (BoaOpaque<TurAppContext>, Rc<RefCell<WidgetTree>>) {
-    register_global_fn(
-        context,
-        &js_string!("tur_createAppContext"),
-        0,
-        tur_create_app_context,
-    );
     register_global_fn(
         context,
         &js_string!("tur_createElement"),

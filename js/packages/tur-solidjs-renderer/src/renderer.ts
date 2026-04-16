@@ -1,6 +1,6 @@
 import { createRenderer, type Renderer } from "solid-js/universal";
 import {
-  createTurAppContext,
+  getTurAppContext,
   tur_createElement,
   tur_createRoot,
   tur_setAttribute,
@@ -23,7 +23,7 @@ function el(h: number): TurElement {
   return { h };
 }
 
-const ctx: TurAppContext = createTurAppContext();
+const ctx: TurAppContext = getTurAppContext();
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
   createElement(type: string): TurElement {
