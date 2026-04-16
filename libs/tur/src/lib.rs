@@ -9,25 +9,29 @@ pub use tur_widget;
 use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
-use tur_boajs::widget_tree;
+use tur_boajs::{BoaOpaque, TurAppContext};
 use tur_layout::LayoutTree;
 use tur_render_tree::{RenderTree, Renderer};
 use tur_shared::Constraints;
-use tur_widget::WidgetTree;
 
 pub struct TurApp<R: Renderer> {
     context: Context,
     renderer: R,
+    app_context: BoaOpaque<TurAppContext>,
 }
 
 impl<R: Renderer> TurApp<R> {
     pub fn new(renderer: R) -> Result<Self, TurError> {
         let mut context = Context::default();
-        tur_boajs::init_bridge(&mut context);
+        let app_context = tur_boajs::init_bridge(&mut context);
 
         tracing::info!("TurApp initialized");
 
-        Ok(TurApp { context, renderer })
+        Ok(TurApp {
+            context,
+            renderer,
+            app_context,
+        })
     }
 
     pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
@@ -38,8 +42,8 @@ impl<R: Renderer> TurApp<R> {
         Ok(())
     }
 
-    pub fn widget_tree(&self) -> &'static LazyLock<RwLock<WidgetTree>> {
-        widget_tree()
+    pub fn app_context(&self) -> &BoaOpaque<TurAppContext> {
+        &self.app_context
     }
 
     pub fn render(&mut self, width: f64, height: f64) {
@@ -50,8 +54,11 @@ impl<R: Renderer> TurApp<R> {
             max_height: height,
         };
 
-        let tree = widget_tree();
-        let tree_guard = tree.read().unwrap();
+        let ctx = self
+            .app_context
+            .get()
+            .expect("failed to downcast TurAppContext");
+        let tree_guard = ctx.tree().borrow();
 
         let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
         let result = layout_tree.compute_layout(&constraints);
@@ -66,5 +73,3 @@ impl<R: Renderer> TurApp<R> {
         &mut self.renderer
     }
 }
-
-use std::sync::{LazyLock, RwLock};

@@ -1,138 +1,127 @@
+use std::cell::{Cell, RefCell};
 use std::str::FromStr;
-use std::sync::LazyLock;
-use std::sync::RwLock;
 
-use boa_engine::js_string;
-use boa_engine::native_function::NativeFunction;
-use boa_engine::object::{FunctionObjectBuilder, ObjectInitializer};
-use boa_engine::property::Attribute;
-use boa_engine::{Context, JsObject, JsResult, JsValue};
+use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
+use boa_gc::{empty_trace, Finalize};
 use tracing;
 use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
-static WIDGET_TREE: LazyLock<RwLock<WidgetTree>> = LazyLock::new(|| RwLock::new(WidgetTree::new()));
-static NEXT_ID: LazyLock<RwLock<u64>> = LazyLock::new(|| RwLock::new(1));
+use crate::BoaOpaque;
 
-fn alloc_id() -> WidgetNodeId {
-    let mut next = NEXT_ID.write().unwrap();
-    let id = *next;
-    *next += 1;
-    WidgetNodeId::new(id)
+#[derive(Debug)]
+pub struct TurAppContext {
+    tree: RefCell<WidgetTree>,
+    next_id: Cell<u64>,
 }
 
-pub fn widget_tree() -> &'static LazyLock<RwLock<WidgetTree>> {
-    &WIDGET_TREE
+impl Finalize for TurAppContext {}
+
+unsafe impl boa_gc::Trace for TurAppContext {
+    empty_trace!();
 }
 
-pub fn create_widget_namespace(context: &mut Context) -> JsObject {
-    let realm = context.realm();
+impl JsData for TurAppContext {}
 
-    let create_element_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_create_element))
-            .length(1)
-            .build();
-
-    let set_attribute_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_set_attribute))
-            .length(3)
-            .build();
-
-    let append_child_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_append_child))
-            .length(2)
-            .build();
-
-    let remove_child_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_remove_child))
-            .length(2)
-            .build();
-
-    let insert_before_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_insert_before))
-            .length(3)
-            .build();
-
-    let get_parent_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_get_parent))
-            .length(1)
-            .build();
-
-    let get_first_child_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_get_first_child))
-            .length(1)
-            .build();
-
-    let get_next_sibling_fn =
-        FunctionObjectBuilder::new(realm, NativeFunction::from_fn_ptr(js_get_next_sibling))
-            .length(1)
-            .build();
-
-    ObjectInitializer::new(context)
-        .property(
-            js_string!("createElement"),
-            create_element_fn,
-            Attribute::all(),
-        )
-        .property(
-            js_string!("setAttribute"),
-            set_attribute_fn,
-            Attribute::all(),
-        )
-        .property(js_string!("appendChild"), append_child_fn, Attribute::all())
-        .property(js_string!("removeChild"), remove_child_fn, Attribute::all())
-        .property(
-            js_string!("insertBefore"),
-            insert_before_fn,
-            Attribute::all(),
-        )
-        .property(js_string!("getParent"), get_parent_fn, Attribute::all())
-        .property(
-            js_string!("getFirstChild"),
-            get_first_child_fn,
-            Attribute::all(),
-        )
-        .property(
-            js_string!("getNextSibling"),
-            get_next_sibling_fn,
-            Attribute::all(),
-        )
-        .build()
+impl Default for TurAppContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-fn js_create_element(
+impl TurAppContext {
+    pub fn new() -> Self {
+        Self {
+            tree: RefCell::new(WidgetTree::new()),
+            next_id: Cell::new(1),
+        }
+    }
+
+    pub fn tree(&self) -> &RefCell<WidgetTree> {
+        &self.tree
+    }
+
+    fn alloc_id(&self) -> WidgetNodeId {
+        let id = self.next_id.get();
+        self.next_id.set(id + 1);
+        WidgetNodeId::new(id)
+    }
+}
+
+macro_rules! extract_ctx {
+    ($args:expr, $ctx:ident) => {
+        let __obj = $args.get_or_undefined(0).as_object().ok_or_else(|| {
+            JsError::from(
+                JsNativeError::typ().with_message("expected TurAppContext as first argument"),
+            )
+        })?;
+        let $ctx = BoaOpaque::<TurAppContext>::wrap(&__obj).ok_or_else(|| {
+            JsError::from(
+                JsNativeError::typ().with_message("expected TurAppContext as first argument"),
+            )
+        })?;
+    };
+}
+
+pub(crate) fn tur_create_app_context(
+    _this: &JsValue,
+    _args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let ctx = TurAppContext::new();
+    let opaque = BoaOpaque::new(ctx, context);
+    Ok(opaque.object().clone().into())
+}
+
+pub(crate) fn tur_create_element(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
+    extract_ctx!(args, ctx);
     let kind_str = args
-        .first()
-        .and_then(|v| v.as_string())
-        .map(|s| s.to_std_string_escaped())
-        .unwrap_or_default();
+        .get_or_undefined(1)
+        .to_string(context)?
+        .to_std_string_escaped();
 
     let kind = WidgetKind::from_str(&kind_str).unwrap_or_else(|_| {
         tracing::warn!("unknown widget type: {kind_str}, falling back to Container");
         WidgetKind::Container
     });
 
-    let id = alloc_id();
+    let id = ctx.alloc_id();
     let node = WidgetNode::new(id, kind);
+    ctx.tree.borrow_mut().insert(node);
 
-    let mut tree = WIDGET_TREE.write().unwrap();
-    tree.insert(node);
-
-    tracing::trace!("createElement({kind_str}) -> {}", id.as_u64());
+    tracing::trace!("tur_createElement({kind_str}) -> {}", id.as_u64());
     Ok(JsValue::from(id.as_u64() as f64))
 }
 
-fn js_set_attribute(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let id = WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
+pub(crate) fn tur_create_root(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    extract_ctx!(args, ctx);
+
+    let id = ctx.alloc_id();
+    let node = WidgetNode::new(id, WidgetKind::Column);
+    ctx.tree.borrow_mut().insert(node);
+
+    tracing::trace!("tur_createRoot() -> {}", id.as_u64());
+    Ok(JsValue::from(id.as_u64() as f64))
+}
+
+pub(crate) fn tur_set_attribute(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let node_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
     let key = args
-        .get(1)
-        .and_then(|v| v.as_string())
-        .map(|s| s.to_std_string_escaped())
-        .unwrap_or_default();
-    let value = args.get(2).cloned().unwrap_or(JsValue::undefined());
+        .get_or_undefined(2)
+        .to_string(context)?
+        .to_std_string_escaped();
+    let value = args.get_or_undefined(3).clone();
 
     let prop_value = if let Some(s) = value.as_string() {
         PropValue::String(s.to_std_string_escaped())
@@ -152,55 +141,71 @@ fn js_set_attribute(_this: &JsValue, args: &[JsValue], context: &mut Context) ->
         )
     };
 
-    tracing::trace!("setAttribute({}, {key}, ...)", id.as_u64());
+    tracing::trace!("tur_setAttribute({}, {key}, ...)", node_id.as_u64());
 
-    let mut tree = WIDGET_TREE.write().unwrap();
-    if let Some(node) = tree.get_mut(id) {
+    extract_ctx!(args, ctx);
+
+    if let Some(node) = ctx.tree.borrow_mut().get_mut(node_id) {
         node.set_prop(key, prop_value);
     }
 
     Ok(JsValue::undefined())
 }
 
-fn js_append_child(_this: &JsValue, args: &[JsValue], _context: &mut Context) -> JsResult<JsValue> {
-    let parent_id =
-        WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let child_id = WidgetNodeId::new(args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-
-    let mut tree = WIDGET_TREE.write().unwrap();
-    tree.append_child(parent_id, child_id);
-
-    tracing::trace!("appendChild({}, {})", parent_id.as_u64(), child_id.as_u64());
-    Ok(JsValue::undefined())
-}
-
-fn js_remove_child(_this: &JsValue, args: &[JsValue], _context: &mut Context) -> JsResult<JsValue> {
-    let parent_id =
-        WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let child_id = WidgetNodeId::new(args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-
-    let mut tree = WIDGET_TREE.write().unwrap();
-    tree.remove_child(parent_id, child_id);
-
-    tracing::trace!("removeChild({}, {})", parent_id.as_u64(), child_id.as_u64());
-    Ok(JsValue::undefined())
-}
-
-fn js_insert_before(
+pub(crate) fn tur_append_child(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
-    let parent_id =
-        WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let child_id = WidgetNodeId::new(args.get(1).and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let ref_id = WidgetNodeId::new(args.get(2).and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
+    extract_ctx!(args, ctx);
+    let parent_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    let child_id = WidgetNodeId::new(args.get_or_undefined(2).to_number(context)? as u64);
 
-    let mut tree = WIDGET_TREE.write().unwrap();
-    tree.insert_before(parent_id, child_id, ref_id);
+    ctx.tree.borrow_mut().append_child(parent_id, child_id);
 
     tracing::trace!(
-        "insertBefore({}, {}, {})",
+        "tur_appendChild({}, {})",
+        parent_id.as_u64(),
+        child_id.as_u64()
+    );
+    Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_remove_child(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    extract_ctx!(args, ctx);
+    let parent_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    let child_id = WidgetNodeId::new(args.get_or_undefined(2).to_number(context)? as u64);
+
+    ctx.tree.borrow_mut().remove_child(parent_id, child_id);
+
+    tracing::trace!(
+        "tur_removeChild({}, {})",
+        parent_id.as_u64(),
+        child_id.as_u64()
+    );
+    Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_insert_before(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    extract_ctx!(args, ctx);
+    let parent_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    let child_id = WidgetNodeId::new(args.get_or_undefined(2).to_number(context)? as u64);
+    let ref_id = WidgetNodeId::new(args.get_or_undefined(3).to_number(context)? as u64);
+
+    ctx.tree
+        .borrow_mut()
+        .insert_before(parent_id, child_id, ref_id);
+
+    tracing::trace!(
+        "tur_insertBefore({}, {}, {})",
         parent_id.as_u64(),
         child_id.as_u64(),
         ref_id.as_u64()
@@ -208,36 +213,40 @@ fn js_insert_before(
     Ok(JsValue::undefined())
 }
 
-fn js_get_parent(_this: &JsValue, args: &[JsValue], _context: &mut Context) -> JsResult<JsValue> {
-    let id = WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let tree = WIDGET_TREE.read().unwrap();
-    match tree.parent_of(id) {
+pub(crate) fn tur_get_parent(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    extract_ctx!(args, ctx);
+    let node_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    match ctx.tree.borrow().parent_of(node_id) {
         Some(parent_id) => Ok(JsValue::from(parent_id.as_u64() as f64)),
         None => Ok(JsValue::null()),
     }
 }
 
-fn js_get_first_child(
+pub(crate) fn tur_get_first_child(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
-    let id = WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let tree = WIDGET_TREE.read().unwrap();
-    match tree.first_child_of(id) {
+    extract_ctx!(args, ctx);
+    let node_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    match ctx.tree.borrow().first_child_of(node_id) {
         Some(child_id) => Ok(JsValue::from(child_id.as_u64() as f64)),
         None => Ok(JsValue::null()),
     }
 }
 
-fn js_get_next_sibling(
+pub(crate) fn tur_get_next_sibling(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
-    let id = WidgetNodeId::new(args.first().and_then(|v| v.as_number()).unwrap_or(0.0) as u64);
-    let tree = WIDGET_TREE.read().unwrap();
-    match tree.next_sibling_of(id) {
+    extract_ctx!(args, ctx);
+    let node_id = WidgetNodeId::new(args.get_or_undefined(1).to_number(context)? as u64);
+    match ctx.tree.borrow().next_sibling_of(node_id) {
         Some(sibling_id) => Ok(JsValue::from(sibling_id.as_u64() as f64)),
         None => Ok(JsValue::null()),
     }

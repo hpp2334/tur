@@ -1,68 +1,45 @@
-import { bridge } from "./bridge";
-import type { Color } from "./generated/Color";
-import type { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
-import type { MainAxisAlignment } from "./generated/MainAxisAlignment";
-
-interface FlexCategory {
-  mainAlignment: MainAxisAlignment | null;
-  crossAlignment: CrossAxisAlignment | null;
-  gap: number | null;
-}
-
-interface TextCategory {
-  fontSize: { value: number; unit: string } | null;
-}
-
-interface StyleInternal {
-  flex: FlexCategory | null;
-  text: TextCategory | null;
-  color: Color | null;
-  padding: number | null;
-  width: number | null;
-  height: number | null;
-}
+import type { Color } from "@tur/solidjs-renderer";
+import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
+import type { MainAxisAlignment } from "@tur/solidjs-renderer";
+import type { ResolvedStyle } from "@tur/solidjs-renderer";
 
 export const Flex = {
-  gap(value: number): Partial<FlexCategory> {
+  gap(value: number): Partial<Pick<ResolvedStyle, "gap">> {
     return { gap: value };
   },
-  mainAlignment(v: MainAxisAlignment): Partial<FlexCategory> {
+  mainAlignment(v: MainAxisAlignment): Partial<Pick<ResolvedStyle, "mainAlignment">> {
     return { mainAlignment: v };
   },
-  crossAlignment(v: CrossAxisAlignment): Partial<FlexCategory> {
+  crossAlignment(v: CrossAxisAlignment): Partial<Pick<ResolvedStyle, "crossAlignment">> {
     return { crossAlignment: v };
   },
 };
 
 export const TextOpts = {
-  fontSize(value: number, unit = "px"): { fontSize: { value: number; unit: string } } {
-    return { fontSize: { value, unit } };
+  fontSize(value: number): Partial<Pick<ResolvedStyle, "fontSize">> {
+    return { fontSize: value };
   },
 };
 
 export class Style {
-  private data: StyleInternal = {
-    flex: null,
-    text: null,
+  private data: ResolvedStyle = {
+    mainAlignment: null,
+    crossAlignment: null,
+    gap: null,
+    fontSize: null,
     color: null,
     padding: null,
     width: null,
     height: null,
   };
 
-  flex(opts: Partial<FlexCategory>): this {
-    if (!this.data.flex) {
-      this.data.flex = { mainAlignment: null, crossAlignment: null, gap: null };
-    }
-    Object.assign(this.data.flex, opts);
+  flex(opts: Partial<Pick<ResolvedStyle, "mainAlignment" | "crossAlignment" | "gap">>): this {
+    Object.assign(this.data, opts);
     return this;
   }
 
-  text(opts: Partial<TextCategory>): this {
-    if (!this.data.text) {
-      this.data.text = { fontSize: null };
-    }
-    Object.assign(this.data.text, opts);
+  text(opts: Partial<Pick<ResolvedStyle, "fontSize">>): this {
+    Object.assign(this.data, opts);
     return this;
   }
 
@@ -86,31 +63,8 @@ export class Style {
     return this;
   }
 
-  apply(handle: number): void {
-    const widget = bridge();
-    if (this.data.flex) {
-      if (this.data.flex.mainAlignment != null)
-        widget.setAttribute(handle, "mainAlignment", this.data.flex.mainAlignment);
-      if (this.data.flex.crossAlignment != null)
-        widget.setAttribute(handle, "crossAlignment", this.data.flex.crossAlignment);
-      if (this.data.flex.gap != null)
-        widget.setAttribute(handle, "gap", this.data.flex.gap);
-    }
-    if (this.data.text?.fontSize) {
-      widget.setAttribute(handle, "fontSize", this.data.text.fontSize.value);
-    }
-    if (this.data.color != null) {
-      widget.setAttribute(handle, "color", String(this.data.color));
-    }
-    if (this.data.padding != null) {
-      widget.setAttribute(handle, "padding", this.data.padding);
-    }
-    if (this.data.width != null) {
-      widget.setAttribute(handle, "width", this.data.width);
-    }
-    if (this.data.height != null) {
-      widget.setAttribute(handle, "height", this.data.height);
-    }
+  resolve(): ResolvedStyle {
+    return { ...this.data };
   }
 }
 

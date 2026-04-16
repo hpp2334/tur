@@ -9,4 +9,5 @@ license.workspace = true
 [dependencies]
 tur-widget = { workspace = true }
 boa_engine = { workspace = true }
+boa_gc = { workspace = true }
 tracing = { workspace = true }
