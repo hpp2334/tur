@@ -1,8 +1,12 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::Context;
 use tracing;
+use tur_widget::WidgetTree;
 
 use crate::widget_bridge::{
     tur_append_child, tur_create_app_context, tur_create_element, tur_create_root,
@@ -30,7 +34,7 @@ fn register_global_fn(
         .expect("failed to register global function");
 }
 
-pub fn init_bridge(context: &mut Context) -> BoaOpaque<TurAppContext> {
+pub fn init_bridge(context: &mut Context) -> (BoaOpaque<TurAppContext>, Rc<RefCell<WidgetTree>>) {
     register_global_fn(
         context,
         &js_string!("tur_createAppContext"),
@@ -73,9 +77,10 @@ pub fn init_bridge(context: &mut Context) -> BoaOpaque<TurAppContext> {
     );
 
     let ctx = TurAppContext::new();
+    let tree_rc = ctx.tree_rc().clone();
     let opaque = BoaOpaque::new(ctx, context);
 
     tracing::info!("tur bridge initialized");
 
-    opaque
+    (opaque, tree_rc)
 }

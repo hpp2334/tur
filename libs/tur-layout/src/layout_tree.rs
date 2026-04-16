@@ -43,6 +43,17 @@ impl LayoutNode {
                 "space-evenly" => Some(MainAxisAlignment::SpaceEvenly),
                 _ => None,
             })
+            .or_else(|| {
+                node.prop_f64("mainAlignment").and_then(|n| match n as i32 {
+                    0 => Some(MainAxisAlignment::Start),
+                    1 => Some(MainAxisAlignment::Center),
+                    2 => Some(MainAxisAlignment::End),
+                    3 => Some(MainAxisAlignment::SpaceBetween),
+                    4 => Some(MainAxisAlignment::SpaceAround),
+                    5 => Some(MainAxisAlignment::SpaceEvenly),
+                    _ => None,
+                })
+            })
             .unwrap_or(MainAxisAlignment::Start);
 
         let cross_alignment = node
@@ -54,6 +65,16 @@ impl LayoutNode {
                 "stretch" => Some(CrossAxisAlignment::Stretch),
                 _ => None,
             })
+            .or_else(|| {
+                node.prop_f64("crossAlignment")
+                    .and_then(|n| match n as i32 {
+                        0 => Some(CrossAxisAlignment::Start),
+                        1 => Some(CrossAxisAlignment::Center),
+                        2 => Some(CrossAxisAlignment::End),
+                        3 => Some(CrossAxisAlignment::Stretch),
+                        _ => None,
+                    })
+            })
             .unwrap_or(CrossAxisAlignment::Center);
 
         let stack_fit = node
@@ -63,6 +84,14 @@ impl LayoutNode {
                 "expand" => Some(StackFit::Expand),
                 "passthrough" => Some(StackFit::Passthrough),
                 _ => None,
+            })
+            .or_else(|| {
+                node.prop_f64("fit").and_then(|n| match n as i32 {
+                    0 => Some(StackFit::Loose),
+                    1 => Some(StackFit::Expand),
+                    2 => Some(StackFit::Passthrough),
+                    _ => None,
+                })
             })
             .unwrap_or(StackFit::Loose);
 
@@ -186,9 +215,10 @@ impl LayoutTree {
 
         let constrained = constraints.constrain(size);
         if let Some(node) = self.get_mut(id) {
+            let offset = node.computed_layout.map_or(Offset::ZERO, |cl| cl.offset);
             node.computed_layout = Some(ComputedLayout {
                 size: constrained,
-                offset: Offset::ZERO,
+                offset,
             });
         }
         constrained

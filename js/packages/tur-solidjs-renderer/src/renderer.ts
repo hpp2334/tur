@@ -15,28 +15,36 @@ import {
 import type { ResolvedStyle } from "./style";
 import type { JSX } from "solid-js";
 
+export interface TurElement {
+  readonly h: number;
+}
+
+function el(h: number): TurElement {
+  return { h };
+}
+
 const ctx: TurAppContext = createTurAppContext();
 
-const _r: Renderer<number> = createRenderer<number>({
-  createElement(type: string): number {
-    return tur_createElement(ctx, type);
+const _r: Renderer<TurElement> = createRenderer<TurElement>({
+  createElement(type: string): TurElement {
+    return el(tur_createElement(ctx, type));
   },
 
-  createTextNode(value: string): number {
+  createTextNode(value: string): TurElement {
     const handle = tur_createElement(ctx, "tur_text");
     tur_setAttribute(ctx, handle, "content", value);
-    return handle;
+    return el(handle);
   },
 
-  replaceText(textNode: number, value: string): void {
-    tur_setAttribute(ctx, textNode, "content", value);
+  replaceText(textNode: TurElement, value: string): void {
+    tur_setAttribute(ctx, textNode.h, "content", value);
   },
 
-  isTextNode(_node: number): boolean {
+  isTextNode(_node: TurElement): boolean {
     return false;
   },
 
-  setProperty<T>(node: number, name: string, value: T): void {
+  setProperty<T>(node: TurElement, name: string, value: T): void {
     if (name === "style" && value != null && typeof value === "object") {
       const rs = value as unknown as ResolvedStyle;
       const keys = Object.keys(rs) as (keyof ResolvedStyle)[];
@@ -44,44 +52,47 @@ const _r: Renderer<number> = createRenderer<number>({
         const key = keys[i];
         const v = rs[key];
         if (v !== null) {
-          tur_setAttribute(ctx, node, key, v);
+          tur_setAttribute(ctx, node.h, key, v);
         }
       }
       return;
     }
-    tur_setAttribute(ctx, node, name, value);
+    tur_setAttribute(ctx, node.h, name, value);
   },
 
-  insertNode(parent: number, node: number, anchor?: number): void {
+  insertNode(parent: TurElement, node: TurElement, anchor?: TurElement): void {
     if (anchor != null) {
-      tur_insertBefore(ctx, parent, node, anchor);
+      tur_insertBefore(ctx, parent.h, node.h, anchor.h);
     } else {
-      tur_appendChild(ctx, parent, node);
+      tur_appendChild(ctx, parent.h, node.h);
     }
   },
 
-  removeNode(parent: number, node: number): void {
-    tur_removeChild(ctx, parent, node);
+  removeNode(parent: TurElement, node: TurElement): void {
+    tur_removeChild(ctx, parent.h, node.h);
   },
 
-  getParentNode(node: number): number | undefined {
-    return tur_getParent(ctx, node) ?? undefined;
+  getParentNode(node: TurElement): TurElement | undefined {
+    const result = tur_getParent(ctx, node.h);
+    return result != null ? el(result) : undefined;
   },
 
-  getFirstChild(node: number): number | undefined {
-    return tur_getFirstChild(ctx, node) ?? undefined;
+  getFirstChild(node: TurElement): TurElement | undefined {
+    const result = tur_getFirstChild(ctx, node.h);
+    return result != null ? el(result) : undefined;
   },
 
-  getNextSibling(node: number): number | undefined {
-    return tur_getNextSibling(ctx, node) ?? undefined;
+  getNextSibling(node: TurElement): TurElement | undefined {
+    const result = tur_getNextSibling(ctx, node.h);
+    return result != null ? el(result) : undefined;
   },
 });
 
-type ComponentType = string | ((props: Record<string, unknown>) => number);
+type ComponentType = string | ((props: Record<string, unknown>) => TurElement);
 
-function createComponent(type: ComponentType, props: Record<string, unknown> | null): number {
+function createComponent(type: ComponentType, props: Record<string, unknown> | null): TurElement {
   if (typeof type === "string") {
-    const el = _r.createElement(type);
+    const element = _r.createElement(type);
     if (props) {
       const keys = Object.keys(props);
       for (let i = 0; i < keys.length; i++) {
@@ -89,22 +100,22 @@ function createComponent(type: ComponentType, props: Record<string, unknown> | n
         if (key === "children") continue;
         const value = props[key];
         if (value !== undefined && value !== null) {
-          _r.setProp(el, key, value);
+          _r.setProp(element, key, value);
         }
       }
       if ("children" in props) {
-        _r.insert(el, props.children);
+        _r.insert(element, props.children);
       }
     }
-    return el;
+    return element;
   }
   return _r.createComponent(type, props ?? {});
 }
 
-export function renderRoot(component: () => JSX.Element): number {
-  const root: number = tur_createRoot(ctx);
+export function renderRoot(component: () => JSX.Element): TurElement {
+  const root = el(tur_createRoot(ctx));
   _r.render(
-    () => _r.createComponent(component as (props: Record<string, never>) => number, {}),
+    () => _r.createComponent(component as unknown as (props: Record<string, never>) => TurElement, {}),
     root,
   );
   return root;

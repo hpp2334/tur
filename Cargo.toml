@@ -10,6 +10,7 @@ members = [
     "libs/tur-boajs",
     "libs/tur",
     "libs/tur-wasm",
+    "libs/tur-integration-tests",
 ]
 
 [workspace.package]
@@ -28,6 +29,7 @@ tur-vello-renderer = { path = "libs/tur-vello-renderer" }
 tur-noop-renderer = { path = "libs/tur-noop-renderer" }
 tur-boajs = { path = "libs/tur-boajs" }
 tur = { path = "libs/tur" }
+tur-integration-tests = { path = "libs/tur-integration-tests" }
 
 winit = "0.30"
 vello = "0.4"
