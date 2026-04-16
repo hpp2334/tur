@@ -3,12 +3,12 @@ import { globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const casesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "cases");
+const casesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "solidjs-cases");
 const entries: Record<string, string> = {};
 
 for (const dir of globSync("*/index.tsx", { cwd: casesDir })) {
   const name = dir.split("/")[0];
-  entries[name] = `./cases/${dir}`;
+  entries[name] = `./solidjs-cases/${dir}`;
 }
 
 export default defineConfig({
