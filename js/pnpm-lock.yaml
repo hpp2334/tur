@@ -77,6 +77,40 @@ importers:
         specifier: ^1.9.0
         version: 1.9.12
 
+  packages/tur-test-cases:
+    dependencies:
+      '@tur/solidjs':
+        specifier: workspace:*
+        version: link:../tur-solidjs
+      '@tur/solidjs-renderer':
+        specifier: workspace:*
+        version: link:../tur-solidjs-renderer
+      solid-js:
+        specifier: ^1.9.0
+        version: 1.9.12
+    devDependencies:
+      '@babel/core':
+        specifier: ^7.27.0
+        version: 7.29.0
+      '@babel/preset-typescript':
+        specifier: ^7.27.0
+        version: 7.28.5(@babel/core@7.29.0)
+      '@rspack/cli':
+        specifier: ^1.2.0
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+      '@rspack/core':
+        specifier: ^1.2.0
+        version: 1.7.11(@swc/helpers@0.5.21)
+      babel-loader:
+        specifier: ^10.0.0
+        version: 10.1.1(@babel/core@7.29.0)(@rspack/core@1.7.11(@swc/helpers@0.5.21))
+      babel-preset-solid:
+        specifier: ^1.9.0
+        version: 1.9.12(@babel/core@7.29.0)(solid-js@1.9.12)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/tur-wasm-cli:
     dependencies:
       commander:
@@ -3014,6 +3048,13 @@ snapshots:
       sprintf-js: 1.0.3
 
   array-flatten@1.1.1: {}
+
+  babel-loader@10.1.1(@babel/core@7.29.0)(@rspack/core@1.7.11(@swc/helpers@0.5.21)):
+    dependencies:
+      '@babel/core': 7.29.0
+      find-up: 5.0.0
+    optionalDependencies:
+      '@rspack/core': 1.7.11(@swc/helpers@0.5.21)
 
   babel-loader@10.1.1(@babel/core@7.29.0)(@rspack/core@2.0.0-rc.1(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@swc/helpers@0.5.21)):
     dependencies:
