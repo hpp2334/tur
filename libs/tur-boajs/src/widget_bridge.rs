@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
@@ -10,7 +11,7 @@ use crate::BoaOpaque;
 
 #[derive(Debug)]
 pub struct TurAppContext {
-    tree: RefCell<WidgetTree>,
+    tree: Rc<RefCell<WidgetTree>>,
     next_id: Cell<u64>,
 }
 
@@ -31,12 +32,16 @@ impl Default for TurAppContext {
 impl TurAppContext {
     pub fn new() -> Self {
         Self {
-            tree: RefCell::new(WidgetTree::new()),
+            tree: Rc::new(RefCell::new(WidgetTree::new())),
             next_id: Cell::new(1),
         }
     }
 
     pub fn tree(&self) -> &RefCell<WidgetTree> {
+        &self.tree
+    }
+
+    pub fn tree_rc(&self) -> &Rc<RefCell<WidgetTree>> {
         &self.tree
     }
 
@@ -60,16 +65,6 @@ macro_rules! extract_ctx {
             )
         })?;
     };
-}
-
-pub(crate) fn tur_create_app_context(
-    _this: &JsValue,
-    _args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let ctx = TurAppContext::new();
-    let opaque = BoaOpaque::new(ctx, context);
-    Ok(opaque.object().clone().into())
 }
 
 pub(crate) fn tur_create_element(
@@ -102,7 +97,6 @@ pub(crate) fn tur_create_root(
     _context: &mut Context,
 ) -> JsResult<JsValue> {
     extract_ctx!(args, ctx);
-
     let id = ctx.alloc_id();
     let node = WidgetNode::new(id, WidgetKind::Column);
     ctx.tree.borrow_mut().insert(node);

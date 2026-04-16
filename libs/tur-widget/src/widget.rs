@@ -126,6 +126,10 @@ impl WidgetTree {
         }
     }
 
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
     pub fn insert(&mut self, node: WidgetNode) {
         if self.root_id.is_none() {
             self.root_id = Some(node.id);

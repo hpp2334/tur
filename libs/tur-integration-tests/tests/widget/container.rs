@@ -1,0 +1,27 @@
+use tur_integration_tests::TurTestApp;
+use tur_render_tree::RenderNodeId;
+use tur_widget::WidgetKind;
+
+#[test]
+fn container_with_padding() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("container-basic").unwrap();
+
+    let container_id = {
+        let tree = app.widget_tree();
+        let root = tree.root().unwrap();
+        let container = tree.get(root.children[0]).unwrap();
+        assert_eq!(container.kind, WidgetKind::Container);
+        assert_eq!(container.children.len(), 1);
+
+        let sb = tree.get(container.children[0]).unwrap();
+        assert_eq!(sb.kind, WidgetKind::SizedBox);
+
+        container.id.as_u64()
+    };
+
+    let rt = app.render_tree();
+    let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
+    assert_eq!(container_node.computed_layout.size.width, 132.0);
+    assert_eq!(container_node.computed_layout.size.height, 132.0);
+}

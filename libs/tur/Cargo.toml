@@ -6,6 +6,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+trace = []
+
 [dependencies]
 tur-shared = { workspace = true }
 tur-widget = { workspace = true }
