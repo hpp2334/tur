@@ -1,4 +1,1 @@
-export interface TurElement {
-  handle: number;
-  type: string;
-}
+export type TurElement = object;
