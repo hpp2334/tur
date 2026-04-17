@@ -1,7 +1,7 @@
 # Rust
 /target/
 **/target/
-Cargo.lock
+# Cargo.lock is committed for reproducible CI
 *.rs.bk
 
 # wasm-pack
