@@ -4,39 +4,25 @@ use std::rc::Rc;
 use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
-use boa_gc::{empty_trace, Finalize, Trace};
+use boa_gc::{Finalize, Trace};
 use tracing;
 use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
 use crate::BoaOpaque;
 
-#[derive(Debug)]
+#[derive(Debug, Trace, Finalize, JsData)]
+#[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
     pub(crate) id: WidgetNodeId,
 }
 
-impl Finalize for TurNodeHandle {}
-
-unsafe impl Trace for TurNodeHandle {
-    empty_trace!();
-}
-
-impl JsData for TurNodeHandle {}
-
-#[derive(Debug)]
+#[derive(Debug, Trace, Finalize, JsData)]
+#[boa_gc(unsafe_empty_trace)]
 pub struct TurAppContext {
     tree: Rc<RefCell<WidgetTree>>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<u64, BoaOpaque<TurNodeHandle>>>,
 }
-
-impl Finalize for TurAppContext {}
-
-unsafe impl boa_gc::Trace for TurAppContext {
-    empty_trace!();
-}
-
-impl JsData for TurAppContext {}
 
 impl Default for TurAppContext {
     fn default() -> Self {
