@@ -1,4 +1,4 @@
-FROM node:20-bookworm
+FROM node:22-bookworm
 
 ENV http_proxy=http://host.docker.internal:7890
 ENV https_proxy=http://host.docker.internal:7890
