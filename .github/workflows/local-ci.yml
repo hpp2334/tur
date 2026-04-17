@@ -33,6 +33,9 @@ jobs:
         run: pnpm install --frozen-lockfile
         working-directory: ./js
 
+      - name: Gen types
+        run: node scripts/gen-types.cjs
+
       - name: Build JS
         run: pnpm build
         working-directory: ./js
@@ -43,9 +46,6 @@ jobs:
 
       - name: Cargo clippy
         run: cargo clippy --workspace -- -D warnings
-
-      - name: Gen types
-        run: node scripts/gen-types.cjs
 
       - name: Typecheck JS
         run: pnpm typecheck
