@@ -36,3 +36,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Local CI
+.actrc
+logs/
