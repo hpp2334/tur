@@ -21,6 +21,8 @@ ENV CARGO_HOME="/root/.cargo"
 
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
+RUN rustup target add wasm32-unknown-unknown
+
 RUN npm install -g pnpm@10
 RUN pnpm config set store-dir /root/.local/share/pnpm/store
 
