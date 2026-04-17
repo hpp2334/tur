@@ -11,33 +11,28 @@ import {
   tur_getFirstChild,
   tur_getNextSibling,
   type TurAppContext,
+  type TurNodeHandle,
 } from "./bridge";
 import type { ResolvedStyle } from "./style";
 import type { JSX } from "solid-js";
 
-export interface TurElement {
-  readonly h: number;
-}
-
-function el(h: number): TurElement {
-  return { h };
-}
+export type TurElement = TurNodeHandle;
 
 const ctx: TurAppContext = getTurAppContext();
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
   createElement(type: string): TurElement {
-    return el(tur_createElement(ctx, type));
+    return tur_createElement(ctx, type);
   },
 
   createTextNode(value: string): TurElement {
     const handle = tur_createElement(ctx, "tur_text");
     tur_setAttribute(ctx, handle, "content", value);
-    return el(handle);
+    return handle;
   },
 
   replaceText(textNode: TurElement, value: string): void {
-    tur_setAttribute(ctx, textNode.h, "content", value);
+    tur_setAttribute(ctx, textNode, "content", value);
   },
 
   isTextNode(_node: TurElement): boolean {
@@ -52,39 +47,36 @@ const _r: Renderer<TurElement> = createRenderer<TurElement>({
         const key = keys[i];
         const v = rs[key];
         if (v !== null) {
-          tur_setAttribute(ctx, node.h, key, v);
+          tur_setAttribute(ctx, node, key, v);
         }
       }
       return;
     }
-    tur_setAttribute(ctx, node.h, name, value);
+    tur_setAttribute(ctx, node, name, value);
   },
 
   insertNode(parent: TurElement, node: TurElement, anchor?: TurElement): void {
     if (anchor != null) {
-      tur_insertBefore(ctx, parent.h, node.h, anchor.h);
+      tur_insertBefore(ctx, parent, node, anchor);
     } else {
-      tur_appendChild(ctx, parent.h, node.h);
+      tur_appendChild(ctx, parent, node);
     }
   },
 
   removeNode(parent: TurElement, node: TurElement): void {
-    tur_removeChild(ctx, parent.h, node.h);
+    tur_removeChild(ctx, parent, node);
   },
 
   getParentNode(node: TurElement): TurElement | undefined {
-    const result = tur_getParent(ctx, node.h);
-    return result != null ? el(result) : undefined;
+    return tur_getParent(ctx, node) ?? undefined;
   },
 
   getFirstChild(node: TurElement): TurElement | undefined {
-    const result = tur_getFirstChild(ctx, node.h);
-    return result != null ? el(result) : undefined;
+    return tur_getFirstChild(ctx, node) ?? undefined;
   },
 
   getNextSibling(node: TurElement): TurElement | undefined {
-    const result = tur_getNextSibling(ctx, node.h);
-    return result != null ? el(result) : undefined;
+    return tur_getNextSibling(ctx, node) ?? undefined;
   },
 });
 
@@ -113,7 +105,7 @@ function createComponent(type: ComponentType, props: Record<string, unknown> | n
 }
 
 export function renderRoot(component: () => JSX.Element): TurElement {
-  const root = el(tur_createRoot(ctx));
+  const root = tur_createRoot(ctx);
   _r.render(
     () => _r.createComponent(component as unknown as (props: Record<string, never>) => TurElement, {}),
     root,

@@ -8,9 +8,19 @@ use boa_engine::object::NativeObject;
 use boa_engine::JsObject;
 use std::marker::PhantomData;
 
+#[derive(Debug)]
 pub struct BoaOpaque<T> {
     object: JsObject,
     _marker: PhantomData<T>,
+}
+
+impl<T> Clone for BoaOpaque<T> {
+    fn clone(&self) -> Self {
+        Self {
+            object: self.object.clone(),
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: NativeObject> BoaOpaque<T> {
