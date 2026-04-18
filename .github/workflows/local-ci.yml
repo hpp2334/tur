@@ -57,5 +57,7 @@ jobs:
         working-directory: ./js
 
       - name: wasm-pack build
-        run: wasm-pack build --target web --no-opt -- --locked --target-dir /root/.cargo/target-wasm
+        run: wasm-pack build --target web -- --locked
         working-directory: ./libs/tur-wasm
+        env:
+          CARGO_TARGET_DIR: /root/.cargo/target-wasm
