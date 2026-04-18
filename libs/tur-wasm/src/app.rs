@@ -9,7 +9,7 @@ use wasm_bindgen_futures::future_to_promise;
 
 struct WasmState {
     app: TurApp<VelloRenderer>,
-    canvas: web_sys::HtmlCanvasElement,
+    _canvas: web_sys::HtmlCanvasElement,
     _resize_closure: Closure<dyn Fn()>,
 }
 
@@ -140,7 +140,7 @@ impl TurWasmApp {
 
             let wasm_state = WasmState {
                 app,
-                canvas,
+                _canvas: canvas,
                 _resize_closure: resize_closure,
             };
 
@@ -192,8 +192,8 @@ impl TurWasmApp {
         let physical_width = (logical_width as f64 * dpr) as u32;
         let physical_height = (logical_height as f64 * dpr) as u32;
 
-        state.canvas.set_width(physical_width);
-        state.canvas.set_height(physical_height);
+        state._canvas.set_width(physical_width);
+        state._canvas.set_height(physical_height);
 
         state
             .app

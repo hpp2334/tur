@@ -1,7 +1,9 @@
+#[cfg(target_arch = "wasm32")]
 mod app;
 
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
 pub use app::TurWasmApp;
 
 #[wasm_bindgen(start)]
