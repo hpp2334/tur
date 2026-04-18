@@ -18,11 +18,26 @@ tur-render-tree = { workspace = true }
 tur-vello-renderer = { workspace = true }
 tur-boajs = { workspace = true }
 winit = { workspace = true }
-vello = { workspace = true }
+vello = { workspace = true, features = ["wgpu"] }
 boa_engine = { workspace = true }
 tracing = { workspace = true }
 tracing-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }
-web-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlCanvasElement",
+    "Node",
+    "EventTarget",
+    "Event",
+    "CssStyleDeclaration",
+    "DomRect",
+    "DomRectReadOnly",
+] }
+js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
+wasm-bindgen-futures = { workspace = true }
+wgpu = { version = "23.0.1", features = ["webgl"] }

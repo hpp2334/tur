@@ -1,5 +1,4 @@
 mod app;
-mod render;
 
 use wasm_bindgen::prelude::*;
 

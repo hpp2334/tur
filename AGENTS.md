@@ -62,10 +62,17 @@ cargo test --workspace
 cargo clippy --workspace -- -D warnings
 ```
 
+**Before running tests**, prepare JS fixtures (install deps, generate TS types, build JS):
+
+```sh
+node scripts/prepare-js-fixtures.cjs
+```
+
 ### tur-wasm (wasm)
 
 ```sh
 cd libs/tur-wasm && wasm-pack build --target web
+cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
 ```
 
 ### tur-wasm-cli (serve demos)

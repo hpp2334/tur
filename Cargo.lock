@@ -2972,6 +2972,7 @@ dependencies = [
  "boa_engine",
  "console_error_panic_hook",
  "getrandom 0.4.2",
+ "js-sys",
  "tracing",
  "tracing-wasm",
  "tur",
@@ -2983,7 +2984,9 @@ dependencies = [
  "tur-widget",
  "vello",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
+ "wgpu",
  "winit",
 ]
 
