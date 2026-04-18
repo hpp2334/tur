@@ -2888,12 +2888,11 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "tur-boajs",
- "tur-layout",
+ "tur-element",
  "tur-noop-renderer",
  "tur-render-tree",
  "tur-shared",
  "tur-vello-renderer",
- "tur-widget",
  "vello",
  "winit",
 ]
@@ -2905,10 +2904,17 @@ dependencies = [
  "boa_engine",
  "boa_gc",
  "tracing",
- "tur-layout",
+ "tur-element",
  "tur-render-tree",
  "tur-shared",
- "tur-widget",
+]
+
+[[package]]
+name = "tur-element"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+ "tur-shared",
 ]
 
 [[package]]
@@ -2916,17 +2922,9 @@ name = "tur-integration-tests"
 version = "0.1.0"
 dependencies = [
  "tur",
+ "tur-element",
  "tur-noop-renderer",
  "tur-render-tree",
- "tur-widget",
-]
-
-[[package]]
-name = "tur-layout"
-version = "0.1.0"
-dependencies = [
- "tur-shared",
- "tur-widget",
 ]
 
 [[package]]
@@ -2934,18 +2932,17 @@ name = "tur-noop-renderer"
 version = "0.1.0"
 dependencies = [
  "tracing",
+ "tur-element",
  "tur-render-tree",
  "tur-shared",
- "tur-widget",
 ]
 
 [[package]]
 name = "tur-render-tree"
 version = "0.1.0"
 dependencies = [
- "tur-layout",
+ "tur-element",
  "tur-shared",
- "tur-widget",
 ]
 
 [[package]]
@@ -2962,9 +2959,9 @@ dependencies = [
  "raw-window-handle",
  "thiserror 2.0.18",
  "tracing",
+ "tur-element",
  "tur-render-tree",
  "tur-shared",
- "tur-widget",
  "vello",
 ]
 
@@ -2980,25 +2977,16 @@ dependencies = [
  "tracing-wasm",
  "tur",
  "tur-boajs",
- "tur-layout",
+ "tur-element",
  "tur-render-tree",
  "tur-shared",
  "tur-vello-renderer",
- "tur-widget",
  "vello",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
  "winit",
-]
-
-[[package]]
-name = "tur-widget"
-version = "0.1.0"
-dependencies = [
- "tracing",
- "tur-shared",
 ]
 
 [[package]]

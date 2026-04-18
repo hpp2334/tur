@@ -1,8 +1,8 @@
 pub mod bridge;
-pub mod widget_bridge;
+pub mod element_bridge;
 
 pub use bridge::init_bridge;
-pub use widget_bridge::{TurAppContext, WeakAppContext};
+pub use element_bridge::{TurAppContext, WeakAppContext};
 
 use boa_engine::object::NativeObject;
 use boa_engine::JsObject;

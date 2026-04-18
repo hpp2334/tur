@@ -2,9 +2,9 @@ use std::path::Path;
 
 use tur::error::TurError;
 use tur::TurApp;
+use tur_element::ElementTree;
 use tur_noop_renderer::NoopRenderer;
 use tur_render_tree::RenderTree;
-use tur_widget::WidgetTree;
 
 pub struct TurTestApp {
     inner: TurApp,
@@ -34,8 +34,8 @@ impl TurTestApp {
         self.inner.load_js(source)
     }
 
-    pub fn widget_tree(&self) -> WidgetTree {
-        self.inner.widget_tree()
+    pub fn element_tree(&self) -> ElementTree {
+        self.inner.element_tree()
     }
 
     pub fn render_tree(&self) -> RenderTree {

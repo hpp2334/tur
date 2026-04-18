@@ -7,10 +7,9 @@ use std::str::FromStr;
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 use tracing;
-use tur_layout::LayoutTree;
+use tur_element::{ElementKind, ElementNode, ElementNodeId, ElementTree, PropValue};
 use tur_render_tree::{RenderTree, Renderer};
 use tur_shared::Constraints;
-use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
 use crate::BoaOpaque;
 
@@ -35,12 +34,11 @@ impl WeakAppContext {
 #[derive(Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
-    pub(crate) id: WidgetNodeId,
+    pub(crate) id: ElementNodeId,
 }
 
 pub struct TurAppContext {
-    tree: Rc<RefCell<WidgetTree>>,
-    layout_tree: RefCell<LayoutTree>,
+    element_tree: Rc<RefCell<ElementTree>>,
     render_tree: RefCell<RenderTree>,
     renderer: RefCell<Box<dyn Renderer>>,
     size: Cell<(f64, f64)>,
@@ -51,8 +49,7 @@ pub struct TurAppContext {
 impl fmt::Debug for TurAppContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TurAppContext")
-            .field("tree", &self.tree)
-            .field("layout_tree", &self.layout_tree)
+            .field("element_tree", &self.element_tree)
             .field("render_tree", &self.render_tree)
             .field("size", &self.size)
             .field("next_id", &self.next_id)
@@ -64,8 +61,7 @@ impl fmt::Debug for TurAppContext {
 impl TurAppContext {
     pub fn new(renderer: Box<dyn Renderer>) -> Self {
         Self {
-            tree: Rc::new(RefCell::new(WidgetTree::new())),
-            layout_tree: RefCell::new(LayoutTree::default()),
+            element_tree: Rc::new(RefCell::new(ElementTree::new())),
             render_tree: RefCell::new(RenderTree::default()),
             renderer: RefCell::new(renderer),
             size: Cell::new((400.0, 600.0)),
@@ -74,12 +70,8 @@ impl TurAppContext {
         }
     }
 
-    pub fn tree(&self) -> &RefCell<WidgetTree> {
-        &self.tree
-    }
-
-    pub fn layout_tree(&self) -> &RefCell<LayoutTree> {
-        &self.layout_tree
+    pub fn element_tree(&self) -> &RefCell<ElementTree> {
+        &self.element_tree
     }
 
     pub fn render_tree(&self) -> &RefCell<RenderTree> {
@@ -103,30 +95,32 @@ impl TurAppContext {
             max_height: height,
         };
 
-        let tree_guard = self.tree.borrow();
-        let mut layout_tree = self.layout_tree.borrow_mut();
+        {
+            let mut element_tree_guard = self.element_tree.borrow_mut();
+            let result = tur_element::compute_layout(&mut element_tree_guard, &constraints);
+            tracing::debug!("layout: {:?}", result.size);
+        }
+
         let mut render_tree = self.render_tree.borrow_mut();
 
-        layout_tree.rebuild_from_widget_tree(&tree_guard);
-        let result = layout_tree.compute_layout(&constraints);
-        tracing::debug!("layout: {:?}", result.size);
-
-        render_tree.rebuild_from_layout_tree(&layout_tree, &tree_guard);
+        {
+            let element_tree_guard = self.element_tree.borrow();
+            render_tree.rebuild_from_element_tree(&element_tree_guard);
+        }
 
         let mut renderer = self.renderer.borrow_mut();
         renderer.render(&render_tree);
-        tracing::debug!("rendered: {:?}", result.size);
     }
 
-    fn alloc_id(&self) -> WidgetNodeId {
+    fn alloc_id(&self) -> ElementNodeId {
         let id = self.next_id.get();
         self.next_id.set(id + 1);
-        WidgetNodeId::new(id)
+        ElementNodeId::new(id)
     }
 
     fn get_or_create_handle(
         &self,
-        id: WidgetNodeId,
+        id: ElementNodeId,
         context: &mut Context,
     ) -> BoaOpaque<TurNodeHandle> {
         let key = id.as_u64();
@@ -151,7 +145,7 @@ fn extract_ctx(args: &[JsValue]) -> JsResult<Rc<RefCell<TurAppContext>>> {
     })
 }
 
-fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<WidgetNodeId> {
+fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<ElementNodeId> {
     let obj = args.get_or_undefined(idx).as_object().ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message("expected TurNodeHandle"))
     })?;
@@ -173,14 +167,14 @@ pub(crate) fn tur_create_element(
         .to_string(context)?
         .to_std_string_escaped();
 
-    let kind = WidgetKind::from_str(&kind_str).unwrap_or_else(|_| {
-        tracing::warn!("unknown widget type: {kind_str}, falling back to Container");
-        WidgetKind::Container
+    let kind = ElementKind::from_str(&kind_str).unwrap_or_else(|_| {
+        tracing::warn!("unknown element type: {kind_str}, falling back to Container");
+        ElementKind::Container
     });
 
     let id = ctx.alloc_id();
-    let node = WidgetNode::new(id, kind);
-    ctx.tree.borrow_mut().insert(node);
+    let node = ElementNode::new(id, kind);
+    ctx.element_tree.borrow_mut().insert(node);
 
     tracing::trace!("tur_createElement({kind_str}) -> {}", id.as_u64());
     let obj = ctx.get_or_create_handle(id, context);
@@ -195,8 +189,8 @@ pub(crate) fn tur_create_root(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let id = ctx.alloc_id();
-    let node = WidgetNode::new(id, WidgetKind::Column);
-    ctx.tree.borrow_mut().insert(node);
+    let node = ElementNode::new(id, ElementKind::Column);
+    ctx.element_tree.borrow_mut().insert(node);
 
     tracing::trace!("tur_createRoot() -> {}", id.as_u64());
     let obj = ctx.get_or_create_handle(id, context);
@@ -237,7 +231,7 @@ pub(crate) fn tur_set_attribute(
 
     tracing::trace!("tur_setAttribute({}, {key}, ...)", node_id.as_u64());
 
-    if let Some(node) = ctx.tree.borrow_mut().get_mut(node_id) {
+    if let Some(node) = ctx.element_tree.borrow_mut().get_mut(node_id) {
         node.set_prop(key, prop_value);
     }
 
@@ -254,7 +248,9 @@ pub(crate) fn tur_append_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.tree.borrow_mut().append_child(parent_id, child_id);
+    ctx.element_tree
+        .borrow_mut()
+        .append_child(parent_id, child_id);
 
     tracing::trace!(
         "tur_appendChild({}, {})",
@@ -274,7 +270,9 @@ pub(crate) fn tur_remove_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.tree.borrow_mut().remove_child(parent_id, child_id);
+    ctx.element_tree
+        .borrow_mut()
+        .remove_child(parent_id, child_id);
 
     tracing::trace!(
         "tur_removeChild({}, {})",
@@ -295,7 +293,7 @@ pub(crate) fn tur_insert_before(
     let child_id = extract_node_id(args, 2)?;
     let ref_id = extract_node_id(args, 3)?;
 
-    ctx.tree
+    ctx.element_tree
         .borrow_mut()
         .insert_before(parent_id, child_id, ref_id);
 
@@ -316,7 +314,7 @@ pub(crate) fn tur_get_parent(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.tree.borrow().parent_of(node_id) {
+    match ctx.element_tree.borrow().parent_of(node_id) {
         Some(parent_id) => {
             let obj = ctx.get_or_create_handle(parent_id, context);
             Ok(obj.object().clone().into())
@@ -333,7 +331,7 @@ pub(crate) fn tur_get_first_child(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.tree.borrow().first_child_of(node_id) {
+    match ctx.element_tree.borrow().first_child_of(node_id) {
         Some(child_id) => {
             let obj = ctx.get_or_create_handle(child_id, context);
             Ok(obj.object().clone().into())
@@ -350,7 +348,7 @@ pub(crate) fn tur_get_next_sibling(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.tree.borrow().next_sibling_of(node_id) {
+    match ctx.element_tree.borrow().next_sibling_of(node_id) {
         Some(sibling_id) => {
             let obj = ctx.get_or_create_handle(sibling_id, context);
             Ok(obj.object().clone().into())

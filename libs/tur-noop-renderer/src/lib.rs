@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
+use tur_element::ElementKind;
 use tur_render_tree::{RenderNodeId, RenderTree, Renderer};
 use tur_shared::Offset;
-use tur_widget::WidgetKind;
 
 pub struct NoopRenderer;
 
@@ -28,7 +28,7 @@ impl Renderer for NoopRenderer {
             }
         };
 
-        let mut counts: HashMap<WidgetKind, usize> = HashMap::new();
+        let mut counts: HashMap<ElementKind, usize> = HashMap::new();
         let max_depth = collect_stats(tree, root_id, Offset::ZERO, 0, &mut counts);
 
         let total: usize = counts.values().sum();
@@ -46,7 +46,7 @@ fn collect_stats(
     id: RenderNodeId,
     parent_offset: Offset,
     depth: usize,
-    counts: &mut HashMap<WidgetKind, usize>,
+    counts: &mut HashMap<ElementKind, usize>,
 ) -> usize {
     let node = match tree.get(id) {
         Some(n) => n,

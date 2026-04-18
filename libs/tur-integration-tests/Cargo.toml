@@ -1,6 +1,6 @@
 [package]
 name = "tur-integration-tests"
-description = "Integration tests for tur widget tree via JS bundles"
+description = "Integration tests for tur element tree via JS bundles"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,6 @@ license.workspace = true
 
 [dependencies]
 tur = { workspace = true, features = ["trace"] }
-tur-widget = { workspace = true }
+tur-element = { workspace = true }
 tur-render-tree = { workspace = true }
 tur-noop-renderer = { workspace = true }

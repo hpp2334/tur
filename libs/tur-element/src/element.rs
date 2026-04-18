@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WidgetNodeId(u64);
+use tur_shared::ComputedLayout;
 
-impl WidgetNodeId {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ElementNodeId(u64);
+
+impl ElementNodeId {
     pub fn new(id: u64) -> Self {
         Self(id)
     }
@@ -15,7 +17,7 @@ impl WidgetNodeId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum WidgetKind {
+pub enum ElementKind {
     Column,
     Row,
     Expanded,
@@ -26,19 +28,19 @@ pub enum WidgetKind {
     Text,
 }
 
-impl FromStr for WidgetKind {
+impl FromStr for ElementKind {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "tur_column" => Ok(WidgetKind::Column),
-            "tur_row" => Ok(WidgetKind::Row),
-            "tur_expanded" => Ok(WidgetKind::Expanded),
-            "tur_stack" => Ok(WidgetKind::Stack),
-            "tur_positioned" => Ok(WidgetKind::Positioned),
-            "tur_sized_box" => Ok(WidgetKind::SizedBox),
-            "tur_container" => Ok(WidgetKind::Container),
-            "tur_text" => Ok(WidgetKind::Text),
+            "tur_column" => Ok(ElementKind::Column),
+            "tur_row" => Ok(ElementKind::Row),
+            "tur_expanded" => Ok(ElementKind::Expanded),
+            "tur_stack" => Ok(ElementKind::Stack),
+            "tur_positioned" => Ok(ElementKind::Positioned),
+            "tur_sized_box" => Ok(ElementKind::SizedBox),
+            "tur_container" => Ok(ElementKind::Container),
+            "tur_text" => Ok(ElementKind::Text),
             _ => Err(()),
         }
     }
@@ -76,22 +78,24 @@ impl PropValue {
 }
 
 #[derive(Debug, Clone)]
-pub struct WidgetNode {
-    pub id: WidgetNodeId,
-    pub kind: WidgetKind,
+pub struct ElementNode {
+    pub id: ElementNodeId,
+    pub kind: ElementKind,
     pub props: HashMap<String, PropValue>,
-    pub children: Vec<WidgetNodeId>,
-    pub parent: Option<WidgetNodeId>,
+    pub children: Vec<ElementNodeId>,
+    pub parent: Option<ElementNodeId>,
+    pub computed_layout: Option<ComputedLayout>,
 }
 
-impl WidgetNode {
-    pub fn new(id: WidgetNodeId, kind: WidgetKind) -> Self {
-        WidgetNode {
+impl ElementNode {
+    pub fn new(id: ElementNodeId, kind: ElementKind) -> Self {
+        ElementNode {
             id,
             kind,
             props: HashMap::new(),
             children: Vec::new(),
             parent: None,
+            computed_layout: None,
         }
     }
 
@@ -113,14 +117,14 @@ impl WidgetNode {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct WidgetTree {
-    nodes: HashMap<WidgetNodeId, WidgetNode>,
-    root_id: Option<WidgetNodeId>,
+pub struct ElementTree {
+    nodes: HashMap<ElementNodeId, ElementNode>,
+    root_id: Option<ElementNodeId>,
 }
 
-impl WidgetTree {
+impl ElementTree {
     pub fn new() -> Self {
-        WidgetTree {
+        ElementTree {
             nodes: HashMap::new(),
             root_id: None,
         }
@@ -130,22 +134,22 @@ impl WidgetTree {
         self.nodes.len()
     }
 
-    pub fn insert(&mut self, node: WidgetNode) {
+    pub fn insert(&mut self, node: ElementNode) {
         if self.root_id.is_none() {
             self.root_id = Some(node.id);
         }
         self.nodes.insert(node.id, node);
     }
 
-    pub fn get(&self, id: WidgetNodeId) -> Option<&WidgetNode> {
+    pub fn get(&self, id: ElementNodeId) -> Option<&ElementNode> {
         self.nodes.get(&id)
     }
 
-    pub fn get_mut(&mut self, id: WidgetNodeId) -> Option<&mut WidgetNode> {
+    pub fn get_mut(&mut self, id: ElementNodeId) -> Option<&mut ElementNode> {
         self.nodes.get_mut(&id)
     }
 
-    pub fn remove(&mut self, id: WidgetNodeId) -> Option<WidgetNode> {
+    pub fn remove(&mut self, id: ElementNodeId) -> Option<ElementNode> {
         let node = self.nodes.remove(&id)?;
         if self.root_id == Some(id) {
             self.root_id = None;
@@ -153,23 +157,23 @@ impl WidgetTree {
         Some(node)
     }
 
-    pub fn root_id(&self) -> Option<WidgetNodeId> {
+    pub fn root_id(&self) -> Option<ElementNodeId> {
         self.root_id
     }
 
-    pub fn root(&self) -> Option<&WidgetNode> {
+    pub fn root(&self) -> Option<&ElementNode> {
         self.root_id.and_then(|id| self.nodes.get(&id))
     }
 
-    pub fn root_mut(&mut self) -> Option<&mut WidgetNode> {
+    pub fn root_mut(&mut self) -> Option<&mut ElementNode> {
         self.root_id.and_then(|id| self.nodes.get_mut(&id))
     }
 
-    pub fn set_root(&mut self, id: WidgetNodeId) {
+    pub fn set_root(&mut self, id: ElementNodeId) {
         self.root_id = Some(id);
     }
 
-    pub fn append_child(&mut self, parent_id: WidgetNodeId, child_id: WidgetNodeId) -> bool {
+    pub fn append_child(&mut self, parent_id: ElementNodeId, child_id: ElementNodeId) -> bool {
         if !self.nodes.contains_key(&parent_id) || !self.nodes.contains_key(&child_id) {
             return false;
         }
@@ -182,7 +186,7 @@ impl WidgetTree {
         true
     }
 
-    pub fn remove_child(&mut self, parent_id: WidgetNodeId, child_id: WidgetNodeId) -> bool {
+    pub fn remove_child(&mut self, parent_id: ElementNodeId, child_id: ElementNodeId) -> bool {
         if let Some(parent) = self.nodes.get_mut(&parent_id) {
             if let Some(pos) = parent.children.iter().position(|&id| id == child_id) {
                 parent.children.remove(pos);
@@ -196,9 +200,9 @@ impl WidgetTree {
 
     pub fn insert_before(
         &mut self,
-        parent_id: WidgetNodeId,
-        child_id: WidgetNodeId,
-        ref_id: WidgetNodeId,
+        parent_id: ElementNodeId,
+        child_id: ElementNodeId,
+        ref_id: ElementNodeId,
     ) -> bool {
         if !self.nodes.contains_key(&parent_id)
             || !self.nodes.contains_key(&child_id)
@@ -219,24 +223,24 @@ impl WidgetTree {
         true
     }
 
-    pub fn children_of(&self, id: WidgetNodeId) -> Vec<WidgetNodeId> {
+    pub fn children_of(&self, id: ElementNodeId) -> Vec<ElementNodeId> {
         self.nodes
             .get(&id)
             .map(|n| n.children.clone())
             .unwrap_or_default()
     }
 
-    pub fn parent_of(&self, id: WidgetNodeId) -> Option<WidgetNodeId> {
+    pub fn parent_of(&self, id: ElementNodeId) -> Option<ElementNodeId> {
         self.nodes.get(&id).and_then(|n| n.parent)
     }
 
-    pub fn first_child_of(&self, id: WidgetNodeId) -> Option<WidgetNodeId> {
+    pub fn first_child_of(&self, id: ElementNodeId) -> Option<ElementNodeId> {
         self.nodes
             .get(&id)
             .and_then(|n| n.children.first().copied())
     }
 
-    pub fn next_sibling_of(&self, id: WidgetNodeId) -> Option<WidgetNodeId> {
+    pub fn next_sibling_of(&self, id: ElementNodeId) -> Option<ElementNodeId> {
         let parent_id = self.nodes.get(&id).and_then(|n| n.parent)?;
         let parent = self.nodes.get(&parent_id)?;
         let pos = parent.children.iter().position(|&c| c == id)?;

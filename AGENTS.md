@@ -12,13 +12,13 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 ├─────────────────────────────────────────────────────┤
 │  js/packages/tur-solidjs-renderer                    │
 │  (solid-js/universal renderer → calls                │
-│   globalThis.tur.widget.*)                           │
+│   globalThis.__tur.*)                                │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur (facade crate, generic over Renderer)      │
 │  ├── libs/tur-boajs          (boa_engine JS bridge)  │
-│  ├── libs/tur-widget         (widget types & layout)  │
+│  ├── libs/tur-element        (element types & layout) │
 │  ├── libs/tur-vello-renderer (vello painting backend) │
 │  └── libs/tur-noop-renderer  (debug/logging backend)  │
 └─────────────────────────────────────────────────────┘
@@ -29,7 +29,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 └─────────────────────────────────────────────────────┘
 ```
 
-### Widget types
+### Element types
 
 `Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`
 
@@ -40,10 +40,10 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 ```
 libs/
   tur/                    # Facade crate (re-exports all sub-crates)
-  tur-widget/             # Widget types, layout algorithms
+  tur-element/            # Element types, layout algorithms
   tur-vello-renderer/     # Vello painting backend
   tur-noop-renderer/      # Debug/logging backend (implements Renderer trait)
-  tur-boajs/              # boa_engine JS bridge (globalThis.tur.widget.*)
+  tur-boajs/              # boa_engine JS bridge (globalThis.__tur.*)
   tur-wasm/               # wasm binary (winit + boajs + vello)
 js/
   packages/

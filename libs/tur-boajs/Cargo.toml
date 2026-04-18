@@ -1,6 +1,6 @@
 [package]
 name = "tur-boajs"
-description = "boa_engine JS bridge for tur widget tree manipulation"
+description = "boa_engine JS bridge for tur element tree manipulation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,8 +8,7 @@ license.workspace = true
 
 [dependencies]
 tur-shared = { workspace = true }
-tur-widget = { workspace = true }
-tur-layout = { workspace = true }
+tur-element = { workspace = true }
 tur-render-tree = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
