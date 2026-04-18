@@ -1,4 +1,3 @@
-use std::cell::Ref;
 use std::path::Path;
 
 use tur::error::TurError;
@@ -35,7 +34,7 @@ impl TurTestApp {
         self.inner.load_js(source)
     }
 
-    pub fn widget_tree(&self) -> Ref<'_, WidgetTree> {
+    pub fn widget_tree(&self) -> WidgetTree {
         self.inner.widget_tree()
     }
 

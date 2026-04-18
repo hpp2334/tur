@@ -43,10 +43,6 @@ impl TurAppContext {
         &self.tree
     }
 
-    pub fn tree_rc(&self) -> &Rc<RefCell<WidgetTree>> {
-        &self.tree
-    }
-
     fn alloc_id(&self) -> WidgetNodeId {
         let id = self.next_id.get();
         self.next_id.set(id + 1);

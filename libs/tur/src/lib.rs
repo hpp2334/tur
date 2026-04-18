@@ -6,9 +6,6 @@ pub use tur_render_tree;
 pub use tur_vello_renderer;
 pub use tur_widget;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use boa_engine::js_string;
 use boa_engine::property::Attribute;
 use boa_engine::Context;
@@ -18,20 +15,18 @@ use tur_boajs::{BoaOpaque, TurAppContext};
 use tur_layout::LayoutTree;
 use tur_render_tree::{RenderTree, Renderer};
 use tur_shared::Constraints;
-use tur_widget::WidgetTree;
 
 pub struct TurApp<R: Renderer> {
     context: Context,
     renderer: R,
     app_context: BoaOpaque<TurAppContext>,
-    tree: Rc<RefCell<WidgetTree>>,
     size: (f64, f64),
 }
 
 impl<R: Renderer> TurApp<R> {
     pub fn new(renderer: R) -> Result<Self, TurError> {
         let mut context = Context::default();
-        let (app_context, tree) = tur_boajs::init_bridge(&mut context);
+        let app_context = tur_boajs::init_bridge(&mut context);
 
         context
             .register_global_property(
@@ -47,7 +42,6 @@ impl<R: Renderer> TurApp<R> {
             context,
             renderer,
             app_context,
-            tree,
             size: (400.0, 600.0),
         })
     }
@@ -96,8 +90,13 @@ impl<R: Renderer> TurApp<R> {
     }
 
     #[cfg(feature = "trace")]
-    pub fn widget_tree(&self) -> std::cell::Ref<'_, WidgetTree> {
-        self.tree.borrow()
+    pub fn widget_tree(&self) -> tur_widget::WidgetTree {
+        self.app_context
+            .get()
+            .expect("failed to downcast TurAppContext")
+            .tree()
+            .borrow()
+            .clone()
     }
 
     #[cfg(feature = "trace")]
@@ -109,7 +108,11 @@ impl<R: Renderer> TurApp<R> {
             min_height: 0.0,
             max_height: height,
         };
-        let tree_guard = self.tree.borrow();
+        let ctx = self
+            .app_context
+            .get()
+            .expect("failed to downcast TurAppContext");
+        let tree_guard = ctx.tree().borrow();
         let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
         layout_tree.compute_layout(&constraints);
         RenderTree::from_layout_tree(&layout_tree, &tree_guard)

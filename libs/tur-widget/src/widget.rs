@@ -75,7 +75,7 @@ impl PropValue {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WidgetNode {
     pub id: WidgetNodeId,
     pub kind: WidgetKind,
@@ -112,7 +112,7 @@ impl WidgetNode {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct WidgetTree {
     nodes: HashMap<WidgetNodeId, WidgetNode>,
     root_id: Option<WidgetNodeId>,
