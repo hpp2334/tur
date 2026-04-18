@@ -8,7 +8,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::future_to_promise;
 
 struct WasmState {
-    app: TurApp<VelloRenderer>,
+    app: TurApp,
     _canvas: web_sys::HtmlCanvasElement,
     _resize_closure: Closure<dyn Fn()>,
 }
@@ -125,7 +125,7 @@ impl TurWasmApp {
                 dpr,
             );
 
-            let mut app = TurApp::new(renderer)
+            let mut app = TurApp::new(Box::new(renderer))
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
             app.set_size(logical_width as f64, logical_height as f64);
 
@@ -162,7 +162,6 @@ impl TurWasmApp {
         state.app.render();
         state
             .app
-            .renderer_mut()
             .present()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
@@ -197,13 +196,11 @@ impl TurWasmApp {
 
         state
             .app
-            .renderer_mut()
-            .resize(logical_width, logical_height, dpr);
+            .renderer_resize(logical_width, logical_height, dpr);
         state.app.set_size(logical_width as f64, logical_height as f64);
         state.app.render();
         state
             .app
-            .renderer_mut()
             .present()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 

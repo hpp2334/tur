@@ -132,4 +132,12 @@ impl TurRenderer for VelloRenderer {
     fn render(&mut self, tree: &RenderTree) {
         self.render_to_scene(tree);
     }
+
+    fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        VelloRenderer::present(self).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+
+    fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
+        VelloRenderer::resize(self, logical_width, logical_height, dpr);
+    }
 }

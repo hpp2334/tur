@@ -7,12 +7,12 @@ use tur_render_tree::RenderTree;
 use tur_widget::WidgetTree;
 
 pub struct TurTestApp {
-    inner: TurApp<NoopRenderer>,
+    inner: TurApp,
 }
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        let mut inner = TurApp::new(NoopRenderer::new())?;
+        let mut inner = TurApp::new(Box::new(NoopRenderer::new()))?;
         inner.set_size(width, height);
         Ok(Self { inner })
     }

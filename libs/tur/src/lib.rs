@@ -12,23 +12,21 @@ use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
 use tur_boajs::{BoaOpaque, TurAppContext};
-use tur_layout::LayoutTree;
-use tur_render_tree::{RenderTree, Renderer};
-use tur_shared::Constraints;
+#[cfg(feature = "trace")]
+use tur_render_tree::RenderTree;
+use tur_render_tree::Renderer;
 
-pub struct TurApp<R: Renderer> {
-    context: Context,
-    renderer: R,
+pub struct TurApp {
+    boa_context: Context,
     app_context: BoaOpaque<TurAppContext>,
-    size: (f64, f64),
 }
 
-impl<R: Renderer> TurApp<R> {
-    pub fn new(renderer: R) -> Result<Self, TurError> {
-        let mut context = Context::default();
-        let app_context = tur_boajs::init_bridge(&mut context);
+impl TurApp {
+    pub fn new(renderer: Box<dyn Renderer>) -> Result<Self, TurError> {
+        let mut boa_context = Context::default();
+        let app_context = tur_boajs::init_bridge(&mut boa_context, renderer);
 
-        context
+        boa_context
             .register_global_property(
                 js_string!("__tur_ctx"),
                 Into::<boa_engine::JsValue>::into(app_context.object().clone()),
@@ -39,15 +37,13 @@ impl<R: Renderer> TurApp<R> {
         tracing::info!("TurApp initialized");
 
         Ok(TurApp {
-            context,
-            renderer,
+            boa_context,
             app_context,
-            size: (400.0, 600.0),
         })
     }
 
     pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
-        self.context
+        self.boa_context
             .eval(Source::from_bytes(source))
             .map_err(TurError::JsEval)?;
         Ok(())
@@ -58,35 +54,37 @@ impl<R: Renderer> TurApp<R> {
     }
 
     pub fn set_size(&mut self, width: f64, height: f64) {
-        self.size = (width, height);
-    }
-
-    pub fn render(&mut self) {
-        let (width, height) = self.size;
-        let constraints = Constraints {
-            min_width: 0.0,
-            max_width: width,
-            min_height: 0.0,
-            max_height: height,
-        };
-
         let ctx = self
             .app_context
             .get()
             .expect("failed to downcast TurAppContext");
-        let tree_guard = ctx.tree().borrow();
-
-        let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
-        let result = layout_tree.compute_layout(&constraints);
-        tracing::debug!("layout: {:?}", result.size);
-
-        let render_tree = RenderTree::from_layout_tree(&layout_tree, &tree_guard);
-        self.renderer.render(&render_tree);
-        tracing::debug!("rendered: {:?}", result.size);
+        ctx.set_size(width, height);
     }
 
-    pub fn renderer_mut(&mut self) -> &mut R {
-        &mut self.renderer
+    pub fn render(&mut self) {
+        let ctx = self
+            .app_context
+            .get()
+            .expect("failed to downcast TurAppContext");
+        ctx.render();
+    }
+
+    pub fn present(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let ctx = self
+            .app_context
+            .get()
+            .expect("failed to downcast TurAppContext");
+        ctx.renderer().borrow_mut().present()
+    }
+
+    pub fn renderer_resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
+        let ctx = self
+            .app_context
+            .get()
+            .expect("failed to downcast TurAppContext");
+        ctx.renderer()
+            .borrow_mut()
+            .resize(logical_width, logical_height, dpr);
     }
 
     #[cfg(feature = "trace")]
@@ -101,20 +99,11 @@ impl<R: Renderer> TurApp<R> {
 
     #[cfg(feature = "trace")]
     pub fn render_tree(&self) -> RenderTree {
-        let (width, height) = self.size;
-        let constraints = Constraints {
-            min_width: 0.0,
-            max_width: width,
-            min_height: 0.0,
-            max_height: height,
-        };
         let ctx = self
             .app_context
             .get()
             .expect("failed to downcast TurAppContext");
-        let tree_guard = ctx.tree().borrow();
-        let mut layout_tree = LayoutTree::from_widget_tree(&tree_guard);
-        layout_tree.compute_layout(&constraints);
-        RenderTree::from_layout_tree(&layout_tree, &tree_guard)
+        ctx.render();
+        ctx.render_tree().borrow().clone()
     }
 }

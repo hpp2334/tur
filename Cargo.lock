@@ -2905,6 +2905,9 @@ dependencies = [
  "boa_engine",
  "boa_gc",
  "tracing",
+ "tur-layout",
+ "tur-render-tree",
+ "tur-shared",
  "tur-widget",
 ]
 
