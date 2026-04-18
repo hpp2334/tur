@@ -1,0 +1,60 @@
+name: Local CI
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH
+        run: |
+          eval $(ssh-agent -s)
+          ssh-add ~/.ssh/id_ed25519
+          mkdir -p /tmp/ssh
+          ssh-keyscan github.com >> /tmp/ssh/known_hosts
+          echo "GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/tmp/ssh/known_hosts" >> $GITHUB_ENV
+
+      - name: Checkout
+        run: |
+          git clone git@github.com:hpp2334/tur.git .
+          git checkout ${{ env.BRANCH_NAME }}
+
+      - name: Check merge conflict
+        run: |
+          git fetch origin main
+          BASE=$(git merge-base HEAD origin/main)
+          git merge-tree $BASE origin/main HEAD
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+        working-directory: ./js
+
+      - name: Gen types
+        run: cargo test -p tur-shared --lib export_bindings --locked
+
+      - name: Build JS
+        run: pnpm build
+        working-directory: ./js
+
+      - name: Cargo test
+        run: cargo test --workspace --locked
+        timeout-minutes: 5
+
+      - name: Cargo clippy
+        run: cargo clippy --workspace --locked -- -D warnings
+
+      - name: Typecheck JS
+        run: pnpm typecheck
+        working-directory: ./js
+
+      - name: Lint JS
+        run: pnpm lint
+        working-directory: ./js
+
+      - name: wasm-pack build
+        run: wasm-pack build --target web -- --locked
+        working-directory: ./libs/tur-wasm

@@ -1,7 +1,7 @@
 # Rust
 /target/
 **/target/
-Cargo.lock
+# Cargo.lock is committed for reproducible CI
 *.rs.bk
 
 # wasm-pack
@@ -36,3 +36,7 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Local CI
+.actrc
+logs/
