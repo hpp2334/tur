@@ -10,7 +10,7 @@ const sshPath = os === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
---container-options --network=host -v /tmp/tur-ci-cache/cargo/registry:/root/.cargo/registry -v /tmp/tur-ci-cache/cargo/git:/root/.cargo/git -v /tmp/tur-ci-cache/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
+--container-options --network=host -v /tmp/tur-ci-cache/cargo/registry:/root/.cargo/registry -v /tmp/tur-ci-cache/cargo/git:/root/.cargo/git -v /tmp/tur-ci-cache/cargo/target:/root/.cargo/target -v /tmp/tur-ci-cache/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
 
 fs.writeFileSync(actrcPath, actrcContent, 'utf8');
 
