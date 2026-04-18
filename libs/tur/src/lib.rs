@@ -12,7 +12,9 @@ use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
 use tur_boajs::{BoaOpaque, TurAppContext};
-use tur_render_tree::{RenderTree, Renderer};
+#[cfg(feature = "trace")]
+use tur_render_tree::RenderTree;
+use tur_render_tree::Renderer;
 
 pub struct TurApp {
     boa_context: Context,
