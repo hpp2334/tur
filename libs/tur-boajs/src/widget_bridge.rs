@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
@@ -14,14 +14,30 @@ use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
 use crate::BoaOpaque;
 
+#[derive(Clone, Debug, Trace, Finalize, JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct WeakAppContext {
+    inner: Weak<RefCell<TurAppContext>>,
+}
+
+impl WeakAppContext {
+    pub fn new(rc: &Rc<RefCell<TurAppContext>>) -> Self {
+        Self {
+            inner: Rc::downgrade(rc),
+        }
+    }
+
+    pub fn upgrade(&self) -> Option<Rc<RefCell<TurAppContext>>> {
+        self.inner.upgrade()
+    }
+}
+
 #[derive(Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
     pub(crate) id: WidgetNodeId,
 }
 
-#[derive(Trace, Finalize)]
-#[boa_gc(unsafe_empty_trace)]
 pub struct TurAppContext {
     tree: Rc<RefCell<WidgetTree>>,
     layout_tree: RefCell<LayoutTree>,
@@ -31,8 +47,6 @@ pub struct TurAppContext {
     next_id: Cell<u64>,
     handles: RefCell<HashMap<u64, BoaOpaque<TurNodeHandle>>>,
 }
-
-impl JsData for TurAppContext {}
 
 impl fmt::Debug for TurAppContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -125,19 +139,16 @@ impl TurAppContext {
     }
 }
 
-macro_rules! extract_ctx {
-    ($args:expr, $ctx:ident) => {
-        let __obj = $args.get_or_undefined(0).as_object().ok_or_else(|| {
-            JsError::from(
-                JsNativeError::typ().with_message("expected TurAppContext as first argument"),
-            )
-        })?;
-        let $ctx = BoaOpaque::<TurAppContext>::wrap(&__obj).ok_or_else(|| {
-            JsError::from(
-                JsNativeError::typ().with_message("expected TurAppContext as first argument"),
-            )
-        })?;
-    };
+fn extract_ctx(args: &[JsValue]) -> JsResult<Rc<RefCell<TurAppContext>>> {
+    let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected TurAppContext as first argument"))
+    })?;
+    let weak = BoaOpaque::<WeakAppContext>::wrap(&obj).ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected TurAppContext as first argument"))
+    })?;
+    weak.upgrade().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("TurAppContext has been dropped"))
+    })
 }
 
 fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<WidgetNodeId> {
@@ -155,7 +166,8 @@ pub(crate) fn tur_create_element(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let kind_str = args
         .get_or_undefined(1)
         .to_string(context)?
@@ -180,7 +192,8 @@ pub(crate) fn tur_create_root(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let id = ctx.alloc_id();
     let node = WidgetNode::new(id, WidgetKind::Column);
     ctx.tree.borrow_mut().insert(node);
@@ -195,7 +208,8 @@ pub(crate) fn tur_set_attribute(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
     let key = args
         .get_or_undefined(2)
@@ -235,7 +249,8 @@ pub(crate) fn tur_append_child(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
@@ -254,7 +269,8 @@ pub(crate) fn tur_remove_child(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
@@ -273,7 +289,8 @@ pub(crate) fn tur_insert_before(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
     let ref_id = extract_node_id(args, 3)?;
@@ -296,7 +313,8 @@ pub(crate) fn tur_get_parent(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
     match ctx.tree.borrow().parent_of(node_id) {
         Some(parent_id) => {
@@ -312,7 +330,8 @@ pub(crate) fn tur_get_first_child(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
     match ctx.tree.borrow().first_child_of(node_id) {
         Some(child_id) => {
@@ -328,7 +347,8 @@ pub(crate) fn tur_get_next_sibling(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    extract_ctx!(args, ctx);
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
     match ctx.tree.borrow().next_sibling_of(node_id) {
         Some(sibling_id) => {

@@ -2,11 +2,13 @@ pub mod bridge;
 pub mod widget_bridge;
 
 pub use bridge::init_bridge;
-pub use widget_bridge::TurAppContext;
+pub use widget_bridge::{TurAppContext, WeakAppContext};
 
 use boa_engine::object::NativeObject;
 use boa_engine::JsObject;
 use std::marker::PhantomData;
+
+pub type BoaTurAppContext = BoaOpaque<WeakAppContext>;
 
 #[derive(Debug)]
 pub struct BoaOpaque<T> {
