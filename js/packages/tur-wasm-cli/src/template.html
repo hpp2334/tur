@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>tur wasm demo</title>
 </head>
-<body>
+<body style="margin: 0; overflow: hidden;">
   <script type="module">
     import init, { TurWasmApp } from "./tur_wasm.js";
 
     async function run() {
       await init();
-      const app = TurWasmApp.create();
-      const resp = await("./__JS_FILE__");
+      const app = await TurWasmApp.create();
+      const resp = await fetch("./__JS_FILE__");
       const source = await resp.text();
       app.load_and_run_js(source);
     }
