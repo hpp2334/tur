@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
@@ -8,7 +11,7 @@ use tur_render_tree::Renderer;
 use crate::widget_bridge::{
     tur_append_child, tur_create_element, tur_create_root, tur_get_first_child,
     tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child, tur_set_attribute,
-    TurAppContext,
+    TurAppContext, WeakAppContext,
 };
 use crate::BoaOpaque;
 
@@ -31,7 +34,10 @@ fn register_global_fn(
         .expect("failed to register global function");
 }
 
-pub fn init_bridge(context: &mut Context, renderer: Box<dyn Renderer>) -> BoaOpaque<TurAppContext> {
+pub fn init_bridge(
+    context: &mut Context,
+    renderer: Box<dyn Renderer>,
+) -> Rc<RefCell<TurAppContext>> {
     register_global_fn(
         context,
         &js_string!("tur_createElement"),
@@ -68,9 +74,19 @@ pub fn init_bridge(context: &mut Context, renderer: Box<dyn Renderer>) -> BoaOpa
     );
 
     let ctx = TurAppContext::new(renderer);
-    let opaque = BoaOpaque::new(ctx, context);
+    let rc_ctx = Rc::new(RefCell::new(ctx));
+    let weak = WeakAppContext::new(&rc_ctx);
+    let opaque = BoaOpaque::new(weak, context);
+
+    context
+        .register_global_property(
+            js_string!("__tur_ctx"),
+            Into::<boa_engine::JsValue>::into(opaque.object().clone()),
+            Attribute::all(),
+        )
+        .expect("failed to register __tur_ctx");
 
     tracing::info!("tur bridge initialized");
 
-    opaque
+    rc_ctx
 }

@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
@@ -14,14 +14,30 @@ use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
 use crate::BoaOpaque;
 
+#[derive(Clone, Debug, Trace, Finalize, JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct WeakAppContext {
+    inner: Weak<RefCell<TurAppContext>>,
+}
+
+impl WeakAppContext {
+    pub fn new(rc: &Rc<RefCell<TurAppContext>>) -> Self {
+        Self {
+            inner: Rc::downgrade(rc),
+        }
+    }
+
+    pub fn upgrade(&self) -> Option<Rc<RefCell<TurAppContext>>> {
+        self.inner.upgrade()
+    }
+}
+
 #[derive(Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
     pub(crate) id: WidgetNodeId,
 }
 
-#[derive(Trace, Finalize)]
-#[boa_gc(unsafe_empty_trace)]
 pub struct TurAppContext {
     tree: Rc<RefCell<WidgetTree>>,
     layout_tree: RefCell<LayoutTree>,
@@ -31,8 +47,6 @@ pub struct TurAppContext {
     next_id: Cell<u64>,
     handles: RefCell<HashMap<u64, BoaOpaque<TurNodeHandle>>>,
 }
-
-impl JsData for TurAppContext {}
 
 impl fmt::Debug for TurAppContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -132,11 +146,15 @@ macro_rules! extract_ctx {
                 JsNativeError::typ().with_message("expected TurAppContext as first argument"),
             )
         })?;
-        let $ctx = BoaOpaque::<TurAppContext>::wrap(&__obj).ok_or_else(|| {
+        let __weak = BoaOpaque::<WeakAppContext>::wrap(&__obj).ok_or_else(|| {
             JsError::from(
                 JsNativeError::typ().with_message("expected TurAppContext as first argument"),
             )
         })?;
+        let __rc = __weak.upgrade().ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message("TurAppContext has been dropped"))
+        })?;
+        let $ctx = __rc.borrow();
     };
 }
 
