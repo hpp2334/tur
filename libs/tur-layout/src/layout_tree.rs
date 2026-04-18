@@ -143,6 +143,15 @@ impl LayoutTree {
         layout_tree
     }
 
+    pub fn rebuild_from_widget_tree(&mut self, tree: &tur_widget::WidgetTree) {
+        self.nodes.clear();
+        self.root_id = tree.root_id().map(|id| LayoutNodeId::new(id.as_u64()));
+
+        if let Some(root_id) = tree.root_id() {
+            Self::convert_node(tree, root_id, self);
+        }
+    }
+
     fn convert_node(
         tree: &tur_widget::WidgetTree,
         id: tur_widget::WidgetNodeId,

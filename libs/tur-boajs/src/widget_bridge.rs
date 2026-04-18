@@ -1,11 +1,15 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::fmt;
 use std::rc::Rc;
 use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 use tracing;
+use tur_layout::LayoutTree;
+use tur_render_tree::{RenderTree, Renderer};
+use tur_shared::Constraints;
 use tur_widget::{PropValue, WidgetKind, WidgetNode, WidgetNodeId, WidgetTree};
 
 use crate::BoaOpaque;
@@ -16,24 +20,41 @@ pub struct TurNodeHandle {
     pub(crate) id: WidgetNodeId,
 }
 
-#[derive(Debug, Trace, Finalize, JsData)]
+#[derive(Trace, Finalize)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurAppContext {
     tree: Rc<RefCell<WidgetTree>>,
+    layout_tree: RefCell<LayoutTree>,
+    render_tree: RefCell<RenderTree>,
+    renderer: RefCell<Box<dyn Renderer>>,
+    size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<u64, BoaOpaque<TurNodeHandle>>>,
 }
 
-impl Default for TurAppContext {
-    fn default() -> Self {
-        Self::new()
+impl JsData for TurAppContext {}
+
+impl fmt::Debug for TurAppContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TurAppContext")
+            .field("tree", &self.tree)
+            .field("layout_tree", &self.layout_tree)
+            .field("render_tree", &self.render_tree)
+            .field("size", &self.size)
+            .field("next_id", &self.next_id)
+            .field("handles", &self.handles)
+            .finish_non_exhaustive()
     }
 }
 
 impl TurAppContext {
-    pub fn new() -> Self {
+    pub fn new(renderer: Box<dyn Renderer>) -> Self {
         Self {
             tree: Rc::new(RefCell::new(WidgetTree::new())),
+            layout_tree: RefCell::new(LayoutTree::default()),
+            render_tree: RefCell::new(RenderTree::default()),
+            renderer: RefCell::new(renderer),
+            size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
         }
@@ -41,6 +62,46 @@ impl TurAppContext {
 
     pub fn tree(&self) -> &RefCell<WidgetTree> {
         &self.tree
+    }
+
+    pub fn layout_tree(&self) -> &RefCell<LayoutTree> {
+        &self.layout_tree
+    }
+
+    pub fn render_tree(&self) -> &RefCell<RenderTree> {
+        &self.render_tree
+    }
+
+    pub fn renderer(&self) -> &RefCell<Box<dyn Renderer>> {
+        &self.renderer
+    }
+
+    pub fn set_size(&self, width: f64, height: f64) {
+        self.size.set((width, height));
+    }
+
+    pub fn render(&self) {
+        let (width, height) = self.size.get();
+        let constraints = Constraints {
+            min_width: 0.0,
+            max_width: width,
+            min_height: 0.0,
+            max_height: height,
+        };
+
+        let tree_guard = self.tree.borrow();
+        let mut layout_tree = self.layout_tree.borrow_mut();
+        let mut render_tree = self.render_tree.borrow_mut();
+
+        layout_tree.rebuild_from_widget_tree(&tree_guard);
+        let result = layout_tree.compute_layout(&constraints);
+        tracing::debug!("layout: {:?}", result.size);
+
+        render_tree.rebuild_from_layout_tree(&layout_tree, &tree_guard);
+
+        let mut renderer = self.renderer.borrow_mut();
+        renderer.render(&render_tree);
+        tracing::debug!("rendered: {:?}", result.size);
     }
 
     fn alloc_id(&self) -> WidgetNodeId {

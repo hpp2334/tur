@@ -14,7 +14,7 @@ impl RenderNodeId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RenderNode {
     pub id: RenderNodeId,
     pub kind: WidgetKind,

@@ -6,7 +6,7 @@ use tur_widget::WidgetTree;
 
 use crate::render_node::{RenderNode, RenderNodeId};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct RenderTree {
     nodes: HashMap<RenderNodeId, RenderNode>,
     root_id: Option<RenderNodeId>,
@@ -26,6 +26,17 @@ impl RenderTree {
         }
 
         render_tree
+    }
+
+    pub fn rebuild_from_layout_tree(&mut self, layout_tree: &LayoutTree, widget_tree: &WidgetTree) {
+        self.nodes.clear();
+        self.root_id = layout_tree
+            .root_id()
+            .map(|id| RenderNodeId::new(id.as_u64()));
+
+        if let Some(root_id) = layout_tree.root_id() {
+            Self::convert_node(layout_tree, widget_tree, root_id, self);
+        }
     }
 
     fn convert_node(

@@ -3,6 +3,7 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::Context;
 use tracing;
+use tur_render_tree::Renderer;
 
 use crate::widget_bridge::{
     tur_append_child, tur_create_element, tur_create_root, tur_get_first_child,
@@ -30,7 +31,7 @@ fn register_global_fn(
         .expect("failed to register global function");
 }
 
-pub fn init_bridge(context: &mut Context) -> BoaOpaque<TurAppContext> {
+pub fn init_bridge(context: &mut Context, renderer: Box<dyn Renderer>) -> BoaOpaque<TurAppContext> {
     register_global_fn(
         context,
         &js_string!("tur_createElement"),
@@ -66,7 +67,7 @@ pub fn init_bridge(context: &mut Context) -> BoaOpaque<TurAppContext> {
         tur_get_next_sibling,
     );
 
-    let ctx = TurAppContext::new();
+    let ctx = TurAppContext::new(renderer);
     let opaque = BoaOpaque::new(ctx, context);
 
     tracing::info!("tur bridge initialized");
