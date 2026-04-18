@@ -1,5 +1,5 @@
+use tur_element::ElementKind;
 use tur_shared::ComputedLayout;
-use tur_widget::WidgetKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RenderNodeId(u64);
@@ -17,7 +17,7 @@ impl RenderNodeId {
 #[derive(Debug, Clone)]
 pub struct RenderNode {
     pub id: RenderNodeId,
-    pub kind: WidgetKind,
+    pub kind: ElementKind,
     pub children: Vec<RenderNodeId>,
     pub computed_layout: ComputedLayout,
     pub text_content: Option<String>,

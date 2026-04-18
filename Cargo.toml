@@ -2,8 +2,7 @@
 resolver = "3"
 members = [
     "libs/tur-shared",
-    "libs/tur-widget",
-    "libs/tur-layout",
+    "libs/tur-element",
     "libs/tur-render-tree",
     "libs/tur-vello-renderer",
     "libs/tur-noop-renderer",
@@ -22,8 +21,7 @@ repository = "https://github.com/hpp2334/tur"
 
 [workspace.dependencies]
 tur-shared = { path = "libs/tur-shared" }
-tur-widget = { path = "libs/tur-widget" }
-tur-layout = { path = "libs/tur-layout" }
+tur-element = { path = "libs/tur-element" }
 tur-render-tree = { path = "libs/tur-render-tree" }
 tur-vello-renderer = { path = "libs/tur-vello-renderer" }
 tur-noop-renderer = { path = "libs/tur-noop-renderer" }

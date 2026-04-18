@@ -1,10 +1,9 @@
 pub mod error;
 pub use tur_boajs;
-pub use tur_layout;
+pub use tur_element;
 pub use tur_noop_renderer;
 pub use tur_render_tree;
 pub use tur_vello_renderer;
-pub use tur_widget;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -67,8 +66,8 @@ impl TurApp {
     }
 
     #[cfg(feature = "trace")]
-    pub fn widget_tree(&self) -> tur_widget::WidgetTree {
-        self.app_context.borrow().tree().borrow().clone()
+    pub fn element_tree(&self) -> tur_element::ElementTree {
+        self.app_context.borrow().element_tree().borrow().clone()
     }
 
     #[cfg(feature = "trace")]

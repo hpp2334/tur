@@ -10,8 +10,7 @@ export {
   mergeProps,
   use,
 } from "./renderer";
-export { getTurAppContext } from "./bridge";
-export type { TurAppContext } from "./bridge";
+export type { TurNodeHandle } from "./tur";
 export type { ResolvedStyle } from "./style";
 export type { TurElement } from "./types";
 export type { Color } from "./generated/Color";

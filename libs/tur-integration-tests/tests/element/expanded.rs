@@ -1,6 +1,6 @@
+use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_widget::WidgetKind;
 
 #[test]
 fn expanded_fills_remaining() {
@@ -8,21 +8,21 @@ fn expanded_fills_remaining() {
     app.load_bundle("expanded-basic").unwrap();
 
     let (expanded_id, _inner_sb_id) = {
-        let tree = app.widget_tree();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.kind, WidgetKind::Column);
+        assert_eq!(col.kind, ElementKind::Column);
         assert_eq!(col.children.len(), 2);
 
         let sb = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb.kind, WidgetKind::SizedBox);
+        assert_eq!(sb.kind, ElementKind::SizedBox);
 
         let expanded = tree.get(col.children[1]).unwrap();
-        assert_eq!(expanded.kind, WidgetKind::Expanded);
+        assert_eq!(expanded.kind, ElementKind::Expanded);
         assert_eq!(expanded.children.len(), 1);
 
         let inner_sb = tree.get(expanded.children[0]).unwrap();
-        assert_eq!(inner_sb.kind, WidgetKind::SizedBox);
+        assert_eq!(inner_sb.kind, ElementKind::SizedBox);
 
         (expanded.id.as_u64(), inner_sb.id.as_u64())
     };
@@ -39,15 +39,15 @@ fn expanded_multiple_share_evenly() {
     app.load_bundle("expanded-multiple").unwrap();
 
     let (exp1_id, exp2_id) = {
-        let tree = app.widget_tree();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.children.len(), 2);
 
         let exp1 = tree.get(col.children[0]).unwrap();
         let exp2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(exp1.kind, WidgetKind::Expanded);
-        assert_eq!(exp2.kind, WidgetKind::Expanded);
+        assert_eq!(exp1.kind, ElementKind::Expanded);
+        assert_eq!(exp2.kind, ElementKind::Expanded);
 
         (exp1.id.as_u64(), exp2.id.as_u64())
     };

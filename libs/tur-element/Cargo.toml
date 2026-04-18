@@ -1,6 +1,6 @@
 [package]
-name = "tur-layout"
-description = "Layout tree and algorithms for tur"
+name = "tur-element"
+description = "Element types and layout algorithms for tur"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,4 +8,4 @@ license.workspace = true
 
 [dependencies]
 tur-shared = { workspace = true }
-tur-widget = { workspace = true }
+tracing = { workspace = true }

@@ -1,38 +1,25 @@
 import { createRenderer, type Renderer } from "solid-js/universal";
-import {
-  getTurAppContext,
-  tur_createElement,
-  tur_createRoot,
-  tur_setAttribute,
-  tur_appendChild,
-  tur_removeChild,
-  tur_insertBefore,
-  tur_getParent,
-  tur_getFirstChild,
-  tur_getNextSibling,
-  type TurAppContext,
-  type TurNodeHandle,
-} from "./bridge";
+import type { TurNodeHandle } from "./tur";
 import type { ResolvedStyle } from "./style";
 import type { JSX } from "solid-js";
 
 export type TurElement = TurNodeHandle;
 
-const ctx: TurAppContext = getTurAppContext();
+const ctx = __tur.__ctx;
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
   createElement(type: string): TurElement {
-    return tur_createElement(ctx, type);
+    return __tur.create(ctx, type);
   },
 
   createTextNode(value: string): TurElement {
-    const handle = tur_createElement(ctx, "tur_text");
-    tur_setAttribute(ctx, handle, "content", value);
+    const handle = __tur.create(ctx, "tur_text");
+    __tur.setAttribute(ctx, handle, "content", value);
     return handle;
   },
 
   replaceText(textNode: TurElement, value: string): void {
-    tur_setAttribute(ctx, textNode, "content", value);
+    __tur.setAttribute(ctx, textNode, "content", value);
   },
 
   isTextNode(_node: TurElement): boolean {
@@ -47,36 +34,36 @@ const _r: Renderer<TurElement> = createRenderer<TurElement>({
         const key = keys[i];
         const v = rs[key];
         if (v !== null) {
-          tur_setAttribute(ctx, node, key, v);
+          __tur.setAttribute(ctx, node, key, v);
         }
       }
       return;
     }
-    tur_setAttribute(ctx, node, name, value);
+    __tur.setAttribute(ctx, node, name, value);
   },
 
   insertNode(parent: TurElement, node: TurElement, anchor?: TurElement): void {
     if (anchor != null) {
-      tur_insertBefore(ctx, parent, node, anchor);
+      __tur.insertBefore(ctx, parent, node, anchor);
     } else {
-      tur_appendChild(ctx, parent, node);
+      __tur.appendChild(ctx, parent, node);
     }
   },
 
   removeNode(parent: TurElement, node: TurElement): void {
-    tur_removeChild(ctx, parent, node);
+    __tur.removeChild(ctx, parent, node);
   },
 
   getParentNode(node: TurElement): TurElement | undefined {
-    return tur_getParent(ctx, node) ?? undefined;
+    return __tur.getParent(ctx, node) ?? undefined;
   },
 
   getFirstChild(node: TurElement): TurElement | undefined {
-    return tur_getFirstChild(ctx, node) ?? undefined;
+    return __tur.getFirstChild(ctx, node) ?? undefined;
   },
 
   getNextSibling(node: TurElement): TurElement | undefined {
-    return tur_getNextSibling(ctx, node) ?? undefined;
+    return __tur.getNextSibling(ctx, node) ?? undefined;
   },
 });
 
@@ -105,7 +92,7 @@ function createComponent(type: ComponentType, props: Record<string, unknown> | n
 }
 
 export function renderRoot(component: () => JSX.Element): TurElement {
-  const root = tur_createRoot(ctx);
+  const root = __tur.createRoot(ctx);
   _r.render(
     () => _r.createComponent(component as unknown as (props: Record<string, never>) => TurElement, {}),
     root,

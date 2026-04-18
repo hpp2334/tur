@@ -1,6 +1,6 @@
 [package]
 name = "tur-vello-renderer"
-description = "Vello rendering backend for tur widgets"
+description = "Vello rendering backend for tur elements"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 
 [dependencies]
 tur-shared = { workspace = true }
-tur-widget = { workspace = true }
+tur-element = { workspace = true }
 tur-render-tree = { workspace = true }
 vello = { workspace = true }
 raw-window-handle = { workspace = true }

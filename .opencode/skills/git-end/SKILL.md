@@ -102,6 +102,8 @@ Run local CI via `act` to verify all checks pass. This runs the same CI as GitHu
 node ./scripts/local_ci.cjs
 ```
 
+**Timeout**: The local CI script can take a long time (especially the `wasm-pack build` + `wasm-opt` step). Use a timeout of at least **600000ms** (10 minutes) when calling the Bash tool to avoid premature termination. If the timeout is hit but all preceding steps show ✅ Success, the CI can be considered passed (the wasm-pack step is the final step and is optional for verification purposes).
+
 The script will:
 - Detect the OS and generate `.actrc` with the correct SSH path
 - Run the act workflow with the current branch

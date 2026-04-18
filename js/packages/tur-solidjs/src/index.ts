@@ -1,5 +1,4 @@
-export { getTurAppContext } from "@tur/solidjs-renderer";
-export type { TurAppContext } from "@tur/solidjs-renderer";
+export type { TurNodeHandle } from "@tur/solidjs-renderer";
 export type { ResolvedStyle } from "@tur/solidjs-renderer";
 export type { Color } from "@tur/solidjs-renderer";
 export type { RGB } from "@tur/solidjs-renderer";

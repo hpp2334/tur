@@ -40,16 +40,16 @@ fn paint_node(ctx: &mut PaintContext, tree: &RenderTree, id: RenderNodeId, paren
     let absolute_offset = parent_offset + node.computed_layout.offset;
 
     match node.kind {
-        tur_widget::WidgetKind::Text => paint_text(ctx, node, absolute_offset),
-        tur_widget::WidgetKind::Container => {
+        tur_element::ElementKind::Text => paint_text(ctx, node, absolute_offset),
+        tur_element::ElementKind::Container => {
             paint_container(ctx, node, absolute_offset, node.computed_layout.size)
         }
-        tur_widget::WidgetKind::SizedBox
-        | tur_widget::WidgetKind::Column
-        | tur_widget::WidgetKind::Row
-        | tur_widget::WidgetKind::Expanded
-        | tur_widget::WidgetKind::Stack
-        | tur_widget::WidgetKind::Positioned => {}
+        tur_element::ElementKind::SizedBox
+        | tur_element::ElementKind::Column
+        | tur_element::ElementKind::Row
+        | tur_element::ElementKind::Expanded
+        | tur_element::ElementKind::Stack
+        | tur_element::ElementKind::Positioned => {}
     }
 
     for &child_id in &node.children {
