@@ -2,11 +2,10 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
-use tur::error::TurError;
-use tur::TurApp;
-use tur_element_tree::ElementTree;
-use tur_noop_renderer::NoopRenderer;
-use tur_render_tree::RenderTree;
+use tur_engine::core::elements::ElementTree;
+use tur_engine::error::TurError;
+use tur_engine::renderer::noop::NoopRenderer;
+use tur_engine::TurApp;
 
 pub struct TurTestApp {
     inner: TurApp,
@@ -40,7 +39,8 @@ impl TurTestApp {
         self.inner.element_tree()
     }
 
-    pub fn render_tree(&self) -> Rc<RefCell<RenderTree>> {
-        self.inner.render_tree()
+    pub fn render_tree(&self) -> Rc<RefCell<ElementTree>> {
+        self.inner.render();
+        self.inner.element_tree()
     }
 }

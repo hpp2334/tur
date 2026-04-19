@@ -1,5 +1,4 @@
 use tur_integration_tests::TurTestApp;
-use tur_render_tree::RenderNodeId;
 
 #[test]
 fn container_with_padding() {
@@ -11,18 +10,24 @@ fn container_with_padding() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let container = tree.get(root.children[0]).unwrap();
-        assert_eq!(container.element.kind().as_str(), "tur_container");
+        assert_eq!(
+            container.element.as_ref().unwrap().kind().as_str(),
+            "tur_container"
+        );
         assert_eq!(container.children.len(), 1);
 
         let sb = tree.get(container.children[0]).unwrap();
-        assert_eq!(sb.element.kind().as_str(), "tur_container");
+        assert_eq!(
+            sb.element.as_ref().unwrap().kind().as_str(),
+            "tur_container"
+        );
 
-        container.id.as_u64()
+        container.id
     };
 
     let rt = app.render_tree();
     let rt = rt.borrow();
-    let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
+    let container_node = rt.get(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 132.0);
     assert_eq!(container_node.computed_layout.size.height, 132.0);
 }

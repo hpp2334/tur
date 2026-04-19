@@ -1,0 +1,19 @@
+[package]
+name = "tur-engine"
+description = "Tur rendering engine (elements, layout, paint, renderers, JS bridge)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[features]
+trace = []
+
+[dependencies]
+tur-shared = { workspace = true }
+boa_engine = { workspace = true }
+boa_gc = { workspace = true }
+vello = { workspace = true }
+num-traits = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }

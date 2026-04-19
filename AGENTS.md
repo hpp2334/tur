@@ -16,12 +16,20 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
-│  libs/tur (facade crate, generic over Renderer)      │
-│  ├── libs/tur-boajs          (boa_engine JS bridge)  │
-│  ├── libs/tur-element        (element types & layout) │
-│  ├── libs/tur-vello-renderer (vello painting backend) │
-│  └── libs/tur-noop-renderer  (debug/logging backend)  │
-└─────────────────────────────────────────────────────┘
+│  libs/tur-engine (unified engine crate)               │
+│  ├── core/trait_   (ElementKind, ElementNodeId,       │
+│  │                   ElementLayout, ElementRender,     │
+│  │                   ElementOnUpdate)                  │
+│  ├── core/elements (AnyElement, ElementNode,           │
+│  │                   ElementTree with layout+paint)    │
+│  ├── core/render   (PaintContext, Renderer,            │
+│  │                   ChildLayout, ChildPaint)          │
+│  ├── core/bridge   (boa_engine JS bridge, init_bridge) │
+│  ├── elements/     (FlexElement, StackElement, etc.    │
+│  │                   each with element.rs + render.rs)  │
+│  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
+│  └── renderer/noop  (NoopRenderer, logs tree stats)    │
+└──────────────────────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-wasm                                        │
@@ -35,21 +43,47 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
+### Domain traits
+
+Each element implements three focused traits:
+
+- `ElementOnUpdate` — JS property mutation (`set_prop`)
+- `ElementLayout` — two-phase layout (`perform_layout_size`, `perform_layout_position`)
+- `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
+
+Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits).
+
+### Data flow
+
+1. JS calls `globalThis.__tur.*` → bridge creates `AnyElement` in `ElementTree`
+2. `ElementTree::compute_layout()` runs two-phase layout directly on elements
+3. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
+4. `Renderer::render(&mut self, tree: &ElementTree)` drives the frame
+
 ## Directory structure
 
 ```
 libs/
-  tur/                    # Facade crate (re-exports all sub-crates)
-  tur-element/            # Element types, layout algorithms
-  tur-vello-renderer/     # Vello painting backend
-  tur-noop-renderer/      # Debug/logging backend (implements Renderer trait)
-  tur-boajs/              # boa_engine JS bridge (globalThis.__tur.*)
-  tur-wasm/               # wasm binary (winit + boajs + vello)
+  tur-engine/                # Unified engine crate
+    src/
+      core/
+        trait_/              # Domain traits (ElementLayout, ElementRender, ElementOnUpdate)
+        elements/            # AnyElement, ElementNode, ElementTree
+        render/              # PaintContext, Renderer, ChildLayout, ChildPaint
+        bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)
+      elements/              # Concrete elements (flex/, stack/, positioned/, etc.)
+        flex/element.rs      # FlexElement struct + ElementOnUpdate
+        flex/render.rs       # ElementLayout + ElementRender (layout algorithm)
+      renderer/
+        vello/               # VelloRenderer (GPU painting)
+        noop/                # NoopRenderer (logging)
+  tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
+  tur-wasm/                  # wasm binary (winit + vello + tur-engine)
 js/
   packages/
-    tur-solidjs-renderer/ # SolidJS universal renderer
-    tur-solidjs-demo/     # Demo app (todolist example)
-    tur-wasm-cli/         # CLI for building and serving tur-wasm demos
+    tur-solidjs-renderer/    # SolidJS universal renderer
+    tur-solidjs-demo/        # Demo app (todolist example)
+    tur-wasm-cli/            # CLI for building and serving tur-wasm demos
 ```
 
 ## Commands
@@ -58,7 +92,7 @@ js/
 
 ```sh
 cargo build --workspace
-cargo test --workspace
+cargo test --workspace --test element
 cargo clippy --workspace -- -D warnings
 ```
 
@@ -113,15 +147,18 @@ cd js/packages/tur-solidjs-demo && pnpm build
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned)
 - Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
+- No separate RenderTree — layout and paint happen directly on ElementTree
 
 ### Renderer trait
 
-The `Renderer` trait is defined in `tur-render-tree`:
+The `Renderer` trait is defined in `tur-engine::core::render`:
 
 ```rust
 pub trait Renderer {
-    fn render(&mut self, tree: &RenderTree);
+    fn render(&mut self, tree: &ElementTree);
+    fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
+    fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
 }
 ```
 
-`TurApp<R: Renderer>` is generic over the rendering backend. Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
+Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
