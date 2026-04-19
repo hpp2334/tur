@@ -1,6 +1,7 @@
 import type { ResolvedStyle } from "@tur/solidjs-renderer";
 import type { Color } from "@tur/solidjs-renderer";
 import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
+import type { FlexFit } from "@tur/solidjs-renderer";
 import type { MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 
@@ -9,7 +10,7 @@ declare module "solid-js" {
     interface IntrinsicElements {
       tur_flex: {
         style?: ResolvedStyle;
-        direction?: "vertical" | "horizontal";
+        direction: "vertical" | "horizontal";
         mainAlignment?: MainAxisAlignment;
         crossAlignment?: CrossAxisAlignment;
         children?: JSX.Element;
@@ -17,6 +18,7 @@ declare module "solid-js" {
       tur_flex_item: {
         style?: ResolvedStyle;
         flex?: number;
+        fit?: FlexFit;
         children?: JSX.Element;
       };
       tur_stack: {

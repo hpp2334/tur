@@ -3,6 +3,7 @@ import type { Color } from "@tur/solidjs-renderer";
 import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
 import type { MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
+import type { FlexFit } from "@tur/solidjs-renderer";
 import type { Style } from "./style";
 
 interface BaseProps {
@@ -22,6 +23,7 @@ export interface RowProps extends BaseProps {
 
 export interface ExpandedProps extends BaseProps {
   flex?: number;
+  fit?: FlexFit;
 }
 
 export interface StackProps extends BaseProps {
