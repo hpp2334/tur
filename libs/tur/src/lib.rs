@@ -65,8 +65,8 @@ impl TurApp {
     }
 
     #[cfg(feature = "trace")]
-    pub fn element_tree(&self) -> ElementTree {
-        self.app_context.borrow().element_tree().borrow().clone()
+    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
+        self.app_context.borrow().element_tree_rc()
     }
 
     #[cfg(feature = "trace")]

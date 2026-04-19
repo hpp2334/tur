@@ -21,10 +21,6 @@ macro_rules! impl_dyn_element {
                 tur_element_tree::Element::name(self)
             }
 
-            fn clone_box(&self) -> Box<dyn tur_element_tree::DynElement> {
-                Box::new(self.clone())
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }

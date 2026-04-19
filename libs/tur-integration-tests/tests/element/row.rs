@@ -7,7 +7,8 @@ fn row_basic_horizontal_stacking() {
     app.load_bundle("row-basic").unwrap();
 
     let (row_id, sb1_id, sb2_id) = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         assert_eq!(root.element.name(), "tur_flex");
         assert_eq!(root.children.len(), 1);

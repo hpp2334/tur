@@ -7,7 +7,8 @@ fn expanded_fills_remaining() {
     app.load_bundle("expanded-basic").unwrap();
 
     let (expanded_id, _inner_sb_id) = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.element.name(), "tur_flex");
@@ -39,7 +40,8 @@ fn expanded_multiple_share_evenly() {
     app.load_bundle("expanded-multiple").unwrap();
 
     let (exp1_id, exp2_id) = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.children.len(), 2);

@@ -1,7 +1,9 @@
+use std::cell::Ref;
+
 use tur_element_tree::ElementTree;
 use tur_integration_tests::TurTestApp;
 
-fn print_tree(tree: &ElementTree) {
+fn print_tree(tree: &Ref<ElementTree>) {
     fn go(tree: &ElementTree, id: tur_element_tree::ElementNodeId, depth: usize) {
         if let Some(node) = tree.get(id) {
             eprintln!(
@@ -43,7 +45,7 @@ fn debug_raw_column_basic() {
     .unwrap();
 
     eprintln!("=== raw JS: column-basic ===");
-    print_tree(&app.element_tree());
+    print_tree(&app.element_tree().borrow());
 }
 
 #[test]
@@ -52,5 +54,5 @@ fn debug_solidjs_column_basic() {
     app.load_bundle("column-basic").unwrap();
 
     eprintln!("=== SolidJS: column-basic ===");
-    print_tree(&app.element_tree());
+    print_tree(&app.element_tree().borrow());
 }

@@ -36,7 +36,7 @@ impl TurTestApp {
         self.inner.load_js(source)
     }
 
-    pub fn element_tree(&self) -> ElementTree {
+    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
         self.inner.element_tree()
     }
 

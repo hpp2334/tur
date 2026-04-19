@@ -7,7 +7,8 @@ fn container_with_padding() {
     app.load_bundle("container-basic").unwrap();
 
     let container_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let container = tree.get(root.children[0]).unwrap();
         assert_eq!(container.element.name(), "tur_container");

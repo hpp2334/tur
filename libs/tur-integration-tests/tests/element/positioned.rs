@@ -7,7 +7,8 @@ fn positioned_with_left_top() {
     app.load_bundle("positioned-basic").unwrap();
 
     let pos_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
         assert_eq!(stack.element.name(), "tur_stack");

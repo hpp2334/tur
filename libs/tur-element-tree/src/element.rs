@@ -20,17 +20,6 @@ pub struct ElementNode {
     pub parent: Option<ElementNodeId>,
 }
 
-impl Clone for ElementNode {
-    fn clone(&self) -> Self {
-        ElementNode {
-            id: self.id,
-            element: self.element.clone_box(),
-            children: self.children.clone(),
-            parent: self.parent,
-        }
-    }
-}
-
 impl std::fmt::Debug for ElementNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ElementNode")
@@ -53,7 +42,7 @@ impl ElementNode {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ElementTree {
     nodes: HashMap<ElementNodeId, ElementNode>,
     root_id: Option<ElementNodeId>,

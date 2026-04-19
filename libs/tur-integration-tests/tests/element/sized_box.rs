@@ -7,7 +7,8 @@ fn sized_box_fixed_dimensions() {
     app.load_bundle("sized-box-basic").unwrap();
 
     let sb_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let sb = tree.get(root.children[0]).unwrap();
         assert_eq!(sb.element.name(), "tur_container");

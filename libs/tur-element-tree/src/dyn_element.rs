@@ -8,7 +8,6 @@ pub trait DynElement: Send + Sync + 'static {
     fn to_render_object_boxed(&self) -> Box<dyn RenderObject>;
     fn kind(&self) -> ElementKind;
     fn name(&self) -> &'static str;
-    fn clone_box(&self) -> Box<dyn DynElement>;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }

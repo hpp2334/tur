@@ -7,7 +7,8 @@ fn column_basic_vertical_stacking() {
     app.load_bundle("column-basic").unwrap();
 
     let (col_id, sb1_id, sb2_id) = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         assert_eq!(root.element.name(), "tur_flex");
         assert_eq!(root.children.len(), 1);
@@ -46,7 +47,8 @@ fn column_main_alignment_end() {
     app.load_bundle("column-main-end").unwrap();
 
     let (sb1_id, sb2_id) = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.children.len(), 2);
@@ -71,7 +73,8 @@ fn column_cross_alignment_start() {
     app.load_bundle("column-cross-start").unwrap();
 
     let sb1_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         col.children[0].as_u64()

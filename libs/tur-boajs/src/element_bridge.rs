@@ -75,6 +75,10 @@ impl TurAppContext {
         &self.element_tree
     }
 
+    pub fn element_tree_rc(&self) -> Rc<RefCell<ElementTree>> {
+        Rc::clone(&self.element_tree)
+    }
+
     pub fn render_tree(&self) -> &RefCell<RenderTree> {
         &self.render_tree
     }
