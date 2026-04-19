@@ -51,5 +51,5 @@ pub fn set_element_prop(
         <dyn BoaElement>::set_prop(e, ctx, key, value);
         return;
     }
-    tracing::warn!("unknown element type for set_prop: {}", elem.name());
+    tracing::warn!("unknown element type for set_prop: {}", elem.kind());
 }

@@ -1,3 +1,4 @@
+use num_derive::FromPrimitive;
 use std::fmt;
 use std::ops::{Add, Sub};
 use ts_rs::TS;
@@ -203,7 +204,7 @@ impl Constraints {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum MainAxisAlignment {
     Start,
@@ -214,7 +215,7 @@ pub enum MainAxisAlignment {
     SpaceEvenly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum CrossAxisAlignment {
     Start,
@@ -223,14 +224,14 @@ pub enum CrossAxisAlignment {
     Stretch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum FlexFit {
     Tight,
     Loose,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum StackFit {
     Loose,
@@ -238,18 +239,18 @@ pub enum StackFit {
     Passthrough,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum FlexDirection {
     Vertical,
     Horizontal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum Axis {
-    Horizontal,
     Vertical,
+    Horizontal,
 }
 
 impl Axis {

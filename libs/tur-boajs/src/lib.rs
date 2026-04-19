@@ -17,10 +17,6 @@ macro_rules! impl_dyn_element {
                 tur_element_tree::Element::kind(self)
             }
 
-            fn name(&self) -> &'static str {
-                tur_element_tree::Element::name(self)
-            }
-
             fn as_any(&self) -> &dyn std::any::Any {
                 self
             }

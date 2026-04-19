@@ -10,17 +10,17 @@ fn row_basic_horizontal_stacking() {
         let tree_rc = app.element_tree();
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
-        assert_eq!(root.element.name(), "tur_flex");
+        assert_eq!(root.element.kind().as_str(), "tur_flex");
         assert_eq!(root.children.len(), 1);
 
         let row = tree.get(root.children[0]).unwrap();
-        assert_eq!(row.element.name(), "tur_flex");
+        assert_eq!(row.element.kind().as_str(), "tur_flex");
         assert_eq!(row.children.len(), 2);
 
         let sb1 = tree.get(row.children[0]).unwrap();
         let sb2 = tree.get(row.children[1]).unwrap();
-        assert_eq!(sb1.element.name(), "tur_container");
-        assert_eq!(sb2.element.name(), "tur_container");
+        assert_eq!(sb1.element.kind().as_str(), "tur_container");
+        assert_eq!(sb2.element.kind().as_str(), "tur_container");
 
         (row.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };

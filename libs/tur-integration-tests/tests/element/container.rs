@@ -11,11 +11,11 @@ fn container_with_padding() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let container = tree.get(root.children[0]).unwrap();
-        assert_eq!(container.element.name(), "tur_container");
+        assert_eq!(container.element.kind().as_str(), "tur_container");
         assert_eq!(container.children.len(), 1);
 
         let sb = tree.get(container.children[0]).unwrap();
-        assert_eq!(sb.element.name(), "tur_container");
+        assert_eq!(sb.element.kind().as_str(), "tur_container");
 
         container.id.as_u64()
     };

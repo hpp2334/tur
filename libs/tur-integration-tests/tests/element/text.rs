@@ -11,7 +11,7 @@ fn text_content_and_measurement() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let text = tree.get(root.children[0]).unwrap();
-        assert_eq!(text.element.name(), "tur_text");
+        assert_eq!(text.element.kind().as_str(), "tur_text");
         text.id.as_u64()
     };
 

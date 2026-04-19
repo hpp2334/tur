@@ -11,18 +11,18 @@ fn expanded_fills_remaining() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.element.name(), "tur_flex");
+        assert_eq!(col.element.kind().as_str(), "tur_flex");
         assert_eq!(col.children.len(), 2);
 
         let sb = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb.element.name(), "tur_container");
+        assert_eq!(sb.element.kind().as_str(), "tur_container");
 
         let expanded = tree.get(col.children[1]).unwrap();
-        assert_eq!(expanded.element.name(), "tur_flex_item");
+        assert_eq!(expanded.element.kind().as_str(), "tur_flex_item");
         assert_eq!(expanded.children.len(), 1);
 
         let inner_sb = tree.get(expanded.children[0]).unwrap();
-        assert_eq!(inner_sb.element.name(), "tur_container");
+        assert_eq!(inner_sb.element.kind().as_str(), "tur_container");
 
         (expanded.id.as_u64(), inner_sb.id.as_u64())
     };
@@ -48,8 +48,8 @@ fn expanded_multiple_share_evenly() {
 
         let exp1 = tree.get(col.children[0]).unwrap();
         let exp2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(exp1.element.name(), "tur_flex_item");
-        assert_eq!(exp2.element.name(), "tur_flex_item");
+        assert_eq!(exp1.element.kind().as_str(), "tur_flex_item");
+        assert_eq!(exp2.element.kind().as_str(), "tur_flex_item");
 
         (exp1.id.as_u64(), exp2.id.as_u64())
     };

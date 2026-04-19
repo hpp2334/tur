@@ -10,18 +10,18 @@ fn column_basic_vertical_stacking() {
         let tree_rc = app.element_tree();
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
-        assert_eq!(root.element.name(), "tur_flex");
+        assert_eq!(root.element.kind().as_str(), "tur_flex");
         assert_eq!(root.children.len(), 1);
 
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.element.name(), "tur_flex");
+        assert_eq!(col.element.kind().as_str(), "tur_flex");
         assert_eq!(col.children.len(), 2);
 
         let sb1 = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb1.element.name(), "tur_container");
+        assert_eq!(sb1.element.kind().as_str(), "tur_container");
 
         let sb2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(sb2.element.name(), "tur_container");
+        assert_eq!(sb2.element.kind().as_str(), "tur_container");
 
         (col.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };

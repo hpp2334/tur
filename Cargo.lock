@@ -1594,6 +1594,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6673768db2d862beb9b39a78fdcb1a69439615d5794a1be50caa9bc92c81967"
 
 [[package]]
+name = "num-derive"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed3955f1a9c7c0c15e092f9c887db08b1fc683305fdf6eb6684f22555355e202"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "num-integer"
 version = "0.1.46"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2902,6 +2913,7 @@ version = "0.1.0"
 dependencies = [
  "boa_engine",
  "boa_gc",
+ "num-traits",
  "tracing",
  "tur-element-tree",
  "tur-render-tree",
@@ -2946,6 +2958,8 @@ dependencies = [
 name = "tur-shared"
 version = "0.1.0"
 dependencies = [
+ "num-derive",
+ "num-traits",
  "ts-rs",
 ]
 

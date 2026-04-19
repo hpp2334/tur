@@ -1,7 +1,6 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
-use tur_element_tree::Element;
-use tur_element_tree::ElementKind;
+use tur_element_tree::{Element, ElementKind};
 use tur_render_tree::ContainerRenderObject;
 
 #[derive(Clone, Default)]
@@ -33,33 +32,22 @@ impl Element for ContainerElement {
     fn kind(&self) -> ElementKind {
         ElementKind::new("tur_container")
     }
-
-    fn name(&self) -> &'static str {
-        "tur_container"
-    }
 }
 
 impl_dyn_element!(ContainerElement);
 
 impl crate::elements::BoaElement for ContainerElement {
     fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
-        let key_str = key.to_std_string_escaped();
-        match key_str.as_str() {
-            "width" => {
-                self.width = value.as_number();
+        if *key == "width" {
+            self.width = value.as_number();
+        } else if *key == "height" {
+            self.height = value.as_number();
+        } else if *key == "padding" {
+            self.padding = value.as_number();
+        } else if *key == "color" {
+            if let Some(s) = value.as_string() {
+                self.color = Some(s.to_std_string_escaped());
             }
-            "height" => {
-                self.height = value.as_number();
-            }
-            "padding" => {
-                self.padding = value.as_number();
-            }
-            "color" => {
-                if let Some(s) = value.as_string() {
-                    self.color = Some(s.to_std_string_escaped());
-                }
-            }
-            _ => {}
         }
     }
 }

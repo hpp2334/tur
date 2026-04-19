@@ -1,7 +1,7 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
-use tur_element_tree::Element;
-use tur_element_tree::ElementKind;
+use num_traits::FromPrimitive;
+use tur_element_tree::{Element, ElementKind};
 use tur_render_tree::{StackFit, StackRenderObject};
 
 #[derive(Clone)]
@@ -33,32 +33,15 @@ impl Element for StackElement {
     fn kind(&self) -> ElementKind {
         ElementKind::new("tur_stack")
     }
-
-    fn name(&self) -> &'static str {
-        "tur_stack"
-    }
 }
 
 impl_dyn_element!(StackElement);
 
 impl crate::elements::BoaElement for StackElement {
     fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
-        let key_str = key.to_std_string_escaped();
-        if key_str == "fit" {
-            if let Some(s) = value.as_string() {
-                self.fit = match s.to_std_string_escaped().as_str() {
-                    "loose" => StackFit::Loose,
-                    "expand" => StackFit::Expand,
-                    "passthrough" => StackFit::Passthrough,
-                    _ => return,
-                };
-            } else if let Some(n) = value.as_number() {
-                self.fit = match n as i32 {
-                    0 => StackFit::Loose,
-                    1 => StackFit::Expand,
-                    2 => StackFit::Passthrough,
-                    _ => return,
-                };
+        if *key == "fit" {
+            if let Some(n) = value.as_number() {
+                self.fit = StackFit::from_i32(n as i32).unwrap_or(self.fit);
             }
         }
     }

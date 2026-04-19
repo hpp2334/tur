@@ -11,11 +11,11 @@ fn sized_box_fixed_dimensions() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let sb = tree.get(root.children[0]).unwrap();
-        assert_eq!(sb.element.name(), "tur_container");
+        assert_eq!(sb.element.kind().as_str(), "tur_container");
         assert_eq!(sb.children.len(), 1);
 
         let text = tree.get(sb.children[0]).unwrap();
-        assert_eq!(text.element.name(), "tur_text");
+        assert_eq!(text.element.kind().as_str(), "tur_text");
 
         sb.id.as_u64()
     };

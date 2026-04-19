@@ -31,6 +31,9 @@ tur-boajs = { path = "libs/tur-boajs" }
 tur = { path = "libs/tur" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 
+num-derive = "0.4"
+num-traits = "0.2"
+
 winit = "0.30"
 vello = "0.4"
 boa_engine = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }

@@ -7,7 +7,6 @@ use tur_trait::ElementKind;
 pub trait DynElement: Send + Sync + 'static {
     fn to_render_object_boxed(&self) -> Box<dyn RenderObject>;
     fn kind(&self) -> ElementKind;
-    fn name(&self) -> &'static str;
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -30,7 +29,6 @@ impl DynElementExt for Box<dyn DynElement> {
 impl fmt::Debug for Box<dyn DynElement> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DynElement")
-            .field("name", &self.name())
             .field("kind", &self.kind())
             .finish()
     }

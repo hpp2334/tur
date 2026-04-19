@@ -18,7 +18,9 @@ const creators: Record<string, () => TurElement> = {
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
   createElement(type: string): TurElement {
-    return (creators[type] ?? (() => __tur.createContainer(ctx)))();
+    const create = creators[type];
+    if (!create) throw new Error(`unknown element type: ${type}`);
+    return create();
   },
 
   createTextNode(value: string): TurElement {

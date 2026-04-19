@@ -11,15 +11,15 @@ fn positioned_with_left_top() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
-        assert_eq!(stack.element.name(), "tur_stack");
+        assert_eq!(stack.element.kind().as_str(), "tur_stack");
         assert_eq!(stack.children.len(), 1);
 
         let positioned = tree.get(stack.children[0]).unwrap();
-        assert_eq!(positioned.element.name(), "tur_positioned");
+        assert_eq!(positioned.element.kind().as_str(), "tur_positioned");
         assert_eq!(positioned.children.len(), 1);
 
         let sb = tree.get(positioned.children[0]).unwrap();
-        assert_eq!(sb.element.name(), "tur_container");
+        assert_eq!(sb.element.kind().as_str(), "tur_container");
 
         positioned.id.as_u64()
     };

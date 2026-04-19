@@ -11,13 +11,13 @@ fn stack_children_overlap() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
-        assert_eq!(stack.element.name(), "tur_stack");
+        assert_eq!(stack.element.kind().as_str(), "tur_stack");
         assert_eq!(stack.children.len(), 2);
 
         let sb1 = tree.get(stack.children[0]).unwrap();
         let sb2 = tree.get(stack.children[1]).unwrap();
-        assert_eq!(sb1.element.name(), "tur_container");
-        assert_eq!(sb2.element.name(), "tur_container");
+        assert_eq!(sb1.element.kind().as_str(), "tur_container");
+        assert_eq!(sb2.element.kind().as_str(), "tur_container");
 
         (sb1.id.as_u64(), sb2.id.as_u64())
     };

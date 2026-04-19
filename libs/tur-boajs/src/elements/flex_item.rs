@@ -1,7 +1,6 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
-use tur_element_tree::Element;
-use tur_element_tree::ElementKind;
+use tur_element_tree::{Element, ElementKind};
 use tur_render_tree::FlexItemRenderObject;
 
 #[derive(Clone, Default)]
@@ -22,10 +21,6 @@ impl Element for FlexItemElement {
 
     fn kind(&self) -> ElementKind {
         ElementKind::new("tur_flex_item")
-    }
-
-    fn name(&self) -> &'static str {
-        "tur_flex_item"
     }
 }
 

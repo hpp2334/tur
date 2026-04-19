@@ -10,7 +10,6 @@ pub trait Element: Send + Sync + Clone + 'static {
 
     fn to_render_object(&self) -> Self::TypedRenderObject;
     fn kind(&self) -> ElementKind;
-    fn name(&self) -> &'static str;
 }
 
 pub struct ElementNode {
@@ -24,7 +23,7 @@ impl std::fmt::Debug for ElementNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ElementNode")
             .field("id", &self.id)
-            .field("element", &self.element.name())
+            .field("element", &self.element.kind())
             .field("children", &self.children)
             .field("parent", &self.parent)
             .finish()
