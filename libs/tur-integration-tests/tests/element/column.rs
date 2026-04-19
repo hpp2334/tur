@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn column_basic_vertical_stacking() {
@@ -27,6 +27,7 @@ fn column_basic_vertical_stacking() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
 
     let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
     assert_eq!(sb1_node.computed_layout.size.height, 50.0);
@@ -54,6 +55,7 @@ fn column_main_alignment_end() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
 
     let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
     assert_eq!(sb1_node.computed_layout.size.height, 50.0);
@@ -77,6 +79,7 @@ fn column_cross_alignment_start() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
     let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 }

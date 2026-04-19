@@ -1,7 +1,6 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
-use tur_shared::ComputedLayout;
+use tur_shared::ElementKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ElementNodeId(u64);
@@ -13,32 +12,6 @@ impl ElementNodeId {
 
     pub fn as_u64(self) -> u64 {
         self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ElementKind {
-    Flex,
-    FlexItem,
-    Stack,
-    Positioned,
-    Container,
-    Text,
-}
-
-impl FromStr for ElementKind {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "tur_flex" => Ok(ElementKind::Flex),
-            "tur_flex_item" => Ok(ElementKind::FlexItem),
-            "tur_stack" => Ok(ElementKind::Stack),
-            "tur_positioned" => Ok(ElementKind::Positioned),
-            "tur_container" => Ok(ElementKind::Container),
-            "tur_text" => Ok(ElementKind::Text),
-            _ => Err(()),
-        }
     }
 }
 
@@ -80,7 +53,6 @@ pub struct ElementNode {
     pub props: HashMap<String, PropValue>,
     pub children: Vec<ElementNodeId>,
     pub parent: Option<ElementNodeId>,
-    pub computed_layout: Option<ComputedLayout>,
 }
 
 impl ElementNode {
@@ -91,7 +63,6 @@ impl ElementNode {
             props: HashMap::new(),
             children: Vec::new(),
             parent: None,
-            computed_layout: None,
         }
     }
 

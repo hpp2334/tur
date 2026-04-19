@@ -1,5 +1,6 @@
-use tur_element::ElementKind;
 use tur_shared::ComputedLayout;
+
+use crate::render_object::RenderObject;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RenderNodeId(u64);
@@ -14,14 +15,31 @@ impl RenderNodeId {
     }
 }
 
-#[derive(Debug, Clone)]
 pub struct RenderNode {
     pub id: RenderNodeId,
-    pub kind: ElementKind,
+    pub object: Option<Box<dyn RenderObject>>,
     pub children: Vec<RenderNodeId>,
     pub computed_layout: ComputedLayout,
-    pub text_content: Option<String>,
-    pub font_size: Option<f64>,
-    pub color: Option<String>,
-    pub padding: Option<f64>,
+}
+
+impl RenderNode {
+    pub fn new(id: RenderNodeId, object: Box<dyn RenderObject>) -> Self {
+        RenderNode {
+            id,
+            object: Some(object),
+            children: Vec::new(),
+            computed_layout: ComputedLayout::ZERO,
+        }
+    }
+}
+
+impl std::fmt::Debug for RenderNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RenderNode")
+            .field("id", &self.id)
+            .field("object", &self.object)
+            .field("children", &self.children)
+            .field("computed_layout", &self.computed_layout)
+            .finish()
+    }
 }

@@ -8,6 +8,5 @@ license.workspace = true
 
 [dependencies]
 tur-shared = { workspace = true }
-tur-element = { workspace = true }
 tur-render-tree = { workspace = true }
 tracing = { workspace = true }

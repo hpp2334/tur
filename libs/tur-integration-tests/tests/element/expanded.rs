@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn expanded_fills_remaining() {
@@ -28,6 +28,7 @@ fn expanded_fills_remaining() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
     let expanded_node = rt.get(RenderNodeId::new(expanded_id)).unwrap();
     assert_eq!(expanded_node.computed_layout.size.height, 550.0);
     assert_eq!(expanded_node.computed_layout.offset.y, 50.0);
@@ -53,6 +54,7 @@ fn expanded_multiple_share_evenly() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
 
     let exp1_node = rt.get(RenderNodeId::new(exp1_id)).unwrap();
     assert_eq!(exp1_node.computed_layout.size.height, 300.0);

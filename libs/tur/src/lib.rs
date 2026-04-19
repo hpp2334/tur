@@ -13,9 +13,8 @@ use boa_engine::Source;
 use error::TurError;
 use tur_boajs::TurAppContext;
 #[cfg(feature = "trace")]
-use tur_render_tree::RenderTree;
-use tur_render_tree::Renderer;
-
+use tur_element::ElementTree;
+use tur_render_tree::{RenderTree, Renderer};
 pub struct TurApp {
     boa_context: Context,
     app_context: Rc<RefCell<TurAppContext>>,
@@ -66,14 +65,14 @@ impl TurApp {
     }
 
     #[cfg(feature = "trace")]
-    pub fn element_tree(&self) -> tur_element::ElementTree {
+    pub fn element_tree(&self) -> ElementTree {
         self.app_context.borrow().element_tree().borrow().clone()
     }
 
     #[cfg(feature = "trace")]
-    pub fn render_tree(&self) -> RenderTree {
+    pub fn render_tree(&self) -> Rc<RefCell<RenderTree>> {
         let ctx = self.app_context.borrow();
         ctx.render();
-        ctx.render_tree().borrow().clone()
+        ctx.render_tree_rc()
     }
 }

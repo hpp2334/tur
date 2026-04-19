@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use tur_element::ElementKind;
 use tur_render_tree::{RenderNodeId, RenderTree, Renderer};
-use tur_shared::Offset;
+use tur_shared::{ElementKind, Offset};
 
 pub struct NoopRenderer;
 
@@ -53,10 +52,15 @@ fn collect_stats(
         None => return depth,
     };
 
+    let kind = node
+        .object
+        .as_ref()
+        .map(|o| o.kind())
+        .unwrap_or(ElementKind::Container);
     let absolute_offset = parent_offset + node.computed_layout.offset;
     tracing::trace!(
         "noop-renderer: {:?} node {} at ({:.1}, {:.1}) size ({:.1}, {:.1}) depth {}",
-        node.kind,
+        kind,
         id.as_u64(),
         absolute_offset.x,
         absolute_offset.y,
@@ -65,7 +69,7 @@ fn collect_stats(
         depth,
     );
 
-    *counts.entry(node.kind).or_insert(0) += 1;
+    *counts.entry(kind).or_insert(0) += 1;
 
     let mut child_max = depth;
     for &child_id in &node.children {

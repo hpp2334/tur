@@ -1,93 +1,51 @@
-use tur_render_tree::render_node::{RenderNode, RenderNodeId};
-use tur_render_tree::RenderTree;
+use std::fmt;
+
+use tur_render_tree::PaintContext as TurPaintContext;
 use tur_shared::{Offset, Size};
 use vello::kurbo::Affine;
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;
 
-pub struct PaintContext<'a> {
+pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
 }
 
-impl<'a> PaintContext<'a> {
+impl<'a> VelloPaintContext<'a> {
     pub fn new(scene: &'a mut Scene) -> Self {
-        PaintContext { scene }
-    }
-
-    pub fn scene(&self) -> &Scene {
-        self.scene
-    }
-
-    pub fn scene_mut(&mut self) -> &mut Scene {
-        self.scene
+        VelloPaintContext { scene }
     }
 }
 
-pub fn paint_tree(ctx: &mut PaintContext, tree: &RenderTree) {
-    let root_id = match tree.root_id() {
-        Some(id) => id,
-        None => return,
-    };
-    paint_node(ctx, tree, root_id, Offset::ZERO);
-}
-
-fn paint_node(ctx: &mut PaintContext, tree: &RenderTree, id: RenderNodeId, parent_offset: Offset) {
-    let node = match tree.get(id) {
-        Some(n) => n,
-        None => return,
-    };
-
-    let absolute_offset = parent_offset + node.computed_layout.offset;
-
-    match node.kind {
-        tur_element::ElementKind::Text => paint_text(ctx, node, absolute_offset),
-        tur_element::ElementKind::Container => {
-            paint_container(ctx, node, absolute_offset, node.computed_layout.size)
-        }
-        tur_element::ElementKind::Flex
-        | tur_element::ElementKind::FlexItem
-        | tur_element::ElementKind::Stack
-        | tur_element::ElementKind::Positioned => {}
-    }
-
-    for &child_id in &node.children {
-        paint_node(ctx, tree, child_id, absolute_offset);
+impl fmt::Debug for VelloPaintContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VelloPaintContext").finish()
     }
 }
 
-fn paint_text(ctx: &mut PaintContext, node: &RenderNode, offset: Offset) {
-    let content = node.text_content.as_deref().unwrap_or("");
-    let _font_size = node.font_size.unwrap_or(14.0) as f32;
-    let color = parse_color(node.color.as_deref().unwrap_or("#ffffff"));
-
-    if content.is_empty() {
-        return;
+impl TurPaintContext for VelloPaintContext<'_> {
+    fn fill_rect(&mut self, offset: Offset, size: Size, color: &str) {
+        let color = parse_color(color);
+        let transform = Affine::translate((offset.x, offset.y));
+        self.scene.fill(
+            Fill::NonZero,
+            transform,
+            &Brush::Solid(color),
+            None,
+            &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
+        );
     }
 
-    let transform = Affine::translate((offset.x, offset.y));
-    ctx.scene.fill(
-        Fill::NonZero,
-        transform,
-        &Brush::Solid(color),
-        None,
-        &vello::kurbo::Rect::new(0.0, 0.0, 0.0, 0.0),
-    );
-}
-
-fn paint_container(ctx: &mut PaintContext, node: &RenderNode, offset: Offset, size: Size) {
-    let color = match &node.color {
-        Some(c) => parse_color(c),
-        None => return,
-    };
-
-    let transform = Affine::translate((offset.x, offset.y));
-    ctx.scene.fill(
-        Fill::NonZero,
-        transform,
-        &Brush::Solid(color),
-        None,
-        &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-    );
+    fn fill_text(&mut self, offset: Offset, _text: &str, _font_size: f64, color: &str) {
+        let color = parse_color(color);
+        let transform = Affine::translate((offset.x, offset.y));
+        self.scene.fill(
+            Fill::NonZero,
+            transform,
+            &Brush::Solid(color),
+            None,
+            &vello::kurbo::Rect::new(0.0, 0.0, 0.0, 0.0),
+        );
+    }
 }
 
 fn parse_color(s: &str) -> Color {

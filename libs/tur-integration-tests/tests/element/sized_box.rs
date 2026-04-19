@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn sized_box_fixed_dimensions() {
@@ -21,6 +21,7 @@ fn sized_box_fixed_dimensions() {
     };
 
     let rt = app.render_tree();
+    let rt = rt.borrow();
     let sb_node = rt.get(RenderNodeId::new(sb_id)).unwrap();
     assert_eq!(sb_node.computed_layout.size.width, 100.0);
     assert_eq!(sb_node.computed_layout.size.height, 50.0);

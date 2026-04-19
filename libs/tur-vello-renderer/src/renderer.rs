@@ -1,4 +1,4 @@
-use crate::paint_context::{paint_tree, PaintContext};
+use crate::paint_context::VelloPaintContext;
 use std::num::NonZeroUsize;
 use tur_render_tree::{RenderTree, Renderer as TurRenderer};
 use vello::kurbo::{Affine, Rect};
@@ -95,8 +95,8 @@ impl VelloRenderer {
                 &Rect::new(0.0, 0.0, f64::MAX, f64::MAX),
             );
         }
-        let mut ctx = PaintContext::new(&mut self.scene);
-        paint_tree(&mut ctx, tree);
+        let mut ctx = VelloPaintContext::new(&mut self.scene);
+        tree.paint(&mut ctx);
         if self.dpr != 1.0 {
             self.scene.pop_layer();
         }

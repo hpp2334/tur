@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 
 use tur::error::TurError;
 use tur::TurApp;
@@ -38,7 +40,7 @@ impl TurTestApp {
         self.inner.element_tree()
     }
 
-    pub fn render_tree(&self) -> RenderTree {
+    pub fn render_tree(&self) -> Rc<RefCell<RenderTree>> {
         self.inner.render_tree()
     }
 }
