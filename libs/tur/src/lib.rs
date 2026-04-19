@@ -15,7 +15,6 @@ use tur_boajs::TurAppContext;
 #[cfg(feature = "trace")]
 use tur_element::ElementTree;
 use tur_render_tree::{RenderTree, Renderer};
-
 pub struct TurApp {
     boa_context: Context,
     app_context: Rc<RefCell<TurAppContext>>,
@@ -70,10 +69,10 @@ impl TurApp {
         self.app_context.borrow().element_tree().borrow().clone()
     }
 
-    pub fn with_render_tree<R>(&self, f: impl FnOnce(&RenderTree) -> R) -> R {
+    #[cfg(feature = "trace")]
+    pub fn render_tree(&self) -> Rc<RefCell<RenderTree>> {
         let ctx = self.app_context.borrow();
         ctx.render();
-        let render_tree = ctx.render_tree().borrow();
-        f(&render_tree)
+        ctx.render_tree_rc()
     }
 }

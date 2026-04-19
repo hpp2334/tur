@@ -17,9 +17,9 @@ fn text_content_and_measurement() {
         text.id.as_u64()
     };
 
-    app.with_render_tree(|rt| {
-        let text_node = rt.get(RenderNodeId::new(text_id)).unwrap();
-        assert_eq!(text_node.computed_layout.size.width, 42.0);
-        assert_eq!(text_node.computed_layout.size.height, 16.8);
-    });
+    let rt = app.render_tree();
+    let rt = rt.borrow();
+    let text_node = rt.get(RenderNodeId::new(text_id)).unwrap();
+    assert_eq!(text_node.computed_layout.size.width, 42.0);
+    assert_eq!(text_node.computed_layout.size.height, 16.8);
 }

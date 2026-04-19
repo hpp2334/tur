@@ -24,9 +24,9 @@ fn positioned_with_left_top() {
         positioned.id.as_u64()
     };
 
-    app.with_render_tree(|rt| {
-        let pos_node = rt.get(RenderNodeId::new(pos_id)).unwrap();
-        assert_eq!(pos_node.computed_layout.offset.x, 10.0);
-        assert_eq!(pos_node.computed_layout.offset.y, 20.0);
-    });
+    let rt = app.render_tree();
+    let rt = rt.borrow();
+    let pos_node = rt.get(RenderNodeId::new(pos_id)).unwrap();
+    assert_eq!(pos_node.computed_layout.offset.x, 10.0);
+    assert_eq!(pos_node.computed_layout.offset.y, 20.0);
 }

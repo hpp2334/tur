@@ -39,7 +39,7 @@ pub struct TurNodeHandle {
 
 pub struct TurAppContext {
     element_tree: Rc<RefCell<ElementTree>>,
-    render_tree: RefCell<RenderTree>,
+    render_tree: Rc<RefCell<RenderTree>>,
     renderer: RefCell<Box<dyn Renderer>>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
@@ -62,7 +62,7 @@ impl TurAppContext {
     pub fn new(renderer: Box<dyn Renderer>) -> Self {
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
-            render_tree: RefCell::new(RenderTree::default()),
+            render_tree: Rc::new(RefCell::new(RenderTree::default())),
             renderer: RefCell::new(renderer),
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
@@ -76,6 +76,10 @@ impl TurAppContext {
 
     pub fn render_tree(&self) -> &RefCell<RenderTree> {
         &self.render_tree
+    }
+
+    pub fn render_tree_rc(&self) -> Rc<RefCell<RenderTree>> {
+        Rc::clone(&self.render_tree)
     }
 
     pub fn renderer(&self) -> &RefCell<Box<dyn Renderer>> {

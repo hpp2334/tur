@@ -20,9 +20,9 @@ fn container_with_padding() {
         container.id.as_u64()
     };
 
-    app.with_render_tree(|rt| {
-        let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
-        assert_eq!(container_node.computed_layout.size.width, 132.0);
-        assert_eq!(container_node.computed_layout.size.height, 132.0);
-    });
+    let rt = app.render_tree();
+    let rt = rt.borrow();
+    let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
+    assert_eq!(container_node.computed_layout.size.width, 132.0);
+    assert_eq!(container_node.computed_layout.size.height, 132.0);
 }

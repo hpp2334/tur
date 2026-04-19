@@ -22,13 +22,14 @@ fn stack_children_overlap() {
         (sb1.id.as_u64(), sb2.id.as_u64())
     };
 
-    app.with_render_tree(|rt| {
-        let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
-        assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
-        assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
+    let rt = app.render_tree();
+    let rt = rt.borrow();
 
-        let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
-        assert_eq!(sb2_node.computed_layout.offset.x, 0.0);
-        assert_eq!(sb2_node.computed_layout.offset.y, 0.0);
-    });
+    let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
+    assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
+    assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
+
+    let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
+    assert_eq!(sb2_node.computed_layout.offset.x, 0.0);
+    assert_eq!(sb2_node.computed_layout.offset.y, 0.0);
 }

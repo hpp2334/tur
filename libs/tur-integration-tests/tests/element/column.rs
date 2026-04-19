@@ -26,18 +26,19 @@ fn column_basic_vertical_stacking() {
         (col.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };
 
-    app.with_render_tree(|rt| {
-        let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
-        assert_eq!(sb1_node.computed_layout.size.height, 50.0);
-        assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
+    let rt = app.render_tree();
+    let rt = rt.borrow();
 
-        let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
-        assert_eq!(sb2_node.computed_layout.size.height, 30.0);
-        assert_eq!(sb2_node.computed_layout.offset.y, 50.0);
+    let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
+    assert_eq!(sb1_node.computed_layout.size.height, 50.0);
+    assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
 
-        let col_node = rt.get(RenderNodeId::new(col_id)).unwrap();
-        assert_eq!(col_node.computed_layout.size.height, 80.0);
-    });
+    let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
+    assert_eq!(sb2_node.computed_layout.size.height, 30.0);
+    assert_eq!(sb2_node.computed_layout.offset.y, 50.0);
+
+    let col_node = rt.get(RenderNodeId::new(col_id)).unwrap();
+    assert_eq!(col_node.computed_layout.size.height, 80.0);
 }
 
 #[test]
@@ -53,15 +54,16 @@ fn column_main_alignment_end() {
         (col.children[0].as_u64(), col.children[1].as_u64())
     };
 
-    app.with_render_tree(|rt| {
-        let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
-        assert_eq!(sb1_node.computed_layout.size.height, 50.0);
-        assert_eq!(sb1_node.computed_layout.offset.y, 520.0);
+    let rt = app.render_tree();
+    let rt = rt.borrow();
 
-        let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
-        assert_eq!(sb2_node.computed_layout.size.height, 30.0);
-        assert_eq!(sb2_node.computed_layout.offset.y, 570.0);
-    });
+    let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
+    assert_eq!(sb1_node.computed_layout.size.height, 50.0);
+    assert_eq!(sb1_node.computed_layout.offset.y, 520.0);
+
+    let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
+    assert_eq!(sb2_node.computed_layout.size.height, 30.0);
+    assert_eq!(sb2_node.computed_layout.offset.y, 570.0);
 }
 
 #[test]
@@ -76,8 +78,8 @@ fn column_cross_alignment_start() {
         col.children[0].as_u64()
     };
 
-    app.with_render_tree(|rt| {
-        let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
-        assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
-    });
+    let rt = app.render_tree();
+    let rt = rt.borrow();
+    let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
+    assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 }
