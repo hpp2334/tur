@@ -240,6 +240,13 @@ pub enum StackFit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
+pub enum FlexDirection {
+    Vertical,
+    Horizontal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum Axis {
     Horizontal,
     Vertical,

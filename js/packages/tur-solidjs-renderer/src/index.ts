@@ -20,6 +20,7 @@ export { MainAxisAlignment } from "./generated/MainAxisAlignment";
 export { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
 export { StackFit } from "./generated/StackFit";
 export { FlexFit } from "./generated/FlexFit";
+export { FlexDirection } from "./generated/FlexDirection";
 export { Axis } from "./generated/Axis";
 export type { EdgeInsets } from "./generated/EdgeInsets";
 export type { Size } from "./generated/Size";

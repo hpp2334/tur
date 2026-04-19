@@ -15,7 +15,7 @@ fn container_with_padding() {
         assert_eq!(container.children.len(), 1);
 
         let sb = tree.get(container.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::SizedBox);
+        assert_eq!(sb.kind, ElementKind::Container);
 
         container.id.as_u64()
     };

@@ -3,6 +3,8 @@ import type { Color } from "@tur/solidjs-renderer";
 import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
 import type { MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
+import type { FlexFit } from "@tur/solidjs-renderer";
+import { FlexDirection } from "@tur/solidjs-renderer";
 import type { Style } from "./style";
 
 interface BaseProps {
@@ -22,6 +24,7 @@ export interface RowProps extends BaseProps {
 
 export interface ExpandedProps extends BaseProps {
   flex?: number;
+  fit?: FlexFit;
 }
 
 export interface StackProps extends BaseProps {
@@ -53,17 +56,17 @@ export interface TextProps extends BaseProps {
 
 export function Column(props: ColumnProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_column style={s?.resolve()} {...rest}>{children}</tur_column>;
+  return <tur_flex style={s?.resolve()} direction={FlexDirection.Vertical} {...rest}>{children}</tur_flex>;
 }
 
 export function Row(props: RowProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_row style={s?.resolve()} {...rest}>{children}</tur_row>;
+  return <tur_flex style={s?.resolve()} direction={FlexDirection.Horizontal} {...rest}>{children}</tur_flex>;
 }
 
 export function Expanded(props: ExpandedProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_expanded style={s?.resolve()} {...rest}>{children}</tur_expanded>;
+  return <tur_flex_item style={s?.resolve()} {...rest}>{children}</tur_flex_item>;
 }
 
 export function Stack(props: StackProps): JSX.Element {
@@ -78,7 +81,7 @@ export function Positioned(props: PositionedProps): JSX.Element {
 
 export function SizedBox(props: SizedBoxProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_sized_box style={s?.resolve()} {...rest}>{children}</tur_sized_box>;
+  return <tur_container style={s?.resolve()} {...rest}>{children}</tur_container>;
 }
 
 export function Container(props: ContainerProps): JSX.Element {
