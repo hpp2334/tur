@@ -25,6 +25,13 @@ RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 RUN rustup target add wasm32-unknown-unknown
 
+RUN mkdir /tmp/wasm-hello && cd /tmp/wasm-hello && \
+    printf '[package]\nname = "wasm-hello"\nedition = "2024"\nversion = "0.1.0"\n\n[lib]\ncrate-type = ["cdylib"]\n\n[dependencies]\nwasm-bindgen = "0.2"\n' > Cargo.toml && \
+    mkdir -p src && \
+    echo 'use wasm_bindgen::prelude::*;#[wasm_bindgen]pub fn greet(){}' > src/lib.rs && \
+    wasm-pack build --target web && \
+    rm -rf /tmp/wasm-hello
+
 RUN npm install -g pnpm@10
 RUN pnpm config set store-dir /root/.local/share/pnpm/store
 
