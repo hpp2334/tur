@@ -1,4 +1,5 @@
 use boa_engine::{Context, JsString, JsValue};
+use tur_shared::Color;
 
 use crate::core::traits::ElementOnUpdate;
 
@@ -7,7 +8,7 @@ pub struct ContainerElement {
     pub(crate) width: Option<f64>,
     pub(crate) height: Option<f64>,
     pub(crate) padding: Option<f64>,
-    pub(crate) color: Option<String>,
+    pub(crate) color: Option<Color>,
 }
 
 impl ContainerElement {
@@ -31,7 +32,7 @@ impl ElementOnUpdate for ContainerElement {
             self.padding = value.as_number();
         } else if *key == "color" {
             if let Some(s) = value.as_string() {
-                self.color = Some(s.to_std_string_escaped());
+                self.color = s.to_std_string_escaped().parse().ok();
             }
         }
     }

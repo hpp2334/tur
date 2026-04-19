@@ -44,7 +44,7 @@ pub struct TurAppContext {
     renderer: RefCell<Box<dyn Renderer>>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
-    handles: RefCell<HashMap<u64, BoaOpaque<TurNodeHandle>>>,
+    handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -116,12 +116,11 @@ impl TurAppContext {
         id: ElementNodeId,
         context: &mut Context,
     ) -> BoaOpaque<TurNodeHandle> {
-        let key = id.as_u64();
-        if let Some(opaque) = self.handles.borrow().get(&key) {
+        if let Some(opaque) = self.handles.borrow().get(&id) {
             return opaque.clone();
         }
         let opaque = BoaOpaque::new(TurNodeHandle { id }, context);
-        self.handles.borrow_mut().insert(key, opaque.clone());
+        self.handles.borrow_mut().insert(id, opaque.clone());
         opaque
     }
 }
@@ -240,7 +239,7 @@ pub(crate) fn tur_set_attribute(
 
     tracing::trace!(
         "tur_setAttribute({}, {}, ...)",
-        node_id.as_u64(),
+        node_id,
         key.to_std_string_escaped()
     );
 
@@ -267,11 +266,7 @@ pub(crate) fn tur_append_child(
         .borrow_mut()
         .append_child(parent_id, child_id);
 
-    tracing::trace!(
-        "tur_appendChild({}, {})",
-        parent_id.as_u64(),
-        child_id.as_u64()
-    );
+    tracing::trace!("tur_appendChild({}, {})", parent_id, child_id);
     Ok(JsValue::undefined())
 }
 
@@ -289,11 +284,7 @@ pub(crate) fn tur_remove_child(
         .borrow_mut()
         .remove_child(parent_id, child_id);
 
-    tracing::trace!(
-        "tur_removeChild({}, {})",
-        parent_id.as_u64(),
-        child_id.as_u64()
-    );
+    tracing::trace!("tur_removeChild({}, {})", parent_id, child_id);
     Ok(JsValue::undefined())
 }
 
@@ -312,12 +303,7 @@ pub(crate) fn tur_insert_before(
         .borrow_mut()
         .insert_before(parent_id, child_id, ref_id);
 
-    tracing::trace!(
-        "tur_insertBefore({}, {}, {})",
-        parent_id.as_u64(),
-        child_id.as_u64(),
-        ref_id.as_u64()
-    );
+    tracing::trace!("tur_insertBefore({}, {}, {})", parent_id, child_id, ref_id);
     Ok(JsValue::undefined())
 }
 

@@ -64,7 +64,7 @@ fn collect_stats(
     tracing::trace!(
         "noop-renderer: {} node {} at ({:.1}, {:.1}) size ({:.1}, {:.1}) depth {}",
         type_name,
-        node.id.as_u64(),
+        node.id,
         absolute_offset.x,
         absolute_offset.y,
         node.computed_layout.size.width,

@@ -1,16 +1,18 @@
-use tur_shared::{ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
 
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
 
 use super::element::TextElement;
+
+const DEFAULT_COLOR: Color = Color::rgb(255, 255, 255);
 
 impl ElementLayout for TextElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
-        _child_layout: &mut dyn ChildLayout,
+        _cx: &mut LayoutContext,
     ) -> Size {
         let char_width = self.font_size * 0.6;
         let line_height = self.font_size * 1.2;
@@ -42,12 +44,7 @@ impl ElementLayout for TextElement {
         constraints.constrain(Size::new(width, height))
     }
 
-    fn perform_layout_position(
-        &mut self,
-        _children: &[ElementNodeId],
-        _child_layout: &mut dyn ChildLayout,
-    ) {
-    }
+    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
 impl ElementRender for TextElement {
@@ -57,16 +54,16 @@ impl ElementRender for TextElement {
 
     fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
-        _child_paint: &mut dyn ChildPaint,
+        _paint_ctx: &PaintContext,
     ) {
         if self.content.is_empty() {
             return;
         }
-        let color = self.color.as_deref().unwrap_or("#ffffff");
-        ctx.fill_text(offset, &self.content, self.font_size, color);
+        let color = self.color.as_ref().unwrap_or(&DEFAULT_COLOR);
+        canvas.fill_text(offset, &self.content, self.font_size, color);
     }
 }

@@ -1,6 +1,6 @@
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
 
 use super::element::StackElement;
@@ -10,7 +10,7 @@ impl ElementLayout for StackElement {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size {
         let mut max_size = Size::ZERO;
 
@@ -24,7 +24,7 @@ impl ElementLayout for StackElement {
                 ),
                 tur_shared::StackFit::Passthrough => *constraints,
             };
-            let size = child_layout.layout_child(child_id, &child_constraints);
+            let size = cx.layout_child(child_id, &child_constraints);
             max_size = Size::new(
                 max_size.width.max(size.width),
                 max_size.height.max(size.height),
@@ -34,16 +34,12 @@ impl ElementLayout for StackElement {
         constraints.constrain(max_size)
     }
 
-    fn perform_layout_position(
-        &mut self,
-        children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    ) {
+    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         for &child_id in children {
-            let is_positioned = child_layout.get_child_type_name(child_id) == "tur_positioned";
+            let is_positioned = cx.child_type_name(child_id) == "tur_positioned";
 
             if !is_positioned {
-                child_layout.set_child_offset(child_id, Offset::ZERO);
+                cx.set_child_offset(child_id, Offset::ZERO);
             }
         }
     }
@@ -56,14 +52,14 @@ impl ElementRender for StackElement {
 
     fn paint(
         &self,
-        _ctx: &mut dyn PaintContext,
+        _canvas: &mut dyn Canvas,
         offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     ) {
         for &child_id in children {
-            child_paint.paint_child(child_id, _ctx, offset);
+            paint_ctx.paint_child(child_id, _canvas, offset);
         }
     }
 }

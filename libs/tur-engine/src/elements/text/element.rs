@@ -1,4 +1,5 @@
 use boa_engine::{Context, JsString, JsValue};
+use tur_shared::Color;
 
 use crate::core::traits::ElementOnUpdate;
 
@@ -6,7 +7,7 @@ use crate::core::traits::ElementOnUpdate;
 pub struct TextElement {
     pub(crate) content: String,
     pub(crate) font_size: f64,
-    pub(crate) color: Option<String>,
+    pub(crate) color: Option<Color>,
 }
 
 impl Default for TextElement {
@@ -35,7 +36,7 @@ impl ElementOnUpdate for TextElement {
             self.font_size = value.as_number().unwrap_or(14.0);
         } else if *key == "color" {
             if let Some(s) = value.as_string() {
-                self.color = Some(s.to_std_string_escaped());
+                self.color = s.to_std_string_escaped().parse().ok();
             }
         }
     }

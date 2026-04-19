@@ -10,8 +10,8 @@ fn print_tree(tree: &Ref<ElementTree>) {
             eprintln!(
                 "{}{} id={} children={}",
                 "  ".repeat(depth),
-                node.element.as_ref().unwrap().kind().as_str(),
-                node.id.as_u64(),
+                node.element.as_ref().unwrap().kind(),
+                node.id,
                 node.children.len(),
             );
             for &child_id in &node.children {

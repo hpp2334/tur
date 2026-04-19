@@ -2,7 +2,7 @@ use tur_shared::{
     Axis, ComputedLayout, Constraints, CrossAxisAlignment, MainAxisAlignment, Offset, Size,
 };
 
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
 
 use super::element::FlexElement;
@@ -12,7 +12,7 @@ impl ElementLayout for FlexElement {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size {
         self.child_data.clear();
         self.constraints = Some(*constraints);
@@ -22,7 +22,7 @@ impl ElementLayout for FlexElement {
         let mut flex_count = 0u32;
 
         for &child_id in children {
-            let is_flex = child_layout.get_child_type_name(child_id) == "tur_flex_item";
+            let is_flex = cx.child_type_name(child_id) == "tur_flex_item";
 
             if is_flex {
                 flex_count += 1;
@@ -54,7 +54,7 @@ impl ElementLayout for FlexElement {
                         max_height: constraints.max_height,
                     },
                 };
-                let size = child_layout.layout_child(child_id, &child_constraints);
+                let size = cx.layout_child(child_id, &child_constraints);
                 total_main += self.direction.main(size);
                 max_cross = max_cross.max(self.direction.cross(size));
                 self.child_data.push(super::element::ChildData {
@@ -99,7 +99,7 @@ impl ElementLayout for FlexElement {
                         max_height: constraints.max_height,
                     },
                 };
-                let size = child_layout.layout_child(entry.id, &child_constraints);
+                let size = cx.layout_child(entry.id, &child_constraints);
                 entry.size = size;
                 max_cross = max_cross.max(self.direction.cross(size));
             }
@@ -125,11 +125,7 @@ impl ElementLayout for FlexElement {
         constraints.constrain(size)
     }
 
-    fn perform_layout_position(
-        &mut self,
-        _children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    ) {
+    fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
         if self.child_data.is_empty() {
             return;
         }
@@ -187,7 +183,7 @@ impl ElementLayout for FlexElement {
                 Axis::Horizontal => Offset::new(current_main, cross),
             };
 
-            child_layout.set_child_offset(entry.id, offset);
+            cx.set_child_offset(entry.id, offset);
 
             current_main += self.direction.main(entry.size);
             if i < self.child_data.len() - 1 {
@@ -204,14 +200,14 @@ impl ElementRender for FlexElement {
 
     fn paint(
         &self,
-        _ctx: &mut dyn PaintContext,
+        _canvas: &mut dyn Canvas,
         offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     ) {
         for &child_id in children {
-            child_paint.paint_child(child_id, _ctx, offset);
+            paint_ctx.paint_child(child_id, _canvas, offset);
         }
     }
 }

@@ -1,3 +1,4 @@
+use tur_engine::core::traits::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -9,22 +10,28 @@ fn row_basic_horizontal_stacking() {
         let tree_rc = app.element_tree();
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
-        assert_eq!(root.element.as_ref().unwrap().kind().as_str(), "tur_flex");
+        assert_eq!(
+            root.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_flex")
+        );
         assert_eq!(root.children.len(), 1);
 
         let row = tree.get(root.children[0]).unwrap();
-        assert_eq!(row.element.as_ref().unwrap().kind().as_str(), "tur_flex");
+        assert_eq!(
+            row.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_flex")
+        );
         assert_eq!(row.children.len(), 2);
 
         let sb1 = tree.get(row.children[0]).unwrap();
         let sb2 = tree.get(row.children[1]).unwrap();
         assert_eq!(
-            sb1.element.as_ref().unwrap().kind().as_str(),
-            "tur_container"
+            sb1.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container")
         );
         assert_eq!(
-            sb2.element.as_ref().unwrap().kind().as_str(),
-            "tur_container"
+            sb2.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container")
         );
 
         (row.id, sb1.id, sb2.id)

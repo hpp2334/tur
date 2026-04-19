@@ -1,3 +1,4 @@
+use tur_engine::core::traits::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -11,15 +12,15 @@ fn container_with_padding() {
         let root = tree.root().unwrap();
         let container = tree.get(root.children[0]).unwrap();
         assert_eq!(
-            container.element.as_ref().unwrap().kind().as_str(),
-            "tur_container"
+            container.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container")
         );
         assert_eq!(container.children.len(), 1);
 
         let sb = tree.get(container.children[0]).unwrap();
         assert_eq!(
-            sb.element.as_ref().unwrap().kind().as_str(),
-            "tur_container"
+            sb.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container")
         );
 
         container.id

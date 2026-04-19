@@ -1,3 +1,4 @@
+use tur_engine::core::traits::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -10,7 +11,10 @@ fn text_content_and_measurement() {
         let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let text = tree.get(root.children[0]).unwrap();
-        assert_eq!(text.element.as_ref().unwrap().kind().as_str(), "tur_text");
+        assert_eq!(
+            text.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_text")
+        );
         text.id
     };
 

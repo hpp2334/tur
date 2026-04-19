@@ -1,6 +1,6 @@
-use tur_shared::{ComputedLayout, Constraints, EdgeInsets, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, EdgeInsets, Geometry, Offset, Size};
 
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
 
 use super::element::ContainerElement;
@@ -10,7 +10,7 @@ impl ElementLayout for ContainerElement {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size {
         let sized_constraints = Constraints {
             min_width: self.width.unwrap_or(constraints.min_width),
@@ -26,7 +26,7 @@ impl ElementLayout for ContainerElement {
         };
 
         let child_size = if let Some(&child_id) = children.first() {
-            child_layout.layout_child(child_id, &inner_constraints)
+            cx.layout_child(child_id, &inner_constraints)
         } else {
             inner_constraints.constrain(Size::ZERO)
         };
@@ -39,12 +39,7 @@ impl ElementLayout for ContainerElement {
         sized_constraints.constrain(inflated)
     }
 
-    fn perform_layout_position(
-        &mut self,
-        _children: &[ElementNodeId],
-        _child_layout: &mut dyn ChildLayout,
-    ) {
-    }
+    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
 impl ElementRender for ContainerElement {
@@ -54,17 +49,17 @@ impl ElementRender for ContainerElement {
 
     fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     ) {
         if let Some(ref color) = self.color {
-            ctx.fill_rect(offset, layout.size, color);
+            canvas.fill_geometry(offset, &Geometry::Rect(layout.size), color);
         }
         for &child_id in children {
-            child_paint.paint_child(child_id, ctx, offset);
+            paint_ctx.paint_child(child_id, canvas, offset);
         }
     }
 }

@@ -1,7 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::{
     ElementKind, ElementLayout, ElementNodeId, ElementOnUpdate, ElementRender,
 };
@@ -18,20 +18,16 @@ trait Erased: Send + Sync + 'static {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size;
-    fn perform_layout_position(
-        &mut self,
-        children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    );
+    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext);
     fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
 }
@@ -56,28 +52,24 @@ where
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size {
-        <Self as ElementLayout>::perform_layout_size(self, constraints, children, child_layout)
+        <Self as ElementLayout>::perform_layout_size(self, constraints, children, cx)
     }
 
-    fn perform_layout_position(
-        &mut self,
-        children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    ) {
-        <Self as ElementLayout>::perform_layout_position(self, children, child_layout);
+    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        <Self as ElementLayout>::perform_layout_position(self, children, cx);
     }
 
     fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     ) {
-        <Self as ElementRender>::paint(self, ctx, offset, layout, children, child_paint);
+        <Self as ElementRender>::paint(self, canvas, offset, layout, children, paint_ctx);
     }
 
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
@@ -108,29 +100,25 @@ impl AnyElement {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size {
-        self.inner
-            .perform_layout_size(constraints, children, child_layout)
+        self.inner.perform_layout_size(constraints, children, cx)
     }
 
-    pub fn perform_layout_position(
-        &mut self,
-        children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    ) {
-        self.inner.perform_layout_position(children, child_layout);
+    pub fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        self.inner.perform_layout_position(children, cx);
     }
 
     pub fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     ) {
-        self.inner.paint(ctx, offset, layout, children, child_paint);
+        self.inner
+            .paint(canvas, offset, layout, children, paint_ctx);
     }
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {

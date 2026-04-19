@@ -1,6 +1,6 @@
 use tur_shared::{ComputedLayout, Offset};
 
-use crate::core::render::{ChildPaint, PaintContext};
+use crate::core::render::{Canvas, PaintContext};
 use crate::core::traits::ElementNodeId;
 
 pub trait ElementRender: Send + Sync + 'static {
@@ -8,11 +8,11 @@ pub trait ElementRender: Send + Sync + 'static {
 
     fn paint(
         &self,
-        ctx: &mut dyn PaintContext,
+        canvas: &mut dyn Canvas,
         offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
-        child_paint: &mut dyn ChildPaint,
+        paint_ctx: &PaintContext,
     );
 
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {

@@ -3,60 +3,13 @@ use std::collections::HashMap;
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::elements::ElementNode;
-use crate::core::render::{ChildLayout, ChildPaint, PaintContext};
+use crate::core::render::{Canvas, LayoutContext, PaintContext};
 use crate::core::traits::ElementNodeId;
 
 #[derive(Debug, Default)]
 pub struct ElementTree {
-    nodes: HashMap<ElementNodeId, ElementNode>,
+    pub(crate) nodes: HashMap<ElementNodeId, ElementNode>,
     root_id: Option<ElementNodeId>,
-}
-
-struct TreeChildLayout<'a> {
-    tree: &'a mut ElementTree,
-    node_id: ElementNodeId,
-}
-
-impl ChildLayout for TreeChildLayout<'_> {
-    fn layout_child(&mut self, child_id: ElementNodeId, constraints: &Constraints) -> Size {
-        self.tree.layout_size(child_id, constraints)
-    }
-
-    fn set_child_offset(&mut self, child_id: ElementNodeId, offset: Offset) {
-        if let Some(node) = self.tree.nodes.get_mut(&child_id) {
-            node.computed_layout.offset = offset;
-        }
-    }
-
-    fn set_child_offset_self(&mut self, offset: Offset) {
-        if let Some(node) = self.tree.nodes.get_mut(&self.node_id) {
-            node.computed_layout.offset = offset;
-        }
-    }
-
-    fn get_child_type_name(&self, child_id: ElementNodeId) -> &'static str {
-        self.tree
-            .nodes
-            .get(&child_id)
-            .and_then(|n| n.element.as_ref())
-            .map(|e| e.type_name())
-            .unwrap_or("tur_container")
-    }
-}
-
-struct TreeChildPaint<'a> {
-    tree: &'a ElementTree,
-}
-
-impl ChildPaint for TreeChildPaint<'_> {
-    fn paint_child(
-        &mut self,
-        child_id: ElementNodeId,
-        ctx: &mut dyn PaintContext,
-        parent_offset: Offset,
-    ) {
-        self.tree.paint_node(child_id, ctx, parent_offset);
-    }
 }
 
 impl ElementTree {
@@ -213,7 +166,7 @@ impl ElementTree {
         }
     }
 
-    fn layout_size(&mut self, id: ElementNodeId, constraints: &Constraints) -> Size {
+    pub(crate) fn layout_size(&mut self, id: ElementNodeId, constraints: &Constraints) -> Size {
         let children = self
             .nodes
             .get(&id)
@@ -226,14 +179,11 @@ impl ElementTree {
             .and_then(|n| n.element.take())
             .expect("element missing during layout_size");
 
-        let mut child_layout = TreeChildLayout {
-            tree: self,
-            node_id: id,
-        };
-        let size = element.perform_layout_size(constraints, &children, &mut child_layout);
+        let mut cx = LayoutContext::new(self, id);
+        let size = element.perform_layout_size(constraints, &children, &mut cx);
 
         let constrained = constraints.constrain(size);
-        let node = child_layout.tree.nodes.get_mut(&id).unwrap();
+        let node = cx.tree.nodes.get_mut(&id).unwrap();
         node.element = Some(element);
         node.computed_layout.size = constrained;
         constrained
@@ -253,13 +203,10 @@ impl ElementTree {
                 .and_then(|n| n.element.take())
                 .expect("element missing during layout_position");
 
-            let mut child_layout = TreeChildLayout {
-                tree: self,
-                node_id: id,
-            };
-            element.perform_layout_position(&children, &mut child_layout);
+            let mut cx = LayoutContext::new(self, id);
+            element.perform_layout_position(&children, &mut cx);
 
-            child_layout.tree.nodes.get_mut(&id).unwrap().element = Some(element);
+            cx.tree.nodes.get_mut(&id).unwrap().element = Some(element);
         }
 
         for child_id in children {
@@ -267,15 +214,20 @@ impl ElementTree {
         }
     }
 
-    pub fn paint(&self, ctx: &mut dyn PaintContext) {
+    pub fn paint(&self, canvas: &mut dyn Canvas) {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return,
         };
-        self.paint_node(root_id, ctx, Offset::ZERO);
+        self.paint_node(root_id, canvas, Offset::ZERO);
     }
 
-    fn paint_node(&self, id: ElementNodeId, ctx: &mut dyn PaintContext, parent_offset: Offset) {
+    pub(crate) fn paint_node(
+        &self,
+        id: ElementNodeId,
+        canvas: &mut dyn Canvas,
+        parent_offset: Offset,
+    ) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
             None => return,
@@ -288,13 +240,13 @@ impl ElementTree {
 
         let absolute_offset = parent_offset + node.computed_layout.offset;
 
-        let mut child_paint = TreeChildPaint { tree: self };
+        let paint_ctx = PaintContext::new(self);
         element.paint(
-            ctx,
+            canvas,
             absolute_offset,
             &node.computed_layout,
             &node.children,
-            &mut child_paint,
+            &paint_ctx,
         );
     }
 

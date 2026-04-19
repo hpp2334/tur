@@ -1,6 +1,6 @@
 use tur_shared::{Constraints, Size};
 
-use crate::core::render::ChildLayout;
+use crate::core::render::LayoutContext;
 use crate::core::traits::ElementNodeId;
 
 pub trait ElementLayout: Send + Sync + 'static {
@@ -8,12 +8,8 @@ pub trait ElementLayout: Send + Sync + 'static {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
+        cx: &mut LayoutContext,
     ) -> Size;
 
-    fn perform_layout_position(
-        &mut self,
-        children: &[ElementNodeId],
-        child_layout: &mut dyn ChildLayout,
-    );
+    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext);
 }

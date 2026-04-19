@@ -1,10 +1,11 @@
 use std::fmt;
 
-use crate::core::render::PaintContext as TurPaintContext;
-use tur_shared::{Offset, Size};
+use tur_shared::{Color, Geometry, Offset};
 use vello::kurbo::Affine;
-use vello::peniko::{Brush, Color, Fill};
+use vello::peniko::{Brush, Fill};
 use vello::Scene;
+
+use crate::core::render::Canvas;
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
@@ -22,54 +23,55 @@ impl fmt::Debug for VelloPaintContext<'_> {
     }
 }
 
-impl TurPaintContext for VelloPaintContext<'_> {
-    fn fill_rect(&mut self, offset: Offset, size: Size, color: &str) {
-        let color = parse_color(color);
+impl Canvas for VelloPaintContext<'_> {
+    fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, color: &Color) {
+        let peniko_color = to_peniko_color(color);
         let transform = Affine::translate((offset.x, offset.y));
-        self.scene.fill(
-            Fill::NonZero,
-            transform,
-            &Brush::Solid(color),
-            None,
-            &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-        );
+        let brush = Brush::Solid(peniko_color);
+        match geometry {
+            Geometry::Rect(size) => {
+                self.scene.fill(
+                    Fill::NonZero,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
+                );
+            }
+            Geometry::RoundedRect { size, radius } => {
+                self.scene.fill(
+                    Fill::NonZero,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
+                );
+            }
+            Geometry::Circle { radius } => {
+                self.scene.fill(
+                    Fill::NonZero,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::Circle::new((0.0, 0.0), *radius),
+                );
+            }
+        }
     }
 
-    fn fill_text(&mut self, offset: Offset, _text: &str, _font_size: f64, color: &str) {
-        let color = parse_color(color);
+    fn fill_text(&mut self, offset: Offset, _text: &str, _font_size: f64, color: &Color) {
+        let peniko_color = to_peniko_color(color);
         let transform = Affine::translate((offset.x, offset.y));
         self.scene.fill(
             Fill::NonZero,
             transform,
-            &Brush::Solid(color),
+            &Brush::Solid(peniko_color),
             None,
             &vello::kurbo::Rect::new(0.0, 0.0, 0.0, 0.0),
         );
     }
 }
 
-fn parse_color(s: &str) -> Color {
-    let hex = s.trim_start_matches('#');
-    match hex.len() {
-        6 => {
-            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
-            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
-            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
-            Color::from_rgba8(r, g, b, 255)
-        }
-        8 => {
-            let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
-            let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
-            let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
-            let a = u8::from_str_radix(&hex[6..8], 16).unwrap_or(255);
-            Color::from_rgba8(r, g, b, a)
-        }
-        3 => {
-            let r = u8::from_str_radix(&hex[0..1].repeat(2), 16).unwrap_or(0);
-            let g = u8::from_str_radix(&hex[1..2].repeat(2), 16).unwrap_or(0);
-            let b = u8::from_str_radix(&hex[2..3].repeat(2), 16).unwrap_or(0);
-            Color::from_rgba8(r, g, b, 255)
-        }
-        _ => Color::from_rgba8(255, 255, 255, 255),
-    }
+fn to_peniko_color(color: &Color) -> vello::peniko::Color {
+    vello::peniko::Color::from_rgba8(color.r(), color.g(), color.b(), color.a())
 }

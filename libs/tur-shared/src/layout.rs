@@ -253,6 +253,13 @@ pub enum Axis {
     Horizontal,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Geometry {
+    Rect(Size),
+    RoundedRect { size: Size, radius: f64 },
+    Circle { radius: f64 },
+}
+
 impl Axis {
     pub fn main(&self, size: Size) -> f64 {
         match self {
