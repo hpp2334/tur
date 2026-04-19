@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,7 +10,7 @@ const sshPath = os === 'darwin' ? '/Users/a/.ssh' : '/home/a/.ssh';
 
 const actrcContent = `-P ubuntu-latest=tur-ci:latest
 --pull=false
---container-options --network=host -v /tmp/tur-ci-cache/cargo/registry:/root/.cargo/registry -v /tmp/tur-ci-cache/cargo/git:/root/.cargo/git -v /tmp/tur-ci-cache/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
+--container-options --network=host -v /tmp/tur-ci-cache/cargo/registry:/root/.cargo/registry -v /tmp/tur-ci-cache/cargo/git:/root/.cargo/git -v /tmp/tur-ci-cache/sccache:/root/.cache/sccache -v /tmp/tur-ci-cache/pnpm/store:/root/.local/share/pnpm/store -v ${sshPath}:/root/.ssh:ro`;
 
 fs.writeFileSync(actrcPath, actrcContent, 'utf8');
 
@@ -33,10 +33,55 @@ console.log(' Docker ready.');
 
 const currentBranch = execSync('git branch --show-current', { encoding: 'utf8' }).trim();
 
-execSync(
-  `mkdir -p logs/ && rm -f logs/workflow.log && flock /tmp/tur-ci.lock act workflow_dispatch -W .github/workflows/local-ci.yml --env BRANCH_NAME=${currentBranch} 2>&1 | tee logs/workflow.log`,
+const logDir = path.join(rootDir, 'logs');
+fs.mkdirSync(logDir, { recursive: true });
+const logPath = path.join(logDir, 'workflow.log');
+const logStream = fs.createWriteStream(logPath, { flags: 'w' });
+
+const child = spawn(
+  'flock',
+  ['/tmp/tur-ci.lock', 'act', 'workflow_dispatch', '-W', '.github/workflows/local-ci.yml', '--json', '--env', `BRANCH_NAME=${currentBranch}`],
   {
-    stdio: 'inherit',
+    cwd: rootDir,
     env: { ...process.env, PATH: `/usr/local/opt/util-linux/bin:${process.env.PATH}` },
+    stdio: ['ignore', 'pipe', 'pipe'],
   },
 );
+
+let buffer = '';
+
+function handleLine(line) {
+  logStream.write(line + '\n');
+  let obj;
+  try { obj = JSON.parse(line); } catch { return; }
+  const msg = obj.msg || '';
+  const isStepStart = msg.startsWith('⭐ Run Main');
+  const isStepResult = (obj.stepResult === 'success' || obj.stepResult === 'failure') && obj.stage === 'Main';
+  if (isStepStart || isStepResult) {
+    process.stdout.write(msg + '\n');
+  }
+}
+
+child.stdout.on('data', (chunk) => {
+  buffer += chunk;
+  const lines = buffer.split('\n');
+  buffer = lines.pop();
+  for (const line of lines) {
+    if (line.trim()) handleLine(line);
+  }
+});
+
+child.stderr.on('data', (chunk) => {
+  process.stderr.write(chunk);
+});
+
+child.on('close', (code) => {
+  if (buffer.trim()) handleLine(buffer);
+  logStream.end();
+  if (code === 0) {
+    console.log('\nCI passed. Full log: logs/workflow.log');
+  } else {
+    console.log(`\nCI FAILED (exit ${code}). See logs/workflow.log for details.`);
+  }
+  process.exit(code || 0);
+});

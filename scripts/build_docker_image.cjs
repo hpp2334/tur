@@ -3,7 +3,7 @@ const path = require('path');
 
 const rootDir = path.join(__dirname, '..');
 const dockerfilePath = path.join(rootDir, 'docker', 'ci.Dockerfile');
-const contextDir = path.join(rootDir, 'docker');
+const contextDir = rootDir;
 const imageName = 'tur-ci:latest';
 
 execSync(

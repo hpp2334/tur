@@ -5,6 +5,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTC_WRAPPER: sccache
+  SCCACHE_CACHE_SIZE: 2G
 
 jobs:
   ci:
@@ -56,5 +58,5 @@ jobs:
         working-directory: ./js
 
       - name: wasm-pack build
-        run: wasm-pack build --target web -- --locked
+        run: wasm-pack build --target web --no-opt -- --locked
         working-directory: ./libs/tur-wasm

@@ -19,12 +19,20 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 ENV CARGO_HOME="/root/.cargo"
 
+RUN curl -L https://github.com/mozilla/sccache/releases/download/v0.14.0/sccache-v0.14.0-x86_64-unknown-linux-musl.tar.gz | tar xz --strip-components=1 -C /root/.cargo/bin sccache-v0.14.0-x86_64-unknown-linux-musl/sccache && chmod +x /root/.cargo/bin/sccache
+
 RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
 RUN rustup target add wasm32-unknown-unknown
 
 RUN npm install -g pnpm@10
 RUN pnpm config set store-dir /root/.local/share/pnpm/store
+
+COPY assets/prewarm.zip /tmp/prewarm.zip
+RUN unzip /tmp/prewarm.zip -d /tmp/prewarm && \
+    cd /tmp/prewarm && \
+    node scripts/prewarm.cjs && \
+    rm -rf /tmp/prewarm /tmp/prewarm.zip
 
 RUN git config --global user.email "hpp2334@outlook.com" && \
     git config --global user.name "hpp2334"
