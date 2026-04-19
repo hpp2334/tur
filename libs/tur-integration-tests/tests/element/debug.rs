@@ -1,15 +1,15 @@
+use tur_element_tree::ElementTree;
 use tur_integration_tests::TurTestApp;
 
-fn print_tree(tree: &tur_element::ElementTree) {
-    fn go(tree: &tur_element::ElementTree, id: tur_element::ElementNodeId, depth: usize) {
+fn print_tree(tree: &ElementTree) {
+    fn go(tree: &ElementTree, id: tur_element_tree::ElementNodeId, depth: usize) {
         if let Some(node) = tree.get(id) {
             eprintln!(
-                "{}{:?} id={} children={} props={:?}",
+                "{}{} id={} children={}",
                 "  ".repeat(depth),
-                node.kind,
+                node.element.name(),
                 node.id.as_u64(),
                 node.children.len(),
-                node.props,
             );
             for &child_id in &node.children {
                 go(tree, child_id, depth + 1);
@@ -29,13 +29,13 @@ fn debug_raw_column_basic() {
         r#"
         var ctx = globalThis.__tur.__ctx;
         var root = globalThis.__tur.createRoot(ctx);
-        var col = globalThis.__tur.create(ctx, "tur_flex");
+        var col = globalThis.__tur.createFlex(ctx);
         globalThis.__tur.setAttribute(ctx, col, "crossAlignment", "Start");
         globalThis.__tur.appendChild(ctx, root, col);
-        var sb1 = globalThis.__tur.create(ctx, "tur_container");
+        var sb1 = globalThis.__tur.createContainer(ctx);
         globalThis.__tur.setAttribute(ctx, sb1, "height", 50);
         globalThis.__tur.appendChild(ctx, col, sb1);
-        var sb2 = globalThis.__tur.create(ctx, "tur_container");
+        var sb2 = globalThis.__tur.createContainer(ctx);
         globalThis.__tur.setAttribute(ctx, sb2, "height", 30);
         globalThis.__tur.appendChild(ctx, col, sb2);
     "#,

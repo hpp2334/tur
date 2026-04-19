@@ -1,7 +1,7 @@
-use tur_shared::{ComputedLayout, Constraints, ElementKind, Offset, Size};
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
+use tur_trait::{
+    ChildLayout, ChildPaint, ComputedLayout, Constraints, Offset, PaintContext, RenderNodeId,
+    RenderObject, Size,
+};
 
 #[derive(Debug)]
 pub struct TextRenderObject {
@@ -11,18 +11,18 @@ pub struct TextRenderObject {
 }
 
 impl TextRenderObject {
-    pub fn from_props(props: &std::collections::HashMap<String, tur_element::PropValue>) -> Self {
+    pub fn new(content: String, font_size: f64, color: Option<String>) -> Self {
         TextRenderObject {
-            content: super::prop_str(props, "content").unwrap_or("").to_string(),
-            font_size: super::prop_f64(props, "fontSize").unwrap_or(14.0),
-            color: super::prop_str(props, "color").map(String::from),
+            content,
+            font_size,
+            color,
         }
     }
 }
 
 impl RenderObject for TextRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::Text
+    fn type_name(&self) -> &'static str {
+        "tur_text"
     }
 
     fn perform_layout_size(

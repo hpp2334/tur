@@ -2,15 +2,17 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::{Rc, Weak};
-use std::str::FromStr;
 
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tracing;
-use tur_element::{ElementKind, ElementNode, ElementNodeId, ElementTree, PropValue};
+use tur_element_tree::{DynElement, ElementNode, ElementNodeId, ElementTree};
 use tur_render_tree::{RenderTree, Renderer};
-use tur_shared::Constraints;
+use tur_trait::Constraints;
 
+use crate::elements::{
+    set_element_prop, ContainerElement, FlexElement, FlexItemElement, PositionedElement,
+    StackElement, TextElement,
+};
 use crate::BoaOpaque;
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -103,7 +105,7 @@ impl TurAppContext {
 
         {
             let element_tree_guard = self.element_tree.borrow();
-            render_tree.rebuild_from_element_tree(&element_tree_guard);
+            render_tree.rebuild_from_element_tree_provider(&*element_tree_guard);
         }
 
         let layout_size = render_tree.compute_layout(&constraints);
@@ -156,30 +158,73 @@ fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<ElementNodeId> {
     Ok(handle.id)
 }
 
-pub(crate) fn tur_create_element(
+fn create_element(
+    args: &[JsValue],
+    context: &mut Context,
+    element: Box<dyn DynElement>,
+) -> JsResult<JsValue> {
+    let ctx = extract_ctx(args)?;
+    let ctx = ctx.borrow();
+    let id = ctx.alloc_id();
+    let node = ElementNode::new(id, element);
+    ctx.element_tree.borrow_mut().insert(node);
+
+    let obj = ctx.get_or_create_handle(id, context);
+    Ok(obj.object().clone().into())
+}
+
+pub(crate) fn tur_create_flex(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let ctx = ctx.borrow();
-    let kind_str = args
-        .get_or_undefined(1)
-        .to_string(context)?
-        .to_std_string_escaped();
+    tracing::trace!("tur_createFlex()");
+    create_element(args, context, Box::new(FlexElement::new()))
+}
 
-    let kind = ElementKind::from_str(&kind_str).unwrap_or_else(|_| {
-        tracing::warn!("unknown element type: {kind_str}, falling back to Container");
-        ElementKind::Container
-    });
+pub(crate) fn tur_create_flex_item(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createFlexItem()");
+    create_element(args, context, Box::new(FlexItemElement::new()))
+}
 
-    let id = ctx.alloc_id();
-    let node = ElementNode::new(id, kind);
-    ctx.element_tree.borrow_mut().insert(node);
+pub(crate) fn tur_create_stack(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createStack()");
+    create_element(args, context, Box::new(StackElement::new()))
+}
 
-    tracing::trace!("tur_createElement({kind_str}) -> {}", id.as_u64());
-    let obj = ctx.get_or_create_handle(id, context);
-    Ok(obj.object().clone().into())
+pub(crate) fn tur_create_positioned(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createPositioned()");
+    create_element(args, context, Box::new(PositionedElement::new()))
+}
+
+pub(crate) fn tur_create_container(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createContainer()");
+    create_element(args, context, Box::new(ContainerElement::new()))
+}
+
+pub(crate) fn tur_create_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createText()");
+    create_element(args, context, Box::new(TextElement::new()))
 }
 
 pub(crate) fn tur_create_root(
@@ -187,15 +232,8 @@ pub(crate) fn tur_create_root(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let ctx = ctx.borrow();
-    let id = ctx.alloc_id();
-    let node = ElementNode::new(id, ElementKind::Flex);
-    ctx.element_tree.borrow_mut().insert(node);
-
-    tracing::trace!("tur_createRoot() -> {}", id.as_u64());
-    let obj = ctx.get_or_create_handle(id, context);
-    Ok(obj.object().clone().into())
+    tracing::trace!("tur_createRoot()");
+    create_element(args, context, Box::new(FlexElement::new()))
 }
 
 pub(crate) fn tur_set_attribute(
@@ -206,34 +244,18 @@ pub(crate) fn tur_set_attribute(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let node_id = extract_node_id(args, 1)?;
-    let key = args
-        .get_or_undefined(2)
-        .to_string(context)?
-        .to_std_string_escaped();
+    let key = args.get_or_undefined(2).to_string(context)?;
+
     let value = args.get_or_undefined(3).clone();
 
-    let prop_value = if let Some(s) = value.as_string() {
-        PropValue::String(s.to_std_string_escaped())
-    } else if let Some(n) = value.as_number() {
-        PropValue::Number(n)
-    } else if let Some(b) = value.as_boolean() {
-        PropValue::Bool(b)
-    } else if let Some(b) = value.as_bigint() {
-        let n: i64 = b.to_string().parse().unwrap_or(0);
-        PropValue::Number(n as f64)
-    } else {
-        PropValue::String(
-            value
-                .to_string(context)
-                .map(|s| s.to_std_string_escaped())
-                .unwrap_or_default(),
-        )
-    };
-
-    tracing::trace!("tur_setAttribute({}, {key}, ...)", node_id.as_u64());
+    tracing::trace!(
+        "tur_setAttribute({}, {}, ...)",
+        node_id.as_u64(),
+        key.to_std_string_escaped()
+    );
 
     if let Some(node) = ctx.element_tree.borrow_mut().get_mut(node_id) {
-        node.set_prop(key, prop_value);
+        set_element_prop(&mut node.element, context, &key, &value);
     }
 
     Ok(JsValue::undefined())

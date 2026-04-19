@@ -1,7 +1,7 @@
-use tur_shared::{ComputedLayout, Constraints, ElementKind, Offset, Size};
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
+use tur_trait::{
+    ChildLayout, ChildPaint, ComputedLayout, Constraints, Offset, PaintContext, RenderNodeId,
+    RenderObject, Size,
+};
 
 #[derive(Debug)]
 pub struct PositionedRenderObject {
@@ -12,19 +12,24 @@ pub struct PositionedRenderObject {
 }
 
 impl PositionedRenderObject {
-    pub fn from_props(props: &std::collections::HashMap<String, tur_element::PropValue>) -> Self {
+    pub fn new(
+        left: Option<f64>,
+        top: Option<f64>,
+        right: Option<f64>,
+        bottom: Option<f64>,
+    ) -> Self {
         PositionedRenderObject {
-            left: super::prop_f64(props, "left"),
-            top: super::prop_f64(props, "top"),
-            right: super::prop_f64(props, "right"),
-            bottom: super::prop_f64(props, "bottom"),
+            left,
+            top,
+            right,
+            bottom,
         }
     }
 }
 
 impl RenderObject for PositionedRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::Positioned
+    fn type_name(&self) -> &'static str {
+        "tur_positioned"
     }
 
     fn perform_layout_size(

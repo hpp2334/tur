@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn text_content_and_measurement() {
@@ -11,9 +10,7 @@ fn text_content_and_measurement() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let text = tree.get(root.children[0]).unwrap();
-        assert_eq!(text.kind, ElementKind::Text);
-        assert_eq!(text.prop_str("content"), Some("Hello"));
-        assert_eq!(text.prop_f64("fontSize"), Some(14.0));
+        assert_eq!(text.element.name(), "tur_text");
         text.id.as_u64()
     };
 

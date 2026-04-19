@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use tur_render_tree::{RenderNodeId, RenderTree, Renderer};
-use tur_shared::{ElementKind, Offset};
+use tur_trait::Offset;
 
 pub struct NoopRenderer;
 
@@ -27,7 +27,7 @@ impl Renderer for NoopRenderer {
             }
         };
 
-        let mut counts: HashMap<ElementKind, usize> = HashMap::new();
+        let mut counts: HashMap<&str, usize> = HashMap::new();
         let max_depth = collect_stats(tree, root_id, Offset::ZERO, 0, &mut counts);
 
         let total: usize = counts.values().sum();
@@ -45,22 +45,22 @@ fn collect_stats(
     id: RenderNodeId,
     parent_offset: Offset,
     depth: usize,
-    counts: &mut HashMap<ElementKind, usize>,
+    counts: &mut HashMap<&str, usize>,
 ) -> usize {
     let node = match tree.get(id) {
         Some(n) => n,
         None => return depth,
     };
 
-    let kind = node
+    let type_name = node
         .object
         .as_ref()
-        .map(|o| o.kind())
-        .unwrap_or(ElementKind::Container);
+        .map(|o| o.type_name())
+        .unwrap_or("tur_container");
     let absolute_offset = parent_offset + node.computed_layout.offset;
     tracing::trace!(
-        "noop-renderer: {:?} node {} at ({:.1}, {:.1}) size ({:.1}, {:.1}) depth {}",
-        kind,
+        "noop-renderer: {} node {} at ({:.1}, {:.1}) size ({:.1}, {:.1}) depth {}",
+        type_name,
         id.as_u64(),
         absolute_offset.x,
         absolute_offset.y,
@@ -69,7 +69,7 @@ fn collect_stats(
         depth,
     );
 
-    *counts.entry(kind).or_insert(0) += 1;
+    *counts.entry(type_name).or_insert(0) += 1;
 
     let mut child_max = depth;
     for &child_id in &node.children {

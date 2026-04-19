@@ -1,8 +1,40 @@
 pub mod bridge;
 pub mod element_bridge;
+pub mod elements;
 
 pub use bridge::init_bridge;
 pub use element_bridge::{TurAppContext, WeakAppContext};
+
+#[macro_export]
+macro_rules! impl_dyn_element {
+    ($t:ty) => {
+        impl tur_element_tree::DynElement for $t {
+            fn to_render_object_boxed(&self) -> Box<dyn tur_element_tree::RenderObject> {
+                Box::new(tur_element_tree::Element::to_render_object(self))
+            }
+
+            fn kind(&self) -> tur_element_tree::ElementKind {
+                tur_element_tree::Element::kind(self)
+            }
+
+            fn name(&self) -> &'static str {
+                tur_element_tree::Element::name(self)
+            }
+
+            fn clone_box(&self) -> Box<dyn tur_element_tree::DynElement> {
+                Box::new(self.clone())
+            }
+
+            fn as_any(&self) -> &dyn std::any::Any {
+                self
+            }
+
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+                self
+            }
+        }
+    };
+}
 
 use boa_engine::object::NativeObject;
 use boa_engine::JsObject;

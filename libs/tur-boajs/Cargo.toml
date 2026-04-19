@@ -7,8 +7,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tur-shared = { workspace = true }
-tur-element = { workspace = true }
+tur-trait = { workspace = true }
+tur-element-tree = { workspace = true }
 tur-render-tree = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }

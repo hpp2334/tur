@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tur-shared = { workspace = true }
+tur-trait = { workspace = true }
 tur-render-tree = { workspace = true }
 vello = { workspace = true }
 raw-window-handle = { workspace = true }

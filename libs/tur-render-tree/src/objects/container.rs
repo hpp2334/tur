@@ -1,7 +1,7 @@
-use tur_shared::{ComputedLayout, Constraints, EdgeInsets, ElementKind, Offset, Size};
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
+use tur_trait::{
+    ChildLayout, ChildPaint, ComputedLayout, Constraints, EdgeInsets, Offset, PaintContext,
+    RenderNodeId, RenderObject, Size,
+};
 
 #[derive(Debug)]
 pub struct ContainerRenderObject {
@@ -12,19 +12,24 @@ pub struct ContainerRenderObject {
 }
 
 impl ContainerRenderObject {
-    pub fn from_props(props: &std::collections::HashMap<String, tur_element::PropValue>) -> Self {
+    pub fn new(
+        width: Option<f64>,
+        height: Option<f64>,
+        padding: Option<f64>,
+        color: Option<String>,
+    ) -> Self {
         ContainerRenderObject {
-            width: super::prop_f64(props, "width"),
-            height: super::prop_f64(props, "height"),
-            padding: super::prop_f64(props, "padding"),
-            color: super::prop_str(props, "color").map(String::from),
+            width,
+            height,
+            padding,
+            color,
         }
     }
 }
 
 impl RenderObject for ContainerRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::Container
+    fn type_name(&self) -> &'static str {
+        "tur_container"
     }
 
     fn perform_layout_size(

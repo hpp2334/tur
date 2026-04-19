@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn expanded_fills_remaining() {
@@ -11,18 +10,18 @@ fn expanded_fills_remaining() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.kind, ElementKind::Flex);
+        assert_eq!(col.element.name(), "tur_flex");
         assert_eq!(col.children.len(), 2);
 
         let sb = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::Container);
+        assert_eq!(sb.element.name(), "tur_container");
 
         let expanded = tree.get(col.children[1]).unwrap();
-        assert_eq!(expanded.kind, ElementKind::FlexItem);
+        assert_eq!(expanded.element.name(), "tur_flex_item");
         assert_eq!(expanded.children.len(), 1);
 
         let inner_sb = tree.get(expanded.children[0]).unwrap();
-        assert_eq!(inner_sb.kind, ElementKind::Container);
+        assert_eq!(inner_sb.element.name(), "tur_container");
 
         (expanded.id.as_u64(), inner_sb.id.as_u64())
     };
@@ -47,8 +46,8 @@ fn expanded_multiple_share_evenly() {
 
         let exp1 = tree.get(col.children[0]).unwrap();
         let exp2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(exp1.kind, ElementKind::FlexItem);
-        assert_eq!(exp2.kind, ElementKind::FlexItem);
+        assert_eq!(exp1.element.name(), "tur_flex_item");
+        assert_eq!(exp2.element.name(), "tur_flex_item");
 
         (exp1.id.as_u64(), exp2.id.as_u64())
     };

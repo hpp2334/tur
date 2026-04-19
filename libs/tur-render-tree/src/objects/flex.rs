@@ -1,10 +1,7 @@
-use tur_shared::{
-    Axis, ComputedLayout, Constraints, CrossAxisAlignment, ElementKind, MainAxisAlignment, Offset,
-    Size,
+use tur_trait::{
+    Axis, ChildLayout, ChildPaint, ComputedLayout, Constraints, CrossAxisAlignment,
+    MainAxisAlignment, Offset, PaintContext, RenderNodeId, RenderObject, Size,
 };
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
 
 #[derive(Debug)]
 struct ChildData {
@@ -23,64 +20,11 @@ pub struct FlexRenderObject {
 }
 
 impl FlexRenderObject {
-    pub fn from_props(props: &std::collections::HashMap<String, tur_element::PropValue>) -> Self {
-        let direction = super::prop_str(props, "direction")
-            .and_then(|s| match s {
-                "Vertical" => Some(Axis::Vertical),
-                "Horizontal" => Some(Axis::Horizontal),
-                _ => None,
-            })
-            .or_else(|| {
-                super::prop_f64(props, "direction").and_then(|n| match n as i32 {
-                    0 => Some(Axis::Vertical),
-                    1 => Some(Axis::Horizontal),
-                    _ => None,
-                })
-            })
-            .unwrap_or(Axis::Vertical);
-
-        let main_alignment = super::prop_str(props, "mainAlignment")
-            .and_then(|s| match s {
-                "start" => Some(MainAxisAlignment::Start),
-                "center" => Some(MainAxisAlignment::Center),
-                "end" => Some(MainAxisAlignment::End),
-                "space-between" => Some(MainAxisAlignment::SpaceBetween),
-                "space-around" => Some(MainAxisAlignment::SpaceAround),
-                "space-evenly" => Some(MainAxisAlignment::SpaceEvenly),
-                _ => None,
-            })
-            .or_else(|| {
-                super::prop_f64(props, "mainAlignment").and_then(|n| match n as i32 {
-                    0 => Some(MainAxisAlignment::Start),
-                    1 => Some(MainAxisAlignment::Center),
-                    2 => Some(MainAxisAlignment::End),
-                    3 => Some(MainAxisAlignment::SpaceBetween),
-                    4 => Some(MainAxisAlignment::SpaceAround),
-                    5 => Some(MainAxisAlignment::SpaceEvenly),
-                    _ => None,
-                })
-            })
-            .unwrap_or(MainAxisAlignment::Start);
-
-        let cross_alignment = super::prop_str(props, "crossAlignment")
-            .and_then(|s| match s {
-                "start" => Some(CrossAxisAlignment::Start),
-                "center" => Some(CrossAxisAlignment::Center),
-                "end" => Some(CrossAxisAlignment::End),
-                "stretch" => Some(CrossAxisAlignment::Stretch),
-                _ => None,
-            })
-            .or_else(|| {
-                super::prop_f64(props, "crossAlignment").and_then(|n| match n as i32 {
-                    0 => Some(CrossAxisAlignment::Start),
-                    1 => Some(CrossAxisAlignment::Center),
-                    2 => Some(CrossAxisAlignment::End),
-                    3 => Some(CrossAxisAlignment::Stretch),
-                    _ => None,
-                })
-            })
-            .unwrap_or(CrossAxisAlignment::Center);
-
+    pub fn new(
+        direction: Axis,
+        main_alignment: MainAxisAlignment,
+        cross_alignment: CrossAxisAlignment,
+    ) -> Self {
         FlexRenderObject {
             direction,
             main_alignment,
@@ -92,8 +36,8 @@ impl FlexRenderObject {
 }
 
 impl RenderObject for FlexRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::Flex
+    fn type_name(&self) -> &'static str {
+        "tur_flex"
     }
 
     fn perform_layout_size(
@@ -110,7 +54,7 @@ impl RenderObject for FlexRenderObject {
         let mut flex_count = 0u32;
 
         for &child_id in children {
-            let is_flex = child_layout.get_child_kind(child_id) == ElementKind::FlexItem;
+            let is_flex = child_layout.get_child_type_name(child_id) == "tur_flex_item";
 
             if is_flex {
                 flex_count += 1;

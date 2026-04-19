@@ -1,7 +1,7 @@
-use tur_shared::{ComputedLayout, Constraints, ElementKind, Offset, Size, StackFit};
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
+use tur_trait::{
+    ChildLayout, ChildPaint, ComputedLayout, Constraints, Offset, PaintContext, RenderNodeId,
+    RenderObject, Size, StackFit,
+};
 
 #[derive(Debug)]
 pub struct StackRenderObject {
@@ -9,31 +9,14 @@ pub struct StackRenderObject {
 }
 
 impl StackRenderObject {
-    pub fn from_props(props: &std::collections::HashMap<String, tur_element::PropValue>) -> Self {
-        let fit = super::prop_str(props, "fit")
-            .and_then(|s| match s {
-                "loose" => Some(StackFit::Loose),
-                "expand" => Some(StackFit::Expand),
-                "passthrough" => Some(StackFit::Passthrough),
-                _ => None,
-            })
-            .or_else(|| {
-                super::prop_f64(props, "fit").and_then(|n| match n as i32 {
-                    0 => Some(StackFit::Loose),
-                    1 => Some(StackFit::Expand),
-                    2 => Some(StackFit::Passthrough),
-                    _ => None,
-                })
-            })
-            .unwrap_or(StackFit::Loose);
-
+    pub fn new(fit: StackFit) -> Self {
         StackRenderObject { fit }
     }
 }
 
 impl RenderObject for StackRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::Stack
+    fn type_name(&self) -> &'static str {
+        "tur_stack"
     }
 
     fn perform_layout_size(
@@ -70,7 +53,7 @@ impl RenderObject for StackRenderObject {
         child_layout: &mut dyn ChildLayout,
     ) {
         for &child_id in children {
-            let is_positioned = child_layout.get_child_kind(child_id) == ElementKind::Positioned;
+            let is_positioned = child_layout.get_child_type_name(child_id) == "tur_positioned";
 
             if !is_positioned {
                 child_layout.set_child_offset(child_id, Offset::ZERO);

@@ -11,7 +11,8 @@ use tracing;
 use tur_render_tree::Renderer;
 
 use crate::element_bridge::{
-    tur_append_child, tur_create_element, tur_create_root, tur_get_first_child,
+    tur_append_child, tur_create_container, tur_create_flex, tur_create_flex_item,
+    tur_create_positioned, tur_create_root, tur_create_stack, tur_create_text, tur_get_first_child,
     tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child, tur_set_attribute,
     TurAppContext, WeakAppContext,
 };
@@ -55,8 +56,13 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 9] = [
-        ("create", 2, tur_create_element),
+    ); 14] = [
+        ("createFlex", 1, tur_create_flex),
+        ("createFlexItem", 1, tur_create_flex_item),
+        ("createStack", 1, tur_create_stack),
+        ("createPositioned", 1, tur_create_positioned),
+        ("createContainer", 1, tur_create_container),
+        ("createText", 1, tur_create_text),
         ("createRoot", 1, tur_create_root),
         ("setAttribute", 4, tur_set_attribute),
         ("appendChild", 3, tur_append_child),

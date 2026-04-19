@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use tur::error::TurError;
 use tur::TurApp;
-use tur_element::ElementTree;
+use tur_element_tree::ElementTree;
 use tur_noop_renderer::NoopRenderer;
 use tur_render_tree::RenderTree;
 

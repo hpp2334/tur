@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn positioned_with_left_top() {
@@ -11,15 +10,15 @@ fn positioned_with_left_top() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
-        assert_eq!(stack.kind, ElementKind::Stack);
+        assert_eq!(stack.element.name(), "tur_stack");
         assert_eq!(stack.children.len(), 1);
 
         let positioned = tree.get(stack.children[0]).unwrap();
-        assert_eq!(positioned.kind, ElementKind::Positioned);
+        assert_eq!(positioned.element.name(), "tur_positioned");
         assert_eq!(positioned.children.len(), 1);
 
         let sb = tree.get(positioned.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::Container);
+        assert_eq!(sb.element.name(), "tur_container");
 
         positioned.id.as_u64()
     };

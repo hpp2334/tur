@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn column_basic_vertical_stacking() {
@@ -10,18 +9,18 @@ fn column_basic_vertical_stacking() {
     let (col_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
-        assert_eq!(root.kind, ElementKind::Flex);
+        assert_eq!(root.element.name(), "tur_flex");
         assert_eq!(root.children.len(), 1);
 
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.kind, ElementKind::Flex);
+        assert_eq!(col.element.name(), "tur_flex");
         assert_eq!(col.children.len(), 2);
 
         let sb1 = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb1.kind, ElementKind::Container);
+        assert_eq!(sb1.element.name(), "tur_container");
 
         let sb2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(sb2.kind, ElementKind::Container);
+        assert_eq!(sb2.element.name(), "tur_container");
 
         (col.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };

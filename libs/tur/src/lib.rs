@@ -1,6 +1,6 @@
 pub mod error;
 pub use tur_boajs;
-pub use tur_element;
+pub use tur_element_tree;
 pub use tur_noop_renderer;
 pub use tur_render_tree;
 pub use tur_vello_renderer;
@@ -13,7 +13,7 @@ use boa_engine::Source;
 use error::TurError;
 use tur_boajs::TurAppContext;
 #[cfg(feature = "trace")]
-use tur_element::ElementTree;
+use tur_element_tree::ElementTree;
 use tur_render_tree::{RenderTree, Renderer};
 pub struct TurApp {
     boa_context: Context,

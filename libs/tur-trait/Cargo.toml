@@ -1,6 +1,6 @@
 [package]
-name = "tur-element"
-description = "Element types and layout algorithms for tur"
+name = "tur-trait"
+description = "Core traits for tur rendering engine"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

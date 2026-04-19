@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn stack_children_overlap() {
@@ -11,13 +10,13 @@ fn stack_children_overlap() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
-        assert_eq!(stack.kind, ElementKind::Stack);
+        assert_eq!(stack.element.name(), "tur_stack");
         assert_eq!(stack.children.len(), 2);
 
         let sb1 = tree.get(stack.children[0]).unwrap();
         let sb2 = tree.get(stack.children[1]).unwrap();
-        assert_eq!(sb1.kind, ElementKind::Container);
-        assert_eq!(sb2.kind, ElementKind::Container);
+        assert_eq!(sb1.element.name(), "tur_container");
+        assert_eq!(sb2.element.name(), "tur_container");
 
         (sb1.id.as_u64(), sb2.id.as_u64())
     };

@@ -1,7 +1,7 @@
 use std::fmt;
 
-use tur_render_tree::PaintContext as TurPaintContext;
-use tur_shared::{Offset, Size};
+use tur_trait::PaintContext as TurPaintContext;
+use tur_trait::{Offset, Size};
 use vello::kurbo::Affine;
 use vello::peniko::{Brush, Color, Fill};
 use vello::Scene;

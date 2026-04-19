@@ -7,13 +7,22 @@ export type TurElement = TurNodeHandle;
 
 const ctx = __tur.__ctx;
 
+const creators: Record<string, () => TurElement> = {
+  "tur_flex": () => __tur.createFlex(ctx),
+  "tur_flex_item": () => __tur.createFlexItem(ctx),
+  "tur_stack": () => __tur.createStack(ctx),
+  "tur_positioned": () => __tur.createPositioned(ctx),
+  "tur_container": () => __tur.createContainer(ctx),
+  "tur_text": () => __tur.createText(ctx),
+};
+
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
   createElement(type: string): TurElement {
-    return __tur.create(ctx, type);
+    return (creators[type] ?? (() => __tur.createContainer(ctx)))();
   },
 
   createTextNode(value: string): TurElement {
-    const handle = __tur.create(ctx, "tur_text");
+    const handle = __tur.createText(ctx);
     __tur.setAttribute(ctx, handle, "content", value);
     return handle;
   },

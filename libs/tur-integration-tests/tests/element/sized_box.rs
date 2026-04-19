@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn sized_box_fixed_dimensions() {
@@ -11,11 +10,11 @@ fn sized_box_fixed_dimensions() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let sb = tree.get(root.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::Container);
+        assert_eq!(sb.element.name(), "tur_container");
         assert_eq!(sb.children.len(), 1);
 
         let text = tree.get(sb.children[0]).unwrap();
-        assert_eq!(text.kind, ElementKind::Text);
+        assert_eq!(text.element.name(), "tur_text");
 
         sb.id.as_u64()
     };

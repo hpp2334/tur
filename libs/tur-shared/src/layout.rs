@@ -268,32 +268,6 @@ impl Axis {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ElementKind {
-    Flex,
-    FlexItem,
-    Stack,
-    Positioned,
-    Container,
-    Text,
-}
-
-impl std::str::FromStr for ElementKind {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "tur_flex" => Ok(ElementKind::Flex),
-            "tur_flex_item" => Ok(ElementKind::FlexItem),
-            "tur_stack" => Ok(ElementKind::Stack),
-            "tur_positioned" => Ok(ElementKind::Positioned),
-            "tur_container" => Ok(ElementKind::Container),
-            "tur_text" => Ok(ElementKind::Text),
-            _ => Err(()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ComputedLayout {
     pub size: Size,

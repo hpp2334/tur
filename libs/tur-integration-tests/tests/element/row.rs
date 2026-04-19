@@ -1,6 +1,5 @@
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn row_basic_horizontal_stacking() {
@@ -10,17 +9,17 @@ fn row_basic_horizontal_stacking() {
     let (row_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
-        assert_eq!(root.kind, ElementKind::Flex);
+        assert_eq!(root.element.name(), "tur_flex");
         assert_eq!(root.children.len(), 1);
 
         let row = tree.get(root.children[0]).unwrap();
-        assert_eq!(row.kind, ElementKind::Flex);
+        assert_eq!(row.element.name(), "tur_flex");
         assert_eq!(row.children.len(), 2);
 
         let sb1 = tree.get(row.children[0]).unwrap();
         let sb2 = tree.get(row.children[1]).unwrap();
-        assert_eq!(sb1.kind, ElementKind::Container);
-        assert_eq!(sb2.kind, ElementKind::Container);
+        assert_eq!(sb1.element.name(), "tur_container");
+        assert_eq!(sb2.element.name(), "tur_container");
 
         (row.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };

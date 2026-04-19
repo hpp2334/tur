@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tur_shared::ElementKind;
+use tur_trait::{DynElement, ElementKind, ElementTreeProvider, RenderObject};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ElementNodeId(u64);
@@ -15,71 +15,51 @@ impl ElementNodeId {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum PropValue {
-    String(String),
-    Number(f64),
-    Bool(bool),
+pub trait Element: Send + Sync + Clone + 'static {
+    type TypedRenderObject: RenderObject;
+
+    fn to_render_object(&self) -> Self::TypedRenderObject;
+    fn kind(&self) -> ElementKind;
+    fn name(&self) -> &'static str;
 }
 
-impl PropValue {
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            PropValue::String(s) => Some(s),
-            _ => None,
-        }
-    }
-
-    pub fn as_f64(&self) -> Option<f64> {
-        match self {
-            PropValue::Number(n) => Some(*n),
-            PropValue::String(s) => s.parse().ok(),
-            _ => None,
-        }
-    }
-
-    pub fn as_bool(&self) -> Option<bool> {
-        match self {
-            PropValue::Bool(b) => Some(*b),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct ElementNode {
     pub id: ElementNodeId,
-    pub kind: ElementKind,
-    pub props: HashMap<String, PropValue>,
+    pub element: Box<dyn DynElement>,
     pub children: Vec<ElementNodeId>,
     pub parent: Option<ElementNodeId>,
 }
 
+impl Clone for ElementNode {
+    fn clone(&self) -> Self {
+        ElementNode {
+            id: self.id,
+            element: self.element.clone_box(),
+            children: self.children.clone(),
+            parent: self.parent,
+        }
+    }
+}
+
+impl std::fmt::Debug for ElementNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ElementNode")
+            .field("id", &self.id)
+            .field("element", &self.element.name())
+            .field("children", &self.children)
+            .field("parent", &self.parent)
+            .finish()
+    }
+}
+
 impl ElementNode {
-    pub fn new(id: ElementNodeId, kind: ElementKind) -> Self {
+    pub fn new(id: ElementNodeId, element: Box<dyn DynElement>) -> Self {
         ElementNode {
             id,
-            kind,
-            props: HashMap::new(),
+            element,
             children: Vec::new(),
             parent: None,
         }
-    }
-
-    pub fn set_prop(&mut self, key: String, value: PropValue) {
-        self.props.insert(key, value);
-    }
-
-    pub fn get_prop(&self, key: &str) -> Option<&PropValue> {
-        self.props.get(key)
-    }
-
-    pub fn prop_str(&self, key: &str) -> Option<&str> {
-        self.props.get(key).and_then(|v| v.as_str())
-    }
-
-    pub fn prop_f64(&self, key: &str) -> Option<f64> {
-        self.props.get(key).and_then(|v| v.as_f64())
     }
 }
 
@@ -212,5 +192,24 @@ impl ElementTree {
         let parent = self.nodes.get(&parent_id)?;
         let pos = parent.children.iter().position(|&c| c == id)?;
         parent.children.get(pos + 1).copied()
+    }
+}
+
+impl ElementTreeProvider for ElementTree {
+    fn root_id(&self) -> Option<u64> {
+        self.root_id.map(|id| id.as_u64())
+    }
+
+    fn children_of(&self, id: u64) -> Vec<u64> {
+        self.children_of(ElementNodeId::new(id))
+            .iter()
+            .map(|c| c.as_u64())
+            .collect()
+    }
+
+    fn element_for(&self, id: u64) -> &dyn DynElement {
+        self.get(ElementNodeId::new(id))
+            .map(|n| n.element.as_ref())
+            .expect("node not found")
     }
 }

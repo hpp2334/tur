@@ -1,6 +1,6 @@
 [package]
-name = "tur-render-tree"
-description = "Render tree for tur (paint data + computed geometry)"
+name = "tur-element-tree"
+description = "Element tree for tur (element nodes, tree structure, Element trait)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,4 +8,3 @@ license.workspace = true
 
 [dependencies]
 tur-trait = { workspace = true }
-tracing = { workspace = true }

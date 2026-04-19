@@ -1,14 +1,14 @@
-use tur_shared::{ComputedLayout, Constraints, ElementKind, Offset, Size};
-
-use crate::render_object::{ChildLayout, ChildPaint, PaintContext, RenderObject};
-use crate::RenderNodeId;
+use tur_trait::{
+    ChildLayout, ChildPaint, ComputedLayout, Constraints, Offset, PaintContext, RenderNodeId,
+    RenderObject, Size,
+};
 
 #[derive(Debug)]
 pub struct FlexItemRenderObject;
 
 impl RenderObject for FlexItemRenderObject {
-    fn kind(&self) -> ElementKind {
-        ElementKind::FlexItem
+    fn type_name(&self) -> &'static str {
+        "tur_flex_item"
     }
 
     fn perform_layout_size(

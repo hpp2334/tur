@@ -3,7 +3,12 @@ export type TurNodeHandle = object;
 declare global {
   var __tur: {
     __ctx: unknown;
-    create(ctx: unknown, type: string): TurNodeHandle;
+    createFlex(ctx: unknown): TurNodeHandle;
+    createFlexItem(ctx: unknown): TurNodeHandle;
+    createStack(ctx: unknown): TurNodeHandle;
+    createPositioned(ctx: unknown): TurNodeHandle;
+    createContainer(ctx: unknown): TurNodeHandle;
+    createText(ctx: unknown): TurNodeHandle;
     createRoot(ctx: unknown): TurNodeHandle;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
