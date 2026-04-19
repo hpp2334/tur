@@ -1,7 +1,7 @@
 use tur_shared::{Constraints, Size};
 
-use crate::core::render::LayoutContext;
-use crate::core::traits::ElementNodeId;
+use crate::core::element::ElementNodeId;
+use crate::core::layout::LayoutContext;
 
 pub trait ElementLayout: Send + Sync + 'static {
     fn perform_layout_size(

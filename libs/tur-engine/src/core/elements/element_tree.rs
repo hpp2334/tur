@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementNode;
-use crate::core::render::{Canvas, LayoutContext, PaintContext};
-use crate::core::traits::ElementNodeId;
+use crate::core::layout::LayoutContext;
+use crate::core::render::{Canvas, PaintContext};
 
 #[derive(Debug, Default)]
 pub struct ElementTree {

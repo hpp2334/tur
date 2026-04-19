@@ -1,7 +1,8 @@
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
-use crate::core::render::{Canvas, LayoutContext, PaintContext};
-use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementLayout, LayoutContext};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::FlexItemElement;
 

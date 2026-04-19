@@ -2,8 +2,9 @@ use tur_shared::{
     Axis, ComputedLayout, Constraints, CrossAxisAlignment, MainAxisAlignment, Offset, Size,
 };
 
-use crate::core::render::{Canvas, LayoutContext, PaintContext};
-use crate::core::traits::{ElementLayout, ElementNodeId, ElementRender};
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementLayout, LayoutContext};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::FlexElement;
 

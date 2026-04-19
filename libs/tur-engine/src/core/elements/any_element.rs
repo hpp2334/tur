@@ -1,10 +1,10 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
-use crate::core::render::{Canvas, LayoutContext, PaintContext};
-use crate::core::traits::{
-    ElementKind, ElementLayout, ElementNodeId, ElementOnUpdate, ElementRender,
-};
+use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::elements::ElementOnUpdate;
+use crate::core::layout::{ElementLayout, LayoutContext};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,

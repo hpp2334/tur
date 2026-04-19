@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::traits::ElementOnUpdate;
+use crate::core::elements::ElementOnUpdate;
 
 #[derive(Clone, Default)]
 pub struct PositionedElement {

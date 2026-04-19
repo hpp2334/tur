@@ -1,7 +1,7 @@
 use std::cell::Ref;
 
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::ElementTree;
-use tur_engine::core::traits::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn print_tree(tree: &Ref<ElementTree>) {

@@ -8,9 +8,9 @@ use boa_gc::{Finalize, Trace};
 use tur_shared::Constraints;
 
 use crate::core::bridge::BoaOpaque;
+use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
 use crate::core::render::Renderer;
-use crate::core::traits::ElementNodeId;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PositionedElement, StackElement, TextElement,
 };

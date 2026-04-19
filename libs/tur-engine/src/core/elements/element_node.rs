@@ -2,8 +2,8 @@ use std::fmt;
 
 use tur_shared::ComputedLayout;
 
+use crate::core::element::ElementNodeId;
 use crate::core::elements::AnyElement;
-use crate::core::traits::ElementNodeId;
 
 pub struct ElementNode {
     pub id: ElementNodeId,

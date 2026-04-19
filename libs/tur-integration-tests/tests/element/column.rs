@@ -1,4 +1,4 @@
-use tur_engine::core::traits::ElementKind;
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]

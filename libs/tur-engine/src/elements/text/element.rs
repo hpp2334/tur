@@ -1,7 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
-use crate::core::traits::ElementOnUpdate;
+use crate::core::elements::ElementOnUpdate;
 
 #[derive(Clone)]
 pub struct TextElement {

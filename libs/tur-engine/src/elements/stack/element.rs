@@ -2,7 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::StackFit;
 
-use crate::core::traits::ElementOnUpdate;
+use crate::core::elements::ElementOnUpdate;
 
 #[derive(Clone)]
 pub struct StackElement {

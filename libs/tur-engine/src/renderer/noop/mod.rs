@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use tur_shared::Offset;
 
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Renderer;
-use crate::core::traits::ElementNodeId;
 
 pub struct NoopRenderer;
 

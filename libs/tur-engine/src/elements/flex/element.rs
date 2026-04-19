@@ -2,10 +2,10 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, Size};
 
-use crate::core::traits::ElementOnUpdate;
+use crate::core::elements::ElementOnUpdate;
 
 pub(crate) struct ChildData {
-    pub id: crate::core::traits::ElementNodeId,
+    pub id: crate::core::element::ElementNodeId,
     pub size: Size,
     pub is_flex: bool,
 }
