@@ -1,6 +1,5 @@
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
-use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn sized_box_fixed_dimensions() {
@@ -8,21 +7,28 @@ fn sized_box_fixed_dimensions() {
     app.load_bundle("sized-box-basic").unwrap();
 
     let sb_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let sb = tree.get(root.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::Container);
+        assert_eq!(
+            sb.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container")
+        );
         assert_eq!(sb.children.len(), 1);
 
         let text = tree.get(sb.children[0]).unwrap();
-        assert_eq!(text.kind, ElementKind::Text);
+        assert_eq!(
+            text.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_text")
+        );
 
-        sb.id.as_u64()
+        sb.id
     };
 
     let rt = app.render_tree();
     let rt = rt.borrow();
-    let sb_node = rt.get(RenderNodeId::new(sb_id)).unwrap();
+    let sb_node = rt.get(sb_id).unwrap();
     assert_eq!(sb_node.computed_layout.size.width, 100.0);
     assert_eq!(sb_node.computed_layout.size.height, 50.0);
 }

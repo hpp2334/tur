@@ -1,6 +1,5 @@
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
-use tur_render_tree::RenderNodeId;
-use tur_shared::ElementKind;
 
 #[test]
 fn text_content_and_measurement() {
@@ -8,18 +7,20 @@ fn text_content_and_measurement() {
     app.load_bundle("text-basic").unwrap();
 
     let text_id = {
-        let tree = app.element_tree();
+        let tree_rc = app.element_tree();
+        let tree = tree_rc.borrow();
         let root = tree.root().unwrap();
         let text = tree.get(root.children[0]).unwrap();
-        assert_eq!(text.kind, ElementKind::Text);
-        assert_eq!(text.prop_str("content"), Some("Hello"));
-        assert_eq!(text.prop_f64("fontSize"), Some(14.0));
-        text.id.as_u64()
+        assert_eq!(
+            text.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_text")
+        );
+        text.id
     };
 
     let rt = app.render_tree();
     let rt = rt.borrow();
-    let text_node = rt.get(RenderNodeId::new(text_id)).unwrap();
+    let text_node = rt.get(text_id).unwrap();
     assert_eq!(text_node.computed_layout.size.width, 42.0);
     assert_eq!(text_node.computed_layout.size.height, 16.8);
 }

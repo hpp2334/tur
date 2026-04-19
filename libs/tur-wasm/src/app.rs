@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use tur::TurApp;
-use tur_vello_renderer::VelloRenderer;
+use tur_engine::TurApp;
+use tur_engine::renderer::vello::VelloRenderer;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;

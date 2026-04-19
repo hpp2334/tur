@@ -10,13 +10,7 @@ license.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-tur = { workspace = true }
-tur-shared = { workspace = true }
-tur-element = { workspace = true }
-tur-render-tree = { workspace = true }
-tur-vello-renderer = { workspace = true }
-tur-boajs = { workspace = true }
-winit = { workspace = true }
+tur-engine = { workspace = true }
 vello = { workspace = true, features = ["wgpu"] }
 boa_engine = { workspace = true }
 tracing = { workspace = true }

@@ -7,8 +7,4 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tur = { workspace = true, features = ["trace"] }
-tur-shared = { workspace = true }
-tur-element = { workspace = true }
-tur-render-tree = { workspace = true }
-tur-noop-renderer = { workspace = true }
+tur-engine = { workspace = true, features = ["trace"] }
