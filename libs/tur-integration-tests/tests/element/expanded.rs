@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn expanded_fills_remaining() {
@@ -27,10 +27,11 @@ fn expanded_fills_remaining() {
         (expanded.id.as_u64(), inner_sb.id.as_u64())
     };
 
-    let rt = app.render_tree();
-    let expanded_node = rt.get(RenderNodeId::new(expanded_id)).unwrap();
-    assert_eq!(expanded_node.computed_layout.size.height, 550.0);
-    assert_eq!(expanded_node.computed_layout.offset.y, 50.0);
+    app.with_render_tree(|rt| {
+        let expanded_node = rt.get(RenderNodeId::new(expanded_id)).unwrap();
+        assert_eq!(expanded_node.computed_layout.size.height, 550.0);
+        assert_eq!(expanded_node.computed_layout.offset.y, 50.0);
+    });
 }
 
 #[test]
@@ -52,13 +53,13 @@ fn expanded_multiple_share_evenly() {
         (exp1.id.as_u64(), exp2.id.as_u64())
     };
 
-    let rt = app.render_tree();
+    app.with_render_tree(|rt| {
+        let exp1_node = rt.get(RenderNodeId::new(exp1_id)).unwrap();
+        assert_eq!(exp1_node.computed_layout.size.height, 300.0);
+        assert_eq!(exp1_node.computed_layout.offset.y, 0.0);
 
-    let exp1_node = rt.get(RenderNodeId::new(exp1_id)).unwrap();
-    assert_eq!(exp1_node.computed_layout.size.height, 300.0);
-    assert_eq!(exp1_node.computed_layout.offset.y, 0.0);
-
-    let exp2_node = rt.get(RenderNodeId::new(exp2_id)).unwrap();
-    assert_eq!(exp2_node.computed_layout.size.height, 300.0);
-    assert_eq!(exp2_node.computed_layout.offset.y, 300.0);
+        let exp2_node = rt.get(RenderNodeId::new(exp2_id)).unwrap();
+        assert_eq!(exp2_node.computed_layout.size.height, 300.0);
+        assert_eq!(exp2_node.computed_layout.offset.y, 300.0);
+    });
 }

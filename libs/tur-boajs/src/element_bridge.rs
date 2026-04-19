@@ -95,18 +95,15 @@ impl TurAppContext {
             max_height: height,
         };
 
-        {
-            let mut element_tree_guard = self.element_tree.borrow_mut();
-            let result = tur_element::compute_layout(&mut element_tree_guard, &constraints);
-            tracing::debug!("layout: {:?}", result.size);
-        }
-
         let mut render_tree = self.render_tree.borrow_mut();
 
         {
             let element_tree_guard = self.element_tree.borrow();
             render_tree.rebuild_from_element_tree(&element_tree_guard);
         }
+
+        let layout_size = render_tree.compute_layout(&constraints);
+        tracing::debug!("layout: {:?}", layout_size);
 
         let mut renderer = self.renderer.borrow_mut();
         renderer.render(&render_tree);

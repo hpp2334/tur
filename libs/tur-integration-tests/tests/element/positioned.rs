@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn positioned_with_left_top() {
@@ -24,8 +24,9 @@ fn positioned_with_left_top() {
         positioned.id.as_u64()
     };
 
-    let rt = app.render_tree();
-    let pos_node = rt.get(RenderNodeId::new(pos_id)).unwrap();
-    assert_eq!(pos_node.computed_layout.offset.x, 10.0);
-    assert_eq!(pos_node.computed_layout.offset.y, 20.0);
+    app.with_render_tree(|rt| {
+        let pos_node = rt.get(RenderNodeId::new(pos_id)).unwrap();
+        assert_eq!(pos_node.computed_layout.offset.x, 10.0);
+        assert_eq!(pos_node.computed_layout.offset.y, 20.0);
+    });
 }

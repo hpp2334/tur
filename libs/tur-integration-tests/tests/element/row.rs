@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn row_basic_horizontal_stacking() {
@@ -25,16 +25,16 @@ fn row_basic_horizontal_stacking() {
         (row.id.as_u64(), sb1.id.as_u64(), sb2.id.as_u64())
     };
 
-    let rt = app.render_tree();
+    app.with_render_tree(|rt| {
+        let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
+        assert_eq!(sb1_node.computed_layout.size.width, 50.0);
+        assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 
-    let sb1_node = rt.get(RenderNodeId::new(sb1_id)).unwrap();
-    assert_eq!(sb1_node.computed_layout.size.width, 50.0);
-    assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
+        let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
+        assert_eq!(sb2_node.computed_layout.size.width, 30.0);
+        assert_eq!(sb2_node.computed_layout.offset.x, 50.0);
 
-    let sb2_node = rt.get(RenderNodeId::new(sb2_id)).unwrap();
-    assert_eq!(sb2_node.computed_layout.size.width, 30.0);
-    assert_eq!(sb2_node.computed_layout.offset.x, 50.0);
-
-    let row_node = rt.get(RenderNodeId::new(row_id)).unwrap();
-    assert_eq!(row_node.computed_layout.size.width, 80.0);
+        let row_node = rt.get(RenderNodeId::new(row_id)).unwrap();
+        assert_eq!(row_node.computed_layout.size.width, 80.0);
+    });
 }

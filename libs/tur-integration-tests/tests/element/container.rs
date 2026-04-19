@@ -1,6 +1,6 @@
-use tur_element::ElementKind;
 use tur_integration_tests::TurTestApp;
 use tur_render_tree::RenderNodeId;
+use tur_shared::ElementKind;
 
 #[test]
 fn container_with_padding() {
@@ -20,8 +20,9 @@ fn container_with_padding() {
         container.id.as_u64()
     };
 
-    let rt = app.render_tree();
-    let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
-    assert_eq!(container_node.computed_layout.size.width, 132.0);
-    assert_eq!(container_node.computed_layout.size.height, 132.0);
+    app.with_render_tree(|rt| {
+        let container_node = rt.get(RenderNodeId::new(container_id)).unwrap();
+        assert_eq!(container_node.computed_layout.size.width, 132.0);
+        assert_eq!(container_node.computed_layout.size.height, 132.0);
+    });
 }
