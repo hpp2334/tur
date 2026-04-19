@@ -1,19 +1,9 @@
 use std::collections::HashMap;
 
-use tur_trait::{DynElement, ElementKind, ElementTreeProvider, RenderObject};
+use tur_render_tree::{ElementTreeProvider, RenderObject};
+use tur_trait::{ElementKind, ElementNodeId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ElementNodeId(u64);
-
-impl ElementNodeId {
-    pub fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
-}
+use crate::DynElement;
 
 pub trait Element: Send + Sync + Clone + 'static {
     type TypedRenderObject: RenderObject;
@@ -196,20 +186,17 @@ impl ElementTree {
 }
 
 impl ElementTreeProvider for ElementTree {
-    fn root_id(&self) -> Option<u64> {
-        self.root_id.map(|id| id.as_u64())
+    fn root_id(&self) -> Option<ElementNodeId> {
+        self.root_id
     }
 
-    fn children_of(&self, id: u64) -> Vec<u64> {
-        self.children_of(ElementNodeId::new(id))
-            .iter()
-            .map(|c| c.as_u64())
-            .collect()
+    fn children_of(&self, id: ElementNodeId) -> Vec<ElementNodeId> {
+        self.children_of(id)
     }
 
-    fn element_for(&self, id: u64) -> &dyn DynElement {
-        self.get(ElementNodeId::new(id))
-            .map(|n| n.element.as_ref())
+    fn render_object_for(&self, id: ElementNodeId) -> Box<dyn RenderObject> {
+        self.get(id)
+            .map(|n| n.element.to_render_object_boxed())
             .expect("node not found")
     }
 }

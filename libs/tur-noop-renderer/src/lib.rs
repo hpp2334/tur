@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use tur_render_tree::{RenderNodeId, RenderTree, Renderer};
-use tur_trait::Offset;
+use tur_render_tree::{Offset, RenderNodeId, RenderTree, Renderer};
 
 pub struct NoopRenderer;
 

@@ -6,8 +6,7 @@ use std::rc::{Rc, Weak};
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 use tur_element_tree::{DynElement, ElementNode, ElementNodeId, ElementTree};
-use tur_render_tree::{RenderTree, Renderer};
-use tur_trait::Constraints;
+use tur_render_tree::{Constraints, RenderTree, Renderer};
 
 use crate::elements::{
     set_element_prop, ContainerElement, FlexElement, FlexItemElement, PositionedElement,

@@ -1,11 +1,11 @@
 use std::fmt;
 
-use tur_shared::{ComputedLayout, Constraints, ElementKind, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::RenderNodeId;
 
 pub trait RenderObject: fmt::Debug + Send + Sync {
-    fn kind(&self) -> ElementKind;
+    fn type_name(&self) -> &'static str;
 
     fn perform_layout_size(
         &mut self,
@@ -41,7 +41,7 @@ pub trait ChildLayout {
     fn layout_child(&mut self, child_id: RenderNodeId, constraints: &Constraints) -> Size;
     fn set_child_offset(&mut self, child_id: RenderNodeId, offset: Offset);
     fn set_child_offset_self(&mut self, offset: Offset);
-    fn get_child_kind(&self, child_id: RenderNodeId) -> ElementKind;
+    fn get_child_type_name(&self, child_id: RenderNodeId) -> &'static str;
 }
 
 pub trait ChildPaint {

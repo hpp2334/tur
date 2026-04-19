@@ -1,7 +1,8 @@
 use std::any::Any;
 use std::fmt;
 
-use crate::{ElementKind, RenderObject};
+use tur_render_tree::RenderObject;
+use tur_trait::ElementKind;
 
 pub trait DynElement: Send + Sync + 'static {
     fn to_render_object_boxed(&self) -> Box<dyn RenderObject>;

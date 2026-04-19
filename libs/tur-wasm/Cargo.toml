@@ -11,7 +11,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tur = { workspace = true }
-tur-trait = { workspace = true }
 tur-element-tree = { workspace = true }
 tur-render-tree = { workspace = true }
 tur-vello-renderer = { workspace = true }

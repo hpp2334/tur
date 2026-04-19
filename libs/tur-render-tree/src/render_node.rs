@@ -1,4 +1,5 @@
-use crate::ComputedLayout;
+use tur_shared::ComputedLayout;
+
 use crate::RenderObject;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

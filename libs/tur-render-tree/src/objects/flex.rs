@@ -1,7 +1,6 @@
-use tur_trait::{
-    Axis, ChildLayout, ChildPaint, ComputedLayout, Constraints, CrossAxisAlignment,
-    MainAxisAlignment, Offset, PaintContext, RenderNodeId, RenderObject, Size,
-};
+use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, Offset, Size};
+
+use crate::{ChildLayout, ChildPaint, ComputedLayout, PaintContext, RenderNodeId, RenderObject};
 
 #[derive(Debug)]
 struct ChildData {

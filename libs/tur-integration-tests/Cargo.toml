@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 tur = { workspace = true, features = ["trace"] }
-tur-trait = { workspace = true }
 tur-element-tree = { workspace = true }
 tur-render-tree = { workspace = true }
 tur-noop-renderer = { workspace = true }

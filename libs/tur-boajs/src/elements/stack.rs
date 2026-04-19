@@ -1,8 +1,8 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
 use tur_element_tree::Element;
-use tur_render_tree::StackRenderObject;
-use tur_trait::{ElementKind, StackFit};
+use tur_element_tree::ElementKind;
+use tur_render_tree::{StackFit, StackRenderObject};
 
 #[derive(Clone)]
 pub struct StackElement {

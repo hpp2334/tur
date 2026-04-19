@@ -1,8 +1,9 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
 use tur_element_tree::Element;
+use tur_element_tree::ElementKind;
 use tur_render_tree::FlexRenderObject;
-use tur_trait::{Axis, CrossAxisAlignment, ElementKind, MainAxisAlignment};
+use tur_render_tree::{Axis, CrossAxisAlignment, MainAxisAlignment};
 
 #[derive(Clone)]
 pub struct FlexElement {

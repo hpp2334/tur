@@ -8,3 +8,4 @@ license.workspace = true
 
 [dependencies]
 tur-trait = { workspace = true }
+tur-render-tree = { workspace = true }

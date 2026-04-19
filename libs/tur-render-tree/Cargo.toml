@@ -7,5 +7,6 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+tur-shared = { workspace = true }
 tur-trait = { workspace = true }
 tracing = { workspace = true }

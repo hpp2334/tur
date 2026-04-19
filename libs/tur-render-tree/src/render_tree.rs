@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use tur_trait::{
-    ChildLayout, ChildPaint, ComputedLayout, Constraints, ElementTreeProvider, Offset, RenderNode,
-    RenderNodeId, Size,
-};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size};
+use tur_trait::ElementNodeId;
+
+use crate::{ChildLayout, ChildPaint, ElementTreeProvider, PaintContext, RenderNode, RenderNodeId};
 
 #[derive(Debug, Default)]
 pub struct RenderTree {
@@ -51,7 +51,7 @@ impl ChildPaint for TreeChildPaint<'_> {
     fn paint_child(
         &mut self,
         child_id: RenderNodeId,
-        ctx: &mut dyn tur_trait::PaintContext,
+        ctx: &mut dyn PaintContext,
         parent_offset: Offset,
     ) {
         self.tree.paint_node(child_id, ctx, parent_offset);
@@ -62,7 +62,7 @@ impl RenderTree {
     pub fn from_element_tree_provider(provider: &dyn ElementTreeProvider) -> Self {
         let mut render_tree = RenderTree {
             nodes: HashMap::new(),
-            root_id: provider.root_id().map(RenderNodeId::new),
+            root_id: provider.root_id().map(|id| RenderNodeId::new(id.as_u64())),
         };
 
         if let Some(root_id) = provider.root_id() {
@@ -74,7 +74,7 @@ impl RenderTree {
 
     pub fn rebuild_from_element_tree_provider(&mut self, provider: &dyn ElementTreeProvider) {
         self.nodes.clear();
-        self.root_id = provider.root_id().map(RenderNodeId::new);
+        self.root_id = provider.root_id().map(|id| RenderNodeId::new(id.as_u64()));
 
         if let Some(root_id) = provider.root_id() {
             Self::convert_node(provider, root_id, self);
@@ -83,17 +83,19 @@ impl RenderTree {
 
     fn convert_node(
         provider: &dyn ElementTreeProvider,
-        element_id: u64,
+        element_id: ElementNodeId,
         render_tree: &mut RenderTree,
     ) {
-        let element = provider.element_for(element_id);
-        let object = element.to_render_object_boxed();
+        let object = provider.render_object_for(element_id);
         let children = provider.children_of(element_id);
 
         let render_node = RenderNode {
-            id: RenderNodeId::new(element_id),
+            id: RenderNodeId::new(element_id.as_u64()),
             object: Some(object),
-            children: children.iter().map(|&c| RenderNodeId::new(c)).collect(),
+            children: children
+                .iter()
+                .map(|&c| RenderNodeId::new(c.as_u64()))
+                .collect(),
             computed_layout: ComputedLayout::ZERO,
         };
 
@@ -101,7 +103,7 @@ impl RenderTree {
         render_tree.nodes.insert(render_node.id, render_node);
 
         for child_id in child_ids {
-            Self::convert_node(provider, child_id.as_u64(), render_tree);
+            Self::convert_node(provider, ElementNodeId::new(child_id.as_u64()), render_tree);
         }
     }
 
@@ -195,7 +197,7 @@ impl RenderTree {
         }
     }
 
-    pub fn paint(&self, ctx: &mut dyn tur_trait::PaintContext) {
+    pub fn paint(&self, ctx: &mut dyn PaintContext) {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return,
@@ -203,12 +205,7 @@ impl RenderTree {
         self.paint_node(root_id, ctx, Offset::ZERO);
     }
 
-    fn paint_node(
-        &self,
-        id: RenderNodeId,
-        ctx: &mut dyn tur_trait::PaintContext,
-        parent_offset: Offset,
-    ) {
+    fn paint_node(&self, id: RenderNodeId, ctx: &mut dyn PaintContext, parent_offset: Offset) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
             None => return,

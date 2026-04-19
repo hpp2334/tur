@@ -15,8 +15,7 @@ pub use text::TextElement;
 use boa_engine::Context;
 use boa_engine::JsString;
 use boa_engine::JsValue;
-use tur_element_tree::DynElement;
-use tur_trait::DynElementExt;
+use tur_element_tree::{DynElement, DynElementExt};
 
 pub trait BoaElement: DynElement {
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);

@@ -1,8 +1,8 @@
 use crate::impl_dyn_element;
 use boa_engine::{Context, JsString, JsValue};
 use tur_element_tree::Element;
+use tur_element_tree::ElementKind;
 use tur_render_tree::TextRenderObject;
-use tur_trait::ElementKind;
 
 #[derive(Clone)]
 pub struct TextElement {

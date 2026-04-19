@@ -1,7 +1,6 @@
-use tur_trait::{
-    ChildLayout, ChildPaint, ComputedLayout, Constraints, EdgeInsets, Offset, PaintContext,
-    RenderNodeId, RenderObject, Size,
-};
+use tur_shared::{Constraints, EdgeInsets, Offset, Size};
+
+use crate::{ChildLayout, ChildPaint, ComputedLayout, PaintContext, RenderNodeId, RenderObject};
 
 #[derive(Debug)]
 pub struct ContainerRenderObject {
