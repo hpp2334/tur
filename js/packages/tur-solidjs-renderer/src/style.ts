@@ -3,6 +3,7 @@ import type { MainAxisAlignment } from "./generated/MainAxisAlignment";
 import type { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
 
 export interface ResolvedStyle {
+  direction: "vertical" | "horizontal" | null;
   mainAlignment: MainAxisAlignment | null;
   crossAlignment: CrossAxisAlignment | null;
   gap: number | null;

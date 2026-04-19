@@ -11,18 +11,18 @@ fn expanded_fills_remaining() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
-        assert_eq!(col.kind, ElementKind::Column);
+        assert_eq!(col.kind, ElementKind::Flex);
         assert_eq!(col.children.len(), 2);
 
         let sb = tree.get(col.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::SizedBox);
+        assert_eq!(sb.kind, ElementKind::Container);
 
         let expanded = tree.get(col.children[1]).unwrap();
-        assert_eq!(expanded.kind, ElementKind::Expanded);
+        assert_eq!(expanded.kind, ElementKind::FlexItem);
         assert_eq!(expanded.children.len(), 1);
 
         let inner_sb = tree.get(expanded.children[0]).unwrap();
-        assert_eq!(inner_sb.kind, ElementKind::SizedBox);
+        assert_eq!(inner_sb.kind, ElementKind::Container);
 
         (expanded.id.as_u64(), inner_sb.id.as_u64())
     };
@@ -46,8 +46,8 @@ fn expanded_multiple_share_evenly() {
 
         let exp1 = tree.get(col.children[0]).unwrap();
         let exp2 = tree.get(col.children[1]).unwrap();
-        assert_eq!(exp1.kind, ElementKind::Expanded);
-        assert_eq!(exp2.kind, ElementKind::Expanded);
+        assert_eq!(exp1.kind, ElementKind::FlexItem);
+        assert_eq!(exp2.kind, ElementKind::FlexItem);
 
         (exp1.id.as_u64(), exp2.id.as_u64())
     };

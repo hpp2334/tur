@@ -19,7 +19,7 @@ fn positioned_with_left_top() {
         assert_eq!(positioned.children.len(), 1);
 
         let sb = tree.get(positioned.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::SizedBox);
+        assert_eq!(sb.kind, ElementKind::Container);
 
         positioned.id.as_u64()
     };

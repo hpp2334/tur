@@ -44,10 +44,8 @@ fn paint_node(ctx: &mut PaintContext, tree: &RenderTree, id: RenderNodeId, paren
         tur_element::ElementKind::Container => {
             paint_container(ctx, node, absolute_offset, node.computed_layout.size)
         }
-        tur_element::ElementKind::SizedBox
-        | tur_element::ElementKind::Column
-        | tur_element::ElementKind::Row
-        | tur_element::ElementKind::Expanded
+        tur_element::ElementKind::Flex
+        | tur_element::ElementKind::FlexItem
         | tur_element::ElementKind::Stack
         | tur_element::ElementKind::Positioned => {}
     }

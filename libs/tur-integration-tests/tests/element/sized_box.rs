@@ -11,7 +11,7 @@ fn sized_box_fixed_dimensions() {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
         let sb = tree.get(root.children[0]).unwrap();
-        assert_eq!(sb.kind, ElementKind::SizedBox);
+        assert_eq!(sb.kind, ElementKind::Container);
         assert_eq!(sb.children.len(), 1);
 
         let text = tree.get(sb.children[0]).unwrap();

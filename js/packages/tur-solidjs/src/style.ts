@@ -23,6 +23,7 @@ export const TextOpts = {
 
 export class Style {
   private data: ResolvedStyle = {
+    direction: null,
     mainAlignment: null,
     crossAlignment: null,
     gap: null,

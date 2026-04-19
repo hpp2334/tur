@@ -16,8 +16,8 @@ fn stack_children_overlap() {
 
         let sb1 = tree.get(stack.children[0]).unwrap();
         let sb2 = tree.get(stack.children[1]).unwrap();
-        assert_eq!(sb1.kind, ElementKind::SizedBox);
-        assert_eq!(sb2.kind, ElementKind::SizedBox);
+        assert_eq!(sb1.kind, ElementKind::Container);
+        assert_eq!(sb2.kind, ElementKind::Container);
 
         (sb1.id.as_u64(), sb2.id.as_u64())
     };

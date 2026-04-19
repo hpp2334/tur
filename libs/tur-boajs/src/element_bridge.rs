@@ -189,7 +189,7 @@ pub(crate) fn tur_create_root(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow();
     let id = ctx.alloc_id();
-    let node = ElementNode::new(id, ElementKind::Column);
+    let node = ElementNode::new(id, ElementKind::Flex);
     ctx.element_tree.borrow_mut().insert(node);
 
     tracing::trace!("tur_createRoot() -> {}", id.as_u64());

@@ -29,13 +29,13 @@ fn debug_raw_column_basic() {
         r#"
         var ctx = globalThis.__tur.__ctx;
         var root = globalThis.__tur.createRoot(ctx);
-        var col = globalThis.__tur.create(ctx, "tur_column");
+        var col = globalThis.__tur.create(ctx, "tur_flex");
         globalThis.__tur.setAttribute(ctx, col, "crossAlignment", "Start");
         globalThis.__tur.appendChild(ctx, root, col);
-        var sb1 = globalThis.__tur.create(ctx, "tur_sized_box");
+        var sb1 = globalThis.__tur.create(ctx, "tur_container");
         globalThis.__tur.setAttribute(ctx, sb1, "height", 50);
         globalThis.__tur.appendChild(ctx, col, sb1);
-        var sb2 = globalThis.__tur.create(ctx, "tur_sized_box");
+        var sb2 = globalThis.__tur.create(ctx, "tur_container");
         globalThis.__tur.setAttribute(ctx, sb2, "height", 30);
         globalThis.__tur.appendChild(ctx, col, sb2);
     "#,

@@ -18,12 +18,10 @@ impl ElementNodeId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ElementKind {
-    Column,
-    Row,
-    Expanded,
+    Flex,
+    FlexItem,
     Stack,
     Positioned,
-    SizedBox,
     Container,
     Text,
 }
@@ -33,12 +31,10 @@ impl FromStr for ElementKind {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "tur_column" => Ok(ElementKind::Column),
-            "tur_row" => Ok(ElementKind::Row),
-            "tur_expanded" => Ok(ElementKind::Expanded),
+            "tur_flex" => Ok(ElementKind::Flex),
+            "tur_flex_item" => Ok(ElementKind::FlexItem),
             "tur_stack" => Ok(ElementKind::Stack),
             "tur_positioned" => Ok(ElementKind::Positioned),
-            "tur_sized_box" => Ok(ElementKind::SizedBox),
             "tur_container" => Ok(ElementKind::Container),
             "tur_text" => Ok(ElementKind::Text),
             _ => Err(()),

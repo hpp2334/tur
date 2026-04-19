@@ -50,12 +50,13 @@ fn layout_node(
     };
 
     let size = match kind {
-        ElementKind::Column => layout_flex(element_tree, id, constraints, Axis::Vertical),
-        ElementKind::Row => layout_flex(element_tree, id, constraints, Axis::Horizontal),
-        ElementKind::Expanded => layout_expanded(element_tree, id, constraints),
+        ElementKind::Flex => {
+            let direction = parse_direction(element_tree, id);
+            layout_flex(element_tree, id, constraints, direction)
+        }
+        ElementKind::FlexItem => layout_flex_item(element_tree, id, constraints),
         ElementKind::Stack => layout_stack(element_tree, id, constraints),
         ElementKind::Positioned => layout_positioned(element_tree, id, constraints),
-        ElementKind::SizedBox => layout_sized_box(element_tree, id, constraints),
         ElementKind::Container => layout_container(element_tree, id, constraints),
         ElementKind::Text => layout_text(element_tree, id, constraints),
     };
@@ -153,6 +154,28 @@ fn parse_stack_fit(element_tree: &ElementTree, id: ElementNodeId) -> StackFit {
         .unwrap_or(StackFit::Loose)
 }
 
+fn parse_direction(element_tree: &ElementTree, id: ElementNodeId) -> Axis {
+    let node = match element_tree.get(id) {
+        Some(n) => n,
+        None => return Axis::Vertical,
+    };
+
+    node.prop_str("direction")
+        .and_then(|s| match s {
+            "vertical" => Some(Axis::Vertical),
+            "horizontal" => Some(Axis::Horizontal),
+            _ => None,
+        })
+        .or_else(|| {
+            node.prop_f64("direction").and_then(|n| match n as i32 {
+                0 => Some(Axis::Vertical),
+                1 => Some(Axis::Horizontal),
+                _ => None,
+            })
+        })
+        .unwrap_or(Axis::Vertical)
+}
+
 fn layout_flex(
     element_tree: &mut ElementTree,
     id: ElementNodeId,
@@ -171,7 +194,7 @@ fn layout_flex(
     for &child_id in &child_ids {
         let is_flex = element_tree
             .get(child_id)
-            .map(|n| n.kind == ElementKind::Expanded)
+            .map(|n| n.kind == ElementKind::FlexItem)
             .unwrap_or(false);
 
         if is_flex {
@@ -334,7 +357,7 @@ fn layout_flex(
     constraints.constrain(size)
 }
 
-fn layout_expanded(
+fn layout_flex_item(
     element_tree: &mut ElementTree,
     id: ElementNodeId,
     constraints: &Constraints,
@@ -433,43 +456,28 @@ fn layout_positioned(
     child_size
 }
 
-fn layout_sized_box(
+fn layout_container(
     element_tree: &mut ElementTree,
     id: ElementNodeId,
     constraints: &Constraints,
 ) -> Size {
-    let width = element_tree.get(id).and_then(|n| n.prop_f64("width"));
-    let height = element_tree.get(id).and_then(|n| n.prop_f64("height"));
+    let node = element_tree.get(id).unwrap();
+    let width = node.prop_f64("width");
+    let height = node.prop_f64("height");
+    let padding = node.prop_f64("padding").map(EdgeInsets::all);
 
     let child_ids = element_tree.children_of(id);
-    let child_constraints = Constraints {
+
+    let sized_constraints = Constraints {
         min_width: width.unwrap_or(constraints.min_width),
         max_width: width.unwrap_or(constraints.max_width),
         min_height: height.unwrap_or(constraints.min_height),
         max_height: height.unwrap_or(constraints.max_height),
     };
 
-    if let Some(&child_id) = child_ids.first() {
-        layout_node(element_tree, child_id, &child_constraints)
-    } else {
-        child_constraints.constrain(Size::ZERO)
-    }
-}
-
-fn layout_container(
-    element_tree: &mut ElementTree,
-    id: ElementNodeId,
-    constraints: &Constraints,
-) -> Size {
-    let padding = element_tree
-        .get(id)
-        .and_then(|n| n.prop_f64("padding"))
-        .map(EdgeInsets::all);
-
-    let child_ids = element_tree.children_of(id);
     let inner_constraints = match padding {
-        Some(p) => constraints.deflate(p),
-        None => *constraints,
+        Some(p) => sized_constraints.deflate(p),
+        None => sized_constraints,
     };
 
     let child_size = if let Some(&child_id) = child_ids.first() {
@@ -478,10 +486,12 @@ fn layout_container(
         inner_constraints.constrain(Size::ZERO)
     };
 
-    match padding {
+    let inflated = match padding {
         Some(p) => p.inflate_size(child_size),
         None => child_size,
-    }
+    };
+
+    sized_constraints.constrain(inflated)
 }
 
 fn layout_text(
