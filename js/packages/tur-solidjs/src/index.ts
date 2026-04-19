@@ -7,6 +7,7 @@ export { MainAxisAlignment } from "@tur/solidjs-renderer";
 export { CrossAxisAlignment } from "@tur/solidjs-renderer";
 export { StackFit } from "@tur/solidjs-renderer";
 export { FlexFit } from "@tur/solidjs-renderer";
+export { FlexDirection } from "@tur/solidjs-renderer";
 export { Axis } from "@tur/solidjs-renderer";
 export type { EdgeInsets } from "@tur/solidjs-renderer";
 export type { Size } from "@tur/solidjs-renderer";

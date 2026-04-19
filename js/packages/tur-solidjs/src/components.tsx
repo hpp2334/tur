@@ -4,6 +4,7 @@ import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
 import type { MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
+import { FlexDirection } from "@tur/solidjs-renderer";
 import type { Style } from "./style";
 
 interface BaseProps {
@@ -55,12 +56,12 @@ export interface TextProps extends BaseProps {
 
 export function Column(props: ColumnProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_flex style={s?.resolve()} direction="vertical" {...rest}>{children}</tur_flex>;
+  return <tur_flex style={s?.resolve()} direction={FlexDirection.Vertical} {...rest}>{children}</tur_flex>;
 }
 
 export function Row(props: RowProps): JSX.Element {
   const { style: s, children, ...rest } = props;
-  return <tur_flex style={s?.resolve()} direction="horizontal" {...rest}>{children}</tur_flex>;
+  return <tur_flex style={s?.resolve()} direction={FlexDirection.Horizontal} {...rest}>{children}</tur_flex>;
 }
 
 export function Expanded(props: ExpandedProps): JSX.Element {

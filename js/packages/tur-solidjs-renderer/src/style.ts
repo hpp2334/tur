@@ -1,9 +1,10 @@
 import type { Color } from "./generated/Color";
-import type { MainAxisAlignment } from "./generated/MainAxisAlignment";
 import type { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
+import type { FlexDirection } from "./generated/FlexDirection";
+import type { MainAxisAlignment } from "./generated/MainAxisAlignment";
 
 export interface ResolvedStyle {
-  direction: "vertical" | "horizontal" | null;
+  direction: FlexDirection | null;
   mainAlignment: MainAxisAlignment | null;
   crossAlignment: CrossAxisAlignment | null;
   gap: number | null;

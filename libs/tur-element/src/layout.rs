@@ -162,8 +162,8 @@ fn parse_direction(element_tree: &ElementTree, id: ElementNodeId) -> Axis {
 
     node.prop_str("direction")
         .and_then(|s| match s {
-            "vertical" => Some(Axis::Vertical),
-            "horizontal" => Some(Axis::Horizontal),
+            "Vertical" => Some(Axis::Vertical),
+            "Horizontal" => Some(Axis::Horizontal),
             _ => None,
         })
         .or_else(|| {
