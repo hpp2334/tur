@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tur-engine = { workspace = true }
+tur-shared = { workspace = true }
 vello = { workspace = true, features = ["wgpu"] }
 boa_engine = { workspace = true }
 tracing = { workspace = true }
