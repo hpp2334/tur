@@ -3,6 +3,7 @@ use std::path::Path;
 use std::rc::Rc;
 
 use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{EventKind, RawAppEvent};
 use tur_engine::error::TurError;
@@ -64,12 +65,15 @@ impl TurTestApp {
         self.inner.has_event_handler(id, kind)
     }
 
-    pub fn text_content(&self, id: ElementNodeId) -> Option<String> {
-        let tree = self.inner.element_tree();
-        let tree = tree.borrow();
-        tree.get(id)
-            .and_then(|n| n.element.as_ref())
-            .and_then(|e| e.text_content())
-            .map(|s| s.to_string())
+    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+        self.inner.query_element(key)
+    }
+
+    pub fn with_element<R>(
+        &self,
+        id: ElementNodeId,
+        cb: impl FnOnce(&AnyElement) -> R,
+    ) -> Option<R> {
+        self.inner.with_element(id, cb)
     }
 }

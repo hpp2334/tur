@@ -11,6 +11,7 @@ pub struct ElementNode {
     pub children: Vec<ElementNodeId>,
     pub parent: Option<ElementNodeId>,
     pub computed_layout: ComputedLayout,
+    pub query_key: Option<Vec<String>>,
 }
 
 impl fmt::Debug for ElementNode {
@@ -32,6 +33,7 @@ impl ElementNode {
             children: Vec::new(),
             parent: None,
             computed_layout: ComputedLayout::ZERO,
+            query_key: None,
         }
     }
 }

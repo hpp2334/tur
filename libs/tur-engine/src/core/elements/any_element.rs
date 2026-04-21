@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
@@ -8,12 +10,12 @@ use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
-    text_content: Option<String>,
 }
 
 trait Erased: Send + Sync + 'static {
     fn kind(&self) -> ElementKind;
     fn type_name(&self) -> &'static str;
+    fn as_any(&self) -> &dyn Any;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn perform_layout_size(
         &mut self,
@@ -43,6 +45,10 @@ where
 
     fn type_name(&self) -> &'static str {
         <Self as ElementRender>::type_name(self)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
@@ -80,14 +86,8 @@ where
 
 impl AnyElement {
     pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + 'static>(element: E) -> Self {
-        let type_name = <E as ElementRender>::type_name(&element);
         AnyElement {
             inner: Box::new(element),
-            text_content: if type_name == "tur_text" {
-                Some(String::new())
-            } else {
-                None
-            },
         }
     }
 
@@ -99,12 +99,11 @@ impl AnyElement {
         self.inner.type_name()
     }
 
+    pub fn cast<T: 'static>(&self) -> Option<&T> {
+        self.inner.as_any().downcast_ref::<T>()
+    }
+
     pub fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
-        if self.text_content.is_some() && *key == "content" {
-            if let Some(s) = value.as_string() {
-                self.text_content = Some(s.to_std_string_escaped());
-            }
-        }
         self.inner.set_prop(ctx, key, value);
     }
 
@@ -135,9 +134,5 @@ impl AnyElement {
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
-    }
-
-    pub fn text_content(&self) -> Option<&str> {
-        self.text_content.as_deref()
     }
 }

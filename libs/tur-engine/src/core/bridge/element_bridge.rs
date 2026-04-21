@@ -356,6 +356,26 @@ pub(crate) fn tur_set_attribute(
         key.to_std_string_escaped()
     );
 
+    if key == "queryKey" {
+        if let Some(obj) = value.as_object() {
+            if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(obj.clone()) {
+                let len = arr.length(context).unwrap_or(0);
+                let mut keys = Vec::with_capacity(len as usize);
+                for i in 0..len {
+                    if let Ok(val) = arr.at(i as i64, context) {
+                        if let Some(s) = val.as_string() {
+                            keys.push(s.to_std_string_escaped());
+                        }
+                    }
+                }
+                if let Some(node) = ctx.element_tree.borrow_mut().get_mut(node_id) {
+                    node.query_key = if keys.is_empty() { None } else { Some(keys) };
+                }
+            }
+        }
+        return Ok(JsValue::undefined());
+    }
+
     if let Some(node) = ctx.element_tree.borrow().get(node_id) {
         if let Some(ref element) = node.element {
             if element.type_name() == "tur_pointer_interact" && key == "onClick" {

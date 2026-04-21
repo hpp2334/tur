@@ -267,6 +267,19 @@ impl ElementTree {
         path
     }
 
+    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+        self.nodes
+            .values()
+            .find(|n| {
+                n.query_key
+                    .as_ref()
+                    .map(|k| k.iter().map(|s| s.as_str()).eq(key.iter().copied()))
+                    .unwrap_or(false)
+                    && n.element.is_some()
+            })
+            .map(|n| n.id)
+    }
+
     fn hit_test_node(&self, id: ElementNodeId, position: Offset) -> bool {
         let node = match self.nodes.get(&id) {
             Some(n) => n,

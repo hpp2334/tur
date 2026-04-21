@@ -1,5 +1,6 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::event::EventKind;
+use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -17,6 +18,7 @@ fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
         var pi = globalThis.__tur.createPointerInteract(ctx);
         var text = globalThis.__tur.createText(ctx);
         globalThis.__tur.setAttribute(ctx, text, "content", "before");
+        globalThis.__tur.setAttribute(ctx, text, "queryKey", ["click-text"]);
         globalThis.__tur.appendChild(ctx, pi, text);
         globalThis.__tur.appendChild(ctx, col, pi);
 
@@ -28,13 +30,7 @@ fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
     )
     .unwrap();
 
-    let tree_rc = app.element_tree();
-    let tree = tree_rc.borrow();
-    let root = tree.root().unwrap();
-    let col = tree.get(root.children[0]).unwrap();
-    let pi = tree.get(col.children[0]).unwrap();
-    let text_id = pi.children[0];
-    text_id
+    app.query_element(&["click-text"]).unwrap()
 }
 
 fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
@@ -89,7 +85,12 @@ fn click_updates_text_content() {
     drop(tree);
 
     assert!(
-        app.text_content(text_id).unwrap_or_default() == "before",
+        app.with_element(text_id, |e| {
+            e.cast::<TextElement>()
+                .map(|t| t.content() == "before")
+                .unwrap_or(false)
+        })
+        .unwrap_or(false),
         "text should be 'before' before click"
     );
 
@@ -98,7 +99,12 @@ fn click_updates_text_content() {
     app.click(click_x, click_y);
 
     assert_eq!(
-        app.text_content(text_id).unwrap_or_default(),
+        app.with_element(text_id, |e| {
+            e.cast::<TextElement>()
+                .map(|t| t.content().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default(),
         "after",
         "text should be 'after' after click"
     );
@@ -111,12 +117,25 @@ fn click_miss_does_not_update_text() {
 
     app.render_tree();
 
-    assert_eq!(app.text_content(text_id).unwrap_or_default(), "before");
+    assert_eq!(
+        app.with_element(text_id, |e| {
+            e.cast::<TextElement>()
+                .map(|t| t.content().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default(),
+        "before"
+    );
 
     app.click(999.0, 999.0);
 
     assert_eq!(
-        app.text_content(text_id).unwrap_or_default(),
+        app.with_element(text_id, |e| {
+            e.cast::<TextElement>()
+                .map(|t| t.content().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default(),
         "before",
         "text should remain 'before' after miss click"
     );
