@@ -6,11 +6,12 @@ use std::rc::{Rc, Weak};
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tur_shared::{Constraints, Offset};
+use tur_shared::Constraints;
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
+use crate::core::event::{AppEvent, AppPointerEvent, EventKind, RawAppEvent};
 use crate::core::render::Renderer;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
@@ -41,14 +42,63 @@ pub struct TurNodeHandle {
     pub(crate) id: ElementNodeId,
 }
 
+struct GestureArena {
+    pointer_down_target: Option<ElementNodeId>,
+}
+
+impl GestureArena {
+    fn new() -> Self {
+        Self {
+            pointer_down_target: None,
+        }
+    }
+
+    fn process_raw_event(
+        &mut self,
+        raw: &RawAppEvent,
+        tree: &ElementTree,
+    ) -> (AppEvent, Option<Vec<AppEvent>>) {
+        match raw {
+            RawAppEvent::PointerDown { position } => {
+                let path = tree.hit_test_path(*position);
+                self.pointer_down_target = path.first().copied();
+                (
+                    AppEvent::PointerDown(AppPointerEvent {
+                        position: *position,
+                    }),
+                    None,
+                )
+            }
+            RawAppEvent::PointerUp { position } => {
+                let path = tree.hit_test_path(*position);
+                let down_target = self.pointer_down_target.take();
+                let gesture = match down_target {
+                    Some(id) if path.contains(&id) => {
+                        Some(vec![AppEvent::Click(AppPointerEvent {
+                            position: *position,
+                        })])
+                    }
+                    _ => None,
+                };
+                (
+                    AppEvent::PointerUp(AppPointerEvent {
+                        position: *position,
+                    }),
+                    gesture,
+                )
+            }
+        }
+    }
+}
+
 pub struct TurAppContext {
     element_tree: Rc<RefCell<ElementTree>>,
     renderer: RefCell<Box<dyn Renderer>>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
-    event_handlers: RefCell<HashMap<(ElementNodeId, String), JsObject>>,
-    pointer_down_target: Cell<Option<ElementNodeId>>,
+    event_handlers: RefCell<HashMap<(ElementNodeId, EventKind), JsObject>>,
+    gesture_arena: RefCell<GestureArena>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -71,7 +121,7 @@ impl TurAppContext {
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
             event_handlers: RefCell::new(HashMap::new()),
-            pointer_down_target: Cell::new(None),
+            gesture_arena: RefCell::new(GestureArena::new()),
         }
     }
 
@@ -130,40 +180,42 @@ impl TurAppContext {
         opaque
     }
 
-    pub fn handle_pointer_down(&self, x: f64, y: f64) {
-        let position = Offset::new(x, y);
-        let tree = self.element_tree.borrow();
-        let path = tree.hit_test_path(position);
-        drop(tree);
-        self.pointer_down_target.set(path.first().copied());
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+        self.event_handlers.borrow().contains_key(&(id, kind))
     }
 
-    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
-        self.event_handlers
-            .borrow()
-            .contains_key(&(id, event_type.to_string()))
-    }
-
-    pub fn handle_pointer_up(&self, x: f64, y: f64, context: &mut Context) {
-        let down_target = match self.pointer_down_target.get() {
-            Some(id) => id,
-            None => return,
+    pub fn dispatch_raw_event(&self, raw: &RawAppEvent, context: &mut Context) {
+        let (direct_event, gesture_events) = {
+            let tree = self.element_tree.borrow();
+            self.gesture_arena
+                .borrow_mut()
+                .process_raw_event(raw, &tree)
         };
-        self.pointer_down_target.set(None);
 
-        let position = Offset::new(x, y);
+        self.invoke_handlers(&direct_event, context);
+
+        if let Some(events) = gesture_events {
+            for event in events {
+                self.invoke_handlers(&event, context);
+            }
+        }
+    }
+
+    fn invoke_handlers(&self, event: &AppEvent, context: &mut Context) {
+        let (kind, position) = match event {
+            AppEvent::PointerDown(e) => (EventKind::PointerDown, e.position),
+            AppEvent::PointerUp(e) => (EventKind::PointerUp, e.position),
+            AppEvent::Click(e) => (EventKind::Click, e.position),
+        };
+
         let tree = self.element_tree.borrow();
         let path = tree.hit_test_path(position);
         drop(tree);
-
-        if !path.contains(&down_target) {
-            return;
-        }
 
         let callbacks: Vec<JsObject> = {
             let handlers = self.event_handlers.borrow();
             path.iter()
-                .filter_map(|id| handlers.get(&(*id, "onClick".into())).cloned())
+                .filter_map(|id| handlers.get(&(*id, kind)).cloned())
                 .collect()
         };
 
@@ -307,16 +359,17 @@ pub(crate) fn tur_set_attribute(
     if let Some(node) = ctx.element_tree.borrow().get(node_id) {
         if let Some(ref element) = node.element {
             if element.type_name() == "tur_pointer_interact" && key == "onClick" {
+                let event_kind = EventKind::Click;
                 if let Some(obj) = value.as_object() {
                     if obj.is_callable() {
                         ctx.event_handlers
                             .borrow_mut()
-                            .insert((node_id, "onClick".into()), obj.clone());
+                            .insert((node_id, event_kind), obj.clone());
                     }
                 } else if value.is_null() || value.is_undefined() {
                     ctx.event_handlers
                         .borrow_mut()
-                        .remove(&(node_id, "onClick".into()));
+                        .remove(&(node_id, event_kind));
                 }
                 return Ok(JsValue::undefined());
             }

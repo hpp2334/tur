@@ -1,4 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::event::EventKind;
 use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -51,11 +52,11 @@ fn click_handler_registered() {
     let pi_id = find_pointer_interact(&app);
 
     assert!(
-        app.has_event_handler(pi_id, "onClick"),
+        app.has_event_handler(pi_id, EventKind::Click),
         "PointerInteract should have onClick handler"
     );
     assert!(
-        !app.has_event_handler(text_id, "onClick"),
+        !app.has_event_handler(text_id, EventKind::Click),
         "Text node should not have onClick handler"
     );
 }

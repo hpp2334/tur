@@ -16,6 +16,7 @@ use core::bridge::TurAppContext;
 use core::element::ElementNodeId;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
+use core::event::{EventKind, RawAppEvent};
 
 pub struct TurApp {
     boa_context: Context,
@@ -66,18 +67,14 @@ impl TurApp {
         );
     }
 
-    pub fn handle_pointer_down(&self, x: f64, y: f64) {
-        self.app_context.borrow().handle_pointer_down(x, y);
-    }
-
-    pub fn handle_pointer_up(&mut self, x: f64, y: f64) {
+    pub fn dispatch_raw_event(&mut self, event: RawAppEvent) {
         self.app_context
             .borrow()
-            .handle_pointer_up(x, y, &mut self.boa_context);
+            .dispatch_raw_event(&event, &mut self.boa_context);
     }
 
-    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
-        self.app_context.borrow().has_event_handler(id, event_type)
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+        self.app_context.borrow().has_event_handler(id, kind)
     }
 
     #[cfg(feature = "trace")]

@@ -4,9 +4,11 @@ use std::rc::Rc;
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::ElementTree;
+use tur_engine::core::event::{EventKind, RawAppEvent};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
+use tur_shared::Offset;
 
 pub struct TurTestApp {
     inner: TurApp,
@@ -45,21 +47,21 @@ impl TurTestApp {
         self.inner.element_tree()
     }
 
-    pub fn handle_pointer_down(&self, x: f64, y: f64) {
-        self.inner.handle_pointer_down(x, y);
-    }
-
-    pub fn handle_pointer_up(&mut self, x: f64, y: f64) {
-        self.inner.handle_pointer_up(x, y);
+    pub fn dispatch_raw_event(&mut self, event: RawAppEvent) {
+        self.inner.dispatch_raw_event(event);
     }
 
     pub fn click(&mut self, x: f64, y: f64) {
-        self.handle_pointer_down(x, y);
-        self.handle_pointer_up(x, y);
+        self.dispatch_raw_event(RawAppEvent::PointerDown {
+            position: Offset::new(x, y),
+        });
+        self.dispatch_raw_event(RawAppEvent::PointerUp {
+            position: Offset::new(x, y),
+        });
     }
 
-    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
-        self.inner.has_event_handler(id, event_type)
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+        self.inner.has_event_handler(id, kind)
     }
 
     pub fn text_content(&self, id: ElementNodeId) -> Option<String> {
