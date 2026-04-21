@@ -13,8 +13,11 @@ use error::TurError;
 
 use core::bridge::init_bridge;
 use core::bridge::TurAppContext;
+use core::element::ElementNodeId;
+use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
+use core::event::{EventKind, RawAppEvent};
 
 pub struct TurApp {
     boa_context: Context,
@@ -63,6 +66,36 @@ impl TurApp {
             logical_height,
             dpr,
         );
+    }
+
+    pub fn dispatch_raw_event(&mut self, event: RawAppEvent) {
+        self.app_context
+            .borrow()
+            .dispatch_raw_event(&event, &mut self.boa_context);
+    }
+
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+        self.app_context.borrow().has_event_handler(id, kind)
+    }
+
+    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+        self.app_context
+            .borrow()
+            .element_tree()
+            .borrow()
+            .query_element(key)
+    }
+
+    pub fn with_element<R>(
+        &self,
+        id: ElementNodeId,
+        cb: impl FnOnce(&AnyElement) -> R,
+    ) -> Option<R> {
+        let ctx = self.app_context.borrow();
+        let tree = ctx.element_tree().borrow();
+        let node = tree.get(id)?;
+        let element = node.element.as_ref()?;
+        Some(cb(element))
     }
 
     #[cfg(feature = "trace")]

@@ -8,3 +8,4 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true, features = ["trace"] }
+tur-shared = { workspace = true }

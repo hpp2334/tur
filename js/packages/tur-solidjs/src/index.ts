@@ -20,6 +20,7 @@ export {
   Positioned,
   SizedBox,
   Container,
+  PointerInteract,
   Text,
 } from "./components";
 export type {
@@ -30,6 +31,7 @@ export type {
   PositionedProps,
   SizedBoxProps,
   ContainerProps,
+  PointerInteractProps,
   TextProps,
 } from "./components";
 export { style, Style, Flex, TextOpts } from "./style";

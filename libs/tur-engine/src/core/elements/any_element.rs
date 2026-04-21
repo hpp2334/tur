@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
@@ -13,6 +15,7 @@ pub struct AnyElement {
 trait Erased: Send + Sync + 'static {
     fn kind(&self) -> ElementKind;
     fn type_name(&self) -> &'static str;
+    fn as_any(&self) -> &dyn Any;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn perform_layout_size(
         &mut self,
@@ -42,6 +45,10 @@ where
 
     fn type_name(&self) -> &'static str {
         <Self as ElementRender>::type_name(self)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
@@ -90,6 +97,10 @@ impl AnyElement {
 
     pub fn type_name(&self) -> &'static str {
         self.inner.type_name()
+    }
+
+    pub fn cast<T: 'static>(&self) -> Option<&T> {
+        self.inner.as_any().downcast_ref::<T>()
     }
 
     pub fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {

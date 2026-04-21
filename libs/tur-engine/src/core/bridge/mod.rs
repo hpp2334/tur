@@ -16,8 +16,9 @@ use boa_engine::Context;
 
 use crate::core::bridge::element_bridge::{
     tur_append_child, tur_create_container, tur_create_flex, tur_create_flex_item,
-    tur_create_positioned, tur_create_root, tur_create_stack, tur_create_text, tur_get_first_child,
-    tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child, tur_set_attribute,
+    tur_create_pointer_interact, tur_create_positioned, tur_create_root, tur_create_stack,
+    tur_create_text, tur_get_first_child, tur_get_next_sibling, tur_get_parent, tur_insert_before,
+    tur_remove_child, tur_set_attribute,
 };
 use crate::core::render::Renderer;
 
@@ -59,13 +60,14 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 14] = [
+    ); 15] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
         ("createPositioned", 1, tur_create_positioned),
         ("createContainer", 1, tur_create_container),
         ("createText", 1, tur_create_text),
+        ("createPointerInteract", 1, tur_create_pointer_interact),
         ("createRoot", 1, tur_create_root),
         ("setAttribute", 4, tur_set_attribute),
         ("appendChild", 3, tur_append_child),

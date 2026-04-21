@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use tur_engine::TurApp;
+use tur_engine::core::event::RawAppEvent;
 use tur_engine::renderer::vello::VelloRenderer;
+use tur_shared::Offset;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -11,6 +13,8 @@ struct WasmState {
     app: TurApp,
     _canvas: web_sys::HtmlCanvasElement,
     _resize_closure: Closure<dyn Fn()>,
+    _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
 }
 
 #[wasm_bindgen]
@@ -138,10 +142,56 @@ impl TurWasmApp {
                 .add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref())
                 .err_to_jsval()?;
 
+            let pointer_down_state = state_clone.clone();
+            let pointer_down_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let mut guard = pointer_down_state.borrow_mut();
+                    if let Some(s) = guard.as_mut() {
+                        let rect = s._canvas.get_bounding_client_rect();
+                        let x = event.client_x() as f64 - rect.left();
+                        let y = event.client_y() as f64 - rect.top();
+                        s.app
+                            .dispatch_raw_event(RawAppEvent::PointerDown {
+                                position: Offset::new(x, y),
+                            });
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "mousedown",
+                    pointer_down_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let pointer_up_state = state_clone.clone();
+            let pointer_up_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let mut guard = pointer_up_state.borrow_mut();
+                    if let Some(s) = guard.as_mut() {
+                        let rect = s._canvas.get_bounding_client_rect();
+                        let x = event.client_x() as f64 - rect.left();
+                        let y = event.client_y() as f64 - rect.top();
+                        s.app
+                            .dispatch_raw_event(RawAppEvent::PointerUp {
+                                position: Offset::new(x, y),
+                            });
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "mouseup",
+                    pointer_up_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let wasm_state = WasmState {
                 app,
                 _canvas: canvas,
                 _resize_closure: resize_closure,
+                _pointer_down_closure: pointer_down_closure,
+                _pointer_up_closure: pointer_up_closure,
             };
 
             *state_clone.borrow_mut() = Some(wasm_state);
