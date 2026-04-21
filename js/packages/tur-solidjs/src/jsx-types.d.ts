@@ -43,6 +43,11 @@ declare module "solid-js" {
         color?: Color;
         children?: JSX.Element;
       };
+      tur_pointer_interact: {
+        style?: ResolvedStyle;
+        onClick?: () => void;
+        children?: JSX.Element;
+      };
       tur_text: {
         style?: ResolvedStyle;
         content?: string;

@@ -2138,6 +2138,7 @@ name = "tur-integration-tests"
 version = "0.1.0"
 dependencies = [
  "tur-engine",
+ "tur-shared",
 ]
 
 [[package]]

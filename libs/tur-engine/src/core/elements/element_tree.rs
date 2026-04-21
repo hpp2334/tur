@@ -259,6 +259,14 @@ impl ElementTree {
         self.hit_test_node(root_id, position)
     }
 
+    pub fn hit_test_path(&self, position: Offset) -> Vec<ElementNodeId> {
+        let mut path = Vec::new();
+        if let Some(root_id) = self.root_id {
+            self.collect_hit_path(root_id, position, &mut path);
+        }
+        path
+    }
+
     fn hit_test_node(&self, id: ElementNodeId, position: Offset) -> bool {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
@@ -284,6 +292,41 @@ impl ElementTree {
                 return true;
             }
         }
+
+        true
+    }
+
+    fn collect_hit_path(
+        &self,
+        id: ElementNodeId,
+        position: Offset,
+        path: &mut Vec<ElementNodeId>,
+    ) -> bool {
+        let node = match self.nodes.get(&id) {
+            Some(n) => n,
+            None => return false,
+        };
+
+        let element = match node.element.as_ref() {
+            Some(e) => e,
+            None => return false,
+        };
+
+        let local_position = Offset::new(
+            position.x - node.computed_layout.offset.x,
+            position.y - node.computed_layout.offset.y,
+        );
+
+        if !element.hit_test(local_position, &node.computed_layout) {
+            return false;
+        }
+
+        node.children
+            .iter()
+            .rev()
+            .any(|&child_id| self.collect_hit_path(child_id, local_position, path));
+
+        path.push(id);
 
         true
     }

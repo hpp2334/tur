@@ -24,6 +24,10 @@ impl TextElement {
             color: None,
         }
     }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
 }
 
 impl ElementOnUpdate for TextElement {

@@ -13,6 +13,7 @@ use error::TurError;
 
 use core::bridge::init_bridge;
 use core::bridge::TurAppContext;
+use core::element::ElementNodeId;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
 
@@ -63,6 +64,20 @@ impl TurApp {
             logical_height,
             dpr,
         );
+    }
+
+    pub fn handle_pointer_down(&self, x: f64, y: f64) {
+        self.app_context.borrow().handle_pointer_down(x, y);
+    }
+
+    pub fn handle_pointer_up(&mut self, x: f64, y: f64) {
+        self.app_context
+            .borrow()
+            .handle_pointer_up(x, y, &mut self.boa_context);
+    }
+
+    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
+        self.app_context.borrow().has_event_handler(id, event_type)
     }
 
     #[cfg(feature = "trace")]

@@ -48,6 +48,10 @@ export interface ContainerProps extends BaseProps {
   color?: Color;
 }
 
+export interface PointerInteractProps extends BaseProps {
+  onClick?: () => void;
+}
+
 export interface TextProps extends BaseProps {
   content: string;
   fontSize?: number;
@@ -87,6 +91,11 @@ export function SizedBox(props: SizedBoxProps): JSX.Element {
 export function Container(props: ContainerProps): JSX.Element {
   const { style: s, children, ...rest } = props;
   return <tur_container style={s?.resolve()} {...rest}>{children}</tur_container>;
+}
+
+export function PointerInteract(props: PointerInteractProps): JSX.Element {
+  const { style: s, children, ...rest } = props;
+  return <tur_pointer_interact style={s?.resolve()} {...rest}>{children}</tur_pointer_interact>;
 }
 
 export function Text(props: TextProps): JSX.Element {

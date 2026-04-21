@@ -9,6 +9,7 @@ declare global {
     createPositioned(ctx: unknown): TurNodeHandle;
     createContainer(ctx: unknown): TurNodeHandle;
     createText(ctx: unknown): TurNodeHandle;
+    createPointerInteract(ctx: unknown): TurNodeHandle;
     createRoot(ctx: unknown): TurNodeHandle;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;

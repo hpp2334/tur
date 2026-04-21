@@ -3,16 +3,18 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::{Rc, Weak};
 
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tur_shared::Constraints;
+use tur_shared::{Constraints, Offset};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
 use crate::core::render::Renderer;
 use crate::elements::{
-    ContainerElement, FlexElement, FlexItemElement, PositionedElement, StackElement, TextElement,
+    ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
+    StackElement, TextElement,
 };
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -45,6 +47,8 @@ pub struct TurAppContext {
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
+    event_handlers: RefCell<HashMap<(ElementNodeId, String), JsObject>>,
+    pointer_down_target: Cell<Option<ElementNodeId>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -66,6 +70,8 @@ impl TurAppContext {
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
+            event_handlers: RefCell::new(HashMap::new()),
+            pointer_down_target: Cell::new(None),
         }
     }
 
@@ -122,6 +128,48 @@ impl TurAppContext {
         let opaque = BoaOpaque::new(TurNodeHandle { id }, context);
         self.handles.borrow_mut().insert(id, opaque.clone());
         opaque
+    }
+
+    pub fn handle_pointer_down(&self, x: f64, y: f64) {
+        let position = Offset::new(x, y);
+        let tree = self.element_tree.borrow();
+        let path = tree.hit_test_path(position);
+        drop(tree);
+        self.pointer_down_target.set(path.first().copied());
+    }
+
+    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
+        self.event_handlers
+            .borrow()
+            .contains_key(&(id, event_type.to_string()))
+    }
+
+    pub fn handle_pointer_up(&self, x: f64, y: f64, context: &mut Context) {
+        let down_target = match self.pointer_down_target.get() {
+            Some(id) => id,
+            None => return,
+        };
+        self.pointer_down_target.set(None);
+
+        let position = Offset::new(x, y);
+        let tree = self.element_tree.borrow();
+        let path = tree.hit_test_path(position);
+        drop(tree);
+
+        if !path.contains(&down_target) {
+            return;
+        }
+
+        let callbacks: Vec<JsObject> = {
+            let handlers = self.event_handlers.borrow();
+            path.iter()
+                .filter_map(|id| handlers.get(&(*id, "onClick".into())).cloned())
+                .collect()
+        };
+
+        for callback in callbacks {
+            let _ = callback.call(&JsValue::undefined(), &[], context);
+        }
     }
 }
 
@@ -216,6 +264,19 @@ pub(crate) fn tur_create_text(
     create_element(args, context, AnyElement::new(TextElement::new()))
 }
 
+pub(crate) fn tur_create_pointer_interact(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createPointerInteract()");
+    create_element(
+        args,
+        context,
+        AnyElement::new(PointerInteractElement::new()),
+    )
+}
+
 pub(crate) fn tur_create_root(
     _this: &JsValue,
     args: &[JsValue],
@@ -242,6 +303,25 @@ pub(crate) fn tur_set_attribute(
         node_id,
         key.to_std_string_escaped()
     );
+
+    if let Some(node) = ctx.element_tree.borrow().get(node_id) {
+        if let Some(ref element) = node.element {
+            if element.type_name() == "tur_pointer_interact" && key == "onClick" {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.event_handlers
+                            .borrow_mut()
+                            .insert((node_id, "onClick".into()), obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.event_handlers
+                        .borrow_mut()
+                        .remove(&(node_id, "onClick".into()));
+                }
+                return Ok(JsValue::undefined());
+            }
+        }
+    }
 
     if let Some(node) = ctx.element_tree.borrow_mut().get_mut(node_id) {
         if let Some(ref mut element) = node.element {

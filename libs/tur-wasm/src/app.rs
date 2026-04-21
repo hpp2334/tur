@@ -11,6 +11,8 @@ struct WasmState {
     app: TurApp,
     _canvas: web_sys::HtmlCanvasElement,
     _resize_closure: Closure<dyn Fn()>,
+    _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
 }
 
 #[wasm_bindgen]
@@ -138,10 +140,38 @@ impl TurWasmApp {
                 .add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref())
                 .err_to_jsval()?;
 
+            let pointer_state = state_clone.clone();
+            let pointer_down_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let _ = Self::handle_pointer_down(&pointer_state, &event);
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "mousedown",
+                    pointer_down_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let pointer_up_state = state_clone.clone();
+            let pointer_up_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let _ = Self::handle_pointer_up(&pointer_up_state, &event);
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "mouseup",
+                    pointer_up_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let wasm_state = WasmState {
                 app,
                 _canvas: canvas,
                 _resize_closure: resize_closure,
+                _pointer_down_closure: pointer_down_closure,
+                _pointer_up_closure: pointer_up_closure,
             };
 
             *state_clone.borrow_mut() = Some(wasm_state);
@@ -204,6 +234,40 @@ impl TurWasmApp {
             .present()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
+        Ok(())
+    }
+
+    fn handle_pointer_down(
+        state: &Rc<RefCell<Option<WasmState>>>,
+        event: &web_sys::MouseEvent,
+    ) -> Result<(), JsValue> {
+        let guard = state.borrow();
+        let state = guard
+            .as_ref()
+            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
+
+        let rect = state._canvas.get_bounding_client_rect();
+        let x = event.client_x() as f64 - rect.left();
+        let y = event.client_y() as f64 - rect.top();
+
+        state.app.handle_pointer_down(x, y);
+        Ok(())
+    }
+
+    fn handle_pointer_up(
+        state: &Rc<RefCell<Option<WasmState>>>,
+        event: &web_sys::MouseEvent,
+    ) -> Result<(), JsValue> {
+        let mut guard = state.borrow_mut();
+        let state = guard
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
+
+        let rect = state._canvas.get_bounding_client_rect();
+        let x = event.client_x() as f64 - rect.left();
+        let y = event.client_y() as f64 - rect.top();
+
+        state.app.handle_pointer_up(x, y);
         Ok(())
     }
 }

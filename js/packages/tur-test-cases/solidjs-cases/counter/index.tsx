@@ -6,12 +6,13 @@ import {
   Text,
   Container,
   SizedBox,
+  PointerInteract,
   MainAxisAlignment,
   CrossAxisAlignment,
 } from "@tur/solidjs";
 
 function Counter() {
-  const [count, _setCount] = createSignal(0);
+  const [count, setCount] = createSignal(0);
 
   const label = () => {
     const n = count();
@@ -35,13 +36,17 @@ function Counter() {
         </Container>
         <SizedBox height={24} />
         <Row mainAlignment={MainAxisAlignment.Center}>
-          <Container padding={8}>
-            <Text content="  -  " fontSize={20} />
-          </Container>
+          <PointerInteract onClick={() => setCount((n) => n - 1)}>
+            <Container padding={8}>
+              <Text content="  -  " fontSize={20} />
+            </Container>
+          </PointerInteract>
           <SizedBox width={16} />
-          <Container padding={8}>
-            <Text content="  +  " fontSize={20} />
-          </Container>
+          <PointerInteract onClick={() => setCount((n) => n + 1)}>
+            <Container padding={8}>
+              <Text content="  +  " fontSize={20} />
+            </Container>
+          </PointerInteract>
         </Row>
         <SizedBox height={16} />
         <Row mainAlignment={MainAxisAlignment.Center}>

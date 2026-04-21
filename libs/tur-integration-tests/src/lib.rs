@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
@@ -42,5 +43,31 @@ impl TurTestApp {
     pub fn render_tree(&self) -> Rc<RefCell<ElementTree>> {
         self.inner.render();
         self.inner.element_tree()
+    }
+
+    pub fn handle_pointer_down(&self, x: f64, y: f64) {
+        self.inner.handle_pointer_down(x, y);
+    }
+
+    pub fn handle_pointer_up(&mut self, x: f64, y: f64) {
+        self.inner.handle_pointer_up(x, y);
+    }
+
+    pub fn click(&mut self, x: f64, y: f64) {
+        self.handle_pointer_down(x, y);
+        self.handle_pointer_up(x, y);
+    }
+
+    pub fn has_event_handler(&self, id: ElementNodeId, event_type: &str) -> bool {
+        self.inner.has_event_handler(id, event_type)
+    }
+
+    pub fn text_content(&self, id: ElementNodeId) -> Option<String> {
+        let tree = self.inner.element_tree();
+        let tree = tree.borrow();
+        tree.get(id)
+            .and_then(|n| n.element.as_ref())
+            .and_then(|e| e.text_content())
+            .map(|s| s.to_string())
     }
 }
