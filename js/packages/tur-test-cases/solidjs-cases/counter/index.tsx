@@ -36,17 +36,17 @@ function Counter() {
         </Container>
         <SizedBox height={24} />
         <Row mainAlignment={MainAxisAlignment.Center}>
-          <PointerInteract onClick={() => setCount((n) => n - 1)}>
+          <PointerInteract onClick={() => setCount((n) => n - 1)} child={
             <Container padding={8}>
               <Text content="  -  " fontSize={20} />
             </Container>
-          </PointerInteract>
+          } />
           <SizedBox width={16} />
-          <PointerInteract onClick={() => setCount((n) => n + 1)}>
+          <PointerInteract onClick={() => setCount((n) => n + 1)} child={
             <Container padding={8}>
               <Text content="  +  " fontSize={20} />
             </Container>
-          </PointerInteract>
+          } />
         </Row>
         <SizedBox height={16} />
         <Row mainAlignment={MainAxisAlignment.Center}>

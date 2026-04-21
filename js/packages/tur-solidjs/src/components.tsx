@@ -48,8 +48,10 @@ export interface ContainerProps extends BaseProps {
   color?: Color;
 }
 
-export interface PointerInteractProps extends BaseProps {
+export interface PointerInteractProps {
+  style?: Style;
   onClick?: () => void;
+  child?: JSX.Element;
 }
 
 export interface TextProps extends BaseProps {
@@ -94,8 +96,8 @@ export function Container(props: ContainerProps): JSX.Element {
 }
 
 export function PointerInteract(props: PointerInteractProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_pointer_interact style={s?.resolve()} {...rest}>{children}</tur_pointer_interact>;
+  const { style: s, child, ...rest } = props;
+  return <tur_pointer_interact style={s?.resolve()} {...rest}>{child}</tur_pointer_interact>;
 }
 
 export function Text(props: TextProps): JSX.Element {
