@@ -43,9 +43,10 @@ jobs:
         working-directory: ./js
 
       - name: Cargo test
-        run: Xvfb :99 -screen 0 1024x768x24 -ac & sleep 1; export DISPLAY=:99; cargo test --workspace --locked
+        run: Xvfb :99 -screen 0 1024x768x24 -ac & sleep 1; cargo test --workspace --locked
         timeout-minutes: 5
         env:
+          DISPLAY: ":99"
           RUST_MIN_STACK: 8388608
 
       - name: Cargo clippy
