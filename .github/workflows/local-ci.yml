@@ -43,13 +43,7 @@ jobs:
         working-directory: ./js
 
       - name: Cargo test
-        run: cargo test --workspace --locked --exclude tur-integration-tests -- --skip vello
-        timeout-minutes: 5
-        env:
-          RUST_MIN_STACK: 8388608
-
-      - name: Cargo test (integration)
-        run: cargo test -p tur-integration-tests --locked --test element --test layout --test event
+        run: xvfb-run cargo test --workspace --locked
         timeout-minutes: 5
         env:
           RUST_MIN_STACK: 8388608
