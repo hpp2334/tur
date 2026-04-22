@@ -15,11 +15,12 @@
       const resp = await fetch("./__JS_FILE__");
       const source = await resp.text();
       app.load_and_run_js(source);
+      window.turDemo = { debugLayout: () => console.log(app.debug_layout()) };
     }
 
     run().catch((e) => console.error(e));
 
-    const ws = new WebSocket("ws://" + location.host + "/__ws");
+    const ws = new WebSocket("wss://" + location.host + "/__ws");
     ws.addEventListener("message", (e) => {
       if (e.data === "reload") location.reload();
     });

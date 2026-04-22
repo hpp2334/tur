@@ -5,6 +5,7 @@ use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
@@ -16,6 +17,7 @@ trait Erased: Send + Sync + 'static {
     fn kind(&self) -> ElementKind;
     fn type_name(&self) -> &'static str;
     fn as_any(&self) -> &dyn Any;
+    fn trace_label(&self) -> String;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn perform_layout_size(
         &mut self,
@@ -37,7 +39,7 @@ trait Erased: Send + Sync + 'static {
 
 impl<E> Erased for E
 where
-    E: ElementOnUpdate + ElementLayout + ElementRender + 'static,
+    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -49,6 +51,15 @@ where
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn trace_label(&self) -> String {
+        let label = <Self as ElementTrace>::trace_label(self);
+        if label.is_empty() {
+            format!("[{}]", <Self as ElementRender>::type_name(self))
+        } else {
+            label
+        }
     }
 
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
@@ -85,7 +96,9 @@ where
 }
 
 impl AnyElement {
-    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + 'static>(element: E) -> Self {
+    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static>(
+        element: E,
+    ) -> Self {
         AnyElement {
             inner: Box::new(element),
         }
@@ -101,6 +114,10 @@ impl AnyElement {
 
     pub fn cast<T: 'static>(&self) -> Option<&T> {
         self.inner.as_any().downcast_ref::<T>()
+    }
+
+    pub fn trace_label(&self) -> String {
+        self.inner.trace_label()
     }
 
     pub fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {

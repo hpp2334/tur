@@ -39,7 +39,8 @@ fn expanded_fills_remaining() {
         (expanded.id, inner_sb.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let expanded_node = rt.get(expanded_id).unwrap();
     assert_eq!(expanded_node.computed_layout.size.height, 550.0);
@@ -72,7 +73,8 @@ fn expanded_multiple_share_evenly() {
         (exp1.id, exp2.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let exp1_node = rt.get(exp1_id).unwrap();

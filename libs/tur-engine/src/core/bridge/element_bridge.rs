@@ -144,9 +144,9 @@ impl TurAppContext {
     pub fn render(&self) {
         let (width, height) = self.size.get();
         let constraints = Constraints {
-            min_width: 0.0,
+            min_width: width,
             max_width: width,
-            min_height: 0.0,
+            min_height: height,
             max_height: height,
         };
 

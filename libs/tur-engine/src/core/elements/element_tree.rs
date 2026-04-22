@@ -343,4 +343,55 @@ impl ElementTree {
 
         true
     }
+
+    pub fn debug_layout(&self) -> String {
+        let root_id = match self.root_id {
+            Some(id) => id,
+            None => return String::new(),
+        };
+        let mut buf = String::new();
+        self.debug_node(root_id, &mut buf, "");
+        buf
+    }
+
+    fn debug_node(&self, id: ElementNodeId, buf: &mut String, prefix: &str) {
+        let node = match self.nodes.get(&id) {
+            Some(n) => n,
+            None => return,
+        };
+        let element = match node.element.as_ref() {
+            Some(e) => e,
+            None => return,
+        };
+
+        let layout = &node.computed_layout;
+        let label = element.trace_label();
+        let label_str = if label.is_empty() {
+            String::new()
+        } else {
+            format!(" {label}")
+        };
+        buf.push_str(&format!(
+            "{}{}{} [{:.1}, {:.1} {:.1}x{:.1}]\n",
+            prefix,
+            element.type_name(),
+            label_str,
+            layout.offset.x,
+            layout.offset.y,
+            layout.size.width,
+            layout.size.height,
+        ));
+
+        let child_count = node.children.len();
+        for (i, &child_id) in node.children.iter().enumerate() {
+            let last = i == child_count - 1;
+            let child_prefix = if last { "└── " } else { "├── " };
+            let nested_prefix = if last { "    " } else { "│   " };
+            self.debug_node(
+                child_id,
+                buf,
+                &format!("{}{}", prefix.trim_end_matches(child_prefix), nested_prefix),
+            );
+        }
+    }
 }

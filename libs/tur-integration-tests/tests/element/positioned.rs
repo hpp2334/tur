@@ -33,7 +33,8 @@ fn positioned_with_left_top() {
         positioned.id
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let pos_node = rt.get(pos_id).unwrap();
     assert_eq!(pos_node.computed_layout.offset.x, 10.0);

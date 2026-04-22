@@ -38,7 +38,8 @@ fn column_basic_vertical_stacking() {
         (col.id, sb1.id, sb2.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let sb1_node = rt.get(sb1_id).unwrap();
@@ -67,7 +68,8 @@ fn column_main_alignment_end() {
         (col.children[0], col.children[1])
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let sb1_node = rt.get(sb1_id).unwrap();
@@ -92,7 +94,8 @@ fn column_cross_alignment_start() {
         col.children[0]
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let sb1_node = rt.get(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);

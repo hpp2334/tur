@@ -2,6 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 
 #[derive(Clone, Default)]
 pub struct ContainerElement {
@@ -19,6 +20,25 @@ impl ContainerElement {
             padding: None,
             color: None,
         }
+    }
+}
+
+impl ElementTrace for ContainerElement {
+    fn trace_label(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(w) = self.width {
+            parts.push(format!("width={w}"));
+        }
+        if let Some(h) = self.height {
+            parts.push(format!("height={h}"));
+        }
+        if let Some(p) = self.padding {
+            parts.push(format!("padding={p}"));
+        }
+        if let Some(c) = self.color {
+            parts.push(format!("color={c}"));
+        }
+        parts.join(" ")
     }
 }
 

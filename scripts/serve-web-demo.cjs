@@ -4,7 +4,7 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const jsDir = path.join(root, "js");
 const demoDir = path.join(jsDir, "packages/tur-solidjs-demo");
-const cliBin = path.join(jsDir, "packages/tur-wasm-cli/bin/cli.cjs");
+const cliBin = path.join(jsDir, "packages/tur-wasm-cli/dist/cli.cjs");
 
 function run(cmd, opts) {
   console.log(`> ${cmd}`);

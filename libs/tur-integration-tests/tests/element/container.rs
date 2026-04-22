@@ -26,7 +26,8 @@ fn container_with_padding() {
         container.id
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let container_node = rt.get(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 132.0);

@@ -18,7 +18,8 @@ fn text_content_and_measurement() {
         text.id
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let text_node = rt.get(text_id).unwrap();
     assert_eq!(text_node.computed_layout.size.width, 42.0);

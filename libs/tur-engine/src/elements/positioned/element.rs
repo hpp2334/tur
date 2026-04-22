@@ -1,6 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 
 #[derive(Clone, Default)]
 pub struct PositionedElement {
@@ -18,6 +19,25 @@ impl PositionedElement {
             right: None,
             bottom: None,
         }
+    }
+}
+
+impl ElementTrace for PositionedElement {
+    fn trace_label(&self) -> String {
+        let mut parts = Vec::new();
+        if let Some(v) = self.left {
+            parts.push(format!("left={v}"));
+        }
+        if let Some(v) = self.top {
+            parts.push(format!("top={v}"));
+        }
+        if let Some(v) = self.right {
+            parts.push(format!("right={v}"));
+        }
+        if let Some(v) = self.bottom {
+            parts.push(format!("bottom={v}"));
+        }
+        parts.join(" ")
     }
 }
 

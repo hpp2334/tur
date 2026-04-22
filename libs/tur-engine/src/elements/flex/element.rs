@@ -3,6 +3,7 @@ use num_traits::FromPrimitive;
 use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, Size};
 
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 
 pub(crate) struct ChildData {
     pub id: crate::core::element::ElementNodeId,
@@ -33,6 +34,15 @@ impl FlexElement {
             child_data: Vec::new(),
             constraints: None,
         }
+    }
+}
+
+impl ElementTrace for FlexElement {
+    fn trace_label(&self) -> String {
+        format!(
+            "{:?}[{:?}][{:?}]",
+            self.direction, self.main_alignment, self.cross_alignment
+        )
     }
 }
 
