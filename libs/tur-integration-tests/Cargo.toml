@@ -9,3 +9,14 @@ license.workspace = true
 [dependencies]
 tur-engine = { workspace = true, features = ["trace"] }
 tur-shared = { workspace = true }
+
+[dev-dependencies]
+minifb = "0.28"
+pollster = "0.4"
+raw-window-handle = "0.6"
+vello = { workspace = true, features = ["wgpu"] }
+
+[[test]]
+name = "vello"
+path = "tests/vello/main.rs"
+harness = false
