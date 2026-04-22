@@ -43,7 +43,7 @@ jobs:
         working-directory: ./js
 
       - name: Cargo test
-        run: xvfb-run -a -s '-screen 0 8192x8192x24' cargo test --workspace --locked
+        run: xvfb-run -a -s '-screen 0 1024x768x24' cargo test --workspace --locked
         timeout-minutes: 5
         env:
           RUST_MIN_STACK: 8388608
