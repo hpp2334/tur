@@ -14,8 +14,15 @@ fn main() {
                 println!("ok");
                 passed += 1;
             }
-            Err(_) => {
-                println!("FAILED");
+            Err(e) => {
+                let msg = if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    format!("{e:?}")
+                };
+                println!("FAILED\n  {msg}");
                 failed += 1;
             }
         }
