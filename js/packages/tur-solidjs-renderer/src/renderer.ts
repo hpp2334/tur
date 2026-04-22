@@ -1,6 +1,5 @@
 import { createRenderer, type Renderer } from "solid-js/universal";
 import type { TurNodeHandle } from "./tur";
-import type { ResolvedStyle } from "./style";
 import type { JSX } from "solid-js";
 
 export type TurElement = TurNodeHandle;
@@ -39,18 +38,6 @@ const _r: Renderer<TurElement> = createRenderer<TurElement>({
   },
 
   setProperty<T>(node: TurElement, name: string, value: T): void {
-    if (name === "style" && value != null && typeof value === "object") {
-      const rs = value as unknown as ResolvedStyle;
-      const keys = Object.keys(rs) as (keyof ResolvedStyle)[];
-      for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        const v = rs[key];
-        if (v !== null) {
-          __tur.setAttribute(ctx, node, key, v);
-        }
-      }
-      return;
-    }
     __tur.setAttribute(ctx, node, name, value);
   },
 
