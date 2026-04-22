@@ -1,4 +1,4 @@
-use tur_integration_tests::vello::TurVelloApp;
+use super::vello_app::TurVelloApp;
 
 pub fn vello_counter_app() {
     let app = TurVelloApp::new(4096.0, 2048.0, 1.0).unwrap();

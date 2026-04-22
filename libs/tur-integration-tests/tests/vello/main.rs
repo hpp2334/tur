@@ -1,4 +1,5 @@
 mod raw;
+mod vello_app;
 
 fn main() {
     let tests: &[(&str, fn())] = &[("vello_counter_app", raw::vello_counter_app)];
