@@ -13,7 +13,7 @@ crate-type = ["cdylib", "rlib"]
 tur-engine = { workspace = true }
 tur-shared = { workspace = true }
 vello = { workspace = true, features = ["wgpu"] }
-boa_engine = { workspace = true }
+boa_engine = { workspace = true, features = ["js"] }
 tracing = { workspace = true }
 tracing-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }
@@ -35,4 +35,4 @@ js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
-wgpu = { version = "23.0.1", features = ["webgl"] }
+wgpu = { version = "23.0.1" }

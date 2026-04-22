@@ -27,7 +27,8 @@ fn pointer_interact_no_child_zero_size() {
         pi.id
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let pi_node = rt.get(pi_id).unwrap();
     assert_eq!(pi_node.computed_layout.size.width, 0.0);

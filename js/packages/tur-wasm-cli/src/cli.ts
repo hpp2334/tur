@@ -19,7 +19,7 @@ program
   .command("serve")
   .description("Build wasm and serve a JS demo app")
   .argument("<jsFile>", "Path to the JS bundle file to serve")
-  .option("-p, --port <number>", "Port to serve on", "3000")
+  .option("-p, --port <number>", "Port to serve on", "11223")
   .option("--no-build", "Skip wasm build step")
   .action(serveAction);
 

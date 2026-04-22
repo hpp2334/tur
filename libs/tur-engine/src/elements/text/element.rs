@@ -2,6 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 
 #[derive(Clone)]
 pub struct TextElement {
@@ -27,6 +28,12 @@ impl TextElement {
 
     pub fn content(&self) -> &str {
         &self.content
+    }
+}
+
+impl ElementTrace for TextElement {
+    fn trace_label(&self) -> String {
+        format!("\"{}\"", self.content)
     }
 }
 

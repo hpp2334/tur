@@ -26,7 +26,8 @@ fn sized_box_fixed_dimensions() {
         sb.id
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
     let sb_node = rt.get(sb_id).unwrap();
     assert_eq!(sb_node.computed_layout.size.width, 100.0);

@@ -11,8 +11,13 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \
+    libx11-dev \
+    libxcb1-dev \
+    libxcursor-dev \
+    mesa-vulkan-drivers \
     git \
     zip \
+    xvfb \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y

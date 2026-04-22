@@ -1,4 +1,4 @@
 import { renderRoot } from "@tur/solidjs-renderer";
-import { TodoList } from "./examples/todolist";
+import { App } from "./examples/todolist";
 
-renderRoot(TodoList);
+renderRoot(App);

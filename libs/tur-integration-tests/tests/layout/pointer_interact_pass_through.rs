@@ -40,7 +40,8 @@ fn pointer_interact_passes_constraints_and_size() {
         (pi.id, container.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let pi_node = rt.get(pi_id).unwrap();
@@ -109,7 +110,8 @@ fn pointer_interact_passes_through_in_column() {
         (pi1.id, pi2.id, sb1.id, sb2.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let pi1_node = rt.get(pi1_id).unwrap();

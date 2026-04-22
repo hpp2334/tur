@@ -24,6 +24,7 @@ pub struct VelloRenderer {
     dpr: f64,
     physical_width: u32,
     physical_height: u32,
+    max_texture_dimension: u32,
 }
 
 impl VelloRenderer {
@@ -36,8 +37,9 @@ impl VelloRenderer {
         logical_height: u32,
         dpr: f64,
     ) -> Self {
-        let physical_width = (logical_width as f64 * dpr) as u32;
-        let physical_height = (logical_height as f64 * dpr) as u32;
+        let max_texture_dimension = device.limits().max_texture_dimension_2d;
+        let physical_width = ((logical_width as f64 * dpr) as u32).min(max_texture_dimension);
+        let physical_height = ((logical_height as f64 * dpr) as u32).min(max_texture_dimension);
 
         let mut config = surface
             .get_default_config(adapter, physical_width, physical_height)
@@ -47,9 +49,21 @@ impl VelloRenderer {
             let caps = surface.get_capabilities(adapter);
             caps.formats
                 .iter()
-                .find(|f| f.is_srgb())
+                .find(|f| {
+                    matches!(
+                        f,
+                        vello::wgpu::TextureFormat::Rgba8Unorm
+                            | vello::wgpu::TextureFormat::Bgra8Unorm
+                    )
+                })
+                .or_else(|| caps.formats.iter().find(|f| f.is_srgb()))
                 .copied()
-                .unwrap_or(config.format)
+                .unwrap_or_else(|| {
+                    caps.formats
+                        .first()
+                        .copied()
+                        .expect("no surface formats available")
+                })
         };
         config.format = surface_format;
         config.usage = TextureUsages::RENDER_ATTACHMENT;
@@ -74,13 +88,15 @@ impl VelloRenderer {
             dpr,
             physical_width,
             physical_height,
+            max_texture_dimension,
         }
     }
 
     pub fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
         self.dpr = dpr;
-        self.physical_width = (logical_width as f64 * dpr) as u32;
-        self.physical_height = (logical_height as f64 * dpr) as u32;
+        self.physical_width = ((logical_width as f64 * dpr) as u32).min(self.max_texture_dimension);
+        self.physical_height =
+            ((logical_height as f64 * dpr) as u32).min(self.max_texture_dimension);
 
         self.config.width = self.physical_width;
         self.config.height = self.physical_height;
@@ -105,23 +121,34 @@ impl VelloRenderer {
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
+        tracing::info!(
+            "present: getting surface texture {}x{}",
+            self.physical_width,
+            self.physical_height
+        );
         let output = self
             .surface
             .get_current_texture()
             .expect("failed to get surface texture");
 
         let params = RenderParams {
-            base_color: Color::from_rgba8(0, 0, 0, 255),
+            base_color: Color::from_rgba8(255, 255, 255, 255),
             width: self.physical_width,
             height: self.physical_height,
             antialiasing_method: AaConfig::Msaa8,
         };
 
+        tracing::info!("present: rendering to surface");
         self.renderer
             .render_to_surface(&self.device, &self.queue, &self.scene, &output, &params)
-            .map_err(VelloRendererError::Render)?;
+            .map_err(|e| {
+                tracing::error!("present: render_to_surface failed: {e}");
+                VelloRendererError::Render(e)
+            })?;
 
+        tracing::info!("present: calling output.present()");
         output.present();
+        tracing::info!("present: done");
         Ok(())
     }
 

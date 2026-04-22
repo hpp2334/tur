@@ -26,7 +26,8 @@ fn build_two_containers(app: &mut TurTestApp) -> (ElementNodeId, ElementNodeId, 
     )
     .unwrap();
 
-    let tree_rc = app.render_tree();
+    app.render();
+    let tree_rc = app.element_tree();
     let tree = tree_rc.borrow();
     let root = tree.root().unwrap();
     let col_id = root.children[0];

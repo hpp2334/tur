@@ -37,7 +37,8 @@ fn row_basic_horizontal_stacking() {
         (row.id, sb1.id, sb2.id)
     };
 
-    let rt = app.render_tree();
+    app.render();
+    let rt = app.element_tree();
     let rt = rt.borrow();
 
     let sb1_node = rt.get(sb1_id).unwrap();

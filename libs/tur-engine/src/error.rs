@@ -6,4 +6,6 @@ pub enum TurError {
     JsEval(#[source] JsError),
     #[error("IO error: {0}")]
     Io(#[source] std::io::Error),
+    #[error("{0}")]
+    Other(String),
 }

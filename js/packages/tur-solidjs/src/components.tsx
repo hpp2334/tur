@@ -1,10 +1,8 @@
 import type { JSX } from "solid-js";
 import type { Color } from "@tur/solidjs-renderer";
-import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
-import type { MainAxisAlignment } from "@tur/solidjs-renderer";
+import { CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
-import { FlexDirection } from "@tur/solidjs-renderer";
 
 interface BaseProps {
   children?: JSX.Element;
@@ -42,6 +40,8 @@ export interface SizedBoxProps extends BaseProps {
 }
 
 export interface ContainerProps extends BaseProps {
+  width?: number;
+  height?: number;
   padding?: number;
   color?: Color;
 }
@@ -58,13 +58,13 @@ export interface TextProps extends BaseProps {
 }
 
 export function Column(props: ColumnProps): JSX.Element {
-  const { children, ...rest } = props;
-  return <tur_flex direction={FlexDirection.Vertical} {...rest}>{children}</tur_flex>;
+  const { children, crossAlignment = CrossAxisAlignment.Stretch, ...rest } = props;
+  return <tur_flex direction={FlexDirection.Vertical} crossAlignment={crossAlignment} {...rest}>{children}</tur_flex>;
 }
 
 export function Row(props: RowProps): JSX.Element {
-  const { children, ...rest } = props;
-  return <tur_flex direction={FlexDirection.Horizontal} {...rest}>{children}</tur_flex>;
+  const { children, mainAlignment = MainAxisAlignment.Start, crossAlignment = CrossAxisAlignment.Stretch, ...rest } = props;
+  return <tur_flex direction={FlexDirection.Horizontal} mainAlignment={mainAlignment} crossAlignment={crossAlignment} {...rest}>{children}</tur_flex>;
 }
 
 export function Expanded(props: ExpandedProps): JSX.Element {

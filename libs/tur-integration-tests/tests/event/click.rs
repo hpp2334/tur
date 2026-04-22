@@ -63,7 +63,7 @@ fn click_updates_text_content() {
     let text_id = build_clickable_text(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render_tree();
+    app.render();
 
     let tree = app.element_tree();
     let tree = tree.borrow();
@@ -115,7 +115,7 @@ fn click_miss_does_not_update_text() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     let text_id = build_clickable_text(&mut app);
 
-    app.render_tree();
+    app.render();
 
     assert_eq!(
         app.with_element(text_id, |e| {

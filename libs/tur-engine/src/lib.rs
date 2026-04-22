@@ -56,6 +56,14 @@ impl TurApp {
         self.app_context.borrow().render();
     }
 
+    pub fn debug_layout(&self) -> String {
+        self.app_context
+            .borrow()
+            .element_tree()
+            .borrow()
+            .debug_layout()
+    }
+
     pub fn present(&self) -> Result<(), Box<dyn std::error::Error>> {
         self.app_context.borrow().renderer().borrow_mut().present()
     }

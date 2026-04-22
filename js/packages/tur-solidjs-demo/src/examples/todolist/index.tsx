@@ -1,8 +1,17 @@
 import { For } from "solid-js";
-import { Column, Row, Text, Container, SizedBox, CrossAxisAlignment, MainAxisAlignment } from "@tur/solidjs";
+import {
+  Column,
+  Row,
+  Text,
+  Container,
+  SizedBox,
+  MainAxisAlignment,
+  CrossAxisAlignment,
+} from "@tur/solidjs";
 import { createTodoStore } from "./store";
+import { Sidebar } from "../../components/Sidebar";
 
-export function TodoList() {
+function TodoList() {
   const { todos } = createTodoStore();
 
   return (
@@ -22,5 +31,16 @@ export function TodoList() {
         </Column>
       </Column>
     </Container>
+  );
+}
+
+const TABS = [{ id: "todolist", label: "TodoList" }];
+
+export function App() {
+  return (
+    <Row>
+      <Sidebar tabs={TABS} activeId="todolist" />
+      <TodoList />
+    </Row>
   );
 }

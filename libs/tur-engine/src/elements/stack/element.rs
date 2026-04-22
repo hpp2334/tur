@@ -3,6 +3,7 @@ use num_traits::FromPrimitive;
 use tur_shared::StackFit;
 
 use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::ElementTrace;
 
 #[derive(Clone)]
 pub struct StackElement {
@@ -20,6 +21,12 @@ impl StackElement {
         StackElement {
             fit: StackFit::Loose,
         }
+    }
+}
+
+impl ElementTrace for StackElement {
+    fn trace_label(&self) -> String {
+        format!("fit={:?}", self.fit)
     }
 }
 
