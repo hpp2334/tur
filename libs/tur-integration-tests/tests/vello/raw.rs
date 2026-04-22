@@ -1,7 +1,7 @@
 use super::vello_app::TurVelloApp;
 
 pub fn vello_counter_app() {
-    let app = TurVelloApp::new(256.0, 256.0, 1.0).unwrap();
+    let app = TurVelloApp::new(1024.0, 768.0, 1.0).unwrap();
     app.load_bundle_raw(
         r#"
         var ctx = globalThis.__tur.__ctx;
