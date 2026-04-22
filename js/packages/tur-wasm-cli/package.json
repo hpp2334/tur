@@ -11,6 +11,7 @@
     "lint": "oxlint ."
   },
   "dependencies": {
+    "chokidar": "^5.0.0",
     "commander": "^13.0.0",
     "koa": "^2.16.0",
     "koa-static": "^5.0.0",
@@ -23,7 +24,6 @@
     "@types/koa-static": "^4.0.4",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
-    "chokidar": "^5.0.0",
     "typescript": "^5.7.0"
   }
 }

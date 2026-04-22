@@ -113,6 +113,9 @@ importers:
 
   packages/tur-wasm-cli:
     dependencies:
+      chokidar:
+        specifier: ^5.0.0
+        version: 5.0.0
       commander:
         specifier: ^13.0.0
         version: 13.1.0
@@ -144,9 +147,6 @@ importers:
       '@types/ws':
         specifier: ^8.5.0
         version: 8.18.1
-      chokidar:
-        specifier: ^5.0.0
-        version: 5.0.0
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

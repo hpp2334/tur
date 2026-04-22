@@ -8,12 +8,12 @@ interface Tab {
 
 export function Sidebar(props: { tabs: Tab[]; activeId: string }) {
   return (
-    <Container color="#1a1a2e" width={200}>
+    <Container color={"#1a1a2e" as unknown as import("@tur/solidjs-renderer").Color} width={200}>
       <Column>
         <For each={props.tabs}>
           {(tab) => (
             <Container
-              color={tab.id === props.activeId ? "#0f3460" : "#16213e"}
+              color={(tab.id === props.activeId ? "#0f3460" : "#16213e") as unknown as import("@tur/solidjs-renderer").Color}
               padding={12}
             >
               <Text content={tab.label} fontSize={14} />

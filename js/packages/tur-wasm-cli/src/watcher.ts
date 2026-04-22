@@ -1,16 +1,16 @@
-import chokidar from "chokidar";
+import { FSWatcher, watch } from "chokidar";
 
 export class Watcher {
-  private watcher: chokidar.FSWatcher | null = null;
+  private watcher: FSWatcher | null = null;
 
   watch(paths: string | string[], onChange: () => Promise<void>): void {
-    this.watcher = chokidar.watch(paths, {
+    this.watcher = watch(paths, {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 100 },
     });
-    this.watcher.on("all", (event, filepath) => {
+    this.watcher.on("all", (event: string, filepath: string) => {
       console.log(`[${new Date().toLocaleTimeString()}] ${filepath} (${event}) — reloading`);
-      onChange().catch((e) => console.error(`Watcher error: ${e}`));
+      onChange().catch((e: unknown) => console.error("Watcher error:", e));
     });
   }
 

@@ -40,6 +40,8 @@ export interface SizedBoxProps extends BaseProps {
 }
 
 export interface ContainerProps extends BaseProps {
+  width?: number;
+  height?: number;
   padding?: number;
   color?: Color;
 }
