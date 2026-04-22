@@ -11,7 +11,6 @@ export {
   use,
 } from "./renderer";
 export type { TurNodeHandle } from "./tur";
-export type { ResolvedStyle } from "./style";
 export type { TurElement } from "./types";
 export type { Color } from "./generated/Color";
 export type { RGB } from "./generated/RGB";

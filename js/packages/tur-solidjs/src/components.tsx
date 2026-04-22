@@ -5,10 +5,8 @@ import type { MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
 import { FlexDirection } from "@tur/solidjs-renderer";
-import type { Style } from "./style";
 
 interface BaseProps {
-  style?: Style;
   children?: JSX.Element;
 }
 
@@ -49,7 +47,6 @@ export interface ContainerProps extends BaseProps {
 }
 
 export interface PointerInteractProps {
-  style?: Style;
   onClick?: () => void;
   child?: JSX.Element;
 }
@@ -61,46 +58,46 @@ export interface TextProps extends BaseProps {
 }
 
 export function Column(props: ColumnProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_flex style={s?.resolve()} direction={FlexDirection.Vertical} {...rest}>{children}</tur_flex>;
+  const { children, ...rest } = props;
+  return <tur_flex direction={FlexDirection.Vertical} {...rest}>{children}</tur_flex>;
 }
 
 export function Row(props: RowProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_flex style={s?.resolve()} direction={FlexDirection.Horizontal} {...rest}>{children}</tur_flex>;
+  const { children, ...rest } = props;
+  return <tur_flex direction={FlexDirection.Horizontal} {...rest}>{children}</tur_flex>;
 }
 
 export function Expanded(props: ExpandedProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_flex_item style={s?.resolve()} {...rest}>{children}</tur_flex_item>;
+  const { children, ...rest } = props;
+  return <tur_flex_item {...rest}>{children}</tur_flex_item>;
 }
 
 export function Stack(props: StackProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_stack style={s?.resolve()} {...rest}>{children}</tur_stack>;
+  const { children, ...rest } = props;
+  return <tur_stack {...rest}>{children}</tur_stack>;
 }
 
 export function Positioned(props: PositionedProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_positioned style={s?.resolve()} {...rest}>{children}</tur_positioned>;
+  const { children, ...rest } = props;
+  return <tur_positioned {...rest}>{children}</tur_positioned>;
 }
 
 export function SizedBox(props: SizedBoxProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_container style={s?.resolve()} {...rest}>{children}</tur_container>;
+  const { children, ...rest } = props;
+  return <tur_container {...rest}>{children}</tur_container>;
 }
 
 export function Container(props: ContainerProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_container style={s?.resolve()} {...rest}>{children}</tur_container>;
+  const { children, ...rest } = props;
+  return <tur_container {...rest}>{children}</tur_container>;
 }
 
 export function PointerInteract(props: PointerInteractProps): JSX.Element {
-  const { style: s, child, ...rest } = props;
-  return <tur_pointer_interact style={s?.resolve()} {...rest}>{child}</tur_pointer_interact>;
+  const { child, ...rest } = props;
+  return <tur_pointer_interact {...rest}>{child}</tur_pointer_interact>;
 }
 
 export function Text(props: TextProps): JSX.Element {
-  const { style: s, children, ...rest } = props;
-  return <tur_text style={s?.resolve()} {...rest}>{children}</tur_text>;
+  const { children, ...rest } = props;
+  return <tur_text {...rest}>{children}</tur_text>;
 }

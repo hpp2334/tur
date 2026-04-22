@@ -1,5 +1,4 @@
 export type { TurNodeHandle } from "@tur/solidjs-renderer";
-export type { ResolvedStyle } from "@tur/solidjs-renderer";
 export type { Color } from "@tur/solidjs-renderer";
 export type { RGB } from "@tur/solidjs-renderer";
 export type { RGBA } from "@tur/solidjs-renderer";
@@ -34,4 +33,3 @@ export type {
   PointerInteractProps,
   TextProps,
 } from "./components";
-export { style, Style, Flex, TextOpts } from "./style";
