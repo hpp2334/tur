@@ -7,21 +7,16 @@ ENV HTTPS_PROXY=http://host.docker.internal:7890
 ENV ALL_PROXY=socks5://host.docker.internal:7890
 ENV no_proxy=localhost,127.0.0.1
 
-RUN apt-get update && apt-get install -y build-essential && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y pkg-config && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y libssl-dev && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y zip && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y libx11-dev && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y libxcb1-dev && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y xvfb && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    libx11-dev \
+    libxcb1-dev \
+    git \
+    zip \
+    xvfb \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
