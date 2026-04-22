@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     libx11-dev \
     libxcb1-dev \
     libxcursor-dev \
+    mesa-vulkan-drivers \
     git \
     zip \
     xvfb \
