@@ -45,6 +45,8 @@ jobs:
       - name: Cargo test
         run: cargo test --workspace --locked
         timeout-minutes: 5
+        env:
+          RUST_MIN_STACK: 8388608
 
       - name: Cargo clippy
         run: cargo clippy --workspace --locked -- -D warnings
