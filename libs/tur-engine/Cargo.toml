@@ -15,6 +15,6 @@ boa_engine = { workspace = true }
 boa_gc = { workspace = true }
 vello = { workspace = true }
 num-traits = { workspace = true }
-parley = { workspace = true }
+parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
