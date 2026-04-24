@@ -8,6 +8,8 @@ use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsVa
 use boa_gc::{Finalize, Trace};
 use tur_shared::Constraints;
 
+use parley::{FontContext, LayoutContext as ParleyLayoutContext};
+
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
@@ -94,6 +96,8 @@ impl GestureArena {
 pub struct TurAppContext {
     element_tree: Rc<RefCell<ElementTree>>,
     renderer: RefCell<Box<dyn Renderer>>,
+    font_cx: RefCell<FontContext>,
+    text_layout_cx: RefCell<ParleyLayoutContext<[u8; 4]>>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
@@ -117,6 +121,8 @@ impl TurAppContext {
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
             renderer: RefCell::new(renderer),
+            font_cx: RefCell::new(FontContext::new()),
+            text_layout_cx: RefCell::new(ParleyLayoutContext::new()),
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
@@ -152,7 +158,9 @@ impl TurAppContext {
 
         {
             let mut tree = self.element_tree.borrow_mut();
-            let layout_size = tree.compute_layout(&constraints);
+            let mut font_cx = self.font_cx.borrow_mut();
+            let mut text_layout_cx = self.text_layout_cx.borrow_mut();
+            let layout_size = tree.compute_layout(&constraints, &mut font_cx, &mut text_layout_cx);
             tracing::debug!("layout: {:?}", layout_size);
         }
 

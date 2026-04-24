@@ -1,3 +1,4 @@
+use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use tur_shared::{Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
@@ -6,15 +7,28 @@ use crate::core::elements::ElementTree;
 pub struct LayoutContext<'a> {
     pub(crate) tree: &'a mut ElementTree,
     node_id: ElementNodeId,
+    font_cx: &'a mut FontContext,
+    text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
 }
 
 impl<'a> LayoutContext<'a> {
-    pub(crate) fn new(tree: &'a mut ElementTree, node_id: ElementNodeId) -> Self {
-        LayoutContext { tree, node_id }
+    pub(crate) fn new(
+        tree: &'a mut ElementTree,
+        node_id: ElementNodeId,
+        font_cx: &'a mut FontContext,
+        text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
+    ) -> Self {
+        LayoutContext {
+            tree,
+            node_id,
+            font_cx,
+            text_layout_cx,
+        }
     }
 
     pub fn layout_child(&mut self, child_id: ElementNodeId, constraints: &Constraints) -> Size {
-        self.tree.layout_size(child_id, constraints)
+        self.tree
+            .layout_size(child_id, constraints, self.font_cx, self.text_layout_cx)
     }
 
     pub fn set_child_offset(&mut self, child_id: ElementNodeId, offset: Offset) {
@@ -36,5 +50,11 @@ impl<'a> LayoutContext<'a> {
             .and_then(|n| n.element.as_ref())
             .map(|e| e.type_name())
             .unwrap_or("tur_container")
+    }
+
+    pub fn text_layout_contexts(
+        &mut self,
+    ) -> (&mut FontContext, &mut ParleyLayoutContext<[u8; 4]>) {
+        (self.font_cx, self.text_layout_cx)
     }
 }
