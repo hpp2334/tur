@@ -1,5 +1,5 @@
 use parley::layout::PositionedLayoutItem;
-use parley::{Alignment, AlignmentOptions, StyleProperty};
+use parley::{Alignment, AlignmentOptions, GenericFamily, StyleProperty};
 use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
@@ -34,6 +34,7 @@ impl ElementLayout for TextElement {
         let mut builder = text_layout_cx.ranged_builder(font_cx, &self.content, 1.0);
         builder.push_default(StyleProperty::FontSize(self.font_size as f32));
         builder.push_default(StyleProperty::Brush(brush));
+        builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
 
         let mut layout = builder.build(&self.content);
 

@@ -8,6 +8,7 @@ use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsVa
 use boa_gc::{Finalize, Trace};
 use tur_shared::Constraints;
 
+use parley::fontique::GenericFamily;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 
 use crate::core::bridge::BoaOpaque;
@@ -19,6 +20,17 @@ use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
     StackElement, TextElement,
 };
+
+const DEFAULT_FONT: &[u8] = include_bytes!("../../../fonts/Roboto-Regular.ttf");
+
+fn make_font_context() -> FontContext {
+    let mut fcx = FontContext::new();
+    let families = fcx.collection.register_fonts(DEFAULT_FONT.to_vec());
+    let family_ids = families.into_iter().map(|(id, _)| id);
+    fcx.collection
+        .set_generic_families(GenericFamily::SansSerif, family_ids);
+    fcx
+}
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -121,7 +133,7 @@ impl TurAppContext {
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
             renderer: RefCell::new(renderer),
-            font_cx: RefCell::new(FontContext::new()),
+            font_cx: RefCell::new(make_font_context()),
             text_layout_cx: RefCell::new(ParleyLayoutContext::new()),
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
