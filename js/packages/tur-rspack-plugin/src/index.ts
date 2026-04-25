@@ -3,17 +3,39 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const PLUGIN_NAME = "TurRspackPlugin";
+
+const TEMPLATE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tur wasm demo</title>
+</head>
+<body style="margin: 0; overflow: hidden;">
+  <script type="module">
+    import init, { TurWasmApp } from "./tur_wasm.js";
+
+    async function run() {
+      await init();
+      const app = await TurWasmApp.create();
+      const resp = await fetch("__JS_FILE__");
+      const source = await resp.text();
+      app.load_and_run_js(source);
+      window.turDemo = { debugLayout: () => console.log(app.debug_layout()) };
+    }
+
+    run().catch((e) => console.error(e));
+  </script>
+</body>
+</html>`;
 
 export interface TurRspackPluginOptions {
   wasmDir?: string;
   jsEntry?: string;
   noBuild?: boolean;
 }
-
-const __dirname = fileURLToPath(import.meta.url);
 
 function findWorkspaceRoot(startDir: string): string {
   let dir = startDir;
@@ -34,9 +56,7 @@ export class TurRspackPlugin implements RspackPluginInstance {
   private options: Required<TurRspackPluginOptions>;
 
   constructor(options: TurRspackPluginOptions = {}) {
-    const root = findWorkspaceRoot(
-      typeof __dirname === "string" ? resolve(__dirname, "..", "..", "..", "..") : process.cwd(),
-    );
+    const root = findWorkspaceRoot(process.cwd());
     this.options = {
       wasmDir: options.wasmDir ?? join(root, "libs", "tur-wasm"),
       jsEntry: options.jsEntry ?? "__JS_FILE__",
@@ -47,10 +67,6 @@ export class TurRspackPlugin implements RspackPluginInstance {
   apply(compiler: Compiler): void {
     const { wasmDir, jsEntry, noBuild } = this.options;
     const pkgDir = join(wasmDir, "pkg");
-    const templateHtml = join(
-      typeof __dirname === "string" ? __dirname : resolve(import.meta.dirname!),
-      "template.html",
-    );
 
     const buildWasm = () => {
       if (noBuild) return;
@@ -85,8 +101,7 @@ export class TurRspackPlugin implements RspackPluginInstance {
         logger.info(`Copied WASM asset: ${file}`);
       }
 
-      let html = readFileSync(templateHtml, "utf-8");
-      html = html.replace("__JS_FILE__", jsEntry);
+      let html = TEMPLATE_HTML.replace("__JS_FILE__", jsEntry);
 
       compilation.emitAsset(
         "index.html",
