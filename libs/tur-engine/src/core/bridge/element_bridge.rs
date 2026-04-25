@@ -8,13 +8,13 @@ use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsVa
 use boa_gc::{Finalize, Trace};
 use tur_shared::Constraints;
 
-use parley::{FontContext, LayoutContext as ParleyLayoutContext};
+use parley::LayoutContext as ParleyLayoutContext;
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
 use crate::core::event::{AppEvent, AppPointerEvent, EventKind, RawAppEvent};
-use crate::core::fonts::FontLoader;
+use crate::core::fonts::FontManager;
 use crate::core::render::Renderer;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
@@ -97,10 +97,8 @@ impl GestureArena {
 pub struct TurAppContext {
     element_tree: Rc<RefCell<ElementTree>>,
     renderer: RefCell<Box<dyn Renderer>>,
-    font_cx: RefCell<FontContext>,
+    font_manager: RefCell<FontManager>,
     text_layout_cx: RefCell<ParleyLayoutContext<[u8; 4]>>,
-    #[allow(dead_code)]
-    font_loader: Box<dyn FontLoader>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
@@ -120,14 +118,12 @@ impl fmt::Debug for TurAppContext {
 }
 
 impl TurAppContext {
-    pub fn new(renderer: Box<dyn Renderer>, font_loader: Box<dyn FontLoader>) -> Self {
-        let font_cx = font_loader.create_font_context();
+    pub fn new(renderer: Box<dyn Renderer>, font_manager: FontManager) -> Self {
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
             renderer: RefCell::new(renderer),
-            font_cx: RefCell::new(font_cx),
+            font_manager: RefCell::new(font_manager),
             text_layout_cx: RefCell::new(ParleyLayoutContext::new()),
-            font_loader,
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
@@ -163,9 +159,10 @@ impl TurAppContext {
 
         {
             let mut tree = self.element_tree.borrow_mut();
-            let mut font_cx = self.font_cx.borrow_mut();
+            let mut font_manager = self.font_manager.borrow_mut();
             let mut text_layout_cx = self.text_layout_cx.borrow_mut();
-            let layout_size = tree.compute_layout(&constraints, &mut font_cx, &mut text_layout_cx);
+            let layout_size =
+                tree.compute_layout(&constraints, &mut font_manager, &mut text_layout_cx);
             tracing::debug!("layout: {:?}", layout_size);
         }
 
