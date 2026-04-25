@@ -1,4 +1,5 @@
 import { defineConfig } from "@rspack/cli";
+import { TurRspackPlugin } from "@tur/rspack-plugin";
 
 export default defineConfig({
   entry: {
@@ -40,4 +41,9 @@ export default defineConfig({
   resolve: {
     extensions: [".tsx", ".ts", ".js"],
   },
+  plugins: [
+    new TurRspackPlugin({
+      jsEntry: "bundle.js",
+    }),
+  ],
 });

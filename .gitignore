@@ -17,7 +17,7 @@ dist/
 js/packages/tur-solidjs-renderer/src/generated
 
 # Build output
-js/packages/tur-wasm-cli/bin/
+js/packages/tur-rspack-plugin/dist/
 
 # Test fixtures
 scripts/tests/fixtures/
