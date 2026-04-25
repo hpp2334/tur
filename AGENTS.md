@@ -83,7 +83,7 @@ js/
   packages/
     tur-solidjs-renderer/    # SolidJS universal renderer
     tur-solidjs-demo/        # Demo app (todolist example)
-    tur-wasm-cli/            # CLI for building and serving tur-wasm demos
+    tur-rspack-plugin/      # Rspack plugin for WASM build + HTML generation
 ```
 
 ## Commands
@@ -109,19 +109,16 @@ cd libs/tur-wasm && wasm-pack build --target web
 cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
 ```
 
-### tur-wasm-cli (serve demos)
+### tur-rspack-plugin (WASM + HTML)
+
+The `TurRspackPlugin` is used in the demo's rspack config. Building the demo
+automatically runs `wasm-pack` and copies WASM artifacts into the output:
 
 ```sh
-# Build JS bundle first
-cd js && pnpm build
-# Serve a JS demo
-node js/packages/tur-wasm-cli/bin/cli.cjs serve <path-to-bundle.js>
-```
-
-Or use the convenience script:
-
-```sh
-node scripts/serve-web-demo.cjs
+# Build JS bundle (plugin handles wasm-pack + HTML generation)
+cd js && pnpm --filter @tur/solidjs-demo build
+# Or use the rspack dev server
+cd js/packages/tur-solidjs-demo && rspack dev
 ```
 
 ### JS (js/ directory)
