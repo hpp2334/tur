@@ -8,29 +8,18 @@ use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsVa
 use boa_gc::{Finalize, Trace};
 use tur_shared::Constraints;
 
-use parley::fontique::GenericFamily;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
 use crate::core::event::{AppEvent, AppPointerEvent, EventKind, RawAppEvent};
+use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
     StackElement, TextElement,
 };
-
-const DEFAULT_FONT: &[u8] = include_bytes!("../../../fonts/Roboto-Regular.ttf");
-
-fn make_font_context() -> FontContext {
-    let mut fcx = FontContext::new();
-    let families = fcx.collection.register_fonts(DEFAULT_FONT.to_vec());
-    let family_ids = families.into_iter().map(|(id, _)| id);
-    fcx.collection
-        .set_generic_families(GenericFamily::SansSerif, family_ids);
-    fcx
-}
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -110,6 +99,8 @@ pub struct TurAppContext {
     renderer: RefCell<Box<dyn Renderer>>,
     font_cx: RefCell<FontContext>,
     text_layout_cx: RefCell<ParleyLayoutContext<[u8; 4]>>,
+    #[allow(dead_code)]
+    font_loader: Box<dyn FontLoader>,
     size: Cell<(f64, f64)>,
     next_id: Cell<u64>,
     handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
@@ -129,12 +120,14 @@ impl fmt::Debug for TurAppContext {
 }
 
 impl TurAppContext {
-    pub fn new(renderer: Box<dyn Renderer>) -> Self {
+    pub fn new(renderer: Box<dyn Renderer>, font_loader: Box<dyn FontLoader>) -> Self {
+        let font_cx = font_loader.create_font_context();
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
             renderer: RefCell::new(renderer),
-            font_cx: RefCell::new(make_font_context()),
+            font_cx: RefCell::new(font_cx),
             text_layout_cx: RefCell::new(ParleyLayoutContext::new()),
+            font_loader,
             size: Cell::new((400.0, 600.0)),
             next_id: Cell::new(1),
             handles: RefCell::new(HashMap::new()),
