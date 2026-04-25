@@ -3,7 +3,7 @@ use tur_shared::{ComputedLayout, Offset};
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, PaintContext};
 
-pub trait ElementRender: Send + Sync + 'static {
+pub trait ElementRender: 'static {
     fn type_name(&self) -> &'static str;
 
     fn paint(

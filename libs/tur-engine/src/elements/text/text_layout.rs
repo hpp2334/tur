@@ -17,10 +17,3 @@ pub(crate) struct TextGlyph {
     pub x: f32,
     pub y: f32,
 }
-
-unsafe impl Send for TextLayoutData {}
-unsafe impl Sync for TextLayoutData {}
-unsafe impl Send for TextRunData {}
-unsafe impl Sync for TextRunData {}
-unsafe impl Send for TextGlyph {}
-unsafe impl Sync for TextGlyph {}
