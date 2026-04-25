@@ -18,6 +18,7 @@ use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
 use core::event::{EventKind, RawAppEvent};
+pub use core::fonts::{FontLoader, PresetFontLoader};
 
 pub struct TurApp {
     boa_context: Context,
@@ -25,9 +26,12 @@ pub struct TurApp {
 }
 
 impl TurApp {
-    pub fn new(renderer: Box<dyn core::render::Renderer>) -> Result<Self, TurError> {
+    pub fn new(
+        renderer: Box<dyn core::render::Renderer>,
+        font_loader: Box<dyn FontLoader>,
+    ) -> Result<Self, TurError> {
         let mut boa_context = Context::default();
-        let app_context = init_bridge(&mut boa_context, renderer);
+        let app_context = init_bridge(&mut boa_context, renderer, font_loader);
 
         tracing::info!("TurApp initialized");
 

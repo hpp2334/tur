@@ -13,7 +13,7 @@ pub struct AnyElement {
     inner: Box<dyn Erased>,
 }
 
-trait Erased: Send + Sync + 'static {
+trait Erased: 'static {
     fn kind(&self) -> ElementKind;
     fn type_name(&self) -> &'static str;
     fn as_any(&self) -> &dyn Any;

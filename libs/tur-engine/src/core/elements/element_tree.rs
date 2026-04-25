@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
+use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementNode;
+use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
 use crate::core::render::{Canvas, PaintContext};
 
@@ -138,7 +140,12 @@ impl ElementTree {
         parent.children.get(pos + 1).copied()
     }
 
-    pub fn compute_layout(&mut self, constraints: &Constraints) -> Size {
+    pub fn compute_layout(
+        &mut self,
+        constraints: &Constraints,
+        font_manager: &mut FontManager,
+        text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+    ) -> Size {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return constraints.constrain(Size::ZERO),
@@ -146,9 +153,9 @@ impl ElementTree {
 
         self.clear_layouts(root_id);
 
-        let size = self.layout_size(root_id, constraints);
+        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx);
 
-        self.layout_position(root_id);
+        self.layout_position(root_id, font_manager, text_layout_cx);
 
         size
     }
@@ -167,7 +174,13 @@ impl ElementTree {
         }
     }
 
-    pub(crate) fn layout_size(&mut self, id: ElementNodeId, constraints: &Constraints) -> Size {
+    pub(crate) fn layout_size(
+        &mut self,
+        id: ElementNodeId,
+        constraints: &Constraints,
+        font_manager: &mut FontManager,
+        text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+    ) -> Size {
         let children = self
             .nodes
             .get(&id)
@@ -180,7 +193,7 @@ impl ElementTree {
             .and_then(|n| n.element.take())
             .expect("element missing during layout_size");
 
-        let mut cx = LayoutContext::new(self, id);
+        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx);
         let size = element.perform_layout_size(constraints, &children, &mut cx);
 
         let constrained = constraints.constrain(size);
@@ -190,7 +203,12 @@ impl ElementTree {
         constrained
     }
 
-    fn layout_position(&mut self, id: ElementNodeId) {
+    fn layout_position(
+        &mut self,
+        id: ElementNodeId,
+        font_manager: &mut FontManager,
+        text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+    ) {
         let children = self
             .nodes
             .get(&id)
@@ -204,14 +222,14 @@ impl ElementTree {
                 .and_then(|n| n.element.take())
                 .expect("element missing during layout_position");
 
-            let mut cx = LayoutContext::new(self, id);
+            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx);
             element.perform_layout_position(&children, &mut cx);
 
             cx.tree.nodes.get_mut(&id).unwrap().element = Some(element);
         }
 
         for child_id in children {
-            self.layout_position(child_id);
+            self.layout_position(child_id, font_manager, text_layout_cx);
         }
     }
 

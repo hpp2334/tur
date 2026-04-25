@@ -22,6 +22,7 @@ tur-integration-tests = { path = "libs/tur-integration-tests" }
 num-derive = "0.4"
 num-traits = "0.2"
 
+parley = { version = "0.3", default-features = false, features = ["std"] }
 vello = "0.4"
 boa_engine = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }
 boa_gc = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }

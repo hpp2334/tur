@@ -3,12 +3,13 @@ use tur_shared::Color;
 
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
+use crate::elements::text::text_layout::TextLayoutData;
 
-#[derive(Clone)]
 pub struct TextElement {
     pub(crate) content: String,
     pub(crate) font_size: f64,
     pub(crate) color: Option<Color>,
+    pub(crate) cached_layout: Option<TextLayoutData>,
 }
 
 impl Default for TextElement {
@@ -23,6 +24,7 @@ impl TextElement {
             content: String::new(),
             font_size: 14.0,
             color: None,
+            cached_layout: None,
         }
     }
 

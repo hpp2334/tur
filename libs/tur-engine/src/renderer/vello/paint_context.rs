@@ -6,6 +6,7 @@ use vello::peniko::{Brush, Fill};
 use vello::Scene;
 
 use crate::core::render::Canvas;
+use crate::elements::text::text_layout::TextLayoutData;
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
@@ -65,16 +66,31 @@ impl Canvas for VelloPaintContext<'_> {
         }
     }
 
-    fn fill_text(&mut self, offset: Offset, _text: &str, _font_size: f64, color: &Color) {
-        let peniko_color = to_peniko_color(color);
+    #[allow(private_interfaces)]
+    fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData) {
         let transform = Affine::translate((offset.x, offset.y));
-        self.scene.fill(
-            Fill::NonZero,
-            transform,
-            &Brush::Solid(peniko_color),
-            None,
-            &vello::kurbo::Rect::new(0.0, 0.0, 0.0, 0.0),
-        );
+        for run in &layout.runs {
+            let brush_color = vello::peniko::Color::from_rgba8(
+                run.brush[0],
+                run.brush[1],
+                run.brush[2],
+                run.brush[3],
+            );
+            self.scene
+                .draw_glyphs(&run.font)
+                .brush(&Brush::Solid(brush_color))
+                .font_size(run.font_size)
+                .normalized_coords(&run.normalized_coords)
+                .transform(transform)
+                .draw(
+                    Fill::NonZero,
+                    run.glyphs.iter().map(|g| vello::Glyph {
+                        id: g.id,
+                        x: g.x,
+                        y: g.y,
+                    }),
+                );
+        }
     }
 }
 
