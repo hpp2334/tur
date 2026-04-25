@@ -20,7 +20,7 @@ use crate::core::bridge::element_bridge::{
     tur_create_text, tur_get_first_child, tur_get_next_sibling, tur_get_parent, tur_insert_before,
     tur_remove_child, tur_set_attribute,
 };
-use crate::core::fonts::FontManager;
+use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 
 fn build_fn(
@@ -53,7 +53,7 @@ where
 pub fn init_bridge(
     context: &mut Context,
     renderer: Box<dyn Renderer>,
-    font_manager: FontManager,
+    font_loader: Box<dyn FontLoader>,
 ) -> Rc<RefCell<TurAppContext>> {
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
@@ -86,7 +86,7 @@ pub fn init_bridge(
         set_prop(&tur_obj, js_name.clone(), func);
     }
 
-    let ctx = TurAppContext::new(renderer, font_manager);
+    let ctx = TurAppContext::new(renderer, font_loader);
     let rc_ctx = Rc::new(RefCell::new(ctx));
     let weak = WeakAppContext::new(&rc_ctx);
     let opaque = BoaOpaque::new(weak, context);

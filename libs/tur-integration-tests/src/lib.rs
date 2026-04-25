@@ -6,7 +6,7 @@ use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{EventKind, RawAppEvent};
-use tur_engine::core::fonts::{FontManager, PresetFontLoader};
+use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
@@ -20,7 +20,7 @@ impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
         let mut inner = TurApp::new(
             Box::new(NoopRenderer::new()),
-            FontManager::new(Box::new(PresetFontLoader::new())),
+            Box::new(PresetFontLoader::new()),
         )?;
         inner.set_size(width, height);
         Ok(Self { inner })

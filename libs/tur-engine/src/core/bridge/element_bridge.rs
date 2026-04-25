@@ -14,7 +14,7 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode, ElementTree};
 use crate::core::event::{AppEvent, AppPointerEvent, EventKind, RawAppEvent};
-use crate::core::fonts::FontManager;
+use crate::core::fonts::{FontLoader, FontManager};
 use crate::core::render::Renderer;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
@@ -118,7 +118,8 @@ impl fmt::Debug for TurAppContext {
 }
 
 impl TurAppContext {
-    pub fn new(renderer: Box<dyn Renderer>, font_manager: FontManager) -> Self {
+    pub fn new(renderer: Box<dyn Renderer>, font_loader: Box<dyn FontLoader>) -> Self {
+        let font_manager = FontManager::new(font_loader);
         Self {
             element_tree: Rc::new(RefCell::new(ElementTree::new())),
             renderer: RefCell::new(renderer),

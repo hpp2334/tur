@@ -5,7 +5,7 @@ use std::rc::Rc;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::ElementTree;
-use tur_engine::core::fonts::{FontManager, PresetFontLoader};
+use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::TurApp;
@@ -91,7 +91,7 @@ impl TurVelloApp {
 
         let mut app = TurApp::new(
             Box::new(renderer),
-            FontManager::new(Box::new(PresetFontLoader::new())),
+            Box::new(PresetFontLoader::new()),
         )?;
         app.set_size(width, height);
 

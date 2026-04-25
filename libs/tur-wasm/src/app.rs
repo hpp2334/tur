@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tur_engine::TurApp;
 use tur_engine::core::event::RawAppEvent;
-use tur_engine::core::fonts::{FontManager, PresetFontLoader};
+use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_shared::Offset;
 use wasm_bindgen::closure::Closure;
@@ -132,7 +132,7 @@ impl TurWasmApp {
 
             let mut app = TurApp::new(
                 Box::new(renderer),
-                FontManager::new(Box::new(PresetFontLoader::new())),
+                Box::new(PresetFontLoader::new()),
             )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
             app.set_size(logical_width as f64, logical_height as f64);
