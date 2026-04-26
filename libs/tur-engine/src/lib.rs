@@ -11,8 +11,8 @@ use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
 
+use core::app::TurAppInternal;
 use core::bridge::init_bridge;
-use core::bridge::TurAppContext;
 use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
@@ -23,7 +23,7 @@ use core::gesture::ComposedGestureEventKind;
 
 pub struct TurApp {
     boa_context: Context,
-    app_context: Rc<RefCell<TurAppContext>>,
+    app_context: Rc<RefCell<TurAppInternal>>,
 }
 
 impl TurApp {
@@ -49,7 +49,7 @@ impl TurApp {
         Ok(())
     }
 
-    pub fn app_context(&self) -> &Rc<RefCell<TurAppContext>> {
+    pub fn app_context(&self) -> &Rc<RefCell<TurAppInternal>> {
         &self.app_context
     }
 
