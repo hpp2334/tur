@@ -27,5 +27,4 @@ pub fn vello_counter_app() {
     drop(tree);
 
     app.render();
-    app.present().unwrap();
 }

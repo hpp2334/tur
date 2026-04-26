@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use tur_engine::TurApp;
-use tur_engine::core::event::RawAppEvent;
+use tur_engine::core::event::{AppEvent, AppGestureEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_shared::Offset;
@@ -16,6 +16,7 @@ struct WasmState {
     _resize_closure: Closure<dyn Fn()>,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
 #[wasm_bindgen]
@@ -135,11 +136,32 @@ impl TurWasmApp {
                 Box::new(PresetFontLoader::new()),
             )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-            app.set_size(logical_width as f64, logical_height as f64);
+
+            app.push_event(AppEvent::Resize {
+                logical_width,
+                logical_height,
+                dpr,
+            });
+            let _ = app.tick();
 
             let resize_state = state_clone.clone();
             let resize_closure = Closure::<dyn Fn()>::new(move || {
-                let _ = Self::handle_resize(&resize_state);
+                let guard = resize_state.borrow();
+                if let Some(s) = guard.as_ref() {
+                    let window = web_sys::window().unwrap();
+                    let dpr = window.device_pixel_ratio();
+                    let logical_width = window.inner_width().unwrap().as_f64().unwrap_or(800.0) as u32;
+                    let logical_height = window.inner_height().unwrap().as_f64().unwrap_or(600.0) as u32;
+                    let physical_width = (logical_width as f64 * dpr) as u32;
+                    let physical_height = (logical_height as f64 * dpr) as u32;
+                    s._canvas.set_width(physical_width);
+                    s._canvas.set_height(physical_height);
+                    s.app.push_event(AppEvent::Resize {
+                        logical_width,
+                        logical_height,
+                        dpr,
+                    });
+                }
             });
 
             window
@@ -149,15 +171,16 @@ impl TurWasmApp {
             let pointer_down_state = state_clone.clone();
             let pointer_down_closure =
                 Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
-                    let mut guard = pointer_down_state.borrow_mut();
-                    if let Some(s) = guard.as_mut() {
+                    let guard = pointer_down_state.borrow();
+                    if let Some(s) = guard.as_ref() {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        s.app
-                            .dispatch_raw_event(RawAppEvent::PointerDown {
+                        s.app.push_event(AppEvent::Gesture(
+                            AppGestureEvent::PointerDown {
                                 position: Offset::new(x, y),
-                            });
+                            },
+                        ));
                     }
                 });
 
@@ -171,15 +194,16 @@ impl TurWasmApp {
             let pointer_up_state = state_clone.clone();
             let pointer_up_closure =
                 Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
-                    let mut guard = pointer_up_state.borrow_mut();
-                    if let Some(s) = guard.as_mut() {
+                    let guard = pointer_up_state.borrow();
+                    if let Some(s) = guard.as_ref() {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        s.app
-                            .dispatch_raw_event(RawAppEvent::PointerUp {
+                        s.app.push_event(AppEvent::Gesture(
+                            AppGestureEvent::PointerUp {
                                 position: Offset::new(x, y),
-                            });
+                            },
+                        ));
                     }
                 });
 
@@ -196,6 +220,7 @@ impl TurWasmApp {
                 _resize_closure: resize_closure,
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
+                _raf_closure: RefCell::new(None),
             };
 
             *state_clone.borrow_mut() = Some(wasm_state);
@@ -213,51 +238,35 @@ impl TurWasmApp {
             .app
             .load_js(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        state.app.render();
-        state
-            .app
-            .present()
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        state.app.push_event(AppEvent::RequestDraw);
+        let _ = state.app.tick();
+
+        drop(guard);
+        Self::start_frame_loop(&self.state);
+
         Ok(())
     }
 }
 
 impl TurWasmApp {
-    fn handle_resize(state: &Rc<RefCell<Option<WasmState>>>) -> Result<(), JsValue> {
-        let mut guard = state.borrow_mut();
-        let state = guard
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
+    fn start_frame_loop(state: &Rc<RefCell<Option<WasmState>>>) {
+        let loop_state = state.clone();
+        let raf_closure = Closure::<dyn Fn()>::new(move || {
+            let mut guard = loop_state.borrow_mut();
+            if let Some(s) = guard.as_mut() {
+                let _ = s.app.tick();
+                drop(guard);
+                Self::start_frame_loop(&loop_state);
+            }
+        });
 
-        let window = web_sys::window().ok_or_else(|| JsValue::from_str("no window"))?;
-        let dpr = window.device_pixel_ratio();
-        let logical_width = window
-            .inner_width()
-            .err_to_jsval()?
-            .as_f64()
-            .unwrap_or(800.0) as u32;
-        let logical_height = window
-            .inner_height()
-            .err_to_jsval()?
-            .as_f64()
-            .unwrap_or(600.0) as u32;
+        let window = web_sys::window().unwrap();
+        let _ = window.request_animation_frame(raf_closure.as_ref().unchecked_ref());
 
-        let physical_width = (logical_width as f64 * dpr) as u32;
-        let physical_height = (logical_height as f64 * dpr) as u32;
-
-        state._canvas.set_width(physical_width);
-        state._canvas.set_height(physical_height);
-
-        state
-            .app
-            .renderer_resize(logical_width, logical_height, dpr);
-        state.app.set_size(logical_width as f64, logical_height as f64);
-        state.app.render();
-        state
-            .app
-            .present()
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        Ok(())
+        let guard = state.borrow();
+        if let Some(s) = guard.as_ref() {
+            *s._raf_closure.borrow_mut() = Some(raf_closure);
+        }
     }
 }

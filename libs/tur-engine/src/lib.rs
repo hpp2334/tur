@@ -17,8 +17,9 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
-use core::event::{EventKind, RawAppEvent};
+use core::event::{AppEvent, AppGestureEvent};
 pub use core::fonts::{FontLoader, PresetFontLoader};
+use core::gesture::ComposedGestureEventKind;
 
 pub struct TurApp {
     boa_context: Context,
@@ -52,12 +53,79 @@ impl TurApp {
         &self.app_context
     }
 
-    pub fn set_size(&mut self, width: f64, height: f64) {
-        self.app_context.borrow().set_size(width, height);
+    pub fn push_event(&self, event: AppEvent) {
+        self.app_context.borrow().push_event(event);
     }
 
-    pub fn render(&self) {
-        self.app_context.borrow().render();
+    pub fn tick(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut needs_draw = false;
+
+        loop {
+            let events = self.app_context.borrow().drain_events();
+            if events.is_empty() {
+                break;
+            }
+
+            for event in events {
+                match event {
+                    AppEvent::Resize {
+                        logical_width,
+                        logical_height,
+                        dpr,
+                    } => {
+                        self.app_context.borrow().renderer().borrow_mut().resize(
+                            logical_width,
+                            logical_height,
+                            dpr,
+                        );
+                        self.app_context
+                            .borrow()
+                            .set_size(logical_width as f64, logical_height as f64);
+                        needs_draw = true;
+                    }
+
+                    AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
+                        let target = self.app_context.borrow().hit_test(position);
+                        self.app_context.borrow().compose_pointer_down(target);
+                    }
+
+                    AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
+                        let click_eligible = {
+                            let ctx = self.app_context.borrow();
+                            let down_target = ctx.gesture_pointer_down_target();
+                            match down_target {
+                                Some(id) => ctx.hit_test_contains(position, id),
+                                None => false,
+                            }
+                        };
+                        if let Some(kind) =
+                            self.app_context.borrow().compose_pointer_up(click_eligible)
+                        {
+                            self.app_context.borrow().invoke_handlers_for(
+                                kind,
+                                position,
+                                &mut self.boa_context,
+                            );
+                        }
+                    }
+
+                    AppEvent::RequestDraw => {
+                        needs_draw = true;
+                    }
+                }
+            }
+        }
+
+        if needs_draw {
+            self.app_context.borrow().render();
+            self.app_context
+                .borrow()
+                .renderer()
+                .borrow_mut()
+                .present()?;
+        }
+
+        Ok(())
     }
 
     pub fn debug_layout(&self) -> String {
@@ -68,25 +136,7 @@ impl TurApp {
             .debug_layout()
     }
 
-    pub fn present(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.app_context.borrow().renderer().borrow_mut().present()
-    }
-
-    pub fn renderer_resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.app_context.borrow().renderer().borrow_mut().resize(
-            logical_width,
-            logical_height,
-            dpr,
-        );
-    }
-
-    pub fn dispatch_raw_event(&mut self, event: RawAppEvent) {
-        self.app_context
-            .borrow()
-            .dispatch_raw_event(&event, &mut self.boa_context);
-    }
-
-    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
         self.app_context.borrow().has_event_handler(id, kind)
     }
 

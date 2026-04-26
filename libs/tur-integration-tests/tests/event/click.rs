@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::event::EventKind;
+use tur_engine::core::gesture::ComposedGestureEventKind;
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
@@ -48,11 +48,11 @@ fn click_handler_registered() {
     let pi_id = find_pointer_interact(&app);
 
     assert!(
-        app.has_event_handler(pi_id, EventKind::Click),
+        app.has_event_handler(pi_id, ComposedGestureEventKind::Click),
         "PointerInteract should have onClick handler"
     );
     assert!(
-        !app.has_event_handler(text_id, EventKind::Click),
+        !app.has_event_handler(text_id, ComposedGestureEventKind::Click),
         "Text node should not have onClick handler"
     );
 }
