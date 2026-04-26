@@ -5,6 +5,7 @@ use std::rc::Rc;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::ElementTree;
+use tur_engine::core::event::AppEvent;
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
@@ -93,7 +94,12 @@ impl TurVelloApp {
             Box::new(renderer),
             Box::new(PresetFontLoader::new()),
         )?;
-        app.set_size(width, height);
+        app.push_event(AppEvent::Resize {
+            logical_width: width as u32,
+            logical_height: height as u32,
+            dpr,
+        });
+        let _ = app.tick();
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -125,21 +131,7 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        self.inner.borrow().app.render();
-    }
-
-    pub fn present(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.inner.borrow().app.present()
-    }
-
-    pub fn renderer_resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.inner
-            .borrow()
-            .app
-            .renderer_resize(logical_width, logical_height, dpr);
-    }
-
-    pub fn set_size(&self, width: f64, height: f64) {
-        self.inner.borrow_mut().app.set_size(width, height);
+        self.inner.borrow_mut().app.push_event(AppEvent::RequestDraw);
+        let _ = self.inner.borrow_mut().app.tick();
     }
 }

@@ -3,5 +3,6 @@ pub mod element;
 pub mod elements;
 pub mod event;
 pub mod fonts;
+pub mod gesture;
 pub mod layout;
 pub mod render;

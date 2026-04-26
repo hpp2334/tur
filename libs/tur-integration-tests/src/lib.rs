@@ -5,8 +5,9 @@ use std::rc::Rc;
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
-use tur_engine::core::event::{EventKind, RawAppEvent};
+use tur_engine::core::event::{AppEvent, AppGestureEvent};
 use tur_engine::core::fonts::PresetFontLoader;
+use tur_engine::core::gesture::ComposedGestureEventKind;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
@@ -22,7 +23,12 @@ impl TurTestApp {
             Box::new(NoopRenderer::new()),
             Box::new(PresetFontLoader::new()),
         )?;
-        inner.set_size(width, height);
+        inner.push_event(AppEvent::Resize {
+            logical_width: width as u32,
+            logical_height: height as u32,
+            dpr: 1.0,
+        });
+        let _ = inner.tick();
         Ok(Self { inner })
     }
 
@@ -43,28 +49,32 @@ impl TurTestApp {
         self.inner.load_js(source)
     }
 
-    pub fn render(&self) {
-        self.inner.render();
+    pub fn render(&mut self) {
+        self.inner.push_event(AppEvent::RequestDraw);
+        let _ = self.inner.tick();
+    }
+
+    pub fn tick(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.inner.tick()
     }
 
     pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
         self.inner.element_tree()
     }
 
-    pub fn dispatch_raw_event(&mut self, event: RawAppEvent) {
-        self.inner.dispatch_raw_event(event);
-    }
-
     pub fn click(&mut self, x: f64, y: f64) {
-        self.dispatch_raw_event(RawAppEvent::PointerDown {
-            position: Offset::new(x, y),
-        });
-        self.dispatch_raw_event(RawAppEvent::PointerUp {
-            position: Offset::new(x, y),
-        });
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+                position: Offset::new(x, y),
+            }));
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+                position: Offset::new(x, y),
+            }));
+        let _ = self.inner.tick();
     }
 
-    pub fn has_event_handler(&self, id: ElementNodeId, kind: EventKind) -> bool {
+    pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
         self.inner.has_event_handler(id, kind)
     }
 
