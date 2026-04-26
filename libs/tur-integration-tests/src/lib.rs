@@ -54,7 +54,7 @@ impl TurTestApp {
         let _ = self.inner.tick();
     }
 
-    pub fn tick(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn tick(&mut self) -> Result<(), TurError> {
         self.inner.tick()
     }
 

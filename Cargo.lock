@@ -2522,6 +2522,7 @@ dependencies = [
  "minifb",
  "pollster",
  "raw-window-handle",
+ "thiserror 2.0.18",
  "tur-engine",
  "tur-shared",
  "vello",
@@ -2533,6 +2534,7 @@ version = "0.1.0"
 dependencies = [
  "num-derive",
  "num-traits",
+ "thiserror 2.0.18",
  "ts-rs",
 ]
 

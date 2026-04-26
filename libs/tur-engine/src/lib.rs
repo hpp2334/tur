@@ -57,7 +57,7 @@ impl TurApp {
         self.app_context.borrow().push_event(event);
     }
 
-    pub fn tick(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn tick(&mut self) -> Result<(), TurError> {
         let mut needs_draw = false;
 
         loop {
@@ -122,7 +122,8 @@ impl TurApp {
                 .borrow()
                 .renderer()
                 .borrow_mut()
-                .present()?;
+                .present()
+                .map_err(|e| TurError::Render(e.to_string()))?;
         }
 
         Ok(())

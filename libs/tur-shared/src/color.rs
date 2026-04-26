@@ -133,16 +133,6 @@ impl std::str::FromStr for Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("invalid color format, expected #RGB, #RRGGBB, or #RRGGBBAA")]
 pub struct ColorParseError;
-
-impl fmt::Display for ColorParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid color format, expected #RGB, #RRGGBB, or #RRGGBBAA"
-        )
-    }
-}
-
-impl std::error::Error for ColorParseError {}

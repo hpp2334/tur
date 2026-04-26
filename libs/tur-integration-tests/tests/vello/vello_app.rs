@@ -11,6 +11,22 @@ use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::TurApp;
 
+#[derive(Debug, thiserror::Error)]
+pub enum TurVelloError {
+    #[error(transparent)]
+    Engine(#[from] TurError),
+    #[error("window creation failed: {0}")]
+    Window(String),
+    #[error("wgpu adapter request failed")]
+    WgpuAdapter,
+    #[error("wgpu device request failed: {0}")]
+    WgpuDevice(String),
+    #[error("wgpu surface creation failed: {0}")]
+    WgpuSurface(String),
+    #[error("window handle error: {0}")]
+    Handle(String),
+}
+
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
@@ -21,11 +37,11 @@ struct TurVelloAppInner {
 }
 
 impl TurVelloApp {
-    pub fn new(width: f64, height: f64, dpr: f64) -> Result<Self, TurError> {
+    pub fn new(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
         pollster::block_on(Self::init_async(width, height, dpr))
     }
 
-    async fn init_async(width: f64, height: f64, dpr: f64) -> Result<Self, TurError> {
+    async fn init_async(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
         let window = Window::new(
             "tur-vello-test",
             width as usize,
@@ -35,19 +51,19 @@ impl TurVelloApp {
                 ..Default::default()
             },
         )
-        .map_err(|e| TurError::Other(e.to_string()))?;
+        .map_err(|e| TurVelloError::Window(e.to_string()))?;
 
         let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
             backends: vello::wgpu::Backends::all(),
             ..Default::default()
         });
 
-        let raw_display = window.display_handle().map_err(|e| {
-            TurError::Other(format!("failed to get display handle: {e}"))
-        })?;
-        let raw_window = window.window_handle().map_err(|e| {
-            TurError::Other(format!("failed to get window handle: {e}"))
-        })?;
+        let raw_display = window
+            .display_handle()
+            .map_err(|e| TurVelloError::Handle(format!("display: {e}")))?;
+        let raw_window = window
+            .window_handle()
+            .map_err(|e| TurVelloError::Handle(format!("window: {e}")))?;
 
         let surface = unsafe {
             instance
@@ -55,7 +71,7 @@ impl TurVelloApp {
                     raw_display_handle: raw_display.as_raw(),
                     raw_window_handle: raw_window.as_raw(),
                 })
-                .map_err(|e| TurError::Other(e.to_string()))?
+                .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?
         };
 
         let adapter = instance
@@ -65,7 +81,7 @@ impl TurVelloApp {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or_else(|| TurError::Other("failed to request adapter".into()))?;
+            .ok_or(TurVelloError::WgpuAdapter)?;
 
         let (device, queue) = adapter
             .request_device(
@@ -78,7 +94,7 @@ impl TurVelloApp {
                 None,
             )
             .await
-            .map_err(|e| TurError::Other(e.to_string()))?;
+            .map_err(|e| TurVelloError::WgpuDevice(e.to_string()))?;
 
         let renderer = VelloRenderer::init_surface(
             &adapter,
@@ -109,7 +125,7 @@ impl TurVelloApp {
         })
     }
 
-    pub fn load_bundle(&self, name: &str) -> Result<(), TurError> {
+    pub fn load_bundle(&self, name: &str) -> Result<(), TurVelloError> {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let workspace_root = Path::new(&manifest_dir)
             .parent()
@@ -119,11 +135,13 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.borrow_mut().app.load_js(&source)
+        self.inner.borrow_mut().app.load_js(&source)?;
+        Ok(())
     }
 
-    pub fn load_bundle_raw(&self, source: &str) -> Result<(), TurError> {
-        self.inner.borrow_mut().app.load_js(source)
+    pub fn load_bundle_raw(&self, source: &str) -> Result<(), TurVelloError> {
+        self.inner.borrow_mut().app.load_js(source)?;
+        Ok(())
     }
 
     pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
