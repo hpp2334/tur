@@ -1,7 +1,7 @@
-mod element_bridge;
+pub(crate) mod element_bridge;
 mod opaque;
 
-pub use element_bridge::{TurAppContext, WeakAppContext};
+pub use element_bridge::{TurNodeHandle, WeakAppContext};
 pub use opaque::BoaOpaque;
 
 use std::cell::RefCell;
@@ -14,6 +14,7 @@ use boa_engine::property::Attribute;
 use boa_engine::property::PropertyDescriptor;
 use boa_engine::Context;
 
+use crate::core::app::TurAppInternal;
 use crate::core::bridge::element_bridge::{
     tur_append_child, tur_create_container, tur_create_flex, tur_create_flex_item,
     tur_create_pointer_interact, tur_create_positioned, tur_create_root, tur_create_stack,
@@ -54,7 +55,7 @@ pub fn init_bridge(
     context: &mut Context,
     renderer: Box<dyn Renderer>,
     font_loader: Box<dyn FontLoader>,
-) -> Rc<RefCell<TurAppContext>> {
+) -> Rc<RefCell<TurAppInternal>> {
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
 
@@ -86,7 +87,7 @@ pub fn init_bridge(
         set_prop(&tur_obj, js_name.clone(), func);
     }
 
-    let ctx = TurAppContext::new(renderer, font_loader);
+    let ctx = TurAppInternal::new(renderer, font_loader);
     let rc_ctx = Rc::new(RefCell::new(ctx));
     let weak = WeakAppContext::new(&rc_ctx);
     let opaque = BoaOpaque::new(weak, context);
