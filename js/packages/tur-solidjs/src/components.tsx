@@ -1,5 +1,5 @@
 import type { JSX } from "solid-js";
-import type { Color } from "@tur/solidjs-renderer";
+import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
 import { CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
@@ -51,6 +51,14 @@ export interface PointerInteractProps {
   child?: JSX.Element;
 }
 
+export interface FocusableProps {
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onKeyDown?: (e: TurKeyEvent) => boolean | void;
+  onKeyUp?: (e: TurKeyEvent) => boolean | void;
+  child?: JSX.Element;
+}
+
 export interface TextProps extends BaseProps {
   content: string;
   fontSize?: number;
@@ -95,6 +103,11 @@ export function Container(props: ContainerProps): JSX.Element {
 export function PointerInteract(props: PointerInteractProps): JSX.Element {
   const { child, ...rest } = props;
   return <tur_pointer_interact {...rest}>{child}</tur_pointer_interact>;
+}
+
+export function Focusable(props: FocusableProps): JSX.Element {
+  const { child, ...rest } = props;
+  return <tur_focusable {...rest}>{child}</tur_focusable>;
 }
 
 export function Text(props: TextProps): JSX.Element {

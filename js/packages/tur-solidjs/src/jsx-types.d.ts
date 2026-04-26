@@ -1,4 +1,4 @@
-import type { Color } from "@tur/solidjs-renderer";
+import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
 import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
 import type { FlexDirection } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
@@ -39,6 +39,13 @@ declare module "solid-js" {
       };
       tur_pointer_interact: {
         onClick?: () => void;
+        children?: JSX.Element;
+      };
+      tur_focusable: {
+        onFocus?: () => void;
+        onBlur?: () => void;
+        onKeyDown?: (e: TurKeyEvent) => boolean | void;
+        onKeyUp?: (e: TurKeyEvent) => boolean | void;
         children?: JSX.Element;
       };
       tur_text: {

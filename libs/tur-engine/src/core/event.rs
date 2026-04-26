@@ -1,3 +1,4 @@
+use crate::core::keyboard::AppKeyEvent;
 use tur_shared::Offset;
 
 pub enum AppEvent {
@@ -7,6 +8,7 @@ pub enum AppEvent {
         dpr: f64,
     },
     Gesture(AppGestureEvent),
+    Key(AppKeyEvent),
     RequestDraw,
 }
 

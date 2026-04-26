@@ -27,6 +27,7 @@ web-sys = { workspace = true, features = [
     "EventTarget",
     "Event",
     "MouseEvent",
+    "KeyboardEvent",
     "CssStyleDeclaration",
     "DomRect",
     "DomRectReadOnly",

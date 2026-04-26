@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
 
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
@@ -9,10 +10,12 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementNode};
 use crate::core::event::AppEvent;
+use crate::core::focus::FocusEventType;
 use crate::core::gesture::ComposedGestureEventKind;
+use crate::core::keyboard::KeyEventType;
 use crate::elements::{
-    ContainerElement, FlexElement, FlexItemElement, PointerInteractElement, PositionedElement,
-    StackElement, TextElement,
+    ContainerElement, FlexElement, FlexItemElement, FocusableElement, PointerInteractElement,
+    PositionedElement, StackElement, TextElement,
 };
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -156,6 +159,32 @@ pub(crate) fn tur_create_root(
     create_element(args, context, AnyElement::new(FlexElement::new()))
 }
 
+pub(crate) fn tur_create_focusable(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createFocusable()");
+    create_element(args, context, AnyElement::new(FocusableElement::new()))
+}
+
+pub(crate) fn tur_request_focus(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let ctx = extract_ctx(args)?;
+    let node_id = extract_node_id(args, 1)?;
+    let old_id = ctx.borrow().request_focus(node_id);
+    if let Some(old) = old_id {
+        ctx.borrow()
+            .invoke_focus_handlers(old, FocusEventType::Blur, context);
+    }
+    ctx.borrow()
+        .invoke_focus_handlers(node_id, FocusEventType::Focus, context);
+    Ok(JsValue::undefined())
+}
+
 pub(crate) fn tur_set_attribute(
     _this: &JsValue,
     args: &[JsValue],
@@ -212,6 +241,54 @@ pub(crate) fn tur_set_attribute(
                 }
                 ctx.push_event(AppEvent::RequestDraw);
                 return Ok(JsValue::undefined());
+            }
+
+            if element.type_name() == "tur_focusable" {
+                let handled = match key.to_std_string_escaped().as_str() {
+                    "onKeyDown" | "onKeyUp" => {
+                        let key_event_type = if key == "onKeyDown" {
+                            KeyEventType::Down
+                        } else {
+                            KeyEventType::Up
+                        };
+                        if let Some(obj) = value.as_object() {
+                            if obj.is_callable() {
+                                ctx.key_handlers
+                                    .borrow_mut()
+                                    .insert((node_id, key_event_type), obj.clone());
+                            }
+                        } else if value.is_null() || value.is_undefined() {
+                            ctx.key_handlers
+                                .borrow_mut()
+                                .remove(&(node_id, key_event_type));
+                        }
+                        true
+                    }
+                    "onFocus" | "onBlur" => {
+                        let focus_event_type = if key == "onFocus" {
+                            FocusEventType::Focus
+                        } else {
+                            FocusEventType::Blur
+                        };
+                        if let Some(obj) = value.as_object() {
+                            if obj.is_callable() {
+                                ctx.focus_handlers
+                                    .borrow_mut()
+                                    .insert((node_id, focus_event_type), obj.clone());
+                            }
+                        } else if value.is_null() || value.is_undefined() {
+                            ctx.focus_handlers
+                                .borrow_mut()
+                                .remove(&(node_id, focus_event_type));
+                        }
+                        true
+                    }
+                    _ => false,
+                };
+                if handled {
+                    ctx.push_event(AppEvent::RequestDraw);
+                    return Ok(JsValue::undefined());
+                }
             }
         }
     }
@@ -336,4 +413,57 @@ pub(crate) fn tur_get_next_sibling(
         }
         None => Ok(JsValue::null()),
     }
+}
+
+pub(crate) fn build_key_event_object(
+    key: &str,
+    code: &str,
+    modifiers: &crate::core::keyboard::Modifiers,
+    context: &mut Context,
+) -> JsValue {
+    let proto = context.intrinsics().constructors().object().prototype();
+    let obj = JsObject::from_proto_and_data(proto, ());
+
+    let desc = boa_engine::property::PropertyDescriptor::builder()
+        .writable(true)
+        .enumerable(true)
+        .configurable(true);
+
+    obj.insert_property(
+        boa_engine::js_string!("key"),
+        desc.clone()
+            .value(boa_engine::JsValue::from(boa_engine::js_string!(key)))
+            .build(),
+    );
+    obj.insert_property(
+        boa_engine::js_string!("code"),
+        desc.clone()
+            .value(boa_engine::JsValue::from(boa_engine::js_string!(code)))
+            .build(),
+    );
+    obj.insert_property(
+        boa_engine::js_string!("ctrl"),
+        desc.clone()
+            .value(boa_engine::JsValue::from(modifiers.ctrl))
+            .build(),
+    );
+    obj.insert_property(
+        boa_engine::js_string!("shift"),
+        desc.clone()
+            .value(boa_engine::JsValue::from(modifiers.shift))
+            .build(),
+    );
+    obj.insert_property(
+        boa_engine::js_string!("alt"),
+        desc.clone()
+            .value(boa_engine::JsValue::from(modifiers.alt))
+            .build(),
+    );
+    obj.insert_property(
+        boa_engine::js_string!("meta"),
+        desc.value(boa_engine::JsValue::from(modifiers.meta))
+            .build(),
+    );
+
+    obj.into()
 }

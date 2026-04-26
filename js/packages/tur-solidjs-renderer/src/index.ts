@@ -10,7 +10,7 @@ export {
   mergeProps,
   use,
 } from "./renderer";
-export type { TurNodeHandle } from "./tur";
+export type { TurNodeHandle, TurKeyEvent } from "./tur";
 export type { TurElement } from "./types";
 export type { Color } from "./generated/Color";
 export type { RGB } from "./generated/RGB";
