@@ -14,6 +14,7 @@ const creators: Record<string, () => TurElement> = {
   "tur_container": () => __tur.createContainer(ctx),
   "tur_text": () => __tur.createText(ctx),
   "tur_pointer_interact": () => __tur.createPointerInteract(ctx),
+  "tur_focusable": () => __tur.createFocusable(ctx),
 };
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({

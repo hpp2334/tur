@@ -1,5 +1,14 @@
 export type TurNodeHandle = object;
 
+export interface TurKeyEvent {
+  key: string;
+  code: string;
+  ctrl: boolean;
+  shift: boolean;
+  alt: boolean;
+  meta: boolean;
+}
+
 declare global {
   var __tur: {
     __ctx: unknown;
@@ -10,6 +19,7 @@ declare global {
     createContainer(ctx: unknown): TurNodeHandle;
     createText(ctx: unknown): TurNodeHandle;
     createPointerInteract(ctx: unknown): TurNodeHandle;
+    createFocusable(ctx: unknown): TurNodeHandle;
     createRoot(ctx: unknown): TurNodeHandle;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
@@ -23,5 +33,6 @@ declare global {
     getParent(ctx: unknown, handle: TurNodeHandle): TurNodeHandle | null;
     getFirstChild(ctx: unknown, handle: TurNodeHandle): TurNodeHandle | null;
     getNextSibling(ctx: unknown, handle: TurNodeHandle): TurNodeHandle | null;
+    requestFocus(ctx: unknown, handle: TurNodeHandle): void;
   };
 }

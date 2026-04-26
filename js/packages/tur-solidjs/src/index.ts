@@ -1,4 +1,4 @@
-export type { TurNodeHandle } from "@tur/solidjs-renderer";
+export type { TurNodeHandle, TurKeyEvent } from "@tur/solidjs-renderer";
 export type { Color } from "@tur/solidjs-renderer";
 export type { RGB } from "@tur/solidjs-renderer";
 export type { RGBA } from "@tur/solidjs-renderer";
@@ -20,6 +20,7 @@ export {
   SizedBox,
   Container,
   PointerInteract,
+  Focusable,
   Text,
 } from "./components";
 export type {
@@ -31,5 +32,6 @@ export type {
   SizedBoxProps,
   ContainerProps,
   PointerInteractProps,
+  FocusableProps,
   TextProps,
 } from "./components";

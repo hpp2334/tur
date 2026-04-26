@@ -13,8 +13,10 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::event::AppEvent;
+use crate::core::focus::{FocusEventType, FocusManager};
 use crate::core::fonts::{FontLoader, FontManager};
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
+use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::render::Renderer;
 
 pub struct TurAppInternal {
@@ -28,6 +30,9 @@ pub struct TurAppInternal {
     pub(crate) event_handlers:
         RefCell<HashMap<(ElementNodeId, ComposedGestureEventKind), JsObject>>,
     gesture_composer: RefCell<GestureEventComposer>,
+    focus_manager: RefCell<FocusManager>,
+    pub(crate) key_handlers: RefCell<HashMap<(ElementNodeId, KeyEventType), JsObject>>,
+    pub(crate) focus_handlers: RefCell<HashMap<(ElementNodeId, FocusEventType), JsObject>>,
     event_queue: RefCell<Vec<AppEvent>>,
 }
 
@@ -55,6 +60,9 @@ impl TurAppInternal {
             handles: RefCell::new(HashMap::new()),
             event_handlers: RefCell::new(HashMap::new()),
             gesture_composer: RefCell::new(GestureEventComposer::new()),
+            focus_manager: RefCell::new(FocusManager::new()),
+            key_handlers: RefCell::new(HashMap::new()),
+            focus_handlers: RefCell::new(HashMap::new()),
             event_queue: RefCell::new(Vec::new()),
         }
     }
@@ -177,5 +185,82 @@ impl TurAppInternal {
 
     pub fn gesture_pointer_down_target(&self) -> Option<ElementNodeId> {
         self.gesture_composer.borrow().pointer_down_target()
+    }
+
+    pub fn request_focus(&self, new_id: ElementNodeId) -> Option<ElementNodeId> {
+        self.focus_manager.borrow_mut().request_focus(new_id)
+    }
+
+    pub fn clear_focus(&self) -> Option<ElementNodeId> {
+        self.focus_manager.borrow_mut().clear_focus()
+    }
+
+    pub fn invoke_focus_handlers(
+        &self,
+        id: ElementNodeId,
+        event_type: FocusEventType,
+        context: &mut Context,
+    ) {
+        let handlers = self.focus_handlers.borrow();
+        if let Some(callback) = handlers.get(&(id, event_type)) {
+            let _ = callback.call(&boa_engine::JsValue::undefined(), &[], context);
+        }
+    }
+
+    pub fn dispatch_key_event(&self, event: &AppKeyEvent, context: &mut Context) {
+        let focused_id = match self.focus_manager.borrow().focused() {
+            Some(id) => id,
+            None => return,
+        };
+
+        let path = {
+            let tree = self.element_tree.borrow();
+            let mut path = Vec::new();
+            let mut current = Some(focused_id);
+            while let Some(id) = current {
+                path.push(id);
+                current = tree.parent_of(id);
+            }
+            path
+        };
+
+        let callbacks: Vec<JsObject> = {
+            let handlers = self.key_handlers.borrow();
+            path.iter()
+                .filter_map(|id| handlers.get(&(*id, event.event_type)).cloned())
+                .collect()
+        };
+
+        let event_obj = crate::core::bridge::element_bridge::build_key_event_object(
+            &event.key,
+            &event.code,
+            &event.modifiers,
+            context,
+        );
+
+        for callback in callbacks {
+            match callback.call(
+                &boa_engine::JsValue::undefined(),
+                std::slice::from_ref(&event_obj),
+                context,
+            ) {
+                Ok(result) if result.to_boolean() => break,
+                _ => continue,
+            }
+        }
+    }
+
+    pub fn find_focusable_in_path(&self, path: &[ElementNodeId]) -> Option<ElementNodeId> {
+        let tree = self.element_tree.borrow();
+        for &id in path {
+            if let Some(node) = tree.get(id) {
+                if let Some(ref element) = node.element {
+                    if element.type_name() == "tur_focusable" {
+                        return Some(id);
+                    }
+                }
+            }
+        }
+        None
     }
 }

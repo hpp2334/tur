@@ -18,7 +18,8 @@ use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
 use core::event::{AppEvent, AppGestureEvent};
-pub use core::fonts::{FontLoader, PresetFontLoader};
+use core::focus::FocusEventType;
+use core::fonts::FontLoader;
 use core::gesture::ComposedGestureEventKind;
 
 pub struct TurApp {
@@ -101,12 +102,55 @@ impl TurApp {
                         if let Some(kind) =
                             self.app_context.borrow().compose_pointer_up(click_eligible)
                         {
+                            let hit_path = {
+                                let ctx = self.app_context.borrow();
+                                let tree = ctx.element_tree().borrow();
+                                tree.hit_test_path(position)
+                            };
+
+                            let focusable_id =
+                                self.app_context.borrow().find_focusable_in_path(&hit_path);
+
+                            if let Some(new_focused) = focusable_id {
+                                let old_focused =
+                                    self.app_context.borrow().request_focus(new_focused);
+                                if let Some(old) = old_focused {
+                                    if old != new_focused {
+                                        self.app_context.borrow().invoke_focus_handlers(
+                                            old,
+                                            FocusEventType::Blur,
+                                            &mut self.boa_context,
+                                        );
+                                    }
+                                }
+                                self.app_context.borrow().invoke_focus_handlers(
+                                    new_focused,
+                                    FocusEventType::Focus,
+                                    &mut self.boa_context,
+                                );
+                            } else {
+                                let old_focused = self.app_context.borrow().clear_focus();
+                                if let Some(old) = old_focused {
+                                    self.app_context.borrow().invoke_focus_handlers(
+                                        old,
+                                        FocusEventType::Blur,
+                                        &mut self.boa_context,
+                                    );
+                                }
+                            }
+
                             self.app_context.borrow().invoke_handlers_for(
                                 kind,
                                 position,
                                 &mut self.boa_context,
                             );
                         }
+                    }
+
+                    AppEvent::Key(key_event) => {
+                        self.app_context
+                            .borrow()
+                            .dispatch_key_event(&key_event, &mut self.boa_context);
                     }
 
                     AppEvent::RequestDraw => {

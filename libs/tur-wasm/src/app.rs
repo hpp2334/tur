@@ -3,6 +3,7 @@ use std::rc::Rc;
 use tur_engine::TurApp;
 use tur_engine::core::event::{AppEvent, AppGestureEvent};
 use tur_engine::core::fonts::PresetFontLoader;
+use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_shared::Offset;
 use wasm_bindgen::closure::Closure;
@@ -16,6 +17,8 @@ struct WasmState {
     _resize_closure: Closure<dyn Fn()>,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
+    _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
@@ -214,12 +217,74 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            canvas
+                .set_attribute("tabindex", "0")
+                .err_to_jsval()?;
+            canvas
+                .style()
+                .set_property("outline", "none")
+                .err_to_jsval()?;
+
+            let keydown_state = state_clone.clone();
+            let keydown_closure =
+                Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
+                    let guard = keydown_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.app.push_event(AppEvent::Key(AppKeyEvent {
+                            key: event.key(),
+                            code: event.code(),
+                            modifiers: Modifiers {
+                                ctrl: event.ctrl_key(),
+                                shift: event.shift_key(),
+                                alt: event.alt_key(),
+                                meta: event.meta_key(),
+                            },
+                            event_type: KeyEventType::Down,
+                        }));
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "keydown",
+                    keydown_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let keyup_state = state_clone.clone();
+            let keyup_closure =
+                Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
+                    let guard = keyup_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.app.push_event(AppEvent::Key(AppKeyEvent {
+                            key: event.key(),
+                            code: event.code(),
+                            modifiers: Modifiers {
+                                ctrl: event.ctrl_key(),
+                                shift: event.shift_key(),
+                                alt: event.alt_key(),
+                                meta: event.meta_key(),
+                            },
+                            event_type: KeyEventType::Up,
+                        }));
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "keyup",
+                    keyup_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let wasm_state = WasmState {
                 app,
                 _canvas: canvas,
                 _resize_closure: resize_closure,
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
+                _keydown_closure: keydown_closure,
+                _keyup_closure: keyup_closure,
                 _raf_closure: RefCell::new(None),
             };
 
