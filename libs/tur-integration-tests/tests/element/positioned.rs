@@ -7,8 +7,7 @@ fn positioned_with_left_top() {
     app.load_bundle("positioned-basic").unwrap();
 
     let pos_id = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -35,7 +34,6 @@ fn positioned_with_left_top() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let pos_node = rt.get(pos_id).unwrap();
     assert_eq!(pos_node.computed_layout.offset.x, 10.0);
     assert_eq!(pos_node.computed_layout.offset.y, 20.0);

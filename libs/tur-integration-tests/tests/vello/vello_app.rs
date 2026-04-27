@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::path::Path;
-use std::rc::Rc;
 
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -139,8 +138,15 @@ impl TurVelloApp {
         Ok(())
     }
 
-    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
-        self.inner.borrow().app.element_tree()
+    pub fn load_bundle_raw(&self, source: &str) -> Result<(), TurVelloError> {
+        self.inner.borrow_mut().app.load_js(source)?;
+        Ok(())
+    }
+
+    pub fn with_element_tree<R>(&self, f: impl FnOnce(&ElementTree) -> R) -> R {
+        let inner = self.inner.borrow();
+        let tree = inner.app.element_tree();
+        f(&tree)
     }
 
     pub fn render(&self) {

@@ -7,8 +7,7 @@ fn pointer_interact_no_child_zero_size() {
     app.load_bundle("pointer-interact-empty").unwrap();
 
     let pi_id = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let pi = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -21,7 +20,6 @@ fn pointer_interact_no_child_zero_size() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let pi_node = rt.get(pi_id).unwrap();
     assert_eq!(pi_node.computed_layout.size.width, 0.0);
     assert_eq!(pi_node.computed_layout.size.height, 0.0);

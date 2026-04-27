@@ -7,8 +7,7 @@ fn expanded_fills_remaining() {
     app.load_bundle("expanded-basic").unwrap();
 
     let (expanded_id, _inner_sb_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -41,7 +40,6 @@ fn expanded_fills_remaining() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let expanded_node = rt.get(expanded_id).unwrap();
     assert_eq!(expanded_node.computed_layout.size.height, 550.0);
     assert_eq!(expanded_node.computed_layout.offset.y, 50.0);
@@ -53,8 +51,7 @@ fn expanded_multiple_share_evenly() {
     app.load_bundle("expanded-multiple").unwrap();
 
     let (exp1_id, exp2_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.children.len(), 2);
@@ -75,7 +72,6 @@ fn expanded_multiple_share_evenly() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let exp1_node = rt.get(exp1_id).unwrap();
     assert_eq!(exp1_node.computed_layout.size.height, 300.0);

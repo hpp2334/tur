@@ -1,6 +1,5 @@
-use std::cell::RefCell;
+use std::cell::Ref;
 use std::path::Path;
-use std::rc::Rc;
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::AnyElement;
@@ -54,7 +53,7 @@ impl TurTestApp {
         self.inner.tick()
     }
 
-    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
+    pub fn element_tree(&self) -> Ref<'_, ElementTree> {
         self.inner.element_tree()
     }
 
