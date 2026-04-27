@@ -7,6 +7,7 @@ use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{AppEvent, AppGestureEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::gesture::ComposedGestureEventKind;
+use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
@@ -66,6 +67,16 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
             }));
+        let _ = self.inner.tick();
+    }
+
+    pub fn send_key(&mut self, key: &str) {
+        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+            key: key.to_string(),
+            code: key.to_string(),
+            modifiers: Modifiers::default(),
+            event_type: KeyEventType::Down,
+        }));
         let _ = self.inner.tick();
     }
 

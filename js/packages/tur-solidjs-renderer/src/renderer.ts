@@ -15,6 +15,7 @@ const creators: Record<string, () => TurElement> = {
   "tur_text": () => __tur.createText(ctx),
   "tur_pointer_interact": () => __tur.createPointerInteract(ctx),
   "tur_focusable": () => __tur.createFocusable(ctx),
+  "tur_input": () => __tur.createInput(ctx),
 };
 
 const _r: Renderer<TurElement> = createRenderer<TurElement>({
@@ -109,3 +110,4 @@ export const effect = _r.effect;
 export const memo = _r.memo;
 export const mergeProps = _r.mergeProps;
 export const use = _r.use;
+export const insertNode = _r.insertNode;

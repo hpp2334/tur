@@ -45,15 +45,29 @@ declare module "solid-js" {
       tur_pointer_interact: {
         onClick?: () => void;
         queryKey?: string[];
+        ref?: (el: import("@tur/solidjs-renderer").TurNodeHandle) => void;
         children?: JSX.Element;
       };
       tur_focusable: {
+        ref?: (el: import("@tur/solidjs-renderer").TurNodeHandle) => void;
         onFocus?: () => void;
         onBlur?: () => void;
         onKeyDown?: (e: TurKeyEvent) => boolean | void;
         onKeyUp?: (e: TurKeyEvent) => boolean | void;
         queryKey?: string[];
         children?: JSX.Element;
+      };
+      tur_input: {
+        ref?: (el: import("@tur/solidjs-renderer").TurNodeHandle) => void;
+        onInput?: (value: string, enterPressed: boolean) => void;
+        onFocus?: () => void;
+        onBlur?: () => void;
+        onCursorChange?: (position: number) => void;
+        fontSize?: number;
+        color?: Color;
+        cursorColor?: Color;
+        placeholder?: string;
+        placeholderColor?: Color;
       };
       tur_text: {
         content?: string;

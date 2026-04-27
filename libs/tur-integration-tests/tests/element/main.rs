@@ -2,6 +2,7 @@ mod column;
 mod container;
 mod debug;
 mod expanded;
+mod input;
 mod positioned;
 mod row;
 mod sized_box;

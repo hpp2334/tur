@@ -9,7 +9,10 @@ export {
   memo,
   mergeProps,
   use,
+  insertNode,
 } from "./renderer";
+export { TextController } from "./text-controller";
+export type { TextControllerOptions } from "./text-controller";
 export type { TurNodeHandle, TurKeyEvent } from "./tur";
 export type { TurElement } from "./types";
 export type { Color } from "./generated/Color";
