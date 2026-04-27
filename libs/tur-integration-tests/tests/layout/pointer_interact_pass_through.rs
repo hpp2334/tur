@@ -4,19 +4,7 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn pointer_interact_passes_constraints_and_size() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var pi = globalThis.__tur.createPointerInteract(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.setAttribute(ctx, container, "height", 50);
-        globalThis.__tur.appendChild(ctx, pi, container);
-        globalThis.__tur.appendChild(ctx, root, pi);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("pointer-interact-basic").unwrap();
 
     let (pi_id, container_id) = {
         let tree_rc = app.element_tree();
@@ -58,33 +46,7 @@ fn pointer_interact_passes_constraints_and_size() {
 #[test]
 fn pointer_interact_passes_through_in_column() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        globalThis.__tur.setAttribute(ctx, root, "direction", 0);
-        globalThis.__tur.setAttribute(ctx, root, "crossAlignment", 0);
-        var col = globalThis.__tur.createFlex(ctx);
-        globalThis.__tur.setAttribute(ctx, col, "direction", 0);
-        globalThis.__tur.setAttribute(ctx, col, "crossAlignment", 0);
-        globalThis.__tur.appendChild(ctx, root, col);
-
-        var pi1 = globalThis.__tur.createPointerInteract(ctx);
-        var sb1 = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, sb1, "width", 80);
-        globalThis.__tur.setAttribute(ctx, sb1, "height", 40);
-        globalThis.__tur.appendChild(ctx, pi1, sb1);
-        globalThis.__tur.appendChild(ctx, col, pi1);
-
-        var pi2 = globalThis.__tur.createPointerInteract(ctx);
-        var sb2 = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, sb2, "width", 60);
-        globalThis.__tur.setAttribute(ctx, sb2, "height", 30);
-        globalThis.__tur.appendChild(ctx, pi2, sb2);
-        globalThis.__tur.appendChild(ctx, col, pi2);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("pointer-interact-in-column").unwrap();
 
     let (pi1_id, pi2_id, sb1_id, sb2_id) = {
         let tree_rc = app.element_tree();

@@ -4,31 +4,7 @@ use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        globalThis.__tur.setAttribute(ctx, root, "direction", 0);
-        globalThis.__tur.setAttribute(ctx, root, "crossAlignment", 0);
-        var col = globalThis.__tur.createFlex(ctx);
-        globalThis.__tur.setAttribute(ctx, col, "direction", 0);
-        globalThis.__tur.setAttribute(ctx, col, "crossAlignment", 0);
-        globalThis.__tur.appendChild(ctx, root, col);
-
-        var pi = globalThis.__tur.createPointerInteract(ctx);
-        var text = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, text, "content", "before");
-        globalThis.__tur.setAttribute(ctx, text, "queryKey", ["click-text"]);
-        globalThis.__tur.appendChild(ctx, pi, text);
-        globalThis.__tur.appendChild(ctx, col, pi);
-
-        globalThis.__clickText = text;
-        globalThis.__tur.setAttribute(ctx, pi, "onClick", function() {
-            globalThis.__tur.setAttribute(ctx, globalThis.__clickText, "content", "after");
-        });
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("clickable-text").unwrap();
 
     app.query_element(&["click-text"]).unwrap()
 }
