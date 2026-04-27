@@ -45,10 +45,6 @@ impl TurTestApp {
         self.inner.load_js(&source)
     }
 
-    pub fn load_bundle_raw(&mut self, source: &str) -> Result<(), TurError> {
-        self.inner.load_js(source)
-    }
-
     pub fn render(&mut self) {
         self.inner.push_event(AppEvent::RequestDraw);
         let _ = self.inner.tick();

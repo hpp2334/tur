@@ -139,11 +139,6 @@ impl TurVelloApp {
         Ok(())
     }
 
-    pub fn load_bundle_raw(&self, source: &str) -> Result<(), TurVelloError> {
-        self.inner.borrow_mut().app.load_js(source)?;
-        Ok(())
-    }
-
     pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
         self.inner.borrow().app.element_tree()
     }
