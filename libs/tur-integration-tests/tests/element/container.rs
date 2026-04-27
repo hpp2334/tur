@@ -7,8 +7,7 @@ fn container_with_padding() {
     app.load_bundle("container-basic").unwrap();
 
     let container_id = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let container = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -28,7 +27,6 @@ fn container_with_padding() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let container_node = rt.get(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 132.0);
     assert_eq!(container_node.computed_layout.size.height, 132.0);

@@ -7,8 +7,7 @@ fn row_basic_horizontal_stacking() {
     app.load_bundle("row-basic").unwrap();
 
     let (row_id, sb1_id, sb2_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         assert_eq!(
             root.element.as_ref().unwrap().kind(),
@@ -39,7 +38,6 @@ fn row_basic_horizontal_stacking() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1_node = rt.get(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.size.width, 50.0);

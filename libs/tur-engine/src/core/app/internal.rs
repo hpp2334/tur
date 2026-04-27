@@ -1,39 +1,37 @@
-use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::JsValue;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
 use crate::core::bridge::element_bridge::TurNodeHandle;
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::{ElementNode, ElementTree};
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusEventType, FocusManager};
-use crate::core::fonts::{FontLoader, FontManager};
+use crate::core::fonts::FontManager;
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::render::Renderer;
 
 pub struct TurAppInternal {
-    pub(crate) element_tree: Rc<RefCell<ElementTree>>,
-    pub(crate) renderer: RefCell<Box<dyn Renderer>>,
-    font_manager: RefCell<FontManager>,
-    text_layout_cx: RefCell<ParleyLayoutContext<[u8; 4]>>,
-    size: Cell<(f64, f64)>,
-    next_id: Cell<u64>,
-    pub(crate) handles: RefCell<HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>>,
-    pub(crate) event_handlers:
-        RefCell<HashMap<(ElementNodeId, ComposedGestureEventKind), JsObject>>,
-    gesture_composer: RefCell<GestureEventComposer>,
-    focus_manager: RefCell<FocusManager>,
-    pub(crate) key_handlers: RefCell<HashMap<(ElementNodeId, KeyEventType), JsObject>>,
-    pub(crate) focus_handlers: RefCell<HashMap<(ElementNodeId, FocusEventType), JsObject>>,
-    event_queue: RefCell<Vec<AppEvent>>,
+    element_tree: ElementTree,
+    renderer: Box<dyn Renderer>,
+    font_manager: FontManager,
+    text_layout_cx: ParleyLayoutContext<[u8; 4]>,
+    size: (f64, f64),
+    next_id: u64,
+    handles: HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>,
+    event_handlers: HashMap<(ElementNodeId, ComposedGestureEventKind), JsObject>,
+    gesture_composer: GestureEventComposer,
+    focus_manager: FocusManager,
+    key_handlers: HashMap<(ElementNodeId, KeyEventType), JsObject>,
+    focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
+    event_queue: Vec<AppEvent>,
 }
 
 impl fmt::Debug for TurAppInternal {
@@ -48,43 +46,42 @@ impl fmt::Debug for TurAppInternal {
 }
 
 impl TurAppInternal {
-    pub fn new(renderer: Box<dyn Renderer>, font_loader: Box<dyn FontLoader>) -> Self {
+    pub fn new(
+        renderer: Box<dyn Renderer>,
+        font_loader: Box<dyn crate::core::fonts::FontLoader>,
+    ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {
-            element_tree: Rc::new(RefCell::new(ElementTree::new())),
-            renderer: RefCell::new(renderer),
-            font_manager: RefCell::new(font_manager),
-            text_layout_cx: RefCell::new(ParleyLayoutContext::new()),
-            size: Cell::new((400.0, 600.0)),
-            next_id: Cell::new(1),
-            handles: RefCell::new(HashMap::new()),
-            event_handlers: RefCell::new(HashMap::new()),
-            gesture_composer: RefCell::new(GestureEventComposer::new()),
-            focus_manager: RefCell::new(FocusManager::new()),
-            key_handlers: RefCell::new(HashMap::new()),
-            focus_handlers: RefCell::new(HashMap::new()),
-            event_queue: RefCell::new(Vec::new()),
+            element_tree: ElementTree::new(),
+            renderer,
+            font_manager,
+            text_layout_cx: ParleyLayoutContext::new(),
+            size: (400.0, 600.0),
+            next_id: 1,
+            handles: HashMap::new(),
+            event_handlers: HashMap::new(),
+            gesture_composer: GestureEventComposer::new(),
+            focus_manager: FocusManager::new(),
+            key_handlers: HashMap::new(),
+            focus_handlers: HashMap::new(),
+            event_queue: Vec::new(),
         }
     }
 
-    pub fn element_tree(&self) -> &RefCell<ElementTree> {
+    pub fn element_tree(&self) -> &ElementTree {
         &self.element_tree
     }
 
-    pub fn element_tree_rc(&self) -> Rc<RefCell<ElementTree>> {
-        Rc::clone(&self.element_tree)
+    pub fn element_tree_mut(&mut self) -> &mut ElementTree {
+        &mut self.element_tree
     }
 
-    pub fn renderer(&self) -> &RefCell<Box<dyn Renderer>> {
-        &self.renderer
+    pub fn set_size(&mut self, width: f64, height: f64) {
+        self.size = (width, height);
     }
 
-    pub fn set_size(&self, width: f64, height: f64) {
-        self.size.set((width, height));
-    }
-
-    pub fn render(&self) {
-        let (width, height) = self.size.get();
+    pub fn render(&mut self) {
+        let (width, height) = self.size;
         let constraints = Constraints {
             min_width: width,
             max_width: width,
@@ -92,144 +89,162 @@ impl TurAppInternal {
             max_height: height,
         };
 
-        {
-            let mut tree = self.element_tree.borrow_mut();
-            let mut font_manager = self.font_manager.borrow_mut();
-            let mut text_layout_cx = self.text_layout_cx.borrow_mut();
-            let layout_size =
-                tree.compute_layout(&constraints, &mut font_manager, &mut text_layout_cx);
-            tracing::debug!("layout: {:?}", layout_size);
-        }
+        let layout_size = self.element_tree.compute_layout(
+            &constraints,
+            &mut self.font_manager,
+            &mut self.text_layout_cx,
+        );
+        tracing::debug!("layout: {:?}", layout_size);
 
-        let mut renderer = self.renderer.borrow_mut();
-        let tree = self.element_tree.borrow();
-        renderer.render(&tree);
+        self.renderer.render(&self.element_tree);
     }
 
-    pub fn push_event(&self, event: AppEvent) {
-        self.event_queue.borrow_mut().push(event);
+    pub fn push_event(&mut self, event: AppEvent) {
+        self.event_queue.push(event);
     }
 
-    pub fn drain_events(&self) -> Vec<AppEvent> {
-        std::mem::take(&mut self.event_queue.borrow_mut())
+    pub fn drain_events(&mut self) -> Vec<AppEvent> {
+        std::mem::take(&mut self.event_queue)
     }
 
-    pub fn alloc_id(&self) -> ElementNodeId {
-        let id = self.next_id.get();
-        self.next_id.set(id + 1);
+    pub fn alloc_id(&mut self) -> ElementNodeId {
+        let id = self.next_id;
+        self.next_id += 1;
         ElementNodeId::new(id)
     }
 
+    pub fn insert_element(&mut self, node: ElementNode) {
+        self.element_tree.insert(node);
+    }
+
     pub fn get_or_create_handle(
-        &self,
+        &mut self,
         id: ElementNodeId,
         context: &mut Context,
     ) -> BoaOpaque<TurNodeHandle> {
-        let handles = self.handles.borrow();
-        if let Some(opaque) = handles.get(&id) {
-            let cloned: BoaOpaque<TurNodeHandle> = opaque.clone();
-            return cloned;
+        if let Some(opaque) = self.handles.get(&id) {
+            return opaque.clone();
         }
-        drop(handles);
         let opaque = BoaOpaque::new(TurNodeHandle { id }, context);
-        self.handles.borrow_mut().insert(id, opaque.clone());
+        self.handles.insert(id, opaque.clone());
         opaque
     }
 
     pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
-        self.event_handlers.borrow().contains_key(&(id, kind))
+        self.event_handlers.contains_key(&(id, kind))
     }
 
-    pub fn invoke_handlers_for(
+    pub fn set_event_handler(
+        &mut self,
+        id: ElementNodeId,
+        kind: ComposedGestureEventKind,
+        handler: JsObject,
+    ) {
+        self.event_handlers.insert((id, kind), handler);
+    }
+
+    pub fn remove_event_handler(&mut self, id: ElementNodeId, kind: ComposedGestureEventKind) {
+        self.event_handlers.remove(&(id, kind));
+    }
+
+    pub fn collect_event_handlers(
         &self,
         kind: ComposedGestureEventKind,
         position: tur_shared::Offset,
-        context: &mut Context,
-    ) {
-        let path = {
-            let tree = self.element_tree.borrow();
-            tree.hit_test_path(position)
-        };
-
-        let callbacks: Vec<JsObject> = {
-            let handlers = self.event_handlers.borrow();
-            path.iter()
-                .filter_map(|id| handlers.get(&(*id, kind)).cloned())
-                .collect()
-        };
-
-        for callback in callbacks {
-            let _ = callback.call(&boa_engine::JsValue::undefined(), &[], context);
-        }
+    ) -> Vec<JsObject> {
+        let path = self.element_tree.hit_test_path(position);
+        path.iter()
+            .filter_map(|id| self.event_handlers.get(&(*id, kind)).cloned())
+            .collect()
     }
 
-    pub fn hit_test(&self, position: tur_shared::Offset) -> Option<ElementNodeId> {
-        let tree = self.element_tree.borrow();
-        tree.hit_test_path(position).first().copied()
-    }
-
-    pub fn hit_test_contains(&self, position: tur_shared::Offset, id: ElementNodeId) -> bool {
-        let tree = self.element_tree.borrow();
-        tree.hit_test_path(position).contains(&id)
-    }
-
-    pub fn compose_pointer_down(&self, target: Option<ElementNodeId>) {
-        self.gesture_composer.borrow_mut().on_pointer_down(target);
-    }
-
-    pub fn compose_pointer_up(&self, click_eligible: bool) -> Option<ComposedGestureEventKind> {
-        self.gesture_composer
-            .borrow_mut()
-            .on_pointer_up(click_eligible)
-    }
-
-    pub fn gesture_pointer_down_target(&self) -> Option<ElementNodeId> {
-        self.gesture_composer.borrow().pointer_down_target()
-    }
-
-    pub fn request_focus(&self, new_id: ElementNodeId) -> Option<ElementNodeId> {
-        self.focus_manager.borrow_mut().request_focus(new_id)
-    }
-
-    pub fn clear_focus(&self) -> Option<ElementNodeId> {
-        self.focus_manager.borrow_mut().clear_focus()
-    }
-
-    pub fn invoke_focus_handlers(
+    pub fn collect_focus_handler(
         &self,
         id: ElementNodeId,
         event_type: FocusEventType,
-        context: &mut Context,
-    ) {
-        let handlers = self.focus_handlers.borrow();
-        if let Some(callback) = handlers.get(&(id, event_type)) {
-            let _ = callback.call(&boa_engine::JsValue::undefined(), &[], context);
-        }
+    ) -> Option<JsObject> {
+        self.focus_handlers.get(&(id, event_type)).cloned()
     }
 
-    pub fn dispatch_key_event(&self, event: &AppKeyEvent, context: &mut Context) {
-        let focused_id = match self.focus_manager.borrow().focused() {
-            Some(id) => id,
-            None => return,
-        };
+    pub fn hit_test(&self, position: tur_shared::Offset) -> Option<ElementNodeId> {
+        self.element_tree.hit_test_path(position).first().copied()
+    }
+
+    pub fn hit_test_contains(&self, position: tur_shared::Offset, id: ElementNodeId) -> bool {
+        self.element_tree.hit_test_path(position).contains(&id)
+    }
+
+    pub fn compose_pointer_down(&mut self, target: Option<ElementNodeId>) {
+        self.gesture_composer.on_pointer_down(target);
+    }
+
+    pub fn compose_pointer_up(&mut self, click_eligible: bool) -> Option<ComposedGestureEventKind> {
+        self.gesture_composer.on_pointer_up(click_eligible)
+    }
+
+    pub fn gesture_pointer_down_target(&self) -> Option<ElementNodeId> {
+        self.gesture_composer.pointer_down_target()
+    }
+
+    pub fn request_focus(&mut self, new_id: ElementNodeId) -> Option<ElementNodeId> {
+        self.focus_manager.request_focus(new_id)
+    }
+
+    pub fn clear_focus(&mut self) -> Option<ElementNodeId> {
+        self.focus_manager.clear_focus()
+    }
+
+    pub fn set_key_handler(
+        &mut self,
+        id: ElementNodeId,
+        key_type: KeyEventType,
+        handler: JsObject,
+    ) {
+        self.key_handlers.insert((id, key_type), handler);
+    }
+
+    pub fn remove_key_handler(&mut self, id: ElementNodeId, key_type: KeyEventType) {
+        self.key_handlers.remove(&(id, key_type));
+    }
+
+    pub fn set_focus_handler(
+        &mut self,
+        id: ElementNodeId,
+        focus_type: FocusEventType,
+        handler: JsObject,
+    ) {
+        self.focus_handlers.insert((id, focus_type), handler);
+    }
+
+    pub fn remove_focus_handler(&mut self, id: ElementNodeId, focus_type: FocusEventType) {
+        self.focus_handlers.remove(&(id, focus_type));
+    }
+
+    pub fn collect_key_event_data(
+        &self,
+        event: &AppKeyEvent,
+        context: &mut Context,
+    ) -> Option<(Vec<JsObject>, JsValue)> {
+        let focused_id = self.focus_manager.focused()?;
 
         let path = {
-            let tree = self.element_tree.borrow();
             let mut path = Vec::new();
             let mut current = Some(focused_id);
             while let Some(id) = current {
                 path.push(id);
-                current = tree.parent_of(id);
+                current = self.element_tree.parent_of(id);
             }
             path
         };
 
-        let callbacks: Vec<JsObject> = {
-            let handlers = self.key_handlers.borrow();
-            path.iter()
-                .filter_map(|id| handlers.get(&(*id, event.event_type)).cloned())
-                .collect()
-        };
+        let callbacks: Vec<JsObject> = path
+            .iter()
+            .filter_map(|id| self.key_handlers.get(&(*id, event.event_type)).cloned())
+            .collect();
+
+        if callbacks.is_empty() {
+            return None;
+        }
 
         let event_obj = crate::core::bridge::element_bridge::build_key_event_object(
             &event.key,
@@ -238,22 +253,12 @@ impl TurAppInternal {
             context,
         );
 
-        for callback in callbacks {
-            match callback.call(
-                &boa_engine::JsValue::undefined(),
-                std::slice::from_ref(&event_obj),
-                context,
-            ) {
-                Ok(result) if result.to_boolean() => break,
-                _ => continue,
-            }
-        }
+        Some((callbacks, event_obj))
     }
 
     pub fn find_focusable_in_path(&self, path: &[ElementNodeId]) -> Option<ElementNodeId> {
-        let tree = self.element_tree.borrow();
         for &id in path {
-            if let Some(node) = tree.get(id) {
+            if let Some(node) = self.element_tree.get(id) {
                 if let Some(ref element) = node.element {
                     if element.type_name() == "tur_focusable" {
                         return Some(id);
@@ -262,5 +267,23 @@ impl TurAppInternal {
             }
         }
         None
+    }
+
+    pub fn set_node_query_key(&mut self, id: ElementNodeId, keys: Option<Vec<String>>) {
+        if let Some(node) = self.element_tree.get_mut(id) {
+            node.query_key = keys;
+        }
+    }
+
+    pub fn resize_renderer(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
+        self.renderer.resize(logical_width, logical_height, dpr);
+    }
+
+    pub fn present_renderer(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.renderer.present()
+    }
+
+    pub fn debug_layout(&self) -> String {
+        self.element_tree.debug_layout()
     }
 }

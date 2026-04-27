@@ -7,7 +7,6 @@ fn row_main_alignment_start() {
 
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -15,7 +14,6 @@ fn row_main_alignment_start() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1 = rt.get(sb1_id).unwrap();
     assert_eq!(sb1.computed_layout.offset.x, 0.0);
@@ -33,7 +31,6 @@ fn row_main_alignment_center() {
 
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -41,7 +38,6 @@ fn row_main_alignment_center() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1 = rt.get(sb1_id).unwrap();
     assert_eq!(sb1.computed_layout.offset.x, 160.0);
@@ -57,7 +53,6 @@ fn row_main_alignment_end() {
 
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -65,7 +60,6 @@ fn row_main_alignment_end() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1 = rt.get(sb1_id).unwrap();
     assert_eq!(sb1.computed_layout.offset.x, 320.0);
@@ -81,7 +75,6 @@ fn row_cross_alignment_stretch() {
 
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -89,7 +82,6 @@ fn row_cross_alignment_stretch() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1 = rt.get(sb1_id).unwrap();
     assert_eq!(sb1.computed_layout.size.height, 600.0);
@@ -107,7 +99,6 @@ fn row_with_expanded() {
 
     let (sb1_id, expanded_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -115,7 +106,6 @@ fn row_with_expanded() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1 = rt.get(sb1_id).unwrap();
     assert_eq!(sb1.computed_layout.size.width, 50.0);
@@ -133,7 +123,6 @@ fn nested_sidebar_layout() {
 
     let (sidebar_id, content_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -141,7 +130,6 @@ fn nested_sidebar_layout() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sidebar = rt.get(sidebar_id).unwrap();
     assert_eq!(sidebar.computed_layout.size.width, 200.0);
@@ -160,7 +148,6 @@ fn todolist_sidebar_at_left() {
 
     let (sidebar_id, content_id) = {
         let tree = app.element_tree();
-        let tree = tree.borrow();
         let root = tree.root().unwrap();
         let row = tree.get(root.children[0]).unwrap();
         (row.children[0], row.children[1])
@@ -168,7 +155,6 @@ fn todolist_sidebar_at_left() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sidebar = rt.get(sidebar_id).unwrap();
     assert_eq!(

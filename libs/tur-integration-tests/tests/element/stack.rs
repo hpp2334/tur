@@ -7,8 +7,7 @@ fn stack_children_overlap() {
     app.load_bundle("stack-basic").unwrap();
 
     let (sb1_id, sb2_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let stack = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -33,7 +32,6 @@ fn stack_children_overlap() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let sb1_node = rt.get(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);

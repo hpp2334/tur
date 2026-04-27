@@ -50,19 +50,15 @@ impl TurApp {
         Ok(())
     }
 
-    pub fn app_context(&self) -> &Rc<RefCell<TurAppInternal>> {
-        &self.app_context
-    }
-
     pub fn push_event(&self, event: AppEvent) {
-        self.app_context.borrow().push_event(event);
+        self.app_context.borrow_mut().push_event(event);
     }
 
     pub fn tick(&mut self) -> Result<(), TurError> {
         let mut needs_draw = false;
 
         loop {
-            let events = self.app_context.borrow().drain_events();
+            let events = self.app_context.borrow_mut().drain_events();
             if events.is_empty() {
                 break;
             }
@@ -74,20 +70,20 @@ impl TurApp {
                         logical_height,
                         dpr,
                     } => {
-                        self.app_context.borrow().renderer().borrow_mut().resize(
+                        self.app_context.borrow_mut().resize_renderer(
                             logical_width,
                             logical_height,
                             dpr,
                         );
                         self.app_context
-                            .borrow()
+                            .borrow_mut()
                             .set_size(logical_width as f64, logical_height as f64);
                         needs_draw = true;
                     }
 
                     AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
                         let target = self.app_context.borrow().hit_test(position);
-                        self.app_context.borrow().compose_pointer_down(target);
+                        self.app_context.borrow_mut().compose_pointer_down(target);
                     }
 
                     AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
@@ -99,58 +95,95 @@ impl TurApp {
                                 None => false,
                             }
                         };
-                        if let Some(kind) =
-                            self.app_context.borrow().compose_pointer_up(click_eligible)
-                        {
-                            let hit_path = {
+                        let kind = self
+                            .app_context
+                            .borrow_mut()
+                            .compose_pointer_up(click_eligible);
+                        if let Some(kind) = kind {
+                            let focusable_id = {
                                 let ctx = self.app_context.borrow();
-                                let tree = ctx.element_tree().borrow();
-                                tree.hit_test_path(position)
+                                let hit_path = ctx.element_tree().hit_test_path(position);
+                                ctx.find_focusable_in_path(&hit_path)
                             };
-
-                            let focusable_id =
-                                self.app_context.borrow().find_focusable_in_path(&hit_path);
 
                             if let Some(new_focused) = focusable_id {
                                 let old_focused =
-                                    self.app_context.borrow().request_focus(new_focused);
+                                    self.app_context.borrow_mut().request_focus(new_focused);
                                 if let Some(old) = old_focused {
                                     if old != new_focused {
-                                        self.app_context.borrow().invoke_focus_handlers(
-                                            old,
-                                            FocusEventType::Blur,
+                                        let cb = self
+                                            .app_context
+                                            .borrow()
+                                            .collect_focus_handler(old, FocusEventType::Blur);
+                                        if let Some(callback) = cb {
+                                            let _ = callback.call(
+                                                &boa_engine::JsValue::undefined(),
+                                                &[],
+                                                &mut self.boa_context,
+                                            );
+                                        }
+                                    }
+                                }
+                                let cb = self
+                                    .app_context
+                                    .borrow()
+                                    .collect_focus_handler(new_focused, FocusEventType::Focus);
+                                if let Some(callback) = cb {
+                                    let _ = callback.call(
+                                        &boa_engine::JsValue::undefined(),
+                                        &[],
+                                        &mut self.boa_context,
+                                    );
+                                }
+                            } else {
+                                let old_focused = self.app_context.borrow_mut().clear_focus();
+                                if let Some(old) = old_focused {
+                                    let cb = self
+                                        .app_context
+                                        .borrow()
+                                        .collect_focus_handler(old, FocusEventType::Blur);
+                                    if let Some(callback) = cb {
+                                        let _ = callback.call(
+                                            &boa_engine::JsValue::undefined(),
+                                            &[],
                                             &mut self.boa_context,
                                         );
                                     }
                                 }
-                                self.app_context.borrow().invoke_focus_handlers(
-                                    new_focused,
-                                    FocusEventType::Focus,
-                                    &mut self.boa_context,
-                                );
-                            } else {
-                                let old_focused = self.app_context.borrow().clear_focus();
-                                if let Some(old) = old_focused {
-                                    self.app_context.borrow().invoke_focus_handlers(
-                                        old,
-                                        FocusEventType::Blur,
-                                        &mut self.boa_context,
-                                    );
-                                }
                             }
 
-                            self.app_context.borrow().invoke_handlers_for(
-                                kind,
-                                position,
-                                &mut self.boa_context,
-                            );
+                            let callbacks = self
+                                .app_context
+                                .borrow()
+                                .collect_event_handlers(kind, position);
+                            for callback in callbacks {
+                                let _ = callback.call(
+                                    &boa_engine::JsValue::undefined(),
+                                    &[],
+                                    &mut self.boa_context,
+                                );
+                            }
                         }
                     }
 
                     AppEvent::Key(key_event) => {
-                        self.app_context
+                        let data = self
+                            .app_context
                             .borrow()
-                            .dispatch_key_event(&key_event, &mut self.boa_context);
+                            .collect_key_event_data(&key_event, &mut self.boa_context);
+                        if let Some((callbacks, event_obj)) = data {
+                            for callback in callbacks {
+                                let result: Result<boa_engine::JsValue, _> = callback.call(
+                                    &boa_engine::JsValue::undefined(),
+                                    std::slice::from_ref(&event_obj),
+                                    &mut self.boa_context,
+                                );
+                                match result {
+                                    Ok(r) if r.to_boolean() => break,
+                                    _ => continue,
+                                }
+                            }
+                        }
                     }
 
                     AppEvent::RequestDraw => {
@@ -161,12 +194,10 @@ impl TurApp {
         }
 
         if needs_draw {
-            self.app_context.borrow().render();
+            self.app_context.borrow_mut().render();
             self.app_context
-                .borrow()
-                .renderer()
                 .borrow_mut()
-                .present()
+                .present_renderer()
                 .map_err(|e| TurError::Render(e.to_string()))?;
         }
 
@@ -174,11 +205,7 @@ impl TurApp {
     }
 
     pub fn debug_layout(&self) -> String {
-        self.app_context
-            .borrow()
-            .element_tree()
-            .borrow()
-            .debug_layout()
+        self.app_context.borrow().debug_layout()
     }
 
     pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
@@ -186,11 +213,7 @@ impl TurApp {
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
-        self.app_context
-            .borrow()
-            .element_tree()
-            .borrow()
-            .query_element(key)
+        self.app_context.borrow().element_tree().query_element(key)
     }
 
     pub fn with_element<R>(
@@ -199,14 +222,13 @@ impl TurApp {
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         let ctx = self.app_context.borrow();
-        let tree = ctx.element_tree().borrow();
-        let node = tree.get(id)?;
+        let node = ctx.element_tree().get(id)?;
         let element = node.element.as_ref()?;
         Some(cb(element))
     }
 
     #[cfg(feature = "trace")]
-    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
-        self.app_context.borrow().element_tree_rc()
+    pub fn element_tree(&self) -> std::cell::Ref<'_, ElementTree> {
+        std::cell::Ref::map(self.app_context.borrow(), |ctx| ctx.element_tree())
     }
 }

@@ -11,7 +11,6 @@ fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
 
 fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
-    let tree = tree.borrow();
     let root = tree.root().unwrap();
     let col = tree.get(root.children[0]).unwrap();
     col.children[0]
@@ -42,7 +41,6 @@ fn click_updates_text_content() {
     app.render();
 
     let tree = app.element_tree();
-    let tree = tree.borrow();
     let pi_node = tree.get(pi_id).unwrap();
     let pi_layout = pi_node.computed_layout;
 

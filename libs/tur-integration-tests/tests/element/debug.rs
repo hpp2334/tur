@@ -30,8 +30,8 @@ fn debug_raw_column_basic() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("column-basic").unwrap();
 
-    eprintln!("=== SolidJS: column-basic ===");
-    print_tree(&app.element_tree().borrow());
+    eprintln!("=== raw JS: column-basic ===");
+    print_tree(&app.element_tree());
 }
 
 #[test]
@@ -40,5 +40,5 @@ fn debug_solidjs_column_basic() {
     app.load_bundle("column-basic").unwrap();
 
     eprintln!("=== SolidJS: column-basic ===");
-    print_tree(&app.element_tree().borrow());
+    print_tree(&app.element_tree());
 }

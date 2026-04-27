@@ -7,8 +7,7 @@ fn pointer_interact_passes_constraints_and_size() {
     app.load_bundle("pointer-interact-basic").unwrap();
 
     let (pi_id, container_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         assert_eq!(root.children.len(), 1);
 
@@ -30,7 +29,6 @@ fn pointer_interact_passes_constraints_and_size() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let pi_node = rt.get(pi_id).unwrap();
     assert_eq!(pi_node.computed_layout.size.width, 100.0);
@@ -49,8 +47,7 @@ fn pointer_interact_passes_through_in_column() {
     app.load_bundle("pointer-interact-in-column").unwrap();
 
     let (pi1_id, pi2_id, sb1_id, sb2_id) = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let col = tree.get(root.children[0]).unwrap();
         assert_eq!(col.children.len(), 2);
@@ -74,7 +71,6 @@ fn pointer_interact_passes_through_in_column() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
 
     let pi1_node = rt.get(pi1_id).unwrap();
     assert_eq!(pi1_node.computed_layout.size.width, 80.0);

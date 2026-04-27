@@ -7,8 +7,7 @@ fn text_content_and_measurement() {
     app.load_bundle("text-basic").unwrap();
 
     let text_id = {
-        let tree_rc = app.element_tree();
-        let tree = tree_rc.borrow();
+        let tree = app.element_tree();
         let root = tree.root().unwrap();
         let text = tree.get(root.children[0]).unwrap();
         assert_eq!(
@@ -20,7 +19,6 @@ fn text_content_and_measurement() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let text_node = rt.get(text_id).unwrap();
     let layout = &text_node.computed_layout;
     assert!(layout.size.width > 0.0, "text width should be positive");
@@ -34,7 +32,6 @@ fn text_empty_content_zero_size() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let root = rt.root().unwrap();
     let text_node = rt.get(root.children[0]).unwrap();
     let layout = &text_node.computed_layout;
@@ -49,7 +46,6 @@ fn text_font_size_affects_height() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let root = rt.root().unwrap();
     let small = rt.get(root.children[0]).unwrap();
     let large = rt.get(root.children[1]).unwrap();
@@ -68,7 +64,6 @@ fn text_wrapping_with_narrow_constraints() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let root = rt.root().unwrap();
     let text_node = rt.get(root.children[0]).unwrap();
     let layout = &text_node.computed_layout;
@@ -91,7 +86,6 @@ fn text_wrapping_vs_no_wrapping() {
     app_narrow.render();
     let wrapped_height = {
         let rt = app_narrow.element_tree();
-        let rt = rt.borrow();
         let root = rt.root().unwrap();
         rt.get(root.children[0])
             .unwrap()
@@ -105,7 +99,6 @@ fn text_wrapping_vs_no_wrapping() {
     app_wide.render();
     let unwrapped_height = {
         let rt = app_wide.element_tree();
-        let rt = rt.borrow();
         let root = rt.root().unwrap();
         rt.get(root.children[0])
             .unwrap()
@@ -129,7 +122,6 @@ fn text_in_column_vertical_stacking() {
 
     app.render();
     let rt = app.element_tree();
-    let rt = rt.borrow();
     let root = rt.root().unwrap();
     let col = rt.get(root.children[0]).unwrap();
     let t1 = rt.get(col.children[0]).unwrap();
