@@ -143,8 +143,10 @@ impl TurVelloApp {
         Ok(())
     }
 
-    pub fn element_tree(&self) -> std::cell::Ref<'_, ElementTree> {
-        std::cell::Ref::map(self.inner.borrow(), |inner| &*inner.app.element_tree())
+    pub fn with_element_tree<R>(&self, f: impl FnOnce(&ElementTree) -> R) -> R {
+        let inner = self.inner.borrow();
+        let tree = inner.app.element_tree();
+        f(&tree)
     }
 
     pub fn render(&self) {
