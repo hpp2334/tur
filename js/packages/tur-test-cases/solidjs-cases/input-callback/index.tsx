@@ -1,6 +1,10 @@
 import { renderRoot } from "@tur/solidjs-renderer";
 import { Input, TextController } from "@tur/solidjs";
 
+declare global {
+  var __inputCallbackLog: string[];
+}
+
 globalThis.__inputCallbackLog = [];
 
 const controller = new TextController({
