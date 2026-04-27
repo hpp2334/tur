@@ -4,15 +4,7 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn pointer_interact_no_child_zero_size() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var pi = globalThis.__tur.createPointerInteract(ctx);
-        globalThis.__tur.appendChild(ctx, root, pi);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("pointer-interact-empty").unwrap();
 
     let pi_id = {
         let tree_rc = app.element_tree();

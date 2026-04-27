@@ -30,16 +30,7 @@ fn text_content_and_measurement() {
 #[test]
 fn text_empty_content_zero_size() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var text = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, text, "content", "");
-        globalThis.__tur.appendChild(ctx, root, text);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("text-empty-content").unwrap();
 
     app.render();
     let rt = app.element_tree();
@@ -54,21 +45,7 @@ fn text_empty_content_zero_size() {
 #[test]
 fn text_font_size_affects_height() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var t1 = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, t1, "content", "Hello");
-        globalThis.__tur.setAttribute(ctx, t1, "fontSize", 14);
-        globalThis.__tur.appendChild(ctx, root, t1);
-        var t2 = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, t2, "content", "Hello");
-        globalThis.__tur.setAttribute(ctx, t2, "fontSize", 28);
-        globalThis.__tur.appendChild(ctx, root, t2);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("text-font-size").unwrap();
 
     app.render();
     let rt = app.element_tree();
@@ -87,17 +64,7 @@ fn text_font_size_affects_height() {
 #[test]
 fn text_wrapping_with_narrow_constraints() {
     let mut app = TurTestApp::new(80.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var text = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, text, "content", "Hello World this is a long text that should wrap");
-        globalThis.__tur.setAttribute(ctx, text, "fontSize", 14);
-        globalThis.__tur.appendChild(ctx, root, text);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("text-wrapping").unwrap();
 
     app.render();
     let rt = app.element_tree();
@@ -119,17 +86,8 @@ fn text_wrapping_with_narrow_constraints() {
 
 #[test]
 fn text_wrapping_vs_no_wrapping() {
-    let js_template = r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var text = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, text, "content", "Hello World this is a long text that should wrap");
-        globalThis.__tur.setAttribute(ctx, text, "fontSize", 14);
-        globalThis.__tur.appendChild(ctx, root, text);
-    "#;
-
     let mut app_narrow = TurTestApp::new(60.0, 600.0).unwrap();
-    app_narrow.load_bundle_raw(js_template).unwrap();
+    app_narrow.load_bundle("text-wrapping").unwrap();
     app_narrow.render();
     let wrapped_height = {
         let rt = app_narrow.element_tree();
@@ -143,7 +101,7 @@ fn text_wrapping_vs_no_wrapping() {
     };
 
     let mut app_wide = TurTestApp::new(800.0, 600.0).unwrap();
-    app_wide.load_bundle_raw(js_template).unwrap();
+    app_wide.load_bundle("text-wrapping").unwrap();
     app_wide.render();
     let unwrapped_height = {
         let rt = app_wide.element_tree();
@@ -167,25 +125,7 @@ fn text_wrapping_vs_no_wrapping() {
 #[test]
 fn text_in_column_vertical_stacking() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_raw(
-        r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var col = globalThis.__tur.createFlex(ctx);
-        globalThis.__tur.setAttribute(ctx, col, "direction", 0);
-        globalThis.__tur.setAttribute(ctx, col, "crossAlignment", 2);
-        globalThis.__tur.appendChild(ctx, root, col);
-        var t1 = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, t1, "content", "First");
-        globalThis.__tur.setAttribute(ctx, t1, "fontSize", 14);
-        globalThis.__tur.appendChild(ctx, col, t1);
-        var t2 = globalThis.__tur.createText(ctx);
-        globalThis.__tur.setAttribute(ctx, t2, "content", "Second");
-        globalThis.__tur.setAttribute(ctx, t2, "fontSize", 14);
-        globalThis.__tur.appendChild(ctx, col, t2);
-    "#,
-    )
-    .unwrap();
+    app.load_bundle("text-in-column").unwrap();
 
     app.render();
     let rt = app.element_tree();

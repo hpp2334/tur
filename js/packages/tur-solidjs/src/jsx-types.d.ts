@@ -12,15 +12,18 @@ declare module "solid-js" {
         direction: FlexDirection;
         mainAlignment?: MainAxisAlignment;
         crossAlignment?: CrossAxisAlignment;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_flex_item: {
         flex?: number;
         fit?: FlexFit;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_stack: {
         fit?: StackFit;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_positioned: {
@@ -28,6 +31,7 @@ declare module "solid-js" {
         top?: number;
         right?: number;
         bottom?: number;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_container: {
@@ -35,10 +39,12 @@ declare module "solid-js" {
         height?: number;
         padding?: number;
         color?: Color;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_pointer_interact: {
         onClick?: () => void;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_focusable: {
@@ -46,12 +52,14 @@ declare module "solid-js" {
         onBlur?: () => void;
         onKeyDown?: (e: TurKeyEvent) => boolean | void;
         onKeyUp?: (e: TurKeyEvent) => boolean | void;
+        queryKey?: string[];
         children?: JSX.Element;
       };
       tur_text: {
         content?: string;
         fontSize?: number;
         color?: Color;
+        queryKey?: string[];
         children?: JSX.Element;
       };
     }

@@ -6,6 +6,7 @@ import type { FlexFit } from "@tur/solidjs-renderer";
 
 interface BaseProps {
   children?: JSX.Element;
+  queryKey?: string[];
 }
 
 export interface ColumnProps extends BaseProps {
@@ -111,6 +112,5 @@ export function Focusable(props: FocusableProps): JSX.Element {
 }
 
 export function Text(props: TextProps): JSX.Element {
-  const { children, ...rest } = props;
-  return <tur_text {...rest}>{children}</tur_text>;
+  return <tur_text {...props} />;
 }
