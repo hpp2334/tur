@@ -84,6 +84,56 @@ impl TurApp {
                     AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
                         let target = self.app_context.borrow().hit_test(position);
                         self.app_context.borrow_mut().compose_pointer_down(target);
+
+                        {
+                            let ctx = self.app_context.borrow();
+                            if let Some(id) = target {
+                                if ctx.input_nodes.contains(&id) {
+                                    drop(ctx);
+                                    let local_x = self
+                                        .app_context
+                                        .borrow()
+                                        .input_local_x(id, position);
+                                    self.app_context
+                                        .borrow_mut()
+                                        .start_input_selection_at_x(id, local_x);
+                                    self.app_context
+                                        .borrow_mut()
+                                        .push_event(AppEvent::RequestDraw);
+                                }
+                            }
+                        }
+                    }
+
+                    AppEvent::Gesture(AppGestureEvent::PointerMove { position }) => {
+                        let (is_dragging, focused) = {
+                            let ctx = self.app_context.borrow();
+                            let dragging = ctx.is_gesture_dragging();
+                            let focused = ctx.focused_element();
+                            (dragging, focused)
+                        };
+
+                        if is_dragging {
+                            if let Some(input_id) = focused {
+                                let is_input = self
+                                    .app_context
+                                    .borrow()
+                                    .input_nodes
+                                    .contains(&input_id);
+                                if is_input {
+                                    let local_x = self
+                                        .app_context
+                                        .borrow()
+                                        .input_local_x(input_id, position);
+                                    self.app_context
+                                        .borrow_mut()
+                                        .extend_input_selection_to_x(input_id, local_x);
+                                    self.app_context
+                                        .borrow_mut()
+                                        .push_event(AppEvent::RequestDraw);
+                                }
+                            }
+                        }
                     }
 
                     AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {

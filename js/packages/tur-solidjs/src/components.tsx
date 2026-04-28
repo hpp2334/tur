@@ -164,6 +164,7 @@ export function Input(props: InputProps): JSX.Element {
         onFocus={() => ctrl._onFocus()}
         onBlur={() => ctrl._onBlur()}
         onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
+        onSelectionChange={(start: number, end: number) => ctrl._onSelectionChange(start, end)}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}

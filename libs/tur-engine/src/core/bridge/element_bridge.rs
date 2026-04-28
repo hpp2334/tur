@@ -359,6 +359,16 @@ pub(crate) fn tur_set_attribute(
                 }
                 true
             }
+            "onSelectionChange" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.text_input_selection_handlers.insert(node_id, obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.text_input_selection_handlers.remove(&node_id);
+                }
+                true
+            }
             _ => false,
         };
         if handled {

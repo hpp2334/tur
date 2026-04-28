@@ -80,6 +80,44 @@ impl TurTestApp {
         let _ = self.inner.tick();
     }
 
+    pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
+        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+            key: key.to_string(),
+            code: key.to_string(),
+            modifiers: Modifiers {
+                shift,
+                ctrl,
+                ..Default::default()
+            },
+            event_type: KeyEventType::Down,
+        }));
+        let _ = self.inner.tick();
+    }
+
+    pub fn pointer_down(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+                position: Offset::new(x, y),
+            }));
+        let _ = self.inner.tick();
+    }
+
+    pub fn pointer_move(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+                position: Offset::new(x, y),
+            }));
+        let _ = self.inner.tick();
+    }
+
+    pub fn pointer_up(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+                position: Offset::new(x, y),
+            }));
+        let _ = self.inner.tick();
+    }
+
     pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
         self.inner.has_event_handler(id, kind)
     }
