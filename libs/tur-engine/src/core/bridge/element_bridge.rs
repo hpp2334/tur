@@ -8,7 +8,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::app::TurAppInternal;
 use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementNode};
+use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusEventType;
 use crate::core::gesture::ComposedGestureEventKind;
@@ -75,12 +75,11 @@ fn create_element(
 ) -> JsResult<JsValue> {
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
-    let id = ctx.alloc_id();
-    let node = ElementNode::new(id, element);
-    ctx.insert_element(node);
-
-    let obj = ctx.get_or_create_handle(id, context);
-    Ok(obj.object().clone().into())
+    let id = ctx.element_tree_mut().alloc_id();
+    let node = ElementObject::new(id, element, context);
+    ctx.element_tree_mut().insert(node);
+    let handle = ctx.element_tree().get(id).unwrap().handle.clone();
+    Ok(handle.object().clone().into())
 }
 
 pub(crate) fn tur_create_flex(
@@ -358,15 +357,15 @@ pub(crate) fn tur_insert_before(
 pub(crate) fn tur_get_parent(
     _this: &JsValue,
     args: &[JsValue],
-    context: &mut Context,
+    _context: &mut Context,
 ) -> JsResult<JsValue> {
     let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
     match ctx.element_tree().parent_of(node_id) {
         Some(parent_id) => {
-            let obj = ctx.get_or_create_handle(parent_id, context);
-            Ok(obj.object().clone().into())
+            let handle = ctx.element_tree().get(parent_id).unwrap().handle.clone();
+            Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
     }
@@ -375,15 +374,15 @@ pub(crate) fn tur_get_parent(
 pub(crate) fn tur_get_first_child(
     _this: &JsValue,
     args: &[JsValue],
-    context: &mut Context,
+    _context: &mut Context,
 ) -> JsResult<JsValue> {
     let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
     match ctx.element_tree().first_child_of(node_id) {
         Some(child_id) => {
-            let obj = ctx.get_or_create_handle(child_id, context);
-            Ok(obj.object().clone().into())
+            let handle = ctx.element_tree().get(child_id).unwrap().handle.clone();
+            Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
     }
@@ -392,15 +391,15 @@ pub(crate) fn tur_get_first_child(
 pub(crate) fn tur_get_next_sibling(
     _this: &JsValue,
     args: &[JsValue],
-    context: &mut Context,
+    _context: &mut Context,
 ) -> JsResult<JsValue> {
     let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
     match ctx.element_tree().next_sibling_of(node_id) {
         Some(sibling_id) => {
-            let obj = ctx.get_or_create_handle(sibling_id, context);
-            Ok(obj.object().clone().into())
+            let handle = ctx.element_tree().get(sibling_id).unwrap().handle.clone();
+            Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
     }
