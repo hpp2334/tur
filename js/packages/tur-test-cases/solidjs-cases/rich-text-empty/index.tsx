@@ -1,10 +1,11 @@
 import { renderRoot } from "@tur/solidjs-renderer";
+import { TextContainer, TextSpan } from "@tur/solidjs";
 
 function RichTextEmpty() {
   return (
-    <tur_text_container fontSize={14}>
-      <tur_text_span content="" />
-    </tur_text_container>
+    <TextContainer fontSize={14}>
+      <TextSpan content="" />
+    </TextContainer>
   );
 }
 

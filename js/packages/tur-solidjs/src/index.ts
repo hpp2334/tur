@@ -23,6 +23,8 @@ export {
   Container,
   PointerInteract,
   Focusable,
+  TextContainer,
+  TextSpan,
   Text,
   Input,
 } from "./components";
@@ -36,6 +38,8 @@ export type {
   ContainerProps,
   PointerInteractProps,
   FocusableProps,
+  TextContainerProps,
+  TextSpanProps,
   TextProps,
   InputProps,
 } from "./components";
