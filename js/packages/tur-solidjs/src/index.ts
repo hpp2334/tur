@@ -1,4 +1,6 @@
 export type { TurNodeHandle, TurKeyEvent } from "@tur/solidjs-renderer";
+export { TextController } from "@tur/solidjs-renderer";
+export type { TextControllerOptions } from "@tur/solidjs-renderer";
 export type { Color } from "@tur/solidjs-renderer";
 export type { RGB } from "@tur/solidjs-renderer";
 export type { RGBA } from "@tur/solidjs-renderer";
@@ -22,6 +24,7 @@ export {
   PointerInteract,
   Focusable,
   Text,
+  Input,
 } from "./components";
 export type {
   ColumnProps,
@@ -34,4 +37,5 @@ export type {
   PointerInteractProps,
   FocusableProps,
   TextProps,
+  InputProps,
 } from "./components";

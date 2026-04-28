@@ -14,8 +14,8 @@ use crate::core::focus::FocusEventType;
 use crate::core::gesture::ComposedGestureEventKind;
 use crate::core::keyboard::KeyEventType;
 use crate::elements::{
-    ContainerElement, FlexElement, FlexItemElement, FocusableElement, PointerInteractElement,
-    PositionedElement, StackElement, TextElement,
+    ContainerElement, FlexElement, FlexItemElement, FocusableElement, InputElement,
+    PointerInteractElement, PositionedElement, StackElement, TextElement,
 };
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -231,60 +231,126 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
-    if let Some(node) = ctx.element_tree().get(node_id) {
-        if let Some(ref element) = node.element {
-            if element.type_name() == "tur_pointer_interact" && key == "onClick" {
-                let event_kind = ComposedGestureEventKind::Click;
+    let element_type = ctx
+        .element_tree()
+        .get(node_id)
+        .and_then(|n| n.element.as_ref())
+        .map(|e| e.type_name().to_string());
+
+    let Some(element_type) = element_type else {
+        if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
+            if let Some(ref mut element) = node.element {
+                element.set_prop(context, &key, &value);
+            }
+        }
+        ctx.push_event(AppEvent::RequestDraw);
+        return Ok(JsValue::undefined());
+    };
+
+    if element_type == "tur_pointer_interact" && key == "onClick" {
+        let event_kind = ComposedGestureEventKind::Click;
+        if let Some(obj) = value.as_object() {
+            if obj.is_callable() {
+                ctx.set_event_handler(node_id, event_kind, obj.clone());
+            }
+        } else if value.is_null() || value.is_undefined() {
+            ctx.remove_event_handler(node_id, event_kind);
+        }
+        ctx.push_event(AppEvent::RequestDraw);
+        return Ok(JsValue::undefined());
+    }
+
+    if element_type == "tur_focusable" {
+        let handled = match key.to_std_string_escaped().as_str() {
+            "onKeyDown" | "onKeyUp" => {
+                let key_event_type = if key == "onKeyDown" {
+                    KeyEventType::Down
+                } else {
+                    KeyEventType::Up
+                };
                 if let Some(obj) = value.as_object() {
                     if obj.is_callable() {
-                        ctx.set_event_handler(node_id, event_kind, obj.clone());
+                        ctx.set_key_handler(node_id, key_event_type, obj.clone());
                     }
                 } else if value.is_null() || value.is_undefined() {
-                    ctx.remove_event_handler(node_id, event_kind);
+                    ctx.remove_key_handler(node_id, key_event_type);
                 }
-                ctx.push_event(AppEvent::RequestDraw);
-                return Ok(JsValue::undefined());
+                true
             }
-
-            if element.type_name() == "tur_focusable" {
-                let handled = match key.to_std_string_escaped().as_str() {
-                    "onKeyDown" | "onKeyUp" => {
-                        let key_event_type = if key == "onKeyDown" {
-                            KeyEventType::Down
-                        } else {
-                            KeyEventType::Up
-                        };
-                        if let Some(obj) = value.as_object() {
-                            if obj.is_callable() {
-                                ctx.set_key_handler(node_id, key_event_type, obj.clone());
-                            }
-                        } else if value.is_null() || value.is_undefined() {
-                            ctx.remove_key_handler(node_id, key_event_type);
-                        }
-                        true
-                    }
-                    "onFocus" | "onBlur" => {
-                        let focus_event_type = if key == "onFocus" {
-                            FocusEventType::Focus
-                        } else {
-                            FocusEventType::Blur
-                        };
-                        if let Some(obj) = value.as_object() {
-                            if obj.is_callable() {
-                                ctx.set_focus_handler(node_id, focus_event_type, obj.clone());
-                            }
-                        } else if value.is_null() || value.is_undefined() {
-                            ctx.remove_focus_handler(node_id, focus_event_type);
-                        }
-                        true
-                    }
-                    _ => false,
+            "onFocus" | "onBlur" => {
+                let focus_event_type = if key == "onFocus" {
+                    FocusEventType::Focus
+                } else {
+                    FocusEventType::Blur
                 };
-                if handled {
-                    ctx.push_event(AppEvent::RequestDraw);
-                    return Ok(JsValue::undefined());
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.set_focus_handler(node_id, focus_event_type, obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.remove_focus_handler(node_id, focus_event_type);
                 }
+                true
             }
+            _ => false,
+        };
+        if handled {
+            ctx.push_event(AppEvent::RequestDraw);
+            return Ok(JsValue::undefined());
+        }
+    }
+
+    if element_type == "tur_input" {
+        let handled = match key.to_std_string_escaped().as_str() {
+            "onInput" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.text_input_callbacks.insert(node_id, obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.text_input_callbacks.remove(&node_id);
+                }
+                true
+            }
+            "onFocus" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.text_input_focus_handlers
+                            .insert((node_id, FocusEventType::Focus), obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.text_input_focus_handlers
+                        .remove(&(node_id, FocusEventType::Focus));
+                }
+                true
+            }
+            "onBlur" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.text_input_focus_handlers
+                            .insert((node_id, FocusEventType::Blur), obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.text_input_focus_handlers
+                        .remove(&(node_id, FocusEventType::Blur));
+                }
+                true
+            }
+            "onCursorChange" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.text_input_cursor_handlers.insert(node_id, obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.text_input_cursor_handlers.remove(&node_id);
+                }
+                true
+            }
+            _ => false,
+        };
+        if handled {
+            ctx.push_event(AppEvent::RequestDraw);
+            return Ok(JsValue::undefined());
         }
     }
 
@@ -403,6 +469,48 @@ pub(crate) fn tur_get_next_sibling(
         }
         None => Ok(JsValue::null()),
     }
+}
+
+pub(crate) fn tur_create_input(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createInput()");
+    let ctx = extract_ctx(args)?;
+    let mut ctx = ctx.borrow_mut();
+    let id = ctx.element_tree_mut().alloc_id();
+    let element = AnyElement::new(InputElement::new());
+    let node = ElementObject::new(id, element, context);
+    ctx.element_tree_mut().insert(node);
+    ctx.input_nodes.insert(id);
+    let handle = ctx.element_tree().get(id).unwrap().handle.clone();
+    Ok(handle.object().clone().into())
+}
+
+pub(crate) fn tur_set_input_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    let ctx = extract_ctx(args)?;
+    let mut ctx = ctx.borrow_mut();
+    let node_id = extract_node_id(args, 1)?;
+    let text = args
+        .get_or_undefined(2)
+        .as_string()
+        .map(|s| s.to_std_string_escaped())
+        .unwrap_or_default();
+
+    if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
+        if let Some(ref mut element) = node.element {
+            if let Some(input_el) = element.cast_mut::<InputElement>() {
+                input_el.set_text(&text);
+            }
+        }
+    }
+    ctx.push_event(AppEvent::RequestDraw);
+    Ok(JsValue::undefined())
 }
 
 pub(crate) fn build_key_event_object(

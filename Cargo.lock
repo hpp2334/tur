@@ -2519,6 +2519,7 @@ dependencies = [
 name = "tur-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "boa_engine",
  "minifb",
  "pollster",
  "raw-window-handle",

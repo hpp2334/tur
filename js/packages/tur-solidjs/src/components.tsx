@@ -1,5 +1,6 @@
 import type { JSX } from "solid-js";
 import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
+import type { TextController } from "@tur/solidjs-renderer";
 import { CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
@@ -113,4 +114,35 @@ export function Focusable(props: FocusableProps): JSX.Element {
 
 export function Text(props: TextProps): JSX.Element {
   return <tur_text {...props} />;
+}
+
+export interface InputProps {
+  controller: TextController;
+  placeholder?: string;
+  fontSize?: number;
+  color?: Color;
+  placeholderColor?: Color;
+  cursorColor?: Color;
+  width?: number;
+  height?: number;
+}
+
+export function Input(props: InputProps): JSX.Element {
+  const ctrl = props.controller;
+  return (
+    <tur_container width={props.width} height={props.height}>
+      <tur_input
+        ref={(el: import("@tur/solidjs-renderer").TurNodeHandle) => ctrl._attach(el)}
+        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
+        onFocus={() => ctrl._onFocus()}
+        onBlur={() => ctrl._onBlur()}
+        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
+        placeholder={props.placeholder}
+        fontSize={props.fontSize ?? 14}
+        color={props.color}
+        placeholderColor={props.placeholderColor}
+        cursorColor={props.cursorColor ?? props.color}
+      />
+    </tur_container>
+  );
 }

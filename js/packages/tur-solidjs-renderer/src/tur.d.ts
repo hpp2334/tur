@@ -20,6 +20,7 @@ declare global {
     createText(ctx: unknown): TurNodeHandle;
     createPointerInteract(ctx: unknown): TurNodeHandle;
     createFocusable(ctx: unknown): TurNodeHandle;
+    createInput(ctx: unknown): TurNodeHandle;
     createRoot(ctx: unknown): TurNodeHandle;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
@@ -34,5 +35,6 @@ declare global {
     getFirstChild(ctx: unknown, handle: TurNodeHandle): TurNodeHandle | null;
     getNextSibling(ctx: unknown, handle: TurNodeHandle): TurNodeHandle | null;
     requestFocus(ctx: unknown, handle: TurNodeHandle): void;
+    setInputText(ctx: unknown, handle: TurNodeHandle, text: string): void;
   };
 }

@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 tur-engine = { workspace = true, features = ["trace"] }
 tur-shared = { workspace = true }
+boa_engine = { workspace = true }
 
 [dev-dependencies]
 minifb = "0.28"

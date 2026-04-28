@@ -72,6 +72,7 @@ impl ElementLayout for TextElement {
                         id: glyph.id as u32,
                         x: gx,
                         y: gy,
+                        advance: glyph.advance,
                     });
                 }
 

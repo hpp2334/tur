@@ -17,6 +17,7 @@ trait Erased: 'static {
     fn kind(&self) -> ElementKind;
     fn type_name(&self) -> &'static str;
     fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn trace_label(&self) -> String;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn perform_layout_size(
@@ -50,6 +51,10 @@ where
     }
 
     fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
 
@@ -114,6 +119,10 @@ impl AnyElement {
 
     pub fn cast<T: 'static>(&self) -> Option<&T> {
         self.inner.as_any().downcast_ref::<T>()
+    }
+
+    pub fn cast_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.inner.as_any_mut().downcast_mut::<T>()
     }
 
     pub fn trace_label(&self) -> String {

@@ -16,4 +16,24 @@ pub(crate) struct TextGlyph {
     pub id: u32,
     pub x: f32,
     pub y: f32,
+    pub advance: f32,
+}
+
+impl TextLayoutData {
+    pub fn cursor_x_at(&self, char_index: usize) -> f32 {
+        let mut chars_seen = 0;
+        for run in &self.runs {
+            for glyph in &run.glyphs {
+                if chars_seen == char_index {
+                    return glyph.x;
+                }
+                chars_seen += 1;
+            }
+        }
+        self.runs
+            .last()
+            .and_then(|r| r.glyphs.last())
+            .map(|g| g.x + g.advance)
+            .unwrap_or(0.0)
+    }
 }
