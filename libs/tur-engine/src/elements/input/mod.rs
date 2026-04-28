@@ -1,4 +1,5 @@
 mod element;
 mod render;
 
-pub use element::{InputEditResult, InputElement};
+pub(crate) use element::InputChanges;
+pub use element::InputElement;

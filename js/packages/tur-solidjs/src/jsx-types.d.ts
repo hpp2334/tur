@@ -69,6 +69,7 @@ declare module "solid-js" {
         cursorColor?: Color;
         placeholder?: string;
         placeholderColor?: Color;
+        multiline?: boolean;
       };
       tur_text_container: {
         fontSize?: number;

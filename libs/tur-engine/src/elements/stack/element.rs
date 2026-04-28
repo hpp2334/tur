@@ -2,7 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::StackFit;
 
-use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate};
 use crate::core::elements::ElementTrace;
 
 #[derive(Clone)]
@@ -39,3 +39,5 @@ impl ElementOnUpdate for StackElement {
         }
     }
 }
+
+impl ElementOnKeyboard for StackElement {}

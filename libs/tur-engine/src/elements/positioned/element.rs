@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate};
 use crate::core::elements::ElementTrace;
 
 #[derive(Clone, Default)]
@@ -54,8 +54,8 @@ impl ElementOnUpdate for PositionedElement {
             self.top = val;
         } else if *key == "right" {
             self.right = val;
-        } else if *key == "bottom" {
-            self.bottom = val;
         }
     }
 }
+
+impl ElementOnKeyboard for PositionedElement {}

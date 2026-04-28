@@ -88,15 +88,15 @@ impl TurApp {
                         {
                             let ctx = self.app_context.borrow();
                             if let Some(id) = target {
-                                if ctx.input_nodes.contains(&id) {
+                                if ctx.is_input(id) {
                                     drop(ctx);
-                                    let local_x = self
-                                        .app_context
-                                        .borrow()
-                                        .input_local_x(id, position);
+                                    let (local_x, local_y) = {
+                                        let ctx = self.app_context.borrow();
+                                        (ctx.input_local_x(id, position), ctx.input_local_y(id, position))
+                                    };
                                     self.app_context
                                         .borrow_mut()
-                                        .start_input_selection_at_x(id, local_x);
+                                        .start_input_selection_at(id, local_x, local_y);
                                     self.app_context
                                         .borrow_mut()
                                         .push_event(AppEvent::RequestDraw);
@@ -118,16 +118,15 @@ impl TurApp {
                                 let is_input = self
                                     .app_context
                                     .borrow()
-                                    .input_nodes
-                                    .contains(&input_id);
+                                    .is_input(input_id);
                                 if is_input {
-                                    let local_x = self
-                                        .app_context
-                                        .borrow()
-                                        .input_local_x(input_id, position);
+                                    let (local_x, local_y) = {
+                                        let ctx = self.app_context.borrow();
+                                        (ctx.input_local_x(input_id, position), ctx.input_local_y(input_id, position))
+                                    };
                                     self.app_context
                                         .borrow_mut()
-                                        .extend_input_selection_to_x(input_id, local_x);
+                                        .extend_input_selection_to(input_id, local_x, local_y);
                                     self.app_context
                                         .borrow_mut()
                                         .push_event(AppEvent::RequestDraw);
@@ -226,23 +225,9 @@ impl TurApp {
                     }
 
                     AppEvent::Key(key_event) => {
-                        let data = self
-                            .app_context
+                        self.app_context
                             .borrow_mut()
-                            .collect_key_event_data(&key_event, &mut self.boa_context);
-                        if let Some((callbacks, event_obj)) = data {
-                            for callback in callbacks {
-                                let result: Result<boa_engine::JsValue, _> = callback.call(
-                                    &boa_engine::JsValue::undefined(),
-                                    std::slice::from_ref(&event_obj),
-                                    &mut self.boa_context,
-                                );
-                                match result {
-                                    Ok(r) if r.to_boolean() => break,
-                                    _ => continue,
-                                }
-                            }
-                        }
+                            .handle_key_event(&key_event, &mut self.boa_context);
                     }
 
                     AppEvent::RequestDraw => {
