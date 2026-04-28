@@ -4,6 +4,7 @@ mod debug;
 mod expanded;
 mod input;
 mod positioned;
+mod rich_text;
 mod row;
 mod sized_box;
 mod stack;

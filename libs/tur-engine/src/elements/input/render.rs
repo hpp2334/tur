@@ -1,11 +1,10 @@
-use parley::layout::PositionedLayoutItem;
 use parley::{Alignment, AlignmentOptions, GenericFamily, StyleProperty};
 use tur_shared::{Color, ComputedLayout, Constraints, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::elements::text::text_layout::{TextGlyph, TextLayoutData, TextRunData};
+use crate::elements::text::text_layout;
 
 use super::element::InputElement;
 
@@ -21,7 +20,7 @@ fn build_text_layout(
     color: &Color,
     constraints: &Constraints,
     cx: &mut LayoutContext,
-) -> (TextLayoutData, f32, f32) {
+) -> (text_layout::TextLayoutData, f32, f32) {
     let brush = color_to_brush(color);
     let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
@@ -40,55 +39,7 @@ fn build_text_layout(
     layout.break_all_lines(max_width);
     layout.align(max_width, Alignment::Start, AlignmentOptions::default());
 
-    let width = layout.width();
-    let height = layout.height();
-
-    let mut runs = Vec::new();
-    for line in layout.lines() {
-        for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
-                continue;
-            };
-            let run = glyph_run.run();
-            let font = run.font().clone();
-            let font_size = run.font_size();
-            let normalized_coords = run.normalized_coords().to_vec();
-            let style = glyph_run.style();
-
-            let mut glyphs = Vec::new();
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-            for glyph in glyph_run.glyphs() {
-                let gx = x + glyph.x;
-                let gy = y - glyph.y;
-                x += glyph.advance;
-                glyphs.push(TextGlyph {
-                    id: glyph.id as u32,
-                    x: gx,
-                    y: gy,
-                    advance: glyph.advance,
-                });
-            }
-
-            runs.push(TextRunData {
-                font,
-                font_size,
-                normalized_coords,
-                glyphs,
-                brush: style.brush,
-            });
-        }
-    }
-
-    (
-        TextLayoutData {
-            runs,
-            _width: width,
-            _height: height,
-        },
-        width,
-        height,
-    )
+    text_layout::extract_layout_data(&mut layout, &[])
 }
 
 impl ElementLayout for InputElement {

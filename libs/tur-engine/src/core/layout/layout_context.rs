@@ -57,6 +57,14 @@ impl<'a> LayoutContext<'a> {
             .unwrap_or("tur_container")
     }
 
+    pub fn child_element<T: 'static>(&self, child_id: ElementNodeId) -> Option<&T> {
+        self.tree
+            .nodes
+            .get(&child_id)
+            .and_then(|n| n.element.as_ref())
+            .and_then(|e| e.cast::<T>())
+    }
+
     pub fn text_layout_contexts(
         &mut self,
     ) -> (&mut FontContext, &mut ParleyLayoutContext<[u8; 4]>) {

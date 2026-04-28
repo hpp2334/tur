@@ -12,7 +12,8 @@ const creators: Record<string, () => TurElement> = {
   "tur_stack": () => __tur.createStack(ctx),
   "tur_positioned": () => __tur.createPositioned(ctx),
   "tur_container": () => __tur.createContainer(ctx),
-  "tur_text": () => __tur.createText(ctx),
+  "tur_text_container": () => __tur.createTextContainer(ctx),
+  "tur_text_span": () => __tur.createTextSpan(ctx),
   "tur_pointer_interact": () => __tur.createPointerInteract(ctx),
   "tur_focusable": () => __tur.createFocusable(ctx),
   "tur_input": () => __tur.createInput(ctx),
@@ -26,9 +27,11 @@ const _r: Renderer<TurElement> = createRenderer<TurElement>({
   },
 
   createTextNode(value: string): TurElement {
-    const handle = __tur.createText(ctx);
-    __tur.setAttribute(ctx, handle, "content", value);
-    return handle;
+    const container = __tur.createTextContainer(ctx);
+    const span = __tur.createTextSpan(ctx);
+    __tur.setAttribute(ctx, span, "content", value);
+    __tur.appendChild(ctx, container, span);
+    return container;
   },
 
   replaceText(textNode: TurElement, value: string): void {

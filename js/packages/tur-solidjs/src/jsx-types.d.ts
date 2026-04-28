@@ -69,12 +69,19 @@ declare module "solid-js" {
         placeholder?: string;
         placeholderColor?: Color;
       };
-      tur_text: {
-        content?: string;
+      tur_text_container: {
         fontSize?: number;
         color?: Color;
         queryKey?: string[];
         children?: JSX.Element;
+      };
+      tur_text_span: {
+        content?: string;
+        bold?: boolean;
+        italic?: boolean;
+        underline?: boolean;
+        fontSize?: number;
+        color?: Color;
       };
     }
   }

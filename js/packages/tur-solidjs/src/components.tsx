@@ -113,7 +113,12 @@ export function Focusable(props: FocusableProps): JSX.Element {
 }
 
 export function Text(props: TextProps): JSX.Element {
-  return <tur_text {...props} />;
+  const { content, fontSize, color, ...rest } = props;
+  return (
+    <tur_text_container fontSize={fontSize} color={color} {...rest}>
+      <tur_text_span content={content} />
+    </tur_text_container>
+  );
 }
 
 export interface InputProps {

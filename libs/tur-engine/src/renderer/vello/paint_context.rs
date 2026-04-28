@@ -1,7 +1,7 @@
 use std::fmt;
 
 use tur_shared::{Color, Geometry, Offset};
-use vello::kurbo::Affine;
+use vello::kurbo::{Affine, Stroke};
 use vello::peniko::{Brush, Fill};
 use vello::Scene;
 
@@ -90,6 +90,28 @@ impl Canvas for VelloPaintContext<'_> {
                         y: g.y,
                     }),
                 );
+
+            if run.underline {
+                if let Some(first) = run.glyphs.first() {
+                    let last_x = run
+                        .glyphs
+                        .last()
+                        .map(|g| g.x + g.advance)
+                        .unwrap_or(first.x + first.advance);
+                    let underline_y = first.y + run.font_size * 0.15;
+                    let underline_brush = Brush::Solid(brush_color);
+                    self.scene.stroke(
+                        &Stroke::new(1.0),
+                        transform,
+                        &underline_brush,
+                        None,
+                        &vello::kurbo::Line::new(
+                            (first.x as f64, underline_y as f64),
+                            (last_x as f64, underline_y as f64),
+                        ),
+                    );
+                }
+            }
         }
     }
 }
