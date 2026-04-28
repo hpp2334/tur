@@ -114,7 +114,7 @@ export function Focusable(props: FocusableProps): JSX.Element {
 
 export interface TextContainerProps extends BaseProps {
   fontSize?: number;
-  color?: Color;
+  color?: Color | string;
 }
 
 export interface TextSpanProps {
@@ -123,7 +123,7 @@ export interface TextSpanProps {
   italic?: boolean;
   underline?: boolean;
   fontSize?: number;
-  color?: Color;
+  color?: Color | string;
 }
 
 export function TextContainer(props: TextContainerProps): JSX.Element {
