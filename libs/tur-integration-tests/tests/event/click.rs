@@ -1,6 +1,6 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::gesture::ComposedGestureEventKind;
-use tur_engine::elements::TextElement;
+use tur_engine::elements::TextSpanElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -14,6 +14,22 @@ fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
     let root = tree.root().unwrap();
     let col = tree.get(root.children[0]).unwrap();
     col.children[0]
+}
+
+fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
+    let tree = app.element_tree();
+    let container = tree.get(container_id).unwrap();
+    let span_id = container.children.first().copied();
+    drop(tree);
+    span_id
+        .and_then(|id| {
+            app.with_element(id, |e| {
+                e.cast::<TextSpanElement>()
+                    .map(|s| s.content().to_string())
+                    .unwrap_or_default()
+            })
+        })
+        .unwrap_or_default()
 }
 
 #[test]
@@ -58,13 +74,9 @@ fn click_updates_text_content() {
     }
     drop(tree);
 
-    assert!(
-        app.with_element(text_id, |e| {
-            e.cast::<TextElement>()
-                .map(|t| t.content() == "before")
-                .unwrap_or(false)
-        })
-        .unwrap_or(false),
+    assert_eq!(
+        get_span_content(&app, text_id),
+        "before",
         "text should be 'before' before click"
     );
 
@@ -73,12 +85,7 @@ fn click_updates_text_content() {
     app.click(click_x, click_y);
 
     assert_eq!(
-        app.with_element(text_id, |e| {
-            e.cast::<TextElement>()
-                .map(|t| t.content().to_string())
-                .unwrap_or_default()
-        })
-        .unwrap_or_default(),
+        get_span_content(&app, text_id),
         "after",
         "text should be 'after' after click"
     );
@@ -92,24 +99,14 @@ fn click_miss_does_not_update_text() {
     app.render();
 
     assert_eq!(
-        app.with_element(text_id, |e| {
-            e.cast::<TextElement>()
-                .map(|t| t.content().to_string())
-                .unwrap_or_default()
-        })
-        .unwrap_or_default(),
+        get_span_content(&app, text_id),
         "before"
     );
 
     app.click(999.0, 999.0);
 
     assert_eq!(
-        app.with_element(text_id, |e| {
-            e.cast::<TextElement>()
-                .map(|t| t.content().to_string())
-                .unwrap_or_default()
-        })
-        .unwrap_or_default(),
+        get_span_content(&app, text_id),
         "before",
         "text should remain 'before' after miss click"
     );

@@ -113,10 +113,9 @@ export function Focusable(props: FocusableProps): JSX.Element {
 }
 
 export function Text(props: TextProps): JSX.Element {
-  const { content, fontSize, color, ...rest } = props;
   return (
-    <tur_text_container fontSize={fontSize} color={color} {...rest}>
-      <tur_text_span content={content} />
+    <tur_text_container fontSize={props.fontSize} color={props.color} queryKey={props.queryKey}>
+      <tur_text_span content={props.content} />
     </tur_text_container>
   );
 }

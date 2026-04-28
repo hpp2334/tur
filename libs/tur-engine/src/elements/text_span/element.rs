@@ -45,6 +45,10 @@ impl TextSpanElement {
             color: None,
         }
     }
+
+    pub fn content(&self) -> &str {
+        &self.content
+    }
 }
 
 impl ElementTrace for TextSpanElement {
