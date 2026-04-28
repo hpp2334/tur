@@ -15,7 +15,7 @@ use crate::core::fonts::FontManager;
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::render::Renderer;
-use crate::elements::input::{InputEditResult, InputElement};
+use crate::elements::input::{InputEditResult, InputElement, LineNavInfo};
 
 pub struct TurAppInternal {
     element_tree: ElementTree,
@@ -255,21 +255,41 @@ impl TurAppInternal {
         event: &AppKeyEvent,
         context: &mut Context,
     ) {
-        let node = self.element_tree.get_mut(node_id).unwrap();
-        let element = node.element.as_mut().unwrap();
-        let input_el = element.cast_mut::<InputElement>().unwrap();
+        let nav_info = {
+            let node = self.element_tree.get(node_id).unwrap();
+            let element = node.element.as_ref().unwrap();
+            let input_el = element.cast::<InputElement>().unwrap();
+            if input_el.multiline {
+                input_el.cached_layout.as_ref().map(|ld| {
+                    let cursor_char = byte_to_char_offset_global(&input_el.content, input_el.cursor_position);
+                    LineNavInfo::extract(ld, cursor_char)
+                })
+            } else {
+                None
+            }
+        };
 
-        let result = input_el.handle_key_event(
-            &event.key,
-            event.modifiers.ctrl,
-            event.modifiers.meta,
-            event.modifiers.shift,
-        );
-
-        let cursor_pos = input_el.cursor_position;
-        let text = input_el.text().to_string();
-        let sel_start = input_el.selection_anchor;
-        let sel_end = input_el.selection_end;
+        let result;
+        let cursor_pos;
+        let text;
+        let sel_start;
+        let sel_end;
+        {
+            let node = self.element_tree.get_mut(node_id).unwrap();
+            let element = node.element.as_mut().unwrap();
+            let input_el = element.cast_mut::<InputElement>().unwrap();
+            result = input_el.handle_key_event(
+                &event.key,
+                event.modifiers.ctrl,
+                event.modifiers.meta,
+                event.modifiers.shift,
+                nav_info.as_ref(),
+            );
+            cursor_pos = input_el.cursor_position;
+            text = input_el.text().to_string();
+            sel_start = input_el.selection_anchor;
+            sel_end = input_el.selection_end;
+        }
 
         match result {
             InputEditResult::TextChanged(_) => {
@@ -374,7 +394,7 @@ impl TurAppInternal {
         true
     }
 
-    pub fn set_input_cursor_at_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+    pub fn set_input_cursor_at(&mut self, node_id: ElementNodeId, local_x: f64, local_y: f64) {
         let node = self.element_tree.get_mut(node_id).unwrap();
         let element = node.element.as_mut().unwrap();
         let input_el = element.cast_mut::<InputElement>().unwrap();
@@ -382,7 +402,13 @@ impl TurAppInternal {
         let char_idx = input_el
             .cached_layout
             .as_ref()
-            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .map(|ld| {
+                if input_el.multiline {
+                    ld.char_index_at_xy(local_x as f32, local_y as f32)
+                } else {
+                    ld.char_index_at_x(local_x as f32)
+                }
+            })
             .unwrap_or(0);
 
         let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
@@ -390,7 +416,7 @@ impl TurAppInternal {
         input_el.clear_selection();
     }
 
-    pub fn start_input_selection_at_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+    pub fn start_input_selection_at(&mut self, node_id: ElementNodeId, local_x: f64, local_y: f64) {
         let node = self.element_tree.get_mut(node_id).unwrap();
         let element = node.element.as_mut().unwrap();
         let input_el = element.cast_mut::<InputElement>().unwrap();
@@ -398,7 +424,13 @@ impl TurAppInternal {
         let char_idx = input_el
             .cached_layout
             .as_ref()
-            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .map(|ld| {
+                if input_el.multiline {
+                    ld.char_index_at_xy(local_x as f32, local_y as f32)
+                } else {
+                    ld.char_index_at_x(local_x as f32)
+                }
+            })
             .unwrap_or(0);
 
         let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
@@ -407,7 +439,7 @@ impl TurAppInternal {
         input_el.selection_end = byte_pos;
     }
 
-    pub fn extend_input_selection_to_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+    pub fn extend_input_selection_to(&mut self, node_id: ElementNodeId, local_x: f64, local_y: f64) {
         let node = self.element_tree.get_mut(node_id).unwrap();
         let element = node.element.as_mut().unwrap();
         let input_el = element.cast_mut::<InputElement>().unwrap();
@@ -415,7 +447,13 @@ impl TurAppInternal {
         let char_idx = input_el
             .cached_layout
             .as_ref()
-            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .map(|ld| {
+                if input_el.multiline {
+                    ld.char_index_at_xy(local_x as f32, local_y as f32)
+                } else {
+                    ld.char_index_at_x(local_x as f32)
+                }
+            })
             .unwrap_or(0);
 
         let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
@@ -435,6 +473,20 @@ impl TurAppInternal {
             }
         }
         global_position.x - abs_x
+    }
+
+    pub fn input_local_y(&self, node_id: ElementNodeId, global_position: tur_shared::Offset) -> f64 {
+        let mut abs_y = 0.0f64;
+        let mut current = Some(node_id);
+        while let Some(cid) = current {
+            if let Some(n) = self.element_tree.get(cid) {
+                abs_y += n.computed_layout.offset.y;
+                current = n.parent;
+            } else {
+                break;
+            }
+        }
+        global_position.y - abs_y
     }
 
     pub fn invoke_input_focus_handler(
@@ -485,4 +537,8 @@ fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {
         .nth(char_idx)
         .map(|(i, _)| i)
         .unwrap_or(s.len())
+}
+
+fn byte_to_char_offset_global(s: &str, byte_pos: usize) -> usize {
+    s[..byte_pos].chars().count()
 }

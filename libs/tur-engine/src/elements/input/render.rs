@@ -8,6 +8,10 @@ use crate::elements::text::text_layout;
 
 use super::element::InputElement;
 
+fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
+    s[..byte_pos].chars().count()
+}
+
 const DEFAULT_COLOR: Color = Color::rgb(255, 255, 255);
 const SELECTION_COLOR: Color = Color::rgba(0, 120, 215, 77);
 
@@ -91,42 +95,78 @@ impl ElementRender for InputElement {
         &self,
         canvas: &mut dyn Canvas,
         offset: Offset,
-        layout: &ComputedLayout,
+        _layout: &ComputedLayout,
         _children: &[ElementNodeId],
         _paint_ctx: &PaintContext,
     ) {
         if let Some(ref layout_data) = self.cached_layout {
             if self.has_selection() {
                 let (start, end) = self.selection_range();
-                let x_start = layout_data.cursor_x_at(start);
-                let x_end = layout_data.cursor_x_at(end);
-                canvas.fill_geometry(
-                    Offset::new(offset.x + x_start as f64, offset.y),
-                    &Geometry::Rect(Size::new((x_end - x_start) as f64, layout.size.height)),
-                    &SELECTION_COLOR,
-                );
+                self.paint_selection(canvas, offset, layout_data, start, end);
             }
 
             canvas.fill_text_layout(offset, layout_data);
 
             if self.focused && !self.has_selection() {
-                let cursor_x = self
-                    .cached_layout
-                    .as_ref()
-                    .map(|ld| ld.cursor_x_at(self.cursor_position) as f64)
-                    .unwrap_or(0.0);
+                let (cursor_x, cursor_y) = layout_data.cursor_xy_at(
+                    byte_to_char_offset(&self.content, self.cursor_position),
+                );
+                let char_idx = byte_to_char_offset(&self.content, self.cursor_position);
+                let line_idx = layout_data.line_index_for_char(char_idx);
+                let line_height = layout_data.line_height_at(line_idx);
                 let cursor_color = self
                     .cursor_color
                     .as_ref()
                     .or(self.color.as_ref())
                     .unwrap_or(&DEFAULT_COLOR);
-                let height = layout.size.height;
                 canvas.fill_geometry(
-                    Offset::new(offset.x + cursor_x, offset.y),
-                    &Geometry::Rect(Size::new(2.0, height)),
+                    Offset::new(offset.x + cursor_x as f64, offset.y + cursor_y as f64),
+                    &Geometry::Rect(Size::new(2.0, line_height as f64)),
                     cursor_color,
                 );
             }
+        }
+    }
+}
+
+impl InputElement {
+    fn paint_selection(
+        &self,
+        canvas: &mut dyn Canvas,
+        offset: Offset,
+        layout_data: &text_layout::TextLayoutData,
+        start_char: usize,
+        end_char: usize,
+    ) {
+        let start_line = layout_data.line_index_for_char(start_char);
+        let end_line = layout_data.line_index_for_char(end_char);
+
+        for line_idx in start_line..=end_line {
+            let line_start = layout_data.line_start_char(line_idx);
+            let line_end = layout_data.line_end_char(line_idx);
+
+            let sel_start = start_char.max(line_start);
+            let sel_end = end_char.min(line_end);
+
+            if sel_start >= sel_end {
+                continue;
+            }
+
+            let x_start = layout_data.cursor_x_at(sel_start);
+            let x_end = layout_data.cursor_x_at(sel_end);
+            let line_info = &layout_data.line_infos[line_idx];
+
+            canvas.fill_geometry(
+                Offset::new(
+                    offset.x + x_start as f64,
+                    offset.y + line_info.top as f64,
+                ),
+                &Geometry::Rect(Size::new(
+                    (x_end - x_start) as f64,
+                    line_info.height as f64,
+                )),
+                &SELECTION_COLOR,
+            );
         }
     }
 }

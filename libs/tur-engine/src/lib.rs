@@ -90,13 +90,13 @@ impl TurApp {
                             if let Some(id) = target {
                                 if ctx.input_nodes.contains(&id) {
                                     drop(ctx);
-                                    let local_x = self
-                                        .app_context
-                                        .borrow()
-                                        .input_local_x(id, position);
+                                    let (local_x, local_y) = {
+                                        let ctx = self.app_context.borrow();
+                                        (ctx.input_local_x(id, position), ctx.input_local_y(id, position))
+                                    };
                                     self.app_context
                                         .borrow_mut()
-                                        .start_input_selection_at_x(id, local_x);
+                                        .start_input_selection_at(id, local_x, local_y);
                                     self.app_context
                                         .borrow_mut()
                                         .push_event(AppEvent::RequestDraw);
@@ -121,13 +121,13 @@ impl TurApp {
                                     .input_nodes
                                     .contains(&input_id);
                                 if is_input {
-                                    let local_x = self
-                                        .app_context
-                                        .borrow()
-                                        .input_local_x(input_id, position);
+                                    let (local_x, local_y) = {
+                                        let ctx = self.app_context.borrow();
+                                        (ctx.input_local_x(input_id, position), ctx.input_local_y(input_id, position))
+                                    };
                                     self.app_context
                                         .borrow_mut()
-                                        .extend_input_selection_to_x(input_id, local_x);
+                                        .extend_input_selection_to(input_id, local_x, local_y);
                                     self.app_context
                                         .borrow_mut()
                                         .push_event(AppEvent::RequestDraw);

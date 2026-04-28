@@ -150,6 +150,7 @@ export interface InputProps {
   color?: Color;
   placeholderColor?: Color;
   cursorColor?: Color;
+  multiline?: boolean;
   width?: number;
   height?: number;
 }
@@ -170,6 +171,7 @@ export function Input(props: InputProps): JSX.Element {
         color={props.color}
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
+        multiline={props.multiline}
       />
     </tur_container>
   );
