@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 
 use boa_engine::js_string;
@@ -28,7 +28,6 @@ pub struct TurAppInternal {
     focus_manager: FocusManager,
     key_handlers: HashMap<(ElementNodeId, KeyEventType), JsObject>,
     focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
-    pub(crate) input_nodes: HashSet<ElementNodeId>,
     pub(crate) text_input_callbacks: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
     pub(crate) text_input_cursor_handlers: HashMap<ElementNodeId, JsObject>,
@@ -62,7 +61,6 @@ impl TurAppInternal {
             focus_manager: FocusManager::new(),
             key_handlers: HashMap::new(),
             focus_handlers: HashMap::new(),
-            input_nodes: HashSet::new(),
             text_input_callbacks: HashMap::new(),
             text_input_focus_handlers: HashMap::new(),
             text_input_cursor_handlers: HashMap::new(),
@@ -206,6 +204,13 @@ impl TurAppInternal {
 
     pub fn remove_focus_handler(&mut self, id: ElementNodeId, focus_type: FocusEventType) {
         self.focus_handlers.remove(&(id, focus_type));
+    }
+
+    pub fn is_input(&self, id: ElementNodeId) -> bool {
+        self.element_tree
+            .get(id)
+            .and_then(|n| n.element.as_ref())
+            .is_some_and(|e| e.cast::<InputElement>().is_some())
     }
 
     pub fn handle_key_event(
@@ -390,7 +395,7 @@ impl TurAppInternal {
     }
 
     pub fn focus_input_if_hit(&mut self, path: &[ElementNodeId], context: &mut Context) -> bool {
-        let input_id = path.iter().find(|id| self.input_nodes.contains(id));
+        let input_id = path.iter().find(|id| self.is_input(**id));
         let Some(&id) = input_id else {
             return false;
         };

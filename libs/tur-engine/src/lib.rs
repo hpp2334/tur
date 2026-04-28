@@ -88,7 +88,7 @@ impl TurApp {
                         {
                             let ctx = self.app_context.borrow();
                             if let Some(id) = target {
-                                if ctx.input_nodes.contains(&id) {
+                                if ctx.is_input(id) {
                                     drop(ctx);
                                     let (local_x, local_y) = {
                                         let ctx = self.app_context.borrow();
@@ -118,8 +118,7 @@ impl TurApp {
                                 let is_input = self
                                     .app_context
                                     .borrow()
-                                    .input_nodes
-                                    .contains(&input_id);
+                                    .is_input(input_id);
                                 if is_input {
                                     let (local_x, local_y) = {
                                         let ctx = self.app_context.borrow();
