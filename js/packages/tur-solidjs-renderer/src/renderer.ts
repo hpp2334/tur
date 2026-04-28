@@ -40,6 +40,10 @@ const _r: Renderer<TurElement> = createRenderer<TurElement>({
   },
 
   setProperty<T>(node: TurElement, name: string, value: T): void {
+    if (name === "ref" && typeof value === "function") {
+      (value as (el: TurElement) => void)(node);
+      return;
+    }
     __tur.setAttribute(ctx, node, name, value);
   },
 
