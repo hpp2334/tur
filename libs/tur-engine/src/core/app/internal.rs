@@ -15,7 +15,7 @@ use crate::core::fonts::FontManager;
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::render::Renderer;
-use crate::elements::input::InputElement;
+use crate::elements::input::{InputElement, InputChanges};
 
 pub struct TurAppInternal {
     element_tree: ElementTree,
@@ -223,8 +223,6 @@ impl TurAppInternal {
             None => return,
         };
 
-        let input_snapshot = self.snapshot_input_state(focused_id);
-
         let result = {
             let node = self.element_tree.get_mut(focused_id).unwrap();
             let element = node.element.as_mut().unwrap();
@@ -237,34 +235,27 @@ impl TurAppInternal {
             }
             KeyboardResult::Handled => {}
             KeyboardResult::NeedsDraw => {
-                self.fire_input_callbacks_if_changed(focused_id, &input_snapshot, context);
+                let changes = self.drain_input_changes(focused_id);
+                self.fire_input_callbacks(focused_id, &changes, context);
                 self.push_event(AppEvent::RequestDraw);
             }
         }
     }
 
-    fn snapshot_input_state(&self, node_id: ElementNodeId) -> Option<InputSnapshot> {
-        let node = self.element_tree.get(node_id)?;
-        let element = node.element.as_ref()?;
-        if element.type_name() != "tur_input" {
-            return None;
-        }
-        let input_el = element.cast::<InputElement>()?;
-        Some(InputSnapshot {
-            content: input_el.text().to_string(),
-            cursor: input_el.cursor_position(),
-            anchor: input_el.selection_anchor(),
-            end: input_el.selection_end(),
-        })
+    fn drain_input_changes(&mut self, node_id: ElementNodeId) -> Option<InputChanges> {
+        let node = self.element_tree.get_mut(node_id)?;
+        let element = node.element.as_mut()?;
+        let input_el = element.cast_mut::<InputElement>()?;
+        Some(input_el.drain_changes())
     }
 
-    fn fire_input_callbacks_if_changed(
+    fn fire_input_callbacks(
         &self,
         node_id: ElementNodeId,
-        snapshot: &Option<InputSnapshot>,
+        changes: &Option<InputChanges>,
         context: &mut Context,
     ) {
-        let Some(before) = snapshot else { return };
+        let Some(changes) = changes else { return };
         let node = match self.element_tree.get(node_id) {
             Some(n) => n,
             None => return,
@@ -278,24 +269,21 @@ impl TurAppInternal {
             None => return,
         };
 
-        let text = input_el.text().to_string();
-        let cursor = input_el.cursor_position();
-        let anchor = input_el.selection_anchor();
-        let end = input_el.selection_end();
-
-        if text != before.content {
-            let enter = text.len() > before.content.len()
-                && text.ends_with('\n')
-                && !before.content.ends_with('\n');
-            self.fire_on_input(node_id, &text, enter, context);
+        if changes.text_changed {
+            self.fire_on_input(node_id, input_el.text(), changes.enter, context);
         }
 
-        if cursor != before.cursor {
-            self.fire_on_cursor_change(node_id, cursor, context);
+        if changes.cursor_changed {
+            self.fire_on_cursor_change(node_id, input_el.cursor_position(), context);
         }
 
-        if anchor != before.anchor || end != before.end {
-            self.fire_on_selection_change(node_id, anchor, end, context);
+        if changes.selection_changed {
+            self.fire_on_selection_change(
+                node_id,
+                input_el.selection_anchor(),
+                input_el.selection_end(),
+                context,
+            );
         }
     }
 
@@ -547,13 +535,6 @@ impl TurAppInternal {
     pub fn debug_layout(&self) -> String {
         self.element_tree.debug_layout()
     }
-}
-
-struct InputSnapshot {
-    content: String,
-    cursor: usize,
-    anchor: usize,
-    end: usize,
 }
 
 fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {

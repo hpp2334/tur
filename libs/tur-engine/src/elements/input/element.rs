@@ -52,6 +52,13 @@ impl LineNavInfo {
     }
 }
 
+pub(crate) struct InputChanges {
+    pub text_changed: bool,
+    pub cursor_changed: bool,
+    pub selection_changed: bool,
+    pub enter: bool,
+}
+
 pub struct InputElement {
     pub(crate) content: String,
     pub(crate) font_size: f64,
@@ -65,6 +72,10 @@ pub struct InputElement {
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
+    pub(crate) text_changed: bool,
+    pub(crate) cursor_changed: bool,
+    pub(crate) selection_changed: bool,
+    pub(crate) enter_flag: bool,
 }
 
 impl Default for InputElement {
@@ -88,6 +99,10 @@ impl InputElement {
             cached_layout: None,
             selection_anchor: 0,
             selection_end: 0,
+            text_changed: false,
+            cursor_changed: false,
+            selection_changed: false,
+            enter_flag: false,
         }
     }
 
@@ -164,6 +179,20 @@ impl InputElement {
         }
     }
 
+    pub(crate) fn drain_changes(&mut self) -> InputChanges {
+        let changes = InputChanges {
+            text_changed: self.text_changed,
+            cursor_changed: self.cursor_changed,
+            selection_changed: self.selection_changed,
+            enter: self.enter_flag,
+        };
+        self.text_changed = false;
+        self.cursor_changed = false;
+        self.selection_changed = false;
+        self.enter_flag = false;
+        changes
+    }
+
     fn delete_selection(&mut self) {
         if !self.has_selection() {
             return;
@@ -181,33 +210,37 @@ impl InputElement {
         meta: bool,
         shift: bool,
         nav_info: Option<&LineNavInfo>,
-    ) -> InputEditResult {
+    ) -> KeyboardResult {
         match key {
             "Backspace" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else if self.cursor_position > 0 {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
-                    InputEditResult::Handled
+                    KeyboardResult::Handled
                 }
             }
             "Delete" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else if self.cursor_position < self.content.len() {
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
-                    InputEditResult::Handled
+                    KeyboardResult::Handled
                 }
             }
             "ArrowLeft" => {
@@ -218,16 +251,20 @@ impl InputElement {
                     }
                     self.selection_end = new_end;
                     self.cursor_position = new_end;
-                    InputEditResult::SelectionChanged
+                    self.cursor_changed = true;
+                    self.selection_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else if self.has_selection() {
                     let (start, _) = self.selection_range();
                     self.cursor_position = start;
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 }
             }
             "ArrowRight" => {
@@ -238,30 +275,34 @@ impl InputElement {
                     }
                     self.selection_end = new_end;
                     self.cursor_position = new_end;
-                    InputEditResult::SelectionChanged
+                    self.cursor_changed = true;
+                    self.selection_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else if self.has_selection() {
                     let (_, end) = self.selection_range();
                     self.cursor_position = end;
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = next_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 }
             }
             "ArrowUp" if self.multiline => {
                 if let Some(info) = nav_info {
                     self.move_vertical(info, -1, shift)
                 } else {
-                    InputEditResult::NotHandled
+                    KeyboardResult::NotHandled
                 }
             }
             "ArrowDown" if self.multiline => {
                 if let Some(info) = nav_info {
                     self.move_vertical(info, 1, shift)
                 } else {
-                    InputEditResult::NotHandled
+                    KeyboardResult::NotHandled
                 }
             }
             "Home" => {
@@ -276,14 +317,17 @@ impl InputElement {
                             }
                             self.selection_end = target;
                             self.cursor_position = target;
-                            InputEditResult::SelectionChanged
+                            self.cursor_changed = true;
+                            self.selection_changed = true;
+                            KeyboardResult::NeedsDraw
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
-                            InputEditResult::CursorMoved
+                            self.cursor_changed = true;
+                            KeyboardResult::NeedsDraw
                         }
                     } else {
-                        InputEditResult::NotHandled
+                        KeyboardResult::NotHandled
                     }
                 } else if shift {
                     if !self.has_selection() {
@@ -291,11 +335,14 @@ impl InputElement {
                     }
                     self.selection_end = 0;
                     self.cursor_position = 0;
-                    InputEditResult::SelectionChanged
+                    self.cursor_changed = true;
+                    self.selection_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = 0;
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 }
             }
             "End" => {
@@ -310,14 +357,17 @@ impl InputElement {
                             }
                             self.selection_end = target;
                             self.cursor_position = target;
-                            InputEditResult::SelectionChanged
+                            self.cursor_changed = true;
+                            self.selection_changed = true;
+                            KeyboardResult::NeedsDraw
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
-                            InputEditResult::CursorMoved
+                            self.cursor_changed = true;
+                            KeyboardResult::NeedsDraw
                         }
                     } else {
-                        InputEditResult::NotHandled
+                        KeyboardResult::NotHandled
                     }
                 } else if shift {
                     if !self.has_selection() {
@@ -325,16 +375,21 @@ impl InputElement {
                     }
                     self.selection_end = self.content.len();
                     self.cursor_position = self.content.len();
-                    InputEditResult::SelectionChanged
+                    self.cursor_changed = true;
+                    self.selection_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = self.content.len();
                     self.clear_selection();
-                    InputEditResult::CursorMoved
+                    self.cursor_changed = true;
+                    KeyboardResult::NeedsDraw
                 }
             }
             "a" if ctrl || meta => {
                 self.select_all();
-                InputEditResult::SelectionChanged
+                self.cursor_changed = true;
+                self.selection_changed = true;
+                KeyboardResult::NeedsDraw
             }
             "Enter" => {
                 if self.multiline {
@@ -344,9 +399,13 @@ impl InputElement {
                     self.content.insert(self.cursor_position, '\n');
                     self.cursor_position += '\n'.len_utf8();
                     self.clear_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    self.enter_flag = true;
+                    KeyboardResult::NeedsDraw
                 } else {
-                    InputEditResult::EnterPressed(self.content.clone())
+                    self.text_changed = true;
+                    self.enter_flag = true;
+                    KeyboardResult::NeedsDraw
                 }
             }
             _ => {
@@ -358,9 +417,10 @@ impl InputElement {
                     self.content.insert(self.cursor_position, ch);
                     self.cursor_position += ch.len_utf8();
                     self.clear_selection();
-                    InputEditResult::TextChanged(self.content.clone())
+                    self.text_changed = true;
+                    KeyboardResult::NeedsDraw
                 } else {
-                    InputEditResult::NotHandled
+                    KeyboardResult::NotHandled
                 }
             }
         }
@@ -371,7 +431,7 @@ impl InputElement {
         info: &LineNavInfo,
         direction: i32,
         shift: bool,
-    ) -> InputEditResult {
+    ) -> KeyboardResult {
         let current_line = info.current_line;
         let cursor_x = info.cursor_xy.0;
 
@@ -382,7 +442,7 @@ impl InputElement {
         };
 
         if target_line == current_line {
-            return InputEditResult::Handled;
+            return KeyboardResult::Handled;
         }
 
         let target_char = {
@@ -408,22 +468,16 @@ impl InputElement {
             }
             self.selection_end = target_byte;
             self.cursor_position = target_byte;
-            InputEditResult::SelectionChanged
+            self.cursor_changed = true;
+            self.selection_changed = true;
+            KeyboardResult::NeedsDraw
         } else {
             self.cursor_position = target_byte;
             self.clear_selection();
-            InputEditResult::CursorMoved
+            self.cursor_changed = true;
+            KeyboardResult::NeedsDraw
         }
     }
-}
-
-pub enum InputEditResult {
-    NotHandled,
-    Handled,
-    CursorMoved,
-    TextChanged(String),
-    EnterPressed(String),
-    SelectionChanged,
 }
 
 fn prev_char_boundary(s: &str, pos: usize) -> usize {
@@ -465,19 +519,6 @@ fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
     s[..byte_pos].chars().count()
 }
 
-impl From<InputEditResult> for KeyboardResult {
-    fn from(result: InputEditResult) -> Self {
-        match result {
-            InputEditResult::NotHandled => KeyboardResult::NotHandled,
-            InputEditResult::Handled
-            | InputEditResult::CursorMoved
-            | InputEditResult::SelectionChanged
-            | InputEditResult::TextChanged(_)
-            | InputEditResult::EnterPressed(_) => KeyboardResult::NeedsDraw,
-        }
-    }
-}
-
 impl ElementOnKeyboard for InputElement {
     fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
         if event.event_type != KeyEventType::Down {
@@ -494,7 +535,6 @@ impl ElementOnKeyboard for InputElement {
             event.modifiers.shift,
             nav_info.as_ref(),
         )
-        .into()
     }
 }
 
