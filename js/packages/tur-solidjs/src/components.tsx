@@ -112,8 +112,35 @@ export function Focusable(props: FocusableProps): JSX.Element {
   return <tur_focusable {...rest}>{child}</tur_focusable>;
 }
 
+export interface TextContainerProps extends BaseProps {
+  fontSize?: number;
+  color?: Color | string;
+}
+
+export interface TextSpanProps {
+  content?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  fontSize?: number;
+  color?: Color | string;
+}
+
+export function TextContainer(props: TextContainerProps): JSX.Element {
+  const { children, ...rest } = props;
+  return <tur_text_container {...rest}>{children}</tur_text_container>;
+}
+
+export function TextSpan(props: TextSpanProps): JSX.Element {
+  return <tur_text_span {...props} />;
+}
+
 export function Text(props: TextProps): JSX.Element {
-  return <tur_text {...props} />;
+  return (
+    <TextContainer fontSize={props.fontSize} color={props.color} queryKey={props.queryKey}>
+      <TextSpan content={props.content} />
+    </TextContainer>
+  );
 }
 
 export interface InputProps {

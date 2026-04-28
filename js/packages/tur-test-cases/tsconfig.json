@@ -5,5 +5,5 @@
     "rootDir": "solidjs-cases",
     "jsxImportSource": "solid-js"
   },
-  "include": ["solidjs-cases"]
+  "include": ["solidjs-cases", "solidjs-jsx.d.ts"]
 }

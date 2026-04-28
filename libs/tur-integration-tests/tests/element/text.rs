@@ -9,12 +9,12 @@ fn text_content_and_measurement() {
     let text_id = {
         let tree = app.element_tree();
         let root = tree.root().unwrap();
-        let text = tree.get(root.children[0]).unwrap();
+        let container = tree.get(root.children[0]).unwrap();
         assert_eq!(
-            text.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_text")
+            container.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_text_container")
         );
-        text.id
+        container.id
     };
 
     app.render();

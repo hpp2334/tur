@@ -12,28 +12,25 @@ const creators: Record<string, () => TurElement> = {
   "tur_stack": () => __tur.createStack(ctx),
   "tur_positioned": () => __tur.createPositioned(ctx),
   "tur_container": () => __tur.createContainer(ctx),
-  "tur_text": () => __tur.createText(ctx),
+  "tur_text_container": () => __tur.createTextContainer(ctx),
+  "tur_text_span": () => __tur.createTextSpan(ctx),
   "tur_pointer_interact": () => __tur.createPointerInteract(ctx),
   "tur_focusable": () => __tur.createFocusable(ctx),
   "tur_input": () => __tur.createInput(ctx),
 };
 
-const _r: Renderer<TurElement> = createRenderer<TurElement>({
+const _r = createRenderer<TurElement>({
   createElement(type: string): TurElement {
     const create = creators[type];
     if (!create) throw new Error(`unknown element type: ${type}`);
     return create();
   },
 
-  createTextNode(value: string): TurElement {
-    const handle = __tur.createText(ctx);
-    __tur.setAttribute(ctx, handle, "content", value);
-    return handle;
+  createTextNode(_value: string): TurElement {
+    throw new Error("createTextNode is not supported; use <tur_text_span> instead");
   },
 
-  replaceText(textNode: TurElement, value: string): void {
-    __tur.setAttribute(ctx, textNode, "content", value);
-  },
+  replaceText(_textNode: TurElement, _value: string): void {},
 
   isTextNode(_node: TurElement): boolean {
     return false;

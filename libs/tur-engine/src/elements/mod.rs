@@ -7,6 +7,8 @@ pub mod pointer_interact;
 pub mod positioned;
 pub mod stack;
 pub mod text;
+pub mod text_container;
+pub mod text_span;
 
 pub use container::ContainerElement;
 pub use flex::FlexElement;
@@ -16,4 +18,5 @@ pub use input::InputElement;
 pub use pointer_interact::PointerInteractElement;
 pub use positioned::PositionedElement;
 pub use stack::StackElement;
-pub use text::TextElement;
+pub use text_container::TextContainerElement;
+pub use text_span::TextSpanElement;

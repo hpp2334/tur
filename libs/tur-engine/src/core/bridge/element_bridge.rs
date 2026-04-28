@@ -15,7 +15,7 @@ use crate::core::gesture::ComposedGestureEventKind;
 use crate::core::keyboard::KeyEventType;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, FocusableElement, InputElement,
-    PointerInteractElement, PositionedElement, StackElement, TextElement,
+    PointerInteractElement, PositionedElement, StackElement, TextContainerElement, TextSpanElement,
 };
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -127,13 +127,26 @@ pub(crate) fn tur_create_container(
     create_element(args, context, AnyElement::new(ContainerElement::new()))
 }
 
-pub(crate) fn tur_create_text(
+pub(crate) fn tur_create_text_container(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createText()");
-    create_element(args, context, AnyElement::new(TextElement::new()))
+    tracing::trace!("tur_createTextContainer()");
+    create_element(
+        args,
+        context,
+        AnyElement::new(TextContainerElement::new()),
+    )
+}
+
+pub(crate) fn tur_create_text_span(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createTextSpan()");
+    create_element(args, context, AnyElement::new(TextSpanElement::new()))
 }
 
 pub(crate) fn tur_create_pointer_interact(

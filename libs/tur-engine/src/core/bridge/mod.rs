@@ -18,9 +18,9 @@ use crate::core::app::TurAppInternal;
 use crate::core::bridge::element_bridge::{
     tur_append_child, tur_create_container, tur_create_flex, tur_create_flex_item,
     tur_create_focusable, tur_create_input, tur_create_pointer_interact, tur_create_positioned,
-    tur_create_root, tur_create_stack, tur_create_text, tur_get_first_child, tur_get_next_sibling,
-    tur_get_parent, tur_insert_before, tur_remove_child, tur_request_focus, tur_set_attribute,
-    tur_set_input_text,
+    tur_create_root, tur_create_stack, tur_create_text_container, tur_create_text_span,
+    tur_get_first_child, tur_get_next_sibling, tur_get_parent, tur_insert_before, tur_remove_child,
+    tur_request_focus, tur_set_attribute, tur_set_input_text,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -64,13 +64,14 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 19] = [
+    ); 20] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
         ("createPositioned", 1, tur_create_positioned),
         ("createContainer", 1, tur_create_container),
-        ("createText", 1, tur_create_text),
+        ("createTextContainer", 1, tur_create_text_container),
+        ("createTextSpan", 1, tur_create_text_span),
         ("createPointerInteract", 1, tur_create_pointer_interact),
         ("createFocusable", 1, tur_create_focusable),
         ("createInput", 1, tur_create_input),
