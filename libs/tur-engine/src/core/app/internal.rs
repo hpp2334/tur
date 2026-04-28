@@ -32,6 +32,7 @@ pub struct TurAppInternal {
     pub(crate) text_input_callbacks: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
     pub(crate) text_input_cursor_handlers: HashMap<ElementNodeId, JsObject>,
+    pub(crate) text_input_selection_handlers: HashMap<ElementNodeId, JsObject>,
     event_queue: Vec<AppEvent>,
 }
 
@@ -65,6 +66,7 @@ impl TurAppInternal {
             text_input_callbacks: HashMap::new(),
             text_input_focus_handlers: HashMap::new(),
             text_input_cursor_handlers: HashMap::new(),
+            text_input_selection_handlers: HashMap::new(),
             event_queue: Vec::new(),
         }
     }
@@ -164,12 +166,20 @@ impl TurAppInternal {
         self.gesture_composer.pointer_down_target()
     }
 
+    pub fn is_gesture_dragging(&self) -> bool {
+        self.gesture_composer.is_tracking_drag()
+    }
+
     pub fn request_focus(&mut self, new_id: ElementNodeId) -> Option<ElementNodeId> {
         self.focus_manager.request_focus(new_id)
     }
 
     pub fn clear_focus(&mut self) -> Option<ElementNodeId> {
         self.focus_manager.clear_focus()
+    }
+
+    pub fn focused_element(&self) -> Option<ElementNodeId> {
+        self.focus_manager.focused()
     }
 
     pub fn set_key_handler(
@@ -249,16 +259,23 @@ impl TurAppInternal {
         let element = node.element.as_mut().unwrap();
         let input_el = element.cast_mut::<InputElement>().unwrap();
 
-        let result =
-            input_el.handle_key_event(&event.key, event.modifiers.ctrl, event.modifiers.meta);
+        let result = input_el.handle_key_event(
+            &event.key,
+            event.modifiers.ctrl,
+            event.modifiers.meta,
+            event.modifiers.shift,
+        );
 
         let cursor_pos = input_el.cursor_position;
         let text = input_el.text().to_string();
+        let sel_start = input_el.selection_anchor;
+        let sel_end = input_el.selection_end;
 
         match result {
             InputEditResult::TextChanged(_) => {
                 self.invoke_input_callback(node_id, &text, false, context);
                 self.invoke_input_cursor_callback(node_id, cursor_pos, context);
+                self.invoke_input_selection_callback(node_id, sel_start, sel_end, context);
                 self.push_event(AppEvent::RequestDraw);
             }
             InputEditResult::EnterPressed(_) => {
@@ -266,6 +283,12 @@ impl TurAppInternal {
                 self.push_event(AppEvent::RequestDraw);
             }
             InputEditResult::CursorMoved => {
+                self.invoke_input_cursor_callback(node_id, cursor_pos, context);
+                self.invoke_input_selection_callback(node_id, sel_start, sel_end, context);
+                self.push_event(AppEvent::RequestDraw);
+            }
+            InputEditResult::SelectionChanged => {
+                self.invoke_input_selection_callback(node_id, sel_start, sel_end, context);
                 self.invoke_input_cursor_callback(node_id, cursor_pos, context);
                 self.push_event(AppEvent::RequestDraw);
             }
@@ -306,6 +329,24 @@ impl TurAppInternal {
         }
     }
 
+    fn invoke_input_selection_callback(
+        &self,
+        node_id: ElementNodeId,
+        start: usize,
+        end: usize,
+        context: &mut Context,
+    ) {
+        if let Some(cb) = self.text_input_selection_handlers.get(&node_id) {
+            let start_val = boa_engine::JsValue::from(start as f64);
+            let end_val = boa_engine::JsValue::from(end as f64);
+            let _ = cb.call(
+                &boa_engine::JsValue::undefined(),
+                &[start_val, end_val],
+                context,
+            );
+        }
+    }
+
     fn set_input_focused(&mut self, node_id: ElementNodeId, focused: bool) {
         if let Some(node) = self.element_tree.get_mut(node_id) {
             if let Some(ref mut element) = node.element {
@@ -333,7 +374,70 @@ impl TurAppInternal {
         true
     }
 
-    fn invoke_input_focus_handler(
+    pub fn set_input_cursor_at_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+        let node = self.element_tree.get_mut(node_id).unwrap();
+        let element = node.element.as_mut().unwrap();
+        let input_el = element.cast_mut::<InputElement>().unwrap();
+
+        let char_idx = input_el
+            .cached_layout
+            .as_ref()
+            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .unwrap_or(0);
+
+        let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
+        input_el.cursor_position = byte_pos;
+        input_el.clear_selection();
+    }
+
+    pub fn start_input_selection_at_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+        let node = self.element_tree.get_mut(node_id).unwrap();
+        let element = node.element.as_mut().unwrap();
+        let input_el = element.cast_mut::<InputElement>().unwrap();
+
+        let char_idx = input_el
+            .cached_layout
+            .as_ref()
+            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .unwrap_or(0);
+
+        let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
+        input_el.cursor_position = byte_pos;
+        input_el.selection_anchor = byte_pos;
+        input_el.selection_end = byte_pos;
+    }
+
+    pub fn extend_input_selection_to_x(&mut self, node_id: ElementNodeId, local_x: f64) {
+        let node = self.element_tree.get_mut(node_id).unwrap();
+        let element = node.element.as_mut().unwrap();
+        let input_el = element.cast_mut::<InputElement>().unwrap();
+
+        let char_idx = input_el
+            .cached_layout
+            .as_ref()
+            .map(|ld| ld.char_index_at_x(local_x as f32))
+            .unwrap_or(0);
+
+        let byte_pos = char_to_byte_offset(&input_el.content, char_idx);
+        input_el.selection_end = byte_pos;
+        input_el.cursor_position = byte_pos;
+    }
+
+    pub fn input_local_x(&self, node_id: ElementNodeId, global_position: tur_shared::Offset) -> f64 {
+        let mut abs_x = 0.0f64;
+        let mut current = Some(node_id);
+        while let Some(cid) = current {
+            if let Some(n) = self.element_tree.get(cid) {
+                abs_x += n.computed_layout.offset.x;
+                current = n.parent;
+            } else {
+                break;
+            }
+        }
+        global_position.x - abs_x
+    }
+
+    pub fn invoke_input_focus_handler(
         &self,
         node_id: ElementNodeId,
         event_type: FocusEventType,
@@ -374,4 +478,11 @@ impl TurAppInternal {
     pub fn debug_layout(&self) -> String {
         self.element_tree.debug_layout()
     }
+}
+
+fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {
+    s.char_indices()
+        .nth(char_idx)
+        .map(|(i, _)| i)
+        .unwrap_or(s.len())
 }

@@ -17,6 +17,7 @@ struct WasmState {
     _resize_closure: Closure<dyn Fn()>,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
@@ -217,6 +218,29 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            let pointer_move_state = state_clone.clone();
+            let pointer_move_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let guard = pointer_move_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        let rect = s._canvas.get_bounding_client_rect();
+                        let x = event.client_x() as f64 - rect.left();
+                        let y = event.client_y() as f64 - rect.top();
+                        s.app.push_event(AppEvent::Gesture(
+                            AppGestureEvent::PointerMove {
+                                position: Offset::new(x, y),
+                            },
+                        ));
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "mousemove",
+                    pointer_move_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             canvas
                 .set_attribute("tabindex", "0")
                 .err_to_jsval()?;
@@ -283,6 +307,7 @@ impl TurWasmApp {
                 _resize_closure: resize_closure,
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
+                _pointer_move_closure: pointer_move_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
                 _raf_closure: RefCell::new(None),

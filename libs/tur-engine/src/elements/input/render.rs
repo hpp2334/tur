@@ -9,6 +9,7 @@ use crate::elements::text::text_layout;
 use super::element::InputElement;
 
 const DEFAULT_COLOR: Color = Color::rgb(255, 255, 255);
+const SELECTION_COLOR: Color = Color::rgba(0, 120, 215, 77);
 
 fn color_to_brush(color: &Color) -> [u8; 4] {
     [color.r(), color.g(), color.b(), color.a()]
@@ -95,26 +96,37 @@ impl ElementRender for InputElement {
         _paint_ctx: &PaintContext,
     ) {
         if let Some(ref layout_data) = self.cached_layout {
-            canvas.fill_text_layout(offset, layout_data);
-        }
+            if self.has_selection() {
+                let (start, end) = self.selection_range();
+                let x_start = layout_data.cursor_x_at(start);
+                let x_end = layout_data.cursor_x_at(end);
+                canvas.fill_geometry(
+                    Offset::new(offset.x + x_start as f64, offset.y),
+                    &Geometry::Rect(Size::new((x_end - x_start) as f64, layout.size.height)),
+                    &SELECTION_COLOR,
+                );
+            }
 
-        if self.focused {
-            let cursor_x = self
-                .cached_layout
-                .as_ref()
-                .map(|ld| ld.cursor_x_at(self.cursor_position) as f64)
-                .unwrap_or(0.0);
-            let cursor_color = self
-                .cursor_color
-                .as_ref()
-                .or(self.color.as_ref())
-                .unwrap_or(&DEFAULT_COLOR);
-            let height = layout.size.height;
-            canvas.fill_geometry(
-                Offset::new(offset.x + cursor_x, offset.y),
-                &Geometry::Rect(Size::new(2.0, height)),
-                cursor_color,
-            );
+            canvas.fill_text_layout(offset, layout_data);
+
+            if self.focused && !self.has_selection() {
+                let cursor_x = self
+                    .cached_layout
+                    .as_ref()
+                    .map(|ld| ld.cursor_x_at(self.cursor_position) as f64)
+                    .unwrap_or(0.0);
+                let cursor_color = self
+                    .cursor_color
+                    .as_ref()
+                    .or(self.color.as_ref())
+                    .unwrap_or(&DEFAULT_COLOR);
+                let height = layout.size.height;
+                canvas.fill_geometry(
+                    Offset::new(offset.x + cursor_x, offset.y),
+                    &Geometry::Rect(Size::new(2.0, height)),
+                    cursor_color,
+                );
+            }
         }
     }
 }

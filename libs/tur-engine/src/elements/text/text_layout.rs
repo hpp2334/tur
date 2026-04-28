@@ -39,6 +39,22 @@ impl TextLayoutData {
             .map(|g| g.x + g.advance)
             .unwrap_or(0.0)
     }
+
+    pub fn char_index_at_x(&self, x: f32) -> usize {
+        let mut chars_seen = 0;
+        let mut total_chars = 0;
+        for run in &self.runs {
+            total_chars += run.glyphs.len();
+            for glyph in &run.glyphs {
+                let glyph_center = glyph.x + glyph.advance / 2.0;
+                if x <= glyph_center {
+                    return chars_seen;
+                }
+                chars_seen += 1;
+            }
+        }
+        total_chars
+    }
 }
 
 pub(crate) fn extract_layout_data(

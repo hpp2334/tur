@@ -15,6 +15,8 @@ pub struct InputElement {
     pub(crate) placeholder: Option<String>,
     pub(crate) placeholder_color: Option<Color>,
     pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) selection_anchor: usize,
+    pub(crate) selection_end: usize,
 }
 
 impl Default for InputElement {
@@ -35,6 +37,8 @@ impl InputElement {
             placeholder: None,
             placeholder_color: None,
             cached_layout: None,
+            selection_anchor: 0,
+            selection_end: 0,
         }
     }
 
@@ -50,65 +54,195 @@ impl InputElement {
         self.cursor_position
     }
 
+    pub fn has_selection(&self) -> bool {
+        self.selection_anchor != self.selection_end
+    }
+
+    pub fn selection_anchor(&self) -> usize {
+        self.selection_anchor
+    }
+
+    pub fn selection_end(&self) -> usize {
+        self.selection_end
+    }
+
+    pub fn selection_range(&self) -> (usize, usize) {
+        let (a, b) = (self.selection_anchor, self.selection_end);
+        if a <= b {
+            (a, b)
+        } else {
+            (b, a)
+        }
+    }
+
+    pub fn selected_text(&self) -> &str {
+        if !self.has_selection() {
+            return "";
+        }
+        let (start, end) = self.selection_range();
+        &self.content[start..end]
+    }
+
+    pub fn select_all(&mut self) {
+        let len = self.content.len();
+        self.selection_anchor = 0;
+        self.selection_end = len;
+        self.cursor_position = len;
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selection_anchor = self.cursor_position;
+        self.selection_end = self.cursor_position;
+    }
+
+    pub fn set_selection(&mut self, anchor: usize, end: usize) {
+        self.selection_anchor = anchor.min(self.content.len());
+        self.selection_end = end.min(self.content.len());
+        self.cursor_position = self.selection_end;
+    }
+
     pub fn set_text(&mut self, text: &str) {
         self.content = text.to_string();
         self.cursor_position = self.content.len();
+        self.clear_selection();
     }
 
     pub fn set_focused(&mut self, focused: bool) {
         self.focused = focused;
         if focused {
             self.cursor_position = self.content.len();
+            self.clear_selection();
         }
     }
 
-    pub fn handle_key_event(&mut self, key: &str, ctrl: bool, meta: bool) -> InputEditResult {
-        let text = &mut self.content;
-        let pos = &mut self.cursor_position;
+    fn delete_selection(&mut self) {
+        if !self.has_selection() {
+            return;
+        }
+        let (start, end) = self.selection_range();
+        self.content.replace_range(start..end, "");
+        self.cursor_position = start;
+        self.clear_selection();
+    }
 
+    pub fn handle_key_event(
+        &mut self,
+        key: &str,
+        ctrl: bool,
+        meta: bool,
+        shift: bool,
+    ) -> InputEditResult {
         match key {
             "Backspace" => {
-                if *pos > 0 {
-                    *pos = prev_char_boundary(text, *pos);
-                    let end = next_char_boundary(text, *pos);
-                    text.replace_range(*pos..end, "");
-                    InputEditResult::TextChanged(text.clone())
+                if self.has_selection() {
+                    self.delete_selection();
+                    InputEditResult::TextChanged(self.content.clone())
+                } else if self.cursor_position > 0 {
+                    self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
+                    let end = next_char_boundary(&self.content, self.cursor_position);
+                    self.content.replace_range(self.cursor_position..end, "");
+                    self.clear_selection();
+                    InputEditResult::TextChanged(self.content.clone())
                 } else {
                     InputEditResult::Handled
                 }
             }
             "Delete" => {
-                if *pos < text.len() {
-                    let end = next_char_boundary(text, *pos);
-                    text.replace_range(*pos..end, "");
-                    InputEditResult::TextChanged(text.clone())
+                if self.has_selection() {
+                    self.delete_selection();
+                    InputEditResult::TextChanged(self.content.clone())
+                } else if self.cursor_position < self.content.len() {
+                    let end = next_char_boundary(&self.content, self.cursor_position);
+                    self.content.replace_range(self.cursor_position..end, "");
+                    self.clear_selection();
+                    InputEditResult::TextChanged(self.content.clone())
                 } else {
                     InputEditResult::Handled
                 }
             }
             "ArrowLeft" => {
-                *pos = prev_char_boundary(text, *pos);
-                InputEditResult::CursorMoved
+                if shift {
+                    let new_end = prev_char_boundary(&self.content, self.selection_end);
+                    if !self.has_selection() {
+                        self.selection_anchor = self.cursor_position;
+                    }
+                    self.selection_end = new_end;
+                    self.cursor_position = new_end;
+                    InputEditResult::SelectionChanged
+                } else if self.has_selection() {
+                    let (start, _) = self.selection_range();
+                    self.cursor_position = start;
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                } else {
+                    self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                }
             }
             "ArrowRight" => {
-                *pos = next_char_boundary(text, *pos);
-                InputEditResult::CursorMoved
+                if shift {
+                    let new_end = next_char_boundary(&self.content, self.selection_end);
+                    if !self.has_selection() {
+                        self.selection_anchor = self.cursor_position;
+                    }
+                    self.selection_end = new_end;
+                    self.cursor_position = new_end;
+                    InputEditResult::SelectionChanged
+                } else if self.has_selection() {
+                    let (_, end) = self.selection_range();
+                    self.cursor_position = end;
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                } else {
+                    self.cursor_position = next_char_boundary(&self.content, self.cursor_position);
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                }
             }
             "Home" => {
-                *pos = 0;
-                InputEditResult::CursorMoved
+                if shift {
+                    if !self.has_selection() {
+                        self.selection_anchor = self.cursor_position;
+                    }
+                    self.selection_end = 0;
+                    self.cursor_position = 0;
+                    InputEditResult::SelectionChanged
+                } else {
+                    self.cursor_position = 0;
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                }
             }
             "End" => {
-                *pos = text.len();
-                InputEditResult::CursorMoved
+                if shift {
+                    if !self.has_selection() {
+                        self.selection_anchor = self.cursor_position;
+                    }
+                    self.selection_end = self.content.len();
+                    self.cursor_position = self.content.len();
+                    InputEditResult::SelectionChanged
+                } else {
+                    self.cursor_position = self.content.len();
+                    self.clear_selection();
+                    InputEditResult::CursorMoved
+                }
             }
-            "Enter" => InputEditResult::EnterPressed(text.clone()),
+            "a" if ctrl || meta => {
+                self.select_all();
+                InputEditResult::SelectionChanged
+            }
+            "Enter" => InputEditResult::EnterPressed(self.content.clone()),
             _ => {
                 if key.len() == 1 && !ctrl && !meta {
                     let ch = key.chars().next().unwrap();
-                    text.insert(*pos, ch);
-                    *pos += ch.len_utf8();
-                    InputEditResult::TextChanged(text.clone())
+                    if self.has_selection() {
+                        self.delete_selection();
+                    }
+                    self.content.insert(self.cursor_position, ch);
+                    self.cursor_position += ch.len_utf8();
+                    self.clear_selection();
+                    InputEditResult::TextChanged(self.content.clone())
                 } else {
                     InputEditResult::NotHandled
                 }
@@ -123,6 +257,7 @@ pub enum InputEditResult {
     CursorMoved,
     TextChanged(String),
     EnterPressed(String),
+    SelectionChanged,
 }
 
 fn prev_char_boundary(s: &str, pos: usize) -> usize {

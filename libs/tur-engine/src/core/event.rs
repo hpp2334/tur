@@ -15,4 +15,5 @@ pub enum AppEvent {
 pub enum AppGestureEvent {
     PointerDown { position: Offset },
     PointerUp { position: Offset },
+    PointerMove { position: Offset },
 }
