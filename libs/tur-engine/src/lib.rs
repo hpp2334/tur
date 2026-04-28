@@ -226,23 +226,9 @@ impl TurApp {
                     }
 
                     AppEvent::Key(key_event) => {
-                        let data = self
-                            .app_context
+                        self.app_context
                             .borrow_mut()
-                            .collect_key_event_data(&key_event, &mut self.boa_context);
-                        if let Some((callbacks, event_obj)) = data {
-                            for callback in callbacks {
-                                let result: Result<boa_engine::JsValue, _> = callback.call(
-                                    &boa_engine::JsValue::undefined(),
-                                    std::slice::from_ref(&event_obj),
-                                    &mut self.boa_context,
-                                );
-                                match result {
-                                    Ok(r) if r.to_boolean() => break,
-                                    _ => continue,
-                                }
-                            }
-                        }
+                            .handle_key_event(&key_event, &mut self.boa_context);
                     }
 
                     AppEvent::RequestDraw => {

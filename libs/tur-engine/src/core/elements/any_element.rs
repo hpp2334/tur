@@ -4,8 +4,10 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::elements::{ElementOnKeyboard, KeyboardResult};
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
+use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
@@ -36,11 +38,12 @@ trait Erased: 'static {
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult;
 }
 
 impl<E> Erased for E
 where
-    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static,
+    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + ElementOnKeyboard + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -98,10 +101,14 @@ where
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         <Self as ElementRender>::hit_test(self, position, layout)
     }
+
+    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
+        <Self as ElementOnKeyboard>::on_keyboard_event(self, event)
+    }
 }
 
 impl AnyElement {
-    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static>(
+    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + ElementOnKeyboard + 'static>(
         element: E,
     ) -> Self {
         AnyElement {
@@ -160,5 +167,9 @@ impl AnyElement {
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
+    }
+
+    pub fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
+        self.inner.on_keyboard_event(event)
     }
 }

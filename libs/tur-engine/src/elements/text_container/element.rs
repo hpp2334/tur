@@ -1,7 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
-use crate::core::elements::{ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate, ElementTrace};
 use crate::elements::text::text_layout::TextLayoutData;
 
 pub struct TextContainerElement {
@@ -32,12 +32,8 @@ impl ElementOnUpdate for TextContainerElement {
     fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
         if *key == "fontSize" {
             self.default_font_size = value.as_number().unwrap_or(14.0);
-        } else if *key == "color" {
-            if let Some(s) = value.as_string() {
-                self.default_color = s.to_std_string_escaped().parse().ok();
-            } else if value.is_null() || value.is_undefined() {
-                self.default_color = None;
-            }
         }
     }
 }
+
+impl ElementOnKeyboard for TextContainerElement {}

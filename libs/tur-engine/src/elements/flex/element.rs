@@ -2,7 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, Size};
 
-use crate::core::elements::ElementOnUpdate;
+use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate};
 use crate::core::elements::ElementTrace;
 
 pub(crate) struct ChildData {
@@ -37,7 +37,7 @@ impl FlexElement {
     }
 }
 
-impl ElementTrace for FlexElement {
+impl ElementOnKeyboard for FlexElement {}impl ElementTrace for FlexElement {
     fn trace_label(&self) -> String {
         format!(
             "{:?}[{:?}][{:?}]",

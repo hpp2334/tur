@@ -1,8 +1,11 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
+use crate::core::elements::ElementOnKeyboard;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
+use crate::core::elements::KeyboardResult;
+use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
 
 #[derive(Clone)]
@@ -456,6 +459,43 @@ fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {
         .nth(char_idx)
         .map(|(i, _)| i)
         .unwrap_or(s.len())
+}
+
+fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
+    s[..byte_pos].chars().count()
+}
+
+impl From<InputEditResult> for KeyboardResult {
+    fn from(result: InputEditResult) -> Self {
+        match result {
+            InputEditResult::NotHandled => KeyboardResult::NotHandled,
+            InputEditResult::Handled
+            | InputEditResult::CursorMoved
+            | InputEditResult::SelectionChanged
+            | InputEditResult::TextChanged(_)
+            | InputEditResult::EnterPressed(_) => KeyboardResult::NeedsDraw,
+        }
+    }
+}
+
+impl ElementOnKeyboard for InputElement {
+    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
+        if event.event_type != KeyEventType::Down {
+            return KeyboardResult::NotHandled;
+        }
+        let nav_info = self.cached_layout.as_ref().map(|ld| {
+            let cursor_char = byte_to_char_offset(&self.content, self.cursor_position);
+            LineNavInfo::extract(ld, cursor_char)
+        });
+        self.handle_key_event(
+            &event.key,
+            event.modifiers.ctrl,
+            event.modifiers.meta,
+            event.modifiers.shift,
+            nav_info.as_ref(),
+        )
+        .into()
+    }
 }
 
 impl ElementTrace for InputElement {
