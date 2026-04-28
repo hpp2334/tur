@@ -1,12 +1,13 @@
 import { renderRoot } from "@tur/solidjs-renderer";
 import { Input, TextController } from "@tur/solidjs";
 
-const controller = new TextController();
-
 function InputSetText() {
-  return <Input controller={controller} width={200} height={30} />;
+  return <Input controller={new TextController()} width={200} height={30} />;
 }
 
-renderRoot(InputSetText);
+const root = renderRoot(InputSetText);
 
-controller.setText("hello");
+const ctx = __tur.__ctx;
+const container = __tur.getFirstChild(ctx, root);
+const input = __tur.getFirstChild(ctx, container);
+__tur.setInputText(ctx, input, "hello");
