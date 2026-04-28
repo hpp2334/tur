@@ -2,15 +2,12 @@ use std::collections::HashMap;
 use std::fmt;
 
 use boa_engine::object::JsObject;
-use boa_engine::Context;
-use boa_engine::JsValue;
+use boa_engine::{Context, JsValue};
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
-use crate::core::bridge::element_bridge::TurNodeHandle;
-use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{ElementNode, ElementTree};
+use crate::core::elements::ElementTree;
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusEventType, FocusManager};
 use crate::core::fonts::FontManager;
@@ -24,8 +21,6 @@ pub struct TurAppInternal {
     font_manager: FontManager,
     text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     size: (f64, f64),
-    next_id: u64,
-    handles: HashMap<ElementNodeId, BoaOpaque<TurNodeHandle>>,
     event_handlers: HashMap<(ElementNodeId, ComposedGestureEventKind), JsObject>,
     gesture_composer: GestureEventComposer,
     focus_manager: FocusManager,
@@ -39,8 +34,6 @@ impl fmt::Debug for TurAppInternal {
         f.debug_struct("TurAppInternal")
             .field("element_tree", &self.element_tree)
             .field("size", &self.size)
-            .field("next_id", &self.next_id)
-            .field("handles", &self.handles)
             .finish_non_exhaustive()
     }
 }
@@ -57,8 +50,6 @@ impl TurAppInternal {
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             size: (400.0, 600.0),
-            next_id: 1,
-            handles: HashMap::new(),
             event_handlers: HashMap::new(),
             gesture_composer: GestureEventComposer::new(),
             focus_manager: FocusManager::new(),
@@ -105,29 +96,6 @@ impl TurAppInternal {
 
     pub fn drain_events(&mut self) -> Vec<AppEvent> {
         std::mem::take(&mut self.event_queue)
-    }
-
-    pub fn alloc_id(&mut self) -> ElementNodeId {
-        let id = self.next_id;
-        self.next_id += 1;
-        ElementNodeId::new(id)
-    }
-
-    pub fn insert_element(&mut self, node: ElementNode) {
-        self.element_tree.insert(node);
-    }
-
-    pub fn get_or_create_handle(
-        &mut self,
-        id: ElementNodeId,
-        context: &mut Context,
-    ) -> BoaOpaque<TurNodeHandle> {
-        if let Some(opaque) = self.handles.get(&id) {
-            return opaque.clone();
-        }
-        let opaque = BoaOpaque::new(TurNodeHandle { id }, context);
-        self.handles.insert(id, opaque.clone());
-        opaque
     }
 
     pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {

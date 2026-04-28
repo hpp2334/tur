@@ -4,15 +4,22 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementNode;
+use crate::core::elements::ElementObject;
 use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
 use crate::core::render::{Canvas, PaintContext};
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ElementTree {
-    pub(crate) nodes: HashMap<ElementNodeId, ElementNode>,
+    pub(crate) nodes: HashMap<ElementNodeId, ElementObject>,
     root_id: Option<ElementNodeId>,
+    next_id: u64,
+}
+
+impl Default for ElementTree {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ElementTree {
@@ -20,29 +27,36 @@ impl ElementTree {
         ElementTree {
             nodes: HashMap::new(),
             root_id: None,
+            next_id: 1,
         }
+    }
+
+    pub fn alloc_id(&mut self) -> ElementNodeId {
+        let id = self.next_id;
+        self.next_id += 1;
+        ElementNodeId::new(id)
     }
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
 
-    pub fn insert(&mut self, node: ElementNode) {
+    pub fn insert(&mut self, node: ElementObject) {
         if self.root_id.is_none() {
             self.root_id = Some(node.id);
         }
         self.nodes.insert(node.id, node);
     }
 
-    pub fn get(&self, id: ElementNodeId) -> Option<&ElementNode> {
+    pub fn get(&self, id: ElementNodeId) -> Option<&ElementObject> {
         self.nodes.get(&id)
     }
 
-    pub fn get_mut(&mut self, id: ElementNodeId) -> Option<&mut ElementNode> {
+    pub fn get_mut(&mut self, id: ElementNodeId) -> Option<&mut ElementObject> {
         self.nodes.get_mut(&id)
     }
 
-    pub fn remove(&mut self, id: ElementNodeId) -> Option<ElementNode> {
+    pub fn remove(&mut self, id: ElementNodeId) -> Option<ElementObject> {
         let node = self.nodes.remove(&id)?;
         if self.root_id == Some(id) {
             self.root_id = None;
@@ -54,11 +68,11 @@ impl ElementTree {
         self.root_id
     }
 
-    pub fn root(&self) -> Option<&ElementNode> {
+    pub fn root(&self) -> Option<&ElementObject> {
         self.root_id.and_then(|id| self.nodes.get(&id))
     }
 
-    pub fn root_mut(&mut self) -> Option<&mut ElementNode> {
+    pub fn root_mut(&mut self) -> Option<&mut ElementObject> {
         self.root_id.and_then(|id| self.nodes.get_mut(&id))
     }
 
