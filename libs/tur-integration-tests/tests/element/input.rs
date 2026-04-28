@@ -60,11 +60,7 @@ fn input_set_text_via_bridge() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-set-text").unwrap();
 
-    let input_id = {
-        let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        root.children[0]
-    };
+    let input_id = find_input_id(&app);
 
     assert_eq!(
         app.with_element(input_id, |e| {
