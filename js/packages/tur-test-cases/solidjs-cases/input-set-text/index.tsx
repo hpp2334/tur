@@ -1,6 +1,14 @@
-/// <reference types="@tur/solidjs-renderer" />
 import { renderRoot } from "@tur/solidjs-renderer";
 import { Input, TextController } from "@tur/solidjs";
+
+declare global {
+  var __tur: {
+    __ctx: unknown;
+    getFirstChild(ctx: unknown, handle: object): object | null;
+    setInputText(ctx: unknown, handle: object, text: string): void;
+    [key: string]: unknown;
+  };
+}
 
 function InputSetText() {
   return <Input controller={new TextController()} width={200} height={30} />;
