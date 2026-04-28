@@ -1,5 +1,5 @@
 import { renderRoot } from "@tur/solidjs-renderer";
-import { Input, TextController } from "@tur/solidjs";
+import { Input, InputController } from "@tur/solidjs";
 
 declare global {
   var __inputCallbackLog: string[];
@@ -7,7 +7,7 @@ declare global {
 
 globalThis.__inputCallbackLog = [];
 
-const controller = new TextController({
+const controller = new InputController({
   onInput: (text) => {
     globalThis.__inputCallbackLog.push("input:" + text);
   },

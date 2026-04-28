@@ -1,5 +1,5 @@
 import { renderRoot } from "@tur/solidjs-renderer";
-import { Input, TextController } from "@tur/solidjs";
+import { Input, InputController } from "@tur/solidjs";
 
 declare global {
   var __tur: {
@@ -11,7 +11,7 @@ declare global {
 }
 
 function InputSetText() {
-  return <Input controller={new TextController()} width={200} height={30} />;
+  return <Input controller={new InputController()} width={200} height={30} />;
 }
 
 const root = renderRoot(InputSetText);
