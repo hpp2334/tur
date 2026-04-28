@@ -1,7 +1,7 @@
 import { renderRoot } from "@tur/solidjs-renderer";
-import { Input, TextController } from "@tur/solidjs";
+import { Input, InputController } from "@tur/solidjs";
 
-const controller = new TextController();
+const controller = new InputController();
 
 function InputSelection() {
   return <Input controller={controller} width={200} height={30} />;

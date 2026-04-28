@@ -1,6 +1,6 @@
 import type { JSX } from "solid-js";
 import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
-import type { TextController } from "@tur/solidjs-renderer";
+import type { InputController } from "@tur/solidjs-renderer";
 import { CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
@@ -144,7 +144,7 @@ export function Text(props: TextProps): JSX.Element {
 }
 
 export interface InputProps {
-  controller: TextController;
+  controller: InputController;
   placeholder?: string;
   fontSize?: number;
   color?: Color;
