@@ -191,16 +191,26 @@ impl TurApp {
         }
 
         // Call phase: drain JsEventQueue and flush to elements
+        // Take element out temporarily to avoid RefCell conflict when
+        // JS callbacks re-enter the bridge during flush.
         let entries = self.app_context.borrow_mut().js_event_queue.drain();
         for (target, event) in entries {
-            if let Some(ref mut element) = self
-                .app_context
-                .borrow_mut()
-                .element_tree_mut()
-                .get_mut(target)
-                .and_then(|n| n.element.as_mut())
-            {
+            let mut element = {
+                let mut ctx = self.app_context.borrow_mut();
+                ctx.element_tree_mut()
+                    .get_mut(target)
+                    .and_then(|n| n.element.take())
+            };
+            if let Some(ref mut element) = element {
                 element.flush_js_event(event, &mut self.boa_context);
+            }
+            if element.is_some() {
+                self.app_context
+                    .borrow_mut()
+                    .element_tree_mut()
+                    .get_mut(target)
+                    .unwrap()
+                    .element = element;
             }
         }
 
