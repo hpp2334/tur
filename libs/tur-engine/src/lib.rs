@@ -138,43 +138,36 @@ impl TurApp {
                             let focusable_id =
                                 self.app_context.borrow().find_focusable_in_path(&hit_path);
 
-                            let input_handled = self
-                                .app_context
-                                .borrow_mut()
-                                .focus_element_in_path(&hit_path, &mut self.boa_context);
-
                             if let Some(new_focused) = focusable_id {
-                                if !input_handled {
-                                    let old_focused =
-                                        self.app_context.borrow_mut().request_focus(new_focused);
-                                    if let Some(old) = old_focused {
-                                        if old != new_focused {
-                                            let cb = self
-                                                .app_context
-                                                .borrow()
-                                                .collect_focus_handler(old, FocusEventType::Blur);
-                                            if let Some(callback) = cb {
-                                                let _ = callback.call(
-                                                    &boa_engine::JsValue::undefined(),
-                                                    &[],
-                                                    &mut self.boa_context,
-                                                );
-                                            }
+                                let old_focused =
+                                    self.app_context.borrow_mut().request_focus(new_focused);
+                                if let Some(old) = old_focused {
+                                    if old != new_focused {
+                                        let cb = self
+                                            .app_context
+                                            .borrow()
+                                            .collect_focus_handler(old, FocusEventType::Blur);
+                                        if let Some(callback) = cb {
+                                            let _ = callback.call(
+                                                &boa_engine::JsValue::undefined(),
+                                                &[],
+                                                &mut self.boa_context,
+                                            );
                                         }
                                     }
-                                    let cb = self
-                                        .app_context
-                                        .borrow()
-                                        .collect_focus_handler(new_focused, FocusEventType::Focus);
-                                    if let Some(callback) = cb {
-                                        let _ = callback.call(
-                                            &boa_engine::JsValue::undefined(),
-                                            &[],
-                                            &mut self.boa_context,
-                                        );
-                                    }
                                 }
-                            } else if !input_handled {
+                                let cb = self
+                                    .app_context
+                                    .borrow()
+                                    .collect_focus_handler(new_focused, FocusEventType::Focus);
+                                if let Some(callback) = cb {
+                                    let _ = callback.call(
+                                        &boa_engine::JsValue::undefined(),
+                                        &[],
+                                        &mut self.boa_context,
+                                    );
+                                }
+                            } else {
                                 let old_focused = self.app_context.borrow_mut().clear_focus();
                                 if let Some(old) = old_focused {
                                     let cb = self

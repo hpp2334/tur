@@ -328,30 +328,6 @@ pub(crate) fn tur_set_attribute(
                 }
                 true
             }
-            "onFocus" => {
-                if let Some(obj) = value.as_object() {
-                    if obj.is_callable() {
-                        ctx.text_input_focus_handlers
-                            .insert((node_id, FocusEventType::Focus), obj.clone());
-                    }
-                } else if value.is_null() || value.is_undefined() {
-                    ctx.text_input_focus_handlers
-                        .remove(&(node_id, FocusEventType::Focus));
-                }
-                true
-            }
-            "onBlur" => {
-                if let Some(obj) = value.as_object() {
-                    if obj.is_callable() {
-                        ctx.text_input_focus_handlers
-                            .insert((node_id, FocusEventType::Blur), obj.clone());
-                    }
-                } else if value.is_null() || value.is_undefined() {
-                    ctx.text_input_focus_handlers
-                        .remove(&(node_id, FocusEventType::Blur));
-                }
-                true
-            }
             "onCursorChange" => {
                 if let Some(obj) = value.as_object() {
                     if obj.is_callable() {
@@ -506,7 +482,7 @@ pub(crate) fn tur_create_input(
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
     let id = ctx.element_tree_mut().alloc_id();
-    let element = AnyElement::with_interactivity(InputElement::new());
+    let element = AnyElement::with_full_interactivity(InputElement::new());
     let node = ElementObject::new(id, element, context);
     ctx.element_tree_mut().insert(node);
     let handle = ctx.element_tree().get(id).unwrap().handle.clone();

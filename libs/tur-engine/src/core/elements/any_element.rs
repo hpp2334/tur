@@ -197,6 +197,27 @@ impl AnyElement {
         }
     }
 
+    pub fn with_full_interactivity<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnKeyboard
+            + ElementOnGesture
+            + ElementOnFocus
+            + 'static,
+    >(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: Some(keyboard_dispatch::<E>),
+            on_gesture: Some(gesture_dispatch::<E>),
+            drain_changes_fn: Some(drain_changes_dispatch::<E>),
+            on_focus: Some(focus_dispatch::<E>),
+        }
+    }
+
     pub fn kind(&self) -> ElementKind {
         self.inner.kind()
     }
