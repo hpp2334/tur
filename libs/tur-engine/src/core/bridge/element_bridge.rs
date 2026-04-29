@@ -503,7 +503,7 @@ pub(crate) fn tur_create_input(
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
     let id = ctx.element_tree_mut().alloc_id();
-    let element = AnyElement::new(InputElement::new());
+    let element = AnyElement::with_interactivity(InputElement::new());
     let node = ElementObject::new(id, element, context);
     ctx.element_tree_mut().insert(node);
     let handle = ctx.element_tree().get(id).unwrap().handle.clone();

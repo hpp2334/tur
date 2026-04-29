@@ -1,7 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
-use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementOnUpdate, ElementTrace};
 use crate::elements::text::text_layout::TextLayoutData;
 
 pub struct TextContainerElement {
@@ -35,6 +35,3 @@ impl ElementOnUpdate for TextContainerElement {
         }
     }
 }
-
-impl ElementOnKeyboard for TextContainerElement {}
-impl ElementOnGesture for TextContainerElement {}
