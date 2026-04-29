@@ -10,7 +10,6 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::event::AppEvent;
-use crate::core::focus::FocusEventType;
 use crate::core::gesture::ComposedGestureEventKind;
 use crate::core::keyboard::KeyEventType;
 use crate::elements::{
@@ -177,7 +176,7 @@ pub(crate) fn tur_create_focusable(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     tracing::trace!("tur_createFocusable()");
-    create_element(args, context, AnyElement::new(FocusableElement::new()))
+    create_element(args, context, AnyElement::with_focusability(FocusableElement::new()))
 }
 
 pub(crate) fn tur_request_focus(
@@ -191,11 +190,11 @@ pub(crate) fn tur_request_focus(
         let mut ctx = ctx.borrow_mut();
         let old_id = ctx.request_focus(node_id);
         let blur_cb = if let Some(old) = old_id {
-            ctx.collect_focus_handler(old, FocusEventType::Blur)
+            ctx.collect_blur_handler(old)
         } else {
             None
         };
-        let focus_cb = ctx.collect_focus_handler(node_id, FocusEventType::Focus);
+        let focus_cb = ctx.collect_focus_handler(node_id);
         (blur_cb, focus_cb)
     };
     if let Some(callback) = blur_cb {
@@ -244,13 +243,16 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
-    let element_type = ctx
+    let node_info = ctx
         .element_tree()
         .get(node_id)
-        .and_then(|n| n.element.as_ref())
-        .map(|e| e.type_name().to_string());
+        .and_then(|n| {
+            n.element.as_ref().map(|e| {
+                (e.type_name().to_string(), e.has_focus())
+            })
+        });
 
-    let Some(element_type) = element_type else {
+    let Some((element_type, has_focus)) = node_info else {
         if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
             if let Some(ref mut element) = node.element {
                 element.set_prop(context, &key, &value);
@@ -273,7 +275,7 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
-    if element_type == "tur_focusable" {
+    if has_focus {
         let handled = match key.to_std_string_escaped().as_str() {
             "onKeyDown" | "onKeyUp" => {
                 let key_event_type = if key == "onKeyDown" {
@@ -290,18 +292,23 @@ pub(crate) fn tur_set_attribute(
                 }
                 true
             }
-            "onFocus" | "onBlur" => {
-                let focus_event_type = if key == "onFocus" {
-                    FocusEventType::Focus
-                } else {
-                    FocusEventType::Blur
-                };
+            "onFocus" => {
                 if let Some(obj) = value.as_object() {
                     if obj.is_callable() {
-                        ctx.set_focus_handler(node_id, focus_event_type, obj.clone());
+                        ctx.set_focus_handler(node_id, obj.clone());
                     }
                 } else if value.is_null() || value.is_undefined() {
-                    ctx.remove_focus_handler(node_id, focus_event_type);
+                    ctx.remove_focus_handler(node_id);
+                }
+                true
+            }
+            "onBlur" => {
+                if let Some(obj) = value.as_object() {
+                    if obj.is_callable() {
+                        ctx.set_blur_handler(node_id, obj.clone());
+                    }
+                } else if value.is_null() || value.is_undefined() {
+                    ctx.remove_blur_handler(node_id);
                 }
                 true
             }
@@ -322,30 +329,6 @@ pub(crate) fn tur_set_attribute(
                     }
                 } else if value.is_null() || value.is_undefined() {
                     ctx.text_input_callbacks.remove(&node_id);
-                }
-                true
-            }
-            "onFocus" => {
-                if let Some(obj) = value.as_object() {
-                    if obj.is_callable() {
-                        ctx.text_input_focus_handlers
-                            .insert((node_id, FocusEventType::Focus), obj.clone());
-                    }
-                } else if value.is_null() || value.is_undefined() {
-                    ctx.text_input_focus_handlers
-                        .remove(&(node_id, FocusEventType::Focus));
-                }
-                true
-            }
-            "onBlur" => {
-                if let Some(obj) = value.as_object() {
-                    if obj.is_callable() {
-                        ctx.text_input_focus_handlers
-                            .insert((node_id, FocusEventType::Blur), obj.clone());
-                    }
-                } else if value.is_null() || value.is_undefined() {
-                    ctx.text_input_focus_handlers
-                        .remove(&(node_id, FocusEventType::Blur));
                 }
                 true
             }
@@ -503,7 +486,7 @@ pub(crate) fn tur_create_input(
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
     let id = ctx.element_tree_mut().alloc_id();
-    let element = AnyElement::with_interactivity(InputElement::new());
+    let element = AnyElement::with_full_interactivity(InputElement::new());
     let node = ElementObject::new(id, element, context);
     ctx.element_tree_mut().insert(node);
     let handle = ctx.element_tree().get(id).unwrap().handle.clone();

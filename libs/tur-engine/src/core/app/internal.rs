@@ -13,7 +13,7 @@ use crate::core::elements::{
     KeyboardResult,
 };
 use crate::core::event::AppEvent;
-use crate::core::focus::{FocusEventType, FocusManager};
+use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
@@ -29,9 +29,9 @@ pub struct TurAppInternal {
     gesture_composer: GestureEventComposer,
     focus_manager: FocusManager,
     key_handlers: HashMap<(ElementNodeId, KeyEventType), JsObject>,
-    focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
+    focus_handlers: HashMap<ElementNodeId, JsObject>,
+    blur_handlers: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_callbacks: HashMap<ElementNodeId, JsObject>,
-    pub(crate) text_input_focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
     pub(crate) text_input_cursor_handlers: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_selection_handlers: HashMap<ElementNodeId, JsObject>,
     event_queue: Vec<AppEvent>,
@@ -63,8 +63,8 @@ impl TurAppInternal {
             focus_manager: FocusManager::new(),
             key_handlers: HashMap::new(),
             focus_handlers: HashMap::new(),
+            blur_handlers: HashMap::new(),
             text_input_callbacks: HashMap::new(),
-            text_input_focus_handlers: HashMap::new(),
             text_input_cursor_handlers: HashMap::new(),
             text_input_selection_handlers: HashMap::new(),
             event_queue: Vec::new(),
@@ -142,9 +142,15 @@ impl TurAppInternal {
     pub fn collect_focus_handler(
         &self,
         id: ElementNodeId,
-        event_type: FocusEventType,
     ) -> Option<JsObject> {
-        self.focus_handlers.get(&(id, event_type)).cloned()
+        self.focus_handlers.get(&id).cloned()
+    }
+
+    pub fn collect_blur_handler(
+        &self,
+        id: ElementNodeId,
+    ) -> Option<JsObject> {
+        self.blur_handlers.get(&id).cloned()
     }
 
     pub fn hit_test(&self, position: tur_shared::Offset) -> Option<ElementNodeId> {
@@ -199,14 +205,25 @@ impl TurAppInternal {
     pub fn set_focus_handler(
         &mut self,
         id: ElementNodeId,
-        focus_type: FocusEventType,
         handler: JsObject,
     ) {
-        self.focus_handlers.insert((id, focus_type), handler);
+        self.focus_handlers.insert(id, handler);
     }
 
-    pub fn remove_focus_handler(&mut self, id: ElementNodeId, focus_type: FocusEventType) {
-        self.focus_handlers.remove(&(id, focus_type));
+    pub fn remove_focus_handler(&mut self, id: ElementNodeId) {
+        self.focus_handlers.remove(&id);
+    }
+
+    pub fn set_blur_handler(
+        &mut self,
+        id: ElementNodeId,
+        handler: JsObject,
+    ) {
+        self.blur_handlers.insert(id, handler);
+    }
+
+    pub fn remove_blur_handler(&mut self, id: ElementNodeId) {
+        self.blur_handlers.remove(&id);
     }
 
     pub fn local_position(&self, node_id: ElementNodeId, global: tur_shared::Offset) -> tur_shared::Offset {
@@ -423,70 +440,11 @@ impl TurAppInternal {
         }
     }
 
-    pub fn invoke_input_focus_handler(
-        &self,
-        node_id: ElementNodeId,
-        event_type: FocusEventType,
-        context: &mut Context,
-    ) {
-        if let Some(cb) = self.text_input_focus_handlers.get(&(node_id, event_type)) {
-            let _ = cb.call(&boa_engine::JsValue::undefined(), &[], context);
-        }
-    }
-
-    pub fn focus_element_in_path(
-        &mut self,
-        path: &[ElementNodeId],
-        context: &mut Context,
-    ) -> bool {
-        let mut target_id: Option<ElementNodeId> = None;
-        for &id in path {
-            let mut redraw = false;
-            let mut focus_req: Option<ElementNodeId> = None;
-            let mut cx = ElementOnGestureContext::new(&mut redraw, &mut focus_req);
-            let handled = {
-                let node = match self.element_tree.get_mut(id) {
-                    Some(n) => n,
-                    None => continue,
-                };
-                let element = match node.element.as_mut() {
-                    Some(e) => e,
-                    None => continue,
-                };
-                matches!(
-                    element.on_gesture_event(
-                        &ComposedGestureEvent::PointerDown {
-                            local_position: tur_shared::Offset::ZERO,
-                        },
-                        &mut cx,
-                    ),
-                    GestureResult::Handled | GestureResult::NeedsDraw
-                )
-            };
-            if handled {
-                target_id = Some(id);
-                break;
-            }
-        }
-
-        let Some(id) = target_id else {
-            return false;
-        };
-
-        let old_id = self.focus_manager.request_focus(id);
-        if let Some(old) = old_id {
-            self.invoke_input_focus_handler(old, FocusEventType::Blur, context);
-        }
-        self.invoke_input_focus_handler(id, FocusEventType::Focus, context);
-        self.push_event(AppEvent::RequestDraw);
-        true
-    }
-
     pub fn find_focusable_in_path(&self, path: &[ElementNodeId]) -> Option<ElementNodeId> {
         for &id in path {
             if let Some(node) = self.element_tree.get(id) {
                 if let Some(ref element) = node.element {
-                    if element.type_name() == "tur_focusable" {
+                    if element.has_focus() {
                         return Some(id);
                     }
                 }

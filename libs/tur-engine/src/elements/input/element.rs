@@ -2,8 +2,8 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
-    ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, ElementOnKeyboard,
-    ElementOnUpdate, ElementTrace, GestureChanges, GestureResult, KeyboardResult,
+    ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementOnKeyboard, ElementOnUpdate, ElementTrace, GestureChanges, GestureResult, KeyboardResult,
 };
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
@@ -591,3 +591,5 @@ impl ElementOnUpdate for InputElement {
         }
     }
 }
+
+impl ElementOnFocus for InputElement {}

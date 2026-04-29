@@ -1,11 +1,5 @@
 use crate::core::element::ElementNodeId;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum FocusEventType {
-    Focus,
-    Blur,
-}
-
 pub struct FocusManager {
     focused_id: Option<ElementNodeId>,
 }
