@@ -177,7 +177,7 @@ pub(crate) fn tur_create_focusable(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     tracing::trace!("tur_createFocusable()");
-    create_element(args, context, AnyElement::new(FocusableElement::new()))
+    create_element(args, context, AnyElement::with_focusability(FocusableElement::new()))
 }
 
 pub(crate) fn tur_request_focus(
@@ -244,13 +244,16 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
-    let element_type = ctx
+    let node_info = ctx
         .element_tree()
         .get(node_id)
-        .and_then(|n| n.element.as_ref())
-        .map(|e| e.type_name().to_string());
+        .and_then(|n| {
+            n.element.as_ref().map(|e| {
+                (e.type_name().to_string(), e.has_focus())
+            })
+        });
 
-    let Some(element_type) = element_type else {
+    let Some((element_type, has_focus)) = node_info else {
         if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
             if let Some(ref mut element) = node.element {
                 element.set_prop(context, &key, &value);
@@ -273,7 +276,7 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
-    if element_type == "tur_focusable" {
+    if has_focus {
         let handled = match key.to_std_string_escaped().as_str() {
             "onKeyDown" | "onKeyUp" => {
                 let key_event_type = if key == "onKeyDown" {

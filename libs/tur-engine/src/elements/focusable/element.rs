@@ -1,7 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::ElementOnUpdate;
-use crate::core::elements::ElementTrace;
+use crate::core::elements::{ElementOnFocus, ElementOnUpdate, ElementTrace};
 
 #[derive(Clone, Default)]
 pub struct FocusableElement;
@@ -16,3 +15,4 @@ impl ElementTrace for FocusableElement {}
 impl ElementOnUpdate for FocusableElement {
     fn set_prop(&mut self, _ctx: &mut Context, _key: &JsString, _value: &JsValue) {}
 }
+impl ElementOnFocus for FocusableElement {}

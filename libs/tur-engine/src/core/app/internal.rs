@@ -486,7 +486,7 @@ impl TurAppInternal {
         for &id in path {
             if let Some(node) = self.element_tree.get(id) {
                 if let Some(ref element) = node.element {
-                    if element.type_name() == "tur_focusable" {
+                    if element.has_focus() {
                         return Some(id);
                     }
                 }
