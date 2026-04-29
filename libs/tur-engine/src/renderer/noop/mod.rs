@@ -21,7 +21,7 @@ impl NoopRenderer {
 }
 
 impl Renderer for NoopRenderer {
-    fn render(&mut self, tree: &ElementTree) {
+    fn render(&mut self, tree: &ElementTree, _focused_node_id: Option<ElementNodeId>) {
         let root_id = match tree.root_id() {
             Some(id) => id,
             None => {

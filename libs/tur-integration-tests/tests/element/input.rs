@@ -127,24 +127,14 @@ fn input_click_to_focus() {
     app.render();
 
     assert!(
-        !app.with_element(input_id, |e| {
-            e.cast::<InputElement>()
-                .map(|i| i.is_focused())
-                .unwrap_or(false)
-        })
-        .unwrap_or(false),
+        app.focused_element() != Some(input_id),
         "input should not be focused before click"
     );
 
     focus_input(&mut app, input_id);
 
     assert!(
-        app.with_element(input_id, |e| {
-            e.cast::<InputElement>()
-                .map(|i| i.is_focused())
-                .unwrap_or(false)
-        })
-        .unwrap_or(false),
+        app.focused_element() == Some(input_id),
         "input should be focused after click"
     );
 }

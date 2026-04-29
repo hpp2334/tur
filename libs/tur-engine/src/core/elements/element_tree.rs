@@ -247,12 +247,12 @@ impl ElementTree {
         }
     }
 
-    pub fn paint(&self, canvas: &mut dyn Canvas) {
+    pub fn paint(&self, canvas: &mut dyn Canvas, focused_node_id: Option<ElementNodeId>) {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return,
         };
-        self.paint_node(root_id, canvas, Offset::ZERO);
+        self.paint_node(root_id, canvas, Offset::ZERO, focused_node_id);
     }
 
     pub(crate) fn paint_node(
@@ -260,6 +260,7 @@ impl ElementTree {
         id: ElementNodeId,
         canvas: &mut dyn Canvas,
         parent_offset: Offset,
+        focused_node_id: Option<ElementNodeId>,
     ) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
@@ -273,7 +274,7 @@ impl ElementTree {
 
         let absolute_offset = parent_offset + node.computed_layout.offset;
 
-        let paint_ctx = PaintContext::new(self);
+        let paint_ctx = PaintContext::new(self, focused_node_id, id);
         element.paint(
             canvas,
             absolute_offset,
