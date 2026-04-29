@@ -19,7 +19,6 @@ use core::elements::AnyElement;
 use core::elements::ElementTree;
 use core::elements::ComposedGestureEvent;
 use core::event::{AppEvent, AppGestureEvent};
-use core::focus::FocusEventType;
 use core::fonts::FontLoader;
 use core::gesture::ComposedGestureEventKind;
 
@@ -146,7 +145,7 @@ impl TurApp {
                                         let cb = self
                                             .app_context
                                             .borrow()
-                                            .collect_focus_handler(old, FocusEventType::Blur);
+                                            .collect_blur_handler(old);
                                         if let Some(callback) = cb {
                                             let _ = callback.call(
                                                 &boa_engine::JsValue::undefined(),
@@ -159,7 +158,7 @@ impl TurApp {
                                 let cb = self
                                     .app_context
                                     .borrow()
-                                    .collect_focus_handler(new_focused, FocusEventType::Focus);
+                                    .collect_focus_handler(new_focused);
                                 if let Some(callback) = cb {
                                     let _ = callback.call(
                                         &boa_engine::JsValue::undefined(),
@@ -173,7 +172,7 @@ impl TurApp {
                                     let cb = self
                                         .app_context
                                         .borrow()
-                                        .collect_focus_handler(old, FocusEventType::Blur);
+                                        .collect_blur_handler(old);
                                     if let Some(callback) = cb {
                                         let _ = callback.call(
                                             &boa_engine::JsValue::undefined(),

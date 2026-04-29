@@ -13,7 +13,7 @@ use crate::core::elements::{
     KeyboardResult,
 };
 use crate::core::event::AppEvent;
-use crate::core::focus::{FocusEventType, FocusManager};
+use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::{ComposedGestureEventKind, GestureEventComposer};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
@@ -29,7 +29,8 @@ pub struct TurAppInternal {
     gesture_composer: GestureEventComposer,
     focus_manager: FocusManager,
     key_handlers: HashMap<(ElementNodeId, KeyEventType), JsObject>,
-    focus_handlers: HashMap<(ElementNodeId, FocusEventType), JsObject>,
+    focus_handlers: HashMap<ElementNodeId, JsObject>,
+    blur_handlers: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_callbacks: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_cursor_handlers: HashMap<ElementNodeId, JsObject>,
     pub(crate) text_input_selection_handlers: HashMap<ElementNodeId, JsObject>,
@@ -62,6 +63,7 @@ impl TurAppInternal {
             focus_manager: FocusManager::new(),
             key_handlers: HashMap::new(),
             focus_handlers: HashMap::new(),
+            blur_handlers: HashMap::new(),
             text_input_callbacks: HashMap::new(),
             text_input_cursor_handlers: HashMap::new(),
             text_input_selection_handlers: HashMap::new(),
@@ -140,9 +142,15 @@ impl TurAppInternal {
     pub fn collect_focus_handler(
         &self,
         id: ElementNodeId,
-        event_type: FocusEventType,
     ) -> Option<JsObject> {
-        self.focus_handlers.get(&(id, event_type)).cloned()
+        self.focus_handlers.get(&id).cloned()
+    }
+
+    pub fn collect_blur_handler(
+        &self,
+        id: ElementNodeId,
+    ) -> Option<JsObject> {
+        self.blur_handlers.get(&id).cloned()
     }
 
     pub fn hit_test(&self, position: tur_shared::Offset) -> Option<ElementNodeId> {
@@ -197,14 +205,25 @@ impl TurAppInternal {
     pub fn set_focus_handler(
         &mut self,
         id: ElementNodeId,
-        focus_type: FocusEventType,
         handler: JsObject,
     ) {
-        self.focus_handlers.insert((id, focus_type), handler);
+        self.focus_handlers.insert(id, handler);
     }
 
-    pub fn remove_focus_handler(&mut self, id: ElementNodeId, focus_type: FocusEventType) {
-        self.focus_handlers.remove(&(id, focus_type));
+    pub fn remove_focus_handler(&mut self, id: ElementNodeId) {
+        self.focus_handlers.remove(&id);
+    }
+
+    pub fn set_blur_handler(
+        &mut self,
+        id: ElementNodeId,
+        handler: JsObject,
+    ) {
+        self.blur_handlers.insert(id, handler);
+    }
+
+    pub fn remove_blur_handler(&mut self, id: ElementNodeId) {
+        self.blur_handlers.remove(&id);
     }
 
     pub fn local_position(&self, node_id: ElementNodeId, global: tur_shared::Offset) -> tur_shared::Offset {

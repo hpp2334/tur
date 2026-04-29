@@ -7,7 +7,6 @@ use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 use crate::core::elements::{KeyboardResult, GestureChanges, GestureResult};
-use crate::core::focus::FocusEventType;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -16,14 +15,15 @@ use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus,
 type KeyboardFn = fn(&mut dyn Any, &AppKeyEvent) -> KeyboardResult;
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
 type DrainChangesFn = fn(&mut dyn Any) -> GestureChanges;
-type FocusFn = fn(&mut dyn Any, FocusEventType);
+type FocusDispatchFn = fn(&mut dyn Any);
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
     drain_changes_fn: Option<DrainChangesFn>,
-    on_focus: Option<FocusFn>,
+    on_focus_fn: Option<FocusDispatchFn>,
+    on_blur_fn: Option<FocusDispatchFn>,
 }
 
 trait Erased: 'static {
@@ -77,10 +77,16 @@ fn drain_changes_dispatch<E: ElementOnGesture + 'static>(
 
 fn focus_dispatch<E: ElementOnFocus + 'static>(
     any: &mut dyn Any,
-    event_type: FocusEventType,
 ) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnFocus::on_focus_event(element, event_type);
+    ElementOnFocus::on_focus(element);
+}
+
+fn blur_dispatch<E: ElementOnFocus + 'static>(
+    any: &mut dyn Any,
+) {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnFocus::on_blur(element);
 }
 
 impl<E> Erased for E
@@ -154,7 +160,8 @@ impl AnyElement {
             on_keyboard: None,
             on_gesture: None,
             drain_changes_fn: None,
-            on_focus: None,
+            on_focus_fn: None,
+            on_blur_fn: None,
         }
     }
 
@@ -174,7 +181,8 @@ impl AnyElement {
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
             drain_changes_fn: Some(drain_changes_dispatch::<E>),
-            on_focus: None,
+            on_focus_fn: None,
+            on_blur_fn: None,
         }
     }
 
@@ -193,7 +201,8 @@ impl AnyElement {
             on_keyboard: None,
             on_gesture: None,
             drain_changes_fn: None,
-            on_focus: Some(focus_dispatch::<E>),
+            on_focus_fn: Some(focus_dispatch::<E>),
+            on_blur_fn: Some(blur_dispatch::<E>),
         }
     }
 
@@ -214,7 +223,8 @@ impl AnyElement {
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
             drain_changes_fn: Some(drain_changes_dispatch::<E>),
-            on_focus: Some(focus_dispatch::<E>),
+            on_focus_fn: Some(focus_dispatch::<E>),
+            on_blur_fn: Some(blur_dispatch::<E>),
         }
     }
 
@@ -300,12 +310,18 @@ impl AnyElement {
     }
 
     pub fn has_focus(&self) -> bool {
-        self.on_focus.is_some()
+        self.on_focus_fn.is_some()
     }
 
-    pub fn on_focus_event(&mut self, event_type: FocusEventType) {
-        if let Some(handler) = self.on_focus {
-            handler(self.inner.as_any_mut(), event_type);
+    pub fn dispatch_focus(&mut self) {
+        if let Some(handler) = self.on_focus_fn {
+            handler(self.inner.as_any_mut());
+        }
+    }
+
+    pub fn dispatch_blur(&mut self) {
+        if let Some(handler) = self.on_blur_fn {
+            handler(self.inner.as_any_mut());
         }
     }
 }
