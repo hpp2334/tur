@@ -1,7 +1,7 @@
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::Color;
 
-use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate};
+use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, ElementOnUpdate};
 use crate::core::elements::ElementTrace;
 
 #[derive(Clone, Default)]
@@ -59,3 +59,4 @@ impl ElementOnUpdate for ContainerElement {
 }
 
 impl ElementOnKeyboard for ContainerElement {}
+impl ElementOnGesture for ContainerElement {}

@@ -4,9 +4,10 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
-use crate::core::elements::{ElementOnKeyboard, KeyboardResult};
+use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, KeyboardResult};
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
+use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext, GestureChanges, GestureResult};
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -39,11 +40,23 @@ trait Erased: 'static {
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
     fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult;
+    fn on_gesture_event(
+        &mut self,
+        event: &ComposedGestureEvent,
+        cx: &mut ElementOnGestureContext,
+    ) -> GestureResult;
+    fn drain_changes(&mut self) -> GestureChanges;
 }
 
 impl<E> Erased for E
 where
-    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + ElementOnKeyboard + 'static,
+    E: ElementOnUpdate
+        + ElementLayout
+        + ElementRender
+        + ElementTrace
+        + ElementOnKeyboard
+        + ElementOnGesture
+        + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -105,12 +118,30 @@ where
     fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
         <Self as ElementOnKeyboard>::on_keyboard_event(self, event)
     }
+
+    fn on_gesture_event(
+        &mut self,
+        event: &ComposedGestureEvent,
+        cx: &mut ElementOnGestureContext,
+    ) -> GestureResult {
+        <Self as ElementOnGesture>::on_gesture_event(self, event, cx)
+    }
+
+    fn drain_changes(&mut self) -> GestureChanges {
+        <Self as ElementOnGesture>::drain_changes(self)
+    }
 }
 
 impl AnyElement {
-    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + ElementOnKeyboard + 'static>(
-        element: E,
-    ) -> Self {
+    pub fn new<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnKeyboard
+            + ElementOnGesture
+            + 'static,
+    >(element: E) -> Self {
         AnyElement {
             inner: Box::new(element),
         }
@@ -171,5 +202,17 @@ impl AnyElement {
 
     pub fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
         self.inner.on_keyboard_event(event)
+    }
+
+    pub fn on_gesture_event(
+        &mut self,
+        event: &ComposedGestureEvent,
+        cx: &mut ElementOnGestureContext,
+    ) -> GestureResult {
+        self.inner.on_gesture_event(event, cx)
+    }
+
+    pub fn drain_changes(&mut self) -> GestureChanges {
+        self.inner.drain_changes()
     }
 }

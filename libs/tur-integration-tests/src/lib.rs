@@ -126,6 +126,10 @@ impl TurTestApp {
         self.inner.query_element(key)
     }
 
+    pub fn focused_element(&self) -> Option<ElementNodeId> {
+        self.inner.focused_element()
+    }
+
     pub fn with_element<R>(
         &self,
         id: ElementNodeId,

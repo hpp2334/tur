@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate};
+use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, ElementOnUpdate};
 use crate::core::elements::ElementTrace;
 
 #[derive(Clone, Default)]
@@ -18,3 +18,4 @@ impl ElementOnUpdate for PointerInteractElement {
 }
 
 impl ElementOnKeyboard for PointerInteractElement {}
+impl ElementOnGesture for PointerInteractElement {}

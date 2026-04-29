@@ -97,7 +97,7 @@ impl ElementRender for InputElement {
         offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
-        _paint_ctx: &PaintContext,
+        paint_ctx: &PaintContext,
     ) {
         if let Some(ref layout_data) = self.cached_layout {
             if self.has_selection() {
@@ -107,7 +107,7 @@ impl ElementRender for InputElement {
 
             canvas.fill_text_layout(offset, layout_data);
 
-            if self.focused && !self.has_selection() {
+            if paint_ctx.is_focused() && !self.has_selection() {
                 let (cursor_x, cursor_y) = layout_data.cursor_xy_at(
                     byte_to_char_offset(&self.content, self.cursor_position),
                 );

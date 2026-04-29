@@ -1,5 +1,6 @@
 use std::num::NonZeroUsize;
 
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Renderer as TurRenderer;
 use crate::renderer::vello::paint_context::VelloPaintContext;
@@ -103,7 +104,7 @@ impl VelloRenderer {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render_to_scene(&mut self, tree: &ElementTree) {
+    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>) {
         self.scene.reset();
         if self.dpr != 1.0 {
             self.scene.push_layer(
@@ -114,7 +115,7 @@ impl VelloRenderer {
             );
         }
         let mut ctx = VelloPaintContext::new(&mut self.scene);
-        tree.paint(&mut ctx);
+        tree.paint(&mut ctx, focused_node_id);
         if self.dpr != 1.0 {
             self.scene.pop_layer();
         }
@@ -158,8 +159,8 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render(&mut self, tree: &ElementTree) {
-        self.render_to_scene(tree);
+    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>) {
+        self.render_to_scene(tree, focused_node_id);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

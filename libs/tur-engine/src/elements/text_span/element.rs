@@ -4,7 +4,7 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{ElementOnKeyboard, ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, ElementOnUpdate, ElementTrace};
 use crate::core::layout::LayoutContext;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
@@ -121,3 +121,4 @@ impl ElementRender for TextSpanElement {
 }
 
 impl ElementOnKeyboard for TextSpanElement {}
+impl ElementOnGesture for TextSpanElement {}

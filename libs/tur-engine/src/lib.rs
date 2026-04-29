@@ -17,6 +17,7 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
+use core::elements::ComposedGestureEvent;
 use core::event::{AppEvent, AppGestureEvent};
 use core::focus::FocusEventType;
 use core::fonts::FontLoader;
@@ -85,23 +86,13 @@ impl TurApp {
                         let target = self.app_context.borrow().hit_test(position);
                         self.app_context.borrow_mut().compose_pointer_down(target);
 
-                        {
-                            let ctx = self.app_context.borrow();
-                            if let Some(id) = target {
-                                if ctx.is_input(id) {
-                                    drop(ctx);
-                                    let (local_x, local_y) = {
-                                        let ctx = self.app_context.borrow();
-                                        (ctx.input_local_x(id, position), ctx.input_local_y(id, position))
-                                    };
-                                    self.app_context
-                                        .borrow_mut()
-                                        .start_input_selection_at(id, local_x, local_y);
-                                    self.app_context
-                                        .borrow_mut()
-                                        .push_event(AppEvent::RequestDraw);
-                                }
-                            }
+                        if let Some(id) = target {
+                            let local = self.app_context.borrow().local_position(id, position);
+                            self.app_context.borrow_mut().handle_gesture_event(
+                                id,
+                                &ComposedGestureEvent::PointerDown { local_position: local },
+                                &mut self.boa_context,
+                            );
                         }
                     }
 
@@ -114,23 +105,13 @@ impl TurApp {
                         };
 
                         if is_dragging {
-                            if let Some(input_id) = focused {
-                                let is_input = self
-                                    .app_context
-                                    .borrow()
-                                    .is_input(input_id);
-                                if is_input {
-                                    let (local_x, local_y) = {
-                                        let ctx = self.app_context.borrow();
-                                        (ctx.input_local_x(input_id, position), ctx.input_local_y(input_id, position))
-                                    };
-                                    self.app_context
-                                        .borrow_mut()
-                                        .extend_input_selection_to(input_id, local_x, local_y);
-                                    self.app_context
-                                        .borrow_mut()
-                                        .push_event(AppEvent::RequestDraw);
-                                }
+                            if let Some(id) = focused {
+                                let local = self.app_context.borrow().local_position(id, position);
+                                self.app_context.borrow_mut().handle_gesture_event(
+                                    id,
+                                    &ComposedGestureEvent::PointerMove { local_position: local },
+                                    &mut self.boa_context,
+                                );
                             }
                         }
                     }
@@ -160,7 +141,7 @@ impl TurApp {
                             let input_handled = self
                                 .app_context
                                 .borrow_mut()
-                                .focus_input_if_hit(&hit_path, &mut self.boa_context);
+                                .focus_element_in_path(&hit_path, &mut self.boa_context);
 
                             if let Some(new_focused) = focusable_id {
                                 if !input_handled {
@@ -258,6 +239,10 @@ impl TurApp {
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
         self.app_context.borrow().element_tree().query_element(key)
+    }
+
+    pub fn focused_element(&self) -> Option<ElementNodeId> {
+        self.app_context.borrow().focused_element()
     }
 
     pub fn with_element<R>(

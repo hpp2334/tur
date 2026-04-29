@@ -1,0 +1,63 @@
+use tur_shared::Offset;
+
+use crate::core::element::ElementNodeId;
+
+pub enum GestureResult {
+    NotHandled,
+    Handled,
+    NeedsDraw,
+}
+
+pub enum ComposedGestureEvent {
+    PointerDown { local_position: Offset },
+    PointerMove { local_position: Offset },
+}
+
+#[derive(Default)]
+pub struct GestureChanges {
+    pub text_changed: bool,
+    pub cursor_changed: bool,
+    pub selection_changed: bool,
+    pub enter: bool,
+}
+
+pub struct ElementOnGestureContext<'a> {
+    redraw_requested: &'a mut bool,
+    focus_request: &'a mut Option<ElementNodeId>,
+}
+
+impl<'a> ElementOnGestureContext<'a> {
+    pub fn new(
+        redraw_requested: &'a mut bool,
+        focus_request: &'a mut Option<ElementNodeId>,
+    ) -> Self {
+        Self {
+            redraw_requested,
+            focus_request,
+        }
+    }
+
+    pub fn request_redraw(&mut self) {
+        *self.redraw_requested = true;
+    }
+
+    pub fn request_focus(&mut self, id: ElementNodeId) {
+        *self.focus_request = Some(id);
+    }
+}
+
+pub trait ElementOnGesture: 'static {
+    fn on_gesture_event(
+        &mut self,
+        event: &ComposedGestureEvent,
+        cx: &mut ElementOnGestureContext,
+    ) -> GestureResult {
+        let _ = event;
+        let _ = cx;
+        GestureResult::NotHandled
+    }
+
+    fn drain_changes(&mut self) -> GestureChanges {
+        GestureChanges::default()
+    }
+}

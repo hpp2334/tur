@@ -1,10 +1,10 @@
 use boa_engine::{Context, JsString, JsValue};
-use tur_shared::Color;
+use tur_shared::{Color, Offset};
 
-use crate::core::elements::ElementOnKeyboard;
-use crate::core::elements::ElementOnUpdate;
-use crate::core::elements::ElementTrace;
-use crate::core::elements::KeyboardResult;
+use crate::core::elements::{
+    ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, ElementOnKeyboard,
+    ElementOnUpdate, ElementTrace, GestureChanges, GestureResult, KeyboardResult,
+};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
 
@@ -52,20 +52,12 @@ impl LineNavInfo {
     }
 }
 
-pub(crate) struct InputChanges {
-    pub text_changed: bool,
-    pub cursor_changed: bool,
-    pub selection_changed: bool,
-    pub enter: bool,
-}
-
 pub struct InputElement {
     pub(crate) content: String,
     pub(crate) font_size: f64,
     pub(crate) color: Option<Color>,
     pub(crate) cursor_position: usize,
     pub(crate) cursor_color: Option<Color>,
-    pub(crate) focused: bool,
     pub(crate) placeholder: Option<String>,
     pub(crate) placeholder_color: Option<Color>,
     pub(crate) multiline: bool,
@@ -92,7 +84,6 @@ impl InputElement {
             color: None,
             cursor_position: 0,
             cursor_color: None,
-            focused: false,
             placeholder: None,
             placeholder_color: None,
             multiline: false,
@@ -108,10 +99,6 @@ impl InputElement {
 
     pub fn text(&self) -> &str {
         &self.content
-    }
-
-    pub fn is_focused(&self) -> bool {
-        self.focused
     }
 
     pub fn cursor_position(&self) -> usize {
@@ -169,28 +156,6 @@ impl InputElement {
         self.content = text.to_string();
         self.cursor_position = self.content.len();
         self.clear_selection();
-    }
-
-    pub fn set_focused(&mut self, focused: bool) {
-        self.focused = focused;
-        if focused {
-            self.cursor_position = self.content.len();
-            self.clear_selection();
-        }
-    }
-
-    pub(crate) fn drain_changes(&mut self) -> InputChanges {
-        let changes = InputChanges {
-            text_changed: self.text_changed,
-            cursor_changed: self.cursor_changed,
-            selection_changed: self.selection_changed,
-            enter: self.enter_flag,
-        };
-        self.text_changed = false;
-        self.cursor_changed = false;
-        self.selection_changed = false;
-        self.enter_flag = false;
-        changes
     }
 
     fn delete_selection(&mut self) {
@@ -478,6 +443,19 @@ impl InputElement {
             KeyboardResult::NeedsDraw
         }
     }
+
+    fn char_index_at(&self, local_position: &Offset) -> usize {
+        self.cached_layout
+            .as_ref()
+            .map(|ld| {
+                if self.multiline {
+                    ld.char_index_at_xy(local_position.x as f32, local_position.y as f32)
+                } else {
+                    ld.char_index_at_x(local_position.x as f32)
+                }
+            })
+            .unwrap_or(0)
+    }
 }
 
 fn prev_char_boundary(s: &str, pos: usize) -> usize {
@@ -517,6 +495,48 @@ fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {
 
 fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
     s[..byte_pos].chars().count()
+}
+
+impl ElementOnGesture for InputElement {
+    fn on_gesture_event(
+        &mut self,
+        event: &ComposedGestureEvent,
+        cx: &mut ElementOnGestureContext,
+    ) -> GestureResult {
+        match event {
+            ComposedGestureEvent::PointerDown { local_position } => {
+                let char_idx = self.char_index_at(local_position);
+                let byte_pos = char_to_byte_offset(&self.content, char_idx);
+                self.cursor_position = byte_pos;
+                self.selection_anchor = byte_pos;
+                self.selection_end = byte_pos;
+                cx.request_redraw();
+                GestureResult::Handled
+            }
+            ComposedGestureEvent::PointerMove { local_position } => {
+                let char_idx = self.char_index_at(local_position);
+                let byte_pos = char_to_byte_offset(&self.content, char_idx);
+                self.selection_end = byte_pos;
+                self.cursor_position = byte_pos;
+                cx.request_redraw();
+                GestureResult::Handled
+            }
+        }
+    }
+
+    fn drain_changes(&mut self) -> GestureChanges {
+        let changes = GestureChanges {
+            text_changed: self.text_changed,
+            cursor_changed: self.cursor_changed,
+            selection_changed: self.selection_changed,
+            enter: self.enter_flag,
+        };
+        self.text_changed = false;
+        self.cursor_changed = false;
+        self.selection_changed = false;
+        self.enter_flag = false;
+        changes
+    }
 }
 
 impl ElementOnKeyboard for InputElement {
