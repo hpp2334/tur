@@ -6,8 +6,8 @@ use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{AppEvent, AppGestureEvent};
 use tur_engine::core::fonts::PresetFontLoader;
-use tur_engine::core::gesture::ComposedGestureEventKind;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
+use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
@@ -118,8 +118,12 @@ impl TurTestApp {
         let _ = self.inner.tick();
     }
 
-    pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
-        self.inner.has_event_handler(id, kind)
+    pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
+        self.inner.with_element(id, |e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.has_on_click())
+                .unwrap_or(false)
+        }).unwrap_or(false)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {

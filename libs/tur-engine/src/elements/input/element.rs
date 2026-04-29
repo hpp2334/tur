@@ -1,12 +1,27 @@
+use boa_engine::js_string;
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
-    ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
-    ElementOnKeyboard, ElementOnUpdate, ElementTrace, GestureChanges, GestureResult, KeyboardResult,
+    ComposedGestureEvent, ElementJsEventEmitter, ElementOnFocus, ElementOnGesture,
+    ElementOnGestureContext, ElementOnKeyboard, ElementOnUpdate, ElementTrace, GestureChanges,
+    GestureResult, KeyboardResult,
 };
+use crate::core::js_event::InputJsEvent;
+use crate::core::js_event_helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
+
+fn extract_callable(value: &JsValue) -> Option<JsObject> {
+    value.as_object().and_then(|o| {
+        if o.is_callable() {
+            Some(o.clone())
+        } else {
+            None
+        }
+    })
+}
 
 #[derive(Clone)]
 pub(crate) struct LineNavInfo {
@@ -68,6 +83,13 @@ pub struct InputElement {
     pub(crate) cursor_changed: bool,
     pub(crate) selection_changed: bool,
     pub(crate) enter_flag: bool,
+    on_key_down: Option<JsObject>,
+    on_key_up: Option<JsObject>,
+    on_focus: Option<JsObject>,
+    on_blur: Option<JsObject>,
+    on_input: Option<JsObject>,
+    on_cursor_change: Option<JsObject>,
+    on_selection_change: Option<JsObject>,
 }
 
 impl Default for InputElement {
@@ -94,6 +116,13 @@ impl InputElement {
             cursor_changed: false,
             selection_changed: false,
             enter_flag: false,
+            on_key_down: None,
+            on_key_up: None,
+            on_focus: None,
+            on_blur: None,
+            on_input: None,
+            on_cursor_change: None,
+            on_selection_change: None,
         }
     }
 
@@ -588,8 +617,85 @@ impl ElementOnUpdate for InputElement {
             }
         } else if *key == "multiline" {
             self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
+        } else if *key == "onKeyDown" {
+            self.on_key_down = extract_callable(value);
+        } else if *key == "onKeyUp" {
+            self.on_key_up = extract_callable(value);
+        } else if *key == "onFocus" {
+            self.on_focus = extract_callable(value);
+        } else if *key == "onBlur" {
+            self.on_blur = extract_callable(value);
+        } else if *key == "onInput" {
+            self.on_input = extract_callable(value);
+        } else if *key == "onCursorChange" {
+            self.on_cursor_change = extract_callable(value);
+        } else if *key == "onSelectionChange" {
+            self.on_selection_change = extract_callable(value);
         }
     }
 }
 
 impl ElementOnFocus for InputElement {}
+
+impl ElementJsEventEmitter for InputElement {
+    type Event = InputJsEvent;
+
+    fn flush_js_event(&mut self, event: InputJsEvent, context: &mut Context) {
+        match &event {
+            InputJsEvent::KeyDown {
+                key,
+                code,
+                modifiers,
+            } => {
+                if let Some(ref handler) = self.on_key_down {
+                    let event_obj = build_key_event_object(key, code, modifiers, context);
+                    let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
+                }
+            }
+            InputJsEvent::KeyUp {
+                key,
+                code,
+                modifiers,
+            } => {
+                if let Some(ref handler) = self.on_key_up {
+                    let event_obj = build_key_event_object(key, code, modifiers, context);
+                    let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
+                }
+            }
+            InputJsEvent::Focus => {
+                if let Some(ref handler) = self.on_focus {
+                    let _ = handler.call(&JsValue::undefined(), &[], context);
+                }
+            }
+            InputJsEvent::Blur => {
+                if let Some(ref handler) = self.on_blur {
+                    let _ = handler.call(&JsValue::undefined(), &[], context);
+                }
+            }
+            InputJsEvent::Input { text, enter } => {
+                if let Some(ref handler) = self.on_input {
+                    let text_val = JsValue::from(js_string!(text.as_str()));
+                    let enter_val = JsValue::from(*enter);
+                    let _ = handler.call(&JsValue::undefined(), &[text_val, enter_val], context);
+                }
+            }
+            InputJsEvent::CursorChange { position } => {
+                if let Some(ref handler) = self.on_cursor_change {
+                    let pos_val = JsValue::from(*position as f64);
+                    let _ = handler.call(&JsValue::undefined(), &[pos_val], context);
+                }
+            }
+            InputJsEvent::SelectionChange { anchor, end } => {
+                if let Some(ref handler) = self.on_selection_change {
+                    let start_val = JsValue::from(*anchor as f64);
+                    let end_val = JsValue::from(*end as f64);
+                    let _ = handler.call(
+                        &JsValue::undefined(),
+                        &[start_val, end_val],
+                        context,
+                    );
+                }
+            }
+        }
+    }
+}

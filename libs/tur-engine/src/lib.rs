@@ -19,8 +19,6 @@ use core::elements::AnyElement;
 use core::elements::ElementTree;
 use core::elements::ComposedGestureEvent;
 use core::event::{AppEvent, AppGestureEvent};
-use core::fonts::FontLoader;
-use core::gesture::ComposedGestureEventKind;
 
 pub struct TurApp {
     boa_context: Context,
@@ -30,7 +28,7 @@ pub struct TurApp {
 impl TurApp {
     pub fn new(
         renderer: Box<dyn core::render::Renderer>,
-        font_loader: Box<dyn FontLoader>,
+        font_loader: Box<dyn core::fonts::FontLoader>,
     ) -> Result<Self, TurError> {
         let mut boa_context = Context::default();
         let app_context = init_bridge(&mut boa_context, renderer, font_loader);
@@ -90,7 +88,6 @@ impl TurApp {
                             self.app_context.borrow_mut().handle_gesture_event(
                                 id,
                                 &ComposedGestureEvent::PointerDown { local_position: local },
-                                &mut self.boa_context,
                             );
                         }
                     }
@@ -109,7 +106,6 @@ impl TurApp {
                                 self.app_context.borrow_mut().handle_gesture_event(
                                     id,
                                     &ComposedGestureEvent::PointerMove { local_position: local },
-                                    &mut self.boa_context,
                                 );
                             }
                         }
@@ -124,11 +120,12 @@ impl TurApp {
                                 None => false,
                             }
                         };
-                        let kind = self
+                        let clicked = self
                             .app_context
                             .borrow_mut()
                             .compose_pointer_up(click_eligible);
-                        if let Some(kind) = kind {
+
+                        if clicked {
                             let hit_path = {
                                 let ctx = self.app_context.borrow();
                                 ctx.element_tree().hit_test_path(position)
@@ -142,71 +139,68 @@ impl TurApp {
                                     self.app_context.borrow_mut().request_focus(new_focused);
                                 if let Some(old) = old_focused {
                                     if old != new_focused {
-                                        let cb = self
-                                            .app_context
-                                            .borrow()
-                                            .collect_blur_handler(old);
-                                        if let Some(callback) = cb {
-                                            let _ = callback.call(
-                                                &boa_engine::JsValue::undefined(),
-                                                &[],
-                                                &mut self.boa_context,
-                                            );
-                                        }
+                                        self.app_context.borrow_mut().dispatch_blur(old);
+                                        self.app_context.borrow_mut().push_js_event_blur(old);
                                     }
                                 }
-                                let cb = self
-                                    .app_context
-                                    .borrow()
-                                    .collect_focus_handler(new_focused);
-                                if let Some(callback) = cb {
-                                    let _ = callback.call(
-                                        &boa_engine::JsValue::undefined(),
-                                        &[],
-                                        &mut self.boa_context,
-                                    );
-                                }
+                                self.app_context.borrow_mut().dispatch_focus(new_focused);
+                                self.app_context.borrow_mut().push_js_event_focus(new_focused);
                             } else {
                                 let old_focused = self.app_context.borrow_mut().clear_focus();
                                 if let Some(old) = old_focused {
-                                    let cb = self
-                                        .app_context
-                                        .borrow()
-                                        .collect_blur_handler(old);
-                                    if let Some(callback) = cb {
-                                        let _ = callback.call(
-                                            &boa_engine::JsValue::undefined(),
-                                            &[],
-                                            &mut self.boa_context,
-                                        );
-                                    }
+                                    self.app_context.borrow_mut().dispatch_blur(old);
+                                    self.app_context.borrow_mut().push_js_event_blur(old);
                                 }
                             }
 
-                            let callbacks = self
-                                .app_context
-                                .borrow()
-                                .collect_event_handlers(kind, position);
-                            for callback in callbacks {
-                                let _ = callback.call(
-                                    &boa_engine::JsValue::undefined(),
-                                    &[],
-                                    &mut self.boa_context,
+                            for node_id in &hit_path {
+                                self.app_context.borrow_mut().push_js_event_click(
+                                    *node_id,
+                                    position.x,
+                                    position.y,
                                 );
                             }
                         }
                     }
 
                     AppEvent::Key(key_event) => {
-                        self.app_context
+                        let result = self
+                            .app_context
                             .borrow_mut()
-                            .handle_key_event(&key_event, &mut self.boa_context);
+                            .handle_key_event(&key_event);
+
+                        if matches!(result, core::elements::KeyboardResult::NotHandled) {
+                            let focused_id = self.app_context.borrow().focused_element();
+                            if let Some(focused_id) = focused_id {
+                                let mut current = Some(focused_id);
+                                while let Some(id) = current {
+                                    self.app_context
+                                        .borrow_mut()
+                                        .push_js_event_key_down(id, &key_event);
+                                    current = self.app_context.borrow().element_tree().parent_of(id);
+                                }
+                            }
+                        }
                     }
 
                     AppEvent::RequestDraw => {
                         needs_draw = true;
                     }
                 }
+            }
+        }
+
+        // Call phase: drain JsEventQueue and flush to elements
+        let entries = self.app_context.borrow_mut().js_event_queue.drain();
+        for (target, event) in entries {
+            if let Some(ref mut element) = self
+                .app_context
+                .borrow_mut()
+                .element_tree_mut()
+                .get_mut(target)
+                .and_then(|n| n.element.as_mut())
+            {
+                element.flush_js_event(event, &mut self.boa_context);
             }
         }
 
@@ -223,10 +217,6 @@ impl TurApp {
 
     pub fn debug_layout(&self) -> String {
         self.app_context.borrow().debug_layout()
-    }
-
-    pub fn has_event_handler(&self, id: ElementNodeId, kind: ComposedGestureEventKind) -> bool {
-        self.app_context.borrow().has_event_handler(id, kind)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {

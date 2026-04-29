@@ -1,9 +1,11 @@
 use std::any::Any;
+use std::rc::Rc;
 
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::elements::ElementJsEventEmitter;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 use crate::core::elements::{KeyboardResult, GestureChanges, GestureResult};
@@ -11,11 +13,13 @@ use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext};
+use crate::core::elements::dispatch_flush_js_event;
 
 type KeyboardFn = fn(&mut dyn Any, &AppKeyEvent) -> KeyboardResult;
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
 type DrainChangesFn = fn(&mut dyn Any) -> GestureChanges;
 type FocusDispatchFn = fn(&mut dyn Any);
+type FlushJsEventFn = fn(&mut dyn Any, Rc<dyn Any>, &mut Context);
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -24,6 +28,7 @@ pub struct AnyElement {
     drain_changes_fn: Option<DrainChangesFn>,
     on_focus_fn: Option<FocusDispatchFn>,
     on_blur_fn: Option<FocusDispatchFn>,
+    flush_js_event_fn: Option<FlushJsEventFn>,
 }
 
 trait Erased: 'static {
@@ -162,6 +167,7 @@ impl AnyElement {
             drain_changes_fn: None,
             on_focus_fn: None,
             on_blur_fn: None,
+            flush_js_event_fn: None,
         }
     }
 
@@ -183,6 +189,7 @@ impl AnyElement {
             drain_changes_fn: Some(drain_changes_dispatch::<E>),
             on_focus_fn: None,
             on_blur_fn: None,
+            flush_js_event_fn: None,
         }
     }
 
@@ -203,6 +210,7 @@ impl AnyElement {
             drain_changes_fn: None,
             on_focus_fn: Some(focus_dispatch::<E>),
             on_blur_fn: Some(blur_dispatch::<E>),
+            flush_js_event_fn: None,
         }
     }
 
@@ -225,7 +233,13 @@ impl AnyElement {
             drain_changes_fn: Some(drain_changes_dispatch::<E>),
             on_focus_fn: Some(focus_dispatch::<E>),
             on_blur_fn: Some(blur_dispatch::<E>),
+            flush_js_event_fn: None,
         }
+    }
+
+    pub fn with_js_event_emitter<E: ElementJsEventEmitter + 'static>(mut self) -> Self {
+        self.flush_js_event_fn = Some(dispatch_flush_js_event::<E>);
+        self
     }
 
     pub fn kind(&self) -> ElementKind {
@@ -323,5 +337,15 @@ impl AnyElement {
         if let Some(handler) = self.on_blur_fn {
             handler(self.inner.as_any_mut());
         }
+    }
+
+    pub fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+        if let Some(f) = self.flush_js_event_fn {
+            f(self.inner.as_any_mut(), event, context);
+        }
+    }
+
+    pub fn has_js_event_emitter(&self) -> bool {
+        self.flush_js_event_fn.is_some()
     }
 }
