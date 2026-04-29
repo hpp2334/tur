@@ -4,16 +4,23 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
-use crate::core::elements::{ElementOnGesture, ElementOnKeyboard, KeyboardResult};
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
-use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext, GestureChanges, GestureResult};
+use crate::core::elements::{KeyboardResult, GestureChanges, GestureResult};
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ComposedGestureEvent, ElementOnGestureContext};
+
+type KeyboardFn = fn(&mut dyn Any, &AppKeyEvent) -> KeyboardResult;
+type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
+type DrainChangesFn = fn(&mut dyn Any) -> GestureChanges;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
+    on_keyboard: Option<KeyboardFn>,
+    on_gesture: Option<GestureFn>,
+    drain_changes_fn: Option<DrainChangesFn>,
 }
 
 trait Erased: 'static {
@@ -39,24 +46,35 @@ trait Erased: 'static {
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
-    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult;
-    fn on_gesture_event(
-        &mut self,
-        event: &ComposedGestureEvent,
-        cx: &mut ElementOnGestureContext,
-    ) -> GestureResult;
-    fn drain_changes(&mut self) -> GestureChanges;
+}
+
+fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
+    any: &mut dyn Any,
+    event: &AppKeyEvent,
+) -> KeyboardResult {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnKeyboard::on_keyboard_event(element, event)
+}
+
+fn gesture_dispatch<E: ElementOnGesture + 'static>(
+    any: &mut dyn Any,
+    event: &ComposedGestureEvent,
+    cx: &mut ElementOnGestureContext,
+) -> GestureResult {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnGesture::on_gesture_event(element, event, cx)
+}
+
+fn drain_changes_dispatch<E: ElementOnGesture + 'static>(
+    any: &mut dyn Any,
+) -> GestureChanges {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnGesture::drain_changes(element)
 }
 
 impl<E> Erased for E
 where
-    E: ElementOnUpdate
-        + ElementLayout
-        + ElementRender
-        + ElementTrace
-        + ElementOnKeyboard
-        + ElementOnGesture
-        + 'static,
+    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -114,26 +132,21 @@ where
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         <Self as ElementRender>::hit_test(self, position, layout)
     }
-
-    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
-        <Self as ElementOnKeyboard>::on_keyboard_event(self, event)
-    }
-
-    fn on_gesture_event(
-        &mut self,
-        event: &ComposedGestureEvent,
-        cx: &mut ElementOnGestureContext,
-    ) -> GestureResult {
-        <Self as ElementOnGesture>::on_gesture_event(self, event, cx)
-    }
-
-    fn drain_changes(&mut self) -> GestureChanges {
-        <Self as ElementOnGesture>::drain_changes(self)
-    }
 }
 
 impl AnyElement {
-    pub fn new<
+    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static>(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: None,
+            on_gesture: None,
+            drain_changes_fn: None,
+        }
+    }
+
+    pub fn with_interactivity<
         E: ElementOnUpdate
             + ElementLayout
             + ElementRender
@@ -141,9 +154,14 @@ impl AnyElement {
             + ElementOnKeyboard
             + ElementOnGesture
             + 'static,
-    >(element: E) -> Self {
+    >(
+        element: E,
+    ) -> Self {
         AnyElement {
             inner: Box::new(element),
+            on_keyboard: Some(keyboard_dispatch::<E>),
+            on_gesture: Some(gesture_dispatch::<E>),
+            drain_changes_fn: Some(drain_changes_dispatch::<E>),
         }
     }
 
@@ -201,7 +219,11 @@ impl AnyElement {
     }
 
     pub fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
-        self.inner.on_keyboard_event(event)
+        if let Some(handler) = self.on_keyboard {
+            handler(self.inner.as_any_mut(), event)
+        } else {
+            KeyboardResult::NotHandled
+        }
     }
 
     pub fn on_gesture_event(
@@ -209,10 +231,18 @@ impl AnyElement {
         event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
     ) -> GestureResult {
-        self.inner.on_gesture_event(event, cx)
+        if let Some(handler) = self.on_gesture {
+            handler(self.inner.as_any_mut(), event, cx)
+        } else {
+            GestureResult::NotHandled
+        }
     }
 
     pub fn drain_changes(&mut self) -> GestureChanges {
-        self.inner.drain_changes()
+        if let Some(handler) = self.drain_changes_fn {
+            handler(self.inner.as_any_mut())
+        } else {
+            GestureChanges::default()
+        }
     }
 }
