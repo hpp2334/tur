@@ -18,7 +18,7 @@ use crate::core::keyboard::AppKeyEvent;
 use crate::core::render::Renderer;
 
 pub struct TurAppInternal {
-    pub(crate) element_tree: ElementTree,
+    element_tree: ElementTree,
     renderer: Box<dyn Renderer>,
     font_manager: FontManager,
     text_layout_cx: ParleyLayoutContext<[u8; 4]>,
@@ -26,7 +26,7 @@ pub struct TurAppInternal {
     gesture_composer: GestureEventComposer,
     focus_manager: FocusManager,
     event_queue: Vec<AppEvent>,
-    pub(crate) js_event_queue: JsEventQueue,
+    js_event_queue: JsEventQueue,
 }
 
 impl fmt::Debug for TurAppInternal {
@@ -63,6 +63,10 @@ impl TurAppInternal {
 
     pub fn element_tree_mut(&mut self) -> &mut ElementTree {
         &mut self.element_tree
+    }
+
+    pub fn js_event_queue_mut(&mut self) -> &mut JsEventQueue {
+        &mut self.js_event_queue
     }
 
     pub fn set_size(&mut self, width: f64, height: f64) {

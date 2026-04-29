@@ -193,7 +193,7 @@ impl TurApp {
         // Call phase: drain JsEventQueue and flush to elements
         // Take element out temporarily to avoid RefCell conflict when
         // JS callbacks re-enter the bridge during flush.
-        let entries = self.app_context.borrow_mut().js_event_queue.drain();
+        let entries = self.app_context.borrow_mut().js_event_queue_mut().drain();
         for (target, event) in entries {
             let mut element = {
                 let mut ctx = self.app_context.borrow_mut();
