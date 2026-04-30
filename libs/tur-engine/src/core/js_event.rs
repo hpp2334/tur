@@ -19,10 +19,6 @@ pub enum FocusableJsEvent {
 
 #[derive(Clone)]
 pub enum InputJsEvent {
-    KeyDown { key: String, code: String, modifiers: Modifiers },
-    KeyUp { key: String, code: String, modifiers: Modifiers },
-    Focus,
-    Blur,
     Input { text: String, enter: bool },
     CursorChange { position: usize },
     SelectionChange { anchor: usize, end: usize },

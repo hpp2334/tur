@@ -1,5 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
+use std::any::Any;
+use std::rc::Rc;
 
 use crate::core::elements::{ElementJsEventEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
 use crate::core::js_event::FocusableJsEvent;
@@ -64,10 +66,11 @@ impl ElementOnUpdate for FocusableElement {
 impl ElementOnFocus for FocusableElement {}
 
 impl ElementJsEventEmitter for FocusableElement {
-    type Event = FocusableJsEvent;
-
-    fn flush_js_event(&mut self, event: FocusableJsEvent, context: &mut Context) {
-        match &event {
+    fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+        let Some(e) = event.downcast_ref::<FocusableJsEvent>() else {
+            return;
+        };
+        match e {
             FocusableJsEvent::KeyDown {
                 key,
                 code,

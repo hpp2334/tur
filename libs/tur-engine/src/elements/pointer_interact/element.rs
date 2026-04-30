@@ -1,5 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
+use std::any::Any;
+use std::rc::Rc;
 
 use crate::core::elements::{ElementJsEventEmitter, ElementOnUpdate, ElementTrace};
 use crate::core::js_event::PointerInteractJsEvent;
@@ -45,15 +47,16 @@ impl ElementOnUpdate for PointerInteractElement {
 }
 
 impl ElementJsEventEmitter for PointerInteractElement {
-    type Event = PointerInteractJsEvent;
-
-    fn flush_js_event(&mut self, event: PointerInteractJsEvent, context: &mut Context) {
-        match event {
+    fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+        let Some(e) = event.downcast_ref::<PointerInteractJsEvent>() else {
+            return;
+        };
+        match e {
             PointerInteractJsEvent::Click { x, y } => {
                 if let Some(ref handler) = self.on_click {
                     let _ = handler.call(
                         &JsValue::undefined(),
-                        &[JsValue::from(x), JsValue::from(y)],
+                        &[JsValue::from(*x), JsValue::from(*y)],
                         context,
                     );
                 }

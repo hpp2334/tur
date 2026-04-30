@@ -190,15 +190,7 @@ pub(crate) fn tur_request_focus(
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
-    let old_focused = ctx.request_focus(node_id);
-    if let Some(old) = old_focused {
-        if old != node_id {
-            ctx.dispatch_blur(old);
-            ctx.push_js_event_blur(old);
-        }
-    }
-    ctx.dispatch_focus(node_id);
-    ctx.push_js_event_focus(node_id);
+    ctx.set_focus(node_id);
     Ok(JsValue::undefined())
 }
 

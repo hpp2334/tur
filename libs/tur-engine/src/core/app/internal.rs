@@ -6,14 +6,13 @@ use tur_shared::Constraints;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    ComposedGestureEvent, ElementOnGestureContext, ElementTree, GestureChanges, GestureResult,
-    KeyboardResult,
+    ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementTree, GestureResult, KeyboardResult,
 };
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
-use crate::core::js_event::{FocusableJsEvent, InputJsEvent, JsEventQueue, PointerInteractJsEvent};
+use crate::core::js_event::{FocusableJsEvent, JsEventQueue, PointerInteractJsEvent};
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::render::Renderer;
 
@@ -67,6 +66,18 @@ impl TurAppInternal {
 
     pub fn js_event_queue_mut(&mut self) -> &mut JsEventQueue {
         &mut self.js_event_queue
+    }
+
+    pub fn focus_manager_mut(&mut self) -> &mut FocusManager {
+        &mut self.focus_manager
+    }
+
+    pub fn set_focus(&mut self, new_id: ElementNodeId) {
+        self.focus_manager.set_focus(new_id, &mut self.js_event_queue);
+    }
+
+    pub fn clear_focus(&mut self) {
+        self.focus_manager.clear_focus(&mut self.js_event_queue);
     }
 
     pub fn set_size(&mut self, width: f64, height: f64) {
@@ -125,14 +136,6 @@ impl TurAppInternal {
         self.gesture_composer.is_tracking_drag()
     }
 
-    pub fn request_focus(&mut self, new_id: ElementNodeId) -> Option<ElementNodeId> {
-        self.focus_manager.request_focus(new_id)
-    }
-
-    pub fn clear_focus(&mut self) -> Option<ElementNodeId> {
-        self.focus_manager.clear_focus()
-    }
-
     pub fn focused_element(&self) -> Option<ElementNodeId> {
         self.focus_manager.focused()
     }
@@ -178,16 +181,10 @@ impl TurAppInternal {
             self.push_event(AppEvent::RequestDraw);
         }
         if let Some(id) = focus_req {
-            self.focus_manager.request_focus(id);
+            self.focus_manager.set_focus(id, &mut self.js_event_queue);
         }
 
         if matches!(result, GestureResult::NeedsDraw) {
-            let changes = {
-                let node = self.element_tree.get_mut(node_id).unwrap();
-                let element = node.element.as_mut().unwrap();
-                element.drain_changes()
-            };
-            self.emit_input_change_events(node_id, &changes);
             self.push_event(AppEvent::RequestDraw);
         }
 
@@ -200,77 +197,28 @@ impl TurAppInternal {
             None => return KeyboardResult::NotHandled,
         };
 
+        let mut redraw = false;
+        let mut cx = ElementOnKeyboardContext::new(
+            &mut self.js_event_queue,
+            focused_id,
+            &mut redraw,
+        );
+
         let result = {
             let node = self.element_tree.get_mut(focused_id).unwrap();
             let element = node.element.as_mut().unwrap();
-            element.on_keyboard_event(event)
+            element.on_keyboard_event(event, &mut cx)
         };
 
-        match result {
-            KeyboardResult::NeedsDraw => {
-                let changes = {
-                    let node = self.element_tree.get_mut(focused_id).unwrap();
-                    let element = node.element.as_mut().unwrap();
-                    element.drain_changes()
-                };
-                self.emit_input_change_events(focused_id, &changes);
-                self.push_event(AppEvent::RequestDraw);
-            }
-            KeyboardResult::NotHandled | KeyboardResult::Handled => {}
+        if redraw {
+            self.push_event(AppEvent::RequestDraw);
+        }
+
+        if matches!(result, KeyboardResult::NeedsDraw) {
+            self.push_event(AppEvent::RequestDraw);
         }
 
         result
-    }
-
-    fn emit_input_change_events(
-        &mut self,
-        node_id: ElementNodeId,
-        changes: &GestureChanges,
-    ) {
-        if changes.text_changed {
-            let text = self
-                .element_tree
-                .get(node_id)
-                .and_then(|n| n.element.as_ref())
-                .and_then(|e| e.cast::<crate::elements::InputElement>())
-                .map(|i| i.text().to_string())
-                .unwrap_or_default();
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(InputJsEvent::Input {
-                    text,
-                    enter: changes.enter,
-                }),
-            );
-        }
-
-        if changes.cursor_changed {
-            let pos = self
-                .element_tree
-                .get(node_id)
-                .and_then(|n| n.element.as_ref())
-                .and_then(|e| e.cast::<crate::elements::InputElement>())
-                .map(|i| i.cursor_position())
-                .unwrap_or(0);
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(InputJsEvent::CursorChange { position: pos }),
-            );
-        }
-
-        if changes.selection_changed {
-            let (anchor, end) = self
-                .element_tree
-                .get(node_id)
-                .and_then(|n| n.element.as_ref())
-                .and_then(|e| e.cast::<crate::elements::InputElement>())
-                .map(|i| (i.selection_anchor(), i.selection_end()))
-                .unwrap_or((0, 0));
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(InputJsEvent::SelectionChange { anchor, end }),
-            );
-        }
     }
 
     pub fn push_js_event_click(&mut self, node_id: ElementNodeId, x: f64, y: f64) {
@@ -278,96 +226,26 @@ impl TurAppInternal {
             .push(node_id, Rc::new(PointerInteractJsEvent::Click { x, y }));
     }
 
-    pub fn push_js_event_focus(&mut self, node_id: ElementNodeId) {
-        let is_input = self.is_input_element(node_id);
-        if is_input {
-            self.js_event_queue
-                .push(node_id, Rc::new(InputJsEvent::Focus));
-        } else {
-            self.js_event_queue
-                .push(node_id, Rc::new(FocusableJsEvent::Focus));
-        }
-    }
-
-    pub fn push_js_event_blur(&mut self, node_id: ElementNodeId) {
-        let is_input = self.is_input_element(node_id);
-        if is_input {
-            self.js_event_queue
-                .push(node_id, Rc::new(InputJsEvent::Blur));
-        } else {
-            self.js_event_queue
-                .push(node_id, Rc::new(FocusableJsEvent::Blur));
-        }
-    }
-
     pub fn push_js_event_key_down(&mut self, node_id: ElementNodeId, event: &AppKeyEvent) {
-        let is_input = self.is_input_element(node_id);
-        if is_input {
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(InputJsEvent::KeyDown {
-                    key: event.key.clone(),
-                    code: event.code.clone(),
-                    modifiers: event.modifiers.clone(),
-                }),
-            );
-        } else {
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(FocusableJsEvent::KeyDown {
-                    key: event.key.clone(),
-                    code: event.code.clone(),
-                    modifiers: event.modifiers.clone(),
-                }),
-            );
-        }
+        self.js_event_queue.push(
+            node_id,
+            Rc::new(FocusableJsEvent::KeyDown {
+                key: event.key.clone(),
+                code: event.code.clone(),
+                modifiers: event.modifiers.clone(),
+            }),
+        );
     }
 
     pub fn push_js_event_key_up(&mut self, node_id: ElementNodeId, event: &AppKeyEvent) {
-        let is_input = self.is_input_element(node_id);
-        if is_input {
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(InputJsEvent::KeyUp {
-                    key: event.key.clone(),
-                    code: event.code.clone(),
-                    modifiers: event.modifiers.clone(),
-                }),
-            );
-        } else {
-            self.js_event_queue.push(
-                node_id,
-                Rc::new(FocusableJsEvent::KeyUp {
-                    key: event.key.clone(),
-                    code: event.code.clone(),
-                    modifiers: event.modifiers.clone(),
-                }),
-            );
-        }
-    }
-
-    fn is_input_element(&self, node_id: ElementNodeId) -> bool {
-        self.element_tree
-            .get(node_id)
-            .and_then(|n| n.element.as_ref())
-            .map(|e| e.type_name() == "tur_input")
-            .unwrap_or(false)
-    }
-
-    pub fn dispatch_focus(&mut self, node_id: ElementNodeId) {
-        if let Some(node) = self.element_tree.get_mut(node_id) {
-            if let Some(ref mut element) = node.element {
-                element.dispatch_focus();
-            }
-        }
-    }
-
-    pub fn dispatch_blur(&mut self, node_id: ElementNodeId) {
-        if let Some(node) = self.element_tree.get_mut(node_id) {
-            if let Some(ref mut element) = node.element {
-                element.dispatch_blur();
-            }
-        }
+        self.js_event_queue.push(
+            node_id,
+            Rc::new(FocusableJsEvent::KeyUp {
+                key: event.key.clone(),
+                code: event.code.clone(),
+                modifiers: event.modifiers.clone(),
+            }),
+        );
     }
 
     pub fn find_focusable_in_path(&self, path: &[ElementNodeId]) -> Option<ElementNodeId> {

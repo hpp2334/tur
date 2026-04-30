@@ -134,22 +134,12 @@ impl TurApp {
                             let focusable_id =
                                 self.app_context.borrow().find_focusable_in_path(&hit_path);
 
-                            if let Some(new_focused) = focusable_id {
-                                let old_focused =
-                                    self.app_context.borrow_mut().request_focus(new_focused);
-                                if let Some(old) = old_focused {
-                                    if old != new_focused {
-                                        self.app_context.borrow_mut().dispatch_blur(old);
-                                        self.app_context.borrow_mut().push_js_event_blur(old);
-                                    }
-                                }
-                                self.app_context.borrow_mut().dispatch_focus(new_focused);
-                                self.app_context.borrow_mut().push_js_event_focus(new_focused);
-                            } else {
-                                let old_focused = self.app_context.borrow_mut().clear_focus();
-                                if let Some(old) = old_focused {
-                                    self.app_context.borrow_mut().dispatch_blur(old);
-                                    self.app_context.borrow_mut().push_js_event_blur(old);
+                            {
+                                let mut ctx = self.app_context.borrow_mut();
+                                if let Some(new_focused) = focusable_id {
+                                    ctx.set_focus(new_focused);
+                                } else {
+                                    ctx.clear_focus();
                                 }
                             }
 

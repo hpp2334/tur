@@ -13,14 +13,6 @@ pub enum ComposedGestureEvent {
     PointerMove { local_position: Offset },
 }
 
-#[derive(Default)]
-pub struct GestureChanges {
-    pub text_changed: bool,
-    pub cursor_changed: bool,
-    pub selection_changed: bool,
-    pub enter: bool,
-}
-
 pub struct ElementOnGestureContext<'a> {
     redraw_requested: &'a mut bool,
     focus_request: &'a mut Option<ElementNodeId>,
@@ -55,9 +47,5 @@ pub trait ElementOnGesture: 'static {
         let _ = event;
         let _ = cx;
         GestureResult::NotHandled
-    }
-
-    fn drain_changes(&mut self) -> GestureChanges {
-        GestureChanges::default()
     }
 }
