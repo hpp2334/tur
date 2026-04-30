@@ -159,30 +159,27 @@ impl TurApp {
                     }
 
                     AppEvent::Key(key_event) => {
-                        let result = self
-                            .app_context
+                        self.app_context
                             .borrow_mut()
                             .handle_key_event(&key_event);
 
-                        if matches!(result, core::elements::KeyboardResult::NotHandled) {
-                            let focused_id =
-                                self.app_context.borrow().focus_manager.focused();
-                            if let Some(focused_id) = focused_id {
-                                let mut current = Some(focused_id);
-                                while let Some(id) = current {
-                                    self.app_context
-                                        .borrow_mut()
-                                        .js_event_queue
-                                        .push(
-                                            id,
-                                            core::keyboard::make_key_down_event(&key_event),
-                                        );
-                                    current = self
-                                        .app_context
-                                        .borrow()
-                                        .element_tree
-                                        .parent_of(id);
-                                }
+                        let focused_id =
+                            self.app_context.borrow().focus_manager.focused();
+                        if let Some(focused_id) = focused_id {
+                            let mut current = Some(focused_id);
+                            while let Some(id) = current {
+                                self.app_context
+                                    .borrow_mut()
+                                    .js_event_queue
+                                    .push(
+                                        id,
+                                        core::keyboard::make_key_down_event(&key_event),
+                                    );
+                                current = self
+                                    .app_context
+                                    .borrow()
+                                    .element_tree
+                                    .parent_of(id);
                             }
                         }
                     }

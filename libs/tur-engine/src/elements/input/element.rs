@@ -6,7 +6,7 @@ use tur_shared::{Color, Offset};
 use crate::core::elements::{
     ComposedGestureEvent, ElementJsEventEmitter, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate,
-    ElementTrace, GestureResult, KeyboardResult,
+    ElementTrace,
 };
 use crate::core::js_event::{AnyJsEvent, FocusableJsEvent, InputJsEvent};
 use crate::core::js_event::helpers::build_key_event_object;
@@ -196,33 +196,33 @@ impl InputElement {
         meta: bool,
         shift: bool,
         nav_info: Option<&LineNavInfo>,
-    ) -> KeyboardResult {
+    ) -> bool {
         match key {
             "Backspace" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    KeyboardResult::NeedsDraw
+                    true
                 } else if self.cursor_position > 0 {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
-                    KeyboardResult::Handled
+                    false
                 }
             }
             "Delete" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    KeyboardResult::NeedsDraw
+                    true
                 } else if self.cursor_position < self.content.len() {
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
-                    KeyboardResult::Handled
+                    false
                 }
             }
             "ArrowLeft" => {
@@ -235,18 +235,18 @@ impl InputElement {
                     self.cursor_position = new_end;
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else if self.has_selection() {
                     let (start, _) = self.selection_range();
                     self.cursor_position = start;
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 }
             }
             "ArrowRight" => {
@@ -259,32 +259,32 @@ impl InputElement {
                     self.cursor_position = new_end;
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else if self.has_selection() {
                     let (_, end) = self.selection_range();
                     self.cursor_position = end;
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
                     self.cursor_position = next_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 }
             }
             "ArrowUp" if self.multiline => {
                 if let Some(info) = nav_info {
                     self.move_vertical(info, -1, shift)
                 } else {
-                    KeyboardResult::NotHandled
+                    false
                 }
             }
             "ArrowDown" if self.multiline => {
                 if let Some(info) = nav_info {
                     self.move_vertical(info, 1, shift)
                 } else {
-                    KeyboardResult::NotHandled
+                    false
                 }
             }
             "Home" => {
@@ -301,15 +301,15 @@ impl InputElement {
                             self.cursor_position = target;
         
         
-                            KeyboardResult::NeedsDraw
+                            true
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
         
-                            KeyboardResult::NeedsDraw
+                            true
                         }
                     } else {
-                        KeyboardResult::NotHandled
+                        false
                     }
                 } else if shift {
                     if !self.has_selection() {
@@ -319,12 +319,12 @@ impl InputElement {
                     self.cursor_position = 0;
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
                     self.cursor_position = 0;
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 }
             }
             "End" => {
@@ -341,15 +341,15 @@ impl InputElement {
                             self.cursor_position = target;
         
         
-                            KeyboardResult::NeedsDraw
+                            true
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
         
-                            KeyboardResult::NeedsDraw
+                            true
                         }
                     } else {
-                        KeyboardResult::NotHandled
+                        false
                     }
                 } else if shift {
                     if !self.has_selection() {
@@ -359,17 +359,17 @@ impl InputElement {
                     self.cursor_position = self.content.len();
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
                     self.cursor_position = self.content.len();
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 }
             }
             "a" if ctrl || meta => {
                 self.select_all();
-                KeyboardResult::NeedsDraw
+                true
             }
             "Enter" => {
                 if self.multiline {
@@ -381,11 +381,11 @@ impl InputElement {
                     self.clear_selection();
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
 
 
-                    KeyboardResult::NeedsDraw
+                    true
                 }
             }
             _ => {
@@ -398,9 +398,9 @@ impl InputElement {
                     self.cursor_position += ch.len_utf8();
                     self.clear_selection();
 
-                    KeyboardResult::NeedsDraw
+                    true
                 } else {
-                    KeyboardResult::NotHandled
+                    false
                 }
             }
         }
@@ -411,7 +411,7 @@ impl InputElement {
         info: &LineNavInfo,
         direction: i32,
         shift: bool,
-    ) -> KeyboardResult {
+    ) -> bool {
         let current_line = info.current_line;
         let cursor_x = info.cursor_xy.0;
 
@@ -422,7 +422,7 @@ impl InputElement {
         };
 
         if target_line == current_line {
-            return KeyboardResult::Handled;
+            return false;
         }
 
         let target_char = {
@@ -448,11 +448,11 @@ impl InputElement {
             }
             self.selection_end = target_byte;
             self.cursor_position = target_byte;
-            KeyboardResult::NeedsDraw
+            true
         } else {
             self.cursor_position = target_byte;
             self.clear_selection();
-            KeyboardResult::NeedsDraw
+            true
         }
     }
 
@@ -514,7 +514,7 @@ impl ElementOnGesture for InputElement {
         &mut self,
         event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
-    ) -> GestureResult {
+    ) {
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
                 cx.request_own_focus();
@@ -524,7 +524,6 @@ impl ElementOnGesture for InputElement {
                 self.selection_anchor = byte_pos;
                 self.selection_end = byte_pos;
                 cx.request_redraw();
-                GestureResult::Handled
             }
             ComposedGestureEvent::PointerMove { local_position } => {
                 let char_idx = self.char_index_at(local_position);
@@ -532,7 +531,6 @@ impl ElementOnGesture for InputElement {
                 self.selection_end = byte_pos;
                 self.cursor_position = byte_pos;
                 cx.request_redraw();
-                GestureResult::Handled
             }
         }
     }
@@ -543,9 +541,9 @@ impl ElementOnKeyboard for InputElement {
         &mut self,
         cx: &mut ElementOnKeyboardContext,
         event: &AppKeyEvent,
-    ) -> KeyboardResult {
+    ) {
         if event.event_type != KeyEventType::Down {
-            return KeyboardResult::NotHandled;
+            return;
         }
 
         let prev_content = self.content.clone();
@@ -557,7 +555,7 @@ impl ElementOnKeyboard for InputElement {
             let cursor_char = byte_to_char_offset(&self.content, self.cursor_position);
             LineNavInfo::extract(ld, cursor_char)
         });
-        let result = self.handle_key_event(
+        let changed = self.handle_key_event(
             &event.key,
             event.modifiers.ctrl,
             event.modifiers.meta,
@@ -565,7 +563,7 @@ impl ElementOnKeyboard for InputElement {
             nav_info.as_ref(),
         );
 
-        if matches!(result, KeyboardResult::NeedsDraw) {
+        if changed {
             cx.request_redraw();
 
             if self.content != prev_content {
@@ -587,8 +585,6 @@ impl ElementOnKeyboard for InputElement {
                 });
             }
         }
-
-        result
     }
 }
 

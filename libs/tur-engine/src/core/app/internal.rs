@@ -5,7 +5,7 @@ use tur_shared::Constraints;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementTree, GestureResult, KeyboardResult,
+    ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementTree,
 };
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
@@ -122,64 +122,39 @@ impl TurAppInternal {
         &mut self,
         node_id: ElementNodeId,
         event: &ComposedGestureEvent,
-    ) -> GestureResult {
-        let mut redraw = false;
-        let mut focus_req: Option<ElementNodeId> = None;
-        let mut cx = ElementOnGestureContext::new(&mut redraw, &mut focus_req, node_id);
-
-        let result = {
-            let node = match self.element_tree.get_mut(node_id) {
-                Some(n) => n,
-                None => return GestureResult::NotHandled,
-            };
-            let element = match node.element.as_mut() {
-                Some(e) => e,
-                None => return GestureResult::NotHandled,
-            };
-            element.on_gesture_event(event, &mut cx)
-        };
-
-        if redraw {
-            self.event_queue.push(crate::core::event::AppEvent::RequestDraw);
-        }
-        if let Some(id) = focus_req {
-            self.focus_manager.set_focus(id, &mut self.js_event_queue);
-        }
-
-        if matches!(result, GestureResult::NeedsDraw) {
-            self.event_queue.push(crate::core::event::AppEvent::RequestDraw);
-        }
-
-        result
-    }
-
-    pub fn handle_key_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
-        let focused_id = match self.focus_manager.focused() {
-            Some(id) => id,
-            None => return KeyboardResult::NotHandled,
-        };
-
-        let mut redraw = false;
-        let mut cx = ElementOnKeyboardContext::new(
+    ) {
+        let mut cx = ElementOnGestureContext::new(
+            &mut self.event_queue,
+            &mut self.focus_manager,
             &mut self.js_event_queue,
-            focused_id,
-            &mut redraw,
+            node_id,
         );
 
-        let result = {
-            let node = self.element_tree.get_mut(focused_id).unwrap();
-            let element = node.element.as_mut().unwrap();
-            element.on_keyboard_event(&mut cx, event)
+        let node = match self.element_tree.get_mut(node_id) {
+            Some(n) => n,
+            None => return,
+        };
+        let element = match node.element.as_mut() {
+            Some(e) => e,
+            None => return,
+        };
+        element.on_gesture_event(event, &mut cx);
+    }
+
+    pub fn handle_key_event(&mut self, event: &AppKeyEvent) {
+        let focused_id = match self.focus_manager.focused() {
+            Some(id) => id,
+            None => return,
         };
 
-        if redraw {
-            self.event_queue.push(crate::core::event::AppEvent::RequestDraw);
-        }
+        let mut cx = ElementOnKeyboardContext::new(
+            &mut self.js_event_queue,
+            &mut self.event_queue,
+            focused_id,
+        );
 
-        if matches!(result, KeyboardResult::NeedsDraw) {
-            self.event_queue.push(crate::core::event::AppEvent::RequestDraw);
-        }
-
-        result
+        let node = self.element_tree.get_mut(focused_id).unwrap();
+        let element = node.element.as_mut().unwrap();
+        element.on_keyboard_event(&mut cx, event);
     }
 }

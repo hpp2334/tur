@@ -9,14 +9,13 @@ use crate::core::elements::ElementJsEventEmitter;
 use crate::core::elements::dispatch_flush_js_event;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
-use crate::core::elements::{KeyboardResult, GestureResult};
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
 
-type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent) -> KeyboardResult;
-type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
+type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
+type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext);
 type FlushJsEventFn = fn(&mut dyn Any, AnyJsEvent, &mut Context);
 
 pub struct AnyElement {
@@ -55,18 +54,18 @@ fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnKeyboardContext,
     event: &AppKeyEvent,
-) -> KeyboardResult {
+) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnKeyboard::on_keyboard_event(element, cx, event)
+    ElementOnKeyboard::on_keyboard_event(element, cx, event);
 }
 
 fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
     event: &ComposedGestureEvent,
     cx: &mut ElementOnGestureContext,
-) -> GestureResult {
+) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, event, cx)
+    ElementOnGesture::on_gesture_event(element, event, cx);
 }
 
 impl<E> Erased for E
@@ -262,11 +261,9 @@ impl AnyElement {
         &mut self,
         cx: &mut ElementOnKeyboardContext,
         event: &AppKeyEvent,
-    ) -> KeyboardResult {
+    ) {
         if let Some(handler) = self.on_keyboard {
-            handler(self.inner.as_any_mut(), cx, event)
-        } else {
-            KeyboardResult::NotHandled
+            handler(self.inner.as_any_mut(), cx, event);
         }
     }
 
@@ -274,11 +271,9 @@ impl AnyElement {
         &mut self,
         event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
-    ) -> GestureResult {
+    ) {
         if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), event, cx)
-        } else {
-            GestureResult::NotHandled
+            handler(self.inner.as_any_mut(), event, cx);
         }
     }
 
