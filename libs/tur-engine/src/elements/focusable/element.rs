@@ -3,7 +3,7 @@ use boa_engine::{Context, JsString, JsValue};
 
 use crate::core::elements::{ElementJsEventEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
 use crate::core::js_event::{AnyJsEvent, FocusableJsEvent};
-use crate::core::js_event_helpers::build_key_event_object;
+use crate::core::js_event::helpers::build_key_event_object;
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
     value.as_object().and_then(|o| {
