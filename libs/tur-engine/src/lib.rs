@@ -62,6 +62,8 @@ impl TurApp {
             }
 
             for event in events {
+                self.app_context.borrow_mut().dispatch_handlers(&event);
+
                 match event {
                     AppEvent::Resize {
                         logical_width,
@@ -143,18 +145,6 @@ impl TurApp {
                                 let ctx = self.app_context.borrow();
                                 core::hit_test::HitTest::new(&ctx.element_tree).path(position)
                             };
-
-                            {
-                                let ctx = self.app_context.borrow();
-                                let focusable_id = core::focus::helper::find_focusable_in_path(
-                                    &ctx.element_tree,
-                                    &hit_path,
-                                );
-                                if focusable_id.is_none() {
-                                    drop(ctx);
-                                    self.app_context.borrow_mut().clear_focus();
-                                }
-                            }
 
                             for node_id in &hit_path {
                                 self.app_context

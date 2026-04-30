@@ -93,7 +93,10 @@ pub fn init_bridge(
         set_prop(&tur_obj, js_name.clone(), func);
     }
 
-    let ctx = TurAppInternal::new(renderer, font_loader);
+    let mut ctx = TurAppInternal::new(renderer, font_loader);
+    ctx.register_handler(Box::new(
+        crate::core::handler::pointer_focus::PointerFocusHandler,
+    ));
     let rc_ctx = Rc::new(RefCell::new(ctx));
     let weak = WeakAppContext::new(&rc_ctx);
     let opaque = BoaOpaque::new(weak, context);

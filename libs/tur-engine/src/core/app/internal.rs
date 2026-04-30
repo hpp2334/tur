@@ -8,9 +8,11 @@ use crate::core::elements::{
     ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementTree, GestureResult, KeyboardResult,
 };
 use crate::core::event::queue::AppEventQueue;
+use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
+use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::js_event::JsEventQueue;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::render::Renderer;
@@ -25,6 +27,7 @@ pub struct TurAppInternal {
     pub(crate) focus_manager: FocusManager,
     pub(crate) event_queue: AppEventQueue,
     pub(crate) js_event_queue: JsEventQueue,
+    pub(crate) handlers: Vec<Box<dyn AppHandler>>,
 }
 
 impl fmt::Debug for TurAppInternal {
@@ -52,6 +55,22 @@ impl TurAppInternal {
             focus_manager: FocusManager::new(),
             event_queue: AppEventQueue::new(),
             js_event_queue: JsEventQueue::new(),
+            handlers: vec![],
+        }
+    }
+
+    pub fn register_handler(&mut self, handler: Box<dyn AppHandler>) {
+        self.handlers.push(handler);
+    }
+
+    pub fn dispatch_handlers(&mut self, event: &AppEvent) {
+        let mut cx = HandlerContext {
+            element_tree: &self.element_tree,
+            focus_manager: &mut self.focus_manager,
+            js_event_queue: &mut self.js_event_queue,
+        };
+        for handler in &mut self.handlers {
+            handler.handle_event(&mut cx, event);
         }
     }
 
