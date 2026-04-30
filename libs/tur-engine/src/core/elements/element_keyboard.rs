@@ -1,38 +1,34 @@
 use crate::core::element::ElementNodeId;
+use crate::core::event::queue::AppEventQueue;
+use crate::core::event::AppEvent;
 use crate::core::js_event::{IntoAnyJsEvent, JsEventQueue};
 use crate::core::keyboard::AppKeyEvent;
 
-pub enum KeyboardResult {
-    NotHandled,
-    Handled,
-    NeedsDraw,
-}
-
 pub struct ElementOnKeyboardContext<'a> {
-    queue: &'a mut JsEventQueue,
+    js_event_queue: &'a mut JsEventQueue,
+    app_event_queue: &'a mut AppEventQueue,
     node_id: ElementNodeId,
-    redraw_requested: &'a mut bool,
 }
 
 impl<'a> ElementOnKeyboardContext<'a> {
     pub fn new(
-        queue: &'a mut JsEventQueue,
+        js_event_queue: &'a mut JsEventQueue,
+        app_event_queue: &'a mut AppEventQueue,
         node_id: ElementNodeId,
-        redraw_requested: &'a mut bool,
     ) -> Self {
         Self {
-            queue,
+            js_event_queue,
+            app_event_queue,
             node_id,
-            redraw_requested,
         }
     }
 
     pub fn push_js_event(&mut self, event: impl IntoAnyJsEvent) {
-        self.queue.push(self.node_id, event);
+        self.js_event_queue.push(self.node_id, event);
     }
 
     pub fn request_redraw(&mut self) {
-        *self.redraw_requested = true;
+        self.app_event_queue.push(AppEvent::RequestDraw);
     }
 }
 
@@ -41,9 +37,8 @@ pub trait ElementOnKeyboard: 'static {
         &mut self,
         cx: &mut ElementOnKeyboardContext,
         event: &AppKeyEvent,
-    ) -> KeyboardResult {
+    ) {
         let _ = cx;
         let _ = event;
-        KeyboardResult::NotHandled
     }
 }
