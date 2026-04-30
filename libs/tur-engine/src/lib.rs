@@ -144,20 +144,15 @@ impl TurApp {
                                 core::hit_test::HitTest::new(&ctx.element_tree).path(position)
                             };
 
-                            let focusable_id = {
+                            {
                                 let ctx = self.app_context.borrow();
-                                core::focus::helper::find_focusable_in_path(
+                                let focusable_id = core::focus::helper::find_focusable_in_path(
                                     &ctx.element_tree,
                                     &hit_path,
-                                )
-                            };
-
-                            {
-                                let mut ctx = self.app_context.borrow_mut();
-                                if let Some(new_focused) = focusable_id {
-                                    ctx.set_focus(new_focused);
-                                } else {
-                                    ctx.clear_focus();
+                                );
+                                if focusable_id.is_none() {
+                                    drop(ctx);
+                                    self.app_context.borrow_mut().clear_focus();
                                 }
                             }
 

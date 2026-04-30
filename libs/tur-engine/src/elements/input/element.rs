@@ -517,6 +517,7 @@ impl ElementOnGesture for InputElement {
     ) -> GestureResult {
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
+                cx.request_own_focus();
                 let char_idx = self.char_index_at(local_position);
                 let byte_pos = char_to_byte_offset(&self.content, char_idx);
                 self.cursor_position = byte_pos;
