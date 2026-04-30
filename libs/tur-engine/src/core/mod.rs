@@ -6,6 +6,8 @@ pub mod event;
 pub mod focus;
 pub mod fonts;
 pub mod gesture;
+pub mod js_event;
+pub mod js_event_helpers;
 pub mod keyboard;
 pub mod layout;
 pub mod render;

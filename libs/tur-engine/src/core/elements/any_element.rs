@@ -4,26 +4,26 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::js_event::AnyJsEvent;
+use crate::core::elements::ElementJsEventEmitter;
+use crate::core::elements::dispatch_flush_js_event;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
-use crate::core::elements::{KeyboardResult, GestureChanges, GestureResult};
+use crate::core::elements::{KeyboardResult, GestureResult};
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext};
+use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
 
-type KeyboardFn = fn(&mut dyn Any, &AppKeyEvent) -> KeyboardResult;
+type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent) -> KeyboardResult;
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
-type DrainChangesFn = fn(&mut dyn Any) -> GestureChanges;
-type FocusDispatchFn = fn(&mut dyn Any);
+type FlushJsEventFn = fn(&mut dyn Any, AnyJsEvent, &mut Context);
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
-    drain_changes_fn: Option<DrainChangesFn>,
-    on_focus_fn: Option<FocusDispatchFn>,
-    on_blur_fn: Option<FocusDispatchFn>,
+    flush_js_event_fn: Option<FlushJsEventFn>,
 }
 
 trait Erased: 'static {
@@ -53,10 +53,11 @@ trait Erased: 'static {
 
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
     any: &mut dyn Any,
+    cx: &mut ElementOnKeyboardContext,
     event: &AppKeyEvent,
 ) -> KeyboardResult {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnKeyboard::on_keyboard_event(element, event)
+    ElementOnKeyboard::on_keyboard_event(element, cx, event)
 }
 
 fn gesture_dispatch<E: ElementOnGesture + 'static>(
@@ -66,27 +67,6 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
 ) -> GestureResult {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnGesture::on_gesture_event(element, event, cx)
-}
-
-fn drain_changes_dispatch<E: ElementOnGesture + 'static>(
-    any: &mut dyn Any,
-) -> GestureChanges {
-    let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::drain_changes(element)
-}
-
-fn focus_dispatch<E: ElementOnFocus + 'static>(
-    any: &mut dyn Any,
-) {
-    let element = any.downcast_mut::<E>().unwrap();
-    ElementOnFocus::on_focus(element);
-}
-
-fn blur_dispatch<E: ElementOnFocus + 'static>(
-    any: &mut dyn Any,
-) {
-    let element = any.downcast_mut::<E>().unwrap();
-    ElementOnFocus::on_blur(element);
 }
 
 impl<E> Erased for E
@@ -159,9 +139,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            drain_changes_fn: None,
-            on_focus_fn: None,
-            on_blur_fn: None,
+            flush_js_event_fn: None,
         }
     }
 
@@ -180,9 +158,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            drain_changes_fn: Some(drain_changes_dispatch::<E>),
-            on_focus_fn: None,
-            on_blur_fn: None,
+            flush_js_event_fn: None,
         }
     }
 
@@ -200,9 +176,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            drain_changes_fn: None,
-            on_focus_fn: Some(focus_dispatch::<E>),
-            on_blur_fn: Some(blur_dispatch::<E>),
+            flush_js_event_fn: None,
         }
     }
 
@@ -222,10 +196,13 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            drain_changes_fn: Some(drain_changes_dispatch::<E>),
-            on_focus_fn: Some(focus_dispatch::<E>),
-            on_blur_fn: Some(blur_dispatch::<E>),
+            flush_js_event_fn: None,
         }
+    }
+
+    pub fn with_js_event_emitter<E: ElementJsEventEmitter + 'static>(mut self) -> Self {
+        self.flush_js_event_fn = Some(dispatch_flush_js_event::<E>);
+        self
     }
 
     pub fn kind(&self) -> ElementKind {
@@ -281,9 +258,13 @@ impl AnyElement {
         self.inner.hit_test(position, layout)
     }
 
-    pub fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
+    pub fn on_keyboard_event(
+        &mut self,
+        cx: &mut ElementOnKeyboardContext,
+        event: &AppKeyEvent,
+    ) -> KeyboardResult {
         if let Some(handler) = self.on_keyboard {
-            handler(self.inner.as_any_mut(), event)
+            handler(self.inner.as_any_mut(), cx, event)
         } else {
             KeyboardResult::NotHandled
         }
@@ -301,27 +282,17 @@ impl AnyElement {
         }
     }
 
-    pub fn drain_changes(&mut self) -> GestureChanges {
-        if let Some(handler) = self.drain_changes_fn {
-            handler(self.inner.as_any_mut())
-        } else {
-            GestureChanges::default()
-        }
-    }
-
     pub fn has_focus(&self) -> bool {
-        self.on_focus_fn.is_some()
+        self.flush_js_event_fn.is_some()
     }
 
-    pub fn dispatch_focus(&mut self) {
-        if let Some(handler) = self.on_focus_fn {
-            handler(self.inner.as_any_mut());
+    pub fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
+        if let Some(f) = self.flush_js_event_fn {
+            f(self.inner.as_any_mut(), event, context);
         }
     }
 
-    pub fn dispatch_blur(&mut self) {
-        if let Some(handler) = self.on_blur_fn {
-            handler(self.inner.as_any_mut());
-        }
+    pub fn has_js_event_emitter(&self) -> bool {
+        self.flush_js_event_fn.is_some()
     }
 }

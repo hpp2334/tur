@@ -1,12 +1,27 @@
+use boa_engine::js_string;
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
-    ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
-    ElementOnKeyboard, ElementOnUpdate, ElementTrace, GestureChanges, GestureResult, KeyboardResult,
+    ComposedGestureEvent, ElementJsEventEmitter, ElementOnFocus, ElementOnGesture,
+    ElementOnGestureContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate,
+    ElementTrace, GestureResult, KeyboardResult,
 };
+use crate::core::js_event::{AnyJsEvent, FocusableJsEvent, InputJsEvent};
+use crate::core::js_event_helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
+
+fn extract_callable(value: &JsValue) -> Option<JsObject> {
+    value.as_object().and_then(|o| {
+        if o.is_callable() {
+            Some(o.clone())
+        } else {
+            None
+        }
+    })
+}
 
 #[derive(Clone)]
 pub(crate) struct LineNavInfo {
@@ -64,10 +79,13 @@ pub struct InputElement {
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
-    pub(crate) text_changed: bool,
-    pub(crate) cursor_changed: bool,
-    pub(crate) selection_changed: bool,
-    pub(crate) enter_flag: bool,
+    on_key_down: Option<JsObject>,
+    on_key_up: Option<JsObject>,
+    on_focus: Option<JsObject>,
+    on_blur: Option<JsObject>,
+    on_input: Option<JsObject>,
+    on_cursor_change: Option<JsObject>,
+    on_selection_change: Option<JsObject>,
 }
 
 impl Default for InputElement {
@@ -90,10 +108,13 @@ impl InputElement {
             cached_layout: None,
             selection_anchor: 0,
             selection_end: 0,
-            text_changed: false,
-            cursor_changed: false,
-            selection_changed: false,
-            enter_flag: false,
+            on_key_down: None,
+            on_key_up: None,
+            on_focus: None,
+            on_blur: None,
+            on_input: None,
+            on_cursor_change: None,
+            on_selection_change: None,
         }
     }
 
@@ -180,14 +201,12 @@ impl InputElement {
             "Backspace" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    self.text_changed = true;
                     KeyboardResult::NeedsDraw
                 } else if self.cursor_position > 0 {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    self.text_changed = true;
                     KeyboardResult::NeedsDraw
                 } else {
                     KeyboardResult::Handled
@@ -196,13 +215,11 @@ impl InputElement {
             "Delete" => {
                 if self.has_selection() {
                     self.delete_selection();
-                    self.text_changed = true;
                     KeyboardResult::NeedsDraw
                 } else if self.cursor_position < self.content.len() {
                     let end = next_char_boundary(&self.content, self.cursor_position);
                     self.content.replace_range(self.cursor_position..end, "");
                     self.clear_selection();
-                    self.text_changed = true;
                     KeyboardResult::NeedsDraw
                 } else {
                     KeyboardResult::Handled
@@ -216,19 +233,19 @@ impl InputElement {
                     }
                     self.selection_end = new_end;
                     self.cursor_position = new_end;
-                    self.cursor_changed = true;
-                    self.selection_changed = true;
+
+
                     KeyboardResult::NeedsDraw
                 } else if self.has_selection() {
                     let (start, _) = self.selection_range();
                     self.cursor_position = start;
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = prev_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 }
             }
@@ -240,19 +257,19 @@ impl InputElement {
                     }
                     self.selection_end = new_end;
                     self.cursor_position = new_end;
-                    self.cursor_changed = true;
-                    self.selection_changed = true;
+
+
                     KeyboardResult::NeedsDraw
                 } else if self.has_selection() {
                     let (_, end) = self.selection_range();
                     self.cursor_position = end;
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = next_char_boundary(&self.content, self.cursor_position);
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 }
             }
@@ -282,13 +299,13 @@ impl InputElement {
                             }
                             self.selection_end = target;
                             self.cursor_position = target;
-                            self.cursor_changed = true;
-                            self.selection_changed = true;
+        
+        
                             KeyboardResult::NeedsDraw
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
-                            self.cursor_changed = true;
+        
                             KeyboardResult::NeedsDraw
                         }
                     } else {
@@ -300,13 +317,13 @@ impl InputElement {
                     }
                     self.selection_end = 0;
                     self.cursor_position = 0;
-                    self.cursor_changed = true;
-                    self.selection_changed = true;
+
+
                     KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = 0;
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 }
             }
@@ -322,13 +339,13 @@ impl InputElement {
                             }
                             self.selection_end = target;
                             self.cursor_position = target;
-                            self.cursor_changed = true;
-                            self.selection_changed = true;
+        
+        
                             KeyboardResult::NeedsDraw
                         } else {
                             self.cursor_position = target;
                             self.clear_selection();
-                            self.cursor_changed = true;
+        
                             KeyboardResult::NeedsDraw
                         }
                     } else {
@@ -340,20 +357,18 @@ impl InputElement {
                     }
                     self.selection_end = self.content.len();
                     self.cursor_position = self.content.len();
-                    self.cursor_changed = true;
-                    self.selection_changed = true;
+
+
                     KeyboardResult::NeedsDraw
                 } else {
                     self.cursor_position = self.content.len();
                     self.clear_selection();
-                    self.cursor_changed = true;
+
                     KeyboardResult::NeedsDraw
                 }
             }
             "a" if ctrl || meta => {
                 self.select_all();
-                self.cursor_changed = true;
-                self.selection_changed = true;
                 KeyboardResult::NeedsDraw
             }
             "Enter" => {
@@ -364,12 +379,12 @@ impl InputElement {
                     self.content.insert(self.cursor_position, '\n');
                     self.cursor_position += '\n'.len_utf8();
                     self.clear_selection();
-                    self.text_changed = true;
-                    self.enter_flag = true;
+
+
                     KeyboardResult::NeedsDraw
                 } else {
-                    self.text_changed = true;
-                    self.enter_flag = true;
+
+
                     KeyboardResult::NeedsDraw
                 }
             }
@@ -382,7 +397,7 @@ impl InputElement {
                     self.content.insert(self.cursor_position, ch);
                     self.cursor_position += ch.len_utf8();
                     self.clear_selection();
-                    self.text_changed = true;
+
                     KeyboardResult::NeedsDraw
                 } else {
                     KeyboardResult::NotHandled
@@ -433,13 +448,10 @@ impl InputElement {
             }
             self.selection_end = target_byte;
             self.cursor_position = target_byte;
-            self.cursor_changed = true;
-            self.selection_changed = true;
             KeyboardResult::NeedsDraw
         } else {
             self.cursor_position = target_byte;
             self.clear_selection();
-            self.cursor_changed = true;
             KeyboardResult::NeedsDraw
         }
     }
@@ -523,38 +535,59 @@ impl ElementOnGesture for InputElement {
             }
         }
     }
-
-    fn drain_changes(&mut self) -> GestureChanges {
-        let changes = GestureChanges {
-            text_changed: self.text_changed,
-            cursor_changed: self.cursor_changed,
-            selection_changed: self.selection_changed,
-            enter: self.enter_flag,
-        };
-        self.text_changed = false;
-        self.cursor_changed = false;
-        self.selection_changed = false;
-        self.enter_flag = false;
-        changes
-    }
 }
 
 impl ElementOnKeyboard for InputElement {
-    fn on_keyboard_event(&mut self, event: &AppKeyEvent) -> KeyboardResult {
+    fn on_keyboard_event(
+        &mut self,
+        cx: &mut ElementOnKeyboardContext,
+        event: &AppKeyEvent,
+    ) -> KeyboardResult {
         if event.event_type != KeyEventType::Down {
             return KeyboardResult::NotHandled;
         }
+
+        let prev_content = self.content.clone();
+        let prev_cursor = self.cursor_position;
+        let prev_anchor = self.selection_anchor;
+        let prev_end = self.selection_end;
+
         let nav_info = self.cached_layout.as_ref().map(|ld| {
             let cursor_char = byte_to_char_offset(&self.content, self.cursor_position);
             LineNavInfo::extract(ld, cursor_char)
         });
-        self.handle_key_event(
+        let result = self.handle_key_event(
             &event.key,
             event.modifiers.ctrl,
             event.modifiers.meta,
             event.modifiers.shift,
             nav_info.as_ref(),
-        )
+        );
+
+        if matches!(result, KeyboardResult::NeedsDraw) {
+            cx.request_redraw();
+
+            if self.content != prev_content {
+                let enter = event.key == "Enter" && !self.multiline;
+                cx.push_js_event(InputJsEvent::Input {
+                    text: self.content.clone(),
+                    enter,
+                });
+            }
+            if self.cursor_position != prev_cursor {
+                cx.push_js_event(InputJsEvent::CursorChange {
+                    position: self.cursor_position,
+                });
+            }
+            if self.selection_anchor != prev_anchor || self.selection_end != prev_end {
+                cx.push_js_event(InputJsEvent::SelectionChange {
+                    anchor: self.selection_anchor,
+                    end: self.selection_end,
+                });
+            }
+        }
+
+        result
     }
 }
 
@@ -588,8 +621,88 @@ impl ElementOnUpdate for InputElement {
             }
         } else if *key == "multiline" {
             self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
+        } else if *key == "onKeyDown" {
+            self.on_key_down = extract_callable(value);
+        } else if *key == "onKeyUp" {
+            self.on_key_up = extract_callable(value);
+        } else if *key == "onFocus" {
+            self.on_focus = extract_callable(value);
+        } else if *key == "onBlur" {
+            self.on_blur = extract_callable(value);
+        } else if *key == "onInput" {
+            self.on_input = extract_callable(value);
+        } else if *key == "onCursorChange" {
+            self.on_cursor_change = extract_callable(value);
+        } else if *key == "onSelectionChange" {
+            self.on_selection_change = extract_callable(value);
         }
     }
 }
 
 impl ElementOnFocus for InputElement {}
+
+impl ElementJsEventEmitter for InputElement {
+    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
+        if let Some(e) = event.downcast_ref::<InputJsEvent>() {
+            match e {
+                InputJsEvent::Input { text, enter } => {
+                    if let Some(ref handler) = self.on_input {
+                        let text_val = JsValue::from(js_string!(text.as_str()));
+                        let enter_val = JsValue::from(*enter);
+                        let _ = handler.call(&JsValue::undefined(), &[text_val, enter_val], context);
+                    }
+                }
+                InputJsEvent::CursorChange { position } => {
+                    if let Some(ref handler) = self.on_cursor_change {
+                        let pos_val = JsValue::from(*position as f64);
+                        let _ = handler.call(&JsValue::undefined(), &[pos_val], context);
+                    }
+                }
+                InputJsEvent::SelectionChange { anchor, end } => {
+                    if let Some(ref handler) = self.on_selection_change {
+                        let start_val = JsValue::from(*anchor as f64);
+                        let end_val = JsValue::from(*end as f64);
+                        let _ = handler.call(
+                            &JsValue::undefined(),
+                            &[start_val, end_val],
+                            context,
+                        );
+                    }
+                }
+            }
+        } else if let Some(e) = event.downcast_ref::<FocusableJsEvent>() {
+            match e {
+                FocusableJsEvent::KeyDown {
+                    key,
+                    code,
+                    modifiers,
+                } => {
+                    if let Some(ref handler) = self.on_key_down {
+                        let event_obj = build_key_event_object(key, code, modifiers, context);
+                        let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
+                    }
+                }
+                FocusableJsEvent::KeyUp {
+                    key,
+                    code,
+                    modifiers,
+                } => {
+                    if let Some(ref handler) = self.on_key_up {
+                        let event_obj = build_key_event_object(key, code, modifiers, context);
+                        let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
+                    }
+                }
+                FocusableJsEvent::Focus => {
+                    if let Some(ref handler) = self.on_focus {
+                        let _ = handler.call(&JsValue::undefined(), &[], context);
+                    }
+                }
+                FocusableJsEvent::Blur => {
+                    if let Some(ref handler) = self.on_blur {
+                        let _ = handler.call(&JsValue::undefined(), &[], context);
+                    }
+                }
+            }
+        }
+    }
+}
