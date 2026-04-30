@@ -106,7 +106,7 @@ impl TurAppInternal {
     ) -> GestureResult {
         let mut redraw = false;
         let mut focus_req: Option<ElementNodeId> = None;
-        let mut cx = ElementOnGestureContext::new(&mut redraw, &mut focus_req);
+        let mut cx = ElementOnGestureContext::new(&mut redraw, &mut focus_req, node_id);
 
         let result = {
             let node = match self.element_tree.get_mut(node_id) {

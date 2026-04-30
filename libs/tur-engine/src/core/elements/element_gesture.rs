@@ -16,16 +16,19 @@ pub enum ComposedGestureEvent {
 pub struct ElementOnGestureContext<'a> {
     redraw_requested: &'a mut bool,
     focus_request: &'a mut Option<ElementNodeId>,
+    node_id: ElementNodeId,
 }
 
 impl<'a> ElementOnGestureContext<'a> {
     pub fn new(
         redraw_requested: &'a mut bool,
         focus_request: &'a mut Option<ElementNodeId>,
+        node_id: ElementNodeId,
     ) -> Self {
         Self {
             redraw_requested,
             focus_request,
+            node_id,
         }
     }
 
@@ -35,6 +38,10 @@ impl<'a> ElementOnGestureContext<'a> {
 
     pub fn request_focus(&mut self, id: ElementNodeId) {
         *self.focus_request = Some(id);
+    }
+
+    pub fn request_own_focus(&mut self) {
+        *self.focus_request = Some(self.node_id);
     }
 }
 
