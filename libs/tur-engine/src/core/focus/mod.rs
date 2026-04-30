@@ -1,3 +1,5 @@
+pub mod helper;
+
 use crate::core::element::ElementNodeId;
 use crate::core::js_event::{FocusableJsEvent, JsEventQueue};
 

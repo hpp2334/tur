@@ -9,7 +9,7 @@ use crate::core::elements::{
     ElementTrace, GestureResult, KeyboardResult,
 };
 use crate::core::js_event::{AnyJsEvent, FocusableJsEvent, InputJsEvent};
-use crate::core::js_event_helpers::build_key_event_object;
+use crate::core::js_event::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
 

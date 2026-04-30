@@ -1,3 +1,5 @@
+pub mod helpers;
+
 use std::any::Any;
 use std::rc::Rc;
 

@@ -1,3 +1,5 @@
+pub mod queue;
+
 use crate::core::keyboard::AppKeyEvent;
 use tur_shared::Offset;
 

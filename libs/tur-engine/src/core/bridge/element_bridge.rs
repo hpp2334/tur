@@ -56,10 +56,10 @@ fn extract_ctx(args: &[JsValue]) -> JsResult<Rc<RefCell<TurAppInternal>>> {
 
 fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<ElementNodeId> {
     let obj = args.get_or_undefined(idx).as_object().ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("expected TurNodeHandle"))
+        JsNativeError::typ().with_message("expected TurNodeHandle")
     })?;
     let handle = BoaOpaque::<TurNodeHandle>::wrap(&obj).ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("expected TurNodeHandle"))
+        JsNativeError::typ().with_message("expected TurNodeHandle")
     })?;
     Ok(handle.id)
 }
@@ -71,10 +71,10 @@ fn create_element(
 ) -> JsResult<JsValue> {
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
-    let id = ctx.element_tree_mut().alloc_id();
+    let id = ctx.element_tree.alloc_id();
     let node = ElementObject::new(id, element, context);
-    ctx.element_tree_mut().insert(node);
-    let handle = ctx.element_tree().get(id).unwrap().handle.clone();
+    ctx.element_tree.insert(node);
+    let handle = ctx.element_tree.get(id).unwrap().handle.clone();
     Ok(handle.object().clone().into())
 }
 
@@ -224,20 +224,22 @@ pub(crate) fn tur_set_attribute(
                         }
                     }
                 }
-                ctx.set_node_query_key(node_id, if keys.is_empty() { None } else { Some(keys) });
+                if let Some(node) = ctx.element_tree.get_mut(node_id) {
+                    node.query_key = if keys.is_empty() { None } else { Some(keys) };
+                }
             }
         }
-        ctx.push_event(AppEvent::RequestDraw);
+        ctx.event_queue.push(AppEvent::RequestDraw);
         return Ok(JsValue::undefined());
     }
 
-    if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
+    if let Some(node) = ctx.element_tree.get_mut(node_id) {
         if let Some(ref mut element) = node.element {
             element.set_prop(context, &key, &value);
         }
     }
 
-    ctx.push_event(AppEvent::RequestDraw);
+    ctx.event_queue.push(AppEvent::RequestDraw);
     Ok(JsValue::undefined())
 }
 
@@ -251,11 +253,11 @@ pub(crate) fn tur_append_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.element_tree_mut().append_child(parent_id, child_id);
+    ctx.element_tree.append_child(parent_id, child_id);
 
     tracing::trace!("tur_appendChild({}, {})", parent_id, child_id);
 
-    ctx.push_event(AppEvent::RequestDraw);
+    ctx.event_queue.push(AppEvent::RequestDraw);
     Ok(JsValue::undefined())
 }
 
@@ -269,11 +271,11 @@ pub(crate) fn tur_remove_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.element_tree_mut().remove_child(parent_id, child_id);
+    ctx.element_tree.remove_child(parent_id, child_id);
 
     tracing::trace!("tur_removeChild({}, {})", parent_id, child_id);
 
-    ctx.push_event(AppEvent::RequestDraw);
+    ctx.event_queue.push(AppEvent::RequestDraw);
     Ok(JsValue::undefined())
 }
 
@@ -288,12 +290,12 @@ pub(crate) fn tur_insert_before(
     let child_id = extract_node_id(args, 2)?;
     let ref_id = extract_node_id(args, 3)?;
 
-    ctx.element_tree_mut()
+    ctx.element_tree
         .insert_before(parent_id, child_id, ref_id);
 
     tracing::trace!("tur_insertBefore({}, {}, {})", parent_id, child_id, ref_id);
 
-    ctx.push_event(AppEvent::RequestDraw);
+    ctx.event_queue.push(AppEvent::RequestDraw);
     Ok(JsValue::undefined())
 }
 
@@ -305,9 +307,9 @@ pub(crate) fn tur_get_parent(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree().parent_of(node_id) {
+    match ctx.element_tree.parent_of(node_id) {
         Some(parent_id) => {
-            let handle = ctx.element_tree().get(parent_id).unwrap().handle.clone();
+            let handle = ctx.element_tree.get(parent_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -322,9 +324,9 @@ pub(crate) fn tur_get_first_child(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree().first_child_of(node_id) {
+    match ctx.element_tree.first_child_of(node_id) {
         Some(child_id) => {
-            let handle = ctx.element_tree().get(child_id).unwrap().handle.clone();
+            let handle = ctx.element_tree.get(child_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -339,9 +341,9 @@ pub(crate) fn tur_get_next_sibling(
     let ctx = extract_ctx(args)?;
     let ctx = ctx.borrow_mut();
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree().next_sibling_of(node_id) {
+    match ctx.element_tree.next_sibling_of(node_id) {
         Some(sibling_id) => {
-            let handle = ctx.element_tree().get(sibling_id).unwrap().handle.clone();
+            let handle = ctx.element_tree.get(sibling_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -356,12 +358,12 @@ pub(crate) fn tur_create_input(
     tracing::trace!("tur_createInput()");
     let ctx = extract_ctx(args)?;
     let mut ctx = ctx.borrow_mut();
-    let id = ctx.element_tree_mut().alloc_id();
+    let id = ctx.element_tree.alloc_id();
     let element = AnyElement::with_full_interactivity(InputElement::new())
         .with_js_event_emitter::<InputElement>();
     let node = ElementObject::new(id, element, context);
-    ctx.element_tree_mut().insert(node);
-    let handle = ctx.element_tree().get(id).unwrap().handle.clone();
+    ctx.element_tree.insert(node);
+    let handle = ctx.element_tree.get(id).unwrap().handle.clone();
     Ok(handle.object().clone().into())
 }
 
@@ -379,13 +381,13 @@ pub(crate) fn tur_set_input_text(
         .map(|s| s.to_std_string_escaped())
         .unwrap_or_default();
 
-    if let Some(node) = ctx.element_tree_mut().get_mut(node_id) {
+    if let Some(node) = ctx.element_tree.get_mut(node_id) {
         if let Some(ref mut element) = node.element {
             if let Some(input_el) = element.cast_mut::<InputElement>() {
                 input_el.set_text(&text);
             }
         }
     }
-    ctx.push_event(AppEvent::RequestDraw);
+    ctx.event_queue.push(AppEvent::RequestDraw);
     Ok(JsValue::undefined())
 }
