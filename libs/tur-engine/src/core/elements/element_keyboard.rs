@@ -1,8 +1,5 @@
-use std::any::Any;
-use std::rc::Rc;
-
 use crate::core::element::ElementNodeId;
-use crate::core::js_event::JsEventQueue;
+use crate::core::js_event::{IntoAnyJsEvent, JsEventQueue};
 use crate::core::keyboard::AppKeyEvent;
 
 pub enum KeyboardResult {
@@ -30,8 +27,8 @@ impl<'a> ElementOnKeyboardContext<'a> {
         }
     }
 
-    pub fn push_js_event(&mut self, event: impl Any + 'static) {
-        self.queue.push(self.node_id, Rc::new(event));
+    pub fn push_js_event(&mut self, event: impl IntoAnyJsEvent) {
+        self.queue.push(self.node_id, event);
     }
 
     pub fn request_redraw(&mut self) {
@@ -42,11 +39,11 @@ impl<'a> ElementOnKeyboardContext<'a> {
 pub trait ElementOnKeyboard: 'static {
     fn on_keyboard_event(
         &mut self,
-        event: &AppKeyEvent,
         cx: &mut ElementOnKeyboardContext,
+        event: &AppKeyEvent,
     ) -> KeyboardResult {
-        let _ = event;
         let _ = cx;
+        let _ = event;
         KeyboardResult::NotHandled
     }
 }

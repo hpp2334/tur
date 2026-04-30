@@ -1,10 +1,10 @@
 use std::any::Any;
-use std::rc::Rc;
 
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::js_event::AnyJsEvent;
 use crate::core::elements::ElementJsEventEmitter;
 use crate::core::elements::dispatch_flush_js_event;
 use crate::core::elements::ElementOnUpdate;
@@ -15,9 +15,9 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
 
-type KeyboardFn = fn(&mut dyn Any, &AppKeyEvent, &mut ElementOnKeyboardContext) -> KeyboardResult;
+type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent) -> KeyboardResult;
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext) -> GestureResult;
-type FlushJsEventFn = fn(&mut dyn Any, Rc<dyn Any>, &mut Context);
+type FlushJsEventFn = fn(&mut dyn Any, AnyJsEvent, &mut Context);
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -53,11 +53,11 @@ trait Erased: 'static {
 
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
     any: &mut dyn Any,
-    event: &AppKeyEvent,
     cx: &mut ElementOnKeyboardContext,
+    event: &AppKeyEvent,
 ) -> KeyboardResult {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnKeyboard::on_keyboard_event(element, event, cx)
+    ElementOnKeyboard::on_keyboard_event(element, cx, event)
 }
 
 fn gesture_dispatch<E: ElementOnGesture + 'static>(
@@ -260,11 +260,11 @@ impl AnyElement {
 
     pub fn on_keyboard_event(
         &mut self,
-        event: &AppKeyEvent,
         cx: &mut ElementOnKeyboardContext,
+        event: &AppKeyEvent,
     ) -> KeyboardResult {
         if let Some(handler) = self.on_keyboard {
-            handler(self.inner.as_any_mut(), event, cx)
+            handler(self.inner.as_any_mut(), cx, event)
         } else {
             KeyboardResult::NotHandled
         }
@@ -286,7 +286,7 @@ impl AnyElement {
         self.flush_js_event_fn.is_some()
     }
 
-    pub fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+    pub fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
         if let Some(f) = self.flush_js_event_fn {
             f(self.inner.as_any_mut(), event, context);
         }

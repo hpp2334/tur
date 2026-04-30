@@ -144,10 +144,9 @@ impl TurApp {
                             }
 
                             for node_id in &hit_path {
-                                self.app_context.borrow_mut().push_js_event_click(
+                                self.app_context.borrow_mut().js_event_queue_mut().push(
                                     *node_id,
-                                    position.x,
-                                    position.y,
+                                    core::gesture::make_click_event(position.x, position.y),
                                 );
                             }
                         }
@@ -164,9 +163,10 @@ impl TurApp {
                             if let Some(focused_id) = focused_id {
                                 let mut current = Some(focused_id);
                                 while let Some(id) = current {
-                                    self.app_context
-                                        .borrow_mut()
-                                        .push_js_event_key_down(id, &key_event);
+                                        self.app_context
+                                            .borrow_mut()
+                                            .js_event_queue_mut()
+                                            .push(id, core::keyboard::make_key_down_event(&key_event));
                                     current = self.app_context.borrow().element_tree().parent_of(id);
                                 }
                             }

@@ -1,8 +1,6 @@
 use crate::core::element::ElementNodeId;
 use crate::core::js_event::{FocusableJsEvent, JsEventQueue};
 
-use std::rc::Rc;
-
 pub struct FocusManager {
     focused_id: Option<ElementNodeId>,
 }
@@ -30,15 +28,15 @@ impl FocusManager {
         let old = self.focused_id.replace(new_id);
         if let Some(old) = old {
             if old != new_id {
-                queue.push(old, Rc::new(FocusableJsEvent::Blur));
+                queue.push(old, FocusableJsEvent::Blur);
             }
         }
-        queue.push(new_id, Rc::new(FocusableJsEvent::Focus));
+        queue.push(new_id, FocusableJsEvent::Focus);
     }
 
     pub fn clear_focus(&mut self, queue: &mut JsEventQueue) {
         if let Some(old) = self.focused_id.take() {
-            queue.push(old, Rc::new(FocusableJsEvent::Blur));
+            queue.push(old, FocusableJsEvent::Blur);
         }
     }
 }

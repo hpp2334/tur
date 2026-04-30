@@ -1,10 +1,8 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
-use std::any::Any;
-use std::rc::Rc;
 
 use crate::core::elements::{ElementJsEventEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
-use crate::core::js_event::FocusableJsEvent;
+use crate::core::js_event::{AnyJsEvent, FocusableJsEvent};
 use crate::core::js_event_helpers::build_key_event_object;
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
@@ -66,7 +64,7 @@ impl ElementOnUpdate for FocusableElement {
 impl ElementOnFocus for FocusableElement {}
 
 impl ElementJsEventEmitter for FocusableElement {
-    fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
         let Some(e) = event.downcast_ref::<FocusableJsEvent>() else {
             return;
         };

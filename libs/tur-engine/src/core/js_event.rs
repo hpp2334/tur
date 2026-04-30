@@ -5,6 +5,43 @@ use crate::core::element::ElementNodeId;
 use crate::core::keyboard::Modifiers;
 
 #[derive(Clone)]
+pub struct AnyJsEvent(pub(crate) Rc<dyn Any>);
+
+impl AnyJsEvent {
+    pub fn downcast_ref<T: Any>(&self) -> Option<&T> {
+        self.0.downcast_ref::<T>()
+    }
+}
+
+pub trait IntoAnyJsEvent {
+    fn into_any_js_event(self) -> AnyJsEvent;
+}
+
+impl IntoAnyJsEvent for AnyJsEvent {
+    fn into_any_js_event(self) -> AnyJsEvent {
+        self
+    }
+}
+
+impl IntoAnyJsEvent for PointerInteractJsEvent {
+    fn into_any_js_event(self) -> AnyJsEvent {
+        AnyJsEvent(Rc::new(self))
+    }
+}
+
+impl IntoAnyJsEvent for FocusableJsEvent {
+    fn into_any_js_event(self) -> AnyJsEvent {
+        AnyJsEvent(Rc::new(self))
+    }
+}
+
+impl IntoAnyJsEvent for InputJsEvent {
+    fn into_any_js_event(self) -> AnyJsEvent {
+        AnyJsEvent(Rc::new(self))
+    }
+}
+
+#[derive(Clone)]
 pub enum PointerInteractJsEvent {
     Click { x: f64, y: f64 },
 }
@@ -26,7 +63,7 @@ pub enum InputJsEvent {
 
 struct JsEventEntry {
     target: ElementNodeId,
-    event: Rc<dyn Any>,
+    event: AnyJsEvent,
 }
 
 pub struct JsEventQueue {
@@ -46,11 +83,11 @@ impl JsEventQueue {
         }
     }
 
-    pub fn push(&mut self, target: ElementNodeId, event: Rc<dyn Any>) {
-        self.entries.push(JsEventEntry { target, event });
+    pub fn push(&mut self, target: ElementNodeId, event: impl IntoAnyJsEvent) {
+        self.entries.push(JsEventEntry { target, event: event.into_any_js_event() });
     }
 
-    pub fn drain(&mut self) -> Vec<(ElementNodeId, Rc<dyn Any>)> {
+    pub fn drain(&mut self) -> Vec<(ElementNodeId, AnyJsEvent)> {
         self.entries
             .drain(..)
             .map(|e| (e.target, e.event))

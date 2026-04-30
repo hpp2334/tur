@@ -1,8 +1,6 @@
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
-use std::any::Any;
-use std::rc::Rc;
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
@@ -10,7 +8,7 @@ use crate::core::elements::{
     ElementOnGestureContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate,
     ElementTrace, GestureResult, KeyboardResult,
 };
-use crate::core::js_event::{FocusableJsEvent, InputJsEvent};
+use crate::core::js_event::{AnyJsEvent, FocusableJsEvent, InputJsEvent};
 use crate::core::js_event_helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
@@ -542,8 +540,8 @@ impl ElementOnGesture for InputElement {
 impl ElementOnKeyboard for InputElement {
     fn on_keyboard_event(
         &mut self,
-        event: &AppKeyEvent,
         cx: &mut ElementOnKeyboardContext,
+        event: &AppKeyEvent,
     ) -> KeyboardResult {
         if event.event_type != KeyEventType::Down {
             return KeyboardResult::NotHandled;
@@ -644,7 +642,7 @@ impl ElementOnUpdate for InputElement {
 impl ElementOnFocus for InputElement {}
 
 impl ElementJsEventEmitter for InputElement {
-    fn flush_js_event(&mut self, event: Rc<dyn Any>, context: &mut Context) {
+    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
         if let Some(e) = event.downcast_ref::<InputJsEvent>() {
             match e {
                 InputJsEvent::Input { text, enter } => {

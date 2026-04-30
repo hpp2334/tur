@@ -1,5 +1,4 @@
 use std::fmt;
-use std::rc::Rc;
 
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
@@ -12,7 +11,7 @@ use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
-use crate::core::js_event::{FocusableJsEvent, JsEventQueue, PointerInteractJsEvent};
+use crate::core::js_event::JsEventQueue;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::render::Renderer;
 
@@ -207,7 +206,7 @@ impl TurAppInternal {
         let result = {
             let node = self.element_tree.get_mut(focused_id).unwrap();
             let element = node.element.as_mut().unwrap();
-            element.on_keyboard_event(event, &mut cx)
+            element.on_keyboard_event(&mut cx, event)
         };
 
         if redraw {
@@ -219,33 +218,6 @@ impl TurAppInternal {
         }
 
         result
-    }
-
-    pub fn push_js_event_click(&mut self, node_id: ElementNodeId, x: f64, y: f64) {
-        self.js_event_queue
-            .push(node_id, Rc::new(PointerInteractJsEvent::Click { x, y }));
-    }
-
-    pub fn push_js_event_key_down(&mut self, node_id: ElementNodeId, event: &AppKeyEvent) {
-        self.js_event_queue.push(
-            node_id,
-            Rc::new(FocusableJsEvent::KeyDown {
-                key: event.key.clone(),
-                code: event.code.clone(),
-                modifiers: event.modifiers.clone(),
-            }),
-        );
-    }
-
-    pub fn push_js_event_key_up(&mut self, node_id: ElementNodeId, event: &AppKeyEvent) {
-        self.js_event_queue.push(
-            node_id,
-            Rc::new(FocusableJsEvent::KeyUp {
-                key: event.key.clone(),
-                code: event.code.clone(),
-                modifiers: event.modifiers.clone(),
-            }),
-        );
     }
 
     pub fn find_focusable_in_path(&self, path: &[ElementNodeId]) -> Option<ElementNodeId> {
