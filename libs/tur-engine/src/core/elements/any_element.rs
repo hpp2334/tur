@@ -4,9 +4,9 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
-use crate::core::js_event::AnyJsEvent;
-use crate::core::elements::ElementJsEventEmitter;
-use crate::core::elements::dispatch_flush_js_event;
+use crate::core::js_command::AnyJsCommand;
+use crate::core::elements::ElementJsCommandEmitter;
+use crate::core::elements::dispatch_flush_js_command;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 use crate::core::keyboard::AppKeyEvent;
@@ -16,13 +16,13 @@ use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus,
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext);
-type FlushJsEventFn = fn(&mut dyn Any, AnyJsEvent, &mut Context);
+type FlushJsCommandFn = fn(&mut dyn Any, AnyJsCommand, &mut Context);
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
-    flush_js_event_fn: Option<FlushJsEventFn>,
+    flush_js_command_fn: Option<FlushJsCommandFn>,
 }
 
 trait Erased: 'static {
@@ -138,7 +138,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            flush_js_event_fn: None,
+            flush_js_command_fn: None,
         }
     }
 
@@ -157,7 +157,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            flush_js_event_fn: None,
+            flush_js_command_fn: None,
         }
     }
 
@@ -175,7 +175,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            flush_js_event_fn: None,
+            flush_js_command_fn: None,
         }
     }
 
@@ -195,12 +195,12 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            flush_js_event_fn: None,
+            flush_js_command_fn: None,
         }
     }
 
-    pub fn with_js_event_emitter<E: ElementJsEventEmitter + 'static>(mut self) -> Self {
-        self.flush_js_event_fn = Some(dispatch_flush_js_event::<E>);
+    pub fn with_js_command_emitter<E: ElementJsCommandEmitter + 'static>(mut self) -> Self {
+        self.flush_js_command_fn = Some(dispatch_flush_js_command::<E>);
         self
     }
 
@@ -278,16 +278,16 @@ impl AnyElement {
     }
 
     pub fn has_focus(&self) -> bool {
-        self.flush_js_event_fn.is_some()
+        self.flush_js_command_fn.is_some()
     }
 
-    pub fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
-        if let Some(f) = self.flush_js_event_fn {
-            f(self.inner.as_any_mut(), event, context);
+    pub fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
+        if let Some(f) = self.flush_js_command_fn {
+            f(self.inner.as_any_mut(), command, context);
         }
     }
 
-    pub fn has_js_event_emitter(&self) -> bool {
-        self.flush_js_event_fn.is_some()
+    pub fn has_js_command_emitter(&self) -> bool {
+        self.flush_js_command_fn.is_some()
     }
 }

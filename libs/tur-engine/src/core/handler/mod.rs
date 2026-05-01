@@ -2,7 +2,7 @@ pub mod pointer_focus;
 
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
-use crate::core::js_event::JsEventQueue;
+use crate::core::js_command::JsCommandQueue;
 use crate::core::elements::ElementTree;
 
 pub trait AppHandler {
@@ -12,5 +12,5 @@ pub trait AppHandler {
 pub struct HandlerContext<'a> {
     pub element_tree: &'a ElementTree,
     pub focus_manager: &'a mut FocusManager,
-    pub js_event_queue: &'a mut JsEventQueue,
+    pub js_command_queue: &'a mut JsCommandQueue,
 }

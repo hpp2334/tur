@@ -4,12 +4,12 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
-    ComposedGestureEvent, ElementJsEventEmitter, ElementOnFocus, ElementOnGesture,
+    ComposedGestureEvent, ElementJsCommandEmitter, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate,
     ElementTrace,
 };
-use crate::core::js_event::{AnyJsEvent, FocusableJsEvent, InputJsEvent};
-use crate::core::js_event::helpers::build_key_event_object;
+use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, InputJsCommand};
+use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::elements::text::text_layout::TextLayoutData;
 
@@ -568,18 +568,18 @@ impl ElementOnKeyboard for InputElement {
 
             if self.content != prev_content {
                 let enter = event.key == "Enter" && !self.multiline;
-                cx.push_js_event(InputJsEvent::Input {
+                cx.push_js_command(InputJsCommand::Input {
                     text: self.content.clone(),
                     enter,
                 });
             }
             if self.cursor_position != prev_cursor {
-                cx.push_js_event(InputJsEvent::CursorChange {
+                cx.push_js_command(InputJsCommand::CursorChange {
                     position: self.cursor_position,
                 });
             }
             if self.selection_anchor != prev_anchor || self.selection_end != prev_end {
-                cx.push_js_event(InputJsEvent::SelectionChange {
+                cx.push_js_command(InputJsCommand::SelectionChange {
                     anchor: self.selection_anchor,
                     end: self.selection_end,
                 });
@@ -638,24 +638,24 @@ impl ElementOnUpdate for InputElement {
 
 impl ElementOnFocus for InputElement {}
 
-impl ElementJsEventEmitter for InputElement {
-    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
-        if let Some(e) = event.downcast_ref::<InputJsEvent>() {
-            match e {
-                InputJsEvent::Input { text, enter } => {
+impl ElementJsCommandEmitter for InputElement {
+    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
+        if let Some(c) = command.downcast_ref::<InputJsCommand>() {
+            match c {
+                InputJsCommand::Input { text, enter } => {
                     if let Some(ref handler) = self.on_input {
                         let text_val = JsValue::from(js_string!(text.as_str()));
                         let enter_val = JsValue::from(*enter);
                         let _ = handler.call(&JsValue::undefined(), &[text_val, enter_val], context);
                     }
                 }
-                InputJsEvent::CursorChange { position } => {
+                InputJsCommand::CursorChange { position } => {
                     if let Some(ref handler) = self.on_cursor_change {
                         let pos_val = JsValue::from(*position as f64);
                         let _ = handler.call(&JsValue::undefined(), &[pos_val], context);
                     }
                 }
-                InputJsEvent::SelectionChange { anchor, end } => {
+                InputJsCommand::SelectionChange { anchor, end } => {
                     if let Some(ref handler) = self.on_selection_change {
                         let start_val = JsValue::from(*anchor as f64);
                         let end_val = JsValue::from(*end as f64);
@@ -667,9 +667,9 @@ impl ElementJsEventEmitter for InputElement {
                     }
                 }
             }
-        } else if let Some(e) = event.downcast_ref::<FocusableJsEvent>() {
-            match e {
-                FocusableJsEvent::KeyDown {
+        } else if let Some(c) = command.downcast_ref::<FocusableJsCommand>() {
+            match c {
+                FocusableJsCommand::KeyDown {
                     key,
                     code,
                     modifiers,
@@ -679,7 +679,7 @@ impl ElementJsEventEmitter for InputElement {
                         let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
                     }
                 }
-                FocusableJsEvent::KeyUp {
+                FocusableJsCommand::KeyUp {
                     key,
                     code,
                     modifiers,
@@ -689,12 +689,12 @@ impl ElementJsEventEmitter for InputElement {
                         let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
                     }
                 }
-                FocusableJsEvent::Focus => {
+                FocusableJsCommand::Focus => {
                     if let Some(ref handler) = self.on_focus {
                         let _ = handler.call(&JsValue::undefined(), &[], context);
                     }
                 }
-                FocusableJsEvent::Blur => {
+                FocusableJsCommand::Blur => {
                     if let Some(ref handler) = self.on_blur {
                         let _ = handler.call(&JsValue::undefined(), &[], context);
                     }

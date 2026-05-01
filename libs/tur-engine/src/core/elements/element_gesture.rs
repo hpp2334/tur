@@ -4,7 +4,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
-use crate::core::js_event::JsEventQueue;
+use crate::core::js_command::JsCommandQueue;
 
 pub enum ComposedGestureEvent {
     PointerDown { local_position: Offset },
@@ -14,7 +14,7 @@ pub enum ComposedGestureEvent {
 pub struct ElementOnGestureContext<'a> {
     event_queue: &'a mut AppEventQueue,
     focus_manager: &'a mut FocusManager,
-    js_event_queue: &'a mut JsEventQueue,
+    js_command_queue: &'a mut JsCommandQueue,
     node_id: ElementNodeId,
 }
 
@@ -22,13 +22,13 @@ impl<'a> ElementOnGestureContext<'a> {
     pub fn new(
         event_queue: &'a mut AppEventQueue,
         focus_manager: &'a mut FocusManager,
-        js_event_queue: &'a mut JsEventQueue,
+        js_command_queue: &'a mut JsCommandQueue,
         node_id: ElementNodeId,
     ) -> Self {
         Self {
             event_queue,
             focus_manager,
-            js_event_queue,
+            js_command_queue,
             node_id,
         }
     }
@@ -38,11 +38,11 @@ impl<'a> ElementOnGestureContext<'a> {
     }
 
     pub fn request_focus(&mut self, id: ElementNodeId) {
-        self.focus_manager.set_focus(id, self.js_event_queue);
+        self.focus_manager.set_focus(id, self.js_command_queue);
     }
 
     pub fn request_own_focus(&mut self) {
-        self.focus_manager.set_focus(self.node_id, self.js_event_queue);
+        self.focus_manager.set_focus(self.node_id, self.js_command_queue);
     }
 }
 

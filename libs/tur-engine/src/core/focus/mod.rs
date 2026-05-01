@@ -1,8 +1,9 @@
 pub mod helper;
 
 use crate::core::element::ElementNodeId;
-use crate::core::js_event::{FocusableJsEvent, JsEventQueue};
+use crate::core::js_command::{FocusableJsCommand, JsCommandQueue};
 
+#[derive(Debug)]
 pub struct FocusManager {
     focused_id: Option<ElementNodeId>,
 }
@@ -26,19 +27,19 @@ impl FocusManager {
         self.focused_id == Some(id)
     }
 
-    pub fn set_focus(&mut self, new_id: ElementNodeId, queue: &mut JsEventQueue) {
+    pub fn set_focus(&mut self, new_id: ElementNodeId, queue: &mut JsCommandQueue) {
         let old = self.focused_id.replace(new_id);
         if let Some(old) = old {
             if old != new_id {
-                queue.push(old, FocusableJsEvent::Blur);
+                queue.push(old, FocusableJsCommand::Blur);
             }
         }
-        queue.push(new_id, FocusableJsEvent::Focus);
+        queue.push(new_id, FocusableJsCommand::Focus);
     }
 
-    pub fn clear_focus(&mut self, queue: &mut JsEventQueue) {
+    pub fn clear_focus(&mut self, queue: &mut JsCommandQueue) {
         if let Some(old) = self.focused_id.take() {
-            queue.push(old, FocusableJsEvent::Blur);
+            queue.push(old, FocusableJsCommand::Blur);
         }
     }
 }

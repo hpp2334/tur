@@ -1,8 +1,8 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::{ElementJsEventEmitter, ElementOnUpdate, ElementTrace};
-use crate::core::js_event::{AnyJsEvent, PointerInteractJsEvent};
+use crate::core::elements::{ElementJsCommandEmitter, ElementOnUpdate, ElementTrace};
+use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
     value.as_object().and_then(|o| {
@@ -44,13 +44,13 @@ impl ElementOnUpdate for PointerInteractElement {
     }
 }
 
-impl ElementJsEventEmitter for PointerInteractElement {
-    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
-        let Some(e) = event.downcast_ref::<PointerInteractJsEvent>() else {
+impl ElementJsCommandEmitter for PointerInteractElement {
+    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
+        let Some(c) = command.downcast_ref::<PointerInteractJsCommand>() else {
             return;
         };
-        match e {
-            PointerInteractJsEvent::Click { x, y } => {
+        match c {
+            PointerInteractJsCommand::Click { x, y } => {
                 if let Some(ref handler) = self.on_click {
                     let _ = handler.call(
                         &JsValue::undefined(),
