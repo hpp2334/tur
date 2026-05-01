@@ -1,11 +1,10 @@
 pub(crate) mod element_bridge;
+mod js_context;
 mod opaque;
 
-pub use element_bridge::{TurNodeHandle, WeakAppContext};
+pub use element_bridge::TurNodeHandle;
+pub use js_context::TurJsContext;
 pub use opaque::BoaOpaque;
-
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
@@ -56,7 +55,7 @@ pub fn init_bridge(
     context: &mut Context,
     renderer: Box<dyn Renderer>,
     font_loader: Box<dyn FontLoader>,
-) -> Rc<RefCell<TurAppInternal>> {
+) -> TurAppInternal {
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
 
@@ -93,13 +92,15 @@ pub fn init_bridge(
         set_prop(&tur_obj, js_name.clone(), func);
     }
 
-    let mut ctx = TurAppInternal::new(renderer, font_loader);
-    ctx.register_handler(Box::new(
-        crate::core::handler::pointer_focus::PointerFocusHandler,
-    ));
-    let rc_ctx = Rc::new(RefCell::new(ctx));
-    let weak = WeakAppContext::new(&rc_ctx);
-    let opaque = BoaOpaque::new(weak, context);
+    let internal = TurAppInternal::new(renderer, font_loader);
+    {
+        let mut ctx = internal.app_context.borrow_mut();
+        ctx.register_handler(Box::new(
+            crate::core::handler::pointer_focus::PointerFocusHandler,
+        ));
+    }
+
+    let opaque = BoaOpaque::new(internal.js_context.clone(), context);
 
     set_prop(
         &tur_obj,
@@ -113,5 +114,5 @@ pub fn init_bridge(
 
     tracing::info!("tur bridge initialized");
 
-    rc_ctx
+    internal
 }

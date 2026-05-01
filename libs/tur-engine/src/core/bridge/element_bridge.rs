@@ -1,57 +1,33 @@
-use std::cell::RefCell;
-use std::rc::{Rc, Weak};
-
-use boa_engine::{Context, JsArgs, JsData, JsError, JsNativeError, JsResult, JsValue};
+use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::app::TurAppInternal;
 use crate::core::bridge::BoaOpaque;
+use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
-use crate::core::event::AppEvent;
 use crate::elements::{
     ContainerElement, FlexElement, FlexItemElement, FocusableElement, InputElement,
     PointerInteractElement, PositionedElement, StackElement, TextContainerElement, TextSpanElement,
 };
 
-#[derive(Clone, Debug, Trace, Finalize, JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct WeakAppContext {
-    inner: Weak<RefCell<TurAppInternal>>,
-}
-
-impl WeakAppContext {
-    pub fn new(rc: &Rc<RefCell<TurAppInternal>>) -> Self {
-        Self {
-            inner: Rc::downgrade(rc),
-        }
-    }
-
-    pub fn upgrade(&self) -> Option<Rc<RefCell<TurAppInternal>>> {
-        self.inner.upgrade()
-    }
-}
-
-#[derive(Debug, Trace, Finalize, JsData)]
+#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
     pub(crate) id: ElementNodeId,
 }
 
-fn extract_ctx(args: &[JsValue]) -> JsResult<Rc<RefCell<TurAppInternal>>> {
+fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
     let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
         JsError::from(
-            JsNativeError::typ().with_message("expected TurAppInternal as first argument"),
+            JsNativeError::typ().with_message("expected TurJsContext as first argument"),
         )
     })?;
-    let weak = BoaOpaque::<WeakAppContext>::wrap(&obj).ok_or_else(|| {
+    let ctx_ref = BoaOpaque::<TurJsContext>::wrap(&obj).ok_or_else(|| {
         JsError::from(
-            JsNativeError::typ().with_message("expected TurAppInternal as first argument"),
+            JsNativeError::typ().with_message("expected TurJsContext as first argument"),
         )
     })?;
-    weak.upgrade().ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("TurAppInternal has been dropped"))
-    })
+    Ok(ctx_ref.clone())
 }
 
 fn extract_node_id(args: &[JsValue], idx: usize) -> JsResult<ElementNodeId> {
@@ -69,12 +45,12 @@ fn create_element(
     context: &mut Context,
     element: AnyElement,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
-    let id = ctx.element_tree.alloc_id();
+    let js_ctx = extract_ctx(args)?;
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    let id = tree.alloc_id();
     let node = ElementObject::new(id, element, context);
-    ctx.element_tree.insert(node);
-    let handle = ctx.element_tree.get(id).unwrap().handle.clone();
+    tree.insert(node);
+    let handle = tree.get(id).unwrap().handle.clone();
     Ok(handle.object().clone().into())
 }
 
@@ -155,7 +131,7 @@ pub(crate) fn tur_create_pointer_interact(
         args,
         context,
         AnyElement::new(PointerInteractElement::new())
-            .with_js_event_emitter::<PointerInteractElement>(),
+            .with_js_command_emitter::<PointerInteractElement>(),
     )
 }
 
@@ -178,7 +154,7 @@ pub(crate) fn tur_create_focusable(
         args,
         context,
         AnyElement::with_focusability(FocusableElement::new())
-            .with_js_event_emitter::<FocusableElement>(),
+            .with_js_command_emitter::<FocusableElement>(),
     )
 }
 
@@ -187,10 +163,11 @@ pub(crate) fn tur_request_focus(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
-    ctx.set_focus(node_id);
+    let mut focus = js_ctx.focus_manager.borrow_mut();
+    let mut js_eq = js_ctx.js_command_queue.borrow_mut();
+    focus.set_focus(node_id, &mut js_eq);
     Ok(JsValue::undefined())
 }
 
@@ -199,8 +176,7 @@ pub(crate) fn tur_set_attribute(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
     let key = args.get_or_undefined(2).to_string(context)?;
 
@@ -224,22 +200,26 @@ pub(crate) fn tur_set_attribute(
                         }
                     }
                 }
-                if let Some(node) = ctx.element_tree.get_mut(node_id) {
+                let mut tree = js_ctx.element_tree.borrow_mut();
+                if let Some(node) = tree.get_mut(node_id) {
                     node.query_key = if keys.is_empty() { None } else { Some(keys) };
                 }
             }
         }
-        ctx.event_queue.push(AppEvent::RequestDraw);
+        js_ctx.dirty.set(true);
         return Ok(JsValue::undefined());
     }
 
-    if let Some(node) = ctx.element_tree.get_mut(node_id) {
-        if let Some(ref mut element) = node.element {
-            element.set_prop(context, &key, &value);
+    {
+        let mut tree = js_ctx.element_tree.borrow_mut();
+        if let Some(node) = tree.get_mut(node_id) {
+            if let Some(ref mut element) = node.element {
+                element.set_prop(context, &key, &value);
+            }
         }
     }
 
-    ctx.event_queue.push(AppEvent::RequestDraw);
+    js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }
 
@@ -248,16 +228,15 @@ pub(crate) fn tur_append_child(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.element_tree.append_child(parent_id, child_id);
+    js_ctx.element_tree.borrow_mut().append_child(parent_id, child_id);
 
     tracing::trace!("tur_appendChild({}, {})", parent_id, child_id);
 
-    ctx.event_queue.push(AppEvent::RequestDraw);
+    js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }
 
@@ -266,16 +245,15 @@ pub(crate) fn tur_remove_child(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    ctx.element_tree.remove_child(parent_id, child_id);
+    js_ctx.element_tree.borrow_mut().remove_child(parent_id, child_id);
 
     tracing::trace!("tur_removeChild({}, {})", parent_id, child_id);
 
-    ctx.event_queue.push(AppEvent::RequestDraw);
+    js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }
 
@@ -284,18 +262,18 @@ pub(crate) fn tur_insert_before(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
     let ref_id = extract_node_id(args, 3)?;
 
-    ctx.element_tree
+    js_ctx.element_tree
+        .borrow_mut()
         .insert_before(parent_id, child_id, ref_id);
 
     tracing::trace!("tur_insertBefore({}, {}, {})", parent_id, child_id, ref_id);
 
-    ctx.event_queue.push(AppEvent::RequestDraw);
+    js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }
 
@@ -304,12 +282,12 @@ pub(crate) fn tur_get_parent(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree.parent_of(node_id) {
+    let tree = js_ctx.element_tree.borrow();
+    match tree.parent_of(node_id) {
         Some(parent_id) => {
-            let handle = ctx.element_tree.get(parent_id).unwrap().handle.clone();
+            let handle = tree.get(parent_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -321,12 +299,12 @@ pub(crate) fn tur_get_first_child(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree.first_child_of(node_id) {
+    let tree = js_ctx.element_tree.borrow();
+    match tree.first_child_of(node_id) {
         Some(child_id) => {
-            let handle = ctx.element_tree.get(child_id).unwrap().handle.clone();
+            let handle = tree.get(child_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -338,12 +316,12 @@ pub(crate) fn tur_get_next_sibling(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
-    match ctx.element_tree.next_sibling_of(node_id) {
+    let tree = js_ctx.element_tree.borrow();
+    match tree.next_sibling_of(node_id) {
         Some(sibling_id) => {
-            let handle = ctx.element_tree.get(sibling_id).unwrap().handle.clone();
+            let handle = tree.get(sibling_id).unwrap().handle.clone();
             Ok(handle.object().clone().into())
         }
         None => Ok(JsValue::null()),
@@ -356,14 +334,14 @@ pub(crate) fn tur_create_input(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     tracing::trace!("tur_createInput()");
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
-    let id = ctx.element_tree.alloc_id();
+    let js_ctx = extract_ctx(args)?;
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    let id = tree.alloc_id();
     let element = AnyElement::with_full_interactivity(InputElement::new())
-        .with_js_event_emitter::<InputElement>();
+        .with_js_command_emitter::<InputElement>();
     let node = ElementObject::new(id, element, context);
-    ctx.element_tree.insert(node);
-    let handle = ctx.element_tree.get(id).unwrap().handle.clone();
+    tree.insert(node);
+    let handle = tree.get(id).unwrap().handle.clone();
     Ok(handle.object().clone().into())
 }
 
@@ -372,8 +350,7 @@ pub(crate) fn tur_set_input_text(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let ctx = extract_ctx(args)?;
-    let mut ctx = ctx.borrow_mut();
+    let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
     let text = args
         .get_or_undefined(2)
@@ -381,13 +358,16 @@ pub(crate) fn tur_set_input_text(
         .map(|s| s.to_std_string_escaped())
         .unwrap_or_default();
 
-    if let Some(node) = ctx.element_tree.get_mut(node_id) {
-        if let Some(ref mut element) = node.element {
-            if let Some(input_el) = element.cast_mut::<InputElement>() {
-                input_el.set_text(&text);
+    {
+        let mut tree = js_ctx.element_tree.borrow_mut();
+        if let Some(node) = tree.get_mut(node_id) {
+            if let Some(ref mut element) = node.element {
+                if let Some(input_el) = element.cast_mut::<InputElement>() {
+                    input_el.set_text(&text);
+                }
             }
         }
     }
-    ctx.event_queue.push(AppEvent::RequestDraw);
+    js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }

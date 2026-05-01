@@ -1,9 +1,9 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::{ElementJsEventEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
-use crate::core::js_event::{AnyJsEvent, FocusableJsEvent};
-use crate::core::js_event::helpers::build_key_event_object;
+use crate::core::elements::{ElementJsCommandEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
+use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
+use crate::core::js_command::helpers::build_key_event_object;
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
     value.as_object().and_then(|o| {
@@ -63,13 +63,13 @@ impl ElementOnUpdate for FocusableElement {
 
 impl ElementOnFocus for FocusableElement {}
 
-impl ElementJsEventEmitter for FocusableElement {
-    fn flush_js_event(&mut self, event: AnyJsEvent, context: &mut Context) {
-        let Some(e) = event.downcast_ref::<FocusableJsEvent>() else {
+impl ElementJsCommandEmitter for FocusableElement {
+    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
+        let Some(c) = command.downcast_ref::<FocusableJsCommand>() else {
             return;
         };
-        match e {
-            FocusableJsEvent::KeyDown {
+        match c {
+            FocusableJsCommand::KeyDown {
                 key,
                 code,
                 modifiers,
@@ -79,7 +79,7 @@ impl ElementJsEventEmitter for FocusableElement {
                     let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
                 }
             }
-            FocusableJsEvent::KeyUp {
+            FocusableJsCommand::KeyUp {
                 key,
                 code,
                 modifiers,
@@ -89,12 +89,12 @@ impl ElementJsEventEmitter for FocusableElement {
                     let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
                 }
             }
-            FocusableJsEvent::Focus => {
+            FocusableJsCommand::Focus => {
                 if let Some(ref handler) = self.on_focus {
                     let _ = handler.call(&JsValue::undefined(), &[], context);
                 }
             }
-            FocusableJsEvent::Blur => {
+            FocusableJsCommand::Blur => {
                 if let Some(ref handler) = self.on_blur {
                     let _ = handler.call(&JsValue::undefined(), &[], context);
                 }

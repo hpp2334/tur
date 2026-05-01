@@ -1,5 +1,5 @@
-use crate::core::js_event::{AnyJsEvent, PointerInteractJsEvent};
+use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
 
-pub fn make_click_event(x: f64, y: f64) -> AnyJsEvent {
-    AnyJsEvent(std::rc::Rc::new(PointerInteractJsEvent::Click { x, y }))
+pub fn make_click_command(x: f64, y: f64) -> AnyJsCommand {
+    AnyJsCommand(std::rc::Rc::new(PointerInteractJsCommand::Click { x, y }))
 }

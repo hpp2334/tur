@@ -1,16 +1,16 @@
-use crate::core::js_event::{AnyJsEvent, FocusableJsEvent};
+use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
 use crate::core::keyboard::AppKeyEvent;
 
-pub fn make_key_down_event(event: &AppKeyEvent) -> AnyJsEvent {
-    AnyJsEvent(std::rc::Rc::new(FocusableJsEvent::KeyDown {
+pub fn make_key_down_command(event: &AppKeyEvent) -> AnyJsCommand {
+    AnyJsCommand(std::rc::Rc::new(FocusableJsCommand::KeyDown {
         key: event.key.clone(),
         code: event.code.clone(),
         modifiers: event.modifiers.clone(),
     }))
 }
 
-pub fn make_key_up_event(event: &AppKeyEvent) -> AnyJsEvent {
-    AnyJsEvent(std::rc::Rc::new(FocusableJsEvent::KeyUp {
+pub fn make_key_up_command(event: &AppKeyEvent) -> AnyJsCommand {
+    AnyJsCommand(std::rc::Rc::new(FocusableJsCommand::KeyUp {
         key: event.key.clone(),
         code: event.code.clone(),
         modifiers: event.modifiers.clone(),

@@ -8,7 +8,7 @@ pub mod fonts;
 pub mod gesture;
 pub mod handler;
 pub mod hit_test;
-pub mod js_event;
+pub mod js_command;
 pub mod keyboard;
 pub mod layout;
 pub mod render;

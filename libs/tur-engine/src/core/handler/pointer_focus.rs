@@ -14,7 +14,7 @@ impl AppHandler for PointerFocusHandler {
         let hit_path = HitTest::new(cx.element_tree).path(*position);
         let focusable_id = find_focusable_in_path(cx.element_tree, &hit_path);
         if focusable_id.is_none() {
-            cx.focus_manager.clear_focus(cx.js_event_queue);
+            cx.focus_manager.clear_focus(cx.js_command_queue);
         }
     }
 }

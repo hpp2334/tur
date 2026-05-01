@@ -4,9 +4,6 @@ pub mod renderer;
 
 pub mod error;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
@@ -22,7 +19,7 @@ use core::event::{AppEvent, AppGestureEvent};
 
 pub struct TurApp {
     boa_context: Context,
-    app_context: Rc<RefCell<TurAppInternal>>,
+    internal: TurAppInternal,
 }
 
 impl TurApp {
@@ -31,13 +28,13 @@ impl TurApp {
         font_loader: Box<dyn core::fonts::FontLoader>,
     ) -> Result<Self, TurError> {
         let mut boa_context = Context::default();
-        let app_context = init_bridge(&mut boa_context, renderer, font_loader);
+        let internal = init_bridge(&mut boa_context, renderer, font_loader);
 
         tracing::info!("TurApp initialized");
 
         Ok(TurApp {
             boa_context,
-            app_context,
+            internal,
         })
     }
 
@@ -49,20 +46,20 @@ impl TurApp {
     }
 
     pub fn push_event(&self, event: AppEvent) {
-        self.app_context.borrow_mut().event_queue.push(event);
+        self.internal.app_context.borrow_mut().event_queue.push(event);
     }
 
     pub fn tick(&mut self) -> Result<(), TurError> {
         let mut needs_draw = false;
 
         loop {
-            let events = self.app_context.borrow_mut().event_queue.drain();
+            let events = self.internal.app_context.borrow_mut().event_queue.drain();
             if events.is_empty() {
                 break;
             }
 
             for event in events {
-                self.app_context.borrow_mut().dispatch_handlers(&event);
+                self.internal.app_context.borrow_mut().dispatch_handlers(&event);
 
                 match event {
                     AppEvent::Resize {
@@ -70,29 +67,27 @@ impl TurApp {
                         logical_height,
                         dpr,
                     } => {
-                        self.app_context
-                            .borrow_mut()
-                            .renderer
-                            .resize(logical_width, logical_height, dpr);
-                        self.app_context.borrow_mut().size =
-                            (logical_width as f64, logical_height as f64);
+                        let mut ctx = self.internal.app_context.borrow_mut();
+                        ctx.renderer.resize(logical_width, logical_height, dpr);
+                        ctx.size = (logical_width as f64, logical_height as f64);
                         needs_draw = true;
                     }
 
                     AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
                         let target = {
-                            let ctx = self.app_context.borrow();
-                            core::hit_test::HitTest::new(&ctx.element_tree).deepest(position)
+                            let tree = self.internal.js_context.element_tree.borrow();
+                            core::hit_test::HitTest::new(&tree).deepest(position)
                         };
-                        self.app_context
+                        self.internal
+                            .app_context
                             .borrow_mut()
                             .gesture_composer
                             .on_pointer_down(target);
 
                         if let Some(id) = target {
                             let local =
-                                self.app_context.borrow().local_position(id, position);
-                            self.app_context.borrow_mut().handle_gesture_event(
+                                self.internal.app_context.borrow().local_position(id, position);
+                            self.internal.app_context.borrow_mut().handle_gesture_event(
                                 id,
                                 &ComposedGestureEvent::PointerDown { local_position: local },
                             );
@@ -101,19 +96,20 @@ impl TurApp {
 
                     AppEvent::Gesture(AppGestureEvent::PointerMove { position }) => {
                         let (is_dragging, focused) = {
-                            let ctx = self.app_context.borrow();
+                            let ctx = self.internal.app_context.borrow();
                             let dragging = ctx.gesture_composer.is_tracking_drag();
-                            let focused = ctx.focus_manager.focused();
+                            let focused = ctx.focus_manager.borrow().focused();
                             (dragging, focused)
                         };
 
                         if is_dragging {
                             if let Some(id) = focused {
                                 let local = self
+                                    .internal
                                     .app_context
                                     .borrow()
                                     .local_position(id, position);
-                                self.app_context.borrow_mut().handle_gesture_event(
+                                self.internal.app_context.borrow_mut().handle_gesture_event(
                                     id,
                                     &ComposedGestureEvent::PointerMove { local_position: local },
                                 );
@@ -123,17 +119,18 @@ impl TurApp {
 
                     AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
                         let click_eligible = {
-                            let ctx = self.app_context.borrow();
+                            let ctx = self.internal.app_context.borrow();
                             let down_target = ctx.gesture_composer.pointer_down_target();
                             match down_target {
                                 Some(id) => {
-                                    core::hit_test::HitTest::new(&ctx.element_tree)
-                                        .contains(position, id)
+                                    let tree = ctx.element_tree.borrow();
+                                    core::hit_test::HitTest::new(&tree).contains(position, id)
                                 }
                                 None => false,
                             }
                         };
                         let clicked = self
+                            .internal
                             .app_context
                             .borrow_mut()
                             .gesture_composer
@@ -142,43 +139,47 @@ impl TurApp {
 
                         if clicked {
                             let hit_path = {
-                                let ctx = self.app_context.borrow();
-                                core::hit_test::HitTest::new(&ctx.element_tree).path(position)
+                                let tree = self.internal.js_context.element_tree.borrow();
+                                core::hit_test::HitTest::new(&tree).path(position)
                             };
 
                             for node_id in &hit_path {
-                                self.app_context
+                                self.internal
+                                    .js_context
+                                    .js_command_queue
                                     .borrow_mut()
-                                    .js_event_queue
                                     .push(
                                         *node_id,
-                                        core::gesture::make_click_event(position.x, position.y),
+                                        core::gesture::make_click_command(position.x, position.y),
                                     );
                             }
                         }
                     }
 
                     AppEvent::Key(key_event) => {
-                        self.app_context
+                        self.internal
+                            .app_context
                             .borrow_mut()
                             .handle_key_event(&key_event);
 
                         let focused_id =
-                            self.app_context.borrow().focus_manager.focused();
+                            self.internal.js_context.focus_manager.borrow().focused();
                         if let Some(focused_id) = focused_id {
                             let mut current = Some(focused_id);
                             while let Some(id) = current {
-                                self.app_context
+                                self.internal
+                                    .js_context
+                                    .js_command_queue
                                     .borrow_mut()
-                                    .js_event_queue
                                     .push(
                                         id,
-                                        core::keyboard::make_key_down_event(&key_event),
+                                        core::keyboard::make_key_down_command(&key_event),
                                     );
                                 current = self
-                                    .app_context
-                                    .borrow()
+                                    .internal
+                                    .js_context
                                     .element_tree
+                                    .borrow()
                                     .parent_of(id);
                             }
                         }
@@ -191,30 +192,36 @@ impl TurApp {
             }
         }
 
-        let entries = self.app_context.borrow_mut().js_event_queue.drain();
-        for (target, event) in entries {
-            let mut element = {
-                let mut ctx = self.app_context.borrow_mut();
-                ctx.element_tree
-                    .get_mut(target)
-                    .and_then(|n| n.element.take())
-            };
-            if let Some(ref mut element) = element {
-                element.flush_js_event(event, &mut self.boa_context);
+        loop {
+            let entries = self.internal.js_context.js_command_queue.borrow_mut().drain();
+            if entries.is_empty() {
+                break;
             }
-            if element.is_some() {
-                self.app_context
-                    .borrow_mut()
-                    .element_tree
-                    .get_mut(target)
-                    .unwrap()
-                    .element = element;
+            for (target, command) in entries {
+                let mut element = {
+                    let mut tree = self.internal.js_context.element_tree.borrow_mut();
+                    tree.get_mut(target).and_then(|n| n.element.take())
+                };
+                if let Some(ref mut element) = element {
+                    element.flush_js_command(command, &mut self.boa_context);
+                }
+                if element.is_some() {
+                    self.internal
+                        .js_context
+                        .element_tree
+                        .borrow_mut()
+                        .get_mut(target)
+                        .unwrap()
+                        .element = element;
+                }
             }
         }
 
-        if needs_draw {
-            self.app_context.borrow_mut().render();
-            self.app_context
+        let dirty = self.internal.js_context.dirty.take();
+        if needs_draw || dirty {
+            self.internal.app_context.borrow_mut().render();
+            self.internal
+                .app_context
                 .borrow_mut()
                 .renderer
                 .present()
@@ -225,18 +232,19 @@ impl TurApp {
     }
 
     pub fn debug_layout(&self) -> String {
-        self.app_context.borrow().element_tree.debug_layout()
+        self.internal.js_context.element_tree.borrow().debug_layout()
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
-        self.app_context
-            .borrow()
+        self.internal
+            .js_context
             .element_tree
+            .borrow()
             .query_element(key)
     }
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
-        self.app_context.borrow().focus_manager.focused()
+        self.internal.js_context.focus_manager.borrow().focused()
     }
 
     pub fn with_element<R>(
@@ -244,14 +252,14 @@ impl TurApp {
         id: ElementNodeId,
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
-        let ctx = self.app_context.borrow();
-        let node = ctx.element_tree.get(id)?;
+        let tree = self.internal.js_context.element_tree.borrow();
+        let node = tree.get(id)?;
         let element = node.element.as_ref()?;
         Some(cb(element))
     }
 
     #[cfg(feature = "trace")]
     pub fn element_tree(&self) -> std::cell::Ref<'_, ElementTree> {
-        std::cell::Ref::map(self.app_context.borrow(), |ctx| &ctx.element_tree)
+        std::cell::Ref::map(self.internal.js_context.element_tree.borrow(), |t| t)
     }
 }
