@@ -192,29 +192,29 @@ impl TurApp {
             }
         }
 
+        let mut pending_callbacks: Vec<(boa_engine::object::JsObject, Vec<boa_engine::JsValue>)> =
+            Vec::new();
+
         loop {
             let entries = self.internal.js_context.js_command_queue.borrow_mut().drain();
             if entries.is_empty() {
                 break;
             }
             for (target, command) in entries {
-                let mut element = {
-                    let mut tree = self.internal.js_context.element_tree.borrow_mut();
-                    tree.get_mut(target).and_then(|n| n.element.take())
-                };
-                if let Some(ref mut element) = element {
-                    element.flush_js_command(command, &mut self.boa_context);
-                }
-                if element.is_some() {
-                    self.internal
-                        .js_context
-                        .element_tree
-                        .borrow_mut()
-                        .get_mut(target)
-                        .unwrap()
-                        .element = element;
+                let tree = self.internal.js_context.element_tree.borrow();
+                if let Some(node) = tree.get(target) {
+                    if let Some(ref element) = node.element {
+                        if let Some(pair) = element.emit_js_callback(command, &mut self.boa_context)
+                        {
+                            pending_callbacks.push(pair);
+                        }
+                    }
                 }
             }
+        }
+
+        for (callback, args) in pending_callbacks {
+            let _ = callback.call(&boa_engine::JsValue::undefined(), &args, &mut self.boa_context);
         }
 
         let dirty = self.internal.js_context.dirty.take();

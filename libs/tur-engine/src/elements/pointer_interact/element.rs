@@ -1,7 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::{ElementJsCommandEmitter, ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementJsCallbackEmitter, ElementOnUpdate, ElementTrace};
 use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
@@ -44,20 +44,18 @@ impl ElementOnUpdate for PointerInteractElement {
     }
 }
 
-impl ElementJsCommandEmitter for PointerInteractElement {
-    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
-        let Some(c) = command.downcast_ref::<PointerInteractJsCommand>() else {
-            return;
-        };
+impl ElementJsCallbackEmitter for PointerInteractElement {
+    fn emit_js_callback(
+        &self,
+        command: AnyJsCommand,
+        _context: &mut Context,
+    ) -> Option<(JsObject, Vec<JsValue>)> {
+        let c = command.downcast_ref::<PointerInteractJsCommand>()?;
         match c {
             PointerInteractJsCommand::Click { x, y } => {
-                if let Some(ref handler) = self.on_click {
-                    let _ = handler.call(
-                        &JsValue::undefined(),
-                        &[JsValue::from(*x), JsValue::from(*y)],
-                        context,
-                    );
-                }
+                self.on_click.as_ref().map(|h| {
+                    (h.clone(), vec![JsValue::from(*x), JsValue::from(*y)])
+                })
             }
         }
     }

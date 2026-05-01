@@ -1,17 +1,24 @@
 use std::any::Any;
 
-use boa_engine::Context;
+use boa_engine::object::JsObject;
+use boa_engine::{Context, JsValue};
 
 use crate::core::js_command::AnyJsCommand;
 
-pub trait ElementJsCommandEmitter: 'static {
-    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context);
+pub trait ElementJsCallbackEmitter: 'static {
+    fn emit_js_callback(
+        &self,
+        command: AnyJsCommand,
+        context: &mut Context,
+    ) -> Option<(JsObject, Vec<JsValue>)>;
 }
 
-pub(crate) fn dispatch_flush_js_command<E: ElementJsCommandEmitter>(
-    any: &mut dyn Any,
+pub(crate) fn dispatch_emit_js_callback<E: ElementJsCallbackEmitter>(
+    any: &dyn Any,
     command: AnyJsCommand,
     context: &mut Context,
-) {
-    any.downcast_mut::<E>().unwrap().flush_js_command(command, context);
+) -> Option<(JsObject, Vec<JsValue>)> {
+    any.downcast_ref::<E>()
+        .unwrap()
+        .emit_js_callback(command, context)
 }
