@@ -16,7 +16,7 @@ use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
-type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext);
+type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
 type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsObject, Vec<JsValue>)>;
 
 pub struct AnyElement {
@@ -62,11 +62,11 @@ fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
 
 fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
-    event: &ComposedGestureEvent,
     cx: &mut ElementOnGestureContext,
+    event: &ComposedGestureEvent,
 ) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, event, cx);
+    ElementOnGesture::on_gesture_event(element, cx, event);
 }
 
 impl<E> Erased for E
@@ -270,11 +270,11 @@ impl AnyElement {
 
     pub fn on_gesture_event(
         &mut self,
-        event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
+        event: &ComposedGestureEvent,
     ) {
         if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), event, cx);
+            handler(self.inner.as_any_mut(), cx, event);
         }
     }
 

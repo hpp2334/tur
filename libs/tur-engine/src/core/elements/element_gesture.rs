@@ -49,10 +49,10 @@ impl<'a> ElementOnGestureContext<'a> {
 pub trait ElementOnGesture: 'static {
     fn on_gesture_event(
         &mut self,
-        event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
+        event: &ComposedGestureEvent,
     ) {
-        let _ = event;
         let _ = cx;
+        let _ = event;
     }
 }

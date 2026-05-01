@@ -511,8 +511,8 @@ fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
 impl ElementOnGesture for InputElement {
     fn on_gesture_event(
         &mut self,
-        event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
+        event: &ComposedGestureEvent,
     ) {
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
