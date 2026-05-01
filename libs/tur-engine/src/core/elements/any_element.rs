@@ -17,7 +17,7 @@ use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus,
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext);
-type EmitJsCallbackFn = fn(&dyn Any, AnyJsCommand, &mut Context) -> Option<(JsObject, Vec<JsValue>)>;
+type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsObject, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -284,11 +284,11 @@ impl AnyElement {
 
     pub fn emit_js_callback(
         &self,
-        command: AnyJsCommand,
         context: &mut Context,
+        command: AnyJsCommand,
     ) -> Option<(JsObject, Vec<JsValue>)> {
         let f = self.emit_js_callback_fn?;
-        f(self.inner.as_any(), command, context)
+        f(self.inner.as_any(), context, command)
     }
 
     pub fn has_js_callback_emitter(&self) -> bool {

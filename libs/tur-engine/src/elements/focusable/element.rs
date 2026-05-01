@@ -66,8 +66,8 @@ impl ElementOnFocus for FocusableElement {}
 impl ElementJsCallbackEmitter for FocusableElement {
     fn emit_js_callback(
         &self,
-        command: AnyJsCommand,
         context: &mut Context,
+        command: AnyJsCommand,
     ) -> Option<(JsObject, Vec<JsValue>)> {
         let c = command.downcast_ref::<FocusableJsCommand>()?;
         match c {

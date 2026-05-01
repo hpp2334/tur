@@ -640,8 +640,8 @@ impl ElementOnFocus for InputElement {}
 impl ElementJsCallbackEmitter for InputElement {
     fn emit_js_callback(
         &self,
-        command: AnyJsCommand,
         context: &mut Context,
+        command: AnyJsCommand,
     ) -> Option<(boa_engine::object::JsObject, Vec<boa_engine::JsValue>)> {
         use boa_engine::js_string;
 

@@ -47,8 +47,8 @@ impl ElementOnUpdate for PointerInteractElement {
 impl ElementJsCallbackEmitter for PointerInteractElement {
     fn emit_js_callback(
         &self,
-        command: AnyJsCommand,
         _context: &mut Context,
+        command: AnyJsCommand,
     ) -> Option<(JsObject, Vec<JsValue>)> {
         let c = command.downcast_ref::<PointerInteractJsCommand>()?;
         match c {
