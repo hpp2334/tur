@@ -1,5 +1,6 @@
 pub mod core;
 pub mod elements;
+pub mod handlers;
 pub mod renderer;
 
 pub mod error;
@@ -14,8 +15,6 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
-use core::elements::ComposedGestureEvent;
-use core::event::{AppEvent, AppGestureEvent};
 
 pub struct TurApp {
     boa_context: Context,
@@ -45,190 +44,12 @@ impl TurApp {
         Ok(())
     }
 
-    pub fn push_event(&self, event: AppEvent) {
+    pub fn push_event(&self, event: core::event::AppEvent) {
         self.internal.app_context.borrow_mut().event_queue.push(event);
     }
 
     pub fn tick(&mut self) -> Result<(), TurError> {
-        let mut needs_draw = false;
-
-        loop {
-            let events = self.internal.app_context.borrow_mut().event_queue.drain();
-            if events.is_empty() {
-                break;
-            }
-
-            for event in events {
-                self.internal.app_context.borrow_mut().dispatch_handlers(&event);
-
-                match event {
-                    AppEvent::Resize {
-                        logical_width,
-                        logical_height,
-                        dpr,
-                    } => {
-                        let mut ctx = self.internal.app_context.borrow_mut();
-                        ctx.renderer.resize(logical_width, logical_height, dpr);
-                        ctx.size = (logical_width as f64, logical_height as f64);
-                        needs_draw = true;
-                    }
-
-                    AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
-                        let target = {
-                            let tree = self.internal.js_context.element_tree.borrow();
-                            core::hit_test::HitTest::new(&tree).deepest(position)
-                        };
-                        self.internal
-                            .app_context
-                            .borrow_mut()
-                            .gesture_composer
-                            .on_pointer_down(target);
-
-                        if let Some(id) = target {
-                            let local =
-                                self.internal.app_context.borrow().local_position(id, position);
-                            self.internal.app_context.borrow_mut().handle_gesture_event(
-                                id,
-                                &ComposedGestureEvent::PointerDown { local_position: local },
-                            );
-                        }
-                    }
-
-                    AppEvent::Gesture(AppGestureEvent::PointerMove { position }) => {
-                        let (is_dragging, focused) = {
-                            let ctx = self.internal.app_context.borrow();
-                            let dragging = ctx.gesture_composer.is_tracking_drag();
-                            let focused = ctx.focus_manager.borrow().focused();
-                            (dragging, focused)
-                        };
-
-                        if is_dragging {
-                            if let Some(id) = focused {
-                                let local = self
-                                    .internal
-                                    .app_context
-                                    .borrow()
-                                    .local_position(id, position);
-                                self.internal.app_context.borrow_mut().handle_gesture_event(
-                                    id,
-                                    &ComposedGestureEvent::PointerMove { local_position: local },
-                                );
-                            }
-                        }
-                    }
-
-                    AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
-                        let click_eligible = {
-                            let ctx = self.internal.app_context.borrow();
-                            let down_target = ctx.gesture_composer.pointer_down_target();
-                            match down_target {
-                                Some(id) => {
-                                    let tree = ctx.element_tree.borrow();
-                                    core::hit_test::HitTest::new(&tree).contains(position, id)
-                                }
-                                None => false,
-                            }
-                        };
-                        let clicked = self
-                            .internal
-                            .app_context
-                            .borrow_mut()
-                            .gesture_composer
-                            .on_pointer_up(click_eligible)
-                            .is_some();
-
-                        if clicked {
-                            let hit_path = {
-                                let tree = self.internal.js_context.element_tree.borrow();
-                                core::hit_test::HitTest::new(&tree).path(position)
-                            };
-
-                            for node_id in &hit_path {
-                                self.internal
-                                    .js_context
-                                    .js_command_queue
-                                    .borrow_mut()
-                                    .push(
-                                        *node_id,
-                                        core::gesture::make_click_command(position.x, position.y),
-                                    );
-                            }
-                        }
-                    }
-
-                    AppEvent::Key(key_event) => {
-                        self.internal
-                            .app_context
-                            .borrow_mut()
-                            .handle_key_event(&key_event);
-
-                        let focused_id =
-                            self.internal.js_context.focus_manager.borrow().focused();
-                        if let Some(focused_id) = focused_id {
-                            let mut current = Some(focused_id);
-                            while let Some(id) = current {
-                                self.internal
-                                    .js_context
-                                    .js_command_queue
-                                    .borrow_mut()
-                                    .push(
-                                        id,
-                                        core::keyboard::make_key_down_command(&key_event),
-                                    );
-                                current = self
-                                    .internal
-                                    .js_context
-                                    .element_tree
-                                    .borrow()
-                                    .parent_of(id);
-                            }
-                        }
-                    }
-
-                    AppEvent::RequestDraw => {
-                        needs_draw = true;
-                    }
-                }
-            }
-        }
-
-        loop {
-            let entries = self.internal.js_context.js_command_queue.borrow_mut().drain();
-            if entries.is_empty() {
-                break;
-            }
-            for (target, command) in entries {
-                let mut element = {
-                    let mut tree = self.internal.js_context.element_tree.borrow_mut();
-                    tree.get_mut(target).and_then(|n| n.element.take())
-                };
-                if let Some(ref mut element) = element {
-                    element.flush_js_command(command, &mut self.boa_context);
-                }
-                if element.is_some() {
-                    self.internal
-                        .js_context
-                        .element_tree
-                        .borrow_mut()
-                        .get_mut(target)
-                        .unwrap()
-                        .element = element;
-                }
-            }
-        }
-
-        let dirty = self.internal.js_context.dirty.take();
-        if needs_draw || dirty {
-            self.internal.app_context.borrow_mut().render();
-            self.internal
-                .app_context
-                .borrow_mut()
-                .renderer
-                .present()
-                .map_err(|e| TurError::Render(e.to_string()))?;
-        }
-
-        Ok(())
+        self.internal.flush(&mut self.boa_context)
     }
 
     pub fn debug_layout(&self) -> String {

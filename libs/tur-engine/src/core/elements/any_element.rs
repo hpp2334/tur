@@ -1,12 +1,13 @@
 use std::any::Any;
 
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::js_command::AnyJsCommand;
-use crate::core::elements::ElementJsCommandEmitter;
-use crate::core::elements::dispatch_flush_js_command;
+use crate::core::elements::ElementJsCallbackEmitter;
+use crate::core::elements::dispatch_emit_js_callback;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 use crate::core::keyboard::AppKeyEvent;
@@ -15,14 +16,14 @@ use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
-type GestureFn = fn(&mut dyn Any, &ComposedGestureEvent, &mut ElementOnGestureContext);
-type FlushJsCommandFn = fn(&mut dyn Any, AnyJsCommand, &mut Context);
+type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsObject, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
-    flush_js_command_fn: Option<FlushJsCommandFn>,
+    emit_js_callback_fn: Option<EmitJsCallbackFn>,
 }
 
 trait Erased: 'static {
@@ -61,11 +62,11 @@ fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
 
 fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
-    event: &ComposedGestureEvent,
     cx: &mut ElementOnGestureContext,
+    event: &ComposedGestureEvent,
 ) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, event, cx);
+    ElementOnGesture::on_gesture_event(element, cx, event);
 }
 
 impl<E> Erased for E
@@ -138,7 +139,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            flush_js_command_fn: None,
+            emit_js_callback_fn: None,
         }
     }
 
@@ -157,7 +158,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            flush_js_command_fn: None,
+            emit_js_callback_fn: None,
         }
     }
 
@@ -175,7 +176,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
-            flush_js_command_fn: None,
+            emit_js_callback_fn: None,
         }
     }
 
@@ -195,12 +196,12 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
-            flush_js_command_fn: None,
+            emit_js_callback_fn: None,
         }
     }
 
-    pub fn with_js_command_emitter<E: ElementJsCommandEmitter + 'static>(mut self) -> Self {
-        self.flush_js_command_fn = Some(dispatch_flush_js_command::<E>);
+    pub fn with_js_callback_emitter<E: ElementJsCallbackEmitter + 'static>(mut self) -> Self {
+        self.emit_js_callback_fn = Some(dispatch_emit_js_callback::<E>);
         self
     }
 
@@ -269,25 +270,28 @@ impl AnyElement {
 
     pub fn on_gesture_event(
         &mut self,
-        event: &ComposedGestureEvent,
         cx: &mut ElementOnGestureContext,
+        event: &ComposedGestureEvent,
     ) {
         if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), event, cx);
+            handler(self.inner.as_any_mut(), cx, event);
         }
     }
 
     pub fn has_focus(&self) -> bool {
-        self.flush_js_command_fn.is_some()
+        self.emit_js_callback_fn.is_some()
     }
 
-    pub fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
-        if let Some(f) = self.flush_js_command_fn {
-            f(self.inner.as_any_mut(), command, context);
-        }
+    pub fn emit_js_callback(
+        &self,
+        context: &mut Context,
+        command: AnyJsCommand,
+    ) -> Option<(JsObject, Vec<JsValue>)> {
+        let f = self.emit_js_callback_fn?;
+        f(self.inner.as_any(), context, command)
     }
 
-    pub fn has_js_command_emitter(&self) -> bool {
-        self.flush_js_command_fn.is_some()
+    pub fn has_js_callback_emitter(&self) -> bool {
+        self.emit_js_callback_fn.is_some()
     }
 }

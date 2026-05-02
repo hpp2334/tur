@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
@@ -5,10 +6,7 @@ use std::rc::Rc;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::{
-    ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementTree,
-};
+use crate::core::elements::ElementTree;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
@@ -16,7 +14,6 @@ use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::js_command::JsCommandQueue;
-use crate::core::keyboard::AppKeyEvent;
 use crate::core::render::Renderer;
 
 pub struct TurAppContext {
@@ -67,21 +64,26 @@ impl TurAppContext {
         self.handlers.push(handler);
     }
 
-    pub fn dispatch_handlers(&mut self, event: &AppEvent) {
-        let tree = self.element_tree.borrow();
+    pub fn dispatch_handlers(&mut self, event: &AppEvent, needs_draw: &Cell<bool>) {
+        let mut tree = self.element_tree.borrow_mut();
         let mut focus = self.focus_manager.borrow_mut();
-        let mut js_eq = self.js_command_queue.borrow_mut();
+        let mut js_q = self.js_command_queue.borrow_mut();
         let mut cx = HandlerContext {
-            element_tree: &tree,
+            element_tree: &mut tree,
             focus_manager: &mut focus,
-            js_command_queue: &mut js_eq,
+            js_command_queue: &mut js_q,
+            event_queue: &mut self.event_queue,
+            gesture_composer: &mut self.gesture_composer,
+            renderer: self.renderer.as_mut(),
+            size: &mut self.size,
+            needs_draw,
         };
         for handler in &mut self.handlers {
             handler.handle_event(&mut cx, event);
         }
     }
 
-    pub fn render(&mut self) {
+    pub fn layout(&mut self) {
         let (width, height) = self.size;
         let constraints = Constraints {
             min_width: width,
@@ -90,79 +92,17 @@ impl TurAppContext {
             max_height: height,
         };
 
-        {
-            let mut tree = self.element_tree.borrow_mut();
-            tree.compute_layout(
-                &constraints,
-                &mut self.font_manager,
-                &mut self.text_layout_cx,
-            );
-        }
+        let mut tree = self.element_tree.borrow_mut();
+        tree.compute_layout(
+            &constraints,
+            &mut self.font_manager,
+            &mut self.text_layout_cx,
+        );
+    }
 
+    pub fn render(&mut self) {
         let focused_node_id = self.focus_manager.borrow().focused();
         let tree = self.element_tree.borrow();
         self.renderer.render(&tree, focused_node_id);
-    }
-
-    pub fn local_position(&self, node_id: ElementNodeId, global: tur_shared::Offset) -> tur_shared::Offset {
-        let tree = self.element_tree.borrow();
-        let mut abs_x = 0.0f64;
-        let mut abs_y = 0.0f64;
-        let mut current = Some(node_id);
-        while let Some(cid) = current {
-            if let Some(n) = tree.get(cid) {
-                abs_x += n.computed_layout.offset.x;
-                abs_y += n.computed_layout.offset.y;
-                current = n.parent;
-            } else {
-                break;
-            }
-        }
-        tur_shared::Offset::new(global.x - abs_x, global.y - abs_y)
-    }
-
-    pub fn handle_gesture_event(
-        &mut self,
-        node_id: ElementNodeId,
-        event: &ComposedGestureEvent,
-    ) {
-        let mut focus = self.focus_manager.borrow_mut();
-        let mut js_eq = self.js_command_queue.borrow_mut();
-        let mut cx = ElementOnGestureContext::new(
-            &mut self.event_queue,
-            &mut focus,
-            &mut js_eq,
-            node_id,
-        );
-
-        let mut tree = self.element_tree.borrow_mut();
-        let node = match tree.get_mut(node_id) {
-            Some(n) => n,
-            None => return,
-        };
-        let element = match node.element.as_mut() {
-            Some(e) => e,
-            None => return,
-        };
-        element.on_gesture_event(event, &mut cx);
-    }
-
-    pub fn handle_key_event(&mut self, event: &AppKeyEvent) {
-        let focused_id = match self.focus_manager.borrow().focused() {
-            Some(id) => id,
-            None => return,
-        };
-
-        let mut js_eq = self.js_command_queue.borrow_mut();
-        let mut cx = ElementOnKeyboardContext::new(
-            &mut js_eq,
-            &mut self.event_queue,
-            focused_id,
-        );
-
-        let mut tree = self.element_tree.borrow_mut();
-        let node = tree.get_mut(focused_id).unwrap();
-        let element = node.element.as_mut().unwrap();
-        element.on_keyboard_event(&mut cx, event);
     }
 }

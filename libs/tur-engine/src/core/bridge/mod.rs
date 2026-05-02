@@ -96,7 +96,16 @@ pub fn init_bridge(
     {
         let mut ctx = internal.app_context.borrow_mut();
         ctx.register_handler(Box::new(
-            crate::core::handler::pointer_focus::PointerFocusHandler,
+            crate::handlers::text_edit_focus::TextEditFocusAppHandler,
+        ));
+        ctx.register_handler(Box::new(
+            crate::handlers::gesture::GestureAppHandler,
+        ));
+        ctx.register_handler(Box::new(
+            crate::handlers::keyboard::KeyboardAppHandler,
+        ));
+        ctx.register_handler(Box::new(
+            crate::handlers::resize::ResizeHandler,
         ));
     }
 

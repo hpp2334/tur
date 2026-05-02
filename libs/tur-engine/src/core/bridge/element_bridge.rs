@@ -131,7 +131,7 @@ pub(crate) fn tur_create_pointer_interact(
         args,
         context,
         AnyElement::new(PointerInteractElement::new())
-            .with_js_command_emitter::<PointerInteractElement>(),
+            .with_js_callback_emitter::<PointerInteractElement>(),
     )
 }
 
@@ -154,7 +154,7 @@ pub(crate) fn tur_create_focusable(
         args,
         context,
         AnyElement::with_focusability(FocusableElement::new())
-            .with_js_command_emitter::<FocusableElement>(),
+            .with_js_callback_emitter::<FocusableElement>(),
     )
 }
 
@@ -338,7 +338,7 @@ pub(crate) fn tur_create_input(
     let mut tree = js_ctx.element_tree.borrow_mut();
     let id = tree.alloc_id();
     let element = AnyElement::with_full_interactivity(InputElement::new())
-        .with_js_command_emitter::<InputElement>();
+        .with_js_callback_emitter::<InputElement>();
     let node = ElementObject::new(id, element, context);
     tree.insert(node);
     let handle = tree.get(id).unwrap().handle.clone();

@@ -1,7 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 
-use crate::core::elements::{ElementJsCommandEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementJsCallbackEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
 use crate::core::js_command::helpers::build_key_event_object;
 
@@ -63,41 +63,39 @@ impl ElementOnUpdate for FocusableElement {
 
 impl ElementOnFocus for FocusableElement {}
 
-impl ElementJsCommandEmitter for FocusableElement {
-    fn flush_js_command(&mut self, command: AnyJsCommand, context: &mut Context) {
-        let Some(c) = command.downcast_ref::<FocusableJsCommand>() else {
-            return;
-        };
+impl ElementJsCallbackEmitter for FocusableElement {
+    fn emit_js_callback(
+        &self,
+        context: &mut Context,
+        command: AnyJsCommand,
+    ) -> Option<(JsObject, Vec<JsValue>)> {
+        let c = command.downcast_ref::<FocusableJsCommand>()?;
         match c {
             FocusableJsCommand::KeyDown {
                 key,
                 code,
                 modifiers,
             } => {
-                if let Some(ref handler) = self.on_key_down {
+                self.on_key_down.as_ref().map(|h| {
                     let event_obj = build_key_event_object(key, code, modifiers, context);
-                    let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
-                }
+                    (h.clone(), vec![event_obj])
+                })
             }
             FocusableJsCommand::KeyUp {
                 key,
                 code,
                 modifiers,
             } => {
-                if let Some(ref handler) = self.on_key_up {
+                self.on_key_up.as_ref().map(|h| {
                     let event_obj = build_key_event_object(key, code, modifiers, context);
-                    let _ = handler.call(&JsValue::undefined(), &[event_obj], context);
-                }
+                    (h.clone(), vec![event_obj])
+                })
             }
             FocusableJsCommand::Focus => {
-                if let Some(ref handler) = self.on_focus {
-                    let _ = handler.call(&JsValue::undefined(), &[], context);
-                }
+                self.on_focus.as_ref().map(|h| (h.clone(), vec![]))
             }
             FocusableJsCommand::Blur => {
-                if let Some(ref handler) = self.on_blur {
-                    let _ = handler.call(&JsValue::undefined(), &[], context);
-                }
+                self.on_blur.as_ref().map(|h| (h.clone(), vec![]))
             }
         }
     }
