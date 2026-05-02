@@ -57,14 +57,19 @@ impl TurAppInternal {
             let handled_events = self.flush_app_events();
             let dirty = self.js_context.dirty.take() || self.needs_draw.take();
             if dirty {
-                self.layout();
+                self.app_context.borrow_mut().layout();
             }
             let handled_commands = self.flush_js_commands(boa_context);
             if !handled_events && !handled_commands {
                 break;
             }
         }
-        self.present()
+        self.app_context.borrow_mut().render();
+        self.app_context
+            .borrow_mut()
+            .renderer
+            .present()
+            .map_err(|e| TurError::Render(e.to_string()))
     }
 
     fn flush_app_events(&self) -> bool {
@@ -119,16 +124,4 @@ impl TurAppInternal {
         handled
     }
 
-    fn layout(&self) {
-        self.app_context.borrow_mut().layout();
-        self.app_context.borrow_mut().render();
-    }
-
-    fn present(&self) -> Result<(), TurError> {
-        self.app_context
-            .borrow_mut()
-            .renderer
-            .present()
-            .map_err(|e| TurError::Render(e.to_string()))
-    }
 }
