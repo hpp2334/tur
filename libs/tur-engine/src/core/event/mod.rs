@@ -11,6 +11,7 @@ pub enum AppEvent {
     },
     Gesture(AppGestureEvent),
     Key(AppKeyEvent),
+    Ime(AppImeEvent),
     RequestDraw,
 }
 
@@ -18,4 +19,16 @@ pub enum AppGestureEvent {
     PointerDown { position: Offset },
     PointerUp { position: Offset },
     PointerMove { position: Offset },
+}
+
+#[derive(Clone, Debug)]
+pub enum AppImeEvent {
+    CompositionStart,
+    CompositionUpdate {
+        text: String,
+        cursor: Option<(usize, usize)>,
+    },
+    CompositionEnd {
+        text: String,
+    },
 }

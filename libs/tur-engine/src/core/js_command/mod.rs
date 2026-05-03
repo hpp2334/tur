@@ -61,6 +61,9 @@ pub enum InputJsCommand {
     Input { text: String, enter: bool },
     CursorChange { position: usize },
     SelectionChange { anchor: usize, end: usize },
+    CompositionStart,
+    CompositionUpdate { text: String },
+    CompositionEnd { text: String },
 }
 
 impl std::fmt::Debug for AnyJsCommand {

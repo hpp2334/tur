@@ -13,16 +13,19 @@ use crate::core::elements::ElementTrace;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::elements::{ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext};
+use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext};
+use crate::core::event::AppImeEvent;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
 type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsObject, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
+    on_ime: Option<ImeFn>,
     emit_js_callback_fn: Option<EmitJsCallbackFn>,
 }
 
@@ -67,6 +70,15 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
 ) {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnGesture::on_gesture_event(element, cx, event);
+}
+
+fn ime_dispatch<E: ElementOnIme + 'static>(
+    any: &mut dyn Any,
+    cx: &mut ElementOnImeContext,
+    event: &AppImeEvent,
+) {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnIme::on_ime_event(element, cx, event);
 }
 
 impl<E> Erased for E
@@ -139,6 +151,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
+            on_ime: None,
             emit_js_callback_fn: None,
         }
     }
@@ -158,6 +171,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
+            on_ime: None,
             emit_js_callback_fn: None,
         }
     }
@@ -176,6 +190,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
+            on_ime: None,
             emit_js_callback_fn: None,
         }
     }
@@ -188,6 +203,7 @@ impl AnyElement {
             + ElementOnKeyboard
             + ElementOnGesture
             + ElementOnFocus
+            + ElementOnIme
             + 'static,
     >(
         element: E,
@@ -196,6 +212,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
+            on_ime: Some(ime_dispatch::<E>),
             emit_js_callback_fn: None,
         }
     }
@@ -274,6 +291,16 @@ impl AnyElement {
         event: &ComposedGestureEvent,
     ) {
         if let Some(handler) = self.on_gesture {
+            handler(self.inner.as_any_mut(), cx, event);
+        }
+    }
+
+    pub fn on_ime_event(
+        &mut self,
+        cx: &mut ElementOnImeContext,
+        event: &AppImeEvent,
+    ) {
+        if let Some(handler) = self.on_ime {
             handler(self.inner.as_any_mut(), cx, event);
         }
     }

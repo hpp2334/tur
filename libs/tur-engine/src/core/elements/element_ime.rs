@@ -1,0 +1,40 @@
+use crate::core::element::ElementNodeId;
+use crate::core::event::queue::AppEventQueue;
+use crate::core::event::AppEvent;
+use crate::core::event::AppImeEvent;
+use crate::core::js_command::{IntoAnyJsCommand, JsCommandQueue};
+
+pub struct ElementOnImeContext<'a> {
+    js_command_queue: &'a mut JsCommandQueue,
+    app_event_queue: &'a mut AppEventQueue,
+    node_id: ElementNodeId,
+}
+
+impl<'a> ElementOnImeContext<'a> {
+    pub fn new(
+        js_command_queue: &'a mut JsCommandQueue,
+        app_event_queue: &'a mut AppEventQueue,
+        node_id: ElementNodeId,
+    ) -> Self {
+        Self {
+            js_command_queue,
+            app_event_queue,
+            node_id,
+        }
+    }
+
+    pub fn push_js_command(&mut self, command: impl IntoAnyJsCommand) {
+        self.js_command_queue.push(self.node_id, command);
+    }
+
+    pub fn request_redraw(&mut self) {
+        self.app_event_queue.push(AppEvent::RequestDraw);
+    }
+}
+
+pub trait ElementOnIme: 'static {
+    fn on_ime_event(&mut self, cx: &mut ElementOnImeContext, event: &AppImeEvent) {
+        let _ = cx;
+        let _ = event;
+    }
+}

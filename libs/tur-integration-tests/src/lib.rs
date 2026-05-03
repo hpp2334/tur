@@ -4,7 +4,7 @@ use std::path::Path;
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
-use tur_engine::core::event::{AppEvent, AppGestureEvent};
+use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -80,6 +80,11 @@ impl TurTestApp {
         let _ = self.inner.tick();
     }
 
+    pub fn send_ime(&mut self, event: AppImeEvent) {
+        self.inner.push_event(AppEvent::Ime(event));
+        let _ = self.inner.tick();
+    }
+
     pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
         self.inner.push_event(AppEvent::Key(AppKeyEvent {
             key: key.to_string(),
@@ -132,6 +137,14 @@ impl TurTestApp {
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
         self.inner.focused_element()
+    }
+
+    pub fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        self.inner.focused_cursor_rect()
+    }
+
+    pub fn focused_is_input(&self) -> bool {
+        self.inner.focused_is_input()
     }
 
     pub fn with_element<R>(

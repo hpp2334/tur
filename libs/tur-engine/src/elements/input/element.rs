@@ -3,13 +3,14 @@ use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
 use crate::core::elements::{
-    ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate,
-    ElementTrace,
+    ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus,
+    ElementOnGesture, ElementOnGestureContext, ElementOnIme, ElementOnImeContext,
+    ElementOnKeyboard, ElementOnKeyboardContext, ElementOnUpdate, ElementTrace,
 };
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, InputJsCommand};
 use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
+use crate::core::event::AppImeEvent;
 use crate::elements::text::text_layout::TextLayoutData;
 
 fn extract_callable(value: &JsValue) -> Option<JsObject> {
@@ -78,6 +79,8 @@ pub struct InputElement {
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
+    pub(crate) composition_text: Option<String>,
+    pub(crate) composition_start: usize,
     on_key_down: Option<JsObject>,
     on_key_up: Option<JsObject>,
     on_focus: Option<JsObject>,
@@ -85,6 +88,9 @@ pub struct InputElement {
     on_input: Option<JsObject>,
     on_cursor_change: Option<JsObject>,
     on_selection_change: Option<JsObject>,
+    on_composition_start: Option<JsObject>,
+    on_composition_update: Option<JsObject>,
+    on_composition_end: Option<JsObject>,
 }
 
 impl Default for InputElement {
@@ -107,6 +113,8 @@ impl InputElement {
             cached_layout: None,
             selection_anchor: 0,
             selection_end: 0,
+            composition_text: None,
+            composition_start: 0,
             on_key_down: None,
             on_key_up: None,
             on_focus: None,
@@ -114,6 +122,9 @@ impl InputElement {
             on_input: None,
             on_cursor_change: None,
             on_selection_change: None,
+            on_composition_start: None,
+            on_composition_update: None,
+            on_composition_end: None,
         }
     }
 
@@ -176,6 +187,29 @@ impl InputElement {
         self.content = text.to_string();
         self.cursor_position = self.content.len();
         self.clear_selection();
+        self.composition_text = None;
+    }
+
+    pub fn is_composing(&self) -> bool {
+        self.composition_text.is_some()
+    }
+
+    pub fn composition_text(&self) -> Option<&str> {
+        self.composition_text.as_deref()
+    }
+
+    pub fn composition_display_text(&self) -> String {
+        if let Some(ref comp) = self.composition_text {
+            let start = self.composition_start.min(self.content.len());
+            format!(
+                "{}{}{}",
+                &self.content[..start],
+                comp,
+                &self.content[start..]
+            )
+        } else {
+            self.content.clone()
+        }
     }
 
     fn delete_selection(&mut self) {
@@ -388,7 +422,7 @@ impl InputElement {
                 }
             }
             _ => {
-                if key.len() == 1 && !ctrl && !meta {
+                if key.len() == 1 && !ctrl && !meta && !self.is_composing() {
                     let ch = key.chars().next().unwrap();
                     if self.has_selection() {
                         self.delete_selection();
@@ -587,6 +621,53 @@ impl ElementOnKeyboard for InputElement {
     }
 }
 
+impl ElementOnIme for InputElement {
+    fn on_ime_event(
+        &mut self,
+        cx: &mut ElementOnImeContext,
+        event: &AppImeEvent,
+    ) {
+        match event {
+            AppImeEvent::CompositionStart => {
+                self.composition_text = Some(String::new());
+                self.composition_start = self.cursor_position;
+                cx.push_js_command(InputJsCommand::CompositionStart);
+                cx.request_redraw();
+            }
+            AppImeEvent::CompositionUpdate { text, .. } => {
+                if self.composition_text.is_some() {
+                    self.composition_text = Some(text.clone());
+                    cx.push_js_command(InputJsCommand::CompositionUpdate {
+                        text: text.clone(),
+                    });
+                    cx.request_redraw();
+                }
+            }
+            AppImeEvent::CompositionEnd { text } => {
+                if self.composition_text.take().is_some() {
+                    let start = self.composition_start.min(self.content.len());
+                    self.content
+                        .replace_range(start..start, text);
+                    self.cursor_position = start + text.len();
+                    self.clear_selection();
+
+                    cx.push_js_command(InputJsCommand::CompositionEnd {
+                        text: text.clone(),
+                    });
+                    cx.push_js_command(InputJsCommand::Input {
+                        text: self.content.clone(),
+                        enter: false,
+                    });
+                    cx.push_js_command(InputJsCommand::CursorChange {
+                        position: self.cursor_position,
+                    });
+                    cx.request_redraw();
+                }
+            }
+        }
+    }
+}
+
 impl ElementTrace for InputElement {
     fn trace_label(&self) -> String {
         format!("\"{}\"", self.content)
@@ -631,6 +712,12 @@ impl ElementOnUpdate for InputElement {
             self.on_cursor_change = extract_callable(value);
         } else if *key == "onSelectionChange" {
             self.on_selection_change = extract_callable(value);
+        } else if *key == "onCompositionStart" {
+            self.on_composition_start = extract_callable(value);
+        } else if *key == "onCompositionUpdate" {
+            self.on_composition_update = extract_callable(value);
+        } else if *key == "onCompositionEnd" {
+            self.on_composition_end = extract_callable(value);
         }
     }
 }
@@ -665,6 +752,21 @@ impl ElementJsCallbackEmitter for InputElement {
                         let start_val = JsValue::from(*anchor as f64);
                         let end_val = JsValue::from(*end as f64);
                         (h.clone(), vec![start_val, end_val])
+                    })
+                }
+                InputJsCommand::CompositionStart => {
+                    self.on_composition_start.as_ref().map(|h| (h.clone(), vec![]))
+                }
+                InputJsCommand::CompositionUpdate { text } => {
+                    self.on_composition_update.as_ref().map(|h| {
+                        let text_val = JsValue::from(js_string!(text.as_str()));
+                        (h.clone(), vec![text_val])
+                    })
+                }
+                InputJsCommand::CompositionEnd { text } => {
+                    self.on_composition_end.as_ref().map(|h| {
+                        let text_val = JsValue::from(js_string!(text.as_str()));
+                        (h.clone(), vec![text_val])
                     })
                 }
             }
