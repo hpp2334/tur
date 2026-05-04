@@ -3,6 +3,7 @@ use tur_shared::Offset;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Canvas;
+use crate::core::resource::{ImageResource, ResourceId};
 
 pub struct PaintContext<'a> {
     tree: &'a ElementTree,
@@ -34,5 +35,9 @@ impl<'a> PaintContext<'a> {
 
     pub fn is_focused(&self) -> bool {
         self.focused_node_id == self.current_node_id
+    }
+
+    pub fn get_image_resource(&self, id: ResourceId) -> Option<&ImageResource> {
+        self.tree.resources.get_image(id)
     }
 }

@@ -4,6 +4,7 @@ use tur_shared::{Constraints, Offset, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::fonts::FontManager;
+use crate::core::resource::ResourceId;
 
 pub struct LayoutContext<'a> {
     pub(crate) tree: &'a mut ElementTree,
@@ -69,5 +70,9 @@ impl<'a> LayoutContext<'a> {
         &mut self,
     ) -> (&mut FontContext, &mut ParleyLayoutContext<[u8; 4]>) {
         (self.font_manager.font_context(), self.text_layout_cx)
+    }
+
+    pub fn get_image_natural_size(&self, resource_id: ResourceId) -> Option<Size> {
+        self.tree.resources.get_image(resource_id).map(|r| r.natural_size)
     }
 }

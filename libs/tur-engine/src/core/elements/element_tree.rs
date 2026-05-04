@@ -8,10 +8,12 @@ use crate::core::elements::ElementObject;
 use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
 use crate::core::render::{Canvas, PaintContext};
+use crate::core::resource::ResourceMap;
 
 #[derive(Debug)]
 pub struct ElementTree {
     pub(crate) nodes: HashMap<ElementNodeId, ElementObject>,
+    pub(crate) resources: ResourceMap,
     root_id: Option<ElementNodeId>,
     next_id: u64,
 }
@@ -26,6 +28,7 @@ impl ElementTree {
     pub fn new() -> Self {
         ElementTree {
             nodes: HashMap::new(),
+            resources: ResourceMap::default(),
             root_id: None,
             next_id: 1,
         }
