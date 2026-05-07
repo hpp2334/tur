@@ -288,3 +288,15 @@ impl ComputedLayout {
         offset: Offset::ZERO,
     };
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
+#[ts(export, export_to = "generated/", repr(enum))]
+pub enum BoxFit {
+    Fill,
+    #[default]
+    Contain,
+    Cover,
+    FitWidth,
+    FitHeight,
+    None,
+}

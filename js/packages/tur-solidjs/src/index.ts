@@ -1,4 +1,4 @@
-export type { TurNodeHandle, TurKeyEvent } from "@tur/solidjs-renderer";
+export type { TurNodeHandle, TurKeyEvent, ResourceHandle } from "@tur/solidjs-renderer";
 export { InputController } from "@tur/solidjs-renderer";
 export type { InputControllerOptions } from "@tur/solidjs-renderer";
 export type { Color } from "@tur/solidjs-renderer";
@@ -10,6 +10,7 @@ export { StackFit } from "@tur/solidjs-renderer";
 export { FlexFit } from "@tur/solidjs-renderer";
 export { FlexDirection } from "@tur/solidjs-renderer";
 export { Axis } from "@tur/solidjs-renderer";
+export { BoxFit } from "@tur/solidjs-renderer";
 export type { EdgeInsets } from "@tur/solidjs-renderer";
 export type { Size } from "@tur/solidjs-renderer";
 export type { Offset } from "@tur/solidjs-renderer";
@@ -27,6 +28,7 @@ export {
   TextSpan,
   Text,
   Input,
+  Image,
 } from "./components";
 export type {
   ColumnProps,
@@ -42,4 +44,5 @@ export type {
   TextSpanProps,
   TextProps,
   InputProps,
+  ImageProps,
 } from "./components";

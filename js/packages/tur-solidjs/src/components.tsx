@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
-import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
+import type { Color, ResourceHandle, TurKeyEvent } from "@tur/solidjs-renderer";
 import type { InputController } from "@tur/solidjs-renderer";
-import { CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
+import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
 
@@ -177,5 +177,25 @@ export function Input(props: InputProps): JSX.Element {
         multiline={props.multiline}
       />
     </tur_container>
+  );
+}
+
+export interface ImageProps {
+  resource: ResourceHandle;
+  width?: number;
+  height?: number;
+  fit?: BoxFit;
+  queryKey?: string[];
+}
+
+export function Image(props: ImageProps): JSX.Element {
+  return (
+    <tur_image
+      resourceId={props.resource}
+      width={props.width}
+      height={props.height}
+      fit={props.fit ?? BoxFit.Contain}
+      queryKey={props.queryKey}
+    />
   );
 }

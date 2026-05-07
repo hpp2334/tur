@@ -17,6 +17,7 @@ const creators: Record<string, () => TurElement> = {
   "tur_pointer_interact": () => __tur.createPointerInteract(ctx),
   "tur_focusable": () => __tur.createFocusable(ctx),
   "tur_input": () => __tur.createInput(ctx),
+  "tur_image": () => __tur.createImage(ctx),
 };
 
 const _r = createRenderer<TurElement>({

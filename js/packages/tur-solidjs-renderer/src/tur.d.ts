@@ -1,4 +1,5 @@
 export type TurNodeHandle = object;
+export type ResourceHandle = number;
 
 export interface TurKeyEvent {
   key: string;
@@ -22,6 +23,8 @@ declare global {
     createPointerInteract(ctx: unknown): TurNodeHandle;
     createFocusable(ctx: unknown): TurNodeHandle;
     createInput(ctx: unknown): TurNodeHandle;
+    createImage(ctx: unknown): TurNodeHandle;
+    createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
     createRoot(ctx: unknown): TurNodeHandle;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;

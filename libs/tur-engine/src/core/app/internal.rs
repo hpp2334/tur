@@ -22,23 +22,27 @@ impl TurAppInternal {
         use crate::core::elements::ElementTree;
         use crate::core::focus::FocusManager;
         use crate::core::js_command::JsCommandQueue;
+        use crate::core::resource::ResourceMap;
 
         let element_tree = Rc::new(RefCell::new(ElementTree::new()));
         let js_command_queue = Rc::new(RefCell::new(JsCommandQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
+        let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
         let js_context = TurJsContext::new(
             element_tree.clone(),
             js_command_queue.clone(),
             focus_manager.clone(),
             dirty,
+            resource_map.clone(),
         );
 
         let app_context = TurAppContext::new(
             element_tree,
             js_command_queue,
             focus_manager,
+            resource_map,
             renderer,
             font_loader,
         );

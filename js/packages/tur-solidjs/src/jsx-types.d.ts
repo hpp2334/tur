@@ -1,4 +1,5 @@
-import type { Color, TurKeyEvent } from "@tur/solidjs-renderer";
+import type { Color, ResourceHandle, TurKeyEvent } from "@tur/solidjs-renderer";
+import type { BoxFit } from "@tur/solidjs-renderer";
 import type { CrossAxisAlignment } from "@tur/solidjs-renderer";
 import type { FlexDirection } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
@@ -87,6 +88,13 @@ declare module "solid-js" {
         underline?: boolean;
         fontSize?: number;
         color?: Color | string;
+      };
+      tur_image: {
+        resourceId: ResourceHandle;
+        width?: number;
+        height?: number;
+        fit?: BoxFit;
+        queryKey?: string[];
       };
     }
   }

@@ -8,6 +8,7 @@ use crate::core::elements::ElementObject;
 use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
 use crate::core::render::{Canvas, PaintContext};
+use crate::core::resource::ResourceMap;
 
 #[derive(Debug)]
 pub struct ElementTree {
@@ -159,6 +160,7 @@ impl ElementTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+        resource_map: &ResourceMap,
     ) -> Size {
         let root_id = match self.root_id {
             Some(id) => id,
@@ -167,9 +169,9 @@ impl ElementTree {
 
         self.clear_layouts(root_id);
 
-        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx);
+        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx, resource_map);
 
-        self.layout_position(root_id, font_manager, text_layout_cx);
+        self.layout_position(root_id, font_manager, text_layout_cx, resource_map);
 
         size
     }
@@ -194,6 +196,7 @@ impl ElementTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+        resource_map: &ResourceMap,
     ) -> Size {
         let children = self
             .nodes
@@ -207,7 +210,7 @@ impl ElementTree {
             .and_then(|n| n.element.take())
             .expect("element missing during layout_size");
 
-        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx);
+        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map);
         let size = element.perform_layout_size(constraints, &children, &mut cx);
 
         let constrained = constraints.constrain(size);
@@ -222,6 +225,7 @@ impl ElementTree {
         id: ElementNodeId,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
+        resource_map: &ResourceMap,
     ) {
         let children = self
             .nodes
@@ -236,23 +240,23 @@ impl ElementTree {
                 .and_then(|n| n.element.take())
                 .expect("element missing during layout_position");
 
-            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx);
+            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map);
             element.perform_layout_position(&children, &mut cx);
 
             cx.tree.nodes.get_mut(&id).unwrap().element = Some(element);
         }
 
         for child_id in children {
-            self.layout_position(child_id, font_manager, text_layout_cx);
+            self.layout_position(child_id, font_manager, text_layout_cx, resource_map);
         }
     }
 
-    pub fn paint(&self, canvas: &mut dyn Canvas, focused_node_id: Option<ElementNodeId>) {
+    pub fn paint(&self, canvas: &mut dyn Canvas, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return,
         };
-        self.paint_node(root_id, canvas, Offset::ZERO, focused_node_id);
+        self.paint_node(root_id, canvas, Offset::ZERO, focused_node_id, resource_map);
     }
 
     pub(crate) fn paint_node(
@@ -261,6 +265,7 @@ impl ElementTree {
         canvas: &mut dyn Canvas,
         parent_offset: Offset,
         focused_node_id: Option<ElementNodeId>,
+        resource_map: &ResourceMap,
     ) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
@@ -274,7 +279,7 @@ impl ElementTree {
 
         let absolute_offset = parent_offset + node.computed_layout.offset;
 
-        let paint_ctx = PaintContext::new(self, focused_node_id, id);
+        let paint_ctx = PaintContext::new(self, focused_node_id, id, resource_map);
         element.paint(
             canvas,
             absolute_offset,

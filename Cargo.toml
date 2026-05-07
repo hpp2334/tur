@@ -26,6 +26,7 @@ parley = { version = "0.3", default-features = false, features = ["std"] }
 vello = "0.4"
 boa_engine = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }
 boa_gc = { git = "https://github.com/boa-dev/boa", rev = "3cec5e6bc4454077cb8d65b537d368d633137e0e" }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-wasm = "0.2"

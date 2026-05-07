@@ -5,8 +5,9 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
+use crate::core::resource::ImageResource;
 use crate::elements::{
-    ContainerElement, FlexElement, FlexItemElement, FocusableElement, InputElement,
+    ContainerElement, FlexElement, FlexItemElement, FocusableElement, ImageElement, InputElement,
     PointerInteractElement, PositionedElement, StackElement, TextContainerElement, TextSpanElement,
 };
 
@@ -370,4 +371,62 @@ pub(crate) fn tur_set_input_text(
     }
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_create_image(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createImage()");
+    create_element(args, context, AnyElement::new(ImageElement::new()))
+}
+
+pub(crate) fn tur_create_image_resource(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    tracing::trace!("tur_createImageResource()");
+
+    let js_ctx = extract_ctx(args)?;
+
+    let buffer_obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected ArrayBuffer or Uint8Array"))
+    })?;
+
+    let bytes = if let Ok(ta) = boa_engine::object::builtins::JsTypedArray::from_object(buffer_obj.clone()) {
+        let offset = ta.byte_offset(context).unwrap_or(0);
+        let len = ta.byte_length(context).unwrap_or(0);
+        let buffer_val = ta.buffer(context)?;
+        let buffer_obj = buffer_val.as_object().ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message("typed array has no backing buffer"))
+        })?;
+        let ab = boa_engine::object::builtins::JsArrayBuffer::from_object(buffer_obj)?;
+        let full = ab.to_vec().unwrap_or_default();
+        if offset + len > full.len() {
+            full
+        } else {
+            full[offset..offset + len].to_vec()
+        }
+    } else if let Ok(ab) = boa_engine::object::builtins::JsArrayBuffer::from_object(buffer_obj.clone()) {
+        ab.to_vec().unwrap_or_default()
+    } else {
+        return Err(JsError::from(
+            JsNativeError::typ().with_message("expected ArrayBuffer or Uint8Array"),
+        ));
+    };
+
+    let image_resource = ImageResource::from_bytes(&bytes).ok_or_else(|| {
+        JsError::from(
+            JsNativeError::range().with_message("failed to decode image (supported: PNG, JPEG)"),
+        )
+    })?;
+
+    let resource_id = {
+        let mut resource_map = js_ctx.resource_map.borrow_mut();
+        resource_map.insert_image(image_resource)
+    };
+
+    Ok(JsValue::from(resource_id.as_u64() as f64))
 }
