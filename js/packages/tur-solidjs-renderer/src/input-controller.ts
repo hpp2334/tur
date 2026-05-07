@@ -7,6 +7,9 @@ export interface InputControllerOptions {
   onBlur?: () => void;
   onCursorChange?: (pos: number) => void;
   onSelectionChange?: (start: number, end: number) => void;
+  onCompositionStart?: () => void;
+  onCompositionUpdate?: (text: string) => void;
+  onCompositionEnd?: (text: string) => void;
 }
 
 export class InputController {
@@ -56,5 +59,17 @@ export class InputController {
 
   _onSelectionChange(start: number, end: number): void {
     this._options?.onSelectionChange?.(start, end);
+  }
+
+  _onCompositionStart(): void {
+    this._options?.onCompositionStart?.();
+  }
+
+  _onCompositionUpdate(text: string): void {
+    this._options?.onCompositionUpdate?.(text);
+  }
+
+  _onCompositionEnd(text: string): void {
+    this._options?.onCompositionEnd?.(text);
   }
 }

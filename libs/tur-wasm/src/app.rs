@@ -1,7 +1,7 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use tur_engine::TurApp;
-use tur_engine::core::event::{AppEvent, AppGestureEvent};
+use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::VelloRenderer;
@@ -14,12 +14,17 @@ use wasm_bindgen_futures::future_to_promise;
 struct WasmState {
     app: TurApp,
     _canvas: web_sys::HtmlCanvasElement,
+    textarea: web_sys::HtmlTextAreaElement,
+    is_composing: Cell<bool>,
     _resize_closure: Closure<dyn Fn()>,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
+    _compositionstart_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
+    _compositionupdate_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
+    _compositionend_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
@@ -76,6 +81,58 @@ impl TurWasmApp {
             body.style()
                 .set_property("overflow", "hidden")
                 .err_to_jsval()?;
+
+            let textarea = document
+                .create_element("textarea")
+                .err_to_jsval()?
+                .dyn_into::<web_sys::HtmlTextAreaElement>()
+                .err_to_jsval()?;
+
+            textarea
+                .style()
+                .set_property("position", "absolute")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("opacity", "0")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("width", "1px")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("height", "1px")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("overflow", "hidden")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("border", "none")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("padding", "0")
+                .err_to_jsval()?;
+            textarea
+                .style()
+                .set_property("outline", "none")
+                .err_to_jsval()?;
+            textarea
+                .set_attribute("autocomplete", "off")
+                .err_to_jsval()?;
+            textarea
+                .set_attribute("autocorrect", "off")
+                .err_to_jsval()?;
+            textarea
+                .set_attribute("autocapitalize", "off")
+                .err_to_jsval()?;
+            textarea
+                .set_attribute("spellcheck", "false")
+                .err_to_jsval()?;
+            body.append_child(&textarea).err_to_jsval()?;
 
             let dpr = window.device_pixel_ratio();
             let logical_width = window
@@ -254,6 +311,9 @@ impl TurWasmApp {
                 Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
                     let guard = keydown_state.borrow();
                     if let Some(s) = guard.as_ref() {
+                        if s.is_composing.get() {
+                            return;
+                        }
                         s.app.push_event(AppEvent::Key(AppKeyEvent {
                             key: event.key(),
                             code: event.code(),
@@ -280,6 +340,9 @@ impl TurWasmApp {
                 Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
                     let guard = keyup_state.borrow();
                     if let Some(s) = guard.as_ref() {
+                        if s.is_composing.get() {
+                            return;
+                        }
                         s.app.push_event(AppEvent::Key(AppKeyEvent {
                             key: event.key(),
                             code: event.code(),
@@ -301,15 +364,82 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            let comp_start_state = state_clone.clone();
+            let compositionstart_closure =
+                Closure::<dyn Fn(web_sys::CompositionEvent)>::new(move |_event: web_sys::CompositionEvent| {
+                    let guard = comp_start_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.is_composing.set(true);
+                        s.app.push_event(AppEvent::Ime(
+                            AppImeEvent::CompositionStart,
+                        ));
+                    }
+                });
+
+            textarea
+                .add_event_listener_with_callback(
+                    "compositionstart",
+                    compositionstart_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let comp_update_state = state_clone.clone();
+            let compositionupdate_closure =
+                Closure::<dyn Fn(web_sys::CompositionEvent)>::new(move |event: web_sys::CompositionEvent| {
+                    let guard = comp_update_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        let text = event.data().unwrap_or_default();
+                        s.app.push_event(AppEvent::Ime(
+                            AppImeEvent::CompositionUpdate {
+                                text,
+                                cursor: None,
+                            },
+                        ));
+                    }
+                });
+
+            textarea
+                .add_event_listener_with_callback(
+                    "compositionupdate",
+                    compositionupdate_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let comp_end_state = state_clone.clone();
+            let compositionend_closure =
+                Closure::<dyn Fn(web_sys::CompositionEvent)>::new(move |event: web_sys::CompositionEvent| {
+                    let guard = comp_end_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.is_composing.set(false);
+                        let text = event.data().unwrap_or_default();
+                        s.app.push_event(AppEvent::Ime(
+                            AppImeEvent::CompositionEnd { text },
+                        ));
+                        s.textarea.set_value("");
+                    }
+                });
+
+            textarea
+                .add_event_listener_with_callback(
+                    "compositionend",
+                    compositionend_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let wasm_state = WasmState {
                 app,
                 _canvas: canvas,
+                textarea,
+                is_composing: Cell::new(false),
                 _resize_closure: resize_closure,
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
                 _pointer_move_closure: pointer_move_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
+                _compositionstart_closure: compositionstart_closure,
+                _compositionupdate_closure: compositionupdate_closure,
+                _compositionend_closure: compositionend_closure,
                 _raf_closure: RefCell::new(None),
             };
 
@@ -346,6 +476,16 @@ impl TurWasmApp {
             let mut guard = loop_state.borrow_mut();
             if let Some(s) = guard.as_mut() {
                 let _ = s.app.tick();
+
+                let is_input = s.app.focused_is_input();
+                if is_input {
+                    let _ = s.textarea.focus();
+                    if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
+                        let _ = s.textarea.style().set_property("left", &format!("{x}px"));
+                        let _ = s.textarea.style().set_property("top", &format!("{y}px"));
+                    }
+                }
+
                 drop(guard);
                 Self::start_frame_loop(&loop_state);
             }

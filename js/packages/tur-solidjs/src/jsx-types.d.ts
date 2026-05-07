@@ -64,6 +64,9 @@ declare module "solid-js" {
         onBlur?: () => void;
         onCursorChange?: (position: number) => void;
         onSelectionChange?: (start: number, end: number) => void;
+        onCompositionStart?: () => void;
+        onCompositionUpdate?: (text: string) => void;
+        onCompositionEnd?: (text: string) => void;
         fontSize?: number;
         color?: Color;
         cursorColor?: Color;

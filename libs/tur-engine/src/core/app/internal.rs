@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJsContext;
+use crate::core::event::AppEvent;
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 use crate::error::TurError;
@@ -79,6 +80,9 @@ impl TurAppInternal {
         }
 
         for event in &events {
+            if matches!(event, AppEvent::RequestDraw) {
+                self.needs_draw.set(true);
+            }
             self.app_context
                 .borrow_mut()
                 .dispatch_handlers(event, &self.needs_draw);

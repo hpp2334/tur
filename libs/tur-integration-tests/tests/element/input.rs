@@ -1,4 +1,5 @@
 use tur_engine::core::element::ElementKind;
+use tur_engine::core::event::AppImeEvent;
 use tur_engine::elements::InputElement;
 use tur_integration_tests::TurTestApp;
 
@@ -544,6 +545,387 @@ fn selected_text_returns_range() {
                 .unwrap_or_default()
         })
         .unwrap_or_default(),
-        "cd"
+         "cd"
+     );
+ }
+
+#[test]
+fn composition_start_sets_state() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+
+    let (composing, comp_text) = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| (i.is_composing(), i.composition_text().map(|s| s.to_string())))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert!(composing, "should be composing after CompositionStart");
+    assert_eq!(
+        comp_text,
+        Some(String::new()),
+        "composition_text should be Some(\"\") after start"
     );
+}
+
+#[test]
+fn composition_update_updates_text() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+
+    let comp_text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.composition_text().map(|s| s.to_string()))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        comp_text,
+        Some("あ".to_string()),
+        "composition_text should be updated"
+    );
+}
+
+#[test]
+fn composition_end_commits_text() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let (text, composing) = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| (i.text().to_string(), i.is_composing()))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(text, "あ", "committed text should be in content");
+    assert!(!composing, "should not be composing after end");
+}
+
+#[test]
+fn composition_end_advances_cursor() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let pos = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.cursor_position())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        pos, 3,
+        "cursor should be at byte 3 after committing あ (3 bytes UTF-8)"
+    );
+}
+
+#[test]
+fn composition_display_text_shows_preedit() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_key("a");
+    app.send_key("b");
+    app.send_key("c");
+    app.send_key("d");
+
+    app.send_key("Home");
+    app.send_key("ArrowRight");
+    app.send_key("ArrowRight");
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+
+    let display = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.composition_display_text())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        display, "abあcd",
+        "display text should show preedit inserted at cursor position"
+    );
+}
+
+#[test]
+fn keyboard_suppressed_during_composition() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_key("x");
+
+    let text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.text().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        text, "",
+        "printable key should be suppressed during composition"
+    );
+}
+
+#[test]
+fn composition_after_existing_text() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_key("a");
+    app.send_key("b");
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.text().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(text, "abあ", "committed text should append after existing");
+}
+
+#[test]
+fn composition_at_middle_position() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_key("a");
+    app.send_key("b");
+
+    app.send_key("ArrowLeft");
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.text().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(text, "aあb", "committed text should be inserted at cursor");
+}
+
+#[test]
+fn composition_display_text_without_composition() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_key("h");
+    app.send_key("i");
+
+    let display = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.composition_display_text())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        display, "hi",
+        "display text should equal content when not composing"
+    );
+}
+
+#[test]
+fn cursor_rect_returns_position_when_focused() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_key("h");
+    app.send_key("i");
+
+    let rect = app.focused_cursor_rect();
+    assert!(rect.is_some(), "cursor rect should be Some when input is focused and has text");
+    let (x, _y, w, h) = rect.unwrap();
+    assert!(x > 0.0, "cursor x should be positive after typing 'hi'");
+    assert!(h > 0.0, "cursor height should be positive");
+    assert_eq!(w, 2.0, "cursor width should be 2.0");
+}
+
+#[test]
+fn cursor_rect_none_when_not_focused() {
+    let app = build_input_basic();
+    let rect = app.focused_cursor_rect();
+    assert!(rect.is_none(), "cursor rect should be None when nothing is focused");
+}
+
+#[test]
+fn focused_is_input_returns_true_for_input() {
+    let mut app = build_input_basic();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    assert!(
+        app.focused_is_input(),
+        "focused_is_input should return true when input is focused"
+    );
+}
+
+#[test]
+fn focused_is_input_returns_false_when_not_focused() {
+    let app = build_input_basic();
+    assert!(
+        !app.focused_is_input(),
+        "focused_is_input should return false when nothing is focused"
+    );
+}
+
+#[test]
+fn multiple_composition_cycles() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "い".to_string(),
+    });
+
+    let text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.text().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(text, "あい", "multiple composition cycles should accumulate");
+}
+
+#[test]
+fn composition_with_update_changes() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "a".to_string(),
+        cursor: None,
+    });
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let text = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| i.text().to_string())
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert_eq!(text, "あ", "intermediate updates should not affect final committed text");
+}
+
+#[test]
+fn composition_state_clean_after_end() {
+    let mut app = build_input_typing();
+    let input_id = find_input_id(&app);
+    app.render();
+    focus_input(&mut app, input_id);
+
+    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(AppImeEvent::CompositionUpdate {
+        text: "あ".to_string(),
+        cursor: None,
+    });
+    app.send_ime(AppImeEvent::CompositionEnd {
+        text: "あ".to_string(),
+    });
+
+    let (composing, comp_text, display) = app
+        .with_element(input_id, |e| {
+            e.cast::<InputElement>()
+                .map(|i| {
+                    (
+                        i.is_composing(),
+                        i.composition_text().is_some(),
+                        i.composition_display_text(),
+                    )
+                })
+                .unwrap_or_default()
+        })
+        .unwrap_or_default();
+    assert!(!composing, "should not be composing after end");
+    assert!(
+        !comp_text,
+        "composition_text should be None after end"
+    );
+    assert_eq!(display, "あ", "display text should equal content after commit");
 }

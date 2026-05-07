@@ -105,6 +105,9 @@ pub fn init_bridge(
             crate::handlers::keyboard::KeyboardAppHandler,
         ));
         ctx.register_handler(Box::new(
+            crate::handlers::ime::ImeAppHandler,
+        ));
+        ctx.register_handler(Box::new(
             crate::handlers::resize::ResizeHandler,
         ));
     }
