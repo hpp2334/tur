@@ -3,6 +3,7 @@ use std::num::NonZeroUsize;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Renderer as TurRenderer;
+use crate::core::resource::ResourceMap;
 use crate::renderer::vello::paint_context::VelloPaintContext;
 use vello::kurbo::{Affine, Rect};
 use vello::peniko::{Color, Mix};
@@ -104,7 +105,7 @@ impl VelloRenderer {
         self.surface.configure(&self.device, &self.config);
     }
 
-    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>) {
+    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
         self.scene.reset();
         if self.dpr != 1.0 {
             self.scene.push_layer(
@@ -115,7 +116,7 @@ impl VelloRenderer {
             );
         }
         let mut ctx = VelloPaintContext::new(&mut self.scene);
-        tree.paint(&mut ctx, focused_node_id);
+        tree.paint(&mut ctx, focused_node_id, resource_map);
         if self.dpr != 1.0 {
             self.scene.pop_layer();
         }
@@ -159,8 +160,8 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>) {
-        self.render_to_scene(tree, focused_node_id);
+    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
+        self.render_to_scene(tree, focused_node_id, resource_map);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

@@ -1,8 +1,9 @@
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
+use crate::core::resource::ResourceMap;
 
 pub trait Renderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>);
+    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap);
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())

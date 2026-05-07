@@ -5,6 +5,7 @@ use tur_shared::Offset;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Renderer;
+use crate::core::resource::ResourceMap;
 
 pub struct NoopRenderer;
 
@@ -21,7 +22,7 @@ impl NoopRenderer {
 }
 
 impl Renderer for NoopRenderer {
-    fn render(&mut self, tree: &ElementTree, _focused_node_id: Option<ElementNodeId>) {
+    fn render(&mut self, tree: &ElementTree, _focused_node_id: Option<ElementNodeId>, _resource_map: &ResourceMap) {
         let root_id = match tree.root_id() {
             Some(id) => id,
             None => {

@@ -424,8 +424,8 @@ pub(crate) fn tur_create_image_resource(
     })?;
 
     let resource_id = {
-        let mut tree = js_ctx.element_tree.borrow_mut();
-        tree.resources.insert_image(image_resource)
+        let mut resource_map = js_ctx.resource_map.borrow_mut();
+        resource_map.insert_image(image_resource)
     };
 
     Ok(JsValue::from(resource_id.as_u64() as f64))

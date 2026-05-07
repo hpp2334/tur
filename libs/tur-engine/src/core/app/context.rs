@@ -15,11 +15,13 @@ use crate::core::gesture::GestureEventComposer;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::js_command::JsCommandQueue;
 use crate::core::render::Renderer;
+use crate::core::resource::ResourceMap;
 
 pub struct TurAppContext {
     pub(crate) element_tree: Rc<RefCell<ElementTree>>,
     pub(crate) js_command_queue: Rc<RefCell<JsCommandQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
+    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub(crate) renderer: Box<dyn Renderer>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
@@ -42,6 +44,7 @@ impl TurAppContext {
         element_tree: Rc<RefCell<ElementTree>>,
         js_command_queue: Rc<RefCell<JsCommandQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
+        resource_map: Rc<RefCell<ResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
     ) -> Self {
@@ -50,6 +53,7 @@ impl TurAppContext {
             element_tree,
             js_command_queue,
             focus_manager,
+            resource_map,
             renderer,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
@@ -92,17 +96,20 @@ impl TurAppContext {
             max_height: height,
         };
 
+        let resource_map = self.resource_map.borrow();
         let mut tree = self.element_tree.borrow_mut();
         tree.compute_layout(
             &constraints,
             &mut self.font_manager,
             &mut self.text_layout_cx,
+            &resource_map,
         );
     }
 
     pub fn render(&mut self) {
         let focused_node_id = self.focus_manager.borrow().focused();
+        let resource_map = self.resource_map.borrow();
         let tree = self.element_tree.borrow();
-        self.renderer.render(&tree, focused_node_id);
+        self.renderer.render(&tree, focused_node_id, &resource_map);
     }
 }
