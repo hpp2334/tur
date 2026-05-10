@@ -1,25 +1,19 @@
-use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
 
 use crate::core::elements::{ElementJsCallbackEmitter, ElementOnFocus, ElementOnUpdate, ElementTrace};
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
 use crate::core::js_command::helpers::build_key_event_object;
 
-fn extract_callable(value: &JsValue) -> Option<JsObject> {
-    value.as_object().and_then(|o| {
-        if o.is_callable() {
-            Some(o.clone())
-        } else {
-            None
-        }
-    })
+fn extract_callable(value: &JsValue) -> Option<JsFunction> {
+    value.as_object().and_then(JsFunction::from_object)
 }
 
 pub struct FocusableElement {
-    on_key_down: Option<JsObject>,
-    on_key_up: Option<JsObject>,
-    on_focus: Option<JsObject>,
-    on_blur: Option<JsObject>,
+    on_key_down: Option<JsFunction>,
+    on_key_up: Option<JsFunction>,
+    on_focus: Option<JsFunction>,
+    on_blur: Option<JsFunction>,
 }
 
 impl Default for FocusableElement {
@@ -68,7 +62,7 @@ impl ElementJsCallbackEmitter for FocusableElement {
         &self,
         context: &mut Context,
         command: AnyJsCommand,
-    ) -> Option<(JsObject, Vec<JsValue>)> {
+    ) -> Option<(JsFunction, Vec<JsValue>)> {
         let c = command.downcast_ref::<FocusableJsCommand>()?;
         match c {
             FocusableJsCommand::KeyDown {

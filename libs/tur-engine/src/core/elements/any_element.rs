@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
@@ -19,7 +19,7 @@ use crate::core::event::AppImeEvent;
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
-type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsObject, Vec<JsValue>)>;
+type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsFunction, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -313,7 +313,7 @@ impl AnyElement {
         &self,
         context: &mut Context,
         command: AnyJsCommand,
-    ) -> Option<(JsObject, Vec<JsValue>)> {
+    ) -> Option<(JsFunction, Vec<JsValue>)> {
         let f = self.emit_js_callback_fn?;
         f(self.inner.as_any(), context, command)
     }
