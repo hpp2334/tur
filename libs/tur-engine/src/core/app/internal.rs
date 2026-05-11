@@ -99,7 +99,7 @@ impl TurAppInternal {
         &self,
         boa_context: &mut boa_engine::Context,
     ) -> bool {
-        let mut pending_callbacks: Vec<(boa_engine::object::JsObject, Vec<boa_engine::JsValue>)> =
+        let mut pending_callbacks: Vec<(boa_engine::object::builtins::JsFunction, Vec<boa_engine::JsValue>)> =
             Vec::new();
 
         loop {

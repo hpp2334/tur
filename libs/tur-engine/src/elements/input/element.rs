@@ -1,4 +1,4 @@
-use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
@@ -13,14 +13,8 @@ use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::event::AppImeEvent;
 use crate::elements::text::text_layout::TextLayoutData;
 
-fn extract_callable(value: &JsValue) -> Option<JsObject> {
-    value.as_object().and_then(|o| {
-        if o.is_callable() {
-            Some(o.clone())
-        } else {
-            None
-        }
-    })
+fn extract_callable(value: &JsValue) -> Option<JsFunction> {
+    value.as_object().and_then(JsFunction::from_object)
 }
 
 #[derive(Clone)]
@@ -81,16 +75,16 @@ pub struct InputElement {
     pub(crate) selection_end: usize,
     pub(crate) composition_text: Option<String>,
     pub(crate) composition_start: usize,
-    on_key_down: Option<JsObject>,
-    on_key_up: Option<JsObject>,
-    on_focus: Option<JsObject>,
-    on_blur: Option<JsObject>,
-    on_input: Option<JsObject>,
-    on_cursor_change: Option<JsObject>,
-    on_selection_change: Option<JsObject>,
-    on_composition_start: Option<JsObject>,
-    on_composition_update: Option<JsObject>,
-    on_composition_end: Option<JsObject>,
+    on_key_down: Option<JsFunction>,
+    on_key_up: Option<JsFunction>,
+    on_focus: Option<JsFunction>,
+    on_blur: Option<JsFunction>,
+    on_input: Option<JsFunction>,
+    on_cursor_change: Option<JsFunction>,
+    on_selection_change: Option<JsFunction>,
+    on_composition_start: Option<JsFunction>,
+    on_composition_update: Option<JsFunction>,
+    on_composition_end: Option<JsFunction>,
 }
 
 impl Default for InputElement {
@@ -729,7 +723,7 @@ impl ElementJsCallbackEmitter for InputElement {
         &self,
         context: &mut Context,
         command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::JsObject, Vec<boa_engine::JsValue>)> {
+    ) -> Option<(JsFunction, Vec<boa_engine::JsValue>)> {
         use boa_engine::js_string;
 
         if let Some(c) = command.downcast_ref::<InputJsCommand>() {

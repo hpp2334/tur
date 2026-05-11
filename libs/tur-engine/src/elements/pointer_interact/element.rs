@@ -1,21 +1,15 @@
-use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
 
 use crate::core::elements::{ElementJsCallbackEmitter, ElementOnUpdate, ElementTrace};
 use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
 
-fn extract_callable(value: &JsValue) -> Option<JsObject> {
-    value.as_object().and_then(|o| {
-        if o.is_callable() {
-            Some(o.clone())
-        } else {
-            None
-        }
-    })
+fn extract_callable(value: &JsValue) -> Option<JsFunction> {
+    value.as_object().and_then(JsFunction::from_object)
 }
 
 pub struct PointerInteractElement {
-    on_click: Option<JsObject>,
+    on_click: Option<JsFunction>,
 }
 
 impl Default for PointerInteractElement {
@@ -49,7 +43,7 @@ impl ElementJsCallbackEmitter for PointerInteractElement {
         &self,
         _context: &mut Context,
         command: AnyJsCommand,
-    ) -> Option<(JsObject, Vec<JsValue>)> {
+    ) -> Option<(JsFunction, Vec<JsValue>)> {
         let c = command.downcast_ref::<PointerInteractJsCommand>()?;
         match c {
             PointerInteractJsCommand::Click { x, y } => {
