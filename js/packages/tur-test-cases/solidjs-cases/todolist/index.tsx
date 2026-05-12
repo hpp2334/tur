@@ -41,11 +41,11 @@ function TodoItem(props: { todo: Todo }) {
           const ctx = __tur.__ctx;
           const piHandle = globalThis.__toggleRefs[todo.id];
           if (piHandle) {
-            const textContainer = __tur.getFirstChild(ctx, piHandle);
+            const textContainer = (__tur as any).getFirstChild(ctx, piHandle);
             if (textContainer) {
-              const span = __tur.getFirstChild(ctx, textContainer);
+              const span = (__tur as any).getFirstChild(ctx, textContainer);
               if (span) {
-                __tur.setAttribute(ctx, span, "content", todo.done ? "\u2713" : "\u25CB");
+                (__tur as any).setAttribute(ctx, span, "content", todo.done ? "\u2713" : "\u25CB");
               }
             }
           }
