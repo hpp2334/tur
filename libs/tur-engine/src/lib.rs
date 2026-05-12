@@ -45,6 +45,18 @@ impl TurApp {
         Ok(())
     }
 
+    pub fn eval_js(&mut self, source: &str) -> Result<String, TurError> {
+        let result = self
+            .boa_context
+            .eval(Source::from_bytes(source))
+            .map_err(TurError::JsEval)?;
+        let s = result
+            .as_string()
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_else(|| result.display().to_string());
+        Ok(s)
+    }
+
     pub fn push_event(&self, event: core::event::AppEvent) {
         self.internal.app_context.borrow_mut().event_queue.push(event);
     }

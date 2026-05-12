@@ -162,6 +162,7 @@ export function Input(props: InputProps): JSX.Element {
       <tur_input
         ref={(el: import("@tur/solidjs-renderer").TurNodeHandle) => ctrl._attach(el)}
         onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
+        onKeyDown={(e: import("@tur/solidjs-renderer").TurKeyEvent) => ctrl._onKeyDown(e)}
         onFocus={() => ctrl._onFocus()}
         onBlur={() => ctrl._onBlur()}
         onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}

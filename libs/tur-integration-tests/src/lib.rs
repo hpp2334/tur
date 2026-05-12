@@ -154,4 +154,8 @@ impl TurTestApp {
     ) -> Option<R> {
         self.inner.with_element(id, cb)
     }
+
+    pub fn eval_js(&mut self, source: &str) -> String {
+        self.inner.eval_js(source).unwrap_or_default()
+    }
 }

@@ -62,6 +62,7 @@ declare module "solid-js" {
         onInput?: (value: string, enterPressed: boolean) => void;
         onFocus?: () => void;
         onBlur?: () => void;
+        onKeyDown?: (e: TurKeyEvent) => void;
         onCursorChange?: (position: number) => void;
         onSelectionChange?: (start: number, end: number) => void;
         onCompositionStart?: () => void;

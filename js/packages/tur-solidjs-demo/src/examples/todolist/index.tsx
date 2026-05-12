@@ -1,33 +1,66 @@
-import { For } from "solid-js";
+import { createSignal } from "solid-js";
 import {
   Column,
   Row,
   Text,
   Container,
   SizedBox,
+  PointerInteract,
   MainAxisAlignment,
   CrossAxisAlignment,
+  Input,
+  InputController,
 } from "@tur/solidjs";
 import { createTodoStore } from "./store";
 import { Sidebar } from "../../components/Sidebar";
 
+function TodoItem(props: { todo: { id: number; text: string; done: boolean }; toggle: (id: number) => void; remove: (id: number) => void }) {
+  return (
+    <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
+      <PointerInteract onClick={() => props.toggle(props.todo.id)} child={
+        <Text content={props.todo.done ? "\u2713" : "\u25CB"} />
+      } />
+      <Text content={props.todo.text} />
+      <PointerInteract onClick={() => props.remove(props.todo.id)} child={
+        <Container padding={4}>
+          <Text content={"✕"} />
+        </Container>
+      } />
+    </Row>
+  );
+}
+
 function TodoList() {
-  const { todos } = createTodoStore();
+  const { todos, addTodo, toggleTodo, removeTodo } = createTodoStore();
+  const [inputText, setInputText] = createSignal("");
+
+  const controller = new InputController({
+    onInput: (text: string) => {
+      setInputText(text);
+    },
+    onKeyDown: (e) => {
+      if (e.key === "Enter") {
+        const text = inputText().trim();
+        if (text) {
+          addTodo(text);
+          controller.clear();
+          setInputText("");
+        }
+      }
+    },
+  });
 
   return (
     <Container padding={16}>
       <Column crossAlignment={CrossAxisAlignment.Center}>
         <Text content="Todo List" fontSize={24} />
         <SizedBox height={16} />
+        <Input controller={controller} placeholder="Add a task..." fontSize={14} width={200} height={30} />
+        <SizedBox height={16} />
         <Column>
-          <For each={todos()}>
-            {(todo) => (
-              <Row mainAlignment={MainAxisAlignment.SpaceBetween}>
-                <Text content={todo.text} />
-                <Text content={todo.done ? "\u2713" : "\u25CB"} />
-              </Row>
-            )}
-          </For>
+          {todos().map((todo) => (
+            <TodoItem todo={todo} toggle={toggleTodo} remove={removeTodo} />
+          ))}
         </Column>
       </Column>
     </Container>

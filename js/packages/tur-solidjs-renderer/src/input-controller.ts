@@ -1,10 +1,11 @@
-import type { TurNodeHandle } from "./tur";
+import type { TurNodeHandle, TurKeyEvent } from "./tur";
 
 export interface InputControllerOptions {
   onInput?: (value: string, enter: boolean) => void;
   onEnter?: () => void;
   onFocus?: () => void;
   onBlur?: () => void;
+  onKeyDown?: (e: TurKeyEvent) => void;
   onCursorChange?: (pos: number) => void;
   onSelectionChange?: (start: number, end: number) => void;
   onCompositionStart?: () => void;
@@ -71,5 +72,9 @@ export class InputController {
 
   _onCompositionEnd(text: string): void {
     this._options?.onCompositionEnd?.(text);
+  }
+
+  _onKeyDown(e: TurKeyEvent): void {
+    this._options?.onKeyDown?.(e);
   }
 }
