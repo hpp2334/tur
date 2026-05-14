@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { renderRoot } from "@tur/solidjs-renderer";
 import {
   Column,
@@ -9,6 +10,7 @@ import {
   MainAxisAlignment,
   Input,
   InputController,
+  PointerInteract,
 } from "@tur/solidjs";
 
 interface Todo {
@@ -24,49 +26,42 @@ const INITIAL_TODOS: Todo[] = [
   { id: 4, text: "Ship v0.1.0", done: false },
 ];
 
-declare global {
-  var __toggleRefs: Record<number, any>;
-}
-
-globalThis.__toggleRefs = {};
-
-function TodoItem(props: { todo: Todo }) {
-  const todo = props.todo;
+function TodoItem(props: { todo: Todo; onToggle: (id: number) => void; onRemove: (id: number) => void }) {
   return (
     <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
-      <tur_pointer_interact
-        ref={(el: any) => { globalThis.__toggleRefs[todo.id] = el; }}
-        onClick={() => {
-          todo.done = !todo.done;
-          const ctx = __tur.__ctx;
-          const piHandle = globalThis.__toggleRefs[todo.id];
-          if (piHandle) {
-            const textContainer = (__tur as any).getFirstChild(ctx, piHandle);
-            if (textContainer) {
-              const span = (__tur as any).getFirstChild(ctx, textContainer);
-              if (span) {
-                (__tur as any).setAttribute(ctx, span, "content", todo.done ? "\u2713" : "\u25CB");
-              }
-            }
-          }
-        }}
-      >
-        <Text
-          content={todo.done ? "\u2713" : "\u25CB"}
-          queryKey={["toggle", String(todo.id)]}
-        />
-      </tur_pointer_interact>
-      <Text content={todo.text} />
-      <tur_pointer_interact onClick={() => {}}>
-        <Container queryKey={["remove", String(todo.id)]} padding={4}>
-          <Text content={"✕"} />
-        </Container>
-      </tur_pointer_interact>
+      <PointerInteract
+        onClick={() => props.onToggle(props.todo.id)}
+        child={
+          <Text
+            content={props.todo.done ? "\u2713" : "\u25CB"}
+            queryKey={["toggle", String(props.todo.id)]}
+          />
+        }
+      />
+      <Text content={props.todo.text} />
+      <PointerInteract
+        onClick={() => props.onRemove(props.todo.id)}
+        child={
+          <Container queryKey={["remove", String(props.todo.id)]} padding={4}>
+            <Text content={"\u2715"} />
+          </Container>
+        }
+      />
     </Row>
   );
 }
 
 function TodoList() {
+  const [todos, setTodos] = createSignal<Todo[]>(INITIAL_TODOS);
+
+  const toggleTodo = (id: number) => {
+    setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+  };
+
+  const removeTodo = (id: number) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
   const controller = new InputController({
     onKeyDown: (e) => {
       if (e.key === "Enter") {
@@ -85,8 +80,8 @@ function TodoList() {
         </Container>
         <SizedBox height={16} />
         <Column queryKey={["todo-list"]}>
-          {INITIAL_TODOS.map((todo) => (
-            <TodoItem todo={todo} />
+          {todos().map((todo) => (
+            <TodoItem todo={todo} onToggle={toggleTodo} onRemove={removeTodo} />
           ))}
         </Column>
       </Column>

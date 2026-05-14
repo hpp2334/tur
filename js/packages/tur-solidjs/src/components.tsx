@@ -4,6 +4,13 @@ import type { InputController } from "@tur/solidjs-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/solidjs-renderer";
 import type { StackFit } from "@tur/solidjs-renderer";
 import type { FlexFit } from "@tur/solidjs-renderer";
+import { createElement, insert, setProp, spread, mergeProps } from "@tur/solidjs-renderer";
+
+declare const __tur: {
+  __ctx: unknown;
+  getFirstChild: (ctx: unknown, node: unknown) => unknown;
+  removeChild: (ctx: unknown, parent: unknown, child: unknown) => void;
+};
 
 interface BaseProps {
   children?: JSX.Element;
@@ -68,8 +75,23 @@ export interface TextProps extends BaseProps {
 }
 
 export function Column(props: ColumnProps): JSX.Element {
-  const { children, crossAlignment = CrossAxisAlignment.Stretch, ...rest } = props;
-  return <tur_flex direction={FlexDirection.Vertical} crossAlignment={crossAlignment} {...rest}>{children}</tur_flex>;
+  const { crossAlignment = CrossAxisAlignment.Stretch, ...rest } = props;
+  const el = createElement("tur_flex");
+  setProp(el, "crossAlignment", crossAlignment);
+  spread(el, mergeProps({ get direction() { return FlexDirection.Vertical; } }, rest), true);
+  let init = false;
+  insert(el, () => {
+    if (init) {
+      const c = __tur.__ctx;
+      let child: unknown;
+      while ((child = __tur.getFirstChild(c, el)) != null) {
+        __tur.removeChild(c, el, child);
+      }
+    }
+    init = true;
+    return props.children;
+  });
+  return el as unknown as JSX.Element;
 }
 
 export function Row(props: RowProps): JSX.Element {

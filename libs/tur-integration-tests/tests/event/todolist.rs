@@ -112,6 +112,7 @@ fn todolist_toggle_task() {
     assert_eq!(get_text_content(&app, &["toggle", "1"]), "\u{2713}");
 
     click_query_key(&mut app, &["toggle", "1"]);
+
     assert_eq!(
         get_text_content(&app, &["toggle", "1"]),
         "\u{25CB}",
