@@ -114,7 +114,7 @@ impl TurVelloApp {
             logical_height: height as u32,
             dpr,
         });
-        let _ = app.tick();
+        let _ = app.spawn_loop_once(std::time::Duration::ZERO);
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -146,6 +146,6 @@ impl TurVelloApp {
 
     pub fn render(&self) {
         self.inner.borrow_mut().app.push_event(AppEvent::RequestDraw);
-        let _ = self.inner.borrow_mut().app.tick();
+        let _ = self.inner.borrow_mut().app.spawn_loop_once(std::time::Duration::ZERO);
     }
 }
