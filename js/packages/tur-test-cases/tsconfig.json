@@ -5,5 +5,5 @@
     "rootDir": "react-cases",
     "jsx": "react-jsx"
   },
-  "include": ["react-cases", "react-jsx.d.ts", "global.d.ts"]
+  "include": ["react-cases", "react-jsx.d.ts"]
 }
