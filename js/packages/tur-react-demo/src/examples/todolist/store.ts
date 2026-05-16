@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { atom, createStore } from "jotai/vanilla";
+import { useAtomValue, useSetAtom } from "jotai/react";
 
 export interface Todo {
   readonly id: number;
@@ -11,29 +12,29 @@ const INITIAL_TODOS: readonly Todo[] = [
   { id: 2, text: "Build tur engine", done: false },
   { id: 3, text: "Write documentation", done: false },
   { id: 4, text: "Ship v0.1.0", done: false },
-] as const;
+];
 
-export function createTodoStore() {
-  const [todos, setTodos] = useState<readonly Todo[]>(INITIAL_TODOS);
+export const store = createStore();
 
-  const addTodo = (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setTodos((prev) => [
-      ...prev,
-      { id: Date.now(), text: trimmed, done: false },
-    ]);
-  };
+export const todosAtom = atom<readonly Todo[]>(INITIAL_TODOS);
 
-  const toggleTodo = (id: number) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
-  };
+export const addTodoAtom = atom(null, (_get, set, text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  set(todosAtom, (prev) => [
+    ...prev,
+    { id: Date.now(), text: trimmed, done: false },
+  ]);
+});
 
-  const removeTodo = (id: number) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
+export const toggleTodoAtom = atom(null, (_get, set, id: number) => {
+  set(todosAtom, (prev) =>
+    prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+  );
+});
 
-  return { todos, addTodo, toggleTodo, removeTodo };
-}
+export const removeTodoAtom = atom(null, (_get, set, id: number) => {
+  set(todosAtom, (prev) => prev.filter((t) => t.id !== id));
+});
+
+export { useAtomValue, useSetAtom };

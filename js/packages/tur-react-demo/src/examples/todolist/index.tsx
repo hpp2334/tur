@@ -11,7 +11,7 @@ import {
   Input,
   InputController,
 } from "@tur/react";
-import { createTodoStore } from "./store";
+import { todosAtom, toggleTodoAtom, removeTodoAtom, useAtomValue, useSetAtom } from "./store";
 import { Sidebar } from "../../components/Sidebar";
 
 function TodoItem(props: { todo: { id: number; text: string; done: boolean }; toggle: (id: number) => void; remove: (id: number) => void }) {
@@ -31,7 +31,9 @@ function TodoItem(props: { todo: { id: number; text: string; done: boolean }; to
 }
 
 function TodoList() {
-  const { todos, addTodo, toggleTodo, removeTodo } = createTodoStore();
+  const todos = useAtomValue(todosAtom);
+  const toggleTodo = useSetAtom(toggleTodoAtom);
+  const removeTodo = useSetAtom(removeTodoAtom);
   const [inputText, setInputText] = useState("");
 
   const controller = new InputController({
@@ -42,7 +44,6 @@ function TodoList() {
       if (e.key === "Enter") {
         const text = inputText.trim();
         if (text) {
-          addTodo(text);
           controller.clear();
           setInputText("");
         }

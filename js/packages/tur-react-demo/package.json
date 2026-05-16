@@ -10,6 +10,10 @@
     "react": "^19.1.0",
     "@tur/react-renderer": "workspace:*",
     "@tur/react": "workspace:*",
-    "@tur/rspack-plugin": "workspace:*"
+    "@tur/rspack-plugin": "workspace:*",
+    "jotai": "^2.20.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14"
   }
 }
