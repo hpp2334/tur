@@ -44,7 +44,11 @@ impl TurJobExecutor {
         let due = {
             let mut all = self.clock_jobs.borrow_mut();
             let keep = all.split_off(&now);
-            std::mem::replace(&mut *all, keep)
+            let mut due = std::mem::replace(&mut *all, keep);
+            if let Some(at_now) = all.remove(&now) {
+                due.insert(now, at_now);
+            }
+            due
         };
 
         for (_instant, jobs) in due {
