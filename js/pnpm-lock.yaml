@@ -114,6 +114,9 @@ importers:
       '@rspack/core':
         specifier: ^1.2.0
         version: 1.7.11(@swc/helpers@0.5.21)
+      '@types/react':
+        specifier: ^19.1.0
+        version: 19.2.14
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
