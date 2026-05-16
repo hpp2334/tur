@@ -73,12 +73,14 @@ impl TurJobExecutor {
             }
         }
 
-        while let Some(job) = self.promise_jobs.borrow_mut().pop_front() {
+        let promise_jobs: Vec<_> = self.promise_jobs.borrow_mut().drain(..).collect();
+        for job in promise_jobs {
             job.call(context)?;
             count += 1;
         }
 
-        while let Some(job) = self.generic_jobs.borrow_mut().pop_front() {
+        let generic_jobs: Vec<_> = self.generic_jobs.borrow_mut().drain(..).collect();
+        for job in generic_jobs {
             job.call(context)?;
             count += 1;
         }
