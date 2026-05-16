@@ -24,6 +24,7 @@ impl ClockJob {
     }
 }
 
+#[derive(Default)]
 pub struct TurJobExecutor {
     promise_jobs: RefCell<VecDeque<PromiseJob>>,
     generic_jobs: RefCell<VecDeque<GenericJob>>,
@@ -33,12 +34,7 @@ pub struct TurJobExecutor {
 
 impl TurJobExecutor {
     pub fn new() -> Self {
-        Self {
-            promise_jobs: RefCell::new(VecDeque::new()),
-            generic_jobs: RefCell::new(VecDeque::new()),
-            async_jobs: RefCell::new(VecDeque::new()),
-            clock_jobs: RefCell::new(BTreeMap::new()),
-        }
+        Self::default()
     }
 
     pub fn drain(&self, context: &mut Context) -> JsResult<usize> {

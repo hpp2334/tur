@@ -8,6 +8,7 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::Context;
 use boa_engine::JsValue;
 
+#[derive(Default)]
 pub struct TimerState {
     next_id: u32,
     cancelled: HashMap<u32, Rc<Cell<bool>>>,
@@ -15,10 +16,7 @@ pub struct TimerState {
 
 impl TimerState {
     pub fn new() -> Self {
-        Self {
-            next_id: 0,
-            cancelled: HashMap::new(),
-        }
+        Self::default()
     }
 
     fn alloc_id(&mut self, cancelled: Rc<Cell<bool>>) -> u32 {
@@ -44,7 +42,7 @@ pub fn register_timer_globals(
     let flush_for_timeout = schedule_flush.clone();
     let set_timeout = unsafe {
         NativeFunction::from_closure(move |_this, args, ctx| {
-            let callback = match args.get(0).and_then(|v| v.as_function()) {
+            let callback = match args.first().and_then(|v| v.as_function()) {
                 Some(f) => f,
                 None => return Ok(JsValue::undefined()),
             };
@@ -79,7 +77,7 @@ pub fn register_timer_globals(
     let flush_for_interval = schedule_flush.clone();
     let set_interval = unsafe {
         NativeFunction::from_closure(move |_this, args, ctx| {
-            let callback = match args.get(0).and_then(|v| v.as_function()) {
+            let callback = match args.first().and_then(|v| v.as_function()) {
                 Some(f) => f,
                 None => return Ok(JsValue::undefined()),
             };
@@ -112,7 +110,7 @@ pub fn register_timer_globals(
     let state_for_clear = timer_state.clone();
     let clear_timeout = unsafe {
         NativeFunction::from_closure(move |_this, args, _ctx| {
-            if let Some(id) = args.get(0).and_then(|v| v.as_number()) {
+            if let Some(id) = args.first().and_then(|v| v.as_number()) {
                 state_for_clear.borrow_mut().cancel(id as u32);
             }
             Ok(JsValue::undefined())
@@ -122,7 +120,7 @@ pub fn register_timer_globals(
     let state_for_clear_iv = timer_state.clone();
     let clear_interval = unsafe {
         NativeFunction::from_closure(move |_this, args, _ctx| {
-            if let Some(id) = args.get(0).and_then(|v| v.as_number()) {
+            if let Some(id) = args.first().and_then(|v| v.as_number()) {
                 state_for_clear_iv.borrow_mut().cancel(id as u32);
             }
             Ok(JsValue::undefined())
@@ -131,7 +129,7 @@ pub fn register_timer_globals(
 
     let queue_microtask = unsafe {
         NativeFunction::from_closure(move |_this, args, ctx| {
-            let callback = match args.get(0).and_then(|v| v.as_function()) {
+            let callback = match args.first().and_then(|v| v.as_function()) {
                 Some(f) => f,
                 None => return Ok(JsValue::undefined()),
             };
@@ -169,7 +167,7 @@ pub fn register_timer_globals(
 }
 
 fn enqueue_interval_tick(
-    id: u32,
+    _id: u32,
     callback: boa_engine::object::builtins::JsFunction,
     delay_ms: u64,
     args: Vec<JsValue>,
@@ -185,7 +183,7 @@ fn enqueue_interval_tick(
         flush_flag.set(true);
 
         if !cancelled.get() {
-            enqueue_interval_tick(id, callback, delay_ms, args, cancelled, flush_flag, ctx);
+            enqueue_interval_tick(_id, callback, delay_ms, args, cancelled, flush_flag, ctx);
         }
         result
     });
