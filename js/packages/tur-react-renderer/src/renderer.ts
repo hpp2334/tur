@@ -1,5 +1,5 @@
 import ReactReconciler from "react-reconciler";
-import type { ReactElement } from "react";
+import React from "react";
 import type { TurNodeHandle } from "./tur";
 
 const ctx = __tur.__ctx;
@@ -36,24 +36,10 @@ function setProps(handle: TurNodeHandle, props: Props) {
   }
 }
 
-let updatePriority = 1;
+let updatePriority = 0;
 
-const reconciler = ReactReconciler<
-  string,
-  Props,
-  TurNodeHandle,
-  TurInstance,
-  never,
-  never,
-  never,
-  never,
-  TurInstance,
-  null,
-  never,
-  unknown,
-  undefined,
-  undefined
->({
+const reconciler = ReactReconciler(
+  {
   supportsMutation: true,
   supportsPersistence: false,
   supportsHydration: false,
@@ -80,8 +66,7 @@ const reconciler = ReactReconciler<
 
   commitUpdate(
     instance: TurInstance,
-    _updatePayload: null,
-    _type: string,
+    _type: any,
     _prevProps: Props,
     nextProps: Props,
     _internalHandle: any,
@@ -127,7 +112,7 @@ const reconciler = ReactReconciler<
   },
 
   getPublicInstance(instance: TurInstance): any {
-    return instance;
+    return instance.handle;
   },
 
   prepareForCommit(): null {
@@ -148,12 +133,17 @@ const reconciler = ReactReconciler<
 
   noTimeout: undefined,
   isPrimaryRenderer: true,
+  supportsMicrotasks: typeof queueMicrotask === "function",
+  scheduleMicrotask:
+    typeof queueMicrotask === "function"
+      ? (cb: () => void) => queueMicrotask(cb)
+      : undefined as any,
   getCurrentUpdatePriority: () => updatePriority,
   setCurrentUpdatePriority(p: number): void {
     updatePriority = p;
   },
   resolveUpdatePriority(): number {
-    return updatePriority;
+    return updatePriority || 2;
   },
   shouldAttemptEagerTransition(): boolean {
     return false;
@@ -161,7 +151,9 @@ const reconciler = ReactReconciler<
   maySuspendCommit(): boolean {
     return false;
   },
-  preloadInstance(): void {},
+  preloadInstance(): boolean {
+    return false;
+  },
   startSuspendingCommit(): void {},
   suspendInstance(): never {
     throw new Error("suspendInstance not supported");
@@ -170,7 +162,7 @@ const reconciler = ReactReconciler<
     throw new Error("waitForCommitToBeReady not supported");
   },
   NotPendingTransition: null,
-  HostTransitionContext: null,
+  HostTransitionContext: null as any,
   resetFormInstance(): void {},
   getInstanceFromNode: () => null,
   beforeActiveInstanceBlur() {},
@@ -181,11 +173,13 @@ const reconciler = ReactReconciler<
   getInstanceFromScope(): null {
     return null;
   },
-});
+} as any);
 
-export function renderRoot(component: () => ReactElement): TurNodeHandle {
+let _container: any = null;
+
+export function renderRoot(component: React.ComponentType): TurNodeHandle {
   const root = __tur.createRoot(ctx);
-  const container = reconciler.createContainer(
+  _container = reconciler.createContainer(
     root,
     0,
     null,
@@ -197,10 +191,10 @@ export function renderRoot(component: () => ReactElement): TurNodeHandle {
     () => {},
     () => {},
   );
+
+  const element = React.createElement(component);
   (reconciler as any).flushSyncFromReconciler(() => {
-    reconciler.updateContainer(component(), container, null, () => {});
+    reconciler.updateContainer(element, _container, null, () => {});
   });
   return root;
 }
-
-export { reconciler };

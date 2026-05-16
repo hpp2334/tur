@@ -1,4 +1,4 @@
-export { renderRoot, reconciler } from "./renderer";
+export { renderRoot } from "./renderer";
 export type { TurInstance } from "./renderer";
 export { InputController } from "./input-controller";
 export type { InputControllerOptions } from "./input-controller";

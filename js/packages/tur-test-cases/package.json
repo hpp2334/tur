@@ -10,6 +10,7 @@
   "dependencies": {
     "@tur/react": "workspace:*",
     "@tur/react-renderer": "workspace:*",
+    "jotai": "^2.20.0",
     "react": "^19.1.0"
   },
   "devDependencies": {

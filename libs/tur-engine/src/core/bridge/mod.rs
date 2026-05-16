@@ -1,14 +1,16 @@
+pub(crate) mod bounded_executor;
 pub(crate) mod element_bridge;
 mod js_context;
 mod opaque;
 pub(crate) mod timer;
 
+pub use bounded_executor::BoundedJobExecutor;
 pub use element_bridge::TurNodeHandle;
 pub use js_context::TurJsContext;
 pub use opaque::BoaOpaque;
-pub use timer::flush_timers;
-pub use timer::register_timer_globals;
+pub use timer::TimerState;
 
+use boa_engine::context::time::FixedClock;
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::object::JsObject;
@@ -55,11 +57,19 @@ where
     obj.insert_property(key, desc);
 }
 
+pub struct BridgeResult {
+    pub internal: TurAppInternal,
+    pub clock: std::rc::Rc<FixedClock>,
+    pub executor: std::rc::Rc<BoundedJobExecutor>,
+}
+
 pub fn init_bridge(
     context: &mut Context,
     renderer: Box<dyn Renderer>,
     font_loader: Box<dyn FontLoader>,
-) -> TurAppInternal {
+    clock: std::rc::Rc<FixedClock>,
+    executor: std::rc::Rc<BoundedJobExecutor>,
+) -> BridgeResult {
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
 
@@ -98,7 +108,7 @@ pub fn init_bridge(
         set_prop(&tur_obj, js_name.clone(), func);
     }
 
-    let internal = TurAppInternal::new(renderer, font_loader);
+    let internal = TurAppInternal::new(renderer, font_loader, executor.clone());
     {
         let mut ctx = internal.app_context.borrow_mut();
         ctx.register_handler(Box::new(
@@ -130,9 +140,11 @@ pub fn init_bridge(
         .register_global_property(js_string!("__tur"), tur_obj, Attribute::all())
         .expect("failed to register __tur global");
 
-    register_timer_globals(context);
+    let schedule_flush = internal.needs_draw.clone();
+    let timer_state = std::rc::Rc::new(std::cell::RefCell::new(TimerState::new()));
+    timer::register_timer_globals(context, timer_state, schedule_flush);
 
     tracing::info!("tur bridge initialized");
 
-    internal
+    BridgeResult { internal, clock, executor }
 }

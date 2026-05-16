@@ -55,7 +55,9 @@ function TodoList() {
   const [todos, setTodos] = useState<Todo[]>(INITIAL_TODOS);
 
   const toggleTodo = (id: number) => {
-    setTodos((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+    setTodos((prev) => {
+      return prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
+    });
   };
 
   const removeTodo = (id: number) => {
@@ -79,6 +81,7 @@ function TodoList() {
           <Input controller={controller} placeholder="Add a task..." fontSize={14} width={200} height={30} />
         </Container>
         <SizedBox height={16} />
+        <Text content={`Count: ${todos.length}`} queryKey={["count"]} />
         <Column queryKey={["todo-list"]}>
           {todos.map((todo) => (
             <TodoItem todo={todo} onToggle={toggleTodo} onRemove={removeTodo} />

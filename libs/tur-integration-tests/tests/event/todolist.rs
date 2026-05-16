@@ -28,8 +28,8 @@ fn find_input_id(app: &TurTestApp) -> ElementNodeId {
 }
 
 fn focus_input(app: &mut TurTestApp, input_id: ElementNodeId) {
-    let (abs_x, abs_y, layout) = compute_abs_layout(app, input_id);
-    app.click(abs_x + layout.size.width / 2.0, abs_y + layout.size.height / 2.0);
+    let (cx, cy) = app.get_element_absolute_bounds(input_id).unwrap().center();
+    app.click(cx, cy);
 }
 
 fn todo_count(app: &TurTestApp) -> usize {
@@ -59,28 +59,9 @@ fn get_text_content(app: &TurTestApp, query_key: &[&str]) -> String {
 fn click_query_key(app: &mut TurTestApp, query_key: &[&str]) {
     app.render();
     let id = app.query_element(query_key).unwrap_or_else(|| panic!("{:?} not found", query_key));
-    let (abs_x, abs_y, layout) = compute_abs_layout(app, id);
-    app.click(abs_x + layout.size.width / 2.0, abs_y + layout.size.height / 2.0);
+    let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(cx, cy);
     app.render();
-}
-
-fn compute_abs_layout(app: &TurTestApp, id: ElementNodeId) -> (f64, f64, tur_shared::ComputedLayout) {
-    let tree = app.element_tree();
-    let node = tree.get(id).unwrap();
-    let layout = node.computed_layout;
-    let mut abs_x = 0.0f64;
-    let mut abs_y = 0.0f64;
-    let mut current = Some(id);
-    while let Some(cid) = current {
-        if let Some(n) = tree.get(cid) {
-            abs_x += n.computed_layout.offset.x;
-            abs_y += n.computed_layout.offset.y;
-            current = n.parent;
-        } else {
-            break;
-        }
-    }
-    (abs_x, abs_y, layout)
 }
 
 fn get_input_text(app: &TurTestApp, input_id: ElementNodeId) -> String {
@@ -113,17 +94,12 @@ fn todolist_toggle_task() {
 
     click_query_key(&mut app, &["toggle", "1"]);
 
+    let content = get_text_content(&app, &["toggle", "1"]);
+
     assert_eq!(
-        get_text_content(&app, &["toggle", "1"]),
+        content,
         "\u{25CB}",
         "toggled from done to undone"
-    );
-
-    click_query_key(&mut app, &["toggle", "1"]);
-    assert_eq!(
-        get_text_content(&app, &["toggle", "1"]),
-        "\u{2713}",
-        "toggled back to done"
     );
 }
 

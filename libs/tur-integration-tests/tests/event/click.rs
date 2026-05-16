@@ -4,7 +4,6 @@ use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("clickable-text").unwrap();
-
     app.query_element(&["click-text"]).unwrap()
 }
 
@@ -55,32 +54,13 @@ fn click_updates_text_content() {
 
     app.render();
 
-    let tree = app.element_tree();
-    let pi_node = tree.get(pi_id).unwrap();
-    let pi_layout = pi_node.computed_layout;
-
-    let mut abs_x = 0.0f64;
-    let mut abs_y = 0.0f64;
-    let mut current = Some(pi_id);
-    while let Some(cid) = current {
-        if let Some(n) = tree.get(cid) {
-            abs_x += n.computed_layout.offset.x;
-            abs_y += n.computed_layout.offset.y;
-            current = n.parent;
-        } else {
-            break;
-        }
-    }
-    drop(tree);
-
     assert_eq!(
         get_span_content(&app, text_id),
         "before",
         "text should be 'before' before click"
     );
 
-    let click_x = abs_x + pi_layout.size.width / 2.0;
-    let click_y = abs_y + pi_layout.size.height / 2.0;
+    let (click_x, click_y) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.click(click_x, click_y);
 
     assert_eq!(
