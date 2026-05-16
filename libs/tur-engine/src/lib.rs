@@ -15,7 +15,7 @@ use error::TurError;
 
 use core::app::TurAppInternal;
 use core::bridge::init_bridge;
-use core::bridge::BoundedJobExecutor;
+use core::bridge::TurJobExecutor;
 use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
@@ -26,7 +26,7 @@ pub struct TurApp {
     boa_context: Context,
     internal: TurAppInternal,
     clock: Rc<FixedClock>,
-    executor: Rc<BoundedJobExecutor>,
+    executor: Rc<TurJobExecutor>,
 }
 
 impl TurApp {
@@ -35,7 +35,7 @@ impl TurApp {
         font_loader: Box<dyn core::fonts::FontLoader>,
     ) -> Result<Self, TurError> {
         let clock = Rc::new(FixedClock::from_millis(0));
-        let executor = Rc::new(BoundedJobExecutor::new());
+        let executor = Rc::new(TurJobExecutor::new());
         let mut boa_context = Context::builder()
             .clock(clock.clone())
             .job_executor(executor.clone())
@@ -59,7 +59,7 @@ impl TurApp {
         self.boa_context
             .eval(Source::from_bytes(source))
             .map_err(TurError::JsEval)?;
-        let _ = self.executor.drain_bounded(&mut self.boa_context, 256);
+        let _ = self.executor.drain(&mut self.boa_context);
         Ok(())
     }
 

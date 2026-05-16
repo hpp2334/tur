@@ -24,14 +24,14 @@ impl ClockJob {
     }
 }
 
-pub struct BoundedJobExecutor {
+pub struct TurJobExecutor {
     promise_jobs: RefCell<VecDeque<PromiseJob>>,
     generic_jobs: RefCell<VecDeque<GenericJob>>,
     async_jobs: RefCell<VecDeque<NativeAsyncJob>>,
     clock_jobs: RefCell<BTreeMap<JsInstant, Vec<ClockJob>>>,
 }
 
-impl BoundedJobExecutor {
+impl TurJobExecutor {
     pub fn new() -> Self {
         Self {
             promise_jobs: RefCell::new(VecDeque::new()),
@@ -41,7 +41,7 @@ impl BoundedJobExecutor {
         }
     }
 
-    pub fn drain_bounded(&self, context: &mut Context, limit: usize) -> JsResult<usize> {
+    pub fn drain(&self, context: &mut Context) -> JsResult<usize> {
         let mut count = 0;
 
         let now = context.clock().now();
@@ -73,16 +73,12 @@ impl BoundedJobExecutor {
             }
         }
 
-        while count < limit {
-            let job = self.promise_jobs.borrow_mut().pop_front();
-            let Some(job) = job else { break };
+        while let Some(job) = self.promise_jobs.borrow_mut().pop_front() {
             job.call(context)?;
             count += 1;
         }
 
-        while count < limit {
-            let job = self.generic_jobs.borrow_mut().pop_front();
-            let Some(job) = job else { break };
+        while let Some(job) = self.generic_jobs.borrow_mut().pop_front() {
             job.call(context)?;
             count += 1;
         }
@@ -91,7 +87,7 @@ impl BoundedJobExecutor {
     }
 }
 
-impl JobExecutor for BoundedJobExecutor {
+impl JobExecutor for TurJobExecutor {
     fn enqueue_job(self: Rc<Self>, job: Job, context: &mut Context) {
         match job {
             Job::PromiseJob(p) => self.promise_jobs.borrow_mut().push_back(p),
@@ -122,7 +118,7 @@ impl JobExecutor for BoundedJobExecutor {
 
     fn run_jobs(self: Rc<Self>, context: &mut Context) -> JsResult<()> {
         loop {
-            let ran = self.drain_bounded(context, usize::MAX)?;
+            let ran = self.drain(context)?;
             if ran == 0 && self.async_jobs.borrow().is_empty() {
                 break;
             }

@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::core::app::TurAppContext;
-use crate::core::bridge::BoundedJobExecutor;
+use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::event::AppEvent;
 use crate::core::fonts::FontLoader;
@@ -13,14 +13,14 @@ pub struct TurAppInternal {
     pub(crate) js_context: TurJsContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) needs_draw: Rc<Cell<bool>>,
-    pub(crate) executor: Rc<BoundedJobExecutor>,
+    pub(crate) executor: Rc<TurJobExecutor>,
 }
 
 impl TurAppInternal {
     pub fn new(
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn FontLoader>,
-        executor: Rc<BoundedJobExecutor>,
+        executor: Rc<TurJobExecutor>,
     ) -> Self {
         use crate::core::elements::ElementTree;
         use crate::core::focus::FocusManager;
@@ -64,7 +64,6 @@ impl TurAppInternal {
         &self,
         boa_context: &mut boa_engine::Context,
     ) -> Result<(), TurError> {
-        let mut iterations = 0;
         loop {
             let handled_events = self.flush_app_events();
             let dirty = self.js_context.dirty.take() || self.needs_draw.take();
@@ -72,13 +71,9 @@ impl TurAppInternal {
                 self.app_context.borrow_mut().layout();
             }
             let handled_commands = self.flush_js_commands(boa_context);
-            let _ = self.executor.drain_bounded(boa_context, 32);
+            let _ = self.executor.drain(boa_context);
             let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
             if !handled_events && !handled_commands && !new_dirty {
-                break;
-            }
-            iterations += 1;
-            if iterations >= 16 {
                 break;
             }
         }

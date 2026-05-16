@@ -1,11 +1,11 @@
-pub(crate) mod bounded_executor;
+pub(crate) mod executor;
 pub(crate) mod console;
 pub(crate) mod element_bridge;
 mod js_context;
 mod opaque;
 pub(crate) mod timer;
 
-pub use bounded_executor::BoundedJobExecutor;
+pub use executor::TurJobExecutor;
 pub use console::register_console_globals;
 pub use element_bridge::TurNodeHandle;
 pub use js_context::TurJsContext;
@@ -62,7 +62,7 @@ where
 pub struct BridgeResult {
     pub internal: TurAppInternal,
     pub clock: std::rc::Rc<FixedClock>,
-    pub executor: std::rc::Rc<BoundedJobExecutor>,
+    pub executor: std::rc::Rc<TurJobExecutor>,
 }
 
 pub fn init_bridge(
@@ -70,7 +70,7 @@ pub fn init_bridge(
     renderer: Box<dyn Renderer>,
     font_loader: Box<dyn FontLoader>,
     clock: std::rc::Rc<FixedClock>,
-    executor: std::rc::Rc<BoundedJobExecutor>,
+    executor: std::rc::Rc<TurJobExecutor>,
 ) -> BridgeResult {
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
