@@ -14,7 +14,7 @@ dist/
 *.tsbuildinfo
 
 # Generated TypeScript
-js/packages/tur-solidjs-renderer/src/generated
+js/packages/tur-react-renderer/src/generated
 
 # Build output
 js/packages/tur-rspack-plugin/dist/
