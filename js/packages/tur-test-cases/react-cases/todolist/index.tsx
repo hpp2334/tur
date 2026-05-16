@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { renderRoot } from "@tur/react-renderer";
 import {
   Column,
@@ -12,21 +11,15 @@ import {
   InputController,
   PointerInteract,
 } from "@tur/react";
+import {
+  todosAtom,
+  toggleTodoAtom,
+  removeTodoAtom,
+  useAtomValue,
+  useSetAtom,
+} from "./store";
 
-interface Todo {
-  id: number;
-  text: string;
-  done: boolean;
-}
-
-const INITIAL_TODOS: Todo[] = [
-  { id: 1, text: "Learn Rust", done: true },
-  { id: 2, text: "Build tur engine", done: false },
-  { id: 3, text: "Write documentation", done: false },
-  { id: 4, text: "Ship v0.1.0", done: false },
-];
-
-function TodoItem(props: { todo: Todo; onToggle: (id: number) => void; onRemove: (id: number) => void }) {
+function TodoItem(props: { todo: { id: number; text: string; done: boolean }; onToggle: (id: number) => void; onRemove: (id: number) => void }) {
   return (
     <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
       <PointerInteract
@@ -52,17 +45,9 @@ function TodoItem(props: { todo: Todo; onToggle: (id: number) => void; onRemove:
 }
 
 function TodoList() {
-  const [todos, setTodos] = useState<Todo[]>(INITIAL_TODOS);
-
-  const toggleTodo = (id: number) => {
-    setTodos((prev) => {
-      return prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t));
-    });
-  };
-
-  const removeTodo = (id: number) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
+  const todos = useAtomValue(todosAtom);
+  const toggleTodo = useSetAtom(toggleTodoAtom);
+  const removeTodo = useSetAtom(removeTodoAtom);
 
   const controller = new InputController({
     onKeyDown: (e) => {

@@ -166,19 +166,6 @@ pub fn register_timer_globals(
             queue_microtask,
         )
         .expect("failed to register queueMicrotask");
-
-    let console_source = r#"
-globalThis.console = {
-    log: function() {},
-    warn: function() {},
-    error: function() {},
-    info: function() {},
-    debug: function() {},
-};
-"#;
-    context
-        .eval(boa_engine::Source::from_bytes(console_source))
-        .expect("failed to register console");
 }
 
 fn enqueue_interval_tick(

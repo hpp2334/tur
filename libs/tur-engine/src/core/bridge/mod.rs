@@ -1,10 +1,12 @@
 pub(crate) mod bounded_executor;
+pub(crate) mod console;
 pub(crate) mod element_bridge;
 mod js_context;
 mod opaque;
 pub(crate) mod timer;
 
 pub use bounded_executor::BoundedJobExecutor;
+pub use console::register_console_globals;
 pub use element_bridge::TurNodeHandle;
 pub use js_context::TurJsContext;
 pub use opaque::BoaOpaque;
@@ -143,6 +145,7 @@ pub fn init_bridge(
     let schedule_flush = internal.needs_draw.clone();
     let timer_state = std::rc::Rc::new(std::cell::RefCell::new(TimerState::new()));
     timer::register_timer_globals(context, timer_state, schedule_flush);
+    console::register_console_globals(context);
 
     tracing::info!("tur bridge initialized");
 
