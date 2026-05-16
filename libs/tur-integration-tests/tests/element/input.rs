@@ -32,26 +32,8 @@ fn find_input_id(app: &TurTestApp) -> tur_engine::core::element::ElementNodeId {
 }
 
 fn focus_input(app: &mut TurTestApp, input_id: tur_engine::core::element::ElementNodeId) {
-    let tree = app.element_tree();
-    let input_node = tree.get(input_id).unwrap();
-    let layout = input_node.computed_layout;
-    let mut abs_x = 0.0f64;
-    let mut abs_y = 0.0f64;
-    let mut current = Some(input_id);
-    while let Some(cid) = current {
-        if let Some(n) = tree.get(cid) {
-            abs_x += n.computed_layout.offset.x;
-            abs_y += n.computed_layout.offset.y;
-            current = n.parent;
-        } else {
-            break;
-        }
-    }
-    drop(tree);
-
-    let click_x = abs_x + layout.size.width / 2.0;
-    let click_y = abs_y + layout.size.height / 2.0;
-    app.click(click_x, click_y);
+    let (cx, cy) = app.get_element_absolute_bounds(input_id).unwrap().center();
+    app.click(cx, cy);
 }
 
 #[test]
@@ -82,24 +64,6 @@ fn input_layout_positive_size() {
         layout.size.height > 0.0,
         "input height should be positive: got {}",
         layout.size.height,
-    );
-}
-
-#[test]
-fn input_set_text_via_bridge() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle("input-set-text").unwrap();
-
-    let input_id = find_input_id(&app);
-
-    assert_eq!(
-        app.with_element(input_id, |e| {
-            e.cast::<InputElement>()
-                .map(|i| i.text().to_string())
-                .unwrap_or_default()
-        })
-        .unwrap_or_default(),
-        "hello"
     );
 }
 

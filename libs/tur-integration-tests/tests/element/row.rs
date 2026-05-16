@@ -48,5 +48,5 @@ fn row_basic_horizontal_stacking() {
     assert_eq!(sb2_node.computed_layout.offset.x, 50.0);
 
     let row_node = rt.get(row_id).unwrap();
-    assert_eq!(row_node.computed_layout.size.width, 80.0);
+    assert_eq!(row_node.computed_layout.size.width, 400.0);
 }

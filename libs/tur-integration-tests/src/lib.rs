@@ -1,5 +1,6 @@
 use std::cell::Ref;
 use std::path::Path;
+use std::time::Duration;
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::AnyElement;
@@ -12,6 +13,19 @@ use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
 use tur_shared::Offset;
+
+pub struct Rect {
+    pub left: f64,
+    pub top: f64,
+    pub right: f64,
+    pub bottom: f64,
+}
+
+impl Rect {
+    pub fn center(&self) -> (f64, f64) {
+        ((self.left + self.right) / 2.0, (self.top + self.bottom) / 2.0)
+    }
+}
 
 pub struct TurTestApp {
     inner: TurApp,
@@ -28,7 +42,7 @@ impl TurTestApp {
             logical_height: height as u32,
             dpr: 1.0,
         });
-        let _ = inner.tick();
+        let _ = inner.spawn_loop_once(Duration::ZERO);
         Ok(Self { inner })
     }
 
@@ -42,16 +56,22 @@ impl TurTestApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.load_js(&source)
+        self.inner.load_js(&source)?;
+        self.ensure_flushed();
+        Ok(())
     }
 
     pub fn render(&mut self) {
         self.inner.push_event(AppEvent::RequestDraw);
-        let _ = self.inner.tick();
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
     pub fn tick(&mut self) -> Result<(), TurError> {
-        self.inner.tick()
+        self.inner.spawn_loop_once(Duration::ZERO)
+    }
+
+    pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
+        self.inner.spawn_loop_once(duration)
     }
 
     pub fn element_tree(&self) -> Ref<'_, ElementTree> {
@@ -63,11 +83,12 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
             }));
+        self.ensure_flushed();
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
             }));
-        let _ = self.inner.tick();
+        self.ensure_flushed();
     }
 
     pub fn send_key(&mut self, key: &str) {
@@ -77,12 +98,12 @@ impl TurTestApp {
             modifiers: Modifiers::default(),
             event_type: KeyEventType::Down,
         }));
-        let _ = self.inner.tick();
+        self.ensure_flushed();
     }
 
     pub fn send_ime(&mut self, event: AppImeEvent) {
         self.inner.push_event(AppEvent::Ime(event));
-        let _ = self.inner.tick();
+        self.ensure_flushed();
     }
 
     pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
@@ -96,7 +117,7 @@ impl TurTestApp {
             },
             event_type: KeyEventType::Down,
         }));
-        let _ = self.inner.tick();
+        self.ensure_flushed();
     }
 
     pub fn pointer_down(&mut self, x: f64, y: f64) {
@@ -104,7 +125,7 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
             }));
-        let _ = self.inner.tick();
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
     pub fn pointer_move(&mut self, x: f64, y: f64) {
@@ -112,7 +133,7 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
                 position: Offset::new(x, y),
             }));
-        let _ = self.inner.tick();
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
     pub fn pointer_up(&mut self, x: f64, y: f64) {
@@ -120,7 +141,13 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
             }));
-        let _ = self.inner.tick();
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+    }
+
+    fn ensure_flushed(&mut self) {
+        for _ in 0..6 {
+            let _ = self.inner.spawn_loop_once(Duration::from_millis(3));
+        }
     }
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
@@ -133,6 +160,29 @@ impl TurTestApp {
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
         self.inner.query_element(key)
+    }
+
+    pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
+        let tree = self.inner.element_tree();
+        let node = tree.get(id)?;
+        let mut x = node.computed_layout.offset.x;
+        let mut y = node.computed_layout.offset.y;
+        let mut current = node.parent;
+        while let Some(cid) = current {
+            if let Some(n) = tree.get(cid) {
+                x += n.computed_layout.offset.x;
+                y += n.computed_layout.offset.y;
+                current = n.parent;
+            } else {
+                break;
+            }
+        }
+        Some(Rect {
+            left: x,
+            top: y,
+            right: x + node.computed_layout.size.width,
+            bottom: y + node.computed_layout.size.height,
+        })
     }
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
@@ -153,5 +203,13 @@ impl TurTestApp {
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         self.inner.with_element(id, cb)
+    }
+
+    pub fn eval_js(&mut self, source: &str) -> String {
+        self.inner.eval_js(source).unwrap_or_default()
+    }
+
+    pub fn load_bundle_source(&mut self, source: &str) -> Result<(), TurError> {
+        self.inner.load_js(source)
     }
 }

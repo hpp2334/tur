@@ -17,6 +17,7 @@ pub struct FlexElement {
     pub(crate) cross_alignment: CrossAxisAlignment,
     pub(crate) child_data: Vec<ChildData>,
     pub(crate) constraints: Option<Constraints>,
+    pub(crate) computed_size: Option<Size>,
 }
 
 impl Default for FlexElement {
@@ -33,6 +34,7 @@ impl FlexElement {
             cross_alignment: CrossAxisAlignment::Center,
             child_data: Vec::new(),
             constraints: None,
+            computed_size: None,
         }
     }
 }

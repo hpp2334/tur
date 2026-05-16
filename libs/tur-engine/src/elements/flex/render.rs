@@ -106,7 +106,7 @@ impl ElementLayout for FlexElement {
             }
         }
 
-        let total_main: f64 = self
+        let _total_main: f64 = self
             .child_data
             .iter()
             .map(|d| self.direction.main(d.size))
@@ -115,15 +115,17 @@ impl ElementLayout for FlexElement {
         let size = match self.direction {
             Axis::Vertical => Size::new(
                 max_cross.clamp(constraints.min_width, constraints.max_width),
-                total_main.clamp(constraints.min_height, constraints.max_height),
+                constraints.max_height.clamp(constraints.min_height, constraints.max_height),
             ),
             Axis::Horizontal => Size::new(
-                total_main.clamp(constraints.min_width, constraints.max_width),
+                constraints.max_width.clamp(constraints.min_width, constraints.max_width),
                 max_cross.clamp(constraints.min_height, constraints.max_height),
             ),
         };
 
-        constraints.constrain(size)
+        let final_size = constraints.constrain(size);
+        self.computed_size = Some(final_size);
+        final_size
     }
 
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
@@ -137,9 +139,10 @@ impl ElementLayout for FlexElement {
             .map(|d| self.direction.main(d.size))
             .sum();
 
-        let constraints = self.constraints.unwrap_or(Constraints::NONE);
-        let container_size =
-            constraints.constrain(Size::new(constraints.max_width, constraints.max_height));
+        let container_size = self.computed_size.unwrap_or_else(|| {
+            let constraints = self.constraints.unwrap_or(Constraints::NONE);
+            constraints.constrain(Size::new(constraints.max_width, constraints.max_height))
+        });
         let available_main = self.direction.main(container_size);
 
         let mut current_main = match self.main_alignment {

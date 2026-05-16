@@ -203,7 +203,7 @@ impl TurWasmApp {
                 logical_height,
                 dpr,
             });
-            let _ = app.tick();
+            let _ = app.spawn_loop_once(std::time::Duration::ZERO);
 
             let resize_state = state_clone.clone();
             let resize_closure = Closure::<dyn Fn()>::new(move || {
@@ -460,7 +460,7 @@ impl TurWasmApp {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         state.app.push_event(AppEvent::RequestDraw);
-        let _ = state.app.tick();
+        let _ = state.app.spawn_loop_once(std::time::Duration::ZERO);
 
         drop(guard);
         Self::start_frame_loop(&self.state);
@@ -475,7 +475,7 @@ impl TurWasmApp {
         let raf_closure = Closure::<dyn Fn()>::new(move || {
             let mut guard = loop_state.borrow_mut();
             if let Some(s) = guard.as_mut() {
-                let _ = s.app.tick();
+                let _ = s.app.spawn_loop_once(std::time::Duration::from_millis(16));
 
                 let is_input = s.app.focused_is_input();
                 if is_input {

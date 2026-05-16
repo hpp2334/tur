@@ -5,12 +5,17 @@ pub mod renderer;
 
 pub mod error;
 
+use std::rc::Rc;
+use std::time::Duration;
+
+use boa_engine::context::time::FixedClock;
 use boa_engine::Context;
 use boa_engine::Source;
 use error::TurError;
 
 use core::app::TurAppInternal;
 use core::bridge::init_bridge;
+use core::bridge::TurJobExecutor;
 use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
@@ -20,6 +25,8 @@ use elements::input::InputElement;
 pub struct TurApp {
     boa_context: Context,
     internal: TurAppInternal,
+    clock: Rc<FixedClock>,
+    executor: Rc<TurJobExecutor>,
 }
 
 impl TurApp {
@@ -27,14 +34,24 @@ impl TurApp {
         renderer: Box<dyn core::render::Renderer>,
         font_loader: Box<dyn core::fonts::FontLoader>,
     ) -> Result<Self, TurError> {
-        let mut boa_context = Context::default();
-        let internal = init_bridge(&mut boa_context, renderer, font_loader);
+        let clock = Rc::new(FixedClock::from_millis(0));
+        let executor = Rc::new(TurJobExecutor::new());
+        let mut boa_context = Context::builder()
+            .clock(clock.clone())
+            .job_executor(executor.clone())
+            .build()
+            .expect("failed to build boa context");
+
+        let BridgeResult { internal, clock, executor } =
+            init_bridge(&mut boa_context, renderer, font_loader, clock, executor);
 
         tracing::info!("TurApp initialized");
 
         Ok(TurApp {
             boa_context,
             internal,
+            clock,
+            executor,
         })
     }
 
@@ -42,15 +59,33 @@ impl TurApp {
         self.boa_context
             .eval(Source::from_bytes(source))
             .map_err(TurError::JsEval)?;
+        let _ = self.executor.drain(&mut self.boa_context);
         Ok(())
     }
 
-    pub fn push_event(&self, event: core::event::AppEvent) {
-        self.internal.app_context.borrow_mut().event_queue.push(event);
+    pub fn eval_js(&mut self, source: &str) -> Result<String, TurError> {
+        let result = self
+            .boa_context
+            .eval(Source::from_bytes(source))
+            .map_err(TurError::JsEval)?;
+        let s = result
+            .as_string()
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_else(|| result.display().to_string());
+        Ok(s)
     }
 
-    pub fn tick(&mut self) -> Result<(), TurError> {
+    pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
+        self.clock.forward(advanced_time.as_millis() as u64);
         self.internal.flush(&mut self.boa_context)
+    }
+
+    pub fn push_event(&self, event: core::event::AppEvent) {
+        self.internal
+            .app_context
+            .borrow_mut()
+            .event_queue
+            .push(event);
     }
 
     pub fn debug_layout(&self) -> String {
@@ -142,3 +177,5 @@ impl TurApp {
 fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
     s[..byte_pos].chars().count()
 }
+
+use core::bridge::BridgeResult;

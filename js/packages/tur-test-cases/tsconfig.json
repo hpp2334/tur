@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "solidjs-cases",
-    "jsxImportSource": "solid-js"
+    "rootDir": "react-cases",
+    "jsx": "react-jsx"
   },
-  "include": ["solidjs-cases", "solidjs-jsx.d.ts"]
+  "include": ["react-cases", "react-jsx.d.ts", "global.d.ts"]
 }

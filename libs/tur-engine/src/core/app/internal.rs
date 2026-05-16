@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::core::app::TurAppContext;
+use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::event::AppEvent;
 use crate::core::fonts::FontLoader;
@@ -11,13 +12,15 @@ use crate::error::TurError;
 pub struct TurAppInternal {
     pub(crate) js_context: TurJsContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
-    needs_draw: Cell<bool>,
+    pub(crate) needs_draw: Rc<Cell<bool>>,
+    pub(crate) executor: Rc<TurJobExecutor>,
 }
 
 impl TurAppInternal {
     pub fn new(
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn FontLoader>,
+        executor: Rc<TurJobExecutor>,
     ) -> Self {
         use crate::core::elements::ElementTree;
         use crate::core::focus::FocusManager;
@@ -47,10 +50,13 @@ impl TurAppInternal {
             font_loader,
         );
 
+        let needs_draw = Rc::new(Cell::new(false));
+
         Self {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
-            needs_draw: Cell::new(false),
+            needs_draw,
+            executor,
         }
     }
 
@@ -65,7 +71,9 @@ impl TurAppInternal {
                 self.app_context.borrow_mut().layout();
             }
             let handled_commands = self.flush_js_commands(boa_context);
-            if !handled_events && !handled_commands {
+            let _ = self.executor.drain(boa_context);
+            let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
+            if !handled_events && !handled_commands && !new_dirty {
                 break;
             }
         }
@@ -99,21 +107,22 @@ impl TurAppInternal {
         &self,
         boa_context: &mut boa_engine::Context,
     ) -> bool {
-        let mut pending_callbacks: Vec<(boa_engine::object::builtins::JsFunction, Vec<boa_engine::JsValue>)> =
-            Vec::new();
+        let mut pending_callbacks: Vec<(
+            boa_engine::object::builtins::JsFunction,
+            Vec<boa_engine::JsValue>,
+        )> = Vec::new();
 
-        loop {
-            let entries = self.js_context.js_command_queue.borrow_mut().drain();
-            if entries.is_empty() {
-                break;
-            }
-            for (target, command) in entries {
-                let tree = self.js_context.element_tree.borrow();
-                if let Some(node) = tree.get(target) {
-                    if let Some(ref element) = node.element {
-                        if let Some(pair) = element.emit_js_callback(boa_context, command) {
-                            pending_callbacks.push(pair);
-                        }
+        let entries = self.js_context.js_command_queue.borrow_mut().drain();
+        if entries.is_empty() {
+            return false;
+        }
+
+        for (target, command) in entries {
+            let tree = self.js_context.element_tree.borrow();
+            if let Some(node) = tree.get(target) {
+                if let Some(ref element) = node.element {
+                    if let Some(pair) = element.emit_js_callback(boa_context, command) {
+                        pending_callbacks.push(pair);
                     }
                 }
             }
@@ -122,14 +131,9 @@ impl TurAppInternal {
         let handled = !pending_callbacks.is_empty();
 
         for (callback, args) in pending_callbacks {
-            let _ = callback.call(
-                &boa_engine::JsValue::undefined(),
-                &args,
-                boa_context,
-            );
+            let _ = callback.call(&boa_engine::JsValue::undefined(), &args, boa_context);
         }
 
         handled
     }
-
 }

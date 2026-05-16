@@ -107,7 +107,7 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 [[package]]
 name = "boa_ast"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "bitflags 2.11.1",
  "boa_interner",
@@ -122,7 +122,7 @@ dependencies = [
 [[package]]
 name = "boa_engine"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "aligned-vec",
  "arrayvec",
@@ -144,7 +144,7 @@ dependencies = [
  "futures-concurrency",
  "futures-lite",
  "getrandom",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "icu_calendar",
  "icu_normalizer",
  "indexmap",
@@ -179,23 +179,23 @@ dependencies = [
 [[package]]
 name = "boa_gc"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "arrayvec",
  "boa_macros",
  "boa_string",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "thin-vec",
 ]
 
 [[package]]
 name = "boa_interner"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "boa_gc",
  "boa_macros",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.0",
  "indexmap",
  "once_cell",
  "phf",
@@ -206,7 +206,7 @@ dependencies = [
 [[package]]
 name = "boa_macros"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "cfg-if",
  "cow-utils",
@@ -219,7 +219,7 @@ dependencies = [
 [[package]]
 name = "boa_parser"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "bitflags 2.11.1",
  "boa_ast",
@@ -236,7 +236,7 @@ dependencies = [
 [[package]]
 name = "boa_string"
 version = "1.0.0-dev"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "fast-float2",
  "itoa",
@@ -970,6 +970,11 @@ name = "hashbrown"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
+]
 
 [[package]]
 name = "heck"
@@ -1172,9 +1177,9 @@ dependencies = [
 
 [[package]]
 name = "intrusive-collections"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0375b6b871e424e9e052e1107d57dc6952f77ff882bd4bf74333a833779bab"
+checksum = "80e165935eba36cb526af8389effd2005a741adcbb6ed32106cc68e3f7b92960"
 dependencies = [
  "memoffset 0.9.1",
 ]
@@ -1666,9 +1671,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pastey"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b867cad97c0791bbd3aaa6472142568c6c9e8f71937e98379f584cfb0cf35bec"
+checksum = "c5a797f0e07bdf071d15742978fc3128ec6c22891c31a3a931513263904c982a"
 
 [[package]]
 name = "peniko"
@@ -2183,7 +2188,7 @@ dependencies = [
 [[package]]
 name = "small_btree"
 version = "0.1.0"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 dependencies = [
  "arrayvec",
 ]
@@ -2278,7 +2283,7 @@ dependencies = [
 [[package]]
 name = "tag_ptr"
 version = "0.1.0"
-source = "git+https://github.com/boa-dev/boa?rev=3cec5e6bc4454077cb8d65b537d368d633137e0e#3cec5e6bc4454077cb8d65b537d368d633137e0e"
+source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd355022196772d32e60a9d#7addeb39597f60156cd355022196772d32e60a9d"
 
 [[package]]
 name = "tap"
@@ -2327,9 +2332,9 @@ dependencies = [
 
 [[package]]
 name = "thin-vec"
-version = "0.2.16"
+version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "259cdf8ed4e4aca6f1e9d011e10bd53f524a2d0637d7b28450f6c64ac298c4c6"
+checksum = "b0f7e269b48f0a7dd0146680fa24b50cc67fc0373f086a5b2f99bd084639b482"
 
 [[package]]
 name = "thiserror"

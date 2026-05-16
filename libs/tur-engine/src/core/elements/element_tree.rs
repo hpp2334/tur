@@ -306,16 +306,41 @@ impl ElementTree {
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
-        self.nodes
-            .values()
-            .find(|n| {
-                n.query_key
-                    .as_ref()
-                    .map(|k| k.iter().map(|s| s.as_str()).eq(key.iter().copied()))
-                    .unwrap_or(false)
-                    && n.element.is_some()
-            })
-            .map(|n| n.id)
+        let root_id = self.root_id?;
+        let mut result = None;
+        self.query_element_recursive(root_id, key, &mut result);
+        result
+    }
+
+    fn query_element_recursive(
+        &self,
+        id: ElementNodeId,
+        key: &[&str],
+        result: &mut Option<ElementNodeId>,
+    ) {
+        if result.is_some() {
+            return;
+        }
+        let node = match self.nodes.get(&id) {
+            Some(n) => n,
+            None => return,
+        };
+        if node
+            .query_key
+            .as_ref()
+            .map(|k| k.iter().map(|s| s.as_str()).eq(key.iter().copied()))
+            .unwrap_or(false)
+            && node.element.is_some()
+        {
+            *result = Some(id);
+            return;
+        }
+        for &child_id in &node.children {
+            self.query_element_recursive(child_id, key, result);
+            if result.is_some() {
+                return;
+            }
+        }
     }
 
     fn hit_test_node(&self, id: ElementNodeId, position: Offset) -> bool {

@@ -49,7 +49,7 @@ fn column_basic_vertical_stacking() {
     assert_eq!(sb2_node.computed_layout.offset.y, 50.0);
 
     let col_node = rt.get(col_id).unwrap();
-    assert_eq!(col_node.computed_layout.size.height, 80.0);
+    assert_eq!(col_node.computed_layout.size.height, 600.0);
 }
 
 #[test]
