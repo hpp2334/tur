@@ -3,12 +3,12 @@ import { globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-const casesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "solidjs-cases");
+const casesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "react-cases");
 const entries: Record<string, string> = {};
 
 for (const dir of globSync("*/index.tsx", { cwd: casesDir })) {
   const name = dir.split("/")[0];
-  entries[name] = `./solidjs-cases/${dir}`;
+  entries[name] = `./react-cases/${dir}`;
 }
 
 export default defineConfig({
@@ -27,21 +27,19 @@ export default defineConfig({
         test: /\.tsx?$/,
         exclude: /node_modules/,
         use: {
-          loader: "babel-loader",
+          loader: "builtin:swc-loader",
           options: {
-            presets: [
-              [
-                "@babel/preset-typescript",
-                { isTSX: true, allExtensions: true },
-              ],
-              [
-                "solid",
-                {
-                  generate: "universal",
-                  moduleName: "@tur/solidjs-renderer",
+            jsc: {
+              parser: {
+                syntax: "typescript",
+                tsx: true,
+              },
+              transform: {
+                react: {
+                  runtime: "automatic",
                 },
-              ],
-            ],
+              },
+            },
           },
         },
       },

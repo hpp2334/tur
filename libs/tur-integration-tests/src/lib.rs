@@ -158,4 +158,12 @@ impl TurTestApp {
     pub fn eval_js(&mut self, source: &str) -> String {
         self.inner.eval_js(source).unwrap_or_default()
     }
+
+    pub fn load_bundle_source(&mut self, source: &str) -> Result<(), TurError> {
+        self.inner.load_js(source)
+    }
+
+    pub fn flush_timer_queue(&mut self) {
+        self.inner.flush_timer_queue();
+    }
 }

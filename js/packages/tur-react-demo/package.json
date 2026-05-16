@@ -1,0 +1,15 @@
+{
+  "name": "@tur/react-demo",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "rspack build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "@tur/react-renderer": "workspace:*",
+    "@tur/react": "workspace:*",
+    "@tur/rspack-plugin": "workspace:*"
+  }
+}

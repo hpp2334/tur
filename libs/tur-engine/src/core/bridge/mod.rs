@@ -1,10 +1,13 @@
 pub(crate) mod element_bridge;
 mod js_context;
 mod opaque;
+pub(crate) mod timer;
 
 pub use element_bridge::TurNodeHandle;
 pub use js_context::TurJsContext;
 pub use opaque::BoaOpaque;
+pub use timer::flush_timers;
+pub use timer::register_timer_globals;
 
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
@@ -126,6 +129,8 @@ pub fn init_bridge(
     context
         .register_global_property(js_string!("__tur"), tur_obj, Attribute::all())
         .expect("failed to register __tur global");
+
+    register_timer_globals(context);
 
     tracing::info!("tur bridge initialized");
 

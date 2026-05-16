@@ -10,6 +10,7 @@ use boa_engine::Source;
 use error::TurError;
 
 use core::app::TurAppInternal;
+use core::bridge::flush_timers;
 use core::bridge::init_bridge;
 use core::element::ElementNodeId;
 use core::elements::AnyElement;
@@ -42,6 +43,9 @@ impl TurApp {
         self.boa_context
             .eval(Source::from_bytes(source))
             .map_err(TurError::JsEval)?;
+        for _ in 0..10 {
+            flush_timers(&mut self.boa_context);
+        }
         Ok(())
     }
 
@@ -55,6 +59,10 @@ impl TurApp {
             .map(|s| s.to_std_string_escaped())
             .unwrap_or_else(|| result.display().to_string());
         Ok(s)
+    }
+
+    pub fn flush_timer_queue(&mut self) {
+        flush_timers(&mut self.boa_context);
     }
 
     pub fn push_event(&self, event: core::event::AppEvent) {

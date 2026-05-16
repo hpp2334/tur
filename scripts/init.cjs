@@ -14,6 +14,6 @@ run('cargo test -p tur-shared --lib export_bindings', { cwd: root });
 
 run('pnpm install', { cwd: path.join(root, 'js') });
 
-run('pnpm --filter @tur/solidjs-renderer build', { cwd: path.join(root, 'js') });
-run('pnpm --filter @tur/solidjs build', { cwd: path.join(root, 'js') });
+run('pnpm --filter @tur/preact-renderer build', { cwd: path.join(root, 'js') });
+run('pnpm --filter @tur/preact build', { cwd: path.join(root, 'js') });
 run('pnpm --filter @tur/rspack-plugin build', { cwd: path.join(root, 'js') });
