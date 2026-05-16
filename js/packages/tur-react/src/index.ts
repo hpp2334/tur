@@ -1,5 +1,6 @@
 export type { TurNodeHandle, TurKeyEvent, ResourceHandle } from "@tur/react-renderer";
 export { InputController } from "@tur/react-renderer";
+export { createImageResource } from "@tur/react-renderer";
 export type { InputControllerOptions } from "@tur/react-renderer";
 export type { Color } from "@tur/react-renderer";
 export type { RGB } from "@tur/react-renderer";
