@@ -1,6 +1,6 @@
 use std::fmt;
 
-use tur_shared::{Color, Geometry, Offset};
+use tur_shared::{Color, Geometry, Offset, Size};
 use vello::kurbo::{Affine, Stroke};
 use vello::peniko::{Brush, Fill, Image};
 use vello::Scene;
@@ -153,6 +153,30 @@ impl Canvas for VelloPaintContext<'_> {
                 );
             }
         }
+    }
+
+    fn draw_shadow(
+        &mut self,
+        offset: Offset,
+        size: Size,
+        color: &Color,
+        border_radius: f64,
+        blur: f64,
+        shadow_offset: (f64, f64),
+    ) {
+        let peniko_color = to_peniko_color(color);
+        let transform = Affine::translate((
+            offset.x + shadow_offset.0,
+            offset.y + shadow_offset.1,
+        ));
+        let rect = vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height);
+        self.scene.draw_blurred_rounded_rect(
+            transform,
+            rect,
+            peniko_color,
+            border_radius,
+            blur,
+        );
     }
 }
 

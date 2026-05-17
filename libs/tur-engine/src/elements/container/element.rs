@@ -16,6 +16,9 @@ pub struct ContainerElement {
     pub(crate) border_width: Option<f64>,
     pub(crate) border_radius: Option<f64>,
     pub(crate) border_position: BorderPosition,
+    pub(crate) shadow_color: Option<Color>,
+    pub(crate) shadow_offset: Option<(f64, f64)>,
+    pub(crate) shadow_blur: Option<f64>,
 }
 
 impl ContainerElement {
@@ -29,6 +32,9 @@ impl ContainerElement {
             border_width: None,
             border_radius: None,
             border_position: BorderPosition::default(),
+            shadow_color: None,
+            shadow_offset: None,
+            shadow_blur: None,
         }
     }
 
@@ -59,6 +65,18 @@ impl ContainerElement {
     pub fn padding(&self) -> Option<f64> {
         self.padding
     }
+
+    pub fn shadow_color(&self) -> Option<&Color> {
+        self.shadow_color.as_ref()
+    }
+
+    pub fn shadow_offset(&self) -> Option<(f64, f64)> {
+        self.shadow_offset
+    }
+
+    pub fn shadow_blur(&self) -> Option<f64> {
+        self.shadow_blur
+    }
 }
 
 impl ElementTrace for ContainerElement {
@@ -86,8 +104,25 @@ impl ElementTrace for ContainerElement {
             parts.push(format!("borderRadius={r}"));
         }
         parts.push(format!("borderPosition={:?}", self.border_position));
+        if let Some(c) = self.shadow_color {
+            parts.push(format!("shadowColor={c}"));
+        }
+        if let Some((x, y)) = self.shadow_offset {
+            parts.push(format!("shadowOffset=({x},{y})"));
+        }
+        if let Some(b) = self.shadow_blur {
+            parts.push(format!("shadowBlur={b}"));
+        }
         parts.join(" ")
     }
+}
+
+fn extract_offset_array(value: &JsValue, ctx: &mut Context) -> Option<(f64, f64)> {
+    let obj = value.as_object()?;
+    let arr = boa_engine::object::builtins::JsArray::from_object(obj.clone()).ok()?;
+    let x = arr.at(0, ctx).ok()?.as_number()?;
+    let y = arr.at(1, ctx).ok()?.as_number()?;
+    Some((x, y))
 }
 
 impl ElementOnUpdate for ContainerElement {
@@ -111,6 +146,12 @@ impl ElementOnUpdate for ContainerElement {
                 self.border_position =
                     BorderPosition::from_u8(n as u8).unwrap_or_default();
             }
+        } else if *key == "shadowColor" {
+            self.shadow_color = extract_color(value, _ctx);
+        } else if *key == "shadowOffset" {
+            self.shadow_offset = extract_offset_array(value, _ctx);
+        } else if *key == "shadowBlur" {
+            self.shadow_blur = value.as_number();
         }
     }
 }

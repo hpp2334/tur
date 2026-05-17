@@ -53,6 +53,9 @@ export interface ContainerProps extends BaseProps {
   borderWidth?: number;
   borderRadius?: number;
   borderPosition?: BorderPosition;
+  shadowColor?: Color;
+  shadowOffset?: [number, number];
+  shadowBlur?: number;
 }
 
 export interface PointerInteractProps {
@@ -122,7 +125,7 @@ export function SizedBox(props: SizedBoxProps) {
 }
 
 export function Container(props: ContainerProps) {
-  return <tur_container width={props.width} height={props.height} padding={props.padding} color={props.color} borderColor={props.borderColor} borderWidth={props.borderWidth} borderRadius={props.borderRadius} borderPosition={props.borderPosition} queryKey={props.queryKey}>{props.children}</tur_container>;
+  return <tur_container width={props.width} height={props.height} padding={props.padding} color={props.color} borderColor={props.borderColor} borderWidth={props.borderWidth} borderRadius={props.borderRadius} borderPosition={props.borderPosition} shadowColor={props.shadowColor} shadowOffset={props.shadowOffset} shadowBlur={props.shadowBlur} queryKey={props.queryKey}>{props.children}</tur_container>;
 }
 
 export function PointerInteract(props: PointerInteractProps) {
