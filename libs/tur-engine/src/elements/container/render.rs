@@ -73,8 +73,15 @@ impl ElementRender for ContainerElement {
             }
         }
 
-        if let Some(ref color) = self.color {
-            canvas.fill_geometry(offset, &Geometry::Rect(layout.size), color);
+        if let Some(ref brush) = self.color {
+            let geometry = match self.border_radius {
+                Some(r) if r > 0.0 => Geometry::RoundedRect {
+                    size: layout.size,
+                    radius: r,
+                },
+                _ => Geometry::Rect(layout.size),
+            };
+            canvas.fill_geometry(offset, &geometry, brush);
         }
 
         if let (Some(ref border_color), Some(border_width)) =

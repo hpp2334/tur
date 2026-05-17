@@ -132,3 +132,19 @@ impl std::str::FromStr for Color {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("invalid color format, expected #RGB, #RRGGBB, or #RRGGBBAA")]
 pub struct ColorParseError;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GradientStop {
+    pub offset: f32,
+    pub color: Color,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Brush {
+    SolidColor(Color),
+    LinearGradient {
+        start: (f64, f64),
+        end: (f64, f64),
+        stops: Vec<GradientStop>,
+    },
+}

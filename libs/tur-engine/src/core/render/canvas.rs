@@ -1,13 +1,13 @@
 use std::fmt;
 
-use tur_shared::{Color, Geometry, Offset, Size};
+use tur_shared::{Brush, Color, Geometry, Offset, Size};
 use vello::kurbo::Affine;
 use vello::peniko::Image;
 
 use crate::elements::text::text_layout::TextLayoutData;
 
 pub trait Canvas: fmt::Debug {
-    fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, color: &Color);
+    fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush);
     fn stroke_geometry(
         &mut self,
         offset: Offset,

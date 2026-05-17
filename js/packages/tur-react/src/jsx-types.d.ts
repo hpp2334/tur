@@ -1,4 +1,4 @@
-import type { Color, ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
+import type { Color, LinearGradient, ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { BoxFit } from "@tur/react-renderer";
 import type { BorderPosition } from "@tur/react-renderer";
 import type { CrossAxisAlignment } from "@tur/react-renderer";
@@ -41,7 +41,7 @@ declare module "react/jsx-runtime" {
         width?: number;
         height?: number;
         padding?: number;
-        color?: Color;
+        color?: Color | LinearGradient;
         borderColor?: Color;
         borderWidth?: number;
         borderRadius?: number;
