@@ -2,6 +2,7 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 
+use crate::core::bridge::color::extract_color;
 use crate::core::elements::{
     ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus,
     ElementOnGesture, ElementOnGestureContext, ElementOnIme, ElementOnImeContext,
@@ -673,13 +674,9 @@ impl ElementOnUpdate for InputElement {
         if *key == "fontSize" {
             self.font_size = value.as_number().unwrap_or(14.0);
         } else if *key == "color" {
-            if let Some(s) = value.as_string() {
-                self.color = s.to_std_string_escaped().parse().ok();
-            }
+            self.color = extract_color(value, _ctx);
         } else if *key == "cursorColor" {
-            if let Some(s) = value.as_string() {
-                self.cursor_color = s.to_std_string_escaped().parse().ok();
-            }
+            self.cursor_color = extract_color(value, _ctx);
         } else if *key == "placeholder" {
             if let Some(s) = value.as_string() {
                 self.placeholder = Some(s.to_std_string_escaped());
@@ -687,9 +684,7 @@ impl ElementOnUpdate for InputElement {
                 self.placeholder = None;
             }
         } else if *key == "placeholderColor" {
-            if let Some(s) = value.as_string() {
-                self.placeholder_color = s.to_std_string_escaped().parse().ok();
-            }
+            self.placeholder_color = extract_color(value, _ctx);
         } else if *key == "multiline" {
             self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
         } else if *key == "onKeyDown" {

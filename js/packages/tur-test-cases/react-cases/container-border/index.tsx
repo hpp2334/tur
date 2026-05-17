@@ -1,5 +1,4 @@
-import { renderRoot } from "@tur/react-renderer";
-import type { Color } from "@tur/react-renderer";
+import { renderRoot, Color } from "@tur/react-renderer";
 import { Container, SizedBox, BorderPosition } from "@tur/react";
 
 function ContainerBorder() {
@@ -8,8 +7,8 @@ function ContainerBorder() {
       width={200}
       height={200}
       padding={16}
-      color={"#ffffff" as unknown as Color}
-      borderColor={"#000000" as unknown as Color}
+      color={Color.hex("#ffffff")}
+      borderColor={Color.hex("#000000")}
       borderWidth={2}
       borderRadius={8}
       borderPosition={BorderPosition.Inside}

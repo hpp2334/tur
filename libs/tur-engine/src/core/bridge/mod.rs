@@ -1,3 +1,4 @@
+pub(crate) mod color;
 pub(crate) mod executor;
 pub(crate) mod console;
 pub(crate) mod element_bridge;

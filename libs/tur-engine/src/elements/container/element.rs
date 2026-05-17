@@ -2,6 +2,7 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::{BorderPosition, Color};
 
+use crate::core::bridge::color::extract_color;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 
@@ -98,13 +99,9 @@ impl ElementOnUpdate for ContainerElement {
         } else if *key == "padding" {
             self.padding = value.as_number();
         } else if *key == "color" {
-            if let Some(s) = value.as_string() {
-                self.color = s.to_std_string_escaped().parse().ok();
-            }
+            self.color = extract_color(value, _ctx);
         } else if *key == "borderColor" {
-            if let Some(s) = value.as_string() {
-                self.border_color = s.to_std_string_escaped().parse().ok();
-            }
+            self.border_color = extract_color(value, _ctx);
         } else if *key == "borderWidth" {
             self.border_width = value.as_number();
         } else if *key == "borderRadius" {

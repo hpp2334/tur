@@ -1,6 +1,7 @@
 import React from "react";
 import type { ReactNode, Ref } from "react";
-import type { Color, ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
+import { Color } from "@tur/react-renderer";
+import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
@@ -143,7 +144,7 @@ export interface TextSpanProps {
   italic?: boolean;
   underline?: boolean;
   fontSize?: number;
-  color?: Color | string;
+  color?: Color;
 }
 
 export function TextContainer(props: TextContainerProps) {
@@ -151,7 +152,7 @@ export function TextContainer(props: TextContainerProps) {
 }
 
 export function TextSpan(props: TextSpanProps) {
-  return <tur_text_span {...props} color={props.color ?? "#000000"} />;
+  return <tur_text_span {...props} color={props.color ?? Color.hex("#000000")} />;
 }
 
 export function Text(props: TextProps) {

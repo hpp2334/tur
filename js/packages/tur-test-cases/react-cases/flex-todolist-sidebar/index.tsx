@@ -1,4 +1,4 @@
-import { renderRoot } from "@tur/react-renderer";
+import { renderRoot, Color } from "@tur/react-renderer";
 import {
   Column,
   Row,
@@ -13,11 +13,11 @@ const TABS = [{ id: "todolist", label: "TodoList" }];
 
 function Sidebar(props: { tabs: typeof TABS; activeId: string }) {
   return (
-    <Container color={"#1a1a2e" as unknown as import("@tur/react-renderer").Color} width={200}>
+    <Container color={Color.hex("#1a1a2e")} width={200}>
       <Column>
         {props.tabs.map((tab) => (
           <Container
-            color={(tab.id === props.activeId ? "#0f3460" : "#16213e") as unknown as import("@tur/react-renderer").Color}
+            color={Color.hex(tab.id === props.activeId ? "#0f3460" : "#16213e")}
             padding={12}
           >
             <Text content={tab.label} fontSize={14} />

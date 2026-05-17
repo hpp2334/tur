@@ -82,7 +82,7 @@ declare module "react/jsx-runtime" {
       };
       tur_text_container: RefAttributes<TurNodeHandle> & {
         fontSize?: number;
-        color?: Color | string;
+        color?: Color;
         queryKey?: string[];
         children?: React.ReactNode;
       };
@@ -92,7 +92,7 @@ declare module "react/jsx-runtime" {
         italic?: boolean;
         underline?: boolean;
         fontSize?: number;
-        color?: Color | string;
+        color?: Color;
       };
       tur_image: RefAttributes<TurNodeHandle> & {
         resourceId: ResourceHandle;

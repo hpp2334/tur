@@ -11,6 +11,7 @@ import {
   Input,
   InputController,
 } from "@tur/react";
+import { Color } from "@tur/react-renderer";
 import { todosAtom, toggleTodoAtom, removeTodoAtom, useAtomValue, useSetAtom } from "./store";
 import { Sidebar } from "../../components/Sidebar";
 
@@ -22,7 +23,7 @@ function TodoItem(props: { todo: { id: number; text: string; done: boolean }; to
       } />
       <Text content={props.todo.text} />
       <PointerInteract onClick={() => props.remove(props.todo.id)} child={
-        <Container padding={4} color={"#e74c3c" as unknown as import("@tur/react-renderer").Color}>
+        <Container padding={4} color={Color.hex("#e74c3c")}>
           <Text content={"[x]"} />
         </Container>
       } />
