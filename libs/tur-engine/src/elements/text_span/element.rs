@@ -3,6 +3,7 @@ use std::fmt;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
 
+use crate::core::bridge::color::extract_color;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{ElementOnUpdate, ElementTrace};
 use crate::core::layout::LayoutContext;
@@ -82,10 +83,10 @@ impl ElementOnUpdate for TextSpanElement {
         } else if *key == "fontSize" {
             self.font_size = value.as_number().and_then(|v| if v == 0.0 { None } else { Some(v) });
         } else if *key == "color" {
-            if let Some(s) = value.as_string() {
-                self.color = s.to_std_string_escaped().parse().ok();
-            } else if value.is_null() || value.is_undefined() {
+            if value.is_null() || value.is_undefined() {
                 self.color = None;
+            } else {
+                self.color = extract_color(value, _ctx);
             }
         }
     }

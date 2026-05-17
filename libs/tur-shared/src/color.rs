@@ -1,8 +1,6 @@
 use std::fmt;
-use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RGB {
     pub r: u8,
     pub g: u8,
@@ -21,8 +19,7 @@ impl fmt::Display for RGB {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RGBA {
     pub r: u8,
     pub g: u8,
@@ -46,8 +43,7 @@ impl fmt::Display for RGBA {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     RGB(RGB),
     RGBA(RGBA),
