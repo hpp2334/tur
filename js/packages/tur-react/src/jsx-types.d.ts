@@ -1,5 +1,6 @@
 import type { Color, ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { BoxFit } from "@tur/react-renderer";
+import type { BorderPosition } from "@tur/react-renderer";
 import type { CrossAxisAlignment } from "@tur/react-renderer";
 import type { FlexDirection } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
@@ -41,6 +42,10 @@ declare module "react/jsx-runtime" {
         height?: number;
         padding?: number;
         color?: Color;
+        borderColor?: Color;
+        borderWidth?: number;
+        borderRadius?: number;
+        borderPosition?: BorderPosition;
         queryKey?: string[];
         children?: React.ReactNode;
       };

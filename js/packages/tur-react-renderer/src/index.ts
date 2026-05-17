@@ -15,6 +15,7 @@ export { FlexFit } from "./generated/FlexFit";
 export { FlexDirection } from "./generated/FlexDirection";
 export { Axis } from "./generated/Axis";
 export { BoxFit } from "./generated/BoxFit";
+export { BorderPosition } from "./generated/BorderPosition";
 export type { EdgeInsets } from "./generated/EdgeInsets";
 export type { Size } from "./generated/Size";
 export type { Offset } from "./generated/Offset";

@@ -5,6 +5,7 @@ import type { InputController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
+import type { BorderPosition } from "@tur/react-renderer";
 
 interface BaseProps {
   children?: ReactNode;
@@ -47,6 +48,10 @@ export interface ContainerProps extends BaseProps {
   height?: number;
   padding?: number;
   color?: Color;
+  borderColor?: Color;
+  borderWidth?: number;
+  borderRadius?: number;
+  borderPosition?: BorderPosition;
 }
 
 export interface PointerInteractProps {
@@ -116,7 +121,7 @@ export function SizedBox(props: SizedBoxProps) {
 }
 
 export function Container(props: ContainerProps) {
-  return <tur_container width={props.width} height={props.height} padding={props.padding} color={props.color} queryKey={props.queryKey}>{props.children}</tur_container>;
+  return <tur_container width={props.width} height={props.height} padding={props.padding} color={props.color} borderColor={props.borderColor} borderWidth={props.borderWidth} borderRadius={props.borderRadius} borderPosition={props.borderPosition} queryKey={props.queryKey}>{props.children}</tur_container>;
 }
 
 export function PointerInteract(props: PointerInteractProps) {
