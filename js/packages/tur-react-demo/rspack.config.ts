@@ -1,12 +1,31 @@
 import { defineConfig } from "@rspack/cli";
 import { TurRspackPlugin } from "@tur/rspack-plugin";
+import selfsigned from "selfsigned";
+
+const { cert, private: key } = selfsigned.generate(
+  [{ name: "commonName", value: "local.hpp2334.com" }],
+  { days: 365, algorithm: "sha256" },
+);
 
 export default defineConfig({
+  devServer: {
+    hot: false,
+    liveReload: false,
+    client: false,
+    host: "0.0.0.0",
+    allowedHosts: "all",
+    server: {
+      type: "https",
+      options: { cert, key },
+    },
+  },
   entry: {
     bundle: "./src/index.tsx",
   },
+  devtool: "source-map",
   output: {
-    filename: "bundle.js",
+    filename: "bundle.bin",
+    publicPath: "",
     library: {
       type: "iife",
     },
@@ -41,7 +60,7 @@ export default defineConfig({
   },
   plugins: [
     new TurRspackPlugin({
-      jsEntry: "bundle.js",
+      jsEntry: "bundle.bin",
     }),
   ],
 });

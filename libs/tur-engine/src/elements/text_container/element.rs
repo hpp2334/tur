@@ -1,12 +1,10 @@
 use boa_engine::{Context, JsString, JsValue};
-use tur_shared::Color;
 
 use crate::core::elements::{ElementOnUpdate, ElementTrace};
 use crate::elements::text::text_layout::TextLayoutData;
 
 pub struct TextContainerElement {
     pub(crate) default_font_size: f64,
-    pub(crate) default_color: Option<Color>,
     pub(crate) cached_layout: Option<TextLayoutData>,
 }
 
@@ -20,7 +18,6 @@ impl TextContainerElement {
     pub fn new() -> Self {
         TextContainerElement {
             default_font_size: 14.0,
-            default_color: None,
             cached_layout: None,
         }
     }

@@ -123,11 +123,6 @@ impl VelloRenderer {
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
-        tracing::info!(
-            "present: getting surface texture {}x{}",
-            self.physical_width,
-            self.physical_height
-        );
         let output = self
             .surface
             .get_current_texture()
@@ -140,7 +135,6 @@ impl VelloRenderer {
             antialiasing_method: AaConfig::Msaa8,
         };
 
-        tracing::info!("present: rendering to surface");
         self.renderer
             .render_to_surface(&self.device, &self.queue, &self.scene, &output, &params)
             .map_err(|e| {
@@ -148,9 +142,7 @@ impl VelloRenderer {
                 VelloRendererError::Render(e)
             })?;
 
-        tracing::info!("present: calling output.present()");
         output.present();
-        tracing::info!("present: done");
         Ok(())
     }
 

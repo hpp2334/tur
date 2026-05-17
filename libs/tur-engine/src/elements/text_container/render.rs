@@ -9,12 +9,6 @@ use crate::elements::text_span::TextSpanElement;
 
 use super::element::TextContainerElement;
 
-const DEFAULT_COLOR: Color = Color::rgb(255, 255, 255);
-
-fn color_to_brush(color: &Color) -> [u8; 4] {
-    [color.r(), color.g(), color.b(), color.a()]
-}
-
 struct SpanData {
     text: String,
     bold: bool,
@@ -52,15 +46,12 @@ impl ElementLayout for TextContainerElement {
             return constraints.constrain(Size::ZERO);
         }
 
-        let base_color = self.default_color.as_ref().unwrap_or(&DEFAULT_COLOR);
-        let base_brush = color_to_brush(base_color);
         let base_font_size = self.default_font_size;
 
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
         let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0);
         builder.push_default(StyleProperty::FontSize(base_font_size as f32));
-        builder.push_default(StyleProperty::Brush(base_brush));
         builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
 
         let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
@@ -70,6 +61,9 @@ impl ElementLayout for TextContainerElement {
             let span_byte_len = span.text.len();
             let range = byte_offset..byte_offset + span_byte_len;
 
+            if let Some(ref c) = span.color {
+                builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
+            }
             if span.bold {
                 builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
             }
@@ -78,9 +72,6 @@ impl ElementLayout for TextContainerElement {
             }
             if let Some(fs) = span.font_size {
                 builder.push(StyleProperty::FontSize(fs as f32), range.clone());
-            }
-            if let Some(ref c) = span.color {
-                builder.push(StyleProperty::Brush(color_to_brush(c)), range.clone());
             }
             if span.underline {
                 underline_ranges.push((byte_offset, byte_offset + span_byte_len));

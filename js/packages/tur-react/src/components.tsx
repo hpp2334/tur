@@ -130,7 +130,6 @@ export function Focusable(props: FocusableProps) {
 
 export interface TextContainerProps extends BaseProps {
   fontSize?: number;
-  color?: Color | string;
 }
 
 export interface TextSpanProps {
@@ -143,17 +142,17 @@ export interface TextSpanProps {
 }
 
 export function TextContainer(props: TextContainerProps) {
-  return <tur_text_container fontSize={props.fontSize} color={props.color} queryKey={props.queryKey}>{props.children}</tur_text_container>;
+  return <tur_text_container fontSize={props.fontSize} queryKey={props.queryKey}>{props.children}</tur_text_container>;
 }
 
 export function TextSpan(props: TextSpanProps) {
-  return <tur_text_span {...props} />;
+  return <tur_text_span {...props} color={props.color ?? "#000000"} />;
 }
 
 export function Text(props: TextProps) {
   return (
-    <TextContainer fontSize={props.fontSize} color={props.color} queryKey={props.queryKey}>
-      <TextSpan content={props.content} />
+    <TextContainer fontSize={props.fontSize} queryKey={props.queryKey}>
+      <TextSpan content={props.content} color={props.color} />
     </TextContainer>
   );
 }

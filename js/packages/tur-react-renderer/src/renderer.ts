@@ -99,12 +99,12 @@ const reconciler = ReactReconciler(
     __tur.removeChild(ctx, container, child.handle);
   },
 
-  getRootHostContext(): null {
-    return null;
+  getRootHostContext() {
+    return {};
   },
 
-  getChildHostContext(): null {
-    return null as any;
+  getChildHostContext(parentHostContext: Record<string, unknown>) {
+    return parentHostContext;
   },
 
   shouldSetTextContent(): boolean {
@@ -162,7 +162,14 @@ const reconciler = ReactReconciler(
     throw new Error("waitForCommitToBeReady not supported");
   },
   NotPendingTransition: null,
-  HostTransitionContext: null as any,
+  HostTransitionContext: {
+    $$typeof: Symbol.for("react.context"),
+    Provider: null as any,
+    Consumer: null as any,
+    _currentValue: null,
+    _currentValue2: null,
+    _threadCount: 0,
+  },
   resetFormInstance(): void {},
   getInstanceFromNode: () => null,
   beforeActiveInstanceBlur() {},
