@@ -60,7 +60,7 @@ function TodoList() {
         <SizedBox height={16} />
         <Column>
           {todos.map((todo) => (
-            <TodoItem todo={todo} toggle={toggleTodo} remove={removeTodo} />
+            <TodoItem key={todo.id} todo={todo} toggle={toggleTodo} remove={removeTodo} />
           ))}
         </Column>
       </Column>
