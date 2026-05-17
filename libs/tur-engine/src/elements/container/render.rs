@@ -56,6 +56,23 @@ impl ElementRender for ContainerElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
+        if let (Some(ref shadow_color), Some(shadow_blur)) =
+            (self.shadow_color, self.shadow_blur)
+        {
+            if shadow_blur > 0.0 {
+                let shadow_offset = self.shadow_offset.unwrap_or((0.0, 0.0));
+                let radius = self.border_radius.unwrap_or(0.0);
+                canvas.draw_shadow(
+                    offset,
+                    layout.size,
+                    shadow_color,
+                    radius,
+                    shadow_blur,
+                    shadow_offset,
+                );
+            }
+        }
+
         if let Some(ref color) = self.color {
             canvas.fill_geometry(offset, &Geometry::Rect(layout.size), color);
         }

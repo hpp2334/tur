@@ -46,6 +46,9 @@ declare module "react/jsx-runtime" {
         borderWidth?: number;
         borderRadius?: number;
         borderPosition?: BorderPosition;
+        shadowColor?: Color;
+        shadowOffset?: [number, number];
+        shadowBlur?: number;
         queryKey?: string[];
         children?: React.ReactNode;
       };
