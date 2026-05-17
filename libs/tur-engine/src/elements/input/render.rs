@@ -1,5 +1,5 @@
 use parley::{Alignment, AlignmentOptions, GenericFamily, StyleProperty};
-use tur_shared::{Color, ComputedLayout, Constraints, Geometry, Offset, Size};
+use tur_shared::{Brush, Color, ComputedLayout, Constraints, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
@@ -157,7 +157,7 @@ impl ElementRender for InputElement {
                 canvas.fill_geometry(
                     Offset::new(offset.x + cursor_x as f64, offset.y + cursor_y as f64),
                     &Geometry::Rect(Size::new(2.0, line_height as f64)),
-                    cursor_color,
+                    &Brush::SolidColor(*cursor_color),
                 );
             }
         }
@@ -200,7 +200,7 @@ impl InputElement {
                     (x_end - x_start) as f64,
                     line_info.height as f64,
                 )),
-                &SELECTION_COLOR,
+                &Brush::SolidColor(SELECTION_COLOR),
             );
         }
     }
@@ -236,7 +236,7 @@ impl InputElement {
             canvas.fill_geometry(
                 Offset::new(offset.x + x_start as f64, underline_y),
                 &Geometry::Rect(Size::new((x_end - x_start) as f64, 2.0)),
-                &COMPOSITION_UNDERLINE_COLOR,
+                &Brush::SolidColor(COMPOSITION_UNDERLINE_COLOR),
             );
         }
     }

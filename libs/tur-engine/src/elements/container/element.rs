@@ -1,8 +1,8 @@
 use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
-use tur_shared::{BorderPosition, Color};
+use tur_shared::{BorderPosition, Brush, Color};
 
-use crate::core::bridge::color::extract_color;
+use crate::core::bridge::color::extract_brush;
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
 
@@ -11,7 +11,7 @@ pub struct ContainerElement {
     pub(crate) width: Option<f64>,
     pub(crate) height: Option<f64>,
     pub(crate) padding: Option<f64>,
-    pub(crate) color: Option<Color>,
+    pub(crate) color: Option<Brush>,
     pub(crate) border_color: Option<Color>,
     pub(crate) border_width: Option<f64>,
     pub(crate) border_radius: Option<f64>,
@@ -91,8 +91,11 @@ impl ElementTrace for ContainerElement {
         if let Some(p) = self.padding {
             parts.push(format!("padding={p}"));
         }
-        if let Some(c) = self.color {
-            parts.push(format!("color={c}"));
+        if let Some(ref b) = self.color {
+            match b {
+                Brush::SolidColor(c) => parts.push(format!("color={c}")),
+                Brush::LinearGradient { .. } => parts.push("color=linearGradient".into()),
+            }
         }
         if let Some(c) = self.border_color {
             parts.push(format!("borderColor={c}"));
@@ -134,9 +137,9 @@ impl ElementOnUpdate for ContainerElement {
         } else if *key == "padding" {
             self.padding = value.as_number();
         } else if *key == "color" {
-            self.color = extract_color(value, _ctx);
+            self.color = extract_brush(value, _ctx);
         } else if *key == "borderColor" {
-            self.border_color = extract_color(value, _ctx);
+            self.border_color = crate::core::bridge::color::extract_color(value, _ctx);
         } else if *key == "borderWidth" {
             self.border_width = value.as_number();
         } else if *key == "borderRadius" {
@@ -147,7 +150,7 @@ impl ElementOnUpdate for ContainerElement {
                     BorderPosition::from_u8(n as u8).unwrap_or_default();
             }
         } else if *key == "shadowColor" {
-            self.shadow_color = extract_color(value, _ctx);
+            self.shadow_color = crate::core::bridge::color::extract_color(value, _ctx);
         } else if *key == "shadowOffset" {
             self.shadow_offset = extract_offset_array(value, _ctx);
         } else if *key == "shadowBlur" {

@@ -1,4 +1,33 @@
+export interface GradientStop {
+  offset: number;
+  color: Color;
+}
+
+export interface LinearGradientOptions {
+  start: [number, number];
+  end: [number, number];
+  stops: GradientStop[];
+}
+
+export class LinearGradient {
+  readonly type = "linear" as const;
+  readonly start: [number, number];
+  readonly end: [number, number];
+  readonly stops: ReadonlyArray<GradientStop>;
+
+  private constructor(options: LinearGradientOptions) {
+    this.start = options.start;
+    this.end = options.end;
+    this.stops = options.stops;
+  }
+
+  static create(options: LinearGradientOptions): LinearGradient {
+    return new LinearGradient(options);
+  }
+}
+
 export class Color {
+  readonly type = "solid" as const;
   readonly r: number;
   readonly g: number;
   readonly b: number;

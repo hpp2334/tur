@@ -1,8 +1,8 @@
 use std::fmt;
 
-use tur_shared::{Color, Geometry, Offset, Size};
+use tur_shared::{Brush, Color, Geometry, Offset, Size};
 use vello::kurbo::{Affine, Stroke};
-use vello::peniko::{Brush, Fill, Image};
+use vello::peniko::{Brush as PenikoBrush, Fill, Image};
 use vello::Scene;
 
 use crate::core::render::Canvas;
@@ -24,38 +24,112 @@ impl fmt::Debug for VelloPaintContext<'_> {
     }
 }
 
+fn fill_shape(scene: &mut Scene, transform: Affine, geometry: &Geometry, brush: &PenikoBrush) {
+    match geometry {
+        Geometry::Rect(size) => {
+            scene.fill(
+                Fill::NonZero,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
+            );
+        }
+        Geometry::RoundedRect { size, radius } => {
+            scene.fill(
+                Fill::NonZero,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
+            );
+        }
+        Geometry::Circle { radius } => {
+            scene.fill(
+                Fill::NonZero,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::Circle::new((0.0, 0.0), *radius),
+            );
+        }
+    }
+}
+
+fn stroke_shape(
+    scene: &mut Scene,
+    transform: Affine,
+    geometry: &Geometry,
+    brush: &PenikoBrush,
+    stroke_width: f64,
+) {
+    let stroke = Stroke::new(stroke_width);
+    match geometry {
+        Geometry::Rect(size) => {
+            scene.stroke(
+                &stroke,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
+            );
+        }
+        Geometry::RoundedRect { size, radius } => {
+            scene.stroke(
+                &stroke,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
+            );
+        }
+        Geometry::Circle { radius } => {
+            scene.stroke(
+                &stroke,
+                transform,
+                brush,
+                None,
+                &vello::kurbo::Circle::new((0.0, 0.0), *radius),
+            );
+        }
+    }
+}
+
+fn geometry_size(geometry: &Geometry) -> Size {
+    match geometry {
+        Geometry::Rect(size) => *size,
+        Geometry::RoundedRect { size, .. } => *size,
+        Geometry::Circle { radius } => Size::new(radius * 2.0, radius * 2.0),
+    }
+}
+
 impl Canvas for VelloPaintContext<'_> {
-    fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, color: &Color) {
-        let peniko_color = to_peniko_color(color);
+    fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush) {
         let transform = Affine::translate((offset.x, offset.y));
-        let brush = Brush::Solid(peniko_color);
-        match geometry {
-            Geometry::Rect(size) => {
-                self.scene.fill(
-                    Fill::NonZero,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-                );
+        match brush {
+            Brush::SolidColor(color) => {
+                let peniko_color = to_peniko_color(color);
+                let peniko_brush = PenikoBrush::Solid(peniko_color);
+                fill_shape(self.scene, transform, geometry, &peniko_brush);
             }
-            Geometry::RoundedRect { size, radius } => {
-                self.scene.fill(
-                    Fill::NonZero,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
-                );
-            }
-            Geometry::Circle { radius } => {
-                self.scene.fill(
-                    Fill::NonZero,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::Circle::new((0.0, 0.0), *radius),
-                );
+            Brush::LinearGradient {
+                start,
+                end,
+                stops,
+            } => {
+                let size = geometry_size(geometry);
+                let x0 = start.0 * size.width;
+                let y0 = start.1 * size.height;
+                let x1 = end.0 * size.width;
+                let y1 = end.1 * size.height;
+                let peniko_stops: Vec<(f32, vello::peniko::Color)> = stops
+                    .iter()
+                    .map(|s| (s.offset, to_peniko_color(&s.color)))
+                    .collect();
+                let gradient =
+                    vello::peniko::Gradient::new_linear((x0, y0), (x1, y1))
+                        .with_stops(peniko_stops.as_slice());
+                fill_shape(self.scene, transform, geometry, &PenikoBrush::Gradient(gradient));
             }
         }
     }
@@ -72,7 +146,7 @@ impl Canvas for VelloPaintContext<'_> {
             );
             self.scene
                 .draw_glyphs(&run.font)
-                .brush(&Brush::Solid(brush_color))
+                .brush(&PenikoBrush::Solid(brush_color))
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
                 .transform(transform)
@@ -93,7 +167,7 @@ impl Canvas for VelloPaintContext<'_> {
                         .map(|g| g.x + g.advance)
                         .unwrap_or(first.x + first.advance);
                     let underline_y = first.y + run.font_size * 0.15;
-                    let underline_brush = Brush::Solid(brush_color);
+                    let underline_brush = PenikoBrush::Solid(brush_color);
                     self.scene.stroke(
                         &Stroke::new(1.0),
                         transform,
@@ -122,37 +196,8 @@ impl Canvas for VelloPaintContext<'_> {
     ) {
         let peniko_color = to_peniko_color(color);
         let transform = Affine::translate((offset.x, offset.y));
-        let brush = Brush::Solid(peniko_color);
-        let stroke = Stroke::new(stroke_width);
-        match geometry {
-            Geometry::Rect(size) => {
-                self.scene.stroke(
-                    &stroke,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-                );
-            }
-            Geometry::RoundedRect { size, radius } => {
-                self.scene.stroke(
-                    &stroke,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
-                );
-            }
-            Geometry::Circle { radius } => {
-                self.scene.stroke(
-                    &stroke,
-                    transform,
-                    &brush,
-                    None,
-                    &vello::kurbo::Circle::new((0.0, 0.0), *radius),
-                );
-            }
-        }
+        let brush = PenikoBrush::Solid(peniko_color);
+        stroke_shape(self.scene, transform, geometry, &brush, stroke_width);
     }
 
     fn draw_shadow(

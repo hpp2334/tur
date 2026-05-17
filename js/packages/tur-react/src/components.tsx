@@ -1,6 +1,6 @@
 import React from "react";
 import type { ReactNode, Ref } from "react";
-import { Color } from "@tur/react-renderer";
+import { Color, LinearGradient } from "@tur/react-renderer";
 import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/react-renderer";
@@ -48,7 +48,7 @@ export interface ContainerProps extends BaseProps {
   width?: number;
   height?: number;
   padding?: number;
-  color?: Color;
+  color?: Color | LinearGradient;
   borderColor?: Color;
   borderWidth?: number;
   borderRadius?: number;
