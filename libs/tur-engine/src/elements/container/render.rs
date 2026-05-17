@@ -57,12 +57,6 @@ impl ElementRender for ContainerElement {
         paint_ctx: &PaintContext,
     ) {
         if let Some(ref color) = self.color {
-            tracing::info!(
-                "container paint: offset={:?} size={:?} color={:?}",
-                offset,
-                layout.size,
-                color
-            );
             canvas.fill_geometry(offset, &Geometry::Rect(layout.size), color);
         }
         for &child_id in children {

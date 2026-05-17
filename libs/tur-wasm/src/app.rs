@@ -152,7 +152,7 @@ impl TurWasmApp {
             canvas.set_height(physical_height);
 
             let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
-                backends: vello::wgpu::Backends::GL,
+                backends: vello::wgpu::Backends::BROWSER_WEBGPU,
                 ..Default::default()
             });
 
@@ -174,7 +174,7 @@ impl TurWasmApp {
                     &vello::wgpu::DeviceDescriptor {
                         label: None,
                         required_features: vello::wgpu::Features::empty(),
-                        required_limits: vello::wgpu::Limits::downlevel_webgl2_defaults(),
+                        required_limits: vello::wgpu::Limits::default(),
                         memory_hints: vello::wgpu::MemoryHints::Performance,
                     },
                     None,
@@ -445,7 +445,8 @@ impl TurWasmApp {
 
             *state_clone.borrow_mut() = Some(wasm_state);
 
-            Ok(JsValue::undefined())
+            let app = TurWasmApp { state: state_clone };
+            Ok(JsValue::from(app))
         })
     }
 
@@ -466,6 +467,14 @@ impl TurWasmApp {
         Self::start_frame_loop(&self.state);
 
         Ok(())
+    }
+
+    pub fn debug_layout(&self) -> String {
+        let guard = self.state.borrow();
+        match guard.as_ref() {
+            Some(s) => s.app.debug_layout(),
+            None => "app not initialized".to_string(),
+        }
     }
 }
 

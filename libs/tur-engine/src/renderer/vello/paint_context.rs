@@ -27,12 +27,6 @@ impl fmt::Debug for VelloPaintContext<'_> {
 impl Canvas for VelloPaintContext<'_> {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, color: &Color) {
         let peniko_color = to_peniko_color(color);
-        tracing::info!(
-            "fill_geometry: offset={:?} geometry={:?} color={:?}",
-            offset,
-            geometry,
-            peniko_color
-        );
         let transform = Affine::translate((offset.x, offset.y));
         let brush = Brush::Solid(peniko_color);
         match geometry {

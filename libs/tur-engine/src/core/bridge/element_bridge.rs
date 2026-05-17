@@ -60,7 +60,6 @@ pub(crate) fn tur_create_flex(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createFlex()");
     create_element(args, context, AnyElement::new(FlexElement::new()))
 }
 
@@ -69,7 +68,6 @@ pub(crate) fn tur_create_flex_item(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createFlexItem()");
     create_element(args, context, AnyElement::new(FlexItemElement::new()))
 }
 
@@ -78,7 +76,6 @@ pub(crate) fn tur_create_stack(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createStack()");
     create_element(args, context, AnyElement::new(StackElement::new()))
 }
 
@@ -87,7 +84,6 @@ pub(crate) fn tur_create_positioned(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createPositioned()");
     create_element(args, context, AnyElement::new(PositionedElement::new()))
 }
 
@@ -96,7 +92,6 @@ pub(crate) fn tur_create_container(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createContainer()");
     create_element(args, context, AnyElement::new(ContainerElement::new()))
 }
 
@@ -105,7 +100,6 @@ pub(crate) fn tur_create_text_container(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createTextContainer()");
     create_element(
         args,
         context,
@@ -118,7 +112,6 @@ pub(crate) fn tur_create_text_span(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createTextSpan()");
     create_element(args, context, AnyElement::new(TextSpanElement::new()))
 }
 
@@ -127,7 +120,6 @@ pub(crate) fn tur_create_pointer_interact(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createPointerInteract()");
     create_element(
         args,
         context,
@@ -141,7 +133,6 @@ pub(crate) fn tur_create_root(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createRoot()");
     create_element(args, context, AnyElement::new(FlexElement::new()))
 }
 
@@ -150,7 +141,6 @@ pub(crate) fn tur_create_focusable(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createFocusable()");
     create_element(
         args,
         context,
@@ -182,12 +172,6 @@ pub(crate) fn tur_set_attribute(
     let key = args.get_or_undefined(2).to_string(context)?;
 
     let value = args.get_or_undefined(3).clone();
-
-    tracing::trace!(
-        "tur_setAttribute({}, {}, ...)",
-        node_id,
-        key.to_std_string_escaped()
-    );
 
     if key == "queryKey" {
         if let Some(obj) = value.as_object() {
@@ -235,8 +219,6 @@ pub(crate) fn tur_append_child(
 
     js_ctx.element_tree.borrow_mut().append_child(parent_id, child_id);
 
-    tracing::trace!("tur_appendChild({}, {})", parent_id, child_id);
-
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
 }
@@ -251,8 +233,6 @@ pub(crate) fn tur_remove_child(
     let child_id = extract_node_id(args, 2)?;
 
     js_ctx.element_tree.borrow_mut().remove_child(parent_id, child_id);
-
-    tracing::trace!("tur_removeChild({}, {})", parent_id, child_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
@@ -271,8 +251,6 @@ pub(crate) fn tur_insert_before(
     js_ctx.element_tree
         .borrow_mut()
         .insert_before(parent_id, child_id, ref_id);
-
-    tracing::trace!("tur_insertBefore({}, {}, {})", parent_id, child_id, ref_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
@@ -334,7 +312,6 @@ pub(crate) fn tur_create_input(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createInput()");
     let js_ctx = extract_ctx(args)?;
     let mut tree = js_ctx.element_tree.borrow_mut();
     let id = tree.alloc_id();
@@ -378,7 +355,6 @@ pub(crate) fn tur_create_image(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createImage()");
     create_element(args, context, AnyElement::new(ImageElement::new()))
 }
 
@@ -387,8 +363,6 @@ pub(crate) fn tur_create_image_resource(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    tracing::trace!("tur_createImageResource()");
-
     let js_ctx = extract_ctx(args)?;
 
     let buffer_obj = args.get_or_undefined(1).as_object().ok_or_else(|| {

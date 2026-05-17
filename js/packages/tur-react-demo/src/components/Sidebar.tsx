@@ -1,4 +1,4 @@
-import { Column, Container, Text } from "@tur/react";
+import { Column, Container, Row, Text, CrossAxisAlignment } from "@tur/react";
 
 interface Tab {
   id: string;
@@ -13,8 +13,11 @@ export function Sidebar(props: { tabs: Tab[]; activeId: string }) {
           <Container
             color={(tab.id === props.activeId ? "#0f3460" : "#16213e") as unknown as import("@tur/react-renderer").Color}
             padding={12}
+            height={40}
           >
-            <Text content={tab.label} fontSize={14} />
+            <Row crossAlignment={CrossAxisAlignment.Center}>
+              <Text content={tab.label} fontSize={14} />
+            </Row>
           </Container>
         ))}
       </Column>

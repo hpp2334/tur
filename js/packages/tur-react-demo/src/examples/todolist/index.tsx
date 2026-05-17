@@ -18,12 +18,12 @@ function TodoItem(props: { todo: { id: number; text: string; done: boolean }; to
   return (
     <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
       <PointerInteract onClick={() => props.toggle(props.todo.id)} child={
-        <Text content={props.todo.done ? "\u2713" : "\u25CB"} />
+        <Text content={props.todo.done ? "[x]" : "[ ]"} />
       } />
       <Text content={props.todo.text} />
       <PointerInteract onClick={() => props.remove(props.todo.id)} child={
-        <Container padding={4}>
-          <Text content={"✕"} />
+        <Container padding={4} color={"#e74c3c" as unknown as import("@tur/react-renderer").Color}>
+          <Text content={"[x]"} />
         </Container>
       } />
     </Row>
