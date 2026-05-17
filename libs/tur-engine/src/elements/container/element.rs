@@ -1,5 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
-use tur_shared::Color;
+use num_traits::FromPrimitive;
+use tur_shared::{BorderPosition, Color};
 
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
@@ -10,6 +11,10 @@ pub struct ContainerElement {
     pub(crate) height: Option<f64>,
     pub(crate) padding: Option<f64>,
     pub(crate) color: Option<Color>,
+    pub(crate) border_color: Option<Color>,
+    pub(crate) border_width: Option<f64>,
+    pub(crate) border_radius: Option<f64>,
+    pub(crate) border_position: BorderPosition,
 }
 
 impl ContainerElement {
@@ -19,7 +24,39 @@ impl ContainerElement {
             height: None,
             padding: None,
             color: None,
+            border_color: None,
+            border_width: None,
+            border_radius: None,
+            border_position: BorderPosition::default(),
         }
+    }
+
+    pub fn border_color(&self) -> Option<&Color> {
+        self.border_color.as_ref()
+    }
+
+    pub fn border_width(&self) -> Option<f64> {
+        self.border_width
+    }
+
+    pub fn border_radius(&self) -> Option<f64> {
+        self.border_radius
+    }
+
+    pub fn border_position(&self) -> BorderPosition {
+        self.border_position
+    }
+
+    pub fn width(&self) -> Option<f64> {
+        self.width
+    }
+
+    pub fn height(&self) -> Option<f64> {
+        self.height
+    }
+
+    pub fn padding(&self) -> Option<f64> {
+        self.padding
     }
 }
 
@@ -38,6 +75,16 @@ impl ElementTrace for ContainerElement {
         if let Some(c) = self.color {
             parts.push(format!("color={c}"));
         }
+        if let Some(c) = self.border_color {
+            parts.push(format!("borderColor={c}"));
+        }
+        if let Some(w) = self.border_width {
+            parts.push(format!("borderWidth={w}"));
+        }
+        if let Some(r) = self.border_radius {
+            parts.push(format!("borderRadius={r}"));
+        }
+        parts.push(format!("borderPosition={:?}", self.border_position));
         parts.join(" ")
     }
 }
@@ -53,6 +100,19 @@ impl ElementOnUpdate for ContainerElement {
         } else if *key == "color" {
             if let Some(s) = value.as_string() {
                 self.color = s.to_std_string_escaped().parse().ok();
+            }
+        } else if *key == "borderColor" {
+            if let Some(s) = value.as_string() {
+                self.border_color = s.to_std_string_escaped().parse().ok();
+            }
+        } else if *key == "borderWidth" {
+            self.border_width = value.as_number();
+        } else if *key == "borderRadius" {
+            self.border_radius = value.as_number();
+        } else if *key == "borderPosition" {
+            if let Some(n) = value.as_number() {
+                self.border_position =
+                    BorderPosition::from_u8(n as u8).unwrap_or_default();
             }
         }
     }

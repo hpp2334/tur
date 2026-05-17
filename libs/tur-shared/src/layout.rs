@@ -300,3 +300,12 @@ pub enum BoxFit {
     FitHeight,
     None,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
+#[ts(export, export_to = "generated/", repr(enum))]
+pub enum BorderPosition {
+    #[default]
+    Inside,
+    Center,
+    Outside,
+}

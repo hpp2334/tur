@@ -1,4 +1,4 @@
-use tur_shared::{ComputedLayout, Constraints, EdgeInsets, Geometry, Offset, Size};
+use tur_shared::{BorderPosition, ComputedLayout, Constraints, EdgeInsets, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
@@ -59,6 +59,35 @@ impl ElementRender for ContainerElement {
         if let Some(ref color) = self.color {
             canvas.fill_geometry(offset, &Geometry::Rect(layout.size), color);
         }
+
+        if let (Some(ref border_color), Some(border_width)) =
+            (self.border_color, self.border_width)
+        {
+            if border_width > 0.0 {
+                let half = border_width / 2.0;
+                let s = layout.size;
+                let (ox, oy, size) = match self.border_position {
+                    BorderPosition::Inside => (
+                        half,
+                        half,
+                        Size::new((s.width - border_width).max(0.0), (s.height - border_width).max(0.0)),
+                    ),
+                    BorderPosition::Outside => (
+                        -half,
+                        -half,
+                        Size::new(s.width + border_width, s.height + border_width),
+                    ),
+                    BorderPosition::Center => (0.0, 0.0, s),
+                };
+                let border_offset = Offset::new(offset.x + ox, offset.y + oy);
+                let geometry = match self.border_radius {
+                    Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
+                    _ => Geometry::Rect(size),
+                };
+                canvas.stroke_geometry(border_offset, &geometry, border_color, border_width);
+            }
+        }
+
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas, offset);
         }

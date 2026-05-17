@@ -112,6 +112,48 @@ impl Canvas for VelloPaintContext<'_> {
     fn draw_image(&mut self, image: &Image, transform: Affine) {
         self.scene.draw_image(image, transform);
     }
+
+    fn stroke_geometry(
+        &mut self,
+        offset: Offset,
+        geometry: &Geometry,
+        color: &Color,
+        stroke_width: f64,
+    ) {
+        let peniko_color = to_peniko_color(color);
+        let transform = Affine::translate((offset.x, offset.y));
+        let brush = Brush::Solid(peniko_color);
+        let stroke = Stroke::new(stroke_width);
+        match geometry {
+            Geometry::Rect(size) => {
+                self.scene.stroke(
+                    &stroke,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
+                );
+            }
+            Geometry::RoundedRect { size, radius } => {
+                self.scene.stroke(
+                    &stroke,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
+                );
+            }
+            Geometry::Circle { radius } => {
+                self.scene.stroke(
+                    &stroke,
+                    transform,
+                    &brush,
+                    None,
+                    &vello::kurbo::Circle::new((0.0, 0.0), *radius),
+                );
+            }
+        }
+    }
 }
 
 fn to_peniko_color(color: &Color) -> vello::peniko::Color {
