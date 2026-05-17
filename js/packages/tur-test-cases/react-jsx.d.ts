@@ -45,6 +45,8 @@ declare module "react/jsx-runtime" {
       };
       tur_pointer_interact: {
         onClick?: () => void;
+        onPointerEnter?: () => void;
+        onPointerExit?: () => void;
         queryKey?: string[];
         children?: React.ReactNode;
       };

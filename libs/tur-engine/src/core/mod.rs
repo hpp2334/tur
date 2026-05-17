@@ -11,5 +11,6 @@ pub mod hit_test;
 pub mod js_command;
 pub mod keyboard;
 pub mod layout;
+pub mod pointer_region;
 pub mod render;
 pub mod resource;

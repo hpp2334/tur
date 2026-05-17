@@ -129,6 +129,9 @@ pub fn init_bridge(
         ctx.register_handler(Box::new(
             crate::handlers::resize::ResizeHandler,
         ));
+        ctx.register_handler(Box::new(
+            crate::handlers::pointer_region::PointerRegionAppHandler::new(),
+        ));
     }
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), context);

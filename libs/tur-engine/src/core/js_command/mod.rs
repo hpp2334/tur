@@ -46,6 +46,8 @@ impl IntoAnyJsCommand for InputJsCommand {
 #[derive(Clone)]
 pub enum PointerInteractJsCommand {
     Click { x: f64, y: f64 },
+    PointerEnter,
+    PointerExit,
 }
 
 #[derive(Clone)]

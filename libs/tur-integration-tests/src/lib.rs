@@ -158,6 +158,14 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
+    pub fn has_pointer_region_callbacks(&self, id: ElementNodeId) -> bool {
+        self.inner.with_element(id, |e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.has_pointer_region_callbacks())
+                .unwrap_or(false)
+        }).unwrap_or(false)
+    }
+
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
         self.inner.query_element(key)
     }
