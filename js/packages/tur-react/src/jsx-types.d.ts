@@ -54,6 +54,8 @@ declare module "react/jsx-runtime" {
       };
       tur_pointer_interact: RefAttributes<TurNodeHandle> & {
         onClick?: () => void;
+        onPointerEnter?: () => void;
+        onPointerExit?: () => void;
         queryKey?: string[];
         children?: React.ReactNode;
       };

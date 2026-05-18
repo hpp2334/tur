@@ -10,6 +10,8 @@ fn extract_callable(value: &JsValue) -> Option<JsFunction> {
 
 pub struct PointerInteractElement {
     on_click: Option<JsFunction>,
+    on_pointer_enter: Option<JsFunction>,
+    on_pointer_exit: Option<JsFunction>,
 }
 
 impl Default for PointerInteractElement {
@@ -20,11 +22,19 @@ impl Default for PointerInteractElement {
 
 impl PointerInteractElement {
     pub fn new() -> Self {
-        Self { on_click: None }
+        Self {
+            on_click: None,
+            on_pointer_enter: None,
+            on_pointer_exit: None,
+        }
     }
 
     pub fn has_on_click(&self) -> bool {
         self.on_click.is_some()
+    }
+
+    pub fn has_pointer_region_callbacks(&self) -> bool {
+        self.on_pointer_enter.is_some() || self.on_pointer_exit.is_some()
     }
 }
 
@@ -34,6 +44,10 @@ impl ElementOnUpdate for PointerInteractElement {
     fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
         if *key == "onClick" {
             self.on_click = extract_callable(value);
+        } else if *key == "onPointerEnter" {
+            self.on_pointer_enter = extract_callable(value);
+        } else if *key == "onPointerExit" {
+            self.on_pointer_exit = extract_callable(value);
         }
     }
 }
@@ -49,6 +63,16 @@ impl ElementJsCallbackEmitter for PointerInteractElement {
             PointerInteractJsCommand::Click { x, y } => {
                 self.on_click.as_ref().map(|h| {
                     (h.clone(), vec![JsValue::from(*x), JsValue::from(*y)])
+                })
+            }
+            PointerInteractJsCommand::PointerEnter => {
+                self.on_pointer_enter.as_ref().map(|h| {
+                    (h.clone(), vec![])
+                })
+            }
+            PointerInteractJsCommand::PointerExit => {
+                self.on_pointer_exit.as_ref().map(|h| {
+                    (h.clone(), vec![])
                 })
             }
         }

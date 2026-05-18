@@ -60,6 +60,8 @@ export interface ContainerProps extends BaseProps {
 
 export interface PointerInteractProps {
   onClick?: () => void;
+  onPointerEnter?: () => void;
+  onPointerExit?: () => void;
   child?: ReactNode;
 }
 
@@ -129,7 +131,7 @@ export function Container(props: ContainerProps) {
 }
 
 export function PointerInteract(props: PointerInteractProps) {
-  return <tur_pointer_interact onClick={props.onClick}>{props.child}</tur_pointer_interact>;
+  return <tur_pointer_interact onClick={props.onClick} onPointerEnter={props.onPointerEnter} onPointerExit={props.onPointerExit}>{props.child}</tur_pointer_interact>;
 }
 
 export function Focusable(props: FocusableProps) {
