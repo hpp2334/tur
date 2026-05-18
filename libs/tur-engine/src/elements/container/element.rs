@@ -42,7 +42,7 @@ impl ContainerElement {
         self.border_color.as_ref()
     }
 
-    pub fn color(&self) -> Option<&Color> {
+    pub fn color(&self) -> Option<&Brush> {
         self.color.as_ref()
     }
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { renderRoot } from "@tur/react-renderer";
-import { Container, PointerInteract } from "@tur/react";
+import { Container, PointerInteract, Color } from "@tur/react";
 
 function App() {
   const [checked, setChecked] = useState(true);
@@ -13,9 +13,9 @@ function App() {
             width={40}
             height={40}
             borderRadius={8}
-            color={{ r: 34, g: 197, b: 94, a: 255 }}
+            color={Color.rgba(34, 197, 94, 255)}
             borderWidth={2}
-            borderColor={{ r: 34, g: 197, b: 94, a: 255 }}
+            borderColor={Color.rgba(34, 197, 94, 255)}
             borderPosition={1}
           />
         ) : (
@@ -24,7 +24,7 @@ function App() {
             height={40}
             borderRadius={8}
             borderWidth={2}
-            borderColor={{ r: 226, g: 232, b: 240, a: 255 }}
+            borderColor={Color.rgba(226, 232, 240, 255)}
             borderPosition={1}
           />
         )
