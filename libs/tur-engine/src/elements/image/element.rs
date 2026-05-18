@@ -56,4 +56,14 @@ impl ElementOnUpdate for ImageElement {
             }
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "resourceId" => self.resource_id = None,
+            "width" => self.width = None,
+            "height" => self.height = None,
+            "fit" => self.fit = BoxFit::default(),
+            _ => {}
+        }
+    }
 }

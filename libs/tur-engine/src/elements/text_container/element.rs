@@ -31,4 +31,10 @@ impl ElementOnUpdate for TextContainerElement {
             self.default_font_size = value.as_number().unwrap_or(14.0);
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        if key.to_std_string_escaped().as_str() == "fontSize" {
+            self.default_font_size = 14.0;
+        }
+    }
 }

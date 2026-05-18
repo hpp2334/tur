@@ -4,6 +4,7 @@ import type { BorderPosition } from "@tur/react-renderer";
 import type { CrossAxisAlignment } from "@tur/react-renderer";
 import type { FlexDirection } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
+import type { MainAxisSize } from "@tur/react-renderer";
 import type { MainAxisAlignment } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 import type { RefAttributes } from "react";
@@ -15,6 +16,7 @@ declare module "react/jsx-runtime" {
         direction?: FlexDirection;
         mainAlignment?: MainAxisAlignment;
         crossAlignment?: CrossAxisAlignment;
+        mainAxisSize?: MainAxisSize;
         queryKey?: string[];
         children?: React.ReactNode;
       };

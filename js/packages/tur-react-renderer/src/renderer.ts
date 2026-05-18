@@ -26,11 +26,16 @@ export interface TurInstance {
   props: Props;
 }
 
-function setProps(handle: TurNodeHandle, props: Props) {
+function setProps(handle: TurNodeHandle, props: Props, clearPrevious?: Props) {
   for (const key in props) {
     if (key === "children" || key === "key" || key === "ref") continue;
     const value = props[key];
-    if (value !== null && value !== undefined) {
+    const prev = clearPrevious?.[key];
+    if (value === null || value === undefined) {
+      if (prev !== null && prev !== undefined) {
+        __tur.setAttribute(ctx, handle, key, null);
+      }
+    } else {
       __tur.setAttribute(ctx, handle, key, value);
     }
   }
@@ -48,6 +53,7 @@ const reconciler = ReactReconciler(
     const create = creators[type];
     if (!create) throw new Error(`unknown element type: ${type}`);
     const handle = create();
+    console.log(`[createInstance] type=${type} handle=${handle} keys=${Object.keys(props).join(',')}`);
     setProps(handle, props);
     return { handle, type, props };
   },
@@ -71,7 +77,7 @@ const reconciler = ReactReconciler(
     nextProps: Props,
     _internalHandle: any,
   ): void {
-    setProps(instance.handle, nextProps);
+    setProps(instance.handle, nextProps, _prevProps);
     instance.props = nextProps;
   },
 

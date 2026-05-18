@@ -224,6 +224,14 @@ pub enum CrossAxisAlignment {
     Stretch,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
+#[ts(export, export_to = "generated/", repr(enum))]
+pub enum MainAxisSize {
+    #[default]
+    Max,
+    Min,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
 #[ts(export, export_to = "generated/", repr(enum))]
 pub enum FlexFit {

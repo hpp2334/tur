@@ -3,7 +3,7 @@ import type { ReactNode, Ref } from "react";
 import { Color, LinearGradient } from "@tur/react-renderer";
 import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
-import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisAlignment } from "@tur/react-renderer";
+import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
 import type { BorderPosition } from "@tur/react-renderer";
@@ -16,11 +16,13 @@ interface BaseProps {
 export interface ColumnProps extends BaseProps {
   mainAlignment?: MainAxisAlignment;
   crossAlignment?: CrossAxisAlignment;
+  mainAxisSize?: MainAxisSize;
 }
 
 export interface RowProps extends BaseProps {
   mainAlignment?: MainAxisAlignment;
   crossAlignment?: CrossAxisAlignment;
+  mainAxisSize?: MainAxisSize;
 }
 
 export interface ExpandedProps extends BaseProps {
@@ -81,12 +83,13 @@ export interface TextProps extends BaseProps {
 }
 
 export function Column(props: ColumnProps) {
-  const { children, crossAlignment, mainAlignment, queryKey, ...rest } = props;
+  const { children, crossAlignment, mainAlignment, mainAxisSize, queryKey, ...rest } = props;
   return (
     <tur_flex
       direction={FlexDirection.Vertical}
       crossAlignment={crossAlignment ?? CrossAxisAlignment.Stretch}
       mainAlignment={mainAlignment}
+      mainAxisSize={mainAxisSize}
       queryKey={queryKey}
       {...rest}
     >
@@ -96,12 +99,13 @@ export function Column(props: ColumnProps) {
 }
 
 export function Row(props: RowProps) {
-  const { children, mainAlignment, crossAlignment, queryKey, ...rest } = props;
+  const { children, mainAlignment, crossAlignment, mainAxisSize, queryKey, ...rest } = props;
   return (
     <tur_flex
       direction={FlexDirection.Horizontal}
       mainAlignment={mainAlignment ?? MainAxisAlignment.Start}
       crossAlignment={crossAlignment ?? CrossAxisAlignment.Stretch}
+      mainAxisSize={mainAxisSize}
       queryKey={queryKey}
       {...rest}
     >

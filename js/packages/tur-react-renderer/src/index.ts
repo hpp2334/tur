@@ -8,6 +8,7 @@ export type { TurElement } from "./types";
 export { Color, LinearGradient } from "./color";
 export type { GradientStop, LinearGradientOptions } from "./color";
 export { MainAxisAlignment } from "./generated/MainAxisAlignment";
+export { MainAxisSize } from "./generated/MainAxisSize";
 export { CrossAxisAlignment } from "./generated/CrossAxisAlignment";
 export { StackFit } from "./generated/StackFit";
 export { FlexFit } from "./generated/FlexFit";

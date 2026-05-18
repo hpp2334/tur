@@ -35,6 +35,44 @@ fn container_with_padding() {
 }
 
 #[test]
+fn container_update_clears_removed_props() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("container-update-clear-prop").unwrap();
+    app.render();
+
+    let checkbox_id = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let container = tree.get(root.children[0]).unwrap();
+        let pointer = tree.get(container.children[0]).unwrap();
+        let checkbox = tree.get(pointer.children[0]).unwrap();
+        assert_eq!(
+            checkbox.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_container"),
+        );
+        checkbox.id
+    };
+
+    app.with_element(checkbox_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        eprintln!("[test] before toggle: color={:?}", c.color());
+        assert!(c.color().is_some(), "checked state should have color");
+    });
+
+    let (cx, cy) = app.get_element_absolute_bounds(checkbox_id).unwrap().center();
+    eprintln!("[test] clicking at ({}, {})", cx, cy);
+    app.click(cx, cy);
+    app.render();
+
+    let tree = app.element_tree();
+    let checkbox_node = tree.get(checkbox_id).unwrap();
+    let checkbox_el = checkbox_node.element.as_ref().unwrap();
+    let c = checkbox_el.cast::<ContainerElement>().unwrap();
+    eprintln!("[test] after toggle: color={:?}, border_color={:?}", c.color(), c.border_color());
+    assert!(c.color().is_none(), "unchecked state should NOT have color, got {:?}", c.color());
+}
+
+#[test]
 fn container_with_border() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("container-border").unwrap();
@@ -70,6 +108,36 @@ fn container_with_border() {
 }
 
 #[test]
+fn container_padding_offsets_child() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("container-padding-offset").unwrap();
+
+    let (container_id, row_id, sb_id) = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let container = tree.get(root.children[0]).unwrap();
+        let row = tree.get(container.children[0]).unwrap();
+        let sb = tree.get(row.children[0]).unwrap();
+        (container.id, row.id, sb.id)
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let container = rt.get(container_id).unwrap();
+    assert_eq!(container.computed_layout.size.width, 200.0);
+    assert_eq!(container.computed_layout.size.height, 100.0);
+
+    let row = rt.get(row_id).unwrap();
+    assert_eq!(row.computed_layout.offset.x, 20.0,
+        "Row should be offset by padding=20");
+    assert_eq!(row.computed_layout.offset.y, 20.0,
+        "Row should be offset by padding=20");
+
+    let sb = rt.get(sb_id).unwrap();
+    assert_eq!(sb.computed_layout.offset.x, 0.0);
+    assert_eq!(sb.computed_layout.offset.y, 0.0);
+}#[test]
 fn container_with_shadow() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("container-shadow").unwrap();

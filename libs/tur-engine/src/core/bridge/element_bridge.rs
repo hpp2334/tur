@@ -199,7 +199,11 @@ pub(crate) fn tur_set_attribute(
         let mut tree = js_ctx.element_tree.borrow_mut();
         if let Some(node) = tree.get_mut(node_id) {
             if let Some(ref mut element) = node.element {
-                element.set_prop(context, &key, &value);
+                if value.is_null() || value.is_undefined() {
+                    element.reset_prop(&key);
+                } else {
+                    element.set_prop(context, &key, &value);
+                }
             }
         }
     }

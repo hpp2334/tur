@@ -4,6 +4,7 @@ export { createImageResource } from "@tur/react-renderer";
 export type { InputControllerOptions } from "@tur/react-renderer";
 export { Color } from "@tur/react-renderer";
 export { MainAxisAlignment } from "@tur/react-renderer";
+export { MainAxisSize } from "@tur/react-renderer";
 export { CrossAxisAlignment } from "@tur/react-renderer";
 export { StackFit } from "@tur/react-renderer";
 export { FlexFit } from "@tur/react-renderer";

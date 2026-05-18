@@ -83,11 +83,19 @@ impl ElementOnUpdate for TextSpanElement {
         } else if *key == "fontSize" {
             self.font_size = value.as_number().and_then(|v| if v == 0.0 { None } else { Some(v) });
         } else if *key == "color" {
-            if value.is_null() || value.is_undefined() {
-                self.color = None;
-            } else {
-                self.color = extract_color(value, _ctx);
-            }
+            self.color = extract_color(value, _ctx);
+        }
+    }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "content" => self.content.clear(),
+            "bold" => self.bold = false,
+            "italic" => self.italic = false,
+            "underline" => self.underline = false,
+            "fontSize" => self.font_size = None,
+            "color" => self.color = None,
+            _ => {}
         }
     }
 }
