@@ -1,5 +1,5 @@
 use tur_shared::{
-    Axis, ComputedLayout, Constraints, CrossAxisAlignment, MainAxisAlignment, Offset, Size,
+    Axis, ComputedLayout, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAlignment, Offset, Size,
 };
 
 use crate::core::element::ElementNodeId;
@@ -106,19 +106,27 @@ impl ElementLayout for FlexElement {
             }
         }
 
-        let _total_main: f64 = self
+        let total_main: f64 = self
             .child_data
             .iter()
             .map(|d| self.direction.main(d.size))
             .sum();
 
+        let main_size = match self.main_axis_size {
+            MainAxisSize::Max => match self.direction {
+                Axis::Vertical => constraints.max_height,
+                Axis::Horizontal => constraints.max_width,
+            },
+            MainAxisSize::Min => total_main,
+        };
+
         let size = match self.direction {
             Axis::Vertical => Size::new(
                 max_cross.clamp(constraints.min_width, constraints.max_width),
-                constraints.max_height.clamp(constraints.min_height, constraints.max_height),
+                main_size.clamp(constraints.min_height, constraints.max_height),
             ),
             Axis::Horizontal => Size::new(
-                constraints.max_width.clamp(constraints.min_width, constraints.max_width),
+                main_size.clamp(constraints.min_width, constraints.max_width),
                 max_cross.clamp(constraints.min_height, constraints.max_height),
             ),
         };

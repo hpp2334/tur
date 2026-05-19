@@ -42,6 +42,10 @@ impl ContainerElement {
         self.border_color.as_ref()
     }
 
+    pub fn color(&self) -> Option<&Brush> {
+        self.color.as_ref()
+    }
+
     pub fn border_width(&self) -> Option<f64> {
         self.border_width
     }
@@ -155,6 +159,23 @@ impl ElementOnUpdate for ContainerElement {
             self.shadow_offset = extract_offset_array(value, _ctx);
         } else if *key == "shadowBlur" {
             self.shadow_blur = value.as_number();
+        }
+    }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "width" => self.width = None,
+            "height" => self.height = None,
+            "padding" => self.padding = None,
+            "color" => self.color = None,
+            "borderColor" => self.border_color = None,
+            "borderWidth" => self.border_width = None,
+            "borderRadius" => self.border_radius = None,
+            "borderPosition" => self.border_position = BorderPosition::default(),
+            "shadowColor" => self.shadow_color = None,
+            "shadowOffset" => self.shadow_offset = None,
+            "shadowBlur" => self.shadow_blur = None,
+            _ => {}
         }
     }
 }

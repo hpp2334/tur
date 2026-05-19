@@ -434,11 +434,16 @@ impl ElementTree {
         } else {
             format!(" {label}")
         };
+        let query_key_str = match &node.query_key {
+            Some(keys) if !keys.is_empty() => format!(" [{}]", keys.join(", ")),
+            _ => String::new(),
+        };
         buf.push_str(&format!(
-            "{}{}{} [{:.1}, {:.1} {:.1}x{:.1}]\n",
+            "{}{}{}{} [{:.1}, {:.1} {:.1}x{:.1}]\n",
             prefix,
             element.type_name(),
             label_str,
+            query_key_str,
             layout.offset.x,
             layout.offset.y,
             layout.size.width,

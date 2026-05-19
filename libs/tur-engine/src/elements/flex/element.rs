@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
-use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, Size};
+use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAlignment, Size};
 
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
@@ -15,6 +15,7 @@ pub struct FlexElement {
     pub(crate) direction: Axis,
     pub(crate) main_alignment: MainAxisAlignment,
     pub(crate) cross_alignment: CrossAxisAlignment,
+    pub(crate) main_axis_size: MainAxisSize,
     pub(crate) child_data: Vec<ChildData>,
     pub(crate) constraints: Option<Constraints>,
     pub(crate) computed_size: Option<Size>,
@@ -32,6 +33,7 @@ impl FlexElement {
             direction: Axis::Vertical,
             main_alignment: MainAxisAlignment::Start,
             cross_alignment: CrossAxisAlignment::Center,
+            main_axis_size: MainAxisSize::Max,
             child_data: Vec::new(),
             constraints: None,
             computed_size: None,
@@ -42,8 +44,8 @@ impl FlexElement {
 impl ElementTrace for FlexElement {
     fn trace_label(&self) -> String {
         format!(
-            "{:?}[{:?}][{:?}]",
-            self.direction, self.main_alignment, self.cross_alignment
+            "{:?}[{:?}][{:?}][{:?}]",
+            self.direction, self.main_alignment, self.cross_alignment, self.main_axis_size
         )
     }
 }
@@ -64,6 +66,21 @@ impl ElementOnUpdate for FlexElement {
                 self.cross_alignment =
                     CrossAxisAlignment::from_i32(n as i32).unwrap_or(self.cross_alignment);
             }
+        } else if *key == "mainAxisSize" {
+            if let Some(n) = value.as_number() {
+                self.main_axis_size =
+                    MainAxisSize::from_i32(n as i32).unwrap_or(self.main_axis_size);
+            }
+        }
+    }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "direction" => self.direction = Axis::Vertical,
+            "mainAlignment" => self.main_alignment = MainAxisAlignment::Start,
+            "crossAlignment" => self.cross_alignment = CrossAxisAlignment::Center,
+            "mainAxisSize" => self.main_axis_size = MainAxisSize::Max,
+            _ => {}
         }
     }
 }

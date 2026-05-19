@@ -56,4 +56,14 @@ impl ElementOnUpdate for PositionedElement {
             self.right = val;
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "left" => self.left = None,
+            "top" => self.top = None,
+            "right" => self.right = None,
+            "bottom" => self.bottom = None,
+            _ => {}
+        }
+    }
 }

@@ -38,4 +38,10 @@ impl ElementOnUpdate for StackElement {
             }
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        if key.to_std_string_escaped().as_str() == "fit" {
+            self.fit = StackFit::Loose;
+        }
+    }
 }

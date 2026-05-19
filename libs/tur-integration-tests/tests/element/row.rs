@@ -50,3 +50,83 @@ fn row_basic_horizontal_stacking() {
     let row_node = rt.get(row_id).unwrap();
     assert_eq!(row_node.computed_layout.size.width, 400.0);
 }
+
+#[test]
+fn row_cross_center_in_tight_container() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("row-cross-center").unwrap();
+
+    let (container_id, row_id, sb1_id, sb2_id) = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let container = tree.get(root.children[0]).unwrap();
+        let row = tree.get(container.children[0]).unwrap();
+        (
+            container.id,
+            row.id,
+            row.children[0],
+            row.children[1],
+        )
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let container = rt.get(container_id).unwrap();
+    assert_eq!(container.computed_layout.size.width, 200.0);
+    assert_eq!(container.computed_layout.size.height, 36.0);
+
+    let row = rt.get(row_id).unwrap();
+    assert_eq!(row.computed_layout.size.height, 36.0,
+        "Row inside Container(height=36) should be 36px tall (tight constraints)");
+
+    let sb1 = rt.get(sb1_id).unwrap();
+    assert_eq!(sb1.computed_layout.size.width, 20.0);
+    assert_eq!(sb1.computed_layout.size.height, 20.0);
+    assert_eq!(sb1.computed_layout.offset.y, 8.0,
+        "20px child centered in 36px Row: (36-20)/2 = 8");
+
+    let sb2 = rt.get(sb2_id).unwrap();
+    assert_eq!(sb2.computed_layout.size.height, 10.0);
+    assert_eq!(sb2.computed_layout.offset.y, 13.0,
+        "10px child centered in 36px Row: (36-10)/2 = 13");
+}
+
+#[test]
+fn row_cross_center_in_column_does_not_starve_siblings() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("row-cross-center-in-column").unwrap();
+
+    let (row_id, sb1_id, sb2_id, sb3_id) = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let col = tree.get(root.children[0]).unwrap();
+        let row = tree.get(col.children[0]).unwrap();
+        (
+            row.id,
+            row.children[0],
+            row.children[1],
+            col.children[2],
+        )
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let row = rt.get(row_id).unwrap();
+    assert_eq!(row.computed_layout.size.height, 20.0,
+        "Row with MainAxisSize.Min should be tallest child height");
+
+    let sb1 = rt.get(sb1_id).unwrap();
+    assert_eq!(sb1.computed_layout.offset.y, 0.0,
+        "20px child in 20px Row: centered at y=0");
+
+    let sb2 = rt.get(sb2_id).unwrap();
+    assert_eq!(sb2.computed_layout.offset.y, 5.0,
+        "10px child centered in 20px Row: (20-10)/2 = 5");
+
+    let sb3 = rt.get(sb3_id).unwrap();
+    assert_eq!(sb3.computed_layout.size.height, 20.0);
+    assert_eq!(sb3.computed_layout.offset.y, 50.0,
+        "third child at y=50 (Row 20 + SizedBox 30), not starved");
+}

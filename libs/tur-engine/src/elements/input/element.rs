@@ -680,8 +680,6 @@ impl ElementOnUpdate for InputElement {
         } else if *key == "placeholder" {
             if let Some(s) = value.as_string() {
                 self.placeholder = Some(s.to_std_string_escaped());
-            } else if value.is_null() || value.is_undefined() {
-                self.placeholder = None;
             }
         } else if *key == "placeholderColor" {
             self.placeholder_color = extract_color(value, _ctx);
@@ -707,6 +705,28 @@ impl ElementOnUpdate for InputElement {
             self.on_composition_update = extract_callable(value);
         } else if *key == "onCompositionEnd" {
             self.on_composition_end = extract_callable(value);
+        }
+    }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "fontSize" => self.font_size = 14.0,
+            "color" => self.color = None,
+            "cursorColor" => self.cursor_color = None,
+            "placeholder" => self.placeholder = None,
+            "placeholderColor" => self.placeholder_color = None,
+            "multiline" => self.multiline = false,
+            "onKeyDown" => self.on_key_down = None,
+            "onKeyUp" => self.on_key_up = None,
+            "onFocus" => self.on_focus = None,
+            "onBlur" => self.on_blur = None,
+            "onInput" => self.on_input = None,
+            "onCursorChange" => self.on_cursor_change = None,
+            "onSelectionChange" => self.on_selection_change = None,
+            "onCompositionStart" => self.on_composition_start = None,
+            "onCompositionUpdate" => self.on_composition_update = None,
+            "onCompositionEnd" => self.on_composition_end = None,
+            _ => {}
         }
     }
 }

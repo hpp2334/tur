@@ -53,6 +53,16 @@ impl ElementOnUpdate for FocusableElement {
             _ => {}
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        match key.to_std_string_escaped().as_str() {
+            "onKeyDown" => self.on_key_down = None,
+            "onKeyUp" => self.on_key_up = None,
+            "onFocus" => self.on_focus = None,
+            "onBlur" => self.on_blur = None,
+            _ => {}
+        }
+    }
 }
 
 impl ElementOnFocus for FocusableElement {}

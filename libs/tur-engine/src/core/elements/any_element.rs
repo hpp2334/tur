@@ -36,6 +36,7 @@ trait Erased: 'static {
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn trace_label(&self) -> String;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
+    fn reset_prop(&mut self, key: &JsString);
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -112,6 +113,10 @@ where
 
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
         <Self as ElementOnUpdate>::set_prop(self, ctx, key, value);
+    }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        <Self as ElementOnUpdate>::reset_prop(self, key);
     }
 
     fn perform_layout_size(
@@ -244,6 +249,10 @@ impl AnyElement {
 
     pub fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
         self.inner.set_prop(ctx, key, value);
+    }
+
+    pub fn reset_prop(&mut self, key: &JsString) {
+        self.inner.reset_prop(key);
     }
 
     pub fn perform_layout_size(

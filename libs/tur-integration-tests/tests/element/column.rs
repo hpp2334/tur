@@ -94,3 +94,50 @@ fn column_cross_alignment_start() {
     let sb1_node = rt.get(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 }
+
+#[test]
+fn column_nested_children_do_not_overlap() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("column-nested").unwrap();
+
+    let (_outer_col_id, sb1_id, inner_col_id, sb3_id) = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let outer_col = tree.get(root.children[0]).unwrap();
+        assert_eq!(outer_col.children.len(), 3);
+        let inner_col = tree.get(outer_col.children[1]).unwrap();
+        (
+            outer_col.id,
+            outer_col.children[0],
+            inner_col.id,
+            outer_col.children[2],
+        )
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let sb1 = rt.get(sb1_id).unwrap();
+    assert_eq!(sb1.computed_layout.size.height, 50.0);
+    assert_eq!(sb1.computed_layout.offset.y, 0.0);
+
+    let inner_col = rt.get(inner_col_id).unwrap();
+    assert_eq!(
+        inner_col.computed_layout.offset.y, 50.0,
+        "inner column should start after first child"
+    );
+    assert_eq!(
+        inner_col.computed_layout.size.height, 30.0,
+        "inner column with mainAxisSize=Min should size to content"
+    );
+
+    let sb3 = rt.get(sb3_id).unwrap();
+    assert_eq!(
+        sb3.computed_layout.size.height, 40.0,
+        "third child should have non-zero height (not starved by inner column)"
+    );
+    assert_eq!(
+        sb3.computed_layout.offset.y, 80.0,
+        "third child should be positioned after inner column (50 + 30)"
+    );
+}

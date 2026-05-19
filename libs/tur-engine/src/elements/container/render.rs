@@ -40,7 +40,11 @@ impl ElementLayout for ContainerElement {
         sized_constraints.constrain(inflated)
     }
 
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
+    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        if let (Some(&child_id), Some(p)) = (children.first(), self.padding) {
+            cx.set_child_offset(child_id, Offset::new(p, p));
+        }
+    }
 }
 
 impl ElementRender for ContainerElement {

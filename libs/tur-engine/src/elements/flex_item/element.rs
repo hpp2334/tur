@@ -16,4 +16,6 @@ impl ElementTrace for FlexItemElement {}
 
 impl ElementOnUpdate for FlexItemElement {
     fn set_prop(&mut self, _ctx: &mut Context, _key: &JsString, _value: &JsValue) {}
+
+    fn reset_prop(&mut self, _key: &JsString) {}
 }

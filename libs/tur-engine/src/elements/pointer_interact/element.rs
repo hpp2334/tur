@@ -50,6 +50,12 @@ impl ElementOnUpdate for PointerInteractElement {
             self.on_pointer_exit = extract_callable(value);
         }
     }
+
+    fn reset_prop(&mut self, key: &JsString) {
+        if key.to_std_string_escaped().as_str() == "onClick" {
+            self.on_click = None;
+        }
+    }
 }
 
 impl ElementJsCallbackEmitter for PointerInteractElement {
