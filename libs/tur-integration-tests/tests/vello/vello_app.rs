@@ -70,7 +70,7 @@ impl TurVelloApp {
         let surface = unsafe {
             instance
                 .create_surface_unsafe(vello::wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: raw_display.as_raw(),
+                    raw_display_handle: Some(raw_display.as_raw()),
                     raw_window_handle: raw_window.as_raw(),
                 })
                 .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?
