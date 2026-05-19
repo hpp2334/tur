@@ -83,7 +83,7 @@ impl VelloRenderer {
         };
         let renderer = Renderer::new(&device, options).expect("failed to create vello Renderer");
 
-        let intermediate_texture = Self::create_intermediate_texture(&device, physical_width, physical_height, surface_format);
+        let intermediate_texture = Self::create_intermediate_texture(&device, physical_width, physical_height);
         let blitter = TextureBlitter::new(&device, surface_format);
 
         VelloRenderer {
@@ -106,7 +106,6 @@ impl VelloRenderer {
         device: &vello::wgpu::Device,
         width: u32,
         height: u32,
-        format: vello::wgpu::TextureFormat,
     ) -> vello::wgpu::Texture {
         device.create_texture(&vello::wgpu::TextureDescriptor {
             label: Some("vello intermediate"),
@@ -118,7 +117,7 @@ impl VelloRenderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: vello::wgpu::TextureDimension::D2,
-            format,
+            format: vello::wgpu::TextureFormat::Rgba8Unorm,
             usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         })
@@ -137,7 +136,6 @@ impl VelloRenderer {
             &self.device,
             self.physical_width,
             self.physical_height,
-            self.config.format,
         );
     }
 
