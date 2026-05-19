@@ -50,7 +50,7 @@ impl ElementLayout for TextContainerElement {
 
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
-        let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0);
+        let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0, false);
         builder.push_default(StyleProperty::FontSize(base_font_size as f32));
         builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
 
@@ -88,7 +88,7 @@ impl ElementLayout for TextContainerElement {
             None
         };
         layout.break_all_lines(max_width);
-        layout.align(max_width, Alignment::Start, AlignmentOptions::default());
+        layout.align(Alignment::Start, AlignmentOptions::default());
 
         let (layout_data, width, height) = text_layout::extract_layout_data(&mut layout, &underline_ranges);
 

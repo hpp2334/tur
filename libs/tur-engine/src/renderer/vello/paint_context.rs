@@ -2,7 +2,7 @@ use std::fmt;
 
 use tur_shared::{Brush, Color, Geometry, Offset, Size};
 use vello::kurbo::{Affine, Stroke};
-use vello::peniko::{Brush as PenikoBrush, Fill, Image};
+use vello::peniko::{Brush as PenikoBrush, Fill, ImageData};
 use vello::Scene;
 
 use crate::core::render::Canvas;
@@ -183,7 +183,7 @@ impl Canvas for VelloPaintContext<'_> {
         }
     }
 
-    fn draw_image(&mut self, image: &Image, transform: Affine) {
+    fn draw_image(&mut self, image: &ImageData, transform: Affine) {
         self.scene.draw_image(image, transform);
     }
 

@@ -6,7 +6,7 @@ use crate::core::render::Renderer as TurRenderer;
 use crate::core::resource::ResourceMap;
 use crate::renderer::vello::paint_context::VelloPaintContext;
 use vello::kurbo::{Affine, Rect};
-use vello::peniko::{Color, Mix};
+use vello::peniko::{BlendMode, Color, Fill, Mix};
 use vello::wgpu::{SurfaceConfiguration, TextureUsages};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
@@ -73,10 +73,10 @@ impl VelloRenderer {
         surface.configure(&device, &config);
 
         let options = RendererOptions {
-            surface_format: Some(surface_format),
             use_cpu: false,
             antialiasing_support: AaSupport::all(),
             num_init_threads: NonZeroUsize::new(1),
+            pipeline_cache: None,
         };
         let renderer = Renderer::new(&device, options).expect("failed to create vello Renderer");
 
@@ -109,7 +109,8 @@ impl VelloRenderer {
         self.scene.reset();
         if self.dpr != 1.0 {
             self.scene.push_layer(
-                Mix::Normal,
+                Fill::NonZero,
+                BlendMode::from(Mix::Normal),
                 1.0,
                 Affine::scale(self.dpr),
                 &Rect::new(0.0, 0.0, f64::MAX, f64::MAX),
@@ -123,10 +124,15 @@ impl VelloRenderer {
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
-        let output = self
-            .surface
-            .get_current_texture()
-            .expect("failed to get surface texture");
+        let output = match self.surface.get_current_texture() {
+            vello::wgpu::CurrentSurfaceTexture::Success(t)
+            | vello::wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            _ => return Ok(()),
+        };
+
+        let view = output
+            .texture
+            .create_view(&vello::wgpu::TextureViewDescriptor::default());
 
         let params = RenderParams {
             base_color: Color::from_rgba8(255, 255, 255, 255),
@@ -136,9 +142,9 @@ impl VelloRenderer {
         };
 
         self.renderer
-            .render_to_surface(&self.device, &self.queue, &self.scene, &output, &params)
+            .render_to_texture(&self.device, &self.queue, &self.scene, &view, &params)
             .map_err(|e| {
-                tracing::error!("present: render_to_surface failed: {e}");
+                tracing::error!("present: render_to_texture failed: {e}");
                 VelloRendererError::Render(e)
             })?;
 

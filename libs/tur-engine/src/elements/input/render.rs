@@ -30,7 +30,7 @@ fn build_text_layout(
     let brush = color_to_brush(color);
     let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
-    let mut builder = text_layout_cx.ranged_builder(font_cx, content, 1.0);
+    let mut builder = text_layout_cx.ranged_builder(font_cx, content, 1.0, false);
     builder.push_default(StyleProperty::FontSize(font_size as f32));
     builder.push_default(StyleProperty::Brush(brush));
     builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
@@ -43,7 +43,7 @@ fn build_text_layout(
         None
     };
     layout.break_all_lines(max_width);
-    layout.align(max_width, Alignment::Start, AlignmentOptions::default());
+    layout.align(Alignment::Start, AlignmentOptions::default());
 
     text_layout::extract_layout_data(&mut layout, &[])
 }
