@@ -7,6 +7,7 @@ use crate::core::resource::ResourceMap;
 use crate::renderer::vello::paint_context::VelloPaintContext;
 use vello::kurbo::{Affine, Rect};
 use vello::peniko::{BlendMode, Color, Fill, Mix};
+use vello::wgpu::util::TextureBlitter;
 use vello::wgpu::{SurfaceConfiguration, TextureUsages};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
 
@@ -23,6 +24,8 @@ pub struct VelloRenderer {
     queue: vello::wgpu::Queue,
     surface: vello::wgpu::Surface<'static>,
     config: SurfaceConfiguration,
+    intermediate_texture: vello::wgpu::Texture,
+    blitter: TextureBlitter,
     dpr: f64,
     physical_width: u32,
     physical_height: u32,
@@ -80,6 +83,9 @@ impl VelloRenderer {
         };
         let renderer = Renderer::new(&device, options).expect("failed to create vello Renderer");
 
+        let intermediate_texture = Self::create_intermediate_texture(&device, physical_width, physical_height, surface_format);
+        let blitter = TextureBlitter::new(&device, surface_format);
+
         VelloRenderer {
             renderer,
             scene: Scene::new(),
@@ -87,11 +93,35 @@ impl VelloRenderer {
             queue,
             surface,
             config,
+            intermediate_texture,
+            blitter,
             dpr,
             physical_width,
             physical_height,
             max_texture_dimension,
         }
+    }
+
+    fn create_intermediate_texture(
+        device: &vello::wgpu::Device,
+        width: u32,
+        height: u32,
+        format: vello::wgpu::TextureFormat,
+    ) -> vello::wgpu::Texture {
+        device.create_texture(&vello::wgpu::TextureDescriptor {
+            label: Some("vello intermediate"),
+            size: vello::wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: vello::wgpu::TextureDimension::D2,
+            format,
+            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
     }
 
     pub fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
@@ -103,6 +133,12 @@ impl VelloRenderer {
         self.config.width = self.physical_width;
         self.config.height = self.physical_height;
         self.surface.configure(&self.device, &self.config);
+        self.intermediate_texture = Self::create_intermediate_texture(
+            &self.device,
+            self.physical_width,
+            self.physical_height,
+            self.config.format,
+        );
     }
 
     pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
@@ -130,8 +166,8 @@ impl VelloRenderer {
             _ => return Ok(()),
         };
 
-        let view = output
-            .texture
+        let intermediate_view = self
+            .intermediate_texture
             .create_view(&vello::wgpu::TextureViewDescriptor::default());
 
         let params = RenderParams {
@@ -142,11 +178,28 @@ impl VelloRenderer {
         };
 
         self.renderer
-            .render_to_texture(&self.device, &self.queue, &self.scene, &view, &params)
+            .render_to_texture(&self.device, &self.queue, &self.scene, &intermediate_view, &params)
             .map_err(|e| {
                 tracing::error!("present: render_to_texture failed: {e}");
                 VelloRendererError::Render(e)
             })?;
+
+        let surface_view = output
+            .texture
+            .create_view(&vello::wgpu::TextureViewDescriptor::default());
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&vello::wgpu::CommandEncoderDescriptor {
+                label: Some("blit encoder"),
+            });
+        self.blitter.copy(
+            &self.device,
+            &mut encoder,
+            &intermediate_view,
+            &surface_view,
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
 
         output.present();
         Ok(())
