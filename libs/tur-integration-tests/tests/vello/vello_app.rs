@@ -16,8 +16,8 @@ pub enum TurVelloError {
     Engine(#[from] TurError),
     #[error("window creation failed: {0}")]
     Window(String),
-    #[error("wgpu adapter request failed")]
-    WgpuAdapter,
+    #[error("wgpu adapter request failed: {0}")]
+    WgpuAdapter(String),
     #[error("wgpu device request failed: {0}")]
     WgpuDevice(String),
     #[error("wgpu surface creation failed: {0}")]
@@ -54,7 +54,10 @@ impl TurVelloApp {
 
         let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
             backends: vello::wgpu::Backends::all(),
-            ..Default::default()
+            flags: vello::wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: vello::wgpu::MemoryBudgetThresholds::default(),
+            backend_options: vello::wgpu::BackendOptions::default(),
+            display: None,
         });
 
         let raw_display = window
@@ -80,18 +83,17 @@ impl TurVelloApp {
                 force_fallback_adapter: false,
             })
             .await
-            .ok_or(TurVelloError::WgpuAdapter)?;
+            .map_err(|e| TurVelloError::WgpuAdapter(e.to_string()))?;
 
         let (device, queue) = adapter
-            .request_device(
-                &vello::wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: vello::wgpu::Features::empty(),
-                    required_limits: vello::wgpu::Limits::default(),
-                    memory_hints: vello::wgpu::MemoryHints::Performance,
-                },
-                None,
-            )
+            .request_device(&vello::wgpu::DeviceDescriptor {
+                label: None,
+                required_features: vello::wgpu::Features::empty(),
+                required_limits: vello::wgpu::Limits::default(),
+                experimental_features: vello::wgpu::ExperimentalFeatures::default(),
+                memory_hints: vello::wgpu::MemoryHints::Performance,
+                trace: vello::wgpu::Trace::default(),
+            })
             .await
             .map_err(|e| TurVelloError::WgpuDevice(e.to_string()))?;
 
