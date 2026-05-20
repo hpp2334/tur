@@ -17,9 +17,9 @@ pub(crate) struct TextLayoutData {
 }
 
 pub(crate) struct TextRunData {
-    pub font: vello::peniko::Font,
+    pub font: parley::FontData,
     pub font_size: f32,
-    pub normalized_coords: Vec<parley::swash::NormalizedCoord>,
+    pub normalized_coords: Vec<i16>,
     pub glyphs: Vec<TextGlyph>,
     pub brush: [u8; 4],
     pub underline: bool,
@@ -200,7 +200,7 @@ pub(crate) fn extract_layout_data(
                 let gy = y - glyph.y;
                 x += glyph.advance;
                 glyphs.push(TextGlyph {
-                    id: glyph.id as u32,
+                    id: glyph.id,
                     x: gx,
                     y: gy,
                     advance: glyph.advance,

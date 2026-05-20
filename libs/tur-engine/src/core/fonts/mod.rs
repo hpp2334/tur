@@ -46,7 +46,7 @@ impl PresetFontLoader {
 
 impl FontLoader for PresetFontLoader {
     fn load_preset_fonts(&self, fcx: &mut FontContext) {
-        let families = fcx.collection.register_fonts(DEFAULT_FONT.to_vec());
+        let families = fcx.collection.register_fonts(DEFAULT_FONT.to_vec().into(), None);
         let family_ids = families.into_iter().map(|(id, _)| id);
         fcx.collection
             .set_generic_families(GenericFamily::SansSerif, family_ids);

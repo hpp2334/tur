@@ -153,7 +153,10 @@ impl TurWasmApp {
 
             let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
                 backends: vello::wgpu::Backends::BROWSER_WEBGPU,
-                ..Default::default()
+                flags: vello::wgpu::InstanceFlags::default(),
+                memory_budget_thresholds: vello::wgpu::MemoryBudgetThresholds::default(),
+                backend_options: vello::wgpu::BackendOptions::default(),
+                display: None,
             });
 
             let surface = instance
@@ -167,18 +170,17 @@ impl TurWasmApp {
                     force_fallback_adapter: false,
                 })
                 .await
-                .ok_or_else(|| JsValue::from_str("failed to request adapter"))?;
+                .map_err(|e| JsValue::from_str(&format!("failed to request adapter: {e}")))?;
 
             let (device, queue) = adapter
-                .request_device(
-                    &vello::wgpu::DeviceDescriptor {
-                        label: None,
-                        required_features: vello::wgpu::Features::empty(),
-                        required_limits: vello::wgpu::Limits::default(),
-                        memory_hints: vello::wgpu::MemoryHints::Performance,
-                    },
-                    None,
-                )
+                .request_device(&vello::wgpu::DeviceDescriptor {
+                    label: None,
+                    required_features: vello::wgpu::Features::empty(),
+                    required_limits: vello::wgpu::Limits::default(),
+                    experimental_features: vello::wgpu::ExperimentalFeatures::default(),
+                    memory_hints: vello::wgpu::MemoryHints::Performance,
+                    trace: vello::wgpu::Trace::default(),
+                })
                 .await
                 .map_err(|e| JsValue::from_str(&format!("failed to request device: {e}")))?;
 
