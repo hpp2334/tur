@@ -49,9 +49,11 @@ fn create_element(
     let js_ctx = extract_ctx(args)?;
     let mut tree = js_ctx.element_tree.borrow_mut();
     let id = tree.alloc_id();
+    let kind = element.type_name().to_string();
     let node = ElementObject::new(id, element, context);
     tree.insert(node);
     let handle = tree.get(id).unwrap().handle.clone();
+    tracing::debug!("[create] {kind} id={id}");
     Ok(handle.object().clone().into())
 }
 

@@ -8,6 +8,9 @@ const { cert, private: key } = selfsigned.generate(
 );
 
 export default defineConfig({
+  optimization: {
+    minimize: false,
+  },
   devServer: {
     hot: false,
     liveReload: false,
@@ -22,7 +25,6 @@ export default defineConfig({
   entry: {
     bundle: "./src/index.tsx",
   },
-  devtool: "source-map",
   output: {
     filename: "bundle.bin",
     publicPath: "",

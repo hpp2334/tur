@@ -191,6 +191,9 @@ let _container: any = null;
 
 export function renderRoot(component: React.ComponentType): TurNodeHandle {
   const root = __tur.createRoot(ctx);
+  const handleError = (error: unknown) => {
+    console.error(error);
+  };
   _container = reconciler.createContainer(
     root,
     0,
@@ -198,9 +201,9 @@ export function renderRoot(component: React.ComponentType): TurNodeHandle {
     false,
     null,
     "",
-    () => {},
-    () => {},
-    () => {},
+    handleError,
+    handleError,
+    handleError,
     () => {},
   );
 

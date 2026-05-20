@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Column,
   Row,
@@ -19,11 +18,17 @@ import {
 import { Colors } from "../../theme";
 import {
   type Todo,
+  store,
   todosAtom,
   toggleTodoAtom,
   removeTodoAtom,
   addTodoAtom,
   selectedTodoIdAtom,
+  showModalAtom,
+  titleTextAtom,
+  descTextAtom,
+  titleControllerAtom,
+  descControllerAtom,
   useAtomValue,
   useSetAtom,
 } from "./store";
@@ -68,6 +73,7 @@ function TodoItemRow(props: {
 }) {
   const { todo, isSelected } = props;
   return (
+    <PointerInteract onClick={props.onSelect} child={
     <Container
       borderRadius={8}
       padding={12}
@@ -80,13 +86,11 @@ function TodoItemRow(props: {
         <Row crossAlignment={CrossAxisAlignment.Center} mainAxisSize={MainAxisSize.Min}>
           <PointerInteract onClick={props.onToggle} child={<Checkbox checked={todo.done} />} />
           <SizedBox width={12} />
-          <PointerInteract onClick={props.onSelect} child={
-            <Text
-              content={todo.text}
-              fontSize={14}
-              color={todo.done ? Colors.TEXT_MUTED : Colors.TEXT_PRIMARY}
-            />
-          } />
+          <Text
+            content={todo.text}
+            fontSize={14}
+            color={todo.done ? Colors.TEXT_MUTED : Colors.TEXT_PRIMARY}
+          />
         </Row>
         <PointerInteract onClick={props.onRemove} child={
           <Container width={28} height={28} borderRadius={6} color={Colors.DANGER_LIGHT}>
@@ -97,6 +101,7 @@ function TodoItemRow(props: {
         } />
       </Row>
     </Container>
+    } />
   );
 }
 
@@ -112,7 +117,7 @@ function DetailPanel(props: { todo: Todo; onClose: () => void }) {
       shadowOffset={[0, 4]}
       shadowBlur={16}
     >
-      <Column crossAlignment={CrossAxisAlignment.Start}>
+      <Column mainAxisSize={MainAxisSize.Min} crossAlignment={CrossAxisAlignment.Start}>
       <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Center}>
           <Text content={todo.text} fontSize={18} color={Colors.TEXT_PRIMARY} />
           <PointerInteract onClick={props.onClose} child={
@@ -145,21 +150,21 @@ function DetailPanel(props: { todo: Todo; onClose: () => void }) {
 }
 
 function AddTaskModal(props: { onClose: () => void; onAdd: (text: string, description: string) => void }) {
-  const [titleText, setTitleText] = useState("");
-  const [descText, setDescText] = useState("");
+  const titleText = useAtomValue(titleTextAtom);
+  const descText = useAtomValue(descTextAtom);
+  const titleController = useAtomValue(titleControllerAtom);
+  const descController = useAtomValue(descControllerAtom);
 
-  const titleController = new InputController({
-    onInput: (text: string) => setTitleText(text),
-  });
-
-  const descController = new InputController({
-    onInput: (text: string) => setDescText(text),
-  });
+  const trimmed = titleText.trim();
+  const canAdd = trimmed.length > 0;
 
   const handleAdd = () => {
-    const trimmed = titleText.trim();
-    if (!trimmed) return;
+    if (!canAdd) return;
     props.onAdd(trimmed, descText);
+    titleController.clear();
+    descController.clear();
+    store.set(titleTextAtom, "");
+    store.set(descTextAtom, "");
     props.onClose();
   };
 
@@ -176,7 +181,7 @@ function AddTaskModal(props: { onClose: () => void; onAdd: (text: string, descri
             shadowOffset={[0, 8]}
             shadowBlur={24}
           >
-            <Column crossAlignment={CrossAxisAlignment.Start}>
+            <Column mainAxisSize={MainAxisSize.Min} crossAlignment={CrossAxisAlignment.Start}>
               <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Center}>
                 <Text content="Add New Task" fontSize={18} color={Colors.TEXT_PRIMARY} />
                 <PointerInteract onClick={props.onClose} child={
@@ -233,7 +238,7 @@ function AddTaskModal(props: { onClose: () => void; onAdd: (text: string, descri
                     borderPosition={BorderPosition.Inside}
                     padding={8}
                   >
-                    <Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}>
+                    <Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center} mainAxisSize={MainAxisSize.Min}>
                       <Text content="Cancel" fontSize={14} color={Colors.TEXT_SECONDARY} />
                     </Row>
                   </Container>
@@ -243,11 +248,11 @@ function AddTaskModal(props: { onClose: () => void; onAdd: (text: string, descri
                   <Container
                     height={36}
                     borderRadius={8}
-                    color={Colors.PRIMARY}
+                    color={canAdd ? Colors.PRIMARY : Colors.BORDER}
                     padding={8}
                   >
-                    <Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}>
-                      <Text content="Add Task" fontSize={14} color={Colors.TEXT_WHITE} />
+                    <Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center} mainAxisSize={MainAxisSize.Min}>
+                      <Text content="Add Task" fontSize={14} color={canAdd ? Colors.TEXT_WHITE : Colors.TEXT_MUTED} />
                     </Row>
                   </Container>
                 } />
@@ -268,7 +273,8 @@ function TodoList() {
   const selectedTodoId = useAtomValue(selectedTodoIdAtom);
   const setSelectedTodoId = useSetAtom(selectedTodoIdAtom);
 
-  const [showModal, setShowModal] = useState(false);
+  const setShowModal = useSetAtom(showModalAtom);
+  const showModal = useAtomValue(showModalAtom);
 
   const selectedTodo = todos.find((t) => t.id === selectedTodoId) ?? null;
 
