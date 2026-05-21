@@ -32,7 +32,8 @@ impl AppHandler for PointerRegionAppHandler {
         };
 
         let hit_path = HitTest::new(&*cx.element_tree).path(*position);
-        let diff = self.tracker.update(&hit_path, |id| {
+        let filtered = filter_opaque_path(&hit_path, &*cx.element_tree);
+        let diff = self.tracker.update(&filtered, |id| {
             has_pointer_region_callbacks(&*cx.element_tree, id)
         });
 
@@ -57,4 +58,26 @@ fn has_pointer_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
                 .unwrap_or(false)
         })
         .unwrap_or(false)
+}
+
+fn is_pointer_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
+    tree.get(id)
+        .and_then(|node| node.element.as_ref())
+        .map(|e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.is_pointer_region_opaque())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
+}
+
+fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<ElementNodeId> {
+    let mut result = Vec::new();
+    for &id in path {
+        result.push(id);
+        if is_pointer_region_opaque(tree, id) {
+            break;
+        }
+    }
+    result
 }

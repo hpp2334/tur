@@ -12,6 +12,7 @@ export { FlexDirection } from "@tur/react-renderer";
 export { Axis } from "@tur/react-renderer";
 export { BoxFit } from "@tur/react-renderer";
 export { BorderPosition } from "@tur/react-renderer";
+export { HitTestBehavior } from "@tur/react-renderer";
 export type { EdgeInsets } from "@tur/react-renderer";
 export type { Size } from "@tur/react-renderer";
 export type { Offset } from "@tur/react-renderer";

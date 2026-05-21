@@ -15,32 +15,37 @@ import {
   todosAtom,
   toggleTodoAtom,
   removeTodoAtom,
+  selectedTodoIdAtom,
   useAtomValue,
   useSetAtom,
 } from "./store";
 
-function TodoItem(props: { todo: { id: number; text: string; done: boolean }; onToggle: (id: number) => void; onRemove: (id: number) => void }) {
+function TodoItem(props: { todo: { id: number; text: string; done: boolean }; onToggle: (id: number) => void; onRemove: (id: number) => void; onSelect: (id: number) => void; isSelected: boolean }) {
   return (
-    <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
-      <PointerInteract
-        onClick={() => props.onToggle(props.todo.id)}
-        child={
-          <Text
-            content={props.todo.done ? "\u2713" : "\u25CB"}
-            queryKey={["toggle", String(props.todo.id)]}
+    <PointerInteract onClick={() => props.onSelect(props.todo.id)} child={
+      <Container queryKey={["todo-item", String(props.todo.id), props.isSelected ? "selected" : "unselected"]} padding={4}>
+        <Row mainAlignment={MainAxisAlignment.SpaceBetween} crossAlignment={CrossAxisAlignment.Start}>
+          <PointerInteract
+            onClick={() => props.onToggle(props.todo.id)}
+            child={
+              <Text
+                content={props.todo.done ? "\u2713" : "\u25CB"}
+                queryKey={["toggle", String(props.todo.id)]}
+              />
+            }
           />
-        }
-      />
-      <Text content={props.todo.text} />
-      <PointerInteract
-        onClick={() => props.onRemove(props.todo.id)}
-        child={
-          <Container queryKey={["remove", String(props.todo.id)]} padding={4}>
-            <Text content={"\u2715"} />
-          </Container>
-        }
-      />
-    </Row>
+          <Text content={props.todo.text} />
+          <PointerInteract
+            onClick={() => props.onRemove(props.todo.id)}
+            child={
+              <Container queryKey={["remove", String(props.todo.id)]} padding={4}>
+                <Text content={"\u2715"} />
+              </Container>
+            }
+          />
+        </Row>
+      </Container>
+    } />
   );
 }
 
@@ -48,6 +53,8 @@ function TodoList() {
   const todos = useAtomValue(todosAtom);
   const toggleTodo = useSetAtom(toggleTodoAtom);
   const removeTodo = useSetAtom(removeTodoAtom);
+  const selectedTodoId = useAtomValue(selectedTodoIdAtom);
+  const setSelectedTodoId = useSetAtom(selectedTodoIdAtom);
 
   const controller = new InputController({
     onKeyDown: (e) => {
@@ -69,7 +76,7 @@ function TodoList() {
         <Text content={`Count: ${todos.length}`} queryKey={["count"]} />
         <Column queryKey={["todo-list"]}>
           {todos.map((todo) => (
-            <TodoItem todo={todo} onToggle={toggleTodo} onRemove={removeTodo} />
+            <TodoItem todo={todo} onToggle={toggleTodo} onRemove={removeTodo} onSelect={setSelectedTodoId} isSelected={todo.id === selectedTodoId} />
           ))}
         </Column>
       </Column>

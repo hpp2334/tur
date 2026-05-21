@@ -52,8 +52,8 @@ fn create_element(
     let kind = element.type_name().to_string();
     let node = ElementObject::new(id, element, context);
     tree.insert(node);
+    let _ = kind;
     let handle = tree.get(id).unwrap().handle.clone();
-    tracing::debug!("[create] {kind} id={id}");
     Ok(handle.object().clone().into())
 }
 

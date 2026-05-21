@@ -192,3 +192,30 @@ fn todolist_remove_click_fires() {
 
     click_query_key(&mut app, &["remove", "2"]);
 }
+
+#[test]
+fn todolist_toggle_does_not_select() {
+    let mut app = build_todolist();
+    app.render();
+
+    click_query_key(&mut app, &["toggle", "1"]);
+
+    let content = get_text_content(&app, &["toggle", "1"]);
+    assert_eq!(content, "\u{25CB}", "should have toggled");
+    assert!(app.query_element(&["todo-item", "1", "unselected"]).is_some(), "clicking toggle should not select");
+}
+
+#[test]
+fn todolist_click_item_selects() {
+    let mut app = build_todolist();
+    app.render();
+
+    assert!(app.query_element(&["todo-item", "2", "unselected"]).is_some());
+
+    let id = app.query_element(&["todo-item", "2", "unselected"]).unwrap();
+    let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(cx, cy);
+    app.render();
+
+    assert!(app.query_element(&["todo-item", "2", "selected"]).is_some());
+}
