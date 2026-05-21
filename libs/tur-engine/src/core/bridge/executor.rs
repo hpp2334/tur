@@ -75,13 +75,17 @@ impl TurJobExecutor {
 
         let promise_jobs: Vec<_> = self.promise_jobs.borrow_mut().drain(..).collect();
         for job in promise_jobs {
-            job.call(context)?;
+            if let Err(e) = job.call(context) {
+                tracing::error!("promise job error: {e}");
+            }
             count += 1;
         }
 
         let generic_jobs: Vec<_> = self.generic_jobs.borrow_mut().drain(..).collect();
         for job in generic_jobs {
-            job.call(context)?;
+            if let Err(e) = job.call(context) {
+                tracing::error!("generic job error: {e}");
+            }
             count += 1;
         }
 

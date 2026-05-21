@@ -11,6 +11,7 @@ use std::time::Duration;
 use boa_engine::context::time::FixedClock;
 use boa_engine::Context;
 use boa_engine::Source;
+use std::path::Path;
 use error::TurError;
 
 use core::app::TurAppInternal;
@@ -56,10 +57,17 @@ impl TurApp {
     }
 
     pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
+        tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
         self.boa_context
-            .eval(Source::from_bytes(source))
-            .map_err(TurError::JsEval)?;
-        let _ = self.executor.drain(&mut self.boa_context);
+            .eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
+            .map_err(|e| {
+                tracing::error!("JS eval error: {e}");
+                TurError::JsEval(e)
+            })?;
+        if let Err(e) = self.executor.drain(&mut self.boa_context) {
+            tracing::error!("load_js drain error: {e}");
+        }
+        tracing::info!("load_js: bundle evaluated successfully");
         Ok(())
     }
 

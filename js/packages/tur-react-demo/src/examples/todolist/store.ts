@@ -1,5 +1,6 @@
 import { atom, createStore } from "jotai/vanilla";
 import { useAtomValue, useSetAtom } from "jotai/react";
+import { InputController } from "@tur/react-renderer";
 
 export interface Todo {
   readonly id: number;
@@ -39,5 +40,21 @@ export const removeTodoAtom = atom(null, (_get, set, id: number) => {
 });
 
 export const selectedTodoIdAtom = atom<number | null>(null);
+
+export const showModalAtom = atom(false);
+
+export const titleTextAtom = atom("");
+export const descTextAtom = atom("");
+
+export const titleControllerAtom = atom(
+  new InputController({
+    onInput: (text: string) => store.set(titleTextAtom, text),
+  }),
+);
+export const descControllerAtom = atom(
+  new InputController({
+    onInput: (text: string) => store.set(descTextAtom, text),
+  }),
+);
 
 export { useAtomValue, useSetAtom };

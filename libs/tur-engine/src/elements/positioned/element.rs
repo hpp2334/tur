@@ -54,6 +54,8 @@ impl ElementOnUpdate for PositionedElement {
             self.top = val;
         } else if *key == "right" {
             self.right = val;
+        } else if *key == "bottom" {
+            self.bottom = val;
         }
     }
 

@@ -136,7 +136,11 @@ pub fn register_timer_globals(
             let realm = ctx.realm().clone();
             let job = GenericJob::new(
                 move |ctx| {
-                    callback.call(&JsValue::undefined(), &[], ctx)
+                    let result = callback.call(&JsValue::undefined(), &[], ctx);
+                    if let Err(ref e) = result {
+                        tracing::error!("microtask error: {e}");
+                    }
+                    result
                 },
                 realm,
             );

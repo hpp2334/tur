@@ -13,6 +13,9 @@ for (const dir of globSync("*/index.tsx", { cwd: casesDir })) {
 
 export default defineConfig({
   mode: "production",
+  optimization: {
+    minimize: false,
+  },
   entry: entries,
   output: {
     filename: "[name].js",
