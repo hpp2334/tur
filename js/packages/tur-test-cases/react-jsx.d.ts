@@ -3,6 +3,7 @@ import type { BoxFit } from "@tur/react-renderer";
 import type { CrossAxisAlignment } from "@tur/react-renderer";
 import type { FlexDirection } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
+import type { HitTestBehavior } from "@tur/react-renderer";
 import type { MainAxisAlignment } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 
@@ -47,6 +48,7 @@ declare module "react/jsx-runtime" {
         onClick?: () => void;
         onPointerEnter?: () => void;
         onPointerExit?: () => void;
+        behavior?: HitTestBehavior;
         queryKey?: string[];
         children?: React.ReactNode;
       };
