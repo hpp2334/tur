@@ -3,6 +3,10 @@
   "private": true,
   "type": "commonjs",
   "dependencies": {
+    "wrangler": "^4.14.0",
     "ws": "^8.18.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp", "workerd"]
   }
 }
