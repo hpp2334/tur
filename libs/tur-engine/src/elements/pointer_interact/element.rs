@@ -1,5 +1,7 @@
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
+use num_traits::FromPrimitive;
+use tur_shared::HitTestBehavior;
 
 use crate::core::elements::{ElementJsCallbackEmitter, ElementOnUpdate, ElementTrace};
 use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
@@ -12,6 +14,7 @@ pub struct PointerInteractElement {
     on_click: Option<JsFunction>,
     on_pointer_enter: Option<JsFunction>,
     on_pointer_exit: Option<JsFunction>,
+    behavior: HitTestBehavior,
 }
 
 impl Default for PointerInteractElement {
@@ -26,6 +29,7 @@ impl PointerInteractElement {
             on_click: None,
             on_pointer_enter: None,
             on_pointer_exit: None,
+            behavior: HitTestBehavior::default(),
         }
     }
 
@@ -35,6 +39,15 @@ impl PointerInteractElement {
 
     pub fn has_pointer_region_callbacks(&self) -> bool {
         self.on_pointer_enter.is_some() || self.on_pointer_exit.is_some()
+    }
+
+    pub fn is_click_opaque(&self) -> bool {
+        self.behavior == HitTestBehavior::Opaque && self.on_click.is_some()
+    }
+
+    pub fn is_pointer_region_opaque(&self) -> bool {
+        self.behavior == HitTestBehavior::Opaque
+            && (self.on_pointer_enter.is_some() || self.on_pointer_exit.is_some())
     }
 }
 
@@ -48,6 +61,12 @@ impl ElementOnUpdate for PointerInteractElement {
             self.on_pointer_enter = extract_callable(value);
         } else if *key == "onPointerExit" {
             self.on_pointer_exit = extract_callable(value);
+        } else if *key == "behavior" {
+            if let Some(n) = value.as_number() {
+                if let Some(b) = HitTestBehavior::from_u8(n as u8) {
+                    self.behavior = b;
+                }
+            }
         }
     }
 

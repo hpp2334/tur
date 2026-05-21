@@ -4,6 +4,7 @@ use crate::core::gesture::make_click_command;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
+use crate::elements::PointerInteractElement;
 use tur_shared::Offset;
 
 pub struct GestureAppHandler;
@@ -60,8 +61,22 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
         let hit_path = HitTest::new(&*cx.element_tree).path(position);
         for node_id in &hit_path {
             cx.js_command_queue.push(*node_id, make_click_command(position.x, position.y));
+            if is_click_opaque(&*cx.element_tree, *node_id) {
+                break;
+            }
         }
     }
+}
+
+fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId) -> bool {
+    tree.get(id)
+        .and_then(|node| node.element.as_ref())
+        .map(|e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.is_click_opaque())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 fn local_position(cx: &HandlerContext, node_id: ElementNodeId, global: Offset) -> Offset {

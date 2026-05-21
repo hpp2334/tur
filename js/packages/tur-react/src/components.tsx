@@ -3,7 +3,7 @@ import type { ReactNode, Ref } from "react";
 import { Color, LinearGradient } from "@tur/react-renderer";
 import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
-import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment } from "@tur/react-renderer";
+import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment, HitTestBehavior } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
 import type { BorderPosition } from "@tur/react-renderer";
@@ -64,6 +64,7 @@ export interface PointerInteractProps {
   onClick?: () => void;
   onPointerEnter?: () => void;
   onPointerExit?: () => void;
+  behavior?: HitTestBehavior;
   child?: ReactNode;
 }
 
@@ -135,7 +136,7 @@ export function Container(props: ContainerProps) {
 }
 
 export function PointerInteract(props: PointerInteractProps) {
-  return <tur_pointer_interact onClick={props.onClick} onPointerEnter={props.onPointerEnter} onPointerExit={props.onPointerExit}>{props.child}</tur_pointer_interact>;
+  return <tur_pointer_interact onClick={props.onClick} onPointerEnter={props.onPointerEnter} onPointerExit={props.onPointerExit} behavior={props.behavior}>{props.child}</tur_pointer_interact>;
 }
 
 export function Focusable(props: FocusableProps) {

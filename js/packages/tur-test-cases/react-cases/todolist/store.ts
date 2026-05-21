@@ -28,4 +28,6 @@ export const removeTodoAtom = atom(null, (_get, set, id: number) => {
   set(todosAtom, (prev) => prev.filter((t) => t.id !== id));
 });
 
+export const selectedTodoIdAtom = atom<number | null>(null);
+
 export { useAtomValue, useSetAtom };

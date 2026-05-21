@@ -64,6 +64,17 @@ fn click_query_key(app: &mut TurTestApp, query_key: &[&str]) {
     app.render();
 }
 
+fn get_selected_text(app: &TurTestApp) -> String {
+    get_text_content(app, &["selected"])
+}
+
+fn click_todo_item(app: &mut TurTestApp, todo_id: i32) {
+    let id = app.query_element(&["todo-item", &todo_id.to_string()]).unwrap();
+    let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
+    app.click(cx, cy);
+    app.render();
+}
+
 fn get_input_text(app: &TurTestApp, input_id: ElementNodeId) -> String {
     app.with_element(input_id, |e| {
         e.cast::<InputElement>()
@@ -191,4 +202,30 @@ fn todolist_remove_click_fires() {
     );
 
     click_query_key(&mut app, &["remove", "2"]);
+}
+
+#[test]
+fn todolist_toggle_does_not_select() {
+    let mut app = build_todolist();
+    app.render();
+
+    assert_eq!(get_selected_text(&app), "Selected: none");
+
+    click_query_key(&mut app, &["toggle", "1"]);
+
+    let content = get_text_content(&app, &["toggle", "1"]);
+    assert_eq!(content, "\u{25CB}", "should have toggled");
+    assert_eq!(get_selected_text(&app), "Selected: none", "clicking toggle should not select");
+}
+
+#[test]
+fn todolist_click_item_selects() {
+    let mut app = build_todolist();
+    app.render();
+
+    assert_eq!(get_selected_text(&app), "Selected: none");
+
+    click_todo_item(&mut app, 2);
+
+    assert_eq!(get_selected_text(&app), "Selected: 2");
 }
