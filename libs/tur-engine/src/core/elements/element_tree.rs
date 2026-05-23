@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use parley::LayoutContext as ParleyLayoutContext;
-use tur_shared::{ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementObject;
@@ -155,6 +155,66 @@ impl ElementTree {
         parent.children.get(pos + 1).copied()
     }
 
+    pub fn mark_dirty(&mut self, id: ElementNodeId) {
+        let mut path = Vec::new();
+        {
+            let mut current = Some(id);
+            while let Some(cid) = current {
+                let node = match self.nodes.get(&cid) {
+                    Some(n) => n,
+                    None => break,
+                };
+                if node.dirty_layout {
+                    break;
+                }
+                path.push(cid);
+                current = node.parent;
+            }
+        }
+        for cid in path {
+            if let Some(node) = self.nodes.get_mut(&cid) {
+                node.dirty_layout = true;
+                node.dirty_paint = true;
+            }
+        }
+    }
+
+    pub fn mark_dirty_paint(&mut self, id: ElementNodeId) {
+        let mut path = Vec::new();
+        {
+            let mut current = Some(id);
+            while let Some(cid) = current {
+                let node = match self.nodes.get(&cid) {
+                    Some(n) => n,
+                    None => break,
+                };
+                if node.dirty_paint {
+                    break;
+                }
+                path.push(cid);
+                current = node.parent;
+            }
+        }
+        for cid in path {
+            if let Some(node) = self.nodes.get_mut(&cid) {
+                node.dirty_paint = true;
+            }
+        }
+    }
+
+    pub fn mark_root_dirty(&mut self) {
+        if let Some(root_id) = self.root_id {
+            if let Some(node) = self.nodes.get_mut(&root_id) {
+                node.dirty_layout = true;
+                node.dirty_paint = true;
+            }
+        }
+    }
+
+    pub fn has_dirty_layout(&self) -> bool {
+        self.nodes.values().any(|n| n.dirty_layout)
+    }
+
     pub fn compute_layout(
         &mut self,
         constraints: &Constraints,
@@ -167,27 +227,10 @@ impl ElementTree {
             None => return constraints.constrain(Size::ZERO),
         };
 
-        self.clear_layouts(root_id);
-
         let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx, resource_map);
-
         self.layout_position(root_id, font_manager, text_layout_cx, resource_map);
 
         size
-    }
-
-    fn clear_layouts(&mut self, id: ElementNodeId) {
-        let children: Vec<ElementNodeId> = self
-            .nodes
-            .get(&id)
-            .map(|n| n.children.clone())
-            .unwrap_or_default();
-        if let Some(node) = self.nodes.get_mut(&id) {
-            node.computed_layout = ComputedLayout::ZERO;
-        }
-        for child_id in children {
-            self.clear_layouts(child_id);
-        }
     }
 
     pub(crate) fn layout_size(
@@ -198,6 +241,13 @@ impl ElementTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
     ) -> Size {
+        let is_dirty = self.nodes.get(&id).map(|n| n.dirty_layout).unwrap_or(false);
+        if !is_dirty {
+            return self.nodes.get(&id)
+                .map(|n| n.computed_layout.size)
+                .unwrap_or(Size::ZERO);
+        }
+
         let children = self
             .nodes
             .get(&id)
@@ -217,6 +267,7 @@ impl ElementTree {
         let node = cx.tree.nodes.get_mut(&id).unwrap();
         node.element = Some(element);
         node.computed_layout.size = constrained;
+        node.dirty_layout = false;
         constrained
     }
 

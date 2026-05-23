@@ -109,4 +109,5 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
         id,
     );
     element.on_gesture_event(&mut el_cx, event);
+    cx.element_tree.mark_dirty(id);
 }

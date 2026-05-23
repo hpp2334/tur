@@ -29,5 +29,6 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
             focused_id,
         );
         element.on_ime_event(&mut el_cx, ime_event);
+        cx.element_tree.mark_dirty(focused_id);
     }
 }

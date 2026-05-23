@@ -193,6 +193,7 @@ pub(crate) fn tur_set_attribute(
                 }
             }
         }
+        js_ctx.element_tree.borrow_mut().mark_dirty(node_id);
         js_ctx.dirty.set(true);
         return Ok(JsValue::undefined());
     }
@@ -208,6 +209,7 @@ pub(crate) fn tur_set_attribute(
                 }
             }
         }
+        tree.mark_dirty(node_id);
     }
 
     js_ctx.dirty.set(true);
@@ -223,7 +225,9 @@ pub(crate) fn tur_append_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    js_ctx.element_tree.borrow_mut().append_child(parent_id, child_id);
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    tree.append_child(parent_id, child_id);
+    tree.mark_dirty(parent_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
@@ -238,7 +242,9 @@ pub(crate) fn tur_remove_child(
     let parent_id = extract_node_id(args, 1)?;
     let child_id = extract_node_id(args, 2)?;
 
-    js_ctx.element_tree.borrow_mut().remove_child(parent_id, child_id);
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    tree.remove_child(parent_id, child_id);
+    tree.mark_dirty(parent_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
@@ -254,9 +260,9 @@ pub(crate) fn tur_insert_before(
     let child_id = extract_node_id(args, 2)?;
     let ref_id = extract_node_id(args, 3)?;
 
-    js_ctx.element_tree
-        .borrow_mut()
-        .insert_before(parent_id, child_id, ref_id);
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    tree.insert_before(parent_id, child_id, ref_id);
+    tree.mark_dirty(parent_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
@@ -351,6 +357,7 @@ pub(crate) fn tur_set_input_text(
                 }
             }
         }
+        tree.mark_dirty(node_id);
     }
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())
