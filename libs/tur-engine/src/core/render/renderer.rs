@@ -10,4 +10,8 @@ pub trait Renderer {
     }
 
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
+
+    fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
+        None
+    }
 }

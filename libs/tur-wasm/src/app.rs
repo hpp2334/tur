@@ -337,6 +337,13 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            textarea
+                .add_event_listener_with_callback(
+                    "keydown",
+                    keydown_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let keyup_state = state_clone.clone();
             let keyup_closure =
                 Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |event: web_sys::KeyboardEvent| {
@@ -360,6 +367,13 @@ impl TurWasmApp {
                 });
 
             canvas
+                .add_event_listener_with_callback(
+                    "keyup",
+                    keyup_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            textarea
                 .add_event_listener_with_callback(
                     "keyup",
                     keyup_closure.as_ref().unchecked_ref(),
@@ -463,7 +477,9 @@ impl TurWasmApp {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         state.app.push_event(AppEvent::RequestDraw);
-        let _ = state.app.spawn_loop_once(std::time::Duration::ZERO);
+        if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
+            tracing::error!("load_and_run_js: initial spawn_loop_once error: {e}");
+        }
 
         drop(guard);
         Self::start_frame_loop(&self.state);
@@ -486,7 +502,9 @@ impl TurWasmApp {
         let raf_closure = Closure::<dyn Fn()>::new(move || {
             let mut guard = loop_state.borrow_mut();
             if let Some(s) = guard.as_mut() {
-                let _ = s.app.spawn_loop_once(std::time::Duration::from_millis(16));
+                if let Err(e) = s.app.spawn_loop_once(std::time::Duration::from_millis(16)) {
+                    tracing::error!("frame loop spawn_loop_once error: {e}");
+                }
 
                 let is_input = s.app.focused_is_input();
                 if is_input {

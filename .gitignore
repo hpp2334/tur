@@ -40,3 +40,9 @@ Thumbs.db
 # Local CI
 .actrc
 logs/
+
+# Wrangler
+.wrangler/
+
+# Playwright test results
+test-results/

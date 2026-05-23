@@ -12,7 +12,7 @@ fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
     s[..byte_pos].chars().count()
 }
 
-const DEFAULT_COLOR: Color = Color::rgb(255, 255, 255);
+const DEFAULT_TEXT_COLOR: Color = Color::rgb(0, 0, 0);
 const SELECTION_COLOR: Color = Color::rgba(0, 120, 215, 77);
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
 
@@ -81,7 +81,7 @@ impl ElementLayout for InputElement {
                 .as_ref()
                 .unwrap_or(&placeholder_color)
         } else {
-            self.color.as_ref().unwrap_or(&DEFAULT_COLOR)
+            self.color.as_ref().unwrap_or(&DEFAULT_TEXT_COLOR)
         };
 
         let (layout_data, width, height) =
@@ -153,7 +153,7 @@ impl ElementRender for InputElement {
                     .cursor_color
                     .as_ref()
                     .or(self.color.as_ref())
-                    .unwrap_or(&DEFAULT_COLOR);
+                    .unwrap_or(&DEFAULT_TEXT_COLOR);
                 canvas.fill_geometry(
                     Offset::new(offset.x + cursor_x as f64, offset.y + cursor_y as f64),
                     &Geometry::Rect(Size::new(2.0, line_height as f64)),

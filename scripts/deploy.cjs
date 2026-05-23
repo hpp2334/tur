@@ -35,6 +35,6 @@ if (!fs.existsSync(distDir)) {
 
 const wrangler = getWranglerBin();
 run(
-  `${wrangler} pages deploy ${distDir} --project-name=${projectName} --commit-dirty=true`,
+  `${wrangler} pages deploy ${distDir} --project-name=${projectName} --commit-dirty=true --branch=main`,
   { cwd: root },
 );

@@ -180,6 +180,10 @@ impl TurApp {
     pub fn element_tree(&self) -> std::cell::Ref<'_, ElementTree> {
         std::cell::Ref::map(self.internal.js_context.element_tree.borrow(), |t| t)
     }
+
+    pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
+        self.internal.app_context.borrow_mut().render_to_pixels()
+    }
 }
 
 fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {

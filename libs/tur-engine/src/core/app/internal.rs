@@ -78,11 +78,16 @@ impl TurAppInternal {
             }
         }
         self.app_context.borrow_mut().render();
-        self.app_context
+        if let Err(e) = self
+            .app_context
             .borrow_mut()
             .renderer
             .present()
-            .map_err(|e| TurError::Render(e.to_string()))
+        {
+            tracing::error!("present failed: {e}");
+            return Err(TurError::Render(e.to_string()));
+        }
+        Ok(())
     }
 
     fn flush_app_events(&self) -> bool {
