@@ -150,15 +150,15 @@ impl TurApp {
 
         let effective_text = input_el.composition_display_text();
         let char_idx = byte_to_char_offset(&effective_text, effective_cursor);
-        let (cursor_x, cursor_y) = layout_data.cursor_xy_at(char_idx);
+        let (cursor_x, _) = layout_data.cursor_xy_at(char_idx);
         let line_idx = layout_data.line_index_for_char(char_idx);
-        let line_height = layout_data.line_height_at(line_idx);
+        let line_info = &layout_data.line_infos[line_idx];
 
         Some((
             abs_x + cursor_x as f64,
-            abs_y + cursor_y as f64,
+            abs_y + line_info.top as f64,
             2.0,
-            line_height as f64,
+            line_info.height as f64,
         ))
     }
 
