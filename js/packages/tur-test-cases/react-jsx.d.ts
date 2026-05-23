@@ -61,37 +61,36 @@ declare module "react/jsx-runtime" {
         queryKey?: string[];
         children?: React.ReactNode;
       };
-      tur_input: {
-        ref?: (el: TurNodeHandle) => void;
-        onInput?: (value: string, enterPressed: boolean) => void;
-        onFocus?: () => void;
-        onBlur?: () => void;
-        onKeyDown?: (e: TurKeyEvent) => void;
-        onCursorChange?: (position: number) => void;
-        onSelectionChange?: (start: number, end: number) => void;
-        onCompositionStart?: () => void;
-        onCompositionUpdate?: (text: string) => void;
-        onCompositionEnd?: (text: string) => void;
+      tur_editable_text: {
+        spans?: { content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }[];
         fontSize?: number;
         color?: Color;
-        cursorColor?: Color;
         placeholder?: string;
         placeholderColor?: Color;
         multiline?: boolean;
+        selectionStart?: number;
+        selectionEnd?: number;
+        selectionColor?: Color;
+        cursorPosition?: number;
+        cursorColor?: Color;
+        compositionStart?: number;
+        compositionEnd?: number;
+        onKeyDown?: (e: TurKeyEvent) => boolean | void;
+        onKeyUp?: (e: TurKeyEvent) => boolean | void;
+        onFocus?: () => void;
+        onBlur?: () => void;
+        onPointerDown?: () => void;
+        onPointerMove?: () => void;
+        onCompositionStart?: () => void;
+        onCompositionUpdate?: (text: string) => void;
+        onCompositionEnd?: (text: string) => void;
+        ref?: (el: TurNodeHandle) => void;
       };
       tur_text_container: {
         fontSize?: number;
         color?: Color;
+        spans?: { content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }[];
         queryKey?: string[];
-        children?: React.ReactNode;
-      };
-      tur_text_span: {
-        content?: string;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-        fontSize?: number;
-        color?: Color;
       };
       tur_image: {
         resourceId: ResourceHandle;

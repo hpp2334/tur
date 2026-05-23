@@ -1,7 +1,7 @@
 use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
-fn get_container_and_spans(app: &TurTestApp) -> (tur_engine::core::element::ElementNodeId, Vec<tur_engine::core::element::ElementNodeId>) {
+fn get_container(app: &TurTestApp) -> tur_engine::core::element::ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root().unwrap();
     let container = tree.get(root.children[0]).unwrap();
@@ -9,17 +9,11 @@ fn get_container_and_spans(app: &TurTestApp) -> (tur_engine::core::element::Elem
         container.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_text_container")
     );
-    let spans: Vec<_> = container
-        .children
-        .iter()
-        .filter_map(|&id| {
-            tree.get(id)
-                .and_then(|n| n.element.as_ref())
-                .filter(|e| e.type_name() == "tur_text_span")
-                .map(|_| id)
-        })
-        .collect();
-    (container.id, spans)
+    assert!(
+        container.children.is_empty(),
+        "TextContainer should have no children (spans are a prop)"
+    );
+    container.id
 }
 
 #[test]
@@ -27,8 +21,7 @@ fn rich_text_single_span_equivalent_to_plain_text() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-single-span").unwrap();
 
-    let (container_id, spans) = get_container_and_spans(&app);
-    assert_eq!(spans.len(), 1);
+    let container_id = get_container(&app);
 
     app.render();
     let rt = app.element_tree();
@@ -43,8 +36,7 @@ fn rich_text_multi_span_concatenates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-multi-span").unwrap();
 
-    let (container_id, spans) = get_container_and_spans(&app);
-    assert_eq!(spans.len(), 3);
+    let container_id = get_container(&app);
 
     app.render();
     let rt = app.element_tree();
@@ -72,18 +64,6 @@ fn rich_text_bold_wider_than_normal() {
         ElementKind::new("tur_text_container")
     );
 
-    let span_normal = tree.get(container.children[0]).unwrap();
-    let span_bold = tree.get(container.children[1]).unwrap();
-
-    assert_eq!(
-        span_normal.element.as_ref().unwrap().type_name(),
-        "tur_text_span"
-    );
-    assert_eq!(
-        span_bold.element.as_ref().unwrap().type_name(),
-        "tur_text_span"
-    );
-
     assert!(container.computed_layout.size.width > 0.0);
 }
 
@@ -92,7 +72,7 @@ fn rich_text_italic_layout_positive() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-italic").unwrap();
 
-    let (container_id, _) = get_container_and_spans(&app);
+    let container_id = get_container(&app);
     app.render();
 
     let rt = app.element_tree();
@@ -108,8 +88,7 @@ fn rich_text_color_layout_positive() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-color").unwrap();
 
-    let (container_id, spans) = get_container_and_spans(&app);
-    assert_eq!(spans.len(), 3);
+    let container_id = get_container(&app);
 
     app.render();
     let rt = app.element_tree();
@@ -125,8 +104,7 @@ fn rich_text_font_size_mixed_height() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-font-size").unwrap();
 
-    let (container_id, spans) = get_container_and_spans(&app);
-    assert_eq!(spans.len(), 2);
+    let container_id = get_container(&app);
 
     app.render();
     let rt = app.element_tree();
@@ -144,7 +122,7 @@ fn rich_text_empty_spans_zero_size() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-empty").unwrap();
 
-    let (container_id, _) = get_container_and_spans(&app);
+    let container_id = get_container(&app);
     app.render();
 
     let rt = app.element_tree();
@@ -164,8 +142,7 @@ fn rich_text_inheritance_uses_defaults() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-inheritance").unwrap();
 
-    let (container_id, spans) = get_container_and_spans(&app);
-    assert_eq!(spans.len(), 2);
+    let container_id = get_container(&app);
 
     app.render();
     let rt = app.element_tree();

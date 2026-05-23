@@ -4,7 +4,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
-use crate::core::js_command::JsCommandQueue;
+use crate::core::js_command::{IntoAnyJsCommand, JsCommandQueue};
 
 pub enum ComposedGestureEvent {
     PointerDown { local_position: Offset },
@@ -43,6 +43,10 @@ impl<'a> ElementOnGestureContext<'a> {
 
     pub fn request_own_focus(&mut self) {
         self.focus_manager.set_focus(self.node_id, self.js_command_queue);
+    }
+
+    pub fn push_js_command(&mut self, command: impl IntoAnyJsCommand) {
+        self.js_command_queue.push(self.node_id, command);
     }
 }
 

@@ -23,12 +23,13 @@ use boa_engine::Context;
 
 use crate::core::app::TurAppInternal;
 use crate::core::bridge::element_bridge::{
-    tur_append_child, tur_create_container, tur_create_flex, tur_create_flex_item,
-    tur_create_focusable, tur_create_image, tur_create_image_resource, tur_create_input,
-    tur_create_pointer_interact, tur_create_positioned, tur_create_root, tur_create_stack,
-    tur_create_text_container, tur_create_text_span, tur_get_first_child, tur_get_next_sibling,
-    tur_get_parent, tur_insert_before, tur_remove_child, tur_request_focus, tur_set_attribute,
-    tur_set_input_text,
+    tur_append_child, tur_create_container, tur_create_editable_text,
+    tur_create_flex, tur_create_flex_item, tur_create_focusable, tur_create_image,
+    tur_create_image_resource, tur_create_pointer_interact, tur_create_positioned,
+    tur_create_root, tur_create_stack, tur_create_text_container,
+    tur_get_char_index_at_position, tur_get_first_child, tur_get_next_sibling, tur_get_parent,
+    tur_get_text_cursor_rect, tur_get_text_selection_rects, tur_insert_before, tur_remove_child,
+    tur_request_focus, tur_set_attribute,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -80,17 +81,16 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 22] = [
+    ); 23] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
         ("createPositioned", 1, tur_create_positioned),
         ("createContainer", 1, tur_create_container),
         ("createTextContainer", 1, tur_create_text_container),
-        ("createTextSpan", 1, tur_create_text_span),
         ("createPointerInteract", 1, tur_create_pointer_interact),
         ("createFocusable", 1, tur_create_focusable),
-        ("createInput", 1, tur_create_input),
+        ("createEditableText", 1, tur_create_editable_text),
         ("createImage", 1, tur_create_image),
         ("createImageResource", 2, tur_create_image_resource),
         ("createRoot", 1, tur_create_root),
@@ -102,7 +102,9 @@ pub fn init_bridge(
         ("getFirstChild", 2, tur_get_first_child),
         ("getNextSibling", 2, tur_get_next_sibling),
         ("requestFocus", 2, tur_request_focus),
-        ("setInputText", 3, tur_set_input_text),
+        ("getTextCursorRect", 3, tur_get_text_cursor_rect),
+        ("getTextSelectionRects", 4, tur_get_text_selection_rects),
+        ("getCharIndexAtPosition", 4, tur_get_char_index_at_position),
     ];
 
     for (name, length, ptr) in &fns {

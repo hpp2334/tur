@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::TextSpanElement;
+use tur_engine::elements::TextContainerElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_pointer_region_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -15,19 +15,12 @@ fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
 }
 
 fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
-    let tree = app.element_tree();
-    let container = tree.get(container_id).unwrap();
-    let span_id = container.children.first().copied();
-    drop(tree);
-    span_id
-        .and_then(|id| {
-            app.with_element(id, |e| {
-                e.cast::<TextSpanElement>()
-                    .map(|s| s.content().to_string())
-                    .unwrap_or_default()
-            })
-        })
-        .unwrap_or_default()
+    app.with_element(container_id, |e| {
+        e.cast::<TextContainerElement>()
+            .map(|tc| tc.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
 }
 
 fn flush(app: &mut TurTestApp) {

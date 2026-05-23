@@ -201,8 +201,8 @@ impl TurTestApp {
         self.inner.focused_cursor_rect()
     }
 
-    pub fn focused_is_input(&self) -> bool {
-        self.inner.focused_is_input()
+    pub fn focused_is_editable(&self) -> bool {
+        self.inner.focused_is_editable()
     }
 
     pub fn with_element<R>(

@@ -506,8 +506,8 @@ impl TurWasmApp {
                     tracing::error!("frame loop spawn_loop_once error: {e}");
                 }
 
-                let is_input = s.app.focused_is_input();
-                if is_input {
+                let is_editable = s.app.focused_is_editable();
+                if is_editable {
                     let _ = s.textarea.focus();
                     if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
                         let _ = s.textarea.style().set_property("left", &format!("{x}px"));

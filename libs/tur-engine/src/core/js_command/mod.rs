@@ -43,6 +43,12 @@ impl IntoAnyJsCommand for InputJsCommand {
     }
 }
 
+impl IntoAnyJsCommand for EditableTextJsCommand {
+    fn into_any_js_command(self) -> AnyJsCommand {
+        AnyJsCommand(Rc::new(self))
+    }
+}
+
 #[derive(Clone)]
 pub enum PointerInteractJsCommand {
     Click { x: f64, y: f64 },
@@ -63,6 +69,15 @@ pub enum InputJsCommand {
     Input { text: String, enter: bool },
     CursorChange { position: usize },
     SelectionChange { anchor: usize, end: usize },
+    CompositionStart,
+    CompositionUpdate { text: String },
+    CompositionEnd { text: String },
+}
+
+#[derive(Clone)]
+pub enum EditableTextJsCommand {
+    PointerDown { x: f64, y: f64 },
+    PointerMove { x: f64, y: f64 },
     CompositionStart,
     CompositionUpdate { text: String },
     CompositionEnd { text: String },

@@ -2,18 +2,14 @@ use std::time::Duration;
 
 use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::TextSpanElement;
+use tur_engine::elements::TextContainerElement;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
-    let tree = app.element_tree();
-    let c = tree.get(id).unwrap();
-    let sid = c.children[0];
-    drop(tree);
-    app.with_element(sid, |e| {
-        e.cast::<TextSpanElement>()
-            .map(|s| s.content().to_string())
+    app.with_element(id, |e| {
+        e.cast::<TextContainerElement>()
+            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })
     .unwrap_or_default()

@@ -1,45 +1,21 @@
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
-use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text::text_layout;
-use crate::elements::text_span::TextSpanElement;
 
 use super::element::TextContainerElement;
-
-struct SpanData {
-    text: String,
-    bold: bool,
-    italic: bool,
-    underline: bool,
-    font_size: Option<f64>,
-    color: Option<Color>,
-}
 
 impl ElementLayout for TextContainerElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
-        children: &[ElementNodeId],
+        _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let spans: Vec<SpanData> = children
-            .iter()
-            .filter_map(|&child_id| {
-                cx.child_element::<TextSpanElement>(child_id).map(|span| SpanData {
-                    text: span.content.clone(),
-                    bold: span.bold,
-                    italic: span.italic,
-                    underline: span.underline,
-                    font_size: span.font_size,
-                    color: span.color,
-                })
-            })
-            .collect();
-
-        let full_text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        let full_text: String = self.spans.iter().map(|s| s.text.as_str()).collect();
 
         if full_text.is_empty() {
             self.cached_layout = None;
@@ -57,7 +33,7 @@ impl ElementLayout for TextContainerElement {
         let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
         let mut byte_offset = 0usize;
 
-        for span in &spans {
+        for span in &self.spans {
             let span_byte_len = span.text.len();
             let range = byte_offset..byte_offset + span_byte_len;
 

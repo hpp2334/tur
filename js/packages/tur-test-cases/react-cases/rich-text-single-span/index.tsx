@@ -1,11 +1,9 @@
 import { renderRoot } from "@tur/react-renderer";
-import { TextContainer, TextSpan } from "@tur/react";
+import { TextContainer } from "@tur/react";
 
 function RichTextSingleSpan() {
   return (
-    <TextContainer fontSize={14}>
-      <TextSpan content="Hello World" />
-    </TextContainer>
+    <TextContainer fontSize={14} spans={[{ content: "Hello World" }]} />
   );
 }
 

@@ -77,12 +77,6 @@ export interface FocusableProps {
   child?: ReactNode;
 }
 
-export interface TextProps extends BaseProps {
-  content: string;
-  fontSize?: number;
-  color?: Color;
-}
-
 export function Column(props: ColumnProps) {
   const { children, crossAlignment, mainAlignment, mainAxisSize, queryKey, ...rest } = props;
   return (
@@ -145,31 +139,27 @@ export function Focusable(props: FocusableProps) {
 }
 
 export interface TextContainerProps extends BaseProps {
+  spans?: Array<{ content: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }>;
   fontSize?: number;
 }
 
-export interface TextSpanProps {
-  content?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
+export function TextContainer(props: TextContainerProps) {
+  return <tur_text_container spans={props.spans} fontSize={props.fontSize} queryKey={props.queryKey}>{props.children}</tur_text_container>;
+}
+
+export interface TextProps extends BaseProps {
+  content: string;
   fontSize?: number;
   color?: Color;
 }
 
-export function TextContainer(props: TextContainerProps) {
-  return <tur_text_container fontSize={props.fontSize} queryKey={props.queryKey}>{props.children}</tur_text_container>;
-}
-
-export function TextSpan(props: TextSpanProps) {
-  return <tur_text_span {...props} color={props.color ?? Color.hex("#000000")} />;
-}
-
 export function Text(props: TextProps) {
   return (
-    <TextContainer fontSize={props.fontSize} queryKey={props.queryKey}>
-      <TextSpan content={props.content} color={props.color} />
-    </TextContainer>
+    <tur_text_container
+      spans={[{ content: props.content, color: props.color }]}
+      fontSize={props.fontSize}
+      queryKey={props.queryKey}
+    />
   );
 }
 
@@ -187,25 +177,29 @@ export interface InputProps {
 
 export function Input(props: InputProps) {
   const ctrl = props.controller;
+  ctrl.setMultiline(!!props.multiline);
   return (
     <tur_container width={props.width} height={props.height}>
-      <tur_input
+      <tur_editable_text
         ref={(el: TurNodeHandle) => ctrl._attach(el)}
-        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
-        onKeyDown={(e: TurKeyEvent) => ctrl._onKeyDown(e)}
-        onFocus={() => ctrl._onFocus()}
-        onBlur={() => ctrl._onBlur()}
-        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
-        onSelectionChange={(start: number, end: number) => ctrl._onSelectionChange(start, end)}
-        onCompositionStart={() => ctrl._onCompositionStart()}
-        onCompositionUpdate={(text: string) => ctrl._onCompositionUpdate(text)}
-        onCompositionEnd={(text: string) => ctrl._onCompositionEnd(text)}
+        spans={ctrl.spans}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
         multiline={props.multiline}
+        cursorPosition={ctrl.cursorPosition}
+        selectionStart={ctrl.selectionStartProp}
+        selectionEnd={ctrl.selectionEndProp}
+        onKeyDown={(e: TurKeyEvent) => ctrl.handleKeyDown(e)}
+        onPointerDown={(x: number, y: number) => ctrl.handlePointerDown(x, y)}
+        onPointerMove={(x: number, y: number) => ctrl.handlePointerMove(x, y)}
+        onCompositionStart={() => ctrl.handleCompositionStart()}
+        onCompositionUpdate={(text: string) => ctrl.handleCompositionUpdate(text)}
+        onCompositionEnd={(text: string) => ctrl.handleCompositionEnd(text)}
+        onFocus={() => ctrl._onFocus()}
+        onBlur={() => ctrl._onBlur()}
       />
     </tur_container>
   );
