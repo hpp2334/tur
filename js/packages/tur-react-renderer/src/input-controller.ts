@@ -37,6 +37,11 @@ export class InputController {
     }
   }
 
+  clear(): void {
+    this._text = "";
+    this._cursorPosition = 0;
+  }
+
   _attach(h: object): void {
     this._handle = h;
   }
