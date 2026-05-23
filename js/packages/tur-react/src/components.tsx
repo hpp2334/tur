@@ -138,13 +138,14 @@ export function Focusable(props: FocusableProps) {
   return <tur_focusable ref={ref} onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onKeyUp={onKeyUp}>{child}</tur_focusable>;
 }
 
-export interface TextContainerProps extends BaseProps {
+export interface ParagraphProps extends BaseProps {
   spans?: Array<{ content: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }>;
   fontSize?: number;
+  onSelectionChange?: (anchor: number, end: number) => void;
 }
 
-export function TextContainer(props: TextContainerProps) {
-  return <tur_text_container spans={props.spans} fontSize={props.fontSize} queryKey={props.queryKey} />;
+export function Paragraph(props: ParagraphProps) {
+  return <tur_paragraph spans={props.spans} fontSize={props.fontSize} onSelectionChange={props.onSelectionChange} queryKey={props.queryKey} />;
 }
 
 export interface TextProps extends BaseProps {
@@ -155,7 +156,7 @@ export interface TextProps extends BaseProps {
 
 export function Text(props: TextProps) {
   return (
-    <tur_text_container
+    <tur_paragraph
       spans={[{ content: props.content, color: props.color }]}
       fontSize={props.fontSize}
       queryKey={props.queryKey}

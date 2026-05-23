@@ -4,11 +4,12 @@ use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::elements::text::paint_helpers;
 use crate::elements::text::text_layout;
 
-use super::element::TextContainerElement;
+use super::element::ParagraphElement;
 
-impl ElementLayout for TextContainerElement {
+impl ElementLayout for ParagraphElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -76,9 +77,9 @@ impl ElementLayout for TextContainerElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for TextContainerElement {
+impl ElementRender for ParagraphElement {
     fn type_name(&self) -> &'static str {
-        "tur_text_container"
+        "tur_paragraph"
     }
 
     fn paint(
@@ -89,8 +90,19 @@ impl ElementRender for TextContainerElement {
         _children: &[ElementNodeId],
         _paint_ctx: &PaintContext,
     ) {
-        if let Some(ref layout_data) = self.cached_layout {
-            canvas.fill_text_layout(offset, layout_data);
+        let Some(ref layout_data) = self.cached_layout else {
+            return;
+        };
+
+        if self.selection_anchor != self.selection_end {
+            let (s, e) = if self.selection_anchor < self.selection_end {
+                (self.selection_anchor, self.selection_end)
+            } else {
+                (self.selection_end, self.selection_anchor)
+            };
+            paint_helpers::paint_selection(canvas, offset, layout_data, s, e);
         }
+
+        canvas.fill_text_layout(offset, layout_data);
     }
 }

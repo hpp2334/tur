@@ -25,7 +25,7 @@ declare global {
     createStack(ctx: unknown): TurNodeHandle;
     createPositioned(ctx: unknown): TurNodeHandle;
     createContainer(ctx: unknown): TurNodeHandle;
-    createTextContainer(ctx: unknown): TurNodeHandle;
+    createParagraph(ctx: unknown): TurNodeHandle;
     createPointerInteract(ctx: unknown): TurNodeHandle;
     createFocusable(ctx: unknown): TurNodeHandle;
     createEditableText(ctx: unknown): TurNodeHandle;

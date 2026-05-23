@@ -1,9 +1,9 @@
 import { renderRoot } from "@tur/react-renderer";
-import { TextContainer } from "@tur/react";
+import { Paragraph } from "@tur/react";
 
 function RichTextFontSize() {
   return (
-    <TextContainer fontSize={14} spans={[{ content: "Small" }, { content: "Big", fontSize: 28 }]} />
+    <Paragraph fontSize={14} spans={[{ content: "Small" }, { content: "Big", fontSize: 28 }]} />
   );
 }
 

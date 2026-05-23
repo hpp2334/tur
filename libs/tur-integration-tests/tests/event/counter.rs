@@ -1,10 +1,10 @@
-use tur_engine::elements::TextContainerElement;
+use tur_engine::elements::ParagraphElement;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap();
     app.with_element(id, |e| {
-        e.cast::<TextContainerElement>()
+        e.cast::<ParagraphElement>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })

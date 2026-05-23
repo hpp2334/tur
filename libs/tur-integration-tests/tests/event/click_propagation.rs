@@ -1,4 +1,4 @@
-use tur_engine::elements::TextContainerElement;
+use tur_engine::elements::ParagraphElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_nested() -> TurTestApp {
@@ -10,7 +10,7 @@ fn build_nested() -> TurTestApp {
 fn get_text_content(app: &TurTestApp, query_key: &[&str]) -> String {
     let id = app.query_element(query_key).unwrap_or_else(|| panic!("{:?} not found", query_key));
     app.with_element(id, |e| {
-        e.cast::<TextContainerElement>()
+        e.cast::<ParagraphElement>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })

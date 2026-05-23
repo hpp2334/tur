@@ -12,7 +12,7 @@ fn text_content_and_measurement() {
         let container = tree.get(root.children[0]).unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_text_container")
+            ElementKind::new("tur_paragraph")
         );
         container.id
     };

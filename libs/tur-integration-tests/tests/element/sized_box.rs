@@ -19,7 +19,7 @@ fn sized_box_fixed_dimensions() {
         let text = tree.get(sb.children[0]).unwrap();
         assert_eq!(
             text.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_text_container")
+            ElementKind::new("tur_paragraph")
         );
 
         sb.id

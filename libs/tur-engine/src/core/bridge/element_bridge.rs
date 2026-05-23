@@ -11,8 +11,8 @@ use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
-    FocusableElement, ImageElement, PointerInteractElement, PositionedElement,
-    StackElement, TextContainerElement,
+    FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
+    PositionedElement, StackElement,
 };
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -77,7 +77,18 @@ simple_creator!(tur_create_flex_item, AnyElement::new(FlexItemElement::new()));
 simple_creator!(tur_create_stack, AnyElement::new(StackElement::new()));
 simple_creator!(tur_create_positioned, AnyElement::new(PositionedElement::new()));
 simple_creator!(tur_create_container, AnyElement::new(ContainerElement::new()));
-simple_creator!(tur_create_text_container, AnyElement::new(TextContainerElement::new()));
+pub(crate) fn tur_create_paragraph(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    create_element(
+        args,
+        context,
+        AnyElement::with_gesture_and_focus(ParagraphElement::new())
+            .with_js_callback_emitter::<ParagraphElement>(),
+    )
+}
 simple_creator!(tur_create_image, AnyElement::new(ImageElement::new()));
 
 pub(crate) fn tur_create_pointer_interact(
@@ -315,7 +326,7 @@ pub(crate) fn tur_get_text_cursor_rect(
         return Ok(JsValue::null());
     };
 
-    let layout = element.cast::<TextContainerElement>()
+    let layout = element.cast::<ParagraphElement>()
         .and_then(|e| e.cached_layout.as_ref())
         .or_else(|| {
             element.cast::<EditableTextElement>()
@@ -372,7 +383,7 @@ pub(crate) fn tur_get_text_selection_rects(
         return Ok(JsValue::from(boa_engine::object::builtins::JsArray::new(context).unwrap()));
     };
 
-    let layout = element.cast::<TextContainerElement>()
+    let layout = element.cast::<ParagraphElement>()
         .and_then(|e| e.cached_layout.as_ref())
         .or_else(|| {
             element.cast::<EditableTextElement>()
@@ -442,7 +453,7 @@ pub(crate) fn tur_get_char_index_at_position(
         return Ok(JsValue::from(0.0_f64));
     };
 
-    let layout = element.cast::<TextContainerElement>()
+    let layout = element.cast::<ParagraphElement>()
         .and_then(|e| e.cached_layout.as_ref())
         .or_else(|| {
             element.cast::<EditableTextElement>()

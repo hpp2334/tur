@@ -10,7 +10,7 @@ const creators: Record<string, () => TurNodeHandle> = {
   tur_stack: () => __tur.createStack(ctx),
   tur_positioned: () => __tur.createPositioned(ctx),
   tur_container: () => __tur.createContainer(ctx),
-  tur_text_container: () => __tur.createTextContainer(ctx),
+  tur_paragraph: () => __tur.createParagraph(ctx),
   tur_pointer_interact: () => __tur.createPointerInteract(ctx),
   tur_focusable: () => __tur.createFocusable(ctx),
   tur_editable_text: () => __tur.createEditableText(ctx),

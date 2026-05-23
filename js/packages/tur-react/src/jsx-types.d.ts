@@ -96,10 +96,10 @@ declare module "react/jsx-runtime" {
         onCompositionEnd?: (text: string) => void;
         ref?: (el: TurNodeHandle) => void;
       };
-      tur_text_container: RefAttributes<TurNodeHandle> & {
+      tur_paragraph: RefAttributes<TurNodeHandle> & {
         fontSize?: number;
-        color?: Color;
         spans?: { content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }[];
+        onSelectionChange?: (anchor: number, end: number) => void;
         queryKey?: string[];
       };
       tur_image: RefAttributes<TurNodeHandle> & {
