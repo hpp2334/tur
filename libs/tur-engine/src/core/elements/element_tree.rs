@@ -413,11 +413,17 @@ impl ElementTree {
             None => return String::new(),
         };
         let mut buf = String::new();
-        self.debug_node(root_id, &mut buf, "");
+        self.debug_node(root_id, &mut buf, "", Offset::ZERO);
         buf
     }
 
-    fn debug_node(&self, id: ElementNodeId, buf: &mut String, prefix: &str) {
+    fn debug_node(
+        &self,
+        id: ElementNodeId,
+        buf: &mut String,
+        prefix: &str,
+        parent_offset: Offset,
+    ) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
             None => return,
@@ -427,7 +433,6 @@ impl ElementTree {
             None => return,
         };
 
-        let layout = &node.computed_layout;
         let label = element.trace_label();
         let label_str = if label.is_empty() {
             String::new()
@@ -438,16 +443,17 @@ impl ElementTree {
             Some(keys) if !keys.is_empty() => format!(" [{}]", keys.join(", ")),
             _ => String::new(),
         };
+        let abs = parent_offset + node.computed_layout.offset;
         buf.push_str(&format!(
-            "{}{}{}{} [{:.1}, {:.1} {:.1}x{:.1}]\n",
+            "{}{}{}{} abs({:.1},{:.1}) {:.1}x{:.1}\n",
             prefix,
             element.type_name(),
             label_str,
             query_key_str,
-            layout.offset.x,
-            layout.offset.y,
-            layout.size.width,
-            layout.size.height,
+            abs.x,
+            abs.y,
+            node.computed_layout.size.width,
+            node.computed_layout.size.height,
         ));
 
         let child_count = node.children.len();
@@ -459,6 +465,7 @@ impl ElementTree {
                 child_id,
                 buf,
                 &format!("{}{}", prefix.trim_end_matches(child_prefix), nested_prefix),
+                abs,
             );
         }
     }

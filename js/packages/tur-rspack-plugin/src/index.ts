@@ -23,7 +23,7 @@ const TEMPLATE_HTML = `<!DOCTYPE html>
       const resp = await fetch("__JS_FILE__");
       const source = await resp.text();
       app.load_and_run_js(source);
-      window.turDemo = { debugLayout: () => console.log(app.debug_layout()) };
+      window.turDemo = { debugLayout: () => app.debug_layout() };
     }
 
     run().catch((e) => console.error(e));

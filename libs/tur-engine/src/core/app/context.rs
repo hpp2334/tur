@@ -112,4 +112,8 @@ impl TurAppContext {
         let tree = self.element_tree.borrow();
         self.renderer.render(&tree, focused_node_id, &resource_map);
     }
+
+    pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
+        self.renderer.render_to_pixels()
+    }
 }

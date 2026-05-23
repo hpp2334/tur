@@ -5,8 +5,8 @@ use crate::core::elements::ElementTree;
 use crate::core::render::Renderer as TurRenderer;
 use crate::core::resource::ResourceMap;
 use crate::renderer::vello::paint_context::VelloPaintContext;
-use vello::kurbo::{Affine, Rect};
-use vello::peniko::{BlendMode, Color, Fill, Mix};
+use vello::kurbo::Affine;
+use vello::peniko::Color;
 use vello::wgpu::util::TextureBlitter;
 use vello::wgpu::{SurfaceConfiguration, TextureUsages};
 use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
@@ -118,7 +118,7 @@ impl VelloRenderer {
             sample_count: 1,
             dimension: vello::wgpu::TextureDimension::D2,
             format: vello::wgpu::TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING,
+            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
             view_formats: &[],
         })
     }
@@ -141,27 +141,29 @@ impl VelloRenderer {
 
     pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
         self.scene.reset();
-        if self.dpr != 1.0 {
-            self.scene.push_layer(
-                Fill::NonZero,
-                BlendMode::from(Mix::Normal),
-                1.0,
-                Affine::scale(self.dpr),
-                &Rect::new(0.0, 0.0, f64::MAX, f64::MAX),
-            );
-        }
-        let mut ctx = VelloPaintContext::new(&mut self.scene);
+        let mut fragment = Scene::new();
+        let mut ctx = VelloPaintContext::new(&mut fragment);
         tree.paint(&mut ctx, focused_node_id, resource_map);
-        if self.dpr != 1.0 {
-            self.scene.pop_layer();
-        }
+        self.scene.append(&fragment, Some(Affine::scale(self.dpr)));
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
         let output = match self.surface.get_current_texture() {
             vello::wgpu::CurrentSurfaceTexture::Success(t)
             | vello::wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            _ => return Ok(()),
+            vello::wgpu::CurrentSurfaceTexture::Timeout => {
+                tracing::warn!("present: get_current_texture timed out");
+                return Ok(());
+            }
+            vello::wgpu::CurrentSurfaceTexture::Outdated => {
+                tracing::warn!("present: get_current_texture outdated, reconfiguring surface");
+                self.surface.configure(&self.device, &self.config);
+                return Ok(());
+            }
+            other => {
+                tracing::warn!("present: get_current_texture returned {other:?}");
+                return Ok(());
+            }
         };
 
         let intermediate_view = self
@@ -206,6 +208,76 @@ impl VelloRenderer {
     pub fn scene(&self) -> &Scene {
         &self.scene
     }
+
+    pub fn render_to_pixels(&mut self) -> Vec<u8> {
+        let intermediate_view = self
+            .intermediate_texture
+            .create_view(&vello::wgpu::TextureViewDescriptor::default());
+
+        let params = RenderParams {
+            base_color: Color::from_rgba8(255, 255, 255, 255),
+            width: self.physical_width,
+            height: self.physical_height,
+            antialiasing_method: AaConfig::Msaa8,
+        };
+
+        if let Err(e) = self
+            .renderer
+            .render_to_texture(&self.device, &self.queue, &self.scene, &intermediate_view, &params)
+        {
+            tracing::error!("render_to_pixels: render_to_texture failed: {e}");
+            return Vec::new();
+        }
+
+        let bytes_per_row_aligned = ((self.physical_width * 4).div_ceil(256)) * 256;
+        let buffer_size = (bytes_per_row_aligned as u64) * (self.physical_height as u64);
+        let readback_buffer = self.device.create_buffer(&vello::wgpu::BufferDescriptor {
+            label: Some("readback buffer"),
+            size: buffer_size,
+            usage: vello::wgpu::BufferUsages::COPY_DST | vello::wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&vello::wgpu::CommandEncoderDescriptor {
+                label: Some("readback encoder"),
+            });
+        encoder.copy_texture_to_buffer(
+            vello::wgpu::TexelCopyTextureInfo {
+                texture: &self.intermediate_texture,
+                mip_level: 0,
+                origin: vello::wgpu::Origin3d::ZERO,
+                aspect: vello::wgpu::TextureAspect::All,
+            },
+            vello::wgpu::TexelCopyBufferInfo {
+                buffer: &readback_buffer,
+                layout: vello::wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(bytes_per_row_aligned),
+                    rows_per_image: Some(self.physical_height),
+                },
+            },
+            vello::wgpu::Extent3d {
+                width: self.physical_width,
+                height: self.physical_height,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        let slice = readback_buffer.slice(..);
+        slice.map_async(vello::wgpu::MapMode::Read, |_| {});
+        self.device.poll(vello::wgpu::PollType::wait_indefinitely()).unwrap();
+
+        let data = slice.get_mapped_range();
+        let mut pixels = Vec::with_capacity((self.physical_width * self.physical_height * 4) as usize);
+        for row in 0..self.physical_height {
+            let offset = row as usize * bytes_per_row_aligned as usize;
+            pixels.extend_from_slice(&data[offset..offset + (self.physical_width * 4) as usize]);
+        }
+        pixels
+    }
 }
 
 impl TurRenderer for VelloRenderer {
@@ -219,5 +291,9 @@ impl TurRenderer for VelloRenderer {
 
     fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
         VelloRenderer::resize(self, logical_width, logical_height, dpr);
+    }
+
+    fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
+        Some(VelloRenderer::render_to_pixels(self))
     }
 }

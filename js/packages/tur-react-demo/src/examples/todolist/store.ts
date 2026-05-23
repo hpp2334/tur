@@ -1,4 +1,4 @@
-import { atom, createStore } from "jotai/vanilla";
+import { atom, getDefaultStore } from "jotai/vanilla";
 import { useAtomValue, useSetAtom } from "jotai/react";
 import { InputController } from "@tur/react-renderer";
 
@@ -16,7 +16,7 @@ const INITIAL_TODOS: readonly Todo[] = [
   { id: 4, text: "Ship v0.1.0", done: false, description: "First public release with core features" },
 ];
 
-export const store = createStore();
+export const store = getDefaultStore();
 
 export const todosAtom = atom<readonly Todo[]>(INITIAL_TODOS);
 

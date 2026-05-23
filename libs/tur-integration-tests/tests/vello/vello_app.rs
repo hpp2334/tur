@@ -150,4 +150,8 @@ impl TurVelloApp {
         self.inner.borrow_mut().app.push_event(AppEvent::RequestDraw);
         let _ = self.inner.borrow_mut().app.spawn_loop_once(std::time::Duration::ZERO);
     }
+
+    pub fn render_to_pixels(&self) -> Vec<u8> {
+        self.inner.borrow_mut().app.render_to_pixels().expect("renderer does not support render_to_pixels")
+    }
 }
