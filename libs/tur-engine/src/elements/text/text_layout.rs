@@ -3,6 +3,7 @@ use parley::layout::PositionedLayoutItem;
 pub(crate) struct LineInfo {
     pub top: f32,
     pub height: f32,
+    #[allow(dead_code)]
     pub baseline: f32,
     #[allow(dead_code)]
     pub start_char: usize,
@@ -113,6 +114,7 @@ impl TextLayoutData {
         self.line_infos.len()
     }
 
+    #[allow(dead_code)]
     pub fn char_index_at_x(&self, x: f32) -> usize {
         let mut chars_seen = 0;
         let mut total_chars = 0;
