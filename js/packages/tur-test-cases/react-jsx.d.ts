@@ -79,8 +79,8 @@ declare module "react/jsx-runtime" {
         onKeyUp?: (e: TurKeyEvent) => boolean | void;
         onFocus?: () => void;
         onBlur?: () => void;
-        onPointerDown?: () => void;
-        onPointerMove?: () => void;
+        onPointerDown?: (x: number, y: number) => void;
+        onPointerMove?: (x: number, y: number) => void;
         onCompositionStart?: () => void;
         onCompositionUpdate?: (text: string) => void;
         onCompositionEnd?: (text: string) => void;

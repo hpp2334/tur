@@ -144,7 +144,7 @@ export interface TextContainerProps extends BaseProps {
 }
 
 export function TextContainer(props: TextContainerProps) {
-  return <tur_text_container spans={props.spans} fontSize={props.fontSize} queryKey={props.queryKey}>{props.children}</tur_text_container>;
+  return <tur_text_container spans={props.spans} fontSize={props.fontSize} queryKey={props.queryKey} />;
 }
 
 export interface TextProps extends BaseProps {
@@ -189,9 +189,9 @@ export function Input(props: InputProps) {
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
         multiline={props.multiline}
-        cursorPosition={ctrl.cursorPosition}
-        selectionStart={ctrl.selectionStartProp}
-        selectionEnd={ctrl.selectionEndProp}
+        cursorPosition={ctrl.cursorPosition ?? undefined}
+        selectionStart={ctrl.selectionStartProp ?? undefined}
+        selectionEnd={ctrl.selectionEndProp ?? undefined}
         onKeyDown={(e: TurKeyEvent) => ctrl.handleKeyDown(e)}
         onPointerDown={(x: number, y: number) => ctrl.handlePointerDown(x, y)}
         onPointerMove={(x: number, y: number) => ctrl.handlePointerMove(x, y)}
