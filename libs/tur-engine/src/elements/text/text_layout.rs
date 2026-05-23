@@ -152,12 +152,6 @@ impl TextLayoutData {
         end
     }
 
-    pub fn line_height_at(&self, line_index: usize) -> f32 {
-        self.line_infos
-            .get(line_index)
-            .map(|l| l.height)
-            .unwrap_or(0.0)
-    }
 }
 
 pub(crate) fn extract_layout_data(

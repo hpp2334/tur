@@ -146,17 +146,17 @@ impl ElementRender for InputElement {
                 };
                 let display = self.composition_display_text();
                 let char_idx = byte_to_char_offset(&display, effective_cursor);
-                let (cursor_x, cursor_y) = layout_data.cursor_xy_at(char_idx);
+                let (cursor_x, _) = layout_data.cursor_xy_at(char_idx);
                 let line_idx = layout_data.line_index_for_char(char_idx);
-                let line_height = layout_data.line_height_at(line_idx);
+                let line_info = &layout_data.line_infos[line_idx];
                 let cursor_color = self
                     .cursor_color
                     .as_ref()
                     .or(self.color.as_ref())
                     .unwrap_or(&DEFAULT_TEXT_COLOR);
                 canvas.fill_geometry(
-                    Offset::new(offset.x + cursor_x as f64, offset.y + cursor_y as f64),
-                    &Geometry::Rect(Size::new(2.0, line_height as f64)),
+                    Offset::new(offset.x + cursor_x as f64, offset.y + line_info.top as f64),
+                    &Geometry::Rect(Size::new(2.0, line_info.height as f64)),
                     &Brush::SolidColor(*cursor_color),
                 );
             }

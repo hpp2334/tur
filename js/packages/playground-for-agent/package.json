@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "tsx src/run.ts",
+    "start": "tsx src/run-dev.ts",
     "start:prod": "tsx src/run-prod.ts"
   },
   "devDependencies": {
