@@ -33,7 +33,7 @@ fn find_input_id(app: &TurTestApp) -> ElementNodeId {
     let input_node = tree.get(inner.children[0]).unwrap();
     assert_eq!(
         input_node.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_input")
+        ElementKind::new("tur_editable_text")
     );
     input_node.id
 }
