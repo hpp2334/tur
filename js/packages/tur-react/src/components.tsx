@@ -178,27 +178,24 @@ export interface InputProps {
 
 export function Input(props: InputProps) {
   const ctrl = props.controller;
-  ctrl.setMultiline(!!props.multiline);
   return (
     <tur_container width={props.width} height={props.height}>
       <tur_editable_text
         ref={(el: TurNodeHandle) => ctrl._attach(el)}
-        spans={ctrl.spans}
+        spans={[{ content: ctrl.text }]}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
         multiline={props.multiline}
-        cursorPosition={ctrl.cursorPosition ?? undefined}
-        selectionStart={ctrl.selectionStartProp ?? undefined}
-        selectionEnd={ctrl.selectionEndProp ?? undefined}
-        onKeyDown={(e: TurKeyEvent) => ctrl.handleKeyDown(e)}
-        onPointerDown={(x: number, y: number) => ctrl.handlePointerDown(x, y)}
-        onPointerMove={(x: number, y: number) => ctrl.handlePointerMove(x, y)}
-        onCompositionStart={() => ctrl.handleCompositionStart()}
-        onCompositionUpdate={(text: string) => ctrl.handleCompositionUpdate(text)}
-        onCompositionEnd={(text: string) => ctrl.handleCompositionEnd(text)}
+        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
+        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
+        onSelectionChange={(anchor: number, end: number) => ctrl._onSelectionChange(anchor, end)}
+        onKeyDown={(e: TurKeyEvent) => ctrl._onKeyDown(e)}
+        onCompositionStart={() => ctrl._onCompositionStart()}
+        onCompositionUpdate={(text: string) => ctrl._onCompositionUpdate(text)}
+        onCompositionEnd={(text: string) => ctrl._onCompositionEnd(text)}
         onFocus={() => ctrl._onFocus()}
         onBlur={() => ctrl._onBlur()}
       />

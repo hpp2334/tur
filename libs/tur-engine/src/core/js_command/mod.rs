@@ -37,18 +37,6 @@ impl IntoAnyJsCommand for FocusableJsCommand {
     }
 }
 
-impl IntoAnyJsCommand for InputJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
-impl IntoAnyJsCommand for EditableTextJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
 #[derive(Clone)]
 pub enum PointerInteractJsCommand {
     Click { x: f64, y: f64 },
@@ -62,25 +50,6 @@ pub enum FocusableJsCommand {
     KeyUp { key: String, code: String, modifiers: Modifiers },
     Focus,
     Blur,
-}
-
-#[derive(Clone)]
-pub enum InputJsCommand {
-    Input { text: String, enter: bool },
-    CursorChange { position: usize },
-    SelectionChange { anchor: usize, end: usize },
-    CompositionStart,
-    CompositionUpdate { text: String },
-    CompositionEnd { text: String },
-}
-
-#[derive(Clone)]
-pub enum EditableTextJsCommand {
-    PointerDown { x: f64, y: f64 },
-    PointerMove { x: f64, y: f64 },
-    CompositionStart,
-    CompositionUpdate { text: String },
-    CompositionEnd { text: String },
 }
 
 impl std::fmt::Debug for AnyJsCommand {

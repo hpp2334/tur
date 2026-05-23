@@ -1,5 +1,6 @@
 use tur_shared::Color;
 
+#[derive(Clone)]
 pub struct SpanData {
     pub text: String,
     pub bold: bool,
