@@ -40,4 +40,5 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &crate::core::keyboard::Ap
         focused_id,
     );
     element.on_keyboard_event(&mut el_cx, event);
+    cx.element_tree.mark_dirty(focused_id);
 }

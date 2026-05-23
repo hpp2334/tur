@@ -63,11 +63,13 @@ impl TurAppInternal {
     pub fn flush(
         &self,
         boa_context: &mut boa_engine::Context,
-    ) -> Result<(), TurError> {
+    ) -> Result<bool, TurError> {
+        let mut needs_render = false;
         loop {
             let handled_events = self.flush_app_events();
             let dirty = self.js_context.dirty.take() || self.needs_draw.take();
             if dirty {
+                needs_render = true;
                 self.app_context.borrow_mut().layout();
             }
             let handled_commands = self.flush_js_commands(boa_context);
@@ -77,17 +79,19 @@ impl TurAppInternal {
                 break;
             }
         }
-        self.app_context.borrow_mut().render();
-        if let Err(e) = self
-            .app_context
-            .borrow_mut()
-            .renderer
-            .present()
-        {
-            tracing::error!("present failed: {e}");
-            return Err(TurError::Render(e.to_string()));
+        if needs_render {
+            self.app_context.borrow_mut().render();
+            if let Err(e) = self
+                .app_context
+                .borrow_mut()
+                .renderer
+                .present()
+            {
+                tracing::error!("present failed: {e}");
+                return Err(TurError::Render(e.to_string()));
+            }
         }
-        Ok(())
+        Ok(needs_render)
     }
 
     fn flush_app_events(&self) -> bool {

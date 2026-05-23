@@ -85,7 +85,8 @@ impl TurApp {
 
     pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
         self.clock.forward(advanced_time.as_millis() as u64);
-        self.internal.flush(&mut self.boa_context)
+        self.internal.flush(&mut self.boa_context)?;
+        Ok(())
     }
 
     pub fn push_event(&self, event: core::event::AppEvent) {

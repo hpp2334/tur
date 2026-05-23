@@ -15,6 +15,8 @@ pub struct ElementObject {
     pub computed_layout: ComputedLayout,
     pub query_key: Option<Vec<String>>,
     pub handle: BoaOpaque<TurNodeHandle>,
+    pub dirty_layout: bool,
+    pub dirty_paint: bool,
 }
 
 impl fmt::Debug for ElementObject {
@@ -38,6 +40,8 @@ impl ElementObject {
             parent: None,
             computed_layout: ComputedLayout::ZERO,
             query_key: None,
+            dirty_layout: true,
+            dirty_paint: true,
         }
     }
 }

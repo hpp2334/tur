@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "playwright": "^1.52.0",
+    "pngjs": "^7.0.0",
     "selfsigned": "^5.5.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
