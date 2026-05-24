@@ -39,6 +39,10 @@ impl<T: NativeObject> BoaOpaque<T> {
         object.downcast_ref::<T>()
     }
 
+    pub fn wrap_mut(object: &JsObject) -> Option<boa_engine::object::RefMut<'_, T>> {
+        object.downcast_mut::<T>()
+    }
+
     pub fn object(&self) -> &JsObject {
         &self.object
     }

@@ -1,12 +1,9 @@
 import { renderRoot } from "@tur/react-renderer";
-import { TextContainer, TextSpan } from "@tur/react";
+import { Paragraph } from "@tur/react";
 
 function RichTextItalic() {
   return (
-    <TextContainer fontSize={14}>
-      <TextSpan content="Normal" />
-      <TextSpan content="Italic" italic />
-    </TextContainer>
+    <Paragraph fontSize={14} spans={[{ content: "Normal" }, { content: "Italic", italic: true }]} />
   );
 }
 

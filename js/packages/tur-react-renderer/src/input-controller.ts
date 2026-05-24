@@ -1,4 +1,4 @@
-import type { TurNodeHandle, TurKeyEvent } from "./tur";
+import type { TurKeyEvent, TextControllerHandle } from "./tur";
 
 export interface InputControllerOptions {
   onInput?: (value: string, enter: boolean) => void;
@@ -14,21 +14,21 @@ export interface InputControllerOptions {
 }
 
 export class InputController {
-  private _handle: TurNodeHandle | null = null;
+  private _handle: object | null = null;
+  private _controllerHandle: TextControllerHandle;
   private _options?: InputControllerOptions;
 
   constructor(options?: InputControllerOptions) {
     this._options = options;
+    this._controllerHandle = __tur.createTextController(__tur.__ctx);
   }
 
-  setText(text: string): void {
-    if (this._handle) {
-      __tur.setInputText(__tur.__ctx, this._handle, text);
-    }
+  get text(): string {
+    return __tur.textControllerText(__tur.__ctx, this._controllerHandle);
   }
 
-  clear(): void {
-    this.setText("");
+  get controllerHandle(): TextControllerHandle {
+    return this._controllerHandle;
   }
 
   requestFocus(): void {
@@ -37,29 +37,31 @@ export class InputController {
     }
   }
 
-  _attach(h: TurNodeHandle): void {
+  setSpans(spans: Array<{ content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: unknown }>): void {
+    __tur.textControllerSetSpans(__tur.__ctx, this._controllerHandle, spans);
+  }
+
+  clear(): void {
+    __tur.textControllerClear(__tur.__ctx, this._controllerHandle);
+  }
+
+  _attach(h: object): void {
     this._handle = h;
   }
 
   _onInput(text: string, enter: boolean): void {
     this._options?.onInput?.(text, enter);
-    if (enter) this._options?.onEnter?.();
+    if (enter) {
+      this._options?.onEnter?.();
+    }
   }
 
-  _onFocus(): void {
-    this._options?.onFocus?.();
+  _onCursorChange(position: number): void {
+    this._options?.onCursorChange?.(position);
   }
 
-  _onBlur(): void {
-    this._options?.onBlur?.();
-  }
-
-  _onCursorChange(pos: number): void {
-    this._options?.onCursorChange?.(pos);
-  }
-
-  _onSelectionChange(start: number, end: number): void {
-    this._options?.onSelectionChange?.(start, end);
+  _onSelectionChange(anchor: number, end: number): void {
+    this._options?.onSelectionChange?.(anchor, end);
   }
 
   _onCompositionStart(): void {
@@ -72,6 +74,14 @@ export class InputController {
 
   _onCompositionEnd(text: string): void {
     this._options?.onCompositionEnd?.(text);
+  }
+
+  _onFocus(): void {
+    this._options?.onFocus?.();
+  }
+
+  _onBlur(): void {
+    this._options?.onBlur?.();
   }
 
   _onKeyDown(e: TurKeyEvent): void {

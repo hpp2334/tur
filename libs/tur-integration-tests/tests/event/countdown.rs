@@ -2,18 +2,14 @@ use std::time::Duration;
 
 use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::TextSpanElement;
+use tur_engine::elements::ParagraphElement;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
-    let tree = app.element_tree();
-    let c = tree.get(id).unwrap();
-    let sid = c.children[0];
-    drop(tree);
-    app.with_element(sid, |e| {
-        e.cast::<TextSpanElement>()
-            .map(|s| s.content().to_string())
+    app.with_element(id, |e| {
+        e.cast::<ParagraphElement>()
+            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -37,7 +33,7 @@ fn find_input_id(app: &TurTestApp) -> ElementNodeId {
     let input_node = tree.get(inner.children[0]).unwrap();
     assert_eq!(
         input_node.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_input")
+        ElementKind::new("tur_editable_text")
     );
     input_node.id
 }

@@ -10,11 +10,10 @@ const creators: Record<string, () => TurNodeHandle> = {
   tur_stack: () => __tur.createStack(ctx),
   tur_positioned: () => __tur.createPositioned(ctx),
   tur_container: () => __tur.createContainer(ctx),
-  tur_text_container: () => __tur.createTextContainer(ctx),
-  tur_text_span: () => __tur.createTextSpan(ctx),
+  tur_paragraph: () => __tur.createParagraph(ctx),
   tur_pointer_interact: () => __tur.createPointerInteract(ctx),
   tur_focusable: () => __tur.createFocusable(ctx),
-  tur_input: () => __tur.createInput(ctx),
+  tur_editable_text: () => __tur.createEditableText(ctx, null!),
   tur_image: () => __tur.createImage(ctx),
 };
 
@@ -58,7 +57,7 @@ const reconciler = ReactReconciler(
   },
 
   createTextInstance(): never {
-    throw new Error("text instances not supported; use <tur_text_span>");
+    throw new Error("text instances not supported; use spans prop");
   },
 
   appendInitialChild(parentInstance: TurInstance, child: TurInstance): void {

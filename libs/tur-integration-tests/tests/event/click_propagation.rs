@@ -1,4 +1,4 @@
-use tur_engine::elements::TextSpanElement;
+use tur_engine::elements::ParagraphElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_nested() -> TurTestApp {
@@ -9,19 +9,12 @@ fn build_nested() -> TurTestApp {
 
 fn get_text_content(app: &TurTestApp, query_key: &[&str]) -> String {
     let id = app.query_element(query_key).unwrap_or_else(|| panic!("{:?} not found", query_key));
-    let tree = app.element_tree();
-    let container = tree.get(id).unwrap();
-    let span_id = container.children.first().copied();
-    drop(tree);
-    span_id
-        .and_then(|sid| {
-            app.with_element(sid, |e| {
-                e.cast::<TextSpanElement>()
-                    .map(|s| s.content().to_string())
-                    .unwrap_or_default()
-            })
-        })
-        .unwrap_or_default()
+    app.with_element(id, |e| {
+        e.cast::<ParagraphElement>()
+            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .unwrap_or_default()
+    })
+    .unwrap_or_default()
 }
 
 fn find_inner_opaque(app: &TurTestApp) -> (tur_engine::core::element::ElementNodeId, tur_engine::core::element::ElementNodeId) {

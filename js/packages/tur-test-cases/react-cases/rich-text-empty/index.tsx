@@ -1,11 +1,9 @@
 import { renderRoot } from "@tur/react-renderer";
-import { TextContainer, TextSpan } from "@tur/react";
+import { Paragraph } from "@tur/react";
 
 function RichTextEmpty() {
   return (
-    <TextContainer fontSize={14}>
-      <TextSpan content="" />
-    </TextContainer>
+    <Paragraph fontSize={14} spans={[{ content: "" }]} />
   );
 }
 

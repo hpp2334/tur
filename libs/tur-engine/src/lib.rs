@@ -21,7 +21,7 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
-use elements::input::InputElement;
+use elements::editable_text::EditableTextElement;
 
 pub struct TurApp {
     boa_context: Context,
@@ -140,19 +140,17 @@ impl TurApp {
 
         let node = tree.get(focused_id)?;
         let element = node.element.as_ref()?;
-        let input_el = element.cast::<InputElement>()?;
-        let layout_data = input_el.cached_layout.as_ref()?;
+        let editable_el = element.cast::<EditableTextElement>()?;
+        let layout_data = editable_el.cached_layout.as_ref()?;
 
-        let effective_cursor = if let Some(ref comp) = input_el.composition_text {
-            input_el.composition_start + comp.len()
-        } else {
-            input_el.cursor_position
-        };
+        let full = editable_el.text();
+        fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
+            s[..byte_pos.min(s.len())].chars().count()
+        }
+        let cursor_char = byte_to_char_offset(&full, editable_el.cursor_position());
 
-        let effective_text = input_el.composition_display_text();
-        let char_idx = byte_to_char_offset(&effective_text, effective_cursor);
-        let (cursor_x, _) = layout_data.cursor_xy_at(char_idx);
-        let line_idx = layout_data.line_index_for_char(char_idx);
+        let (cursor_x, _) = layout_data.cursor_xy_at(cursor_char);
+        let line_idx = layout_data.line_index_for_char(cursor_char);
         let line_info = &layout_data.line_infos[line_idx];
 
         Some((
@@ -163,7 +161,7 @@ impl TurApp {
         ))
     }
 
-    pub fn focused_is_input(&self) -> bool {
+    pub fn focused_is_editable(&self) -> bool {
         let Some(focused_id) = self.focused_element() else {
             return false;
         };
@@ -174,7 +172,7 @@ impl TurApp {
         let Some(ref element) = node.element else {
             return false;
         };
-        element.cast::<InputElement>().is_some()
+        element.cast::<EditableTextElement>().is_some()
     }
 
     #[cfg(feature = "trace")]
@@ -185,10 +183,6 @@ impl TurApp {
     pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
         self.internal.app_context.borrow_mut().render_to_pixels()
     }
-}
-
-fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
-    s[..byte_pos].chars().count()
 }
 
 use core::bridge::BridgeResult;

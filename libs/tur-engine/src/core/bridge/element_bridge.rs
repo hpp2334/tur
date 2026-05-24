@@ -1,3 +1,6 @@
+use boa_engine::js_string;
+use boa_engine::object::JsObject;
+use boa_engine::property::PropertyDescriptor;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
@@ -6,9 +9,11 @@ use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::text::TextEditingController;
 use crate::elements::{
-    ContainerElement, FlexElement, FlexItemElement, FocusableElement, ImageElement, InputElement,
-    PointerInteractElement, PositionedElement, StackElement, TextContainerElement, TextSpanElement,
+    ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
+    FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
+    PositionedElement, StackElement,
 };
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -49,55 +54,31 @@ fn create_element(
     let js_ctx = extract_ctx(args)?;
     let mut tree = js_ctx.element_tree.borrow_mut();
     let id = tree.alloc_id();
-    let kind = element.type_name().to_string();
+    let _kind = element.type_name().to_string();
     let node = ElementObject::new(id, element, context);
     tree.insert(node);
-    let _ = kind;
     let handle = tree.get(id).unwrap().handle.clone();
     Ok(handle.object().clone().into())
 }
 
-pub(crate) fn tur_create_flex(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(FlexElement::new()))
+macro_rules! simple_creator {
+    ($fn_name:ident, $constructor:expr) => {
+        pub(crate) fn $fn_name(
+            _this: &JsValue,
+            args: &[JsValue],
+            context: &mut Context,
+        ) -> JsResult<JsValue> {
+            create_element(args, context, $constructor)
+        }
+    };
 }
 
-pub(crate) fn tur_create_flex_item(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(FlexItemElement::new()))
-}
-
-pub(crate) fn tur_create_stack(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(StackElement::new()))
-}
-
-pub(crate) fn tur_create_positioned(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(PositionedElement::new()))
-}
-
-pub(crate) fn tur_create_container(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(ContainerElement::new()))
-}
-
-pub(crate) fn tur_create_text_container(
+simple_creator!(tur_create_flex, AnyElement::new(FlexElement::new()));
+simple_creator!(tur_create_flex_item, AnyElement::new(FlexItemElement::new()));
+simple_creator!(tur_create_stack, AnyElement::new(StackElement::new()));
+simple_creator!(tur_create_positioned, AnyElement::new(PositionedElement::new()));
+simple_creator!(tur_create_container, AnyElement::new(ContainerElement::new()));
+pub(crate) fn tur_create_paragraph(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -105,17 +86,11 @@ pub(crate) fn tur_create_text_container(
     create_element(
         args,
         context,
-        AnyElement::new(TextContainerElement::new()),
+        AnyElement::with_gesture_and_focus(ParagraphElement::new())
+            .with_js_callback_emitter::<ParagraphElement>(),
     )
 }
-
-pub(crate) fn tur_create_text_span(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(TextSpanElement::new()))
-}
+simple_creator!(tur_create_image, AnyElement::new(ImageElement::new()));
 
 pub(crate) fn tur_create_pointer_interact(
     _this: &JsValue,
@@ -149,6 +124,93 @@ pub(crate) fn tur_create_focusable(
         AnyElement::with_focusability(FocusableElement::new())
             .with_js_callback_emitter::<FocusableElement>(),
     )
+}
+
+pub(crate) fn tur_create_editable_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let controller_obj = args.get_or_undefined(1).as_object().filter(|obj| {
+        BoaOpaque::<TextEditingController>::wrap(obj).is_some()
+    });
+    let js_ctx = extract_ctx(args)?;
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    let id = tree.alloc_id();
+    let obj = match controller_obj {
+        Some(obj) => obj,
+        None => {
+            let handle = BoaOpaque::new(TextEditingController::new(), context);
+            handle.object().clone()
+        }
+    };
+    let element = AnyElement::with_full_interactivity(EditableTextElement::new(obj))
+        .with_js_callback_emitter::<EditableTextElement>();
+    let node = ElementObject::new(id, element, context);
+    tree.insert(node);
+    let handle = tree.get(id).unwrap().handle.clone();
+    Ok(handle.object().clone().into())
+}
+
+pub(crate) fn tur_create_text_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let handle = BoaOpaque::new(TextEditingController::new(), context);
+    Ok(handle.object().clone().into())
+}
+
+pub(crate) fn tur_text_controller_set_spans(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let mut controller_ref = BoaOpaque::<TextEditingController>::wrap_mut(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let spans = crate::elements::text::span_data::extract_spans_from_js(
+        args.get_or_undefined(2),
+        context,
+    );
+    controller_ref.set_spans(spans);
+    drop(controller_ref);
+    Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_text_controller_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let controller_ref = BoaOpaque::<TextEditingController>::wrap(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let text = controller_ref.text();
+    drop(controller_ref);
+    Ok(boa_engine::JsValue::from(boa_engine::js_string!(text.as_str())))
+}
+
+pub(crate) fn tur_text_controller_clear(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let mut controller_ref = BoaOpaque::<TextEditingController>::wrap_mut(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    controller_ref.clear();
+    Ok(JsValue::undefined())
 }
 
 pub(crate) fn tur_request_focus(
@@ -319,56 +381,166 @@ pub(crate) fn tur_get_next_sibling(
     }
 }
 
-pub(crate) fn tur_create_input(
+pub(crate) fn tur_get_text_cursor_rect(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let mut tree = js_ctx.element_tree.borrow_mut();
-    let id = tree.alloc_id();
-    let element = AnyElement::with_full_interactivity(InputElement::new())
-        .with_js_callback_emitter::<InputElement>();
-    let node = ElementObject::new(id, element, context);
-    tree.insert(node);
-    let handle = tree.get(id).unwrap().handle.clone();
-    Ok(handle.object().clone().into())
+    let node_id = extract_node_id(args, 1)?;
+    let char_index = args.get_or_undefined(2)
+        .as_number()
+        .map(|n| n as usize)
+        .unwrap_or(0);
+
+    let tree = js_ctx.element_tree.borrow();
+    let Some(node) = tree.get(node_id) else {
+        return Ok(JsValue::null());
+    };
+    let Some(ref element) = node.element else {
+        return Ok(JsValue::null());
+    };
+
+    let layout = element.cast::<ParagraphElement>()
+        .and_then(|e| e.cached_layout.as_ref())
+        .or_else(|| {
+            element.cast::<EditableTextElement>()
+                .and_then(|e| e.cached_layout.as_ref())
+        });
+
+    let Some(layout_data) = layout else {
+        return Ok(JsValue::null());
+    };
+
+    let (x, _) = layout_data.cursor_xy_at(char_index);
+    let line_idx = layout_data.line_index_for_char(char_index);
+    let line_info = &layout_data.line_infos[line_idx];
+
+    let proto = context.intrinsics().constructors().object().prototype();
+    let obj = JsObject::from_proto_and_data(proto, ());
+    let desc = |v: f64| {
+        PropertyDescriptor::builder()
+            .value(JsValue::from(v))
+            .writable(true)
+            .enumerable(true)
+            .configurable(true)
+            .build()
+    };
+    obj.insert_property(js_string!("x"), desc(x as f64));
+    obj.insert_property(js_string!("y"), desc(line_info.top as f64));
+    obj.insert_property(js_string!("w"), desc(2.0_f64));
+    obj.insert_property(js_string!("h"), desc(line_info.height as f64));
+
+    Ok(obj.into())
 }
 
-pub(crate) fn tur_set_input_text(
+pub(crate) fn tur_get_text_selection_rects(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let node_id = extract_node_id(args, 1)?;
+    let start_char = args.get_or_undefined(2)
+        .as_number()
+        .map(|n| n as usize)
+        .unwrap_or(0);
+    let end_char = args.get_or_undefined(3)
+        .as_number()
+        .map(|n| n as usize)
+        .unwrap_or(0);
+
+    let tree = js_ctx.element_tree.borrow();
+    let Some(node) = tree.get(node_id) else {
+        return Ok(JsValue::from(boa_engine::object::builtins::JsArray::new(context).unwrap()));
+    };
+    let Some(ref element) = node.element else {
+        return Ok(JsValue::from(boa_engine::object::builtins::JsArray::new(context).unwrap()));
+    };
+
+    let layout = element.cast::<ParagraphElement>()
+        .and_then(|e| e.cached_layout.as_ref())
+        .or_else(|| {
+            element.cast::<EditableTextElement>()
+                .and_then(|e| e.cached_layout.as_ref())
+        });
+
+    let Some(layout_data) = layout else {
+        return Ok(JsValue::from(boa_engine::object::builtins::JsArray::new(context).unwrap()));
+    };
+
+    let (s, e) = if start_char < end_char { (start_char, end_char) } else { (end_char, start_char) };
+    let start_line = layout_data.line_index_for_char(s);
+    let end_line = layout_data.line_index_for_char(e);
+
+    let mut rects = Vec::new();
+    for line_idx in start_line..=end_line {
+        let line_start = layout_data.line_start_char(line_idx);
+        let line_end = layout_data.line_end_char(line_idx);
+
+        let sel_start = s.max(line_start);
+        let sel_end = e.min(line_end);
+
+        if sel_start >= sel_end {
+            continue;
+        }
+
+        let x_start = layout_data.cursor_x_at(sel_start);
+        let x_end = layout_data.cursor_x_at(sel_end);
+        let line_info = &layout_data.line_infos[line_idx];
+
+        let proto = context.intrinsics().constructors().object().prototype();
+        let obj = JsObject::from_proto_and_data(proto, ());
+        let desc = |v: f64| {
+            PropertyDescriptor::builder()
+                .value(JsValue::from(v))
+                .writable(true)
+                .enumerable(true)
+                .configurable(true)
+                .build()
+        };
+        obj.insert_property(js_string!("x"), desc(x_start as f64));
+        obj.insert_property(js_string!("y"), desc(line_info.top as f64));
+        obj.insert_property(js_string!("w"), desc((x_end - x_start) as f64));
+        obj.insert_property(js_string!("h"), desc(line_info.height as f64));
+        rects.push(JsValue::from(obj));
+    }
+
+    let arr = boa_engine::object::builtins::JsArray::from_iter(rects, context);
+    Ok(JsValue::from(arr))
+}
+
+pub(crate) fn tur_get_char_index_at_position(
     _this: &JsValue,
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let node_id = extract_node_id(args, 1)?;
-    let text = args
-        .get_or_undefined(2)
-        .as_string()
-        .map(|s| s.to_std_string_escaped())
-        .unwrap_or_default();
+    let x = args.get_or_undefined(2).as_number().unwrap_or(0.0) as f32;
+    let y = args.get_or_undefined(3).as_number().unwrap_or(0.0) as f32;
 
-    {
-        let mut tree = js_ctx.element_tree.borrow_mut();
-        if let Some(node) = tree.get_mut(node_id) {
-            if let Some(ref mut element) = node.element {
-                if let Some(input_el) = element.cast_mut::<InputElement>() {
-                    input_el.set_text(&text);
-                }
-            }
-        }
-        tree.mark_dirty(node_id);
-    }
-    js_ctx.dirty.set(true);
-    Ok(JsValue::undefined())
-}
+    let tree = js_ctx.element_tree.borrow();
+    let Some(node) = tree.get(node_id) else {
+        return Ok(JsValue::from(0.0_f64));
+    };
+    let Some(ref element) = node.element else {
+        return Ok(JsValue::from(0.0_f64));
+    };
 
-pub(crate) fn tur_create_image(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    create_element(args, context, AnyElement::new(ImageElement::new()))
+    let layout = element.cast::<ParagraphElement>()
+        .and_then(|e| e.cached_layout.as_ref())
+        .or_else(|| {
+            element.cast::<EditableTextElement>()
+                .and_then(|e| e.cached_layout.as_ref())
+        });
+
+    let Some(layout_data) = layout else {
+        return Ok(JsValue::from(0.0_f64));
+    };
+
+    let char_index = layout_data.char_index_at_xy(x, y);
+    Ok(JsValue::from(char_index as f64))
 }
 
 pub(crate) fn tur_create_image_resource(

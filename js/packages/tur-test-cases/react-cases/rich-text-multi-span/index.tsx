@@ -1,13 +1,9 @@
 import { renderRoot } from "@tur/react-renderer";
-import { TextContainer, TextSpan } from "@tur/react";
+import { Paragraph } from "@tur/react";
 
 function RichTextMultiSpan() {
   return (
-    <TextContainer fontSize={14}>
-      <TextSpan content="Hello " />
-      <TextSpan content="Bold" bold />
-      <TextSpan content=" World" />
-    </TextContainer>
+    <Paragraph fontSize={14} spans={[{ content: "Hello " }, { content: "Bold", bold: true }, { content: " World" }]} />
   );
 }
 

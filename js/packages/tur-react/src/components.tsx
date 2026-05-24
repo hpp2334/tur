@@ -1,7 +1,7 @@
 import React from "react";
 import type { ReactNode, Ref } from "react";
 import { Color, LinearGradient } from "@tur/react-renderer";
-import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
+import type { ResourceHandle, TurKeyEvent, TurNodeHandle, TextControllerHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment, HitTestBehavior } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
@@ -77,12 +77,6 @@ export interface FocusableProps {
   child?: ReactNode;
 }
 
-export interface TextProps extends BaseProps {
-  content: string;
-  fontSize?: number;
-  color?: Color;
-}
-
 export function Column(props: ColumnProps) {
   const { children, crossAlignment, mainAlignment, mainAxisSize, queryKey, ...rest } = props;
   return (
@@ -144,32 +138,29 @@ export function Focusable(props: FocusableProps) {
   return <tur_focusable ref={ref} onFocus={onFocus} onBlur={onBlur} onKeyDown={onKeyDown} onKeyUp={onKeyUp}>{child}</tur_focusable>;
 }
 
-export interface TextContainerProps extends BaseProps {
+export interface ParagraphProps extends BaseProps {
+  spans?: Array<{ content: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }>;
   fontSize?: number;
+  onSelectionChange?: (anchor: number, end: number) => void;
 }
 
-export interface TextSpanProps {
-  content?: string;
-  bold?: boolean;
-  italic?: boolean;
-  underline?: boolean;
+export function Paragraph(props: ParagraphProps) {
+  return <tur_paragraph spans={props.spans} fontSize={props.fontSize} onSelectionChange={props.onSelectionChange} queryKey={props.queryKey} />;
+}
+
+export interface TextProps extends BaseProps {
+  content: string;
   fontSize?: number;
   color?: Color;
 }
 
-export function TextContainer(props: TextContainerProps) {
-  return <tur_text_container fontSize={props.fontSize} queryKey={props.queryKey}>{props.children}</tur_text_container>;
-}
-
-export function TextSpan(props: TextSpanProps) {
-  return <tur_text_span {...props} color={props.color ?? Color.hex("#000000")} />;
-}
-
 export function Text(props: TextProps) {
   return (
-    <TextContainer fontSize={props.fontSize} queryKey={props.queryKey}>
-      <TextSpan content={props.content} color={props.color} />
-    </TextContainer>
+    <tur_paragraph
+      spans={[{ content: props.content, color: props.color }]}
+      fontSize={props.fontSize}
+      queryKey={props.queryKey}
+    />
   );
 }
 
@@ -189,23 +180,24 @@ export function Input(props: InputProps) {
   const ctrl = props.controller;
   return (
     <tur_container width={props.width} height={props.height}>
-      <tur_input
+      <tur_editable_text
         ref={(el: TurNodeHandle) => ctrl._attach(el)}
-        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
-        onKeyDown={(e: TurKeyEvent) => ctrl._onKeyDown(e)}
-        onFocus={() => ctrl._onFocus()}
-        onBlur={() => ctrl._onBlur()}
-        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
-        onSelectionChange={(start: number, end: number) => ctrl._onSelectionChange(start, end)}
-        onCompositionStart={() => ctrl._onCompositionStart()}
-        onCompositionUpdate={(text: string) => ctrl._onCompositionUpdate(text)}
-        onCompositionEnd={(text: string) => ctrl._onCompositionEnd(text)}
+        controller={ctrl.controllerHandle}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
         multiline={props.multiline}
+        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
+        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
+        onSelectionChange={(anchor: number, end: number) => ctrl._onSelectionChange(anchor, end)}
+        onKeyDown={(e: TurKeyEvent) => ctrl._onKeyDown(e)}
+        onCompositionStart={() => ctrl._onCompositionStart()}
+        onCompositionUpdate={(text: string) => ctrl._onCompositionUpdate(text)}
+        onCompositionEnd={(text: string) => ctrl._onCompositionEnd(text)}
+        onFocus={() => ctrl._onFocus()}
+        onBlur={() => ctrl._onBlur()}
       />
     </tur_container>
   );

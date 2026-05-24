@@ -200,6 +200,26 @@ impl AnyElement {
         }
     }
 
+    pub fn with_gesture_and_focus<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnFocus
+            + ElementOnGesture
+            + 'static,
+    >(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: None,
+            on_gesture: Some(gesture_dispatch::<E>),
+            on_ime: None,
+            emit_js_callback_fn: None,
+        }
+    }
+
     pub fn with_full_interactivity<
         E: ElementOnUpdate
             + ElementLayout

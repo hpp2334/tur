@@ -71,37 +71,31 @@ declare module "react/jsx-runtime" {
         queryKey?: string[];
         children?: React.ReactNode;
       };
-      tur_input: RefAttributes<TurNodeHandle> & {
-        ref?: (el: TurNodeHandle) => void;
-        onInput?: (value: string, enterPressed: boolean) => void;
-        onFocus?: () => void;
-        onBlur?: () => void;
-        onKeyDown?: (e: TurKeyEvent) => void;
-        onCursorChange?: (position: number) => void;
-        onSelectionChange?: (start: number, end: number) => void;
-        onCompositionStart?: () => void;
-        onCompositionUpdate?: (text: string) => void;
-        onCompositionEnd?: (text: string) => void;
+      tur_editable_text: RefAttributes<TurNodeHandle> & {
+        controller?: object;
         fontSize?: number;
         color?: Color;
         cursorColor?: Color;
         placeholder?: string;
         placeholderColor?: Color;
         multiline?: boolean;
+        onInput?: (text: string, enter: boolean) => void;
+        onCursorChange?: (position: number) => void;
+        onSelectionChange?: (anchor: number, end: number) => void;
+        onKeyDown?: (e: TurKeyEvent) => boolean | void;
+        onKeyUp?: (e: TurKeyEvent) => boolean | void;
+        onFocus?: () => void;
+        onBlur?: () => void;
+        onCompositionStart?: () => void;
+        onCompositionUpdate?: (text: string) => void;
+        onCompositionEnd?: (text: string) => void;
+        ref?: (el: TurNodeHandle) => void;
       };
-      tur_text_container: RefAttributes<TurNodeHandle> & {
+      tur_paragraph: RefAttributes<TurNodeHandle> & {
         fontSize?: number;
-        color?: Color;
+        spans?: { content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }[];
+        onSelectionChange?: (anchor: number, end: number) => void;
         queryKey?: string[];
-        children?: React.ReactNode;
-      };
-      tur_text_span: RefAttributes<TurNodeHandle> & {
-        content?: string;
-        bold?: boolean;
-        italic?: boolean;
-        underline?: boolean;
-        fontSize?: number;
-        color?: Color;
       };
       tur_image: RefAttributes<TurNodeHandle> & {
         resourceId: ResourceHandle;

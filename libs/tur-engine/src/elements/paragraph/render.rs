@@ -1,45 +1,22 @@
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
-use tur_shared::{Color, ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::elements::text::paint_helpers;
 use crate::elements::text::text_layout;
-use crate::elements::text_span::TextSpanElement;
 
-use super::element::TextContainerElement;
+use super::element::ParagraphElement;
 
-struct SpanData {
-    text: String,
-    bold: bool,
-    italic: bool,
-    underline: bool,
-    font_size: Option<f64>,
-    color: Option<Color>,
-}
-
-impl ElementLayout for TextContainerElement {
+impl ElementLayout for ParagraphElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
-        children: &[ElementNodeId],
+        _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let spans: Vec<SpanData> = children
-            .iter()
-            .filter_map(|&child_id| {
-                cx.child_element::<TextSpanElement>(child_id).map(|span| SpanData {
-                    text: span.content.clone(),
-                    bold: span.bold,
-                    italic: span.italic,
-                    underline: span.underline,
-                    font_size: span.font_size,
-                    color: span.color,
-                })
-            })
-            .collect();
-
-        let full_text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        let full_text: String = self.spans.iter().map(|s| s.text.as_str()).collect();
 
         if full_text.is_empty() {
             self.cached_layout = None;
@@ -57,7 +34,7 @@ impl ElementLayout for TextContainerElement {
         let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
         let mut byte_offset = 0usize;
 
-        for span in &spans {
+        for span in &self.spans {
             let span_byte_len = span.text.len();
             let range = byte_offset..byte_offset + span_byte_len;
 
@@ -100,9 +77,9 @@ impl ElementLayout for TextContainerElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for TextContainerElement {
+impl ElementRender for ParagraphElement {
     fn type_name(&self) -> &'static str {
-        "tur_text_container"
+        "tur_paragraph"
     }
 
     fn paint(
@@ -113,8 +90,19 @@ impl ElementRender for TextContainerElement {
         _children: &[ElementNodeId],
         _paint_ctx: &PaintContext,
     ) {
-        if let Some(ref layout_data) = self.cached_layout {
-            canvas.fill_text_layout(offset, layout_data);
+        let Some(ref layout_data) = self.cached_layout else {
+            return;
+        };
+
+        if self.selection_anchor != self.selection_end {
+            let (s, e) = if self.selection_anchor < self.selection_end {
+                (self.selection_anchor, self.selection_end)
+            } else {
+                (self.selection_end, self.selection_anchor)
+            };
+            paint_helpers::paint_selection(canvas, offset, layout_data, s, e);
         }
+
+        canvas.fill_text_layout(offset, layout_data);
     }
 }
