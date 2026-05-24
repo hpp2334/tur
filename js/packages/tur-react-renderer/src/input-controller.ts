@@ -17,7 +17,6 @@ export class InputController {
   private _handle: object | null = null;
   private _controllerHandle: TextControllerHandle;
   private _options?: InputControllerOptions;
-  private _text: string = "";
 
   constructor(options?: InputControllerOptions) {
     this._options = options;
@@ -25,7 +24,7 @@ export class InputController {
   }
 
   get text(): string {
-    return this._text;
+    return __tur.textControllerText(__tur.__ctx, this._controllerHandle);
   }
 
   get controllerHandle(): TextControllerHandle {
@@ -44,7 +43,6 @@ export class InputController {
 
   clear(): void {
     __tur.textControllerClear(__tur.__ctx, this._controllerHandle);
-    this._text = "";
   }
 
   _attach(h: object): void {
@@ -52,7 +50,6 @@ export class InputController {
   }
 
   _onInput(text: string, enter: boolean): void {
-    this._text = text;
     this._options?.onInput?.(text, enter);
     if (enter) {
       this._options?.onEnter?.();
