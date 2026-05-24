@@ -126,17 +126,12 @@ node ./scripts/local_ci.cjs
 Use a timeout of at least **600000ms** (10 minutes) when running this. If the timeout is hit but all preceding steps show success, the CI can be considered passed.
 
 **If CI fails:**
-1. Check the output for the specific error
-2. Fix the issues in the current worktree
-3. Commit and push again
-4. Re-run CI
-5. Repeat until CI passes
-
-Do NOT proceed until local CI passes successfully.
+1. Report the failure output back to the caller.
+2. Do NOT attempt to fix issues — the caller will fix and re-dispatch this agent.
 
 ### Step 6: Return Result
 
 Return a summary to the caller including:
 - All changes committed and pushed
-- Whether local CI passed
+- Whether local CI passed or failed (include error output if failed)
 - The PR URL
