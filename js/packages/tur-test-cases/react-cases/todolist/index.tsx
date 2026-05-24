@@ -8,8 +8,8 @@ import {
   CrossAxisAlignment,
   MainAxisAlignment,
   Input,
-  InputController,
   PointerInteract,
+  createTextEditingController,
 } from "@tur/react";
 import {
   todosAtom,
@@ -56,7 +56,7 @@ function TodoList() {
   const selectedTodoId = useAtomValue(selectedTodoIdAtom);
   const setSelectedTodoId = useSetAtom(selectedTodoIdAtom);
 
-  const controller = new InputController({
+  const controller = createTextEditingController({
     onKeyDown: (e) => {
       if (e.key === "Enter") {
         controller.clear();

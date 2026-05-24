@@ -1,5 +1,4 @@
 export type TurNodeHandle = object;
-export type TextControllerHandle = object;
 export type ResourceHandle = number;
 
 export interface TurKeyEvent {
@@ -18,6 +17,31 @@ export interface TextCursorRect {
   h: number;
 }
 
+declare class TextEditingController {
+  get text(): string;
+  get cursorPosition(): number;
+  get selectionAnchor(): number;
+  get selectionEnd(): number;
+  setSpans(spans: Array<{content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: unknown}>): void;
+  setSelection(anchor: number, end: number): void;
+  clear(): void;
+  _attach(handle: TurNodeHandle): void;
+  requestFocus(ctx: unknown): void;
+}
+
+interface TextEditingControllerOptions {
+  onInput?: (text: string, enter: boolean) => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onKeyDown?: (e: TurKeyEvent) => void;
+  onKeyUp?: (e: TurKeyEvent) => void;
+  onCursorChange?: (pos: number) => void;
+  onSelectionChange?: (start: number, end: number) => void;
+  onCompositionStart?: () => void;
+  onCompositionUpdate?: (text: string) => void;
+  onCompositionEnd?: (text: string) => void;
+}
+
 declare global {
   var __tur: {
     __ctx: unknown;
@@ -29,14 +53,11 @@ declare global {
     createParagraph(ctx: unknown): TurNodeHandle;
     createPointerInteract(ctx: unknown): TurNodeHandle;
     createFocusable(ctx: unknown): TurNodeHandle;
-    createEditableText(ctx: unknown, controller: TextControllerHandle): TurNodeHandle;
+    createEditableText(ctx: unknown, controller: TextEditingController): TurNodeHandle;
     createImage(ctx: unknown): TurNodeHandle;
     createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
     createRoot(ctx: unknown): TurNodeHandle;
-    createTextController(ctx: unknown): TextControllerHandle;
-    textControllerSetSpans(ctx: unknown, handle: TextControllerHandle, spans: unknown[]): void;
-    textControllerText(ctx: unknown, handle: TextControllerHandle): string;
-    textControllerClear(ctx: unknown, handle: TextControllerHandle): void;
+    createTextEditingController(ctx: unknown, options?: TextEditingControllerOptions): TextEditingController;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
     removeChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;

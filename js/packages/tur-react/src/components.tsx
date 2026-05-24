@@ -1,8 +1,7 @@
 import React from "react";
 import type { ReactNode, Ref } from "react";
 import { Color, LinearGradient } from "@tur/react-renderer";
-import type { ResourceHandle, TurKeyEvent, TurNodeHandle, TextControllerHandle } from "@tur/react-renderer";
-import type { InputController } from "@tur/react-renderer";
+import type { ResourceHandle, TurKeyEvent, TurNodeHandle, TextEditingController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment, HitTestBehavior } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
 import type { FlexFit } from "@tur/react-renderer";
@@ -165,7 +164,7 @@ export function Text(props: TextProps) {
 }
 
 export interface InputProps {
-  controller: InputController;
+  controller: TextEditingController;
   placeholder?: string;
   fontSize?: number;
   color?: Color;
@@ -182,22 +181,13 @@ export function Input(props: InputProps) {
     <tur_container width={props.width} height={props.height}>
       <tur_editable_text
         ref={(el: TurNodeHandle) => ctrl._attach(el)}
-        controller={ctrl.controllerHandle}
+        controller={ctrl}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}
         placeholderColor={props.placeholderColor}
         cursorColor={props.cursorColor ?? props.color}
         multiline={props.multiline}
-        onInput={(text: string, enter: boolean) => ctrl._onInput(text, enter)}
-        onCursorChange={(pos: number) => ctrl._onCursorChange(pos)}
-        onSelectionChange={(anchor: number, end: number) => ctrl._onSelectionChange(anchor, end)}
-        onKeyDown={(e: TurKeyEvent) => ctrl._onKeyDown(e)}
-        onCompositionStart={() => ctrl._onCompositionStart()}
-        onCompositionUpdate={(text: string) => ctrl._onCompositionUpdate(text)}
-        onCompositionEnd={(text: string) => ctrl._onCompositionEnd(text)}
-        onFocus={() => ctrl._onFocus()}
-        onBlur={() => ctrl._onBlur()}
       />
     </tur_container>
   );

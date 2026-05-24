@@ -1,7 +1,5 @@
-export type { TurNodeHandle, TurKeyEvent, ResourceHandle } from "@tur/react-renderer";
-export { InputController } from "@tur/react-renderer";
-export { createImageResource } from "@tur/react-renderer";
-export type { InputControllerOptions } from "@tur/react-renderer";
+export type { TurNodeHandle, TurKeyEvent, ResourceHandle, TextEditingController, TextEditingControllerOptions } from "@tur/react-renderer";
+export { createTextEditingController, createImageResource } from "@tur/react-renderer";
 export { Color } from "@tur/react-renderer";
 export { MainAxisAlignment } from "@tur/react-renderer";
 export { MainAxisSize } from "@tur/react-renderer";

@@ -1,12 +1,12 @@
 import { renderRoot } from "@tur/react-renderer";
-import { Input, InputController } from "@tur/react";
+import { Input, createTextEditingController } from "@tur/react";
 import { useState } from "react";
 
 declare global {
   var __setCursorMidTick: (n: number) => void;
 }
 
-const ctrl = new InputController();
+const ctrl = createTextEditingController();
 
 function InputCursorMid() {
   const [tick, setTick] = useState(0);

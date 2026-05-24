@@ -5,7 +5,6 @@ use tur_shared::{Color, Offset};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::bridge::color::extract_color;
-use crate::core::bridge::BoaOpaque;
 use crate::core::elements::{
     ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
@@ -17,10 +16,6 @@ use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::text::TextEditingController;
 use crate::elements::text::text_layout::TextLayoutData;
-
-fn extract_callable(value: &JsValue) -> Option<JsFunction> {
-    value.as_object().and_then(JsFunction::from_object)
-}
 
 #[derive(Clone)]
 pub(crate) struct LineNavInfo {
@@ -89,16 +84,6 @@ pub struct EditableTextElement {
     pub(crate) placeholder_color: Option<Color>,
     pub(crate) multiline: bool,
     pub(crate) cached_layout: Option<TextLayoutData>,
-    on_key_down: Option<JsFunction>,
-    on_key_up: Option<JsFunction>,
-    on_focus: Option<JsFunction>,
-    on_blur: Option<JsFunction>,
-    on_input: Option<JsFunction>,
-    on_cursor_change: Option<JsFunction>,
-    on_selection_change: Option<JsFunction>,
-    on_composition_start: Option<JsFunction>,
-    on_composition_update: Option<JsFunction>,
-    on_composition_end: Option<JsFunction>,
 }
 
 impl Default for EditableTextElement {
@@ -118,27 +103,19 @@ impl EditableTextElement {
             placeholder_color: None,
             multiline: false,
             cached_layout: None,
-            on_key_down: None,
-            on_key_up: None,
-            on_focus: None,
-            on_blur: None,
-            on_input: None,
-            on_cursor_change: None,
-            on_selection_change: None,
-            on_composition_start: None,
-            on_composition_update: None,
-            on_composition_end: None,
         }
     }
 
     pub(crate) fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
-        BoaOpaque::<TextEditingController>::wrap(&self.controller_obj)
-            .expect("controller is always a valid TextControllerHandle")
+        self.controller_obj
+            .downcast_ref::<TextEditingController>()
+            .expect("controller is always a valid TextEditingController")
     }
 
     pub(crate) fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
-        BoaOpaque::<TextEditingController>::wrap_mut(&self.controller_obj)
-            .expect("controller is always a valid TextControllerHandle")
+        self.controller_obj
+            .downcast_mut::<TextEditingController>()
+            .expect("controller is always a valid TextEditingController")
     }
 
     pub fn text(&self) -> String {
@@ -473,7 +450,7 @@ impl ElementOnUpdate for EditableTextElement {
         match key.to_std_string_escaped().as_str() {
             "controller" => {
                 if let Some(obj) = value.as_object() {
-                    if BoaOpaque::<TextEditingController>::wrap(&obj).is_some() {
+                    if obj.downcast_ref::<TextEditingController>().is_some() {
                         self.controller_obj = obj;
                     }
                 }
@@ -496,16 +473,6 @@ impl ElementOnUpdate for EditableTextElement {
             "multiline" => {
                 self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
             }
-            "onKeyDown" => { self.on_key_down = extract_callable(value); }
-            "onKeyUp" => { self.on_key_up = extract_callable(value); }
-            "onFocus" => { self.on_focus = extract_callable(value); }
-            "onBlur" => { self.on_blur = extract_callable(value); }
-            "onInput" => { self.on_input = extract_callable(value); }
-            "onCursorChange" => { self.on_cursor_change = extract_callable(value); }
-            "onSelectionChange" => { self.on_selection_change = extract_callable(value); }
-            "onCompositionStart" => { self.on_composition_start = extract_callable(value); }
-            "onCompositionUpdate" => { self.on_composition_update = extract_callable(value); }
-            "onCompositionEnd" => { self.on_composition_end = extract_callable(value); }
             _ => {}
         }
     }
@@ -519,16 +486,6 @@ impl ElementOnUpdate for EditableTextElement {
             "placeholder" => self.placeholder = None,
             "placeholderColor" => self.placeholder_color = None,
             "multiline" => self.multiline = false,
-            "onKeyDown" => self.on_key_down = None,
-            "onKeyUp" => self.on_key_up = None,
-            "onFocus" => self.on_focus = None,
-            "onBlur" => self.on_blur = None,
-            "onInput" => self.on_input = None,
-            "onCursorChange" => self.on_cursor_change = None,
-            "onSelectionChange" => self.on_selection_change = None,
-            "onCompositionStart" => self.on_composition_start = None,
-            "onCompositionUpdate" => self.on_composition_update = None,
-            "onCompositionEnd" => self.on_composition_end = None,
             _ => {}
         }
     }
@@ -692,56 +649,58 @@ impl ElementJsCallbackEmitter for EditableTextElement {
     ) -> Option<(JsFunction, Vec<JsValue>)> {
         use boa_engine::js_string;
 
+        let ctrl = self.controller();
+
         if let Some(c) = command.downcast_ref::<EditableTextNotification>() {
             match c {
                 EditableTextNotification::TextChanged { text, enter } => {
-                    self.on_input.as_ref().map(|h| {
-                        (h.clone(), vec![JsValue::from(js_string!(text.as_str())), JsValue::from(*enter)])
+                    ctrl.on_input().cloned().map(|h| {
+                        (h, vec![JsValue::from(js_string!(text.as_str())), JsValue::from(*enter)])
                     })
                 }
                 EditableTextNotification::CursorChanged { position } => {
-                    self.on_cursor_change.as_ref().map(|h| {
-                        (h.clone(), vec![JsValue::from(*position as f64)])
+                    ctrl.on_cursor_change().cloned().map(|h| {
+                        (h, vec![JsValue::from(*position as f64)])
                     })
                 }
                 EditableTextNotification::SelectionChanged { anchor, end } => {
-                    self.on_selection_change.as_ref().map(|h| {
-                        (h.clone(), vec![JsValue::from(*anchor as f64), JsValue::from(*end as f64)])
+                    ctrl.on_selection_change().cloned().map(|h| {
+                        (h, vec![JsValue::from(*anchor as f64), JsValue::from(*end as f64)])
                     })
                 }
                 EditableTextNotification::CompositionStarted => {
-                    self.on_composition_start.as_ref().map(|h| (h.clone(), vec![]))
+                    ctrl.on_composition_start().cloned().map(|h| (h, vec![]))
                 }
                 EditableTextNotification::CompositionUpdated { text } => {
-                    self.on_composition_update.as_ref().map(|h| {
-                        (h.clone(), vec![JsValue::from(js_string!(text.as_str()))])
+                    ctrl.on_composition_update().cloned().map(|h| {
+                        (h, vec![JsValue::from(js_string!(text.as_str()))])
                     })
                 }
                 EditableTextNotification::CompositionEnded { text } => {
-                    self.on_composition_end.as_ref().map(|h| {
-                        (h.clone(), vec![JsValue::from(js_string!(text.as_str()))])
+                    ctrl.on_composition_end().cloned().map(|h| {
+                        (h, vec![JsValue::from(js_string!(text.as_str()))])
                     })
                 }
             }
         } else if let Some(c) = command.downcast_ref::<FocusableJsCommand>() {
             match c {
                 FocusableJsCommand::KeyDown { key, code, modifiers } => {
-                    self.on_key_down.as_ref().map(|h| {
+                    ctrl.on_key_down().cloned().map(|h| {
                         let event_obj = build_key_event_object(key, code, modifiers, context);
-                        (h.clone(), vec![event_obj])
+                        (h, vec![event_obj])
                     })
                 }
                 FocusableJsCommand::KeyUp { key, code, modifiers } => {
-                    self.on_key_up.as_ref().map(|h| {
+                    ctrl.on_key_up().cloned().map(|h| {
                         let event_obj = build_key_event_object(key, code, modifiers, context);
-                        (h.clone(), vec![event_obj])
+                        (h, vec![event_obj])
                     })
                 }
                 FocusableJsCommand::Focus => {
-                    self.on_focus.as_ref().map(|h| (h.clone(), vec![]))
+                    ctrl.on_focus().cloned().map(|h| (h, vec![]))
                 }
                 FocusableJsCommand::Blur => {
-                    self.on_blur.as_ref().map(|h| (h.clone(), vec![]))
+                    ctrl.on_blur().cloned().map(|h| (h, vec![]))
                 }
             }
         } else {

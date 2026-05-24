@@ -1,6 +1,6 @@
 import { atom, getDefaultStore } from "jotai/vanilla";
 import { useAtomValue, useSetAtom } from "jotai/react";
-import { InputController } from "@tur/react-renderer";
+import { createTextEditingController } from "@tur/react-renderer";
 
 export interface Todo {
   readonly id: number;
@@ -47,12 +47,12 @@ export const titleTextAtom = atom("");
 export const descTextAtom = atom("");
 
 export const titleControllerAtom = atom(
-  new InputController({
+  createTextEditingController({
     onInput: (text: string) => store.set(titleTextAtom, text),
   }),
 );
 export const descControllerAtom = atom(
-  new InputController({
+  createTextEditingController({
     onInput: (text: string) => store.set(descTextAtom, text),
   }),
 );

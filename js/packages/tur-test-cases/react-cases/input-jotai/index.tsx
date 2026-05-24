@@ -1,5 +1,5 @@
 import { renderRoot } from "@tur/react-renderer";
-import { Input, InputController, Container, Column, Text, Row, SizedBox, MainAxisSize, MainAxisAlignment, CrossAxisAlignment, Color } from "@tur/react";
+import { Input, Container, Column, Text, Row, SizedBox, MainAxisSize, MainAxisAlignment, CrossAxisAlignment, Color, createTextEditingController } from "@tur/react";
 import { atom, getDefaultStore } from "jotai/vanilla";
 import { useAtomValue } from "jotai/react";
 
@@ -14,7 +14,7 @@ const inputTextAtom = atom("");
 globalThis.__jotaiTestStore = store;
 globalThis.__jotaiInputText = inputTextAtom;
 
-const controller = new InputController({
+const controller = createTextEditingController({
   onInput: (text: string) => {
     store.set(inputTextAtom, text);
   },
