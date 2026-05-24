@@ -13,7 +13,13 @@ impl AppHandler for TextEditFocusAppHandler {
 
         let hit_path = HitTest::new(&*cx.element_tree).path(*position);
         let focusable_id = find_focusable_in_path(&*cx.element_tree, &hit_path);
+
         if focusable_id.is_none() {
+            if let Some(focused) = cx.focus_manager.focused() {
+                if cx.gesture_composer.pointer_down_target() == Some(focused) {
+                    return;
+                }
+            }
             cx.focus_manager.clear_focus(cx.js_command_queue);
         }
     }

@@ -147,7 +147,7 @@ impl TurApp {
         fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
             s[..byte_pos.min(s.len())].chars().count()
         }
-        let cursor_char = byte_to_char_offset(&full, editable_el.cursor_position);
+        let cursor_char = byte_to_char_offset(&full, editable_el.cursor_position());
 
         let (cursor_x, _) = layout_data.cursor_xy_at(cursor_char);
         let line_idx = layout_data.line_index_for_char(cursor_char);

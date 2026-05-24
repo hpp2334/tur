@@ -9,6 +9,7 @@ use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::text::TextEditingController;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
     FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
@@ -130,12 +131,86 @@ pub(crate) fn tur_create_editable_text(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    create_element(
-        args,
+    let controller_obj = args.get_or_undefined(1).as_object().filter(|obj| {
+        BoaOpaque::<TextEditingController>::wrap(obj).is_some()
+    });
+    let js_ctx = extract_ctx(args)?;
+    let mut tree = js_ctx.element_tree.borrow_mut();
+    let id = tree.alloc_id();
+    let obj = match controller_obj {
+        Some(obj) => obj,
+        None => {
+            let handle = BoaOpaque::new(TextEditingController::new(), context);
+            handle.object().clone()
+        }
+    };
+    let element = AnyElement::with_full_interactivity(EditableTextElement::new(obj))
+        .with_js_callback_emitter::<EditableTextElement>();
+    let node = ElementObject::new(id, element, context);
+    tree.insert(node);
+    let handle = tree.get(id).unwrap().handle.clone();
+    Ok(handle.object().clone().into())
+}
+
+pub(crate) fn tur_create_text_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let handle = BoaOpaque::new(TextEditingController::new(), context);
+    Ok(handle.object().clone().into())
+}
+
+pub(crate) fn tur_text_controller_set_spans(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let mut controller_ref = BoaOpaque::<TextEditingController>::wrap_mut(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let spans = crate::elements::text::span_data::extract_spans_from_js(
+        args.get_or_undefined(2),
         context,
-        AnyElement::with_full_interactivity(EditableTextElement::new())
-            .with_js_callback_emitter::<EditableTextElement>(),
-    )
+    );
+    controller_ref.set_spans(spans);
+    drop(controller_ref);
+    Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_text_controller_text(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let controller_ref = BoaOpaque::<TextEditingController>::wrap(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let text = controller_ref.text();
+    drop(controller_ref);
+    Ok(boa_engine::JsValue::from(boa_engine::js_string!(text.as_str())))
+}
+
+pub(crate) fn tur_text_controller_clear(
+    _this: &JsValue,
+    args: &[JsValue],
+    _context: &mut Context,
+) -> JsResult<JsValue> {
+    let obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    let mut controller_ref = BoaOpaque::<TextEditingController>::wrap_mut(&obj).ok_or_else(|| {
+        JsNativeError::typ().with_message("expected TextControllerHandle")
+    })?;
+    controller_ref.clear();
+    Ok(JsValue::undefined())
 }
 
 pub(crate) fn tur_request_focus(

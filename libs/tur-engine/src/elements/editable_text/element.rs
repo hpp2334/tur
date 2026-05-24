@@ -1,9 +1,11 @@
 use boa_engine::object::builtins::JsFunction;
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsString, JsValue};
 use tur_shared::{Color, Offset};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::bridge::color::extract_color;
+use crate::core::bridge::BoaOpaque;
 use crate::core::elements::{
     ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
@@ -13,7 +15,7 @@ use crate::core::event::AppImeEvent;
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, IntoAnyJsCommand};
 use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
-use crate::elements::text::span_data::SpanData;
+use crate::core::text::TextEditingController;
 use crate::elements::text::text_layout::TextLayoutData;
 
 fn extract_callable(value: &JsValue) -> Option<JsFunction> {
@@ -79,19 +81,14 @@ impl IntoAnyJsCommand for EditableTextNotification {
 }
 
 pub struct EditableTextElement {
-    pub(crate) spans: Vec<SpanData>,
+    controller_obj: JsObject,
     pub(crate) font_size: f64,
     pub(crate) color: Option<Color>,
-    pub(crate) cursor_position: usize,
     pub(crate) cursor_color: Option<Color>,
     pub(crate) placeholder: Option<String>,
     pub(crate) placeholder_color: Option<Color>,
     pub(crate) multiline: bool,
     pub(crate) cached_layout: Option<TextLayoutData>,
-    pub(crate) selection_anchor: usize,
-    pub(crate) selection_end: usize,
-    pub(crate) composition_text: Option<String>,
-    pub(crate) composition_start: usize,
     on_key_down: Option<JsFunction>,
     on_key_up: Option<JsFunction>,
     on_focus: Option<JsFunction>,
@@ -106,26 +103,21 @@ pub struct EditableTextElement {
 
 impl Default for EditableTextElement {
     fn default() -> Self {
-        Self::new()
+        Self::new(JsObject::with_null_proto())
     }
 }
 
 impl EditableTextElement {
-    pub fn new() -> Self {
+    pub fn new(controller_obj: JsObject) -> Self {
         EditableTextElement {
-            spans: Vec::new(),
+            controller_obj,
             font_size: 14.0,
             color: None,
-            cursor_position: 0,
             cursor_color: None,
             placeholder: None,
             placeholder_color: None,
             multiline: false,
             cached_layout: None,
-            selection_anchor: 0,
-            selection_end: 0,
-            composition_text: None,
-            composition_start: 0,
             on_key_down: None,
             on_key_up: None,
             on_focus: None,
@@ -139,179 +131,90 @@ impl EditableTextElement {
         }
     }
 
+    pub(crate) fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
+        BoaOpaque::<TextEditingController>::wrap(&self.controller_obj)
+            .expect("controller is always a valid TextControllerHandle")
+    }
+
+    pub(crate) fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
+        BoaOpaque::<TextEditingController>::wrap_mut(&self.controller_obj)
+            .expect("controller is always a valid TextControllerHandle")
+    }
+
     pub fn text(&self) -> String {
-        self.spans.iter().map(|s| s.text.as_str()).collect()
+        self.controller().text()
     }
 
-    pub fn has_selection(&self) -> bool {
-        self.selection_anchor != self.selection_end
+    pub fn cursor_position(&self) -> usize {
+        self.controller().cursor_position()
     }
 
-    fn selection_range(&self) -> (usize, usize) {
-        let (a, b) = (self.selection_anchor, self.selection_end);
-        if a <= b { (a, b) } else { (b, a) }
-    }
-
-    fn clear_selection(&mut self) {
-        self.selection_anchor = self.cursor_position;
-        self.selection_end = self.cursor_position;
-    }
-
-    fn delete_selection(&mut self) {
-        if !self.has_selection() { return; }
-        let (start, end) = self.selection_range();
-        self.delete_range(start, end);
-        self.cursor_position = start;
-        self.clear_selection();
-    }
-
-    fn is_composing(&self) -> bool {
-        self.composition_text.is_some()
-    }
-
-    fn full_len(&self) -> usize {
-        self.spans.iter().map(|s| s.text.len()).sum()
-    }
-
-    fn span_index_at(&self, byte_pos: usize) -> (usize, usize) {
-        let mut offset = 0;
-        for (i, span) in self.spans.iter().enumerate() {
-            let end = offset + span.text.len();
-            if byte_pos <= end {
-                return (i, byte_pos - offset);
-            }
-            offset = end;
-        }
-        if self.spans.is_empty() {
-            return (0, 0);
-        }
-        let last = self.spans.len() - 1;
-        (last, self.spans[last].text.len())
-    }
-
-    fn insert_at(&mut self, byte_pos: usize, text: &str) {
-        if text.is_empty() {
-            return;
-        }
-        if self.spans.is_empty() {
-            self.spans.push(SpanData {
-                text: text.to_string(),
-                bold: false,
-                italic: false,
-                underline: false,
-                font_size: None,
-                color: None,
-            });
-            return;
-        }
-        let (idx, local_offset) = self.span_index_at(byte_pos);
-        self.spans[idx].text.insert_str(local_offset, text);
-    }
-
-    fn delete_range(&mut self, start: usize, end: usize) {
-        if start >= end || self.spans.is_empty() {
-            return;
-        }
-        let total = self.full_len();
-        let end = end.min(total);
-        let start = start.min(total);
-        if start >= end {
-            return;
-        }
-
-        let (start_idx, start_local) = self.span_index_at(start);
-        let (end_idx, end_local) = self.span_index_at(end);
-
-        if start_idx == end_idx {
-            self.spans[start_idx].text.replace_range(start_local..end_local, "");
-        } else {
-            self.spans[start_idx].text.truncate(start_local);
-            self.spans[end_idx].text.replace_range(0..end_local, "");
-            for i in (start_idx + 1..end_idx).rev() {
-                self.spans.remove(i);
-            }
-        }
-
-        self.spans.retain(|s| !s.text.is_empty());
-        self.merge_adjacent();
-    }
-
-    fn merge_adjacent(&mut self) {
-        if self.spans.len() <= 1 {
-            return;
-        }
-        let mut i = 0;
-        while i < self.spans.len() - 1 {
-            let can_merge = {
-                let a = &self.spans[i];
-                let b = &self.spans[i + 1];
-                a.bold == b.bold
-                    && a.italic == b.italic
-                    && a.underline == b.underline
-                    && a.font_size == b.font_size
-                    && a.color == b.color
-            };
-            if can_merge {
-                let b_text = self.spans[i + 1].text.clone();
-                self.spans[i].text.push_str(&b_text);
-                self.spans.remove(i + 1);
-            } else {
-                i += 1;
-            }
-        }
-    }
-
-    fn insert_char_at(&mut self, pos: usize, ch: char) {
-        self.insert_at(pos, &ch.to_string());
-    }
-
-    fn insert_str_at(&mut self, pos: usize, text: &str) {
-        self.insert_at(pos, text);
+    pub fn selection(&self) -> (usize, usize) {
+        let c = self.controller();
+        (c.selection_anchor(), c.selection_end())
     }
 
     pub(crate) fn composition_display_text(&self) -> String {
-        let base = self.text();
-        if let Some(ref comp) = self.composition_text {
-            let start = self.composition_start.min(base.len());
-            format!("{}{}{}", &base[..start], comp, &base[start..])
-        } else {
-            base
-        }
+        self.controller().composition_display_text()
     }
 
     fn handle_key_event(
-        &mut self,
+        &self,
         key: &str,
         ctrl: bool,
         meta: bool,
         shift: bool,
         nav_info: Option<&LineNavInfo>,
     ) -> bool {
-        let full = self.text();
-        match key {
+        let mut c = self.controller_mut();
+        let full = c.text();
+        let cursor = c.cursor_position();
+        let anchor = c.selection_anchor();
+        let end = c.selection_end();
+        let has_sel = c.has_selection();
+        let len = c.full_len();
+        let composing = c.is_composing();
+
+        let mut new_cursor = cursor;
+        let mut new_anchor = anchor;
+        let mut new_end = end;
+
+        let handled = match key {
             "Backspace" => {
-                if self.has_selection() {
-                    self.delete_selection();
+                if has_sel {
+                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    c.delete_range(s, e);
+                    new_cursor = s;
+                    new_anchor = s;
+                    new_end = s;
                     true
-                } else if self.cursor_position > 0 {
-                    let new_pos = prev_grapheme_boundary(&full, self.cursor_position);
-                    let end = next_grapheme_boundary(&full, new_pos);
-                    self.delete_range(new_pos, end);
-                    self.cursor_position = new_pos;
-                    self.clear_selection();
+                } else if cursor > 0 {
+                    let new_pos = prev_grapheme_boundary(&full, cursor);
+                    let del_end = next_grapheme_boundary(&full, new_pos);
+                    c.delete_range(new_pos, del_end);
+                    new_cursor = new_pos;
+                    new_anchor = new_pos;
+                    new_end = new_pos;
                     true
                 } else {
                     false
                 }
             }
             "Delete" => {
-                if self.has_selection() {
-                    self.delete_selection();
+                if has_sel {
+                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    c.delete_range(s, e);
+                    new_cursor = s;
+                    new_anchor = s;
+                    new_end = s;
+
                     true
-                } else if self.cursor_position < self.full_len() {
-                    let end = next_grapheme_boundary(&full, self.cursor_position);
-                    self.delete_range(self.cursor_position, end);
-                    self.clear_selection();
+                } else if cursor < len {
+                    let del_end = next_grapheme_boundary(&full, cursor);
+                    c.delete_range(cursor, del_end);
+                    new_anchor = cursor;
+                    new_end = cursor;
+
                     true
                 } else {
                     false
@@ -319,186 +222,163 @@ impl EditableTextElement {
             }
             "ArrowLeft" => {
                 if shift {
-                    let new_end = prev_grapheme_boundary(&full, self.selection_end);
-                    if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                    self.selection_end = new_end;
-                    self.cursor_position = new_end;
-                    true
-                } else if self.has_selection() {
-                    let (start, _) = self.selection_range();
-                    self.cursor_position = start;
-                    self.clear_selection();
-                    true
+                    new_end = prev_grapheme_boundary(&full, end);
+                    if !has_sel { new_anchor = cursor; }
+                    new_cursor = new_end;
+                } else if has_sel {
+                    new_cursor = if anchor <= end { anchor } else { end };
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
                 } else {
-                    self.cursor_position = prev_grapheme_boundary(&full, self.cursor_position);
-                    self.clear_selection();
-                    true
+                    new_cursor = prev_grapheme_boundary(&full, cursor);
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
                 }
+                true
             }
             "ArrowRight" => {
                 if shift {
-                    let new_end = next_grapheme_boundary(&full, self.selection_end);
-                    if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                    self.selection_end = new_end;
-                    self.cursor_position = new_end;
-                    true
-                } else if self.has_selection() {
-                    let (_, end) = self.selection_range();
-                    self.cursor_position = end;
-                    self.clear_selection();
-                    true
+                    new_end = next_grapheme_boundary(&full, end);
+                    if !has_sel { new_anchor = cursor; }
+                    new_cursor = new_end;
+                } else if has_sel {
+                    new_cursor = if anchor <= end { end } else { anchor };
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
                 } else {
-                    self.cursor_position = next_grapheme_boundary(&full, self.cursor_position);
-                    self.clear_selection();
-                    true
+                    new_cursor = next_grapheme_boundary(&full, cursor);
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
                 }
+                true
             }
             "ArrowUp" if self.multiline => {
                 if let Some(info) = nav_info {
-                    self.move_vertical(info, -1, shift)
+                    let target_byte = compute_vertical_target(info, &full, -1);
+                    if shift {
+                        if !has_sel { new_anchor = cursor; }
+                        new_end = target_byte;
+                        new_cursor = target_byte;
+                    } else {
+                        new_cursor = target_byte;
+                        new_anchor = target_byte;
+                        new_end = target_byte;
+                    }
+                    true
                 } else {
                     false
                 }
             }
             "ArrowDown" if self.multiline => {
                 if let Some(info) = nav_info {
-                    self.move_vertical(info, 1, shift)
+                    let target_byte = compute_vertical_target(info, &full, 1);
+                    if shift {
+                        if !has_sel { new_anchor = cursor; }
+                        new_end = target_byte;
+                        new_cursor = target_byte;
+                    } else {
+                        new_cursor = target_byte;
+                        new_anchor = target_byte;
+                        new_end = target_byte;
+                    }
+                    true
                 } else {
                     false
                 }
             }
             "Home" => {
-                if self.multiline {
+                let target = if self.multiline {
                     if let Some(info) = nav_info {
                         let line_start = info.line_start_chars[info.current_line];
-                        let target = char_to_byte_offset(&full, line_start);
-                        if shift {
-                            if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                            self.selection_end = target;
-                            self.cursor_position = target;
-                        } else {
-                            self.cursor_position = target;
-                            self.clear_selection();
-                        }
-                        true
+                        char_to_byte_offset(&full, line_start)
                     } else {
-                        false
+                        return false;
                     }
-                } else if shift {
-                    if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                    self.selection_end = 0;
-                    self.cursor_position = 0;
-                    true
                 } else {
-                    self.cursor_position = 0;
-                    self.clear_selection();
-                    true
+                    0
+                };
+                if shift {
+                    if !has_sel { new_anchor = cursor; }
+                    new_end = target;
+                    new_cursor = target;
+                } else {
+                    new_cursor = target;
+                    new_anchor = target;
+                    new_end = target;
                 }
+                true
             }
             "End" => {
-                let len = self.full_len();
-                if self.multiline {
+                let target = if self.multiline {
                     if let Some(info) = nav_info {
                         let line_end = info.line_end_chars[info.current_line];
-                        let target = char_to_byte_offset(&full, line_end);
-                        if shift {
-                            if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                            self.selection_end = target;
-                            self.cursor_position = target;
-                        } else {
-                            self.cursor_position = target;
-                            self.clear_selection();
-                        }
-                        true
+                        char_to_byte_offset(&full, line_end)
                     } else {
-                        false
+                        return false;
                     }
-                } else if shift {
-                    if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-                    self.selection_end = len;
-                    self.cursor_position = len;
-                    true
                 } else {
-                    self.cursor_position = len;
-                    self.clear_selection();
-                    true
+                    len
+                };
+                if shift {
+                    if !has_sel { new_anchor = cursor; }
+                    new_end = target;
+                    new_cursor = target;
+                } else {
+                    new_cursor = target;
+                    new_anchor = target;
+                    new_end = target;
                 }
+                true
             }
             "a" if ctrl || meta => {
-                let len = self.full_len();
-                self.selection_anchor = 0;
-                self.selection_end = len;
-                self.cursor_position = len;
+                new_anchor = 0;
+                new_end = len;
+                new_cursor = len;
                 true
             }
             "Enter" => {
                 if self.multiline {
-                    if self.has_selection() { self.delete_selection(); }
-                    self.insert_char_at(self.cursor_position, '\n');
-                    self.cursor_position += '\n'.len_utf8();
-                    self.clear_selection();
+                    if has_sel {
+                        let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                        c.delete_range(s, e);
+                        new_cursor = s;
+                    }
+                    c.insert_char_at(new_cursor, '\n');
+                    new_cursor += '\n'.len_utf8();
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
+
                     true
                 } else {
                     true
                 }
             }
             _ => {
-                if key.len() == 1 && !ctrl && !meta && !self.is_composing() {
+                if key.len() == 1 && !ctrl && !meta && !composing {
                     let ch = key.chars().next().unwrap();
-                    if self.has_selection() { self.delete_selection(); }
-                    self.insert_char_at(self.cursor_position, ch);
-                    self.cursor_position += ch.len_utf8();
-                    self.clear_selection();
+                    if has_sel {
+                        let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                        c.delete_range(s, e);
+                        new_cursor = s;
+                    }
+                    c.insert_char_at(new_cursor, ch);
+                    new_cursor += ch.len_utf8();
+                    new_anchor = new_cursor;
+                    new_end = new_cursor;
+
                     true
                 } else {
                     false
                 }
             }
-        }
-    }
-
-    fn move_vertical(&mut self, info: &LineNavInfo, direction: i32, shift: bool) -> bool {
-        let full = self.text();
-        let current_line = info.current_line;
-        let cursor_x = info.cursor_xy.0;
-        let num_lines = info.line_start_chars.len();
-
-        let target_line = if direction < 0 {
-            current_line.saturating_sub(1)
-        } else {
-            (current_line + 1).min(num_lines - 1)
         };
 
-        if target_line == current_line {
-            return false;
+        if handled {
+            c.set_cursor_position(new_cursor);
+            c.set_selection(new_anchor, new_end);
         }
 
-        let target_char = {
-            let xs = &info.line_glyph_xs[target_line];
-            let line_start = info.line_start_chars[target_line];
-            let mut best_idx = xs.len().saturating_sub(1);
-            let mut best_dist = f32::MAX;
-            for (i, &x) in xs.iter().enumerate() {
-                let dist = (x - cursor_x).abs();
-                if dist < best_dist {
-                    best_dist = dist;
-                    best_idx = i;
-                }
-            }
-            line_start + best_idx
-        };
-
-        let target_byte = char_to_byte_offset(&full, target_char);
-
-        if shift {
-            if !self.has_selection() { self.selection_anchor = self.cursor_position; }
-            self.selection_end = target_byte;
-            self.cursor_position = target_byte;
-        } else {
-            self.cursor_position = target_byte;
-            self.clear_selection();
-        }
-        true
+        handled
     }
 
     fn char_index_at(&self, local_position: &Offset) -> usize {
@@ -513,6 +393,39 @@ impl EditableTextElement {
             })
             .unwrap_or(0)
     }
+}
+
+fn compute_vertical_target(info: &LineNavInfo, full: &str, direction: i32) -> usize {
+    let current_line = info.current_line;
+    let cursor_x = info.cursor_xy.0;
+    let num_lines = info.line_start_chars.len();
+
+    let target_line = if direction < 0 {
+        current_line.saturating_sub(1)
+    } else {
+        (current_line + 1).min(num_lines - 1)
+    };
+
+    if target_line == current_line {
+        return char_to_byte_offset(full, info.line_start_chars[current_line]);
+    }
+
+    let target_char = {
+        let xs = &info.line_glyph_xs[target_line];
+        let line_start = info.line_start_chars[target_line];
+        let mut best_idx = xs.len().saturating_sub(1);
+        let mut best_dist = f32::MAX;
+        for (i, &x) in xs.iter().enumerate() {
+            let dist = (x - cursor_x).abs();
+            if dist < best_dist {
+                best_dist = dist;
+                best_idx = i;
+            }
+        }
+        line_start + best_idx
+    };
+
+    char_to_byte_offset(full, target_char)
 }
 
 fn prev_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
@@ -556,28 +469,29 @@ impl ElementTrace for EditableTextElement {
 }
 
 impl ElementOnUpdate for EditableTextElement {
-    fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
+    fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
         match key.to_std_string_escaped().as_str() {
-            "spans" => {
-                self.spans = crate::elements::text::span_data::extract_spans_from_js(value, ctx);
-                self.cursor_position = self.full_len();
-                self.clear_selection();
-                self.composition_text = None;
+            "controller" => {
+                if let Some(obj) = value.as_object() {
+                    if BoaOpaque::<TextEditingController>::wrap(&obj).is_some() {
+                        self.controller_obj = obj;
+                    }
+                }
             }
             "fontSize" => {
                 self.font_size = value.as_number().unwrap_or(14.0);
             }
             "color" => {
-                self.color = extract_color(value, ctx);
+                self.color = extract_color(value, _ctx);
             }
             "cursorColor" => {
-                self.cursor_color = extract_color(value, ctx);
+                self.cursor_color = extract_color(value, _ctx);
             }
             "placeholder" => {
                 self.placeholder = value.as_string().map(|s| s.to_std_string_escaped());
             }
             "placeholderColor" => {
-                self.placeholder_color = extract_color(value, ctx);
+                self.placeholder_color = extract_color(value, _ctx);
             }
             "multiline" => {
                 self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
@@ -598,7 +512,7 @@ impl ElementOnUpdate for EditableTextElement {
 
     fn reset_prop(&mut self, key: &JsString) {
         match key.to_std_string_escaped().as_str() {
-            "spans" => { self.spans.clear(); self.cursor_position = 0; self.clear_selection(); }
+            "controller" => {}
             "fontSize" => self.font_size = 14.0,
             "color" => self.color = None,
             "cursorColor" => self.cursor_color = None,
@@ -628,23 +542,31 @@ impl ElementOnGesture for EditableTextElement {
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
     ) {
-        let full = self.text();
+        let full = {
+            let c = self.controller();
+            c.text()
+        };
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
                 cx.request_own_focus();
                 let char_idx = self.char_index_at(local_position);
                 let byte_pos = char_to_byte_offset(&full, char_idx);
-                self.cursor_position = byte_pos;
-                self.selection_anchor = byte_pos;
-                self.selection_end = byte_pos;
+                let mut c = self.controller_mut();
+                c.set_cursor_position(byte_pos);
+                c.set_selection(byte_pos, byte_pos);
+                drop(c);
                 cx.request_redraw();
             }
             ComposedGestureEvent::PointerMove { local_position } => {
                 let char_idx = self.char_index_at(local_position);
                 let byte_pos = char_to_byte_offset(&full, char_idx);
-                if byte_pos != self.selection_end {
-                    self.selection_end = byte_pos;
-                    self.cursor_position = byte_pos;
+                let mut c = self.controller_mut();
+                let anchor = c.selection_anchor();
+                let sel_end = c.selection_end();
+                if byte_pos != sel_end {
+                    c.set_selection(anchor, byte_pos);
+                    c.set_cursor_position(byte_pos);
+                    drop(c);
                     cx.request_redraw();
                 }
             }
@@ -662,13 +584,14 @@ impl ElementOnKeyboard for EditableTextElement {
             return;
         }
 
-        let prev_text = self.text();
-        let prev_cursor = self.cursor_position;
-        let prev_anchor = self.selection_anchor;
-        let prev_end = self.selection_end;
+        let (prev_text, prev_cursor, prev_anchor, prev_end, cursor_char) = {
+            let c = self.controller();
+            let text = c.text();
+            let cursor_char = byte_to_char_offset(&text, c.cursor_position());
+            (text, c.cursor_position(), c.selection_anchor(), c.selection_end(), cursor_char)
+        };
 
         let nav_info = self.cached_layout.as_ref().map(|ld| {
-            let cursor_char = byte_to_char_offset(&prev_text, self.cursor_position);
             LineNavInfo::extract(ld, cursor_char)
         });
 
@@ -683,7 +606,8 @@ impl ElementOnKeyboard for EditableTextElement {
         if changed {
             cx.request_redraw();
 
-            let new_text = self.text();
+            let c = self.controller();
+            let new_text = c.text();
             if new_text != prev_text {
                 let enter = event.key == "Enter" && !self.multiline;
                 cx.push_js_command(EditableTextNotification::TextChanged {
@@ -691,15 +615,18 @@ impl ElementOnKeyboard for EditableTextElement {
                     enter,
                 });
             }
-            if self.cursor_position != prev_cursor {
+            let cursor = c.cursor_position();
+            if cursor != prev_cursor {
                 cx.push_js_command(EditableTextNotification::CursorChanged {
-                    position: self.cursor_position,
+                    position: cursor,
                 });
             }
-            if self.selection_anchor != prev_anchor || self.selection_end != prev_end {
+            let anchor = c.selection_anchor();
+            let end = c.selection_end();
+            if anchor != prev_anchor || end != prev_end {
                 cx.push_js_command(EditableTextNotification::SelectionChanged {
-                    anchor: self.selection_anchor,
-                    end: self.selection_end,
+                    anchor,
+                    end,
                 });
             }
         }
@@ -714,28 +641,32 @@ impl ElementOnIme for EditableTextElement {
     ) {
         match event {
             AppImeEvent::CompositionStart => {
-                self.composition_text = Some(String::new());
-                self.composition_start = self.cursor_position;
+                let mut c = self.controller_mut();
+                c.start_composition();
+                drop(c);
                 cx.push_js_command(EditableTextNotification::CompositionStarted);
                 cx.request_redraw();
             }
             AppImeEvent::CompositionUpdate { text, .. } => {
-                if self.composition_text.is_some() {
-                    self.composition_text = Some(text.clone());
-                    cx.push_js_command(EditableTextNotification::CompositionUpdated {
-                        text: text.clone(),
-                    });
-                    cx.request_redraw();
-                }
+                let mut c = self.controller_mut();
+                c.update_composition(text.clone());
+                drop(c);
+                cx.push_js_command(EditableTextNotification::CompositionUpdated {
+                    text: text.clone(),
+                });
+                cx.request_redraw();
             }
             AppImeEvent::CompositionEnd { text } => {
-                if self.composition_text.take().is_some() {
-                    let start = self.composition_start.min(self.full_len());
-                    self.insert_str_at(start, text);
-                    self.cursor_position = start + text.len();
-                    self.clear_selection();
+                let mut c = self.controller_mut();
+                if c.finish_composition().is_some() {
+                    let start = c.composing_start().min(c.full_len());
+                    c.insert_str_at(start, text);
+                    c.set_cursor_position(start + text.len());
+                    c.clear_selection();
 
-                    let new_text = self.text();
+                    let new_text = c.text();
+                    let cursor = c.cursor_position();
+                    drop(c);
                     cx.push_js_command(EditableTextNotification::CompositionEnded {
                         text: text.clone(),
                     });
@@ -744,7 +675,7 @@ impl ElementOnIme for EditableTextElement {
                         enter: false,
                     });
                     cx.push_js_command(EditableTextNotification::CursorChanged {
-                        position: self.cursor_position,
+                        position: cursor,
                     });
                     cx.request_redraw();
                 }

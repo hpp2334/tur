@@ -84,12 +84,21 @@ impl ElementRender for EditableTextElement {
             return;
         };
 
-        let full = self.text();
-        if self.selection_anchor != self.selection_end {
-            let (a, b) = if self.selection_anchor < self.selection_end {
-                (self.selection_anchor, self.selection_end)
+        let c = self.controller();
+        let full = c.text();
+        let cursor_pos = c.cursor_position();
+        let sel_anchor = c.selection_anchor();
+        let sel_end = c.selection_end();
+        let has_selection = c.has_selection();
+        let composing_text = c.composing_text().cloned();
+        let composing_start = c.composing_start();
+        drop(c);
+
+        if has_selection {
+            let (a, b) = if sel_anchor < sel_end {
+                (sel_anchor, sel_end)
             } else {
-                (self.selection_end, self.selection_anchor)
+                (sel_end, sel_anchor)
             };
             let a_char = byte_to_char_offset(&full, a);
             let b_char = byte_to_char_offset(&full, b);
@@ -98,16 +107,16 @@ impl ElementRender for EditableTextElement {
 
         canvas.fill_text_layout(offset, layout_data);
 
-        if let Some(ref comp) = self.composition_text {
-            let comp_start_char = byte_to_char_offset(&full, self.composition_start);
+        if let Some(ref comp) = composing_text {
+            let comp_start_char = byte_to_char_offset(&full, composing_start);
             let comp_end_char = comp_start_char + comp.chars().count();
             if comp_start_char != comp_end_char {
                 paint_composition_underline(canvas, offset, layout_data, comp_start_char, comp_end_char);
             }
         }
 
-        if paint_ctx.is_focused() && !self.has_selection() {
-            let cursor_char = byte_to_char_offset(&full, self.cursor_position);
+        if paint_ctx.is_focused() && !has_selection {
+            let cursor_char = byte_to_char_offset(&full, cursor_pos);
             paint_cursor(
                 canvas, offset, layout_data, cursor_char,
                 self.cursor_color.or(self.color).unwrap_or(DEFAULT_TEXT_COLOR),

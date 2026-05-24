@@ -1,7 +1,7 @@
 import React from "react";
 import type { ReactNode, Ref } from "react";
 import { Color, LinearGradient } from "@tur/react-renderer";
-import type { ResourceHandle, TurKeyEvent, TurNodeHandle } from "@tur/react-renderer";
+import type { ResourceHandle, TurKeyEvent, TurNodeHandle, TextControllerHandle } from "@tur/react-renderer";
 import type { InputController } from "@tur/react-renderer";
 import { BoxFit, CrossAxisAlignment, FlexDirection, MainAxisSize, MainAxisAlignment, HitTestBehavior } from "@tur/react-renderer";
 import type { StackFit } from "@tur/react-renderer";
@@ -182,7 +182,7 @@ export function Input(props: InputProps) {
     <tur_container width={props.width} height={props.height}>
       <tur_editable_text
         ref={(el: TurNodeHandle) => ctrl._attach(el)}
-        spans={[{ content: ctrl.text }]}
+        controller={ctrl.controllerHandle}
         placeholder={props.placeholder}
         fontSize={props.fontSize ?? 14}
         color={props.color}

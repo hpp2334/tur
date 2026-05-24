@@ -62,7 +62,7 @@ declare module "react/jsx-runtime" {
         children?: React.ReactNode;
       };
       tur_editable_text: {
-        spans?: { content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: Color }[];
+        controller?: object;
         fontSize?: number;
         color?: Color;
         cursorColor?: Color;

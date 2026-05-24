@@ -1,4 +1,4 @@
-import type { TurKeyEvent } from "./tur";
+import type { TurKeyEvent, TextControllerHandle } from "./tur";
 
 export interface InputControllerOptions {
   onInput?: (value: string, enter: boolean) => void;
@@ -15,20 +15,21 @@ export interface InputControllerOptions {
 
 export class InputController {
   private _handle: object | null = null;
+  private _controllerHandle: TextControllerHandle;
   private _options?: InputControllerOptions;
   private _text: string = "";
-  private _cursorPosition: number = 0;
 
   constructor(options?: InputControllerOptions) {
     this._options = options;
+    this._controllerHandle = __tur.createTextController(__tur.__ctx);
   }
 
   get text(): string {
     return this._text;
   }
 
-  get cursorPosition(): number {
-    return this._cursorPosition;
+  get controllerHandle(): TextControllerHandle {
+    return this._controllerHandle;
   }
 
   requestFocus(): void {
@@ -37,9 +38,13 @@ export class InputController {
     }
   }
 
+  setSpans(spans: Array<{ content?: string; bold?: boolean; italic?: boolean; underline?: boolean; fontSize?: number; color?: unknown }>): void {
+    __tur.textControllerSetSpans(__tur.__ctx, this._controllerHandle, spans);
+  }
+
   clear(): void {
+    __tur.textControllerClear(__tur.__ctx, this._controllerHandle);
     this._text = "";
-    this._cursorPosition = 0;
   }
 
   _attach(h: object): void {
@@ -55,7 +60,6 @@ export class InputController {
   }
 
   _onCursorChange(position: number): void {
-    this._cursorPosition = position;
     this._options?.onCursorChange?.(position);
   }
 

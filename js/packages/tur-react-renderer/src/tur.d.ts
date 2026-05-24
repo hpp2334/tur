@@ -1,4 +1,5 @@
 export type TurNodeHandle = object;
+export type TextControllerHandle = object;
 export type ResourceHandle = number;
 
 export interface TurKeyEvent {
@@ -28,10 +29,14 @@ declare global {
     createParagraph(ctx: unknown): TurNodeHandle;
     createPointerInteract(ctx: unknown): TurNodeHandle;
     createFocusable(ctx: unknown): TurNodeHandle;
-    createEditableText(ctx: unknown): TurNodeHandle;
+    createEditableText(ctx: unknown, controller: TextControllerHandle): TurNodeHandle;
     createImage(ctx: unknown): TurNodeHandle;
     createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
     createRoot(ctx: unknown): TurNodeHandle;
+    createTextController(ctx: unknown): TextControllerHandle;
+    textControllerSetSpans(ctx: unknown, handle: TextControllerHandle, spans: unknown[]): void;
+    textControllerText(ctx: unknown, handle: TextControllerHandle): string;
+    textControllerClear(ctx: unknown, handle: TextControllerHandle): void;
     setAttribute(ctx: unknown, handle: TurNodeHandle, key: string, value: unknown): void;
     appendChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
     removeChild(ctx: unknown, parent: TurNodeHandle, child: TurNodeHandle): void;
