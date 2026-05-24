@@ -1,4 +1,5 @@
 import { renderRoot } from "@tur/react-renderer";
+import type { TurKeyEvent } from '@tur/react';
 import {
   Column,
   Row,
@@ -57,7 +58,7 @@ function TodoList() {
   const setSelectedTodoId = useSetAtom(selectedTodoIdAtom);
 
   const controller = createTextEditingController({
-    onKeyDown: (e) => {
+    onKeyDown: (e: TurKeyEvent) => {
       if (e.key === "Enter") {
         controller.clear();
       }

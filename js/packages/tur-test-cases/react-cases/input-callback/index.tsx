@@ -8,11 +8,11 @@ declare global {
 globalThis.__inputCallbackLog = [];
 
 const controller = createTextEditingController({
-  onInput: (text) => {
+  onInput: (text: string, enter: boolean) => {
     globalThis.__inputCallbackLog.push("input:" + text);
-  },
-  onEnter: () => {
-    globalThis.__inputCallbackLog.push("enter");
+    if (enter) {
+      globalThis.__inputCallbackLog.push("enter");
+    }
   },
 });
 
