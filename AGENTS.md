@@ -162,4 +162,4 @@ Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
 ## git-end agent
 
-Dispatch `@git-end` to finalize a feature branch. It commits, rebases onto main, pushes, creates/updates a PR, and runs local CI. It reports back: commit hash, PR URL, and CI result (pass or fail with error output). If CI fails, fix the issues and re-dispatch `@git-end`.
+Dispatch `@git-end` to finalize a feature branch. It commits, rebases onto main, pushes, creates/updates a PR, and runs local CI. It reports back: commit hash, PR URL, and CI result (pass or fail with error output). If CI fails, fix the issues and re-dispatch `@git-end`. Do not include a changes summary in the prompt — the agent inspects the diff itself.
