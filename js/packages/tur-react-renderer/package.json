@@ -1,29 +1,29 @@
 {
-  "name": "@tur/react-renderer",
-  "version": "0.1.0",
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+    "name": "@tur/react-renderer",
+    "version": "0.1.0",
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "types": "./dist/index.d.ts"
+        }
+    },
+    "scripts": {
+        "build": "rslib build",
+        "gen-types": "node ../../../scripts/gen-types.cjs",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "react": "^19.1.0",
+        "react-reconciler": "^0.31.0"
+    },
+    "peerDependencies": {
+        "react": "^19.1.0"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.14",
+        "@types/react-reconciler": "^0.33.0"
     }
-  },
-  "scripts": {
-    "build": "rslib build",
-    "gen-types": "node ../../../scripts/gen-types.cjs",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "react": "^19.1.0",
-    "react-reconciler": "^0.31.0"
-  },
-  "peerDependencies": {
-    "react": "^19.1.0"
-  },
-  "devDependencies": {
-    "@types/react": "^19.2.14",
-    "@types/react-reconciler": "^0.33.0"
-  }
 }

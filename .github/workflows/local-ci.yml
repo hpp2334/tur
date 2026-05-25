@@ -55,8 +55,8 @@ jobs:
         run: pnpm typecheck
         working-directory: ./js
 
-      - name: Lint JS
-        run: pnpm lint
+      - name: Check JS
+        run: pnpm check
         working-directory: ./js
 
       - name: wasm-pack build

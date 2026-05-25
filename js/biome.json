@@ -1,0 +1,27 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.4.15/schema.json",
+    "files": {
+        "includes": ["**", "!!**/dist", "!!**/.rslib", "!!**/node_modules"]
+    },
+    "formatter": {
+        "indentStyle": "space",
+        "indentWidth": 4
+    },
+    "linter": {
+        "rules": {
+            "a11y": {
+                "noStaticElementInteractions": "off"
+            },
+            "suspicious": {
+                "noConfusingVoidType": "off",
+                "noExplicitAny": "error"
+            },
+            "complexity": {
+                "noUselessEmptyExport": "off"
+            },
+            "correctness": {
+                "noUnusedImports": "off"
+            }
+        }
+    }
+}

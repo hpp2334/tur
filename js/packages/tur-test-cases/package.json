@@ -1,22 +1,22 @@
 {
-  "name": "@tur/test-cases",
-  "version": "0.1.0",
-  "type": "module",
-  "private": true,
-  "scripts": {
-    "build": "rspack build",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@tur/react": "workspace:*",
-    "@tur/react-renderer": "workspace:*",
-    "jotai": "^2.20.0",
-    "react": "^19.1.0"
-  },
-  "devDependencies": {
-    "@rspack/cli": "^1.2.0",
-    "@rspack/core": "^1.2.0",
-    "@types/react": "^19.1.0",
-    "typescript": "^5.7.0"
-  }
+    "name": "@tur/test-cases",
+    "version": "0.1.0",
+    "type": "module",
+    "private": true,
+    "scripts": {
+        "build": "rspack build",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@tur/react": "workspace:*",
+        "@tur/react-renderer": "workspace:*",
+        "jotai": "^2.20.0",
+        "react": "^19.1.0"
+    },
+    "devDependencies": {
+        "@rspack/cli": "^1.2.0",
+        "@rspack/core": "^1.2.0",
+        "@types/react": "^19.1.0",
+        "typescript": "^5.7.0"
+    }
 }
