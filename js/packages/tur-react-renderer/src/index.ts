@@ -14,6 +14,7 @@ export type { Offset } from "./generated/Offset";
 export type { Size } from "./generated/Size";
 export { StackFit } from "./generated/StackFit";
 export { createImageResource } from "./image";
+export { createSvgResource } from "./svg";
 export type { TurInstance } from "./renderer";
 export { renderRoot } from "./renderer";
 export { createTextEditingController } from "./text-controller";

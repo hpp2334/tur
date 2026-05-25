@@ -68,6 +68,8 @@ declare global {
         ): TurNodeHandle;
         createImage(ctx: unknown): TurNodeHandle;
         createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
+        createSvg(ctx: unknown): TurNodeHandle;
+        createSvgResource(ctx: unknown, svgString: string): ResourceHandle;
         createRoot(ctx: unknown): TurNodeHandle;
         createTextEditingController(
             ctx: unknown,

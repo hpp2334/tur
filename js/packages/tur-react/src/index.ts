@@ -15,6 +15,7 @@ export {
     Color,
     CrossAxisAlignment,
     createImageResource,
+    createSvgResource,
     createTextEditingController,
     FlexDirection,
     FlexFit,
@@ -36,6 +37,7 @@ export type {
     RowProps,
     SizedBoxProps,
     StackProps,
+    SvgProps,
     TextProps,
 } from "./components";
 export {
@@ -51,5 +53,6 @@ export {
     Row,
     SizedBox,
     Stack,
+    Svg,
     Text,
 } from "./components";

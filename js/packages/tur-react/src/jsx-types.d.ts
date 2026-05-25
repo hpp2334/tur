@@ -117,6 +117,13 @@ declare module "react/jsx-runtime" {
                 fit?: BoxFit;
                 queryKey?: string[];
             };
+            tur_svg: RefAttributes<TurNodeHandle> & {
+                resourceId: ResourceHandle;
+                width?: number;
+                height?: number;
+                fit?: BoxFit;
+                queryKey?: string[];
+            };
         }
     }
 }

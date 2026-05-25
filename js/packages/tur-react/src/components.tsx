@@ -319,3 +319,24 @@ export function Image(props: ImageProps) {
         />
     );
 }
+
+
+export interface SvgProps {
+    resource: ResourceHandle;
+    width?: number;
+    height?: number;
+    fit?: BoxFit;
+    queryKey?: string[];
+}
+
+export function Svg(props: SvgProps) {
+    return (
+        <tur_svg
+            resourceId={props.resource}
+            width={props.width}
+            height={props.height}
+            fit={props.fit ?? BoxFit.Contain}
+            queryKey={props.queryKey}
+        />
+    );
+}
