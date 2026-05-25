@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import {
     Column,
     Container,
@@ -70,15 +71,15 @@ function Settings() {
                 <Text content="Settings" fontSize={28} />
                 <SizedBox height={16} />
                 {SECTIONS.map((section) => (
-                    <Container padding={12}>
+                    <Container key={section.title} padding={12}>
                         <Column>
                             <Text content={section.title} fontSize={18} />
                             <SizedBox height={8} />
                             {section.items.map((item) => (
-                                <>
+                                <Fragment key={item.label}>
                                     <SettingRow item={item} />
                                     <SizedBox height={4} />
-                                </>
+                                </Fragment>
                             ))}
                         </Column>
                     </Container>
