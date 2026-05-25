@@ -17,6 +17,7 @@ function Sidebar(props: { tabs: typeof TABS; activeId: string }) {
             <Column>
                 {props.tabs.map((tab) => (
                     <Container
+                        key={tab.id}
                         color={Color.hex(
                             tab.id === props.activeId ? "#0f3460" : "#16213e",
                         )}

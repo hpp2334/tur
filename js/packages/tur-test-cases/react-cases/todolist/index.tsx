@@ -108,6 +108,7 @@ function TodoList() {
                 <Column queryKey={["todo-list"]}>
                     {todos.map((todo) => (
                         <TodoItem
+                            key={todo.id}
                             todo={todo}
                             onToggle={toggleTodo}
                             onRemove={removeTodo}
