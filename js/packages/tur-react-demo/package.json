@@ -1,21 +1,21 @@
 {
-  "name": "@tur/react-demo",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "build": "rspack build",
-    "dev": "rspack serve",
-    "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@tur/react": "workspace:*",
-    "@tur/react-renderer": "workspace:*",
-    "@tur/rspack-plugin": "workspace:*",
-    "jotai": "^2.20.0",
-    "react": "^19.1.0"
-  },
-  "devDependencies": {
-    "@types/react": "^19.2.14",
-    "selfsigned": "^5.5.0"
-  }
+    "name": "@tur/react-demo",
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "build": "rspack build",
+        "dev": "rspack serve",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@tur/react": "workspace:*",
+        "@tur/react-renderer": "workspace:*",
+        "@tur/rspack-plugin": "workspace:*",
+        "jotai": "^2.20.0",
+        "react": "^19.1.0"
+    },
+    "devDependencies": {
+        "@types/react": "^19.2.14",
+        "selfsigned": "^5.5.0"
+    }
 }

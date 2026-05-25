@@ -126,7 +126,7 @@ cd js/packages/tur-solidjs-demo && rspack dev
 ```sh
 pnpm install
 pnpm build            # build all packages
-pnpm lint             # oxlint across all packages
+pnpm lint             # biome lint across all packages
 ```
 
 ### Per-package JS builds
@@ -140,7 +140,7 @@ cd js/packages/tur-solidjs-demo && pnpm build
 
 - Rust edition 2024, MSRV 1.85
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
-- Linting: oxlint with recommended rules
+- Linting: biome
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned)
 - Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)

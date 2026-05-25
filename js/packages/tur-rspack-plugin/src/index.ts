@@ -1,8 +1,8 @@
-import type { Compiler, RspackPluginInstance } from "@rspack/core";
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import type { Compiler, RspackPluginInstance } from "@rspack/core";
 
 const PLUGIN_NAME = "TurRspackPlugin";
 
@@ -32,82 +32,87 @@ const TEMPLATE_HTML = `<!DOCTYPE html>
 </html>`;
 
 export interface TurRspackPluginOptions {
-  wasmDir?: string;
-  jsEntry?: string;
-  noBuild?: boolean;
+    wasmDir?: string;
+    jsEntry?: string;
+    noBuild?: boolean;
 }
 
 function findWorkspaceRoot(startDir: string): string {
-  let dir = startDir;
-  for (let i = 0; i < 20; i++) {
-    try {
-      readFileSync(join(dir, "Cargo.toml"));
-      return dir;
-    } catch {
-      const parent = resolve(dir, "..");
-      if (parent === dir) break;
-      dir = parent;
+    let dir = startDir;
+    for (let i = 0; i < 20; i++) {
+        try {
+            readFileSync(join(dir, "Cargo.toml"));
+            return dir;
+        } catch {
+            const parent = resolve(dir, "..");
+            if (parent === dir) break;
+            dir = parent;
+        }
     }
-  }
-  return startDir;
+    return startDir;
 }
 
 export class TurRspackPlugin implements RspackPluginInstance {
-  private options: Required<TurRspackPluginOptions>;
+    private options: Required<TurRspackPluginOptions>;
 
-  constructor(options: TurRspackPluginOptions = {}) {
-    const root = findWorkspaceRoot(process.cwd());
-    this.options = {
-      wasmDir: options.wasmDir ?? join(root, "libs", "tur-wasm"),
-      jsEntry: options.jsEntry ?? "__JS_FILE__",
-      noBuild: options.noBuild ?? false,
-    };
-  }
+    constructor(options: TurRspackPluginOptions = {}) {
+        const root = findWorkspaceRoot(process.cwd());
+        this.options = {
+            wasmDir: options.wasmDir ?? join(root, "libs", "tur-wasm"),
+            jsEntry: options.jsEntry ?? "__JS_FILE__",
+            noBuild: options.noBuild ?? false,
+        };
+    }
 
-  apply(compiler: Compiler): void {
-    const { wasmDir, jsEntry, noBuild } = this.options;
-    const pkgDir = join(wasmDir, "pkg");
+    apply(compiler: Compiler): void {
+        const { wasmDir, jsEntry, noBuild } = this.options;
+        const pkgDir = join(wasmDir, "pkg");
 
-    const buildWasm = () => {
-      if (noBuild) return;
-      compiler.getInfrastructureLogger(PLUGIN_NAME).info("Building WASM with wasm-pack...");
-      execSync("wasm-pack build --target web --no-opt", {
-        cwd: wasmDir,
-        stdio: "inherit",
-      });
-    };
+        const buildWasm = () => {
+            if (noBuild) return;
+            compiler
+                .getInfrastructureLogger(PLUGIN_NAME)
+                .info("Building WASM with wasm-pack...");
+            execSync("wasm-pack build --target web --no-opt", {
+                cwd: wasmDir,
+                stdio: "inherit",
+            });
+        };
 
-    compiler.hooks.beforeRun.tapPromise(PLUGIN_NAME, async () => {
-      buildWasm();
-    });
+        compiler.hooks.beforeRun.tapPromise(PLUGIN_NAME, async () => {
+            buildWasm();
+        });
 
-    compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, async () => {
-      buildWasm();
-    });
+        compiler.hooks.watchRun.tapPromise(PLUGIN_NAME, async () => {
+            buildWasm();
+        });
 
-    compiler.hooks.emit.tapPromise(PLUGIN_NAME, async (compilation) => {
-      const logger = compilation.getLogger(PLUGIN_NAME);
+        compiler.hooks.emit.tapPromise(PLUGIN_NAME, async (compilation) => {
+            const logger = compilation.getLogger(PLUGIN_NAME);
 
-      const files = await readdir(pkgDir);
-      const wasmAssets = files.filter(
-        (f) => f.endsWith(".js") || f.endsWith(".wasm") || f.endsWith(".d.ts"),
-      );
+            const files = await readdir(pkgDir);
+            const wasmAssets = files.filter(
+                (f) =>
+                    f.endsWith(".js") ||
+                    f.endsWith(".wasm") ||
+                    f.endsWith(".d.ts"),
+            );
 
-      for (const file of wasmAssets) {
-        const src = join(pkgDir, file);
-        const content = readFileSync(src);
-        const source = new compiler.webpack.sources.RawSource(content);
-        compilation.emitAsset(file, source);
-        logger.info(`Copied WASM asset: ${file}`);
-      }
+            for (const file of wasmAssets) {
+                const src = join(pkgDir, file);
+                const content = readFileSync(src);
+                const source = new compiler.webpack.sources.RawSource(content);
+                compilation.emitAsset(file, source);
+                logger.info(`Copied WASM asset: ${file}`);
+            }
 
-      let html = TEMPLATE_HTML.replace("__JS_FILE__", jsEntry);
+            const html = TEMPLATE_HTML.replace("__JS_FILE__", jsEntry);
 
-      compilation.emitAsset(
-        "index.html",
-        new compiler.webpack.sources.RawSource(html),
-      );
-      logger.info("Generated index.html");
-    });
-  }
+            compilation.emitAsset(
+                "index.html",
+                new compiler.webpack.sources.RawSource(html),
+            );
+            logger.info("Generated index.html");
+        });
+    }
 }
