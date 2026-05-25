@@ -13,7 +13,7 @@ const creators: Record<string, () => TurNodeHandle> = {
     tur_paragraph: () => __tur.createParagraph(ctx),
     tur_pointer_interact: () => __tur.createPointerInteract(ctx),
     tur_focusable: () => __tur.createFocusable(ctx),
-    tur_editable_text: () => __tur.createEditableText(ctx, null!),
+    tur_editable_text: () => __tur.createEditableText(ctx, null as never),
     tur_image: () => __tur.createImage(ctx),
 };
 

@@ -35,7 +35,7 @@ async function createServer(): Promise<https.Server> {
 
     return new Promise((resolve, reject) => {
         const server = https.createServer({ cert, key }, (req, res) => {
-            const urlPath = req.url === "/" ? "/index.html" : req.url!;
+            const urlPath = req.url === "/" ? "/index.html" : (req.url as string);
             const filePath = path.join(DIST_DIR, urlPath);
 
             if (!filePath.startsWith(DIST_DIR)) {
