@@ -26,11 +26,11 @@ use crate::core::bridge::element_bridge::{
     tur_append_child, tur_create_container, tur_create_editable_text,
     tur_create_flex, tur_create_flex_item, tur_create_focusable, tur_create_image,
     tur_create_image_resource, tur_create_pointer_interact, tur_create_positioned,
-    tur_create_root, tur_create_stack, tur_create_paragraph, tur_create_text_controller,
+    tur_create_root, tur_create_stack, tur_create_paragraph,
+    tur_create_text_editing_controller,
     tur_get_char_index_at_position, tur_get_first_child, tur_get_next_sibling, tur_get_parent,
     tur_get_text_cursor_rect, tur_get_text_selection_rects, tur_insert_before, tur_remove_child,
-    tur_request_focus, tur_set_attribute, tur_text_controller_clear, tur_text_controller_set_spans,
-    tur_text_controller_text,
+    tur_request_focus, tur_set_attribute,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -78,11 +78,15 @@ pub fn init_bridge(
     let proto = context.intrinsics().constructors().object().prototype();
     let tur_obj = JsObject::from_proto_and_data(proto, ());
 
+    context
+        .register_global_class::<crate::core::text::TextEditingController>()
+        .expect("failed to register TextEditingController class");
+
     let fns: [(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 27] = [
+    ); 24] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
@@ -95,10 +99,7 @@ pub fn init_bridge(
         ("createImage", 1, tur_create_image),
         ("createImageResource", 2, tur_create_image_resource),
         ("createRoot", 1, tur_create_root),
-        ("createTextController", 1, tur_create_text_controller),
-        ("textControllerSetSpans", 3, tur_text_controller_set_spans),
-        ("textControllerText", 2, tur_text_controller_text),
-        ("textControllerClear", 2, tur_text_controller_clear),
+        ("createTextEditingController", 2, tur_create_text_editing_controller),
         ("setAttribute", 4, tur_set_attribute),
         ("appendChild", 3, tur_append_child),
         ("removeChild", 3, tur_remove_child),

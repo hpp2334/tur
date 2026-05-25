@@ -1,9 +1,9 @@
 export { renderRoot } from "./renderer";
 export type { TurInstance } from "./renderer";
-export { InputController } from "./input-controller";
-export type { InputControllerOptions } from "./input-controller";
+export type { TextEditingController, TextEditingControllerOptions } from "./tur";
+export { createTextEditingController } from "./text-controller";
 export { createImageResource } from "./image";
-export type { TurNodeHandle, TurKeyEvent, ResourceHandle, TextControllerHandle } from "./tur";
+export type { TurNodeHandle, TurKeyEvent, ResourceHandle } from "./tur";
 export type { TurElement } from "./types";
 export { Color, LinearGradient } from "./color";
 export type { GradientStop, LinearGradientOptions } from "./color";

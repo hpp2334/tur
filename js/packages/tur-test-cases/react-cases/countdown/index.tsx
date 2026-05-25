@@ -6,10 +6,10 @@ import {
   Text,
   Container,
   Input,
-  InputController,
   PointerInteract,
   MainAxisAlignment,
   CrossAxisAlignment,
+  createTextEditingController,
 } from "@tur/react";
 
 const DEFAULT_TIME = 60;
@@ -21,7 +21,7 @@ function Countdown() {
   const [editText, setEditText] = useState("");
   const initialRef = useRef(DEFAULT_TIME);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const controllerRef = useRef<InputController | null>(null);
+  const controllerRef = useRef<any>(null);
 
   const start = () => {
     if (running) return;
@@ -58,7 +58,7 @@ function Countdown() {
   const openEdit = () => {
     pause();
     setEditText(String(initialRef.current));
-    const ctrl = new InputController({
+    const ctrl = createTextEditingController({
       onInput: (text: string) => {
         setEditText(text);
       },

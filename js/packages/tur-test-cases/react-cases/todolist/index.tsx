@@ -1,4 +1,5 @@
 import { renderRoot } from "@tur/react-renderer";
+import type { TurKeyEvent } from '@tur/react';
 import {
   Column,
   Row,
@@ -8,8 +9,8 @@ import {
   CrossAxisAlignment,
   MainAxisAlignment,
   Input,
-  InputController,
   PointerInteract,
+  createTextEditingController,
 } from "@tur/react";
 import {
   todosAtom,
@@ -56,8 +57,8 @@ function TodoList() {
   const selectedTodoId = useAtomValue(selectedTodoIdAtom);
   const setSelectedTodoId = useSetAtom(selectedTodoIdAtom);
 
-  const controller = new InputController({
-    onKeyDown: (e) => {
+  const controller = createTextEditingController({
+    onKeyDown: (e: TurKeyEvent) => {
       if (e.key === "Enter") {
         controller.clear();
       }

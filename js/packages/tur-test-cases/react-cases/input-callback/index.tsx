@@ -1,5 +1,5 @@
 import { renderRoot } from "@tur/react-renderer";
-import { Input, InputController } from "@tur/react";
+import { Input, createTextEditingController } from "@tur/react";
 
 declare global {
   var __inputCallbackLog: string[];
@@ -7,12 +7,12 @@ declare global {
 
 globalThis.__inputCallbackLog = [];
 
-const controller = new InputController({
-  onInput: (text) => {
+const controller = createTextEditingController({
+  onInput: (text: string, enter: boolean) => {
     globalThis.__inputCallbackLog.push("input:" + text);
-  },
-  onEnter: () => {
-    globalThis.__inputCallbackLog.push("enter");
+    if (enter) {
+      globalThis.__inputCallbackLog.push("enter");
+    }
   },
 });
 
