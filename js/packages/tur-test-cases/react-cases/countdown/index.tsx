@@ -128,7 +128,9 @@ function Countdown() {
                             <Text content="Set time:" />
                             <Container queryKey={["edit-input"]}>
                                 <Input
-                                    controller={controllerRef.current as TextEditingController}
+                                    controller={
+                                        controllerRef.current as TextEditingController
+                                    }
                                     placeholder="Positive integer"
                                     fontSize={14}
                                     width={200}

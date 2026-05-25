@@ -320,7 +320,6 @@ export function Image(props: ImageProps) {
     );
 }
 
-
 export interface SvgProps {
     resource: ResourceHandle;
     width?: number;

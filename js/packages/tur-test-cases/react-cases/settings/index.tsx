@@ -1,4 +1,3 @@
-import { Fragment } from "react";
 import {
     Column,
     Container,
@@ -9,6 +8,7 @@ import {
     Text,
 } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
+import { Fragment } from "react";
 
 interface SettingItem {
     readonly label: string;
