@@ -1,36 +1,193 @@
+import { execSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
-import { TurRspackPlugin } from "@tur/rspack-plugin";
-import selfsigned from "selfsigned";
+import type { Compiler, RspackPluginInstance } from "@rspack/core";
+import * as rspack from "@rspack/core";
 
-const { cert, private: key } = selfsigned.generate(
-    [{ name: "commonName", value: "local.hpp2334.com" }],
-    { days: 365, algorithm: "sha256" },
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = resolve(__dirname, "../../..");
+const wasmDir = join(workspaceRoot, "libs", "tur-wasm");
+const wasmPkgDir = join(wasmDir, "pkg");
+const testCasesDir = join(__dirname, "../tur-test-cases");
+
+function findCaseNames(): string[] {
+    const casesRoot = join(testCasesDir, "react-cases");
+    return readdirSync(casesRoot, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => d.name);
+}
+
+class WasmBuildPlugin implements RspackPluginInstance {
+    apply(compiler: Compiler): void {
+        const buildWasm = () => {
+            compiler
+                .getInfrastructureLogger("WasmBuildPlugin")
+                .info("Building WASM with wasm-pack...");
+            execSync("wasm-pack build --target web --no-opt", {
+                cwd: wasmDir,
+                stdio: "inherit",
+            });
+        };
+
+        compiler.hooks.beforeRun.tapPromise("WasmBuildPlugin", async () => {
+            buildWasm();
+        });
+
+        compiler.hooks.watchRun.tapPromise("WasmBuildPlugin", async () => {
+            buildWasm();
+        });
+
+        compiler.hooks.emit.tapPromise("WasmBuildPlugin", async (compilation) => {
+            const logger = compilation.getLogger("WasmBuildPlugin");
+            const files = readdirSync(wasmPkgDir);
+            const wasmAssets = files.filter(
+                (f) =>
+                    f.endsWith(".js") ||
+                    f.endsWith(".wasm") ||
+                    f.endsWith(".d.ts"),
+            );
+
+            for (const file of wasmAssets) {
+                const src = join(wasmPkgDir, file);
+                const content = readFileSync(src);
+                const source = new compiler.webpack.sources.RawSource(content);
+                compilation.emitAsset(file, source);
+                logger.info(`Copied WASM asset: ${file}`);
+            }
+        });
+    }
+}
+
+class TestCasesPlugin implements RspackPluginInstance {
+    apply(compiler: Compiler): void {
+        compiler.hooks.beforeRun.tapPromise("TestCasesPlugin", async () => {
+            compiler
+                .getInfrastructureLogger("TestCasesPlugin")
+                .info("Building test cases...");
+            execSync("npx rspack build", {
+                cwd: testCasesDir,
+                stdio: "inherit",
+            });
+        });
+
+        compiler.hooks.watchRun.tapPromise("TestCasesPlugin", async () => {
+            compiler
+                .getInfrastructureLogger("TestCasesPlugin")
+                .info("Building test cases...");
+            execSync("npx rspack build", {
+                cwd: testCasesDir,
+                stdio: "inherit",
+            });
+        });
+
+        compiler.hooks.emit.tapPromise(
+            "TestCasesPlugin",
+            async (compilation) => {
+                const logger = compilation.getLogger("TestCasesPlugin");
+                const distDir = join(testCasesDir, "dist");
+                const casesRoot = join(testCasesDir, "react-cases");
+                const caseNames = findCaseNames();
+
+                for (const name of caseNames) {
+                    const jsFile = `${name}.js`;
+                    const src = join(distDir, jsFile);
+                    try {
+                        const content = readFileSync(src);
+                        const source = new compiler.webpack.sources.RawSource(
+                            content,
+                        );
+                        compilation.emitAsset(
+                            `cases/${jsFile}`,
+                            source,
+                        );
+                    } catch {
+                        logger.warn(`Test case not built: ${jsFile}`);
+                    }
+
+                    const sourceFile = join(casesRoot, name, "index.tsx");
+                    try {
+                        const content = readFileSync(sourceFile, "utf-8");
+                        const source = new compiler.webpack.sources.RawSource(
+                            content,
+                        );
+                        compilation.emitAsset(
+                            `sources/${name}.tsx`,
+                            source,
+                        );
+                    } catch {
+                        logger.warn(`Test case source not found: ${name}/index.tsx`);
+                    }
+                }
+
+                logger.info(
+                    `Copied ${caseNames.length} test case bundles + sources`,
+                );
+            },
+        );
+    }
+}
+
+class WorkspaceDepsPlugin implements RspackPluginInstance {
+    apply(compiler: Compiler): void {
+        compiler.hooks.emit.tapPromise(
+            "WorkspaceDepsPlugin",
+            async (compilation) => {
+                const logger = compilation.getLogger("WorkspaceDepsPlugin");
+                const pkgsRoot = join(__dirname, "..");
+                const workspacePkgs = [
+                    { name: "@tur/react", dir: "tur-react" },
+                    { name: "@tur/react-renderer", dir: "tur-react-renderer" },
+                ];
+
+                for (const pkg of workspacePkgs) {
+                    const distFile = join(pkgsRoot, pkg.dir, "dist", "index.js");
+                    if (!existsSync(distFile)) {
+                        logger.warn(`${pkg.name}: dist/index.js not found, run build first`);
+                        continue;
+                    }
+                    const content = readFileSync(distFile, "utf-8");
+                    const source = new compiler.webpack.sources.RawSource(content);
+                    compilation.emitAsset(
+                        `deps/${pkg.dir}.js`,
+                        source,
+                    );
+                    logger.info(`Copied workspace dep: ${pkg.name}`);
+                }
+            },
+        );
+    }
+}
 
 export default defineConfig({
+    experiments: {
+        css: true,
+    },
     optimization: {
         minimize: false,
     },
     devServer: {
-        hot: false,
+        hot: true,
         liveReload: false,
-        client: false,
+        client: {
+            overlay: {
+                errors: true,
+                warnings: false,
+            },
+        },
         host: "0.0.0.0",
         allowedHosts: "all",
-        server: {
-            type: "https",
-            options: { cert, key },
+        headers: {
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Embedder-Policy": "require-corp",
         },
     },
     entry: {
-        bundle: "./src/index.tsx",
+        main: "./src/index.tsx",
     },
     output: {
-        filename: "bundle.bin",
         publicPath: "",
-        library: {
-            type: "iife",
-        },
         clean: true,
     },
     module: {
@@ -49,11 +206,16 @@ export default defineConfig({
                             transform: {
                                 react: {
                                     runtime: "automatic",
+                                    refresh: true,
                                 },
                             },
                         },
                     },
                 },
+            },
+            {
+                test: /\.css$/,
+                type: "css",
             },
         ],
     },
@@ -61,8 +223,14 @@ export default defineConfig({
         extensions: [".tsx", ".ts", ".js"],
     },
     plugins: [
-        new TurRspackPlugin({
-            jsEntry: "bundle.bin",
+        new rspack.HtmlRspackPlugin({
+            template: "./index.html",
+        }),
+        new WasmBuildPlugin(),
+        new TestCasesPlugin(),
+        new WorkspaceDepsPlugin(),
+        new rspack.CopyRspackPlugin({
+            patterns: [{ from: "public" }],
         }),
     ],
 });

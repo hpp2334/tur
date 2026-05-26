@@ -8,14 +8,26 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@codemirror/autocomplete": "^6.18.0",
+        "@codemirror/commands": "^6.8.0",
+        "@codemirror/lang-javascript": "^6.2.4",
+        "@codemirror/language": "^6.11.0",
+        "@codemirror/state": "^6.5.0",
+        "@codemirror/theme-one-dark": "^6.1.2",
+        "@codemirror/view": "^6.36.0",
+        "@rspack/browser": "^2.0.0",
         "@tur/react": "workspace:*",
         "@tur/react-renderer": "workspace:*",
-        "@tur/rspack-plugin": "workspace:*",
-        "jotai": "^2.20.0",
-        "react": "^19.1.0"
+        "@tur/test-cases": "workspace:*",
+        "codemirror": "^6.0.1",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0"
     },
     "devDependencies": {
+        "@rspack/core": "^1.2.0",
+        "@rspack/plugin-react-refresh": "^1.4.0",
         "@types/react": "^19.2.14",
-        "selfsigned": "^5.5.0"
+        "@types/react-dom": "^19.2.0",
+        "react-refresh": "^0.17.0"
     }
 }

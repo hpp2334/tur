@@ -46,6 +46,14 @@ impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
 #[wasm_bindgen]
 impl TurWasmApp {
     pub fn create() -> js_sys::Promise {
+        Self::create_internal(None)
+    }
+
+    pub fn create_in(container_id: String) -> js_sys::Promise {
+        Self::create_internal(Some(container_id))
+    }
+
+    fn create_internal(container_id: Option<String>) -> js_sys::Promise {
         let state: Rc<RefCell<Option<WasmState>>> = Rc::new(RefCell::new(None));
         let state_clone = state.clone();
 
@@ -59,28 +67,52 @@ impl TurWasmApp {
                 .dyn_into::<web_sys::HtmlCanvasElement>()
                 .err_to_jsval()?;
 
-            let body = document.body().ok_or_else(|| JsValue::from_str("no body"))?;
-            body.append_child(&canvas).err_to_jsval()?;
+            let container: web_sys::HtmlElement = if let Some(ref id) = container_id {
+                document
+                    .get_element_by_id(id)
+                    .ok_or_else(|| JsValue::from_str(&format!("element #{id} not found")))?
+                    .dyn_into()
+                    .err_to_jsval()?
+            } else {
+                document.body().ok_or_else(|| JsValue::from_str("no body"))?
+            };
 
-            canvas
-                .style()
-                .set_property("width", "100vw")
-                .err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("height", "100vh")
-                .err_to_jsval()?;
-            canvas
-                .style()
-                .set_property("display", "block")
-                .err_to_jsval()?;
+            container.append_child(&canvas).err_to_jsval()?;
 
-            body.style()
-                .set_property("margin", "0")
-                .err_to_jsval()?;
-            body.style()
-                .set_property("overflow", "hidden")
-                .err_to_jsval()?;
+            if container_id.is_some() {
+                canvas
+                    .style()
+                    .set_property("width", "100%")
+                    .err_to_jsval()?;
+                canvas
+                    .style()
+                    .set_property("height", "100%")
+                    .err_to_jsval()?;
+                canvas
+                    .style()
+                    .set_property("display", "block")
+                    .err_to_jsval()?;
+            } else {
+                canvas
+                    .style()
+                    .set_property("width", "100vw")
+                    .err_to_jsval()?;
+                canvas
+                    .style()
+                    .set_property("height", "100vh")
+                    .err_to_jsval()?;
+                canvas
+                    .style()
+                    .set_property("display", "block")
+                    .err_to_jsval()?;
+                let body = document.body().ok_or_else(|| JsValue::from_str("no body"))?;
+                body.style()
+                    .set_property("margin", "0")
+                    .err_to_jsval()?;
+                body.style()
+                    .set_property("overflow", "hidden")
+                    .err_to_jsval()?;
+            }
 
             let textarea = document
                 .create_element("textarea")
@@ -132,19 +164,25 @@ impl TurWasmApp {
             textarea
                 .set_attribute("spellcheck", "false")
                 .err_to_jsval()?;
-            body.append_child(&textarea).err_to_jsval()?;
+            document.body().ok_or_else(|| JsValue::from_str("no body"))?.append_child(&textarea).err_to_jsval()?;
 
+            let (logical_width, logical_height) = if container_id.is_some() {
+                let rect = container.get_bounding_client_rect();
+                (rect.width() as u32, rect.height() as u32)
+            } else {
+                let w = window
+                    .inner_width()
+                    .err_to_jsval()?
+                    .as_f64()
+                    .unwrap_or(800.0) as u32;
+                let h = window
+                    .inner_height()
+                    .err_to_jsval()?
+                    .as_f64()
+                    .unwrap_or(600.0) as u32;
+                (w, h)
+            };
             let dpr = window.device_pixel_ratio();
-            let logical_width = window
-                .inner_width()
-                .err_to_jsval()?
-                .as_f64()
-                .unwrap_or(800.0) as u32;
-            let logical_height = window
-                .inner_height()
-                .err_to_jsval()?
-                .as_f64()
-                .unwrap_or(600.0) as u32;
 
             let physical_width = (logical_width as f64 * dpr) as u32;
             let physical_height = (logical_height as f64 * dpr) as u32;
@@ -208,13 +246,25 @@ impl TurWasmApp {
             let _ = app.spawn_loop_once(std::time::Duration::ZERO);
 
             let resize_state = state_clone.clone();
+            let resize_container_id = container_id.clone();
             let resize_closure = Closure::<dyn Fn()>::new(move || {
                 let guard = resize_state.borrow();
                 if let Some(s) = guard.as_ref() {
                     let window = web_sys::window().unwrap();
                     let dpr = window.device_pixel_ratio();
-                    let logical_width = window.inner_width().unwrap().as_f64().unwrap_or(800.0) as u32;
-                    let logical_height = window.inner_height().unwrap().as_f64().unwrap_or(600.0) as u32;
+                    let (logical_width, logical_height) = if resize_container_id.is_some() {
+                        let document = window.document().unwrap();
+                        if let Some(el) = resize_container_id.as_ref().and_then(|id| document.get_element_by_id(id)) {
+                            let rect = el.get_bounding_client_rect();
+                            (rect.width() as u32, rect.height() as u32)
+                        } else {
+                            return;
+                        }
+                    } else {
+                        let w = window.inner_width().unwrap().as_f64().unwrap_or(800.0) as u32;
+                        let h = window.inner_height().unwrap().as_f64().unwrap_or(600.0) as u32;
+                        (w, h)
+                    };
                     let physical_width = (logical_width as f64 * dpr) as u32;
                     let physical_height = (logical_height as f64 * dpr) as u32;
                     s._canvas.set_width(physical_width);

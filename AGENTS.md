@@ -1,18 +1,27 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello, and boa_engine. Renders SolidJS applications via a custom universal renderer (`@tur/solidjs-renderer`).
+A JavaScript rendering engine built with winit, vello, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  js/packages/tur-solidjs-demo                       │
-│  (SolidJS app, bundled by rspack → defines           │
-│   globalThis.startApp())                             │
+│  js/packages/tur-react-demo (playground web app)     │
+│  React-DOM web app with:                             │
+│  - Case selector (sidebar)                           │
+│  - Code editor (CodeMirror 6)                        │
+│  - Tur viewer (embedded WASM canvas)                 │
+│  - Browser-side bundling via @rspack/browser          │
 ├─────────────────────────────────────────────────────┤
-│  js/packages/tur-solidjs-renderer                    │
-│  (solid-js/universal renderer → calls                │
-│   globalThis.__tur.*)                                │
+│  js/packages/tur-test-cases                          │
+│  ~60 React test cases in react-cases/                 │
+│  Each case calls renderRoot(Component)                │
+├─────────────────────────────────────────────────────┤
+│  js/packages/tur-react                                │
+│  React component wrappers (Column, Row, Container…)  │
+├─────────────────────────────────────────────────────┤
+│  js/packages/tur-react-renderer                       │
+│  Custom React reconciler → globalThis.__tur.*         │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -33,13 +42,16 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-wasm                                        │
-│  (wasm binary via wasm-pack: winit + boajs + vello)  │
+│  (wasm binary via wasm-pack: boajs + vello)           │
+│  TurWasmApp::create() — full viewport                 │
+│  TurWasmApp::create_in(id) — embed in container       │
+│  clear_and_run_js() — clear tree + evaluate new JS    │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`, `Input`, `PointerInteract`, `Focusable`, `Paragraph`, `Image`, `Svg`
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -78,12 +90,14 @@ libs/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
   tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
-  tur-wasm/                  # wasm binary (winit + vello + tur-engine)
+  tur-wasm/                  # wasm binary (boa_engine + vello + tur-engine)
 js/
   packages/
-    tur-solidjs-renderer/    # SolidJS universal renderer
-    tur-solidjs-demo/        # Demo app (todolist example)
-    tur-rspack-plugin/      # Rspack plugin for WASM build + HTML generation
+    tur-react/               # React component wrappers
+    tur-react-renderer/      # Custom React reconciler
+    tur-react-demo/          # Playground web app (React-DOM + CodeMirror + tur viewer)
+    tur-test-cases/          # Test cases (react-cases/ with ~60 cases)
+    playground-for-agent/    # Playwright integration tests
 ```
 
 ## Commands
@@ -109,17 +123,18 @@ cd libs/tur-wasm && wasm-pack build --target web
 cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
 ```
 
-### tur-rspack-plugin (WASM + HTML)
+### tur-react-demo (playground)
 
-The `TurRspackPlugin` is used in the demo's rspack config. Building the demo
-automatically runs `wasm-pack` and copies WASM artifacts into the output:
+The playground is a React-DOM web app. Building it automatically runs `wasm-pack`, builds test cases, copies WASM assets + compiled cases + workspace deps into the output:
 
 ```sh
-# Build JS bundle (plugin handles wasm-pack + HTML generation)
-cd js && pnpm --filter @tur/solidjs-demo build
+cd js && pnpm build
+cd js/packages/tur-react-demo && rspack build
 # Or use the rspack dev server
-cd js/packages/tur-solidjs-demo && rspack dev
+cd js/packages/tur-react-demo && rspack dev
 ```
+
+Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer).
 
 ### JS (js/ directory)
 
@@ -132,8 +147,9 @@ pnpm lint             # biome lint across all packages
 ### Per-package JS builds
 
 ```sh
-cd js/packages/tur-solidjs-renderer && pnpm build
-cd js/packages/tur-solidjs-demo && pnpm build
+cd js/packages/tur-react-renderer && pnpm build
+cd js/packages/tur-react && pnpm build
+cd js/packages/tur-test-cases && pnpm build
 ```
 
 ## Conventions
