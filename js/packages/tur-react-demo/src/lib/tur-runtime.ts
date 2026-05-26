@@ -8,12 +8,14 @@ export async function loadCase(caseName: string): Promise<void> {
     await destroyAndRecreate();
     const resp = await fetch(`/cases/${caseName}.js`);
     const source = await resp.text();
-    (turApp!.load_and_run_js as (s: string) => void)(source);
+    const fn = turApp?.load_and_run_js as (s: string) => void;
+    fn(source);
 }
 
 export async function runSource(jsSource: string): Promise<void> {
     await destroyAndRecreate();
-    (turApp!.load_and_run_js as (s: string) => void)(jsSource);
+    const fn = turApp?.load_and_run_js as (s: string) => void;
+    fn(jsSource);
 }
 
 async function createApp(containerId: string): Promise<Record<string, unknown>> {
