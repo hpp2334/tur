@@ -90,7 +90,10 @@ export function App() {
 
     return (
         <div className="app">
-            <CaseSelector selectedCase={selectedCase} onSelect={handleSelectCase} />
+            <CaseSelector
+                selectedCase={selectedCase}
+                onSelect={handleSelectCase}
+            />
             <div className="main-area">
                 <div className="editor-panel">
                     <div className="editor-header">
@@ -100,13 +103,19 @@ export function App() {
                                 : "select a case"}
                         </span>
                         {loading && (
-                            <span className="building-indicator">loading...</span>
+                            <span className="building-indicator">
+                                loading...
+                            </span>
                         )}
                         {building && (
-                            <span className="building-indicator">building...</span>
+                            <span className="building-indicator">
+                                building...
+                            </span>
                         )}
                         {!workerReady && (
-                            <span className="building-indicator">initializing compiler...</span>
+                            <span className="building-indicator">
+                                initializing compiler...
+                            </span>
                         )}
                         {buildError && (
                             <span className="build-error" title={buildError}>
@@ -115,10 +124,7 @@ export function App() {
                         )}
                     </div>
                     {selectedCase ? (
-                        <CodeEditor
-                            source={source}
-                            onSave={handleSave}
-                        />
+                        <CodeEditor source={source} onSave={handleSave} />
                     ) : (
                         <div className="editor-placeholder">
                             select a test case from the sidebar

@@ -18,7 +18,9 @@ export async function runSource(jsSource: string): Promise<void> {
     fn(jsSource);
 }
 
-async function createApp(containerId: string): Promise<Record<string, unknown>> {
+async function createApp(
+    containerId: string,
+): Promise<Record<string, unknown>> {
     const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
         | ((id: string) => Promise<unknown>)
         | undefined;

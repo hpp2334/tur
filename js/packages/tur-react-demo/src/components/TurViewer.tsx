@@ -19,7 +19,8 @@ export function TurViewer({ caseName, compiledSource }: TurViewerProps) {
                 if (!cancelled) setReady(true);
             })
             .catch((e) => {
-                if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+                if (!cancelled)
+                    setError(e instanceof Error ? e.message : String(e));
             });
         return () => {
             cancelled = true;

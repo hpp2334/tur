@@ -14,13 +14,16 @@
     --danger: #ef4444;
 }
 
-html, body, #root {
+html,
+body,
+#root {
     width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg-main);
     color: var(--text-primary);
 }

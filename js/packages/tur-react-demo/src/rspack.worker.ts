@@ -1,4 +1,8 @@
-import { rspack, builtinMemFs, BrowserHttpImportEsmPlugin } from "@rspack/browser";
+import {
+    BrowserHttpImportEsmPlugin,
+    builtinMemFs,
+    rspack,
+} from "@rspack/browser";
 
 interface InitMessage {
     type: "init";

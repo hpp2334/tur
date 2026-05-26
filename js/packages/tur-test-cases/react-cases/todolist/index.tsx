@@ -16,7 +16,6 @@ import {
 } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
 import { Sidebar } from "./Sidebar";
-import { Colors } from "./theme";
 import {
     addTodoAtom,
     descControllerAtom,
@@ -33,6 +32,7 @@ import {
     useAtomValue,
     useSetAtom,
 } from "./store";
+import { Colors } from "./theme";
 
 function Checkbox(props: { checked: boolean }) {
     if (props.checked) {

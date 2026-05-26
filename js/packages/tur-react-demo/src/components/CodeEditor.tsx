@@ -1,11 +1,20 @@
-import { useEffect, useRef } from "react";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
-import { javascript } from "@codemirror/lang-javascript";
-import { oneDark } from "@codemirror/theme-one-dark";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from "@codemirror/language";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { javascript } from "@codemirror/lang-javascript";
+import {
+    bracketMatching,
+    defaultHighlightStyle,
+    syntaxHighlighting,
+} from "@codemirror/language";
+import { EditorState } from "@codemirror/state";
+import { oneDark } from "@codemirror/theme-one-dark";
+import {
+    EditorView,
+    highlightActiveLine,
+    keymap,
+    lineNumbers,
+} from "@codemirror/view";
+import { useEffect, useRef } from "react";
 
 interface CodeEditorProps {
     source: string;
