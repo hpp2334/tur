@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
 import type { Compiler, RspackPluginInstance } from "@rspack/core";
@@ -39,24 +39,29 @@ class WasmBuildPlugin implements RspackPluginInstance {
             buildWasm();
         });
 
-        compiler.hooks.emit.tapPromise("WasmBuildPlugin", async (compilation) => {
-            const logger = compilation.getLogger("WasmBuildPlugin");
-            const files = readdirSync(wasmPkgDir);
-            const wasmAssets = files.filter(
-                (f) =>
-                    f.endsWith(".js") ||
-                    f.endsWith(".wasm") ||
-                    f.endsWith(".d.ts"),
-            );
+        compiler.hooks.emit.tapPromise(
+            "WasmBuildPlugin",
+            async (compilation) => {
+                const logger = compilation.getLogger("WasmBuildPlugin");
+                const files = readdirSync(wasmPkgDir);
+                const wasmAssets = files.filter(
+                    (f) =>
+                        f.endsWith(".js") ||
+                        f.endsWith(".wasm") ||
+                        f.endsWith(".d.ts"),
+                );
 
-            for (const file of wasmAssets) {
-                const src = join(wasmPkgDir, file);
-                const content = readFileSync(src);
-                const source = new compiler.webpack.sources.RawSource(content);
-                compilation.emitAsset(file, source);
-                logger.info(`Copied WASM asset: ${file}`);
-            }
-        });
+                for (const file of wasmAssets) {
+                    const src = join(wasmPkgDir, file);
+                    const content = readFileSync(src);
+                    const source = new compiler.webpack.sources.RawSource(
+                        content,
+                    );
+                    compilation.emitAsset(file, source);
+                    logger.info(`Copied WASM asset: ${file}`);
+                }
+            },
+        );
     }
 }
 
@@ -98,10 +103,7 @@ class TestCasesPlugin implements RspackPluginInstance {
                         const source = new compiler.webpack.sources.RawSource(
                             content,
                         );
-                        compilation.emitAsset(
-                            `cases/${jsFile}`,
-                            source,
-                        );
+                        compilation.emitAsset(`cases/${jsFile}`, source);
                     } catch {
                         logger.warn(`Test case not built: ${jsFile}`);
                     }
@@ -112,12 +114,11 @@ class TestCasesPlugin implements RspackPluginInstance {
                         const source = new compiler.webpack.sources.RawSource(
                             content,
                         );
-                        compilation.emitAsset(
-                            `sources/${name}.tsx`,
-                            source,
-                        );
+                        compilation.emitAsset(`sources/${name}.tsx`, source);
                     } catch {
-                        logger.warn(`Test case source not found: ${name}/index.tsx`);
+                        logger.warn(
+                            `Test case source not found: ${name}/index.tsx`,
+                        );
                     }
                 }
 
@@ -142,17 +143,23 @@ class WorkspaceDepsPlugin implements RspackPluginInstance {
                 ];
 
                 for (const pkg of workspacePkgs) {
-                    const distFile = join(pkgsRoot, pkg.dir, "dist", "index.js");
+                    const distFile = join(
+                        pkgsRoot,
+                        pkg.dir,
+                        "dist",
+                        "index.js",
+                    );
                     if (!existsSync(distFile)) {
-                        logger.warn(`${pkg.name}: dist/index.js not found, run build first`);
+                        logger.warn(
+                            `${pkg.name}: dist/index.js not found, run build first`,
+                        );
                         continue;
                     }
                     const content = readFileSync(distFile, "utf-8");
-                    const source = new compiler.webpack.sources.RawSource(content);
-                    compilation.emitAsset(
-                        `deps/${pkg.dir}.js`,
-                        source,
+                    const source = new compiler.webpack.sources.RawSource(
+                        content,
                     );
+                    compilation.emitAsset(`deps/${pkg.dir}.js`, source);
                     logger.info(`Copied workspace dep: ${pkg.name}`);
                 }
             },

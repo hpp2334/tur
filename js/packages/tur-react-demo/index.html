@@ -10,6 +10,7 @@
     </style>
     <script type="module">
         import init, { TurWasmApp } from "./tur_wasm.js";
+
         globalThis.initTurWasm = async (containerId) => {
             await init();
             return TurWasmApp.create_in(containerId);
