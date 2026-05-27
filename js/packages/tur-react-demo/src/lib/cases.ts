@@ -24,7 +24,11 @@ for (const key of ctx.keys()) {
 }
 
 export const cases = casesMap;
-export const caseNames = Array.from(casesMap.keys()).sort();
+const WHITELIST = ["todolist"];
+
+export const caseNames = Array.from(casesMap.keys())
+    .filter((name) => WHITELIST.includes(name))
+    .sort();
 
 const sourceCache = new Map<string, string>();
 

@@ -438,6 +438,7 @@ async function main() {
         const context = await browser.newContext({
             ignoreHTTPSErrors: true,
             viewport: { width: 1600, height: 900 },
+            permissions: ["clipboard-read", "clipboard-write"],
         });
 
         const page = await context.newPage();
@@ -845,6 +846,294 @@ async function main() {
             );
             failed++;
         }
+
+        printConsole(logs);
+
+        // ========== COUNTER APP TEST ==========
+        // Test live editing: type a counter app in the code editor, compile, and interact
+        console.log("\n========== COUNTER APP TEST ==========");
+
+        const counterSource = `import { Column, Container, Expanded, PointerInteract, Row, SizedBox, Text, Color, MainAxisAlignment, CrossAxisAlignment } from "@tur/react";
+import { renderRoot } from "@tur/react-renderer";
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    <Expanded>
+      <Container color={Color.hex("#f8fafc")}>
+        <Column mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}>
+          <Container width={300} borderRadius={12} padding={24} color={Color.hex("#ffffff")}>
+            <Column crossAlignment={CrossAxisAlignment.Center}>
+              <Text content={"Count: " + count} queryKey={["count"]} fontSize={36} color={Color.hex("#1e293b")} />
+              <SizedBox height={20} />
+              <Row mainAlignment={MainAxisAlignment.Center}>
+                <PointerInteract
+                  onClick={() => setCount((n) => n + 1)}
+                  child={<Container width={100} height={44} borderRadius={8} color={Color.hex("#6366f1")}><Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}><Text content="+1" fontSize={18} color={Color.hex("#ffffff")} /></Row></Container>}
+                />
+                <SizedBox width={12} />
+                <PointerInteract
+                  onClick={() => setCount((n) => n - 1)}
+                  child={<Container width={100} height={44} borderRadius={8} color={Color.hex("#ef4444")}><Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}><Text content="-1" fontSize={18} color={Color.hex("#ffffff")} /></Row></Container>}
+                />
+              </Row>
+            </Column>
+          </Container>
+        </Column>
+      </Container>
+    </Expanded>
+  );
+}
+
+renderRoot(Counter);
+`;
+
+        // --- Step A: Select "todolist" case to open the editor ---
+        console.log("\n--- Step A: Select todolist case (opens editor) ---");
+        const editorCaseBtn = page.locator("button.case-item", {
+            hasText: /^todolist$/,
+        });
+        await editorCaseBtn.click();
+        await waitForRender(page, 500);
+
+        // Wait for the code editor to load with source
+        await page.waitForFunction(
+            () => {
+                const editor = document.querySelector(".cm-editor .cm-content");
+                return editor && editor.textContent && editor.textContent.length > 10;
+            },
+            { timeout: 5000 },
+        );
+
+        // --- Step B: Clear editor and paste the counter source ---
+        console.log("\n--- Step B: Paste counter app in editor ---");
+        const cmContent = page.locator(".cm-editor .cm-content");
+        await cmContent.click();
+        await page.keyboard.press("Meta+a");
+        await waitForRender(page, 100);
+
+        await page.evaluate(async (code) => {
+            await navigator.clipboard.writeText(code);
+        }, counterSource);
+        await waitForRender(page, 100);
+        await page.keyboard.press("Meta+v");
+        await waitForRender(page, 300);
+
+        const editorText = await page.evaluate(() => {
+            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
+            return Array.from(lines).map((l) => l.textContent).join("\n");
+        });
+        console.log(`  Editor has "Row": ${editorText.includes("Row")}, length: ${editorText.length}`);
+        if (!editorText.includes("Row")) {
+            console.log(`  Editor first 80 chars: "${editorText.substring(0, 80)}"`);
+        }
+
+        // --- Step C: Save (Cmd+S) to compile ---
+        console.log("\n--- Step C: Save (Cmd+S) to compile ---");
+        await page.keyboard.press("Meta+s");
+        await waitForRender(page, 500);
+
+        await page.waitForFunction(
+            () => {
+                const w = window as Record<string, unknown>;
+                if (!w.turDemo) return false;
+                try {
+                    const layout = (
+                        w.turDemo as { debugLayout: () => string }
+                    ).debugLayout();
+                    return typeof layout === "string" && layout.includes("Count:");
+                } catch {
+                    return false;
+                }
+            },
+            { timeout: 15000 },
+        );
+        await waitForRender(page, 500);
+
+        const buildErrorText = await page.evaluate(() => {
+            const errEl = document.querySelector(".build-error");
+            return errEl?.textContent ?? null;
+        });
+        if (buildErrorText) {
+            const buildErrorTitle = await page.evaluate(() => {
+                const errEl = document.querySelector(".build-error");
+                return errEl?.getAttribute("title") ?? "";
+            });
+            console.log(`  BUILD ERROR: ${buildErrorTitle}`);
+        } else {
+            console.log("  No build error badge");
+        }
+
+        await screenshot(page, "counter-initial");
+
+        elements = await getLayout(page);
+
+        console.log("  All elements:");
+        for (const el of elements) {
+            console.log(`    ${el.type} "${el.label}" at (${el.rect.x},${el.rect.y}) ${el.rect.w}x${el.rect.h}`);
+        }
+
+        const allTexts = findAll(
+            elements,
+            (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
+        );
+        console.log("  All text labels:", allTexts.map((e) => `"${e.label}"`).join(", "));
+
+        const counterErrors = logs.filter((e) => e.type === "error");
+        if (counterErrors.length > 0) {
+            console.log("  Browser errors:");
+            for (const err of counterErrors) {
+                console.log(`    ${err.text}`);
+            }
+        }
+
+        const countZero = findTextSpans(elements, "Count: 0");
+        if (countZero.length > 0) {
+            console.log('  PASS: "Count: 0" rendered');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 0" not found');
+            failed++;
+        }
+
+        // VERIFY: "+1" button exists
+        const plusOneTexts = findTextSpans(elements, "+1");
+        if (plusOneTexts.length > 0) {
+            console.log('  PASS: "+1" button text found');
+            passed++;
+        } else {
+            console.log('  FAIL: "+1" button text not found');
+            failed++;
+        }
+
+        // VERIFY: "-1" button exists
+        const minusOneTexts = findTextSpans(elements, "-1");
+        if (minusOneTexts.length > 0) {
+            console.log('  PASS: "-1" button text found');
+            passed++;
+        } else {
+            console.log('  FAIL: "-1" button text not found');
+            failed++;
+        }
+
+        // --- Step D: Click "+1" button ---
+        console.log("\n--- Step D: Click +1 ---");
+        elements = await getLayout(page);
+        const plusOneSpan = findTextSpans(elements, "+1");
+        let plusOneClickTarget: { x: number; y: number } | null = null;
+        if (plusOneSpan.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                plusOneSpan[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                plusOneClickTarget = center(btn.rect);
+            }
+        }
+        await assertClick(
+            page,
+            elements,
+            "+1 button",
+            plusOneClickTarget,
+            canvasOffset,
+        );
+        await screenshot(page, "counter-click-plus1");
+
+        // VERIFY: count is now 1
+        elements = await getLayout(page);
+        const countOne = findTextSpans(elements, "Count: 1");
+        if (countOne.length > 0) {
+            console.log('  PASS: "Count: 1" after clicking +1');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 1" not found after clicking +1');
+            const allTexts = findAll(
+                elements,
+                (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
+            );
+            console.log(
+                "  Texts:",
+                allTexts.map((e) => `"${e.label}"`).join(", "),
+            );
+            failed++;
+        }
+
+        // --- Step E: Click "+1" again ---
+        console.log("\n--- Step E: Click +1 again ---");
+        elements = await getLayout(page);
+        const plusOneSpan2 = findTextSpans(elements, "+1");
+        let plusOneClickTarget2: { x: number; y: number } | null = null;
+        if (plusOneSpan2.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                plusOneSpan2[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                plusOneClickTarget2 = center(btn.rect);
+            }
+        }
+        await assertClick(
+            page,
+            elements,
+            "+1 button (2nd)",
+            plusOneClickTarget2,
+            canvasOffset,
+        );
+        await screenshot(page, "counter-click-plus1-again");
+
+        // VERIFY: count is now 2
+        elements = await getLayout(page);
+        const countTwo = findTextSpans(elements, "Count: 2");
+        if (countTwo.length > 0) {
+            console.log('  PASS: "Count: 2" after clicking +1 twice');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 2" not found after clicking +1 twice');
+            failed++;
+        }
+
+        // --- Step F: Click "-1" button ---
+        console.log("\n--- Step F: Click -1 ---");
+        elements = await getLayout(page);
+        const minusOneSpan = findTextSpans(elements, "-1");
+        let minusOneClickTarget: { x: number; y: number } | null = null;
+        if (minusOneSpan.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                minusOneSpan[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                minusOneClickTarget = center(btn.rect);
+            }
+        }
+        if (minusOneClickTarget) {
+            const px = Math.round(minusOneClickTarget.x + canvasOffset.x);
+            const py = Math.round(minusOneClickTarget.y + canvasOffset.y);
+            console.log(`  Clicking "-1 button" at (${px}, ${py})`);
+            await page.mouse.click(px, py);
+            await waitForRender(page);
+            await screenshot(page, "counter-click-minus1");
+
+            elements = await getLayout(page);
+            const countBackToOne = findTextSpans(elements, "Count: 1");
+            if (countBackToOne.length > 0) {
+                console.log('  PASS: "Count: 1" after clicking -1 (was 2)');
+                passed++;
+            } else {
+                console.log('  FAIL: "Count: 1" not found after clicking -1');
+                failed++;
+            }
+        } else {
+            console.log('  SKIP: "-1" button not found in layout — cannot test decrement');
+            failed++;
+            await screenshot(page, "counter-no-minus1");
+        }
+
+        console.log("\n=== Counter App Test Complete ===");
 
         printConsole(logs);
 

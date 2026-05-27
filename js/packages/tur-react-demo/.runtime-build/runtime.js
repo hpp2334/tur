@@ -12003,6 +12003,20 @@ __webpack_require__.d(esm_react_namespaceObject, {
   useSetAtom: () => (useSetAtom),
   useStore: () => (useStore) });
 
+// NAMESPACE OBJECT: ../../node_modules/.pnpm/jotai@2.20.0_@types+react@19.2.14_react@19.2.6/node_modules/jotai/esm/index.mjs
+var esm_namespaceObject = {};
+__webpack_require__.r(esm_namespaceObject);
+__webpack_require__.d(esm_namespaceObject, { 
+  INTERNAL_overrideCreateStore: () => (INTERNAL_overrideCreateStore),
+  Provider: () => (Provider),
+  atom: () => (vanilla_atom),
+  createStore: () => (createStore),
+  getDefaultStore: () => (getDefaultStore),
+  useAtom: () => (useAtom),
+  useAtomValue: () => (useAtomValue),
+  useSetAtom: () => (useSetAtom),
+  useStore: () => (useStore) });
+
 
 // EXTERNAL MODULE: ../../node_modules/.pnpm/react@19.2.6/node_modules/react/index.js
 var react = __webpack_require__(348);
@@ -12285,7 +12299,7 @@ function Column(props) {
     const { children, crossAlignment, mainAlignment, mainAxisSize, queryKey, ...rest } = props;
     return /*#__PURE__*/ react.createElement("tur_flex", {
         direction: FlexDirection_FlexDirection.Vertical,
-        crossAlignment: crossAlignment ?? CrossAxisAlignment_CrossAxisAlignment.Stretch,
+        crossAlignment: crossAlignment ?? CrossAxisAlignment_CrossAxisAlignment.Center,
         mainAlignment: mainAlignment,
         mainAxisSize: mainAxisSize,
         queryKey: queryKey,
@@ -12297,7 +12311,7 @@ function Row(props) {
     return /*#__PURE__*/ react.createElement("tur_flex", {
         direction: FlexDirection_FlexDirection.Horizontal,
         mainAlignment: mainAlignment ?? MainAxisAlignment_MainAxisAlignment.Start,
-        crossAlignment: crossAlignment ?? CrossAxisAlignment_CrossAxisAlignment.Stretch,
+        crossAlignment: crossAlignment ?? CrossAxisAlignment_CrossAxisAlignment.Center,
         mainAxisSize: mainAxisSize,
         queryKey: queryKey,
         ...rest
@@ -13455,7 +13469,12 @@ function useAtom(atom, options) {
 
 
 
+;// CONCATENATED MODULE: ../../node_modules/.pnpm/jotai@2.20.0_@types+react@19.2.14_react@19.2.6/node_modules/jotai/esm/index.mjs
+
+
+
 ;// CONCATENATED MODULE: ./src/lib/runtime-entry.ts
+
 
 
 
@@ -13464,6 +13483,7 @@ function useAtom(atom, options) {
 globalThis.React = react_namespaceObject;
 globalThis.TurReact = tur_react_dist_namespaceObject;
 globalThis.TurReactRenderer = dist_namespaceObject;
+globalThis.Jotai = esm_namespaceObject;
 globalThis.JotaiVanilla = vanilla_namespaceObject;
 globalThis.JotaiReact = esm_react_namespaceObject;
 

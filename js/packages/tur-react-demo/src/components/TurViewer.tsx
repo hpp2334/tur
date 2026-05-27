@@ -1,52 +1,31 @@
-import { useEffect, useRef, useState } from "react";
-import { initTur, loadCase, runSource } from "../lib/tur-runtime";
+import { useEffect, useRef } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { editorAtoms } from "../lib/atoms/editor-atoms";
+import { viewerAtoms } from "../lib/atoms/viewer-atoms";
 
-interface TurViewerProps {
-    caseName: string | null;
-    compiledSource?: string | null;
-}
-
-export function TurViewer({ caseName, compiledSource }: TurViewerProps) {
+export function TurViewer() {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [ready, setReady] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const turReady = useAtomValue(viewerAtoms.turReady);
+    const turError = useAtomValue(viewerAtoms.turError);
+    const compiledSource = useAtomValue(editorAtoms.compiledSource);
+    const initTur = useSetAtom(viewerAtoms.initTur);
+    const run = useSetAtom(viewerAtoms.run);
 
     useEffect(() => {
-        if (!containerRef.current) return;
-        let cancelled = false;
-        initTur("tur-container")
-            .then(() => {
-                if (!cancelled) setReady(true);
-            })
-            .catch((e) => {
-                if (!cancelled)
-                    setError(e instanceof Error ? e.message : String(e));
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, []);
+        initTur("tur-container");
+    }, [initTur]);
 
     useEffect(() => {
-        if (!ready || !caseName) return;
-        setError(null);
-        if (compiledSource) {
-            runSource(compiledSource).catch((e) =>
-                setError(e instanceof Error ? e.message : String(e)),
-            );
-        } else {
-            loadCase(caseName).catch((e) =>
-                setError(e instanceof Error ? e.message : String(e)),
-            );
-        }
-    }, [ready, caseName, compiledSource]);
+        if (!turReady || !compiledSource) return;
+        run(compiledSource);
+    }, [turReady, compiledSource, run]);
 
     return (
         <div className="tur-viewer">
             <div className="tur-viewer-header">
                 <span>tur viewer</span>
-                {!ready && <span className="status">initializing...</span>}
-                {ready && <span className="status ready">ready</span>}
+                {!turReady && <span className="status">initializing...</span>}
+                {turReady && <span className="status ready">ready</span>}
             </div>
             <div className="tur-canvas-wrapper">
                 <div
@@ -54,7 +33,7 @@ export function TurViewer({ caseName, compiledSource }: TurViewerProps) {
                     ref={containerRef}
                     className="tur-canvas"
                 />
-                {error && <div className="tur-error">{error}</div>}
+                {turError && <div className="tur-error">{turError}</div>}
             </div>
         </div>
     );

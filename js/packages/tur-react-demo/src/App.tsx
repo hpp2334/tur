@@ -1,59 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useAtomValue, useSetAtom } from "jotai";
 import { CaseSelector } from "./components/CaseSelector";
 import { CodeEditor } from "./components/CodeEditor";
 import { TurViewer } from "./components/TurViewer";
-import { cases, fetchSource } from "./lib/cases";
-import { compile, initCompiler } from "./lib/compiler";
+import { editorAtoms } from "./lib/atoms/editor-atoms";
 import "./App.css";
 
 export function App() {
-    const [selectedCase, setSelectedCase] = useState<string | null>(null);
-    const [source, setSource] = useState<string>("");
-    const [compiledSource, setCompiledSource] = useState<string | null>(null);
-    const [building, setBuilding] = useState(false);
-    const [buildError, setBuildError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [compilerReady, setCompilerReady] = useState(false);
+    const selectedCase = useAtomValue(editorAtoms.selectedCase);
+    const source = useAtomValue(editorAtoms.source);
+    const building = useAtomValue(editorAtoms.building);
+    const buildError = useAtomValue(editorAtoms.buildError);
+    const compilerReady = useAtomValue(editorAtoms.compilerReady);
+    const selectCase = useSetAtom(editorAtoms.selectCase);
+    const save = useSetAtom(editorAtoms.save);
+    const initCompiler = useSetAtom(editorAtoms.initCompiler);
 
     useEffect(() => {
-        initCompiler()
-            .then(() => setCompilerReady(true))
-            .catch((e) => console.error("Failed to init compiler:", e));
-    }, []);
-
-    const handleSelectCase = useCallback((name: string) => {
-        setSelectedCase(name);
-        setCompiledSource(null);
-        setBuildError(null);
-        setLoading(true);
-        fetchSource(name)
-            .then((s) => setSource(s))
-            .catch(() => setSource(""))
-            .finally(() => setLoading(false));
-    }, []);
-
-    const handleSave = useCallback(
-        (editedSource: string) => {
-            if (!compilerReady) return;
-            setBuilding(true);
-            setBuildError(null);
-            const result = compile(editedSource);
-            setBuilding(false);
-            if (result.error) {
-                setBuildError(result.error);
-            } else if (result.code) {
-                setBuildError(null);
-                setCompiledSource(result.code);
-            }
-        },
-        [compilerReady],
-    );
+        initCompiler();
+    }, [initCompiler]);
 
     return (
         <div className="app">
             <CaseSelector
                 selectedCase={selectedCase}
-                onSelect={handleSelectCase}
+                onSelect={selectCase}
             />
             <div className="main-area">
                 <div className="editor-panel">
@@ -63,11 +34,6 @@ export function App() {
                                 ? `${selectedCase}/index.tsx`
                                 : "select a case"}
                         </span>
-                        {loading && (
-                            <span className="building-indicator">
-                                loading...
-                            </span>
-                        )}
                         {building && (
                             <span className="building-indicator">
                                 building...
@@ -85,7 +51,7 @@ export function App() {
                         )}
                     </div>
                     {selectedCase ? (
-                        <CodeEditor source={source} onSave={handleSave} />
+                        <CodeEditor source={source} onSave={save} />
                     ) : (
                         <div className="editor-placeholder">
                             select a test case from the sidebar
@@ -93,10 +59,7 @@ export function App() {
                     )}
                 </div>
                 <div className="viewer-panel">
-                    <TurViewer
-                        caseName={selectedCase}
-                        compiledSource={compiledSource}
-                    />
+                    <TurViewer />
                 </div>
             </div>
         </div>

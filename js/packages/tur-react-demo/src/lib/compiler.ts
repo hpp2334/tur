@@ -1,3 +1,5 @@
+import { parse } from "acorn";
+import type { ImportDeclaration, ImportSpecifier } from "acorn";
 import { transform } from "sucrase";
 
 let runtimeCode: string | null = null;
@@ -6,6 +8,48 @@ export async function initCompiler(): Promise<void> {
     const resp = await fetch("/runtime.js");
     if (!resp.ok) throw new Error(`Failed to load runtime: ${resp.status}`);
     runtimeCode = await resp.text();
+}
+
+const GLOBAL_MAP: Record<string, string> = {
+    "@tur/react": "globalThis.TurReact",
+    "@tur/react-renderer": "globalThis.TurReactRenderer",
+    react: "globalThis.React",
+    jotai: "globalThis.Jotai",
+    "jotai/vanilla": "globalThis.JotaiVanilla",
+    "jotai/react": "globalThis.JotaiReact",
+};
+
+function formatSpecifier(spec: ImportSpecifier): string {
+    const imported = spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
+    if (imported === spec.local.name) return imported;
+    return `${imported}: ${spec.local.name}`;
+}
+
+function processImport(node: ImportDeclaration): string | null {
+    const source = node.source.value as string;
+
+    if (source.startsWith(".")) {
+        return null;
+    }
+
+    const globalRef = GLOBAL_MAP[source];
+    if (!globalRef) {
+        return undefined as unknown as string;
+    }
+
+    const lines: string[] = [];
+
+    for (const spec of node.specifiers) {
+        if (spec.type === "ImportDefaultSpecifier") {
+            lines.push(`var ${spec.local.name} = ${globalRef};`);
+        } else if (spec.type === "ImportNamespaceSpecifier") {
+            lines.push(`var ${spec.local.name} = ${globalRef};`);
+        } else if (spec.type === "ImportSpecifier") {
+            lines.push(`var { ${formatSpecifier(spec)} } = ${globalRef};`);
+        }
+    }
+
+    return lines.join("\n");
 }
 
 export function compile(source: string): { code?: string; error?: string } {
@@ -17,82 +61,58 @@ export function compile(source: string): { code?: string; error?: string } {
             jsxRuntime: "classic",
         });
 
-        let result = jsCode;
+        const ast = parse(jsCode, {
+            sourceType: "module",
+            ecmaVersion: 2024,
+        });
 
-        result = result.replace(
-            /import\s+type\s+\{[\s\S]*?\}\s*from\s*["'][^"']*["']\s*;?/g,
-            "",
+        const imports = ast.body.filter(
+            (node): node is ImportDeclaration => node.type === "ImportDeclaration",
         );
 
-        result = result.replace(
-            /import\s+(\w+)\s*,\s*\{([\s\S]*?)\}\s*from\s*["']react["']\s*;?/g,
-            (_, name, imports) =>
-                `var ${name} = globalThis.React;\nvar {${imports.trim()}} = globalThis.React;`,
-        );
+        const replacements: { start: number; end: number; text: string }[] = [];
+        let hasReactRef = false;
 
-        result = result.replace(
-            /import\s*\*\s*as\s+(\w+)\s+from\s*["']react["']\s*;?/g,
-            (_, name) => `var ${name} = globalThis.React;`,
-        );
+        for (const node of imports) {
+            const source = node.source.value as string;
 
-        result = result.replace(
-            /import\s+(\w+)\s+from\s*["']react["']\s*;?/g,
-            (_, name) => `var ${name} = globalThis.React;`,
-        );
+            if (source.startsWith(".")) {
+                return {
+                    error: `Local imports not supported for live editing: ${source}`,
+                };
+            }
 
-        result = result.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']react["']\s*;?/g,
-            (_, imports) => `var {${imports.trim()}} = globalThis.React;`,
-        );
+            const globalRef = GLOBAL_MAP[source];
+            if (!globalRef) {
+                return { error: `Unsupported import: ${source}` };
+            }
 
-        result = result.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/react["']\s*;?/g,
-            (_, imports) => `var {${imports.trim()}} = globalThis.TurReact;`,
-        );
+            hasReactRef = hasReactRef || source === "react";
 
-        result = result.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/react-renderer["']\s*;?/g,
-            (_, imports) =>
-                `var {${imports.trim()}} = globalThis.TurReactRenderer;`,
-        );
-
-        result = result.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']jotai\/vanilla["']\s*;?/g,
-            (_, imports) =>
-                `var {${imports.trim()}} = globalThis.JotaiVanilla;`,
-        );
-
-        result = result.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']jotai\/react["']\s*;?/g,
-            (_, imports) => `var {${imports.trim()}} = globalThis.JotaiReact;`,
-        );
-
-        const localImports = result.match(
-            /import\s+[\s\S]*?from\s*["']\.{0,2}\/[^"']*["']\s*;?/g,
-        );
-        if (localImports) {
-            return {
-                error: `Local imports not supported for live editing: ${localImports[0].split("\n")[0]}`,
-            };
+            const result = processImport(node);
+            replacements.push({
+                start: node.start,
+                end: node.end,
+                text: result ?? "",
+            });
         }
 
-        const remainingImports = result.match(
-            /import\s+[\s\S]*?from\s*["'][^"']*["']\s*;?/g,
-        );
-        if (remainingImports) {
-            return {
-                error: `Unsupported import: ${remainingImports[0].split("\n")[0]}`,
-            };
+        let processed = jsCode;
+        for (const { start, end, text } of replacements.sort(
+            (a, b) => b.start - a.start,
+        )) {
+            processed =
+                processed.slice(0, start) + text + processed.slice(end);
         }
 
         if (
-            !result.includes("globalThis.React") &&
-            /\bReact\.createElement\b/.test(result)
+            !hasReactRef &&
+            /\bReact\.createElement\b/.test(processed)
         ) {
-            result = `var React = globalThis.React;\n${result}`;
+            processed = `var React = globalThis.React;\n${processed}`;
         }
 
-        return { code: `${runtimeCode}\n${result}` };
+        return { code: `${runtimeCode}\n${processed}` };
     } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };
     }

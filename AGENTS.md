@@ -157,7 +157,7 @@ cd js/packages/tur-test-cases && pnpm build
 - Rust edition 2024, MSRV 1.85
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: biome
-- Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned)
+- Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
 - Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
@@ -178,15 +178,21 @@ Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
 ## Debugging with playground-for-agent
 
-Launches Chromium with WebGPU, loads the playground via Playwright, runs an interactive todolist scenario (add/toggle/delete tasks), and screenshots each step. Screenshots saved to `js/packages/playground-for-agent/test-results/`.
+Launches Chromium with WebGPU, loads the playground via Playwright, runs an interactive todolist scenario (add/toggle/delete tasks) and a counter live-editing scenario, and screenshots each step. Screenshots saved to `js/packages/playground-for-agent/test-results/`.
 
-After running, use `@image-reader` to inspect the screenshots and verify the actual rendering. Example:
+### Always verify with image-reader after running
+
+After running the playground tests, you MUST use `@image-reader` (Task tool with `image-reader` subagent) to inspect the screenshots and verify the actual rendering. Layout assertions check element positions but `@image-reader` reveals what the user actually sees (colors, spacing, text rendering, missing content, blank canvases, stretched elements, etc.).
+
+Tests can pass (elements exist in layout tree, clicks register) while the canvas is visually blank or broken. Only visual verification catches these issues.
+
+Example:
 
 ```
 @image-reader js/packages/playground-for-agent/test-results/01-initial.png
 ```
 
-This is essential — layout assertions check element positions but `@image-reader` reveals what the user actually sees (colors, spacing, text rendering, missing content, etc.).
+Or verify all screenshots at once by passing all file paths to a single `@image-reader` task.
 
 ### Dev mode (local dist)
 
@@ -202,6 +208,4 @@ cd js/packages/playground-for-agent && pnpm start
 DEPLOY_URL=https://tur-react-demo.pages.dev pnpm start:prod
 ```
 
-## git-end agent
 
-Dispatch `@git-end` to finalize a feature branch. It commits, rebases onto main, pushes, creates/updates a PR, and runs local CI. It reports back: commit hash, PR URL, and CI result (pass or fail with error output). If CI fails, fix the issues and re-dispatch `@git-end`. Do not include a changes summary in the prompt — the agent inspects the diff itself.

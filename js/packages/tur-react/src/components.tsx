@@ -101,7 +101,7 @@ export function Column(props: ColumnProps) {
     return (
         <tur_flex
             direction={FlexDirection.Vertical}
-            crossAlignment={crossAlignment ?? CrossAxisAlignment.Stretch}
+            crossAlignment={crossAlignment ?? CrossAxisAlignment.Center}
             mainAlignment={mainAlignment}
             mainAxisSize={mainAxisSize}
             queryKey={queryKey}
@@ -125,7 +125,7 @@ export function Row(props: RowProps) {
         <tur_flex
             direction={FlexDirection.Horizontal}
             mainAlignment={mainAlignment ?? MainAxisAlignment.Start}
-            crossAlignment={crossAlignment ?? CrossAxisAlignment.Stretch}
+            crossAlignment={crossAlignment ?? CrossAxisAlignment.Center}
             mainAxisSize={mainAxisSize}
             queryKey={queryKey}
             {...rest}

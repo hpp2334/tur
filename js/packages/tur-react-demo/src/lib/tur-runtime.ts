@@ -1,10 +1,24 @@
 let turApp: Record<string, unknown> | null = null;
 
 export async function initTur(containerId: string): Promise<void> {
-    turApp = await createApp(containerId);
-    (globalThis as Record<string, unknown>).turDemo = {
-        debugLayout: () => debugLayout(),
-    };
+    const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
+        | ((id: string) => Promise<unknown>)
+        | undefined;
+    if (!initWasm) {
+        const msg = "WASM not loaded";
+        console.error("Tur init error:", msg);
+        throw new Error(msg);
+    }
+    try {
+        turApp = (await initWasm(containerId)) as Record<string, unknown>;
+        (globalThis as Record<string, unknown>).turDemo = {
+            debugLayout: () => debugLayout(),
+        };
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("Tur init error:", msg);
+        throw e;
+    }
 }
 
 export function debugLayout(): string {
@@ -16,30 +30,17 @@ export function debugLayout(): string {
     }
 }
 
-export async function loadCase(caseName: string): Promise<void> {
-    const resp = await fetch(`/cases/${caseName}.js`);
-    const source = await resp.text();
-    await destroyAndRecreate();
-    (turApp as { load_and_run_js: (s: string) => void }).load_and_run_js(
-        source,
-    );
-}
-
 export async function runSource(jsSource: string): Promise<void> {
-    await destroyAndRecreate();
-    (turApp as { load_and_run_js: (s: string) => void }).load_and_run_js(
-        jsSource,
-    );
-}
-
-async function createApp(
-    containerId: string,
-): Promise<Record<string, unknown>> {
-    const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
-        | ((id: string) => Promise<unknown>)
-        | undefined;
-    if (!initWasm) throw new Error("WASM not loaded");
-    return (await initWasm(containerId)) as Record<string, unknown>;
+    try {
+        await destroyAndRecreate();
+        (turApp as { load_and_run_js: (s: string) => void }).load_and_run_js(
+            jsSource,
+        );
+    } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error("Tur runSource error:", msg);
+        throw e;
+    }
 }
 
 async function destroyAndRecreate(): Promise<void> {
@@ -48,7 +49,12 @@ async function destroyAndRecreate(): Promise<void> {
     const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
         | ((id: string) => Promise<unknown>)
         | undefined;
-    if (!initWasm || !container) return;
+    if (!initWasm || !container) {
+        console.error(
+            "Tur destroyAndRecreate: WASM loader or container not found",
+        );
+        return;
+    }
     container.innerHTML = "";
     turApp = (await initWasm("tur-container")) as Record<string, unknown>;
 }
