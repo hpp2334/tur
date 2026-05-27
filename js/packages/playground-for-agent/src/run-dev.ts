@@ -494,7 +494,9 @@ async function main() {
                 const w = window as Record<string, unknown>;
                 if (!w.turDemo) return false;
                 try {
-                    const layout = (w.turDemo as { debugLayout: () => string }).debugLayout();
+                    const layout = (
+                        w.turDemo as { debugLayout: () => string }
+                    ).debugLayout();
                     return typeof layout === "string" && layout.length > 100;
                 } catch {
                     return false;
@@ -542,7 +544,13 @@ async function main() {
         console.log("\n--- Step 3: Click + New Task ---");
         elements = await getLayout(page);
         const newTaskBtn = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn, canvasOffset);
+        await assertClick(
+            page,
+            elements,
+            "+ New Task (header)",
+            newTaskBtn,
+            canvasOffset,
+        );
         await screenshot(page, "click-new-task");
 
         // VERIFY: modal should be open
@@ -596,9 +604,12 @@ async function main() {
             passed++;
         } else {
             const allInputs = findAll(elements, (e) => e.type === "tur_input");
-            const allTexts = findAll(elements, (e) =>
-                (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
-                e.label.includes("Buy groceries"),
+            const allTexts = findAll(
+                elements,
+                (e) =>
+                    (e.type === "tur_text_span" ||
+                        e.type === "tur_paragraph") &&
+                    e.label.includes("Buy groceries"),
             );
             console.log(
                 `  FAIL: input does not show "Buy groceries". Inputs: ${allInputs.map((e) => `"${e.label}"`).join(", ")}. Texts: ${allTexts.map((e) => `"${e.label}"`).join(", ")}`,
@@ -610,7 +621,13 @@ async function main() {
         console.log("\n--- Step 5: Click Add Task (modal) ---");
         elements = await getLayout(page);
         const addTaskBtn = findModalAddTaskButton(elements);
-        await assertClick(page, elements, "Add Task (modal)", addTaskBtn, canvasOffset);
+        await assertClick(
+            page,
+            elements,
+            "Add Task (modal)",
+            addTaskBtn,
+            canvasOffset,
+        );
         await screenshot(page, "after-add-task");
 
         // VERIFY: modal should be closed
@@ -638,7 +655,13 @@ async function main() {
         console.log("\n--- Step 6: Add second task 'Review PR' ---");
         elements = await getLayout(page);
         const newTaskBtn2 = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn2, canvasOffset);
+        await assertClick(
+            page,
+            elements,
+            "+ New Task (header)",
+            newTaskBtn2,
+            canvasOffset,
+        );
         await screenshot(page, "open-modal-again");
 
         elements = await getLayout(page);
@@ -660,7 +683,13 @@ async function main() {
 
             elements = await getLayout(page);
             const addTaskBtn2 = findModalAddTaskButton(elements);
-            await assertClick(page, elements, "Add Task (modal)", addTaskBtn2, canvasOffset);
+            await assertClick(
+                page,
+                elements,
+                "Add Task (modal)",
+                addTaskBtn2,
+                canvasOffset,
+            );
         }
         await screenshot(page, "after-add-second-task");
 
@@ -706,7 +735,8 @@ async function main() {
             const checkmark = findElement(
                 elements,
                 (e) =>
-                    (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
+                    (e.type === "tur_text_span" ||
+                        e.type === "tur_paragraph") &&
                     e.label === "v" &&
                     Math.abs(
                         e.rect.y +
@@ -758,7 +788,13 @@ async function main() {
         console.log("\n--- Step 9: Select 'Learn Rust' ---");
         elements = await getLayout(page);
         const learnRustRow = findItemRow(elements, "Learn Rust");
-        await assertClick(page, elements, "row for Learn Rust", learnRustRow, canvasOffset);
+        await assertClick(
+            page,
+            elements,
+            "row for Learn Rust",
+            learnRustRow,
+            canvasOffset,
+        );
         await screenshot(page, "select-item");
 
         // Print final state

@@ -8,9 +8,7 @@ export async function initCompiler(): Promise<void> {
     runtimeCode = await resp.text();
 }
 
-export function compile(
-    source: string,
-): { code?: string; error?: string } {
+export function compile(source: string): { code?: string; error?: string } {
     if (!runtimeCode) return { error: "Compiler not initialized" };
 
     try {
@@ -49,8 +47,7 @@ export function compile(
 
         result = result.replace(
             /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/react["']\s*;?/g,
-            (_, imports) =>
-                `var {${imports.trim()}} = globalThis.TurReact;`,
+            (_, imports) => `var {${imports.trim()}} = globalThis.TurReact;`,
         );
 
         result = result.replace(
@@ -67,8 +64,7 @@ export function compile(
 
         result = result.replace(
             /import\s*\{([\s\S]*?)\}\s*from\s*["']jotai\/react["']\s*;?/g,
-            (_, imports) =>
-                `var {${imports.trim()}} = globalThis.JotaiReact;`,
+            (_, imports) => `var {${imports.trim()}} = globalThis.JotaiReact;`,
         );
 
         const localImports = result.match(

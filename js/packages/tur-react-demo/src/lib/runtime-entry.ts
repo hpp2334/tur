@@ -1,8 +1,8 @@
-import * as React from "react";
 import * as TurReact from "@tur/react";
 import * as TurReactRenderer from "@tur/react-renderer";
-import * as JotaiVanilla from "jotai/vanilla";
 import * as JotaiReact from "jotai/react";
+import * as JotaiVanilla from "jotai/vanilla";
+import * as React from "react";
 
 (globalThis as Record<string, unknown>).React = React;
 (globalThis as Record<string, unknown>).TurReact = TurReact;

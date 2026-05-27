@@ -142,14 +142,12 @@ class RuntimeBundlePlugin implements RspackPluginInstance {
             });
         };
 
-        compiler.hooks.beforeRun.tapPromise(
-            "RuntimeBundlePlugin",
-            async () => buildRuntime(),
+        compiler.hooks.beforeRun.tapPromise("RuntimeBundlePlugin", async () =>
+            buildRuntime(),
         );
 
-        compiler.hooks.watchRun.tapPromise(
-            "RuntimeBundlePlugin",
-            async () => buildRuntime(),
+        compiler.hooks.watchRun.tapPromise("RuntimeBundlePlugin", async () =>
+            buildRuntime(),
         );
 
         compiler.hooks.emit.tapPromise(
