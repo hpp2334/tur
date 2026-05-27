@@ -1,20 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CaseSelector } from "./components/CaseSelector";
 import { CodeEditor } from "./components/CodeEditor";
 import { TurViewer } from "./components/TurViewer";
 import { cases, fetchSource } from "./lib/cases";
+import { compile, initCompiler } from "./lib/compiler";
 import "./App.css";
-
-async function fetchWorkspaceDeps(): Promise<{ name: string; code: string }[]> {
-    const [turReact, turReactRenderer] = await Promise.all([
-        fetch("/deps/tur-react.js").then((r) => r.text()),
-        fetch("/deps/tur-react-renderer.js").then((r) => r.text()),
-    ]);
-    return [
-        { name: "@tur/react", code: turReact },
-        { name: "@tur/react-renderer", code: turReactRenderer },
-    ];
-}
 
 export function App() {
     const [selectedCase, setSelectedCase] = useState<string | null>(null);
@@ -23,44 +13,12 @@ export function App() {
     const [building, setBuilding] = useState(false);
     const [buildError, setBuildError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
-    const [workerReady, setWorkerReady] = useState(false);
-    const workerRef = useRef<Worker | null>(null);
+    const [compilerReady, setCompilerReady] = useState(false);
 
     useEffect(() => {
-        const worker = new Worker(
-            new URL("./rspack.worker.ts", import.meta.url),
-            { type: "module" },
-        );
-        worker.onmessage = (event) => {
-            if (event.data.type === "init-done") {
-                setWorkerReady(true);
-                return;
-            }
-            if (event.data.type === "result") {
-                const { compiled, error } = event.data;
-                setBuilding(false);
-                if (error) {
-                    setBuildError(error);
-                } else {
-                    setBuildError(null);
-                    setCompiledSource(compiled);
-                }
-            }
-        };
-        workerRef.current = worker;
-
-        fetchWorkspaceDeps()
-            .then((deps) => {
-                worker.postMessage({ type: "init", deps });
-            })
-            .catch((e) => {
-                console.error("Failed to fetch workspace deps:", e);
-            });
-
-        return () => {
-            worker.terminate();
-            workerRef.current = null;
-        };
+        initCompiler()
+            .then(() => setCompilerReady(true))
+            .catch((e) => console.error("Failed to init compiler:", e));
     }, []);
 
     const handleSelectCase = useCallback((name: string) => {
@@ -76,16 +34,19 @@ export function App() {
 
     const handleSave = useCallback(
         (editedSource: string) => {
-            if (!workerReady || !workerRef.current) return;
+            if (!compilerReady) return;
             setBuilding(true);
             setBuildError(null);
-            workerRef.current.postMessage({
-                type: "build",
-                source: editedSource,
-                caseName: selectedCase ?? "untitled",
-            });
+            const result = compile(editedSource);
+            setBuilding(false);
+            if (result.error) {
+                setBuildError(result.error);
+            } else if (result.code) {
+                setBuildError(null);
+                setCompiledSource(result.code);
+            }
         },
-        [selectedCase, workerReady],
+        [compilerReady],
     );
 
     return (
@@ -112,7 +73,7 @@ export function App() {
                                 building...
                             </span>
                         )}
-                        {!workerReady && (
+                        {!compilerReady && (
                             <span className="building-indicator">
                                 initializing compiler...
                             </span>

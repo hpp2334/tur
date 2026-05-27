@@ -176,6 +176,32 @@ pub trait Renderer {
 
 Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
+## Debugging with playground-for-agent
+
+Launches Chromium with WebGPU, loads the playground via Playwright, runs an interactive todolist scenario (add/toggle/delete tasks), and screenshots each step. Screenshots saved to `js/packages/playground-for-agent/test-results/`.
+
+After running, use `@image-reader` to inspect the screenshots and verify the actual rendering. Example:
+
+```
+@image-reader js/packages/playground-for-agent/test-results/01-initial.png
+```
+
+This is essential — layout assertions check element positions but `@image-reader` reveals what the user actually sees (colors, spacing, text rendering, missing content, etc.).
+
+### Dev mode (local dist)
+
+```sh
+cd js && pnpm build
+cd js/packages/tur-react-demo && rspack build
+cd js/packages/playground-for-agent && pnpm start
+```
+
+### Prod mode (deployed URL)
+
+```sh
+DEPLOY_URL=https://tur-react-demo.pages.dev pnpm start:prod
+```
+
 ## git-end agent
 
 Dispatch `@git-end` to finalize a feature branch. It commits, rebases onto main, pushes, creates/updates a PR, and runs local CI. It reports back: commit hash, PR URL, and CI result (pass or fail with error output). If CI fails, fix the issues and re-dispatch `@git-end`. Do not include a changes summary in the prompt — the agent inspects the diff itself.

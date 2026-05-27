@@ -2,20 +2,34 @@ let turApp: Record<string, unknown> | null = null;
 
 export async function initTur(containerId: string): Promise<void> {
     turApp = await createApp(containerId);
+    (globalThis as Record<string, unknown>).turDemo = {
+        debugLayout: () => debugLayout(),
+    };
+}
+
+export function debugLayout(): string {
+    try {
+        const app = turApp as { debug_layout?: () => string } | null;
+        return app?.debug_layout?.() ?? "";
+    } catch {
+        return "";
+    }
 }
 
 export async function loadCase(caseName: string): Promise<void> {
-    await destroyAndRecreate();
     const resp = await fetch(`/cases/${caseName}.js`);
     const source = await resp.text();
-    const fn = turApp?.load_and_run_js as (s: string) => void;
-    fn(source);
+    await destroyAndRecreate();
+    (turApp as { load_and_run_js: (s: string) => void }).load_and_run_js(
+        source,
+    );
 }
 
 export async function runSource(jsSource: string): Promise<void> {
     await destroyAndRecreate();
-    const fn = turApp?.load_and_run_js as (s: string) => void;
-    fn(jsSource);
+    (turApp as { load_and_run_js: (s: string) => void }).load_and_run_js(
+        jsSource,
+    );
 }
 
 async function createApp(

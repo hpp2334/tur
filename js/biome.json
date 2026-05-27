@@ -5,6 +5,7 @@
             "**",
             "!!**/dist",
             "!!**/.rslib",
+            "!!**/.runtime-build",
             "!!**/node_modules",
             "!!**/generated"
         ]

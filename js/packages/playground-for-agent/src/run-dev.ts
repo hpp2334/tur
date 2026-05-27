@@ -13,10 +13,18 @@ const PORT = 3999;
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",
     ".js": "text/javascript",
+    ".mjs": "text/javascript",
+    ".css": "text/css",
     ".wasm": "application/wasm",
     ".bin": "text/plain",
     ".map": "application/json",
     ".d.ts": "text/typescript",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+    ".ttf": "font/ttf",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
 };
 
 async function createServer(): Promise<https.Server> {
@@ -54,10 +62,13 @@ async function createServer(): Promise<https.Server> {
             const ext = path.extname(filePath);
             const contentType = MIME_TYPES[ext] || "application/octet-stream";
             const content = fs.readFileSync(filePath);
-            res.writeHead(200, {
+            const headers: Record<string, string | number> = {
                 "Content-Type": contentType,
                 "Content-Length": content.length,
-            });
+                "Cross-Origin-Opener-Policy": "same-origin",
+                "Cross-Origin-Embedder-Policy": "require-corp",
+            };
+            res.writeHead(200, headers);
             res.end(content);
         });
 
@@ -144,7 +155,9 @@ function findElement(
 function findTextSpans(elements: ElementInfo[], text: string): ElementInfo[] {
     return findAll(
         elements,
-        (e) => e.label === text && e.type === "tur_text_span",
+        (e) =>
+            e.label === text &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph"),
     );
 }
 
@@ -171,7 +184,7 @@ function findModalAddTaskButton(
             span.rect,
             "tur_pointer_interact",
         );
-        if (btn && btn.rect.y > 380) {
+        if (btn) {
             return center(btn.rect);
         }
     }
@@ -188,7 +201,7 @@ function findHeaderNewTaskButton(
             span.rect,
             "tur_pointer_interact",
         );
-        if (btn && btn.rect.y < 200) {
+        if (btn) {
             return center(btn.rect);
         }
     }
@@ -201,7 +214,9 @@ function findModalInput(
 ): ElementInfo | undefined {
     const inputs = findAll(
         elements,
-        (e) => e.type === "tur_input" && e.rect.w > 300 && e.rect.h < 50,
+        (e) =>
+            (e.type === "tur_input" || e.type === "tur_editable_text") &&
+            e.rect.h < 50,
     );
     return inputs[index];
 }
@@ -269,14 +284,16 @@ function findItemRow(
             span.rect,
             "tur_pointer_interact",
         );
-        if (row && row.rect.w > 400) return center(row.rect);
+        if (row && row.rect.w > 100) return center(row.rect);
     }
     return null;
 }
 
 function hasModalOpen(elements: ElementInfo[]): boolean {
     return elements.some(
-        (e) => e.label === "Add New Task" && e.type === "tur_text_span",
+        (e) =>
+            e.label === "Add New Task" &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph"),
     );
 }
 
@@ -284,20 +301,28 @@ function getTaskTexts(elements: ElementInfo[]): string[] {
     const taskItems: string[] = [];
     for (const e of elements) {
         if (
-            e.type === "tur_text_span" &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
             e.label &&
             e.label !== "v" &&
             e.label !== "x" &&
-            e.rect.x > 250 &&
-            e.rect.y > 180 &&
-            e.rect.y < 550
+            e.label !== "My Tasks" &&
+            e.label !== "NAVIGATION" &&
+            e.label !== "Tur Todo" &&
+            e.label !== "TodoList" &&
+            e.label !== "+ New Task" &&
+            e.label !== "Add New Task" &&
+            e.label !== "Add Task" &&
+            e.label !== "Cancel" &&
+            e.label !== "Title" &&
+            e.label !== "Description" &&
+            e.rect.h > 5
         ) {
             const hasDeleteBtn = elements.some(
                 (d) =>
                     d.type === "tur_pointer_interact" &&
                     d.rect.w <= 40 &&
                     d.rect.h <= 40 &&
-                    d.rect.x > 700 &&
+                    d.rect.x > e.rect.x + e.rect.w &&
                     Math.abs(d.rect.y - e.rect.y) < 30,
             );
             const hasCheckbox = elements.some(
@@ -350,14 +375,15 @@ async function assertClick(
     _elements: ElementInfo[],
     label: string,
     target: { x: number; y: number } | null,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
 ) {
     if (!target) {
         throw new Error(`ASSERT FAIL: could not find "${label}" to click`);
     }
-    console.log(
-        `  Clicking "${label}" at (${Math.round(target.x)}, ${Math.round(target.y)})`,
-    );
-    await page.mouse.click(target.x, target.y);
+    const px = Math.round(target.x + offset.x);
+    const py = Math.round(target.y + offset.y);
+    console.log(`  Clicking "${label}" at (${px}, ${py})`);
+    await page.mouse.click(px, py);
     await waitForRender(page);
 }
 
@@ -411,7 +437,7 @@ async function main() {
 
         const context = await browser.newContext({
             ignoreHTTPSErrors: true,
-            viewport: { width: 800, height: 600 },
+            viewport: { width: 1600, height: 900 },
         });
 
         const page = await context.newPage();
@@ -454,11 +480,37 @@ async function main() {
         });
         console.log("WebGPU:", JSON.stringify(gpuInfo));
 
+        await waitForRender(page, 1000);
+
+        // --- Step 2: Click "todolist" in sidebar ---
+        console.log("\n--- Step 2: Select todolist case ---");
+        const todolistBtn = page.locator("button.case-item", {
+            hasText: /^todolist$/,
+        });
+        await todolistBtn.click();
+
         await page.waitForFunction(
-            () => (window as Record<string, unknown>).turDemo !== undefined,
-            { timeout: 10000 },
+            () => {
+                const w = window as Record<string, unknown>;
+                if (!w.turDemo) return false;
+                try {
+                    const layout = (w.turDemo as { debugLayout: () => string }).debugLayout();
+                    return typeof layout === "string" && layout.length > 100;
+                } catch {
+                    return false;
+                }
+            },
+            { timeout: 30000 },
         );
-        await waitForRender(page, 3000);
+        await waitForRender(page, 1000);
+
+        const canvasOffset = await page.evaluate(() => {
+            const canvas = document.querySelector("#tur-container canvas");
+            if (!canvas) return { x: 0, y: 0 };
+            const rect = canvas.getBoundingClientRect();
+            return { x: rect.x, y: rect.y };
+        });
+        console.log(`  Canvas offset: ${JSON.stringify(canvasOffset)}`);
 
         let elements = await getLayout(page);
         await screenshot(page, "initial");
@@ -486,11 +538,11 @@ async function main() {
             failed++;
         }
 
-        // --- Step 2: Click "+ New Task" button ---
-        console.log("\n--- Step 2: Click + New Task ---");
+        // --- Step 3: Click "+ New Task" button ---
+        console.log("\n--- Step 3: Click + New Task ---");
         elements = await getLayout(page);
         const newTaskBtn = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn);
+        await assertClick(page, elements, "+ New Task (header)", newTaskBtn, canvasOffset);
         await screenshot(page, "click-new-task");
 
         // VERIFY: modal should be open
@@ -515,16 +567,16 @@ async function main() {
             failed++;
         }
 
-        // --- Step 3: Type in the modal's title input ---
-        console.log("\n--- Step 3: Type in input ---");
+        // --- Step 4: Type in the modal's title input ---
+        console.log("\n--- Step 4: Type in input ---");
         elements = await getLayout(page);
         const titleInput = findModalInput(elements, 0);
-        if (titleInput) {
+        if (titleInput && canvasOffset) {
             const c = center(titleInput.rect);
-            console.log(
-                `  Clicking title input at (${Math.round(c.x)}, ${Math.round(c.y)})`,
-            );
-            await page.mouse.click(c.x, c.y);
+            const px = Math.round(c.x + canvasOffset.x);
+            const py = Math.round(c.y + canvasOffset.y);
+            console.log(`  Clicking title input at (${px}, ${py})`);
+            await page.mouse.click(px, py);
             await waitForRender(page, 200);
             await page.keyboard.type("Buy groceries");
         }
@@ -535,24 +587,30 @@ async function main() {
         elements = await getLayout(page);
         const typedInput = findElement(
             elements,
-            (e) => e.type === "tur_input" && e.label.includes("Buy groceries"),
+            (e) =>
+                (e.type === "tur_input" || e.type === "tur_editable_text") &&
+                e.label.includes("Buy groceries"),
         );
         if (typedInput) {
             console.log(`  PASS: input shows "${typedInput.label}"`);
             passed++;
         } else {
             const allInputs = findAll(elements, (e) => e.type === "tur_input");
+            const allTexts = findAll(elements, (e) =>
+                (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
+                e.label.includes("Buy groceries"),
+            );
             console.log(
-                `  FAIL: input does not show "Buy groceries". Inputs: ${allInputs.map((e) => `"${e.label}"`).join(", ")}`,
+                `  FAIL: input does not show "Buy groceries". Inputs: ${allInputs.map((e) => `"${e.label}"`).join(", ")}. Texts: ${allTexts.map((e) => `"${e.label}"`).join(", ")}`,
             );
             failed++;
         }
 
-        // --- Step 4: Click "Add Task" button (in modal) ---
-        console.log("\n--- Step 4: Click Add Task (modal) ---");
+        // --- Step 5: Click "Add Task" button (in modal) ---
+        console.log("\n--- Step 5: Click Add Task (modal) ---");
         elements = await getLayout(page);
         const addTaskBtn = findModalAddTaskButton(elements);
-        await assertClick(page, elements, "Add Task (modal)", addTaskBtn);
+        await assertClick(page, elements, "Add Task (modal)", addTaskBtn, canvasOffset);
         await screenshot(page, "after-add-task");
 
         // VERIFY: modal should be closed
@@ -576,11 +634,11 @@ async function main() {
             failed++;
         }
 
-        // --- Step 5: Add another task ---
-        console.log("\n--- Step 5: Add second task 'Review PR' ---");
+        // --- Step 6: Add another task ---
+        console.log("\n--- Step 6: Add second task 'Review PR' ---");
         elements = await getLayout(page);
         const newTaskBtn2 = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn2);
+        await assertClick(page, elements, "+ New Task (header)", newTaskBtn2, canvasOffset);
         await screenshot(page, "open-modal-again");
 
         elements = await getLayout(page);
@@ -589,12 +647,12 @@ async function main() {
             failed++;
         } else {
             const input2 = findModalInput(elements, 0);
-            if (input2) {
+            if (input2 && canvasOffset) {
                 const c = center(input2.rect);
-                console.log(
-                    `  Clicking title input at (${Math.round(c.x)}, ${Math.round(c.y)})`,
-                );
-                await page.mouse.click(c.x, c.y);
+                const px = Math.round(c.x + canvasOffset.x);
+                const py = Math.round(c.y + canvasOffset.y);
+                console.log(`  Clicking title input at (${px}, ${py})`);
+                await page.mouse.click(px, py);
                 await waitForRender(page, 200);
                 await page.keyboard.type("Review PR");
             }
@@ -602,7 +660,7 @@ async function main() {
 
             elements = await getLayout(page);
             const addTaskBtn2 = findModalAddTaskButton(elements);
-            await assertClick(page, elements, "Add Task (modal)", addTaskBtn2);
+            await assertClick(page, elements, "Add Task (modal)", addTaskBtn2, canvasOffset);
         }
         await screenshot(page, "after-add-second-task");
 
@@ -627,8 +685,8 @@ async function main() {
             failed++;
         }
 
-        // --- Step 6: Toggle checkbox on "Build tur engine" ---
-        console.log("\n--- Step 6: Toggle checkbox ---");
+        // --- Step 7: Toggle checkbox on "Build tur engine" ---
+        console.log("\n--- Step 7: Toggle checkbox ---");
         elements = await getLayout(page);
         const checkbox = findCheckboxForItem(elements, "Build tur engine");
         await assertClick(
@@ -636,6 +694,7 @@ async function main() {
             elements,
             "checkbox for Build tur engine",
             checkbox,
+            canvasOffset,
         );
         await screenshot(page, "toggle-checkbox");
 
@@ -647,7 +706,7 @@ async function main() {
             const checkmark = findElement(
                 elements,
                 (e) =>
-                    e.type === "tur_text_span" &&
+                    (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
                     e.label === "v" &&
                     Math.abs(
                         e.rect.y +
@@ -665,8 +724,8 @@ async function main() {
             }
         }
 
-        // --- Step 7: Delete "Write documentation" ---
-        console.log("\n--- Step 7: Delete 'Write documentation' ---");
+        // --- Step 8: Delete "Write documentation" ---
+        console.log("\n--- Step 8: Delete 'Write documentation' ---");
         elements = await getLayout(page);
         const deleteBtn = findDeleteButtonForItem(
             elements,
@@ -677,6 +736,7 @@ async function main() {
             elements,
             "delete for Write documentation",
             deleteBtn,
+            canvasOffset,
         );
         await screenshot(page, "after-delete");
 
@@ -694,11 +754,11 @@ async function main() {
             failed++;
         }
 
-        // --- Step 8: Click on "Learn Rust" to select it ---
-        console.log("\n--- Step 8: Select 'Learn Rust' ---");
+        // --- Step 9: Click on "Learn Rust" to select it ---
+        console.log("\n--- Step 9: Select 'Learn Rust' ---");
         elements = await getLayout(page);
         const learnRustRow = findItemRow(elements, "Learn Rust");
-        await assertClick(page, elements, "row for Learn Rust", learnRustRow);
+        await assertClick(page, elements, "row for Learn Rust", learnRustRow, canvasOffset);
         await screenshot(page, "select-item");
 
         // Print final state

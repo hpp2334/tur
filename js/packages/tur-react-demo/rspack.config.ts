@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
@@ -130,38 +130,37 @@ class TestCasesPlugin implements RspackPluginInstance {
     }
 }
 
-class WorkspaceDepsPlugin implements RspackPluginInstance {
+class RuntimeBundlePlugin implements RspackPluginInstance {
     apply(compiler: Compiler): void {
-        compiler.hooks.emit.tapPromise(
-            "WorkspaceDepsPlugin",
-            async (compilation) => {
-                const logger = compilation.getLogger("WorkspaceDepsPlugin");
-                const pkgsRoot = join(__dirname, "..");
-                const workspacePkgs = [
-                    { name: "@tur/react", dir: "tur-react" },
-                    { name: "@tur/react-renderer", dir: "tur-react-renderer" },
-                ];
+        const buildRuntime = () => {
+            compiler
+                .getInfrastructureLogger("RuntimeBundlePlugin")
+                .info("Building boa runtime bundle...");
+            execSync("npx rspack build --config runtime.rspack.config.ts", {
+                cwd: __dirname,
+                stdio: "inherit",
+            });
+        };
 
-                for (const pkg of workspacePkgs) {
-                    const distFile = join(
-                        pkgsRoot,
-                        pkg.dir,
-                        "dist",
-                        "index.js",
-                    );
-                    if (!existsSync(distFile)) {
-                        logger.warn(
-                            `${pkg.name}: dist/index.js not found, run build first`,
-                        );
-                        continue;
-                    }
-                    const content = readFileSync(distFile, "utf-8");
-                    const source = new compiler.webpack.sources.RawSource(
-                        content,
-                    );
-                    compilation.emitAsset(`deps/${pkg.dir}.js`, source);
-                    logger.info(`Copied workspace dep: ${pkg.name}`);
-                }
+        compiler.hooks.beforeRun.tapPromise(
+            "RuntimeBundlePlugin",
+            async () => buildRuntime(),
+        );
+
+        compiler.hooks.watchRun.tapPromise(
+            "RuntimeBundlePlugin",
+            async () => buildRuntime(),
+        );
+
+        compiler.hooks.emit.tapPromise(
+            "RuntimeBundlePlugin",
+            async (compilation) => {
+                const logger = compilation.getLogger("RuntimeBundlePlugin");
+                const src = join(__dirname, ".runtime-build", "runtime.js");
+                const content = readFileSync(src);
+                const source = new compiler.webpack.sources.RawSource(content);
+                compilation.emitAsset("runtime.js", source);
+                logger.info("Emitted runtime.js");
             },
         );
     }
@@ -235,7 +234,7 @@ export default defineConfig({
         }),
         new WasmBuildPlugin(),
         new TestCasesPlugin(),
-        new WorkspaceDepsPlugin(),
+        new RuntimeBundlePlugin(),
         new rspack.CopyRspackPlugin({
             patterns: [{ from: "public" }],
         }),
