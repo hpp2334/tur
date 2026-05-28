@@ -1,6 +1,11 @@
 import { atom } from "jotai";
+import {
+    fetchAllFiles,
+    getCaseFiles,
+    getCaseNames,
+    loadManifest,
+} from "../cases";
 import { compileWithFiles, initCompiler } from "../compiler";
-import { fetchAllFiles, getCaseNames, getCaseFiles, loadManifest } from "../cases";
 
 export function createEditorAtoms() {
     const selectedCase = atom<string | null>(null);
@@ -74,7 +79,11 @@ export function createEditorAtoms() {
         set(caseFiles, allFiles);
 
         const indexSource = allFiles.get("index.tsx") ?? editedSource;
-        const result = compileWithFiles("index.tsx", indexSource, new Map(allFiles));
+        const result = compileWithFiles(
+            "index.tsx",
+            indexSource,
+            new Map(allFiles),
+        );
         set(building, false);
         if (result.error) {
             console.error("Compile error:", result.error);

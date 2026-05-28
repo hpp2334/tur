@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
+import { useEffect, useRef } from "react";
 import { editorAtoms } from "../lib/atoms/editor-atoms";
 import { viewerAtoms } from "../lib/atoms/viewer-atoms";
 

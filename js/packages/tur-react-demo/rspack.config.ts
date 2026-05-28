@@ -116,9 +116,16 @@ class TestCasesPlugin implements RspackPluginInstance {
                         const files = readdirSync(caseDir);
                         for (const file of files) {
                             if (!/\.(ts|tsx)$/.test(file)) continue;
-                            const content = readFileSync(join(caseDir, file), "utf-8");
-                            const source = new compiler.webpack.sources.RawSource(content);
-                            compilation.emitAsset(`sources/${name}/${file}`, source);
+                            const content = readFileSync(
+                                join(caseDir, file),
+                                "utf-8",
+                            );
+                            const source =
+                                new compiler.webpack.sources.RawSource(content);
+                            compilation.emitAsset(
+                                `sources/${name}/${file}`,
+                                source,
+                            );
                             filesForCase.push(file);
                         }
                     } catch {

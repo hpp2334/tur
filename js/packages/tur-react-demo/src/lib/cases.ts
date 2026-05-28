@@ -37,18 +37,24 @@ export function getCaseFiles(caseName: string): string[] {
     return info ? info.files : [];
 }
 
-export async function fetchFile(caseName: string, fileName: string): Promise<string> {
+export async function fetchFile(
+    caseName: string,
+    fileName: string,
+): Promise<string> {
     const cacheKey = `${caseName}/${fileName}`;
     const cached = fileContentCache.get(cacheKey);
     if (cached) return cached;
     const resp = await fetch(`/sources/${caseName}/${fileName}`);
-    if (!resp.ok) throw new Error(`failed to fetch ${cacheKey}: ${resp.status}`);
+    if (!resp.ok)
+        throw new Error(`failed to fetch ${cacheKey}: ${resp.status}`);
     const source = await resp.text();
     fileContentCache.set(cacheKey, source);
     return source;
 }
 
-export async function fetchAllFiles(caseName: string): Promise<Map<string, string>> {
+export async function fetchAllFiles(
+    caseName: string,
+): Promise<Map<string, string>> {
     const files = getCaseFiles(caseName);
     const result = new Map<string, string>();
     await Promise.all(

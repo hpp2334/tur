@@ -859,13 +859,22 @@ async function main() {
             return Array.from(items).map((el) => el.textContent);
         });
         console.log(`  File tree items: ${fileTreeVisible.join(", ")}`);
-        const expectedFiles = ["Sidebar.tsx", "index.tsx", "store.ts", "theme.ts"];
-        const allFilesPresent = expectedFiles.every((f) => fileTreeVisible.includes(f));
+        const expectedFiles = [
+            "Sidebar.tsx",
+            "index.tsx",
+            "store.ts",
+            "theme.ts",
+        ];
+        const allFilesPresent = expectedFiles.every((f) =>
+            fileTreeVisible.includes(f),
+        );
         if (allFilesPresent) {
             console.log("  PASS: all todolist files visible in file tree");
             passed++;
         } else {
-            console.log(`  FAIL: expected ${expectedFiles.join(", ")}, got ${fileTreeVisible.join(", ")}`);
+            console.log(
+                `  FAIL: expected ${expectedFiles.join(", ")}, got ${fileTreeVisible.join(", ")}`,
+            );
             failed++;
         }
 
@@ -883,16 +892,26 @@ async function main() {
 
         // --- Step F2: Click store.ts in file tree ---
         console.log("\n--- Step F2: Click store.ts in file tree ---");
-        const storeFileBtn = page.locator("button.file-item", { hasText: /^store\.ts$/ });
+        const storeFileBtn = page.locator("button.file-item", {
+            hasText: /^store\.ts$/,
+        });
         await storeFileBtn.click();
         await waitForRender(page, 200);
 
         const editorContent = await page.evaluate(() => {
-            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
-            return Array.from(lines).slice(0, 3).map((l) => l.textContent).join("\n");
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .slice(0, 3)
+                .map((l) => l.textContent)
+                .join("\n");
         });
         console.log(`  Editor first 3 lines: ${editorContent}`);
-        if (editorContent.includes("createTextEditingController") || editorContent.includes("jotai")) {
+        if (
+            editorContent.includes("createTextEditingController") ||
+            editorContent.includes("jotai")
+        ) {
             console.log("  PASS: editor shows store.ts content");
             passed++;
         } else {
@@ -908,7 +927,9 @@ async function main() {
             console.log("  PASS: store.ts is now the active file");
             passed++;
         } else {
-            console.log(`  FAIL: expected store.ts active, got ${activeFileAfterSwitch}`);
+            console.log(
+                `  FAIL: expected store.ts active, got ${activeFileAfterSwitch}`,
+            );
             failed++;
         }
 
@@ -916,15 +937,25 @@ async function main() {
 
         // --- Step F3: Switch back to index.tsx ---
         console.log("\n--- Step F3: Click index.tsx in file tree ---");
-        const indexFileBtn = page.locator("button.file-item", { hasText: /^index\.tsx$/ });
+        const indexFileBtn = page.locator("button.file-item", {
+            hasText: /^index\.tsx$/,
+        });
         await indexFileBtn.click();
         await waitForRender(page, 200);
 
         const editorContentIndex = await page.evaluate(() => {
-            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
-            return Array.from(lines).slice(0, 3).map((l) => l.textContent).join("\n");
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .slice(0, 3)
+                .map((l) => l.textContent)
+                .join("\n");
         });
-        if (editorContentIndex.includes("@tur/react") || editorContentIndex.includes("import")) {
+        if (
+            editorContentIndex.includes("@tur/react") ||
+            editorContentIndex.includes("import")
+        ) {
             console.log("  PASS: editor shows index.tsx content");
             passed++;
         } else {
@@ -933,21 +964,29 @@ async function main() {
         }
 
         // --- Step F4: Verify canvas still renders correctly after file switching ---
-        console.log("\n--- Step F4: Verify canvas still renders after file switching ---");
+        console.log(
+            "\n--- Step F4: Verify canvas still renders after file switching ---",
+        );
         await screenshot(page, "file-tree-after-switch");
         const elementsAfterSwitch = await getLayout(page);
         const tasksAfterSwitch = getTaskTexts(elementsAfterSwitch);
         if (tasksAfterSwitch.length >= 4) {
-            console.log("  PASS: canvas still renders tasks after file switching");
+            console.log(
+                "  PASS: canvas still renders tasks after file switching",
+            );
             passed++;
         } else {
-            console.log(`  FAIL: canvas lost tasks after file switching (got ${tasksAfterSwitch.length})`);
+            console.log(
+                `  FAIL: canvas lost tasks after file switching (got ${tasksAfterSwitch.length})`,
+            );
             failed++;
         }
 
         // --- Step F5: Switch to counter case (single file, no tree) ---
         console.log("\n--- Step F5: Switch to counter case ---");
-        const counterBtn = page.locator("button.case-item", { hasText: /^counter$/ });
+        const counterBtn = page.locator("button.case-item", {
+            hasText: /^counter$/,
+        });
         await counterBtn.click();
         await waitForRender(page, 500);
 
@@ -960,7 +999,9 @@ async function main() {
             console.log("  PASS: no file tree for single-file counter case");
             passed++;
         } else {
-            console.log(`  FAIL: unexpected file tree items for counter: ${counterFileTree.join(", ")}`);
+            console.log(
+                `  FAIL: unexpected file tree items for counter: ${counterFileTree.join(", ")}`,
+            );
             failed++;
         }
 
@@ -972,7 +1013,9 @@ async function main() {
             console.log("  PASS: editor header shows counter/index.tsx");
             passed++;
         } else {
-            console.log(`  FAIL: expected counter/index.tsx header, got ${editorHeader}`);
+            console.log(
+                `  FAIL: expected counter/index.tsx header, got ${editorHeader}`,
+            );
             failed++;
         }
 
@@ -1030,7 +1073,7 @@ renderRoot(Counter);
         await page.waitForFunction(
             () => {
                 const editor = document.querySelector(".cm-editor .cm-content");
-                return editor && editor.textContent && editor.textContent.length > 10;
+                return editor?.textContent && editor.textContent.length > 10;
             },
             { timeout: 5000 },
         );
@@ -1050,12 +1093,20 @@ renderRoot(Counter);
         await waitForRender(page, 300);
 
         const editorText = await page.evaluate(() => {
-            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
-            return Array.from(lines).map((l) => l.textContent).join("\n");
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .map((l) => l.textContent)
+                .join("\n");
         });
-        console.log(`  Editor has "Row": ${editorText.includes("Row")}, length: ${editorText.length}`);
+        console.log(
+            `  Editor has "Row": ${editorText.includes("Row")}, length: ${editorText.length}`,
+        );
         if (!editorText.includes("Row")) {
-            console.log(`  Editor first 80 chars: "${editorText.substring(0, 80)}"`);
+            console.log(
+                `  Editor first 80 chars: "${editorText.substring(0, 80)}"`,
+            );
         }
 
         // --- Step C: Save (Cmd+S) to compile ---
@@ -1071,7 +1122,9 @@ renderRoot(Counter);
                     const layout = (
                         w.turDemo as { debugLayout: () => string }
                     ).debugLayout();
-                    return typeof layout === "string" && layout.includes("Count:");
+                    return (
+                        typeof layout === "string" && layout.includes("Count:")
+                    );
                 } catch {
                     return false;
                 }
@@ -1100,14 +1153,19 @@ renderRoot(Counter);
 
         console.log("  All elements:");
         for (const el of elements) {
-            console.log(`    ${el.type} "${el.label}" at (${el.rect.x},${el.rect.y}) ${el.rect.w}x${el.rect.h}`);
+            console.log(
+                `    ${el.type} "${el.label}" at (${el.rect.x},${el.rect.y}) ${el.rect.w}x${el.rect.h}`,
+            );
         }
 
         const allTexts = findAll(
             elements,
             (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
         );
-        console.log("  All text labels:", allTexts.map((e) => `"${e.label}"`).join(", "));
+        console.log(
+            "  All text labels:",
+            allTexts.map((e) => `"${e.label}"`).join(", "),
+        );
 
         const counterErrors = logs.filter((e) => e.type === "error");
         if (counterErrors.length > 0) {
@@ -1257,7 +1315,9 @@ renderRoot(Counter);
                 failed++;
             }
         } else {
-            console.log('  SKIP: "-1" button not found in layout — cannot test decrement');
+            console.log(
+                '  SKIP: "-1" button not found in layout — cannot test decrement',
+            );
             failed++;
             await screenshot(page, "counter-no-minus1");
         }

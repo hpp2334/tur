@@ -1,5 +1,5 @@
-import { parse } from "acorn";
 import type { ImportDeclaration, ImportSpecifier } from "acorn";
+import { parse } from "acorn";
 import { transform } from "sucrase";
 
 let runtimeCode: string | null = null;
@@ -20,7 +20,10 @@ const GLOBAL_MAP: Record<string, string> = {
 };
 
 function formatSpecifier(spec: ImportSpecifier): string {
-    const imported = spec.imported.type === "Identifier" ? spec.imported.name : spec.imported.value;
+    const imported =
+        spec.imported.type === "Identifier"
+            ? spec.imported.name
+            : spec.imported.value;
     if (imported === spec.local.name) return imported;
     return `${imported}: ${spec.local.name}`;
 }
@@ -52,7 +55,11 @@ function processImport(node: ImportDeclaration): string | null {
     return lines.join("\n");
 }
 
-function resolveLocalPath(importer: string, specifier: string, files: Map<string, string>): string | null {
+function resolveLocalPath(
+    importer: string,
+    specifier: string,
+    files: Map<string, string>,
+): string | null {
     const match = specifier.match(/^\.\/(.+)$/);
     if (!match) return null;
     let base = match[1];
@@ -63,7 +70,9 @@ function resolveLocalPath(importer: string, specifier: string, files: Map<string
         if (files.has(base)) return base;
         return null;
     }
-    const dir = importer.includes("/") ? importer.substring(0, importer.lastIndexOf("/")) : "";
+    const dir = importer.includes("/")
+        ? importer.substring(0, importer.lastIndexOf("/"))
+        : "";
     for (const ext of [".tsx", ".ts"]) {
         const candidate = dir ? `${dir}/${base}${ext}` : `${base}${ext}`;
         if (files.has(candidate)) return candidate;
@@ -73,7 +82,13 @@ function resolveLocalPath(importer: string, specifier: string, files: Map<string
     return null;
 }
 
-function transpileFile(fileName: string, source: string, files: Map<string, string>, visited: Set<string>, output: string[]): { code?: string; error?: string } {
+function transpileFile(
+    fileName: string,
+    source: string,
+    files: Map<string, string>,
+    visited: Set<string>,
+    output: string[],
+): { code?: string; error?: string } {
     if (visited.has(fileName)) return {};
     visited.add(fileName);
 
@@ -85,7 +100,9 @@ function transpileFile(fileName: string, source: string, files: Map<string, stri
         });
         jsCode = result.code;
     } catch (e) {
-        return { error: `${fileName}: ${e instanceof Error ? e.message : String(e)}` };
+        return {
+            error: `${fileName}: ${e instanceof Error ? e.message : String(e)}`,
+        };
     }
 
     let ast: ReturnType<typeof parse>;
@@ -95,7 +112,9 @@ function transpileFile(fileName: string, source: string, files: Map<string, stri
             ecmaVersion: 2024,
         });
     } catch (e) {
-        return { error: `${fileName}: parse error: ${e instanceof Error ? e.message : String(e)}` };
+        return {
+            error: `${fileName}: parse error: ${e instanceof Error ? e.message : String(e)}`,
+        };
     }
 
     const imports = ast.body.filter(
@@ -123,7 +142,10 @@ function transpileFile(fileName: string, source: string, files: Map<string, stri
                 end: exp.end,
                 text: "",
             });
-        } else if (exp.type === "ExportNamedDeclaration" && exp.specifiers.length > 0) {
+        } else if (
+            exp.type === "ExportNamedDeclaration" &&
+            exp.specifiers.length > 0
+        ) {
             replacements.push({
                 start: exp.start,
                 end: exp.end,
@@ -138,14 +160,24 @@ function transpileFile(fileName: string, source: string, files: Map<string, stri
         if (src.startsWith(".")) {
             const resolved = resolveLocalPath(fileName, src, files);
             if (!resolved) {
-                return { error: `${fileName}: cannot resolve local import: ${src}` };
+                return {
+                    error: `${fileName}: cannot resolve local import: ${src}`,
+                };
             }
             const depSource = files.get(resolved);
             if (depSource === undefined) {
-                return { error: `${fileName}: local file not found: ${resolved}` };
+                return {
+                    error: `${fileName}: local file not found: ${resolved}`,
+                };
             }
 
-            const depResult = transpileFile(resolved, depSource, files, visited, output);
+            const depResult = transpileFile(
+                resolved,
+                depSource,
+                files,
+                visited,
+                output,
+            );
             if (depResult.error) return depResult;
 
             replacements.push({
@@ -173,8 +205,7 @@ function transpileFile(fileName: string, source: string, files: Map<string, stri
     for (const { start, end, text } of replacements.sort(
         (a, b) => b.start - a.start,
     )) {
-        processed =
-            processed.slice(0, start) + text + processed.slice(end);
+        processed = processed.slice(0, start) + text + processed.slice(end);
     }
 
     output.push(processed);
@@ -185,7 +216,11 @@ export function compile(source: string): { code?: string; error?: string } {
     return compileWithFiles("index.tsx", source, new Map());
 }
 
-export function compileWithFiles(entryFile: string, source: string, files: Map<string, string>): { code?: string; error?: string } {
+export function compileWithFiles(
+    entryFile: string,
+    source: string,
+    files: Map<string, string>,
+): { code?: string; error?: string } {
     if (!runtimeCode) return { error: "Compiler not initialized" };
 
     try {

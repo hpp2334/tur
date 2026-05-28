@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
+import { useEffect } from "react";
 import { CaseSelector } from "./components/CaseSelector";
 import { CodeEditor } from "./components/CodeEditor";
 import { TurViewer } from "./components/TurViewer";
@@ -19,6 +19,7 @@ export function App() {
     const save = useSetAtom(editorAtoms.save);
     const initCompiler = useSetAtom(editorAtoms.initCompiler);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: init only, selectCase is stable
     useEffect(() => {
         initCompiler().then(() => {
             selectCase("todolist");
