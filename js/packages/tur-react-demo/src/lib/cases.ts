@@ -1,9 +1,3 @@
-const ctx = require.context(
-    "../../../tur-test-cases/react-cases",
-    true,
-    /\.(ts|tsx)$/,
-);
-
 export interface CaseInfo {
     name: string;
     files: string[];
@@ -12,37 +6,34 @@ export interface CaseInfo {
 
 const casesMap = new Map<string, CaseInfo>();
 const fileContentCache = new Map<string, string>();
+const WHITELIST = ["todolist", "counter"];
 
-for (const key of ctx.keys()) {
-    const match = key.match(/^\.\/([^/]+)\/(.+\.(ts|tsx))$/);
-    if (!match) continue;
-    const caseName = match[1];
-    const fileName = match[2];
-    let info = casesMap.get(caseName);
-    if (!info) {
-        info = {
-            name: caseName,
-            files: [],
-            compiledPath: `/cases/${caseName}.js`,
-        };
-        casesMap.set(caseName, info);
+let manifestReady = false;
+
+export async function loadManifest(): Promise<void> {
+    if (manifestReady) return;
+    const resp = await fetch("/cases-manifest.json");
+    if (!resp.ok) throw new Error(`Failed to load manifest: ${resp.status}`);
+    const manifest: Record<string, string[]> = await resp.json();
+    for (const [name, files] of Object.entries(manifest)) {
+        if (!WHITELIST.includes(name)) continue;
+        casesMap.set(name, {
+            name,
+            files,
+            compiledPath: `/cases/${name}.js`,
+        });
     }
-    info.files.push(fileName);
-}
-
-for (const info of casesMap.values()) {
-    info.files.sort();
+    manifestReady = true;
 }
 
 export const cases = casesMap;
-const WHITELIST = ["todolist", "counter"];
 
-export const caseNames = Array.from(casesMap.keys())
-    .filter((name) => WHITELIST.includes(name))
-    .sort();
+export function getCaseNames(): string[] {
+    return Array.from(casesMap.keys()).sort();
+}
 
 export function getCaseFiles(caseName: string): string[] {
-    const info = cases.get(caseName);
+    const info = casesMap.get(caseName);
     return info ? info.files : [];
 }
 

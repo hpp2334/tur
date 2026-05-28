@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 import { compileWithFiles, initCompiler } from "../compiler";
-import { fetchAllFiles, getCaseFiles } from "../cases";
+import { fetchAllFiles, getCaseNames, getCaseFiles, loadManifest } from "../cases";
 
 export function createEditorAtoms() {
     const selectedCase = atom<string | null>(null);
@@ -8,6 +8,7 @@ export function createEditorAtoms() {
     const caseFiles = atom<Map<string, string>>(new Map());
     const source = atom("");
     const compilerReady = atom(false);
+    const caseNamesAtom = atom<string[]>([]);
     const compiledSource = atom<string | null>(null);
     const buildError = atom<string | null>(null);
     const building = atom(false);
@@ -15,7 +16,9 @@ export function createEditorAtoms() {
     const initCompilerAction = atom(null, async (_get, set) => {
         try {
             await initCompiler();
+            await loadManifest();
             set(compilerReady, true);
+            set(caseNamesAtom, getCaseNames());
         } catch (e) {
             console.error(
                 "Compiler init failed:",
@@ -85,6 +88,7 @@ export function createEditorAtoms() {
         selectedCase,
         selectedFile,
         caseFiles,
+        caseNames: caseNamesAtom,
         source,
         compilerReady,
         compiledSource,

@@ -1,6 +1,7 @@
-import { caseNames, getCaseFiles } from "../lib/cases";
+import { getCaseFiles } from "../lib/cases";
 
 interface CaseSelectorProps {
+    caseNames: string[];
     selectedCase: string | null;
     selectedFile: string;
     onSelectCase: (name: string) => void;
@@ -8,6 +9,7 @@ interface CaseSelectorProps {
 }
 
 export function CaseSelector({
+    caseNames,
     selectedCase,
     selectedFile,
     onSelectCase,

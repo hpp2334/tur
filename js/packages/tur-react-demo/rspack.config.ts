@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
 import type { Compiler, RspackPluginInstance } from "@rspack/core";
 import * as rspack from "@rspack/core";
+import ReactRefreshPlugin from "@rspack/plugin-react-refresh";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(__dirname, "../../..");
@@ -94,6 +95,7 @@ class TestCasesPlugin implements RspackPluginInstance {
                 const distDir = join(testCasesDir, "dist");
                 const casesRoot = join(testCasesDir, "react-cases");
                 const caseNames = findCaseNames();
+                const manifest: Record<string, string[]> = {};
 
                 for (const name of caseNames) {
                     const jsFile = `${name}.js`;
@@ -109,6 +111,7 @@ class TestCasesPlugin implements RspackPluginInstance {
                     }
 
                     const caseDir = join(casesRoot, name);
+                    const filesForCase: string[] = [];
                     try {
                         const files = readdirSync(caseDir);
                         for (const file of files) {
@@ -116,11 +119,19 @@ class TestCasesPlugin implements RspackPluginInstance {
                             const content = readFileSync(join(caseDir, file), "utf-8");
                             const source = new compiler.webpack.sources.RawSource(content);
                             compilation.emitAsset(`sources/${name}/${file}`, source);
+                            filesForCase.push(file);
                         }
                     } catch {
                         logger.warn(`Test case source not found: ${name}`);
                     }
+                    manifest[name] = filesForCase.sort();
                 }
+
+                const manifestJson = JSON.stringify(manifest);
+                compilation.emitAsset(
+                    "cases-manifest.json",
+                    new compiler.webpack.sources.RawSource(manifestJson),
+                );
 
                 logger.info(
                     `Copied ${caseNames.length} test case bundles + sources`,
@@ -174,6 +185,7 @@ export default defineConfig({
     devServer: {
         hot: true,
         liveReload: false,
+        server: "https",
         client: {
             overlay: {
                 errors: true,
@@ -236,5 +248,6 @@ export default defineConfig({
         new rspack.CopyRspackPlugin({
             patterns: [{ from: "public" }],
         }),
+        new ReactRefreshPlugin(),
     ],
 });

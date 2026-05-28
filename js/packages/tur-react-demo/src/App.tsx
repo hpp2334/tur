@@ -9,6 +9,7 @@ import "./App.css";
 export function App() {
     const selectedCase = useAtomValue(editorAtoms.selectedCase);
     const selectedFile = useAtomValue(editorAtoms.selectedFile);
+    const caseNames = useAtomValue(editorAtoms.caseNames);
     const source = useAtomValue(editorAtoms.source);
     const building = useAtomValue(editorAtoms.building);
     const buildError = useAtomValue(editorAtoms.buildError);
@@ -27,6 +28,7 @@ export function App() {
     return (
         <div className="app">
             <CaseSelector
+                caseNames={caseNames}
                 selectedCase={selectedCase}
                 selectedFile={selectedFile}
                 onSelectCase={selectCase}
