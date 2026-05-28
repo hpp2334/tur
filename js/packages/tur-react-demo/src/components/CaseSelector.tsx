@@ -33,7 +33,7 @@ export function CaseSelector({
                             >
                                 {name}
                             </button>
-                            {isActive && files.length > 1 && (
+                            {isActive && files.length > 0 && (
                                 <div className="file-tree">
                                     {files.map((file) => (
                                         <button

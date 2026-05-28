@@ -5,6 +5,7 @@ import { viewerAtoms } from "../lib/atoms/viewer-atoms";
 
 export function TurViewer() {
     const containerRef = useRef<HTMLDivElement>(null);
+    const initializedRef = useRef(false);
     const turReady = useAtomValue(viewerAtoms.turReady);
     const turError = useAtomValue(viewerAtoms.turError);
     const compiledSource = useAtomValue(editorAtoms.compiledSource);
@@ -12,6 +13,8 @@ export function TurViewer() {
     const run = useSetAtom(viewerAtoms.run);
 
     useEffect(() => {
+        if (initializedRef.current) return;
+        initializedRef.current = true;
         initTur("tur-container");
     }, [initTur]);
 

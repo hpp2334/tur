@@ -995,8 +995,11 @@ async function main() {
             return Array.from(items).map((el) => el.textContent);
         });
         console.log(`  Counter file tree items: ${counterFileTree.join(", ")}`);
-        if (counterFileTree.length === 0) {
-            console.log("  PASS: no file tree for single-file counter case");
+        if (
+            counterFileTree.length === 1 &&
+            counterFileTree[0] === "index.tsx"
+        ) {
+            console.log("  PASS: file tree shows index.tsx for counter");
             passed++;
         } else {
             console.log(
@@ -1020,6 +1023,41 @@ async function main() {
         }
 
         await screenshot(page, "file-tree-counter");
+
+        // --- Step F6: Verify counter renders in canvas ---
+        console.log("\n--- Step F6: Verify counter renders in canvas ---");
+        await waitForRender(page, 1000);
+        const counterCanvasLayout = await page.evaluate(() => {
+            const w = window as Record<string, unknown>;
+            if (!w.turDemo) return null;
+            try {
+                return (
+                    w.turDemo as { debugLayout: () => string }
+                ).debugLayout();
+            } catch {
+                return null;
+            }
+        });
+        if (counterCanvasLayout && counterCanvasLayout.length > 50) {
+            console.log(
+                `  PASS: counter renders in canvas (${counterCanvasLayout.length} chars)`,
+            );
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: counter canvas is empty (layout=${counterCanvasLayout ? counterCanvasLayout.length : "null"})`,
+            );
+            failed++;
+            // Check for build error
+            const buildErr = await page.evaluate(() => {
+                const el = document.querySelector(".build-error");
+                return el ? el.getAttribute("title") : null;
+            });
+            if (buildErr) {
+                console.log(`  Build error: ${buildErr}`);
+            }
+        }
+        await screenshot(page, "counter-case-rendered");
 
         // ========== COUNTER APP TEST ==========
         // Test live editing: type a counter app in the code editor, compile, and interact
