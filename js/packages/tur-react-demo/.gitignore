@@ -1,3 +1,4 @@
 
 # Runtime build cache
 .runtime-build/
+.rspack-profile*
