@@ -849,6 +849,135 @@ async function main() {
 
         printConsole(logs);
 
+        // ========== FILE TREE TEST ==========
+        console.log("\n========== FILE TREE TEST ==========");
+
+        // --- Step F1: Verify file tree has todolist expanded with files ---
+        console.log("\n--- Step F1: Verify file tree for todolist ---");
+        const fileTreeVisible = await page.evaluate(() => {
+            const items = document.querySelectorAll(".file-item");
+            return Array.from(items).map((el) => el.textContent);
+        });
+        console.log(`  File tree items: ${fileTreeVisible.join(", ")}`);
+        const expectedFiles = ["Sidebar.tsx", "index.tsx", "store.ts", "theme.ts"];
+        const allFilesPresent = expectedFiles.every((f) => fileTreeVisible.includes(f));
+        if (allFilesPresent) {
+            console.log("  PASS: all todolist files visible in file tree");
+            passed++;
+        } else {
+            console.log(`  FAIL: expected ${expectedFiles.join(", ")}, got ${fileTreeVisible.join(", ")}`);
+            failed++;
+        }
+
+        const activeFile = await page.evaluate(() => {
+            const active = document.querySelector(".file-item.active");
+            return active ? active.textContent : null;
+        });
+        if (activeFile === "index.tsx") {
+            console.log("  PASS: index.tsx is the active file");
+            passed++;
+        } else {
+            console.log(`  FAIL: expected index.tsx active, got ${activeFile}`);
+            failed++;
+        }
+
+        // --- Step F2: Click store.ts in file tree ---
+        console.log("\n--- Step F2: Click store.ts in file tree ---");
+        const storeFileBtn = page.locator("button.file-item", { hasText: /^store\.ts$/ });
+        await storeFileBtn.click();
+        await waitForRender(page, 200);
+
+        const editorContent = await page.evaluate(() => {
+            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
+            return Array.from(lines).slice(0, 3).map((l) => l.textContent).join("\n");
+        });
+        console.log(`  Editor first 3 lines: ${editorContent}`);
+        if (editorContent.includes("createTextEditingController") || editorContent.includes("jotai")) {
+            console.log("  PASS: editor shows store.ts content");
+            passed++;
+        } else {
+            console.log("  FAIL: editor does not show store.ts content");
+            failed++;
+        }
+
+        const activeFileAfterSwitch = await page.evaluate(() => {
+            const active = document.querySelector(".file-item.active");
+            return active ? active.textContent : null;
+        });
+        if (activeFileAfterSwitch === "store.ts") {
+            console.log("  PASS: store.ts is now the active file");
+            passed++;
+        } else {
+            console.log(`  FAIL: expected store.ts active, got ${activeFileAfterSwitch}`);
+            failed++;
+        }
+
+        await screenshot(page, "file-tree-store");
+
+        // --- Step F3: Switch back to index.tsx ---
+        console.log("\n--- Step F3: Click index.tsx in file tree ---");
+        const indexFileBtn = page.locator("button.file-item", { hasText: /^index\.tsx$/ });
+        await indexFileBtn.click();
+        await waitForRender(page, 200);
+
+        const editorContentIndex = await page.evaluate(() => {
+            const lines = document.querySelectorAll(".cm-editor .cm-content .cm-line");
+            return Array.from(lines).slice(0, 3).map((l) => l.textContent).join("\n");
+        });
+        if (editorContentIndex.includes("@tur/react") || editorContentIndex.includes("import")) {
+            console.log("  PASS: editor shows index.tsx content");
+            passed++;
+        } else {
+            console.log("  FAIL: editor does not show index.tsx content");
+            failed++;
+        }
+
+        // --- Step F4: Verify canvas still renders correctly after file switching ---
+        console.log("\n--- Step F4: Verify canvas still renders after file switching ---");
+        await screenshot(page, "file-tree-after-switch");
+        const elementsAfterSwitch = await getLayout(page);
+        const tasksAfterSwitch = getTaskTexts(elementsAfterSwitch);
+        if (tasksAfterSwitch.length >= 4) {
+            console.log("  PASS: canvas still renders tasks after file switching");
+            passed++;
+        } else {
+            console.log(`  FAIL: canvas lost tasks after file switching (got ${tasksAfterSwitch.length})`);
+            failed++;
+        }
+
+        // --- Step F5: Switch to counter case (single file, no tree) ---
+        console.log("\n--- Step F5: Switch to counter case ---");
+        const counterBtn = page.locator("button.case-item", { hasText: /^counter$/ });
+        await counterBtn.click();
+        await waitForRender(page, 500);
+
+        const counterFileTree = await page.evaluate(() => {
+            const items = document.querySelectorAll(".file-item");
+            return Array.from(items).map((el) => el.textContent);
+        });
+        console.log(`  Counter file tree items: ${counterFileTree.join(", ")}`);
+        if (counterFileTree.length === 0) {
+            console.log("  PASS: no file tree for single-file counter case");
+            passed++;
+        } else {
+            console.log(`  FAIL: unexpected file tree items for counter: ${counterFileTree.join(", ")}`);
+            failed++;
+        }
+
+        const editorHeader = await page.evaluate(() => {
+            const header = document.querySelector(".editor-header span");
+            return header ? header.textContent : null;
+        });
+        if (editorHeader?.includes("counter/index.tsx")) {
+            console.log("  PASS: editor header shows counter/index.tsx");
+            passed++;
+        } else {
+            console.log(`  FAIL: expected counter/index.tsx header, got ${editorHeader}`);
+            failed++;
+        }
+
+        await screenshot(page, "file-tree-counter");
+
         // ========== COUNTER APP TEST ==========
         // Test live editing: type a counter app in the code editor, compile, and interact
         console.log("\n========== COUNTER APP TEST ==========");

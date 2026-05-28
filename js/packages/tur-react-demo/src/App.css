@@ -88,6 +88,40 @@ body,
     padding-left: 17px;
 }
 
+.case-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.file-tree {
+    display: flex;
+    flex-direction: column;
+}
+
+.file-item {
+    display: block;
+    width: 100%;
+    padding: 6px 20px 6px 36px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+    transition: all 0.1s;
+}
+
+.file-item:hover {
+    background: var(--bg-sidebar-active);
+    color: var(--text-primary);
+}
+
+.file-item.active {
+    background: var(--bg-sidebar-active);
+    color: #fff;
+}
+
 /* Main Area */
 .main-area {
     flex: 1;

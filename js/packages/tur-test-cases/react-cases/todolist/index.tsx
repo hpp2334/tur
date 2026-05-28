@@ -14,79 +14,9 @@ import {
     Stack,
     Text,
 } from "@tur/react";
-import { renderRoot, createTextEditingController } from "@tur/react-renderer";
-import { useAtomValue, useSetAtom } from "jotai/react";
-import { atom, getDefaultStore } from "jotai";
-
-interface Todo {
-    readonly id: number;
-    readonly text: string;
-    readonly done: boolean;
-    readonly description: string;
-}
-
-const INITIAL_TODOS: readonly Todo[] = [
-    { id: 1, text: "Learn Rust", done: true, description: "Complete the Rust book and build a CLI tool" },
-    { id: 2, text: "Build tur engine", done: false, description: "Implement the rendering engine with winit and vello" },
-    { id: 3, text: "Write documentation", done: false, description: "Document the architecture and API surface" },
-    { id: 4, text: "Ship v0.1.0", done: false, description: "First public release with core features" },
-];
-
-const { Color } = globalThis.TurReactRenderer as typeof import("@tur/react-renderer");
-
-const Colors = {
-    BG_APP: Color.hex("#f8fafc"),
-    BG_CARD: Color.hex("#ffffff"),
-    PRIMARY: Color.hex("#6366f1"),
-    PRIMARY_DARK: Color.hex("#4f46e5"),
-    PRIMARY_LIGHT: Color.hex("#eef2ff"),
-    TEXT_PRIMARY: Color.hex("#1e293b"),
-    TEXT_SECONDARY: Color.hex("#64748b"),
-    TEXT_MUTED: Color.hex("#94a3b8"),
-    TEXT_WHITE: Color.hex("#ffffff"),
-    SUCCESS: Color.hex("#22c55e"),
-    SUCCESS_LIGHT: Color.hex("#f0fdf4"),
-    DANGER: Color.hex("#ef4444"),
-    DANGER_LIGHT: Color.hex("#fef2f2"),
-    BORDER: Color.hex("#e2e8f0"),
-    SHADOW: Color.rgba(0, 0, 0, 60),
-    MODAL_BACKDROP: Color.rgba(0, 0, 0, 102),
-};
-
-const store = getDefaultStore();
-
-const todosAtom = atom<readonly Todo[]>(INITIAL_TODOS);
-
-const addTodoAtom = atom(null, (_get: never, set: (a: never, v: never) => void, payload: { text: string; description: string }) => {
-    const trimmed = payload.text.trim();
-    if (!trimmed) return;
-    set(todosAtom as never, (prev: readonly Todo[]) => [
-        ...prev,
-        { id: Date.now(), text: trimmed, description: payload.description, done: false },
-    ] as readonly Todo[]);
-});
-
-const toggleTodoAtom = atom(null, (_get: never, set: (a: never, v: never) => void, id: number) => {
-    set(todosAtom as never, (prev: readonly Todo[]) =>
-        prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
-});
-
-const removeTodoAtom = atom(null, (_get: never, set: (a: never, v: never) => void, id: number) => {
-    set(todosAtom as never, (prev: readonly Todo[]) => prev.filter((t) => t.id !== id));
-});
-
-const selectedTodoIdAtom = atom<number | null>(null);
-const showModalAtom = atom(false);
-const titleTextAtom = atom("");
-const descTextAtom = atom("");
-
-const titleControllerAtom = atom(
-    createTextEditingController({ onInput: (text: string) => store.set(titleTextAtom, text) }),
-);
-const descControllerAtom = atom(
-    createTextEditingController({ onInput: (text: string) => store.set(descTextAtom, text) }),
-);
+import { renderRoot } from "@tur/react-renderer";
+import { Colors } from "./theme";
+import { type Todo, store, todosAtom, addTodoAtom, toggleTodoAtom, removeTodoAtom, selectedTodoIdAtom, showModalAtom, titleTextAtom, descTextAtom, titleControllerAtom, descControllerAtom, useAtomValue, useSetAtom } from "./store";
 
 function Checkbox(props: { checked: boolean }) {
     if (props.checked) {

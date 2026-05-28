@@ -108,17 +108,17 @@ class TestCasesPlugin implements RspackPluginInstance {
                         logger.warn(`Test case not built: ${jsFile}`);
                     }
 
-                    const sourceFile = join(casesRoot, name, "index.tsx");
+                    const caseDir = join(casesRoot, name);
                     try {
-                        const content = readFileSync(sourceFile, "utf-8");
-                        const source = new compiler.webpack.sources.RawSource(
-                            content,
-                        );
-                        compilation.emitAsset(`sources/${name}.tsx`, source);
+                        const files = readdirSync(caseDir);
+                        for (const file of files) {
+                            if (!/\.(ts|tsx)$/.test(file)) continue;
+                            const content = readFileSync(join(caseDir, file), "utf-8");
+                            const source = new compiler.webpack.sources.RawSource(content);
+                            compilation.emitAsset(`sources/${name}/${file}`, source);
+                        }
                     } catch {
-                        logger.warn(
-                            `Test case source not found: ${name}/index.tsx`,
-                        );
+                        logger.warn(`Test case source not found: ${name}`);
                     }
                 }
 

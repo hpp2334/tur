@@ -1,9 +1,11 @@
 import { atom } from "jotai";
-import { compile, initCompiler } from "../compiler";
-import { fetchSource } from "../cases";
+import { compileWithFiles, initCompiler } from "../compiler";
+import { fetchAllFiles, getCaseFiles } from "../cases";
 
 export function createEditorAtoms() {
     const selectedCase = atom<string | null>(null);
+    const selectedFile = atom("index.tsx");
+    const caseFiles = atom<Map<string, string>>(new Map());
     const source = atom("");
     const compilerReady = atom(false);
     const compiledSource = atom<string | null>(null);
@@ -14,15 +16,6 @@ export function createEditorAtoms() {
         try {
             await initCompiler();
             set(compilerReady, true);
-            const src = _get(source);
-            if (!src) return;
-            const result = compile(src);
-            if (result.error) {
-                console.error("Compile error:", result.error);
-                set(buildError, result.error);
-            } else if (result.code) {
-                set(compiledSource, result.code);
-            }
         } catch (e) {
             console.error(
                 "Compiler init failed:",
@@ -33,13 +26,16 @@ export function createEditorAtoms() {
 
     const selectCase = atom(null, async (get, set, name: string) => {
         set(selectedCase, name);
+        set(selectedFile, "index.tsx");
         set(compiledSource, null);
         set(buildError, null);
         try {
-            const src = await fetchSource(name);
-            set(source, src);
+            const allFiles = await fetchAllFiles(name);
+            set(caseFiles, allFiles);
+            const indexSource = allFiles.get("index.tsx") ?? "";
+            set(source, indexSource);
             if (!get(compilerReady)) return;
-            const result = compile(src);
+            const result = compileWithFiles("index.tsx", indexSource, allFiles);
             if (result.error) {
                 console.error("Compile error:", result.error);
                 set(buildError, result.error);
@@ -55,11 +51,27 @@ export function createEditorAtoms() {
         }
     });
 
+    const selectFile = atom(null, (get, set, fileName: string) => {
+        const files = get(caseFiles);
+        const content = files.get(fileName);
+        if (content !== undefined) {
+            set(selectedFile, fileName);
+            set(source, content);
+        }
+    });
+
     const save = atom(null, (get, set, editedSource: string) => {
         if (!get(compilerReady)) return;
         set(building, true);
         set(buildError, null);
-        const result = compile(editedSource);
+
+        const currentFile = get(selectedFile);
+        const allFiles = new Map(get(caseFiles));
+        allFiles.set(currentFile, editedSource);
+        set(caseFiles, allFiles);
+
+        const indexSource = allFiles.get("index.tsx") ?? editedSource;
+        const result = compileWithFiles("index.tsx", indexSource, new Map(allFiles));
         set(building, false);
         if (result.error) {
             console.error("Compile error:", result.error);
@@ -71,6 +83,8 @@ export function createEditorAtoms() {
 
     return {
         selectedCase,
+        selectedFile,
+        caseFiles,
         source,
         compilerReady,
         compiledSource,
@@ -78,6 +92,7 @@ export function createEditorAtoms() {
         building,
         initCompiler: initCompilerAction,
         selectCase,
+        selectFile,
         save,
     };
 }

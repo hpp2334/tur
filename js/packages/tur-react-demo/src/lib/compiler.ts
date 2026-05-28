@@ -52,67 +52,159 @@ function processImport(node: ImportDeclaration): string | null {
     return lines.join("\n");
 }
 
-export function compile(source: string): { code?: string; error?: string } {
-    if (!runtimeCode) return { error: "Compiler not initialized" };
+function resolveLocalPath(importer: string, specifier: string, files: Map<string, string>): string | null {
+    const match = specifier.match(/^\.\/(.+)$/);
+    if (!match) return null;
+    let base = match[1];
+    if (base.endsWith(".js")) {
+        base = base.slice(0, -3);
+    }
+    if (/\.(ts|tsx)$/.test(base)) {
+        if (files.has(base)) return base;
+        return null;
+    }
+    const dir = importer.includes("/") ? importer.substring(0, importer.lastIndexOf("/")) : "";
+    for (const ext of [".tsx", ".ts"]) {
+        const candidate = dir ? `${dir}/${base}${ext}` : `${base}${ext}`;
+        if (files.has(candidate)) return candidate;
+    }
+    const bare = dir ? `${dir}/${base}` : base;
+    if (files.has(bare)) return bare;
+    return null;
+}
 
+function transpileFile(fileName: string, source: string, files: Map<string, string>, visited: Set<string>, output: string[]): { code?: string; error?: string } {
+    if (visited.has(fileName)) return {};
+    visited.add(fileName);
+
+    let jsCode: string;
     try {
-        const { code: jsCode } = transform(source, {
+        const result = transform(source, {
             transforms: ["typescript", "jsx"],
             jsxRuntime: "classic",
         });
+        jsCode = result.code;
+    } catch (e) {
+        return { error: `${fileName}: ${e instanceof Error ? e.message : String(e)}` };
+    }
 
-        const ast = parse(jsCode, {
+    let ast: ReturnType<typeof parse>;
+    try {
+        ast = parse(jsCode, {
             sourceType: "module",
             ecmaVersion: 2024,
         });
+    } catch (e) {
+        return { error: `${fileName}: parse error: ${e instanceof Error ? e.message : String(e)}` };
+    }
 
-        const imports = ast.body.filter(
-            (node): node is ImportDeclaration => node.type === "ImportDeclaration",
-        );
+    const imports = ast.body.filter(
+        (node): node is ImportDeclaration => node.type === "ImportDeclaration",
+    );
 
-        const replacements: { start: number; end: number; text: string }[] = [];
-        let hasReactRef = false;
+    const exports = ast.body.filter(
+        (node) =>
+            node.type === "ExportNamedDeclaration" ||
+            node.type === "ExportDefaultDeclaration",
+    );
 
-        for (const node of imports) {
-            const source = node.source.value as string;
+    const replacements: { start: number; end: number; text: string }[] = [];
 
-            if (source.startsWith(".")) {
-                return {
-                    error: `Local imports not supported for live editing: ${source}`,
-                };
+    for (const exp of exports) {
+        if (exp.type === "ExportNamedDeclaration" && exp.declaration) {
+            replacements.push({
+                start: exp.start,
+                end: exp.declaration.start,
+                text: "",
+            });
+        } else if (exp.type === "ExportDefaultDeclaration") {
+            replacements.push({
+                start: exp.start,
+                end: exp.end,
+                text: "",
+            });
+        } else if (exp.type === "ExportNamedDeclaration" && exp.specifiers.length > 0) {
+            replacements.push({
+                start: exp.start,
+                end: exp.end,
+                text: "",
+            });
+        }
+    }
+
+    for (const node of imports) {
+        const src = node.source.value as string;
+
+        if (src.startsWith(".")) {
+            const resolved = resolveLocalPath(fileName, src, files);
+            if (!resolved) {
+                return { error: `${fileName}: cannot resolve local import: ${src}` };
+            }
+            const depSource = files.get(resolved);
+            if (depSource === undefined) {
+                return { error: `${fileName}: local file not found: ${resolved}` };
             }
 
-            const globalRef = GLOBAL_MAP[source];
-            if (!globalRef) {
-                return { error: `Unsupported import: ${source}` };
-            }
+            const depResult = transpileFile(resolved, depSource, files, visited, output);
+            if (depResult.error) return depResult;
 
-            hasReactRef = hasReactRef || source === "react";
-
-            const result = processImport(node);
             replacements.push({
                 start: node.start,
                 end: node.end,
-                text: result ?? "",
+                text: "",
             });
+            continue;
         }
 
-        let processed = jsCode;
-        for (const { start, end, text } of replacements.sort(
-            (a, b) => b.start - a.start,
-        )) {
-            processed =
-                processed.slice(0, start) + text + processed.slice(end);
+        const globalRef = GLOBAL_MAP[src];
+        if (!globalRef) {
+            return { error: `Unsupported import: ${src}` };
         }
 
-        if (
-            !hasReactRef &&
-            /\bReact\.createElement\b/.test(processed)
-        ) {
-            processed = `var React = globalThis.React;\n${processed}`;
-        }
+        const result = processImport(node);
+        replacements.push({
+            start: node.start,
+            end: node.end,
+            text: result ?? "",
+        });
+    }
 
-        return { code: `${runtimeCode}\n${processed}` };
+    let processed = jsCode;
+    for (const { start, end, text } of replacements.sort(
+        (a, b) => b.start - a.start,
+    )) {
+        processed =
+            processed.slice(0, start) + text + processed.slice(end);
+    }
+
+    output.push(processed);
+    return {};
+}
+
+export function compile(source: string): { code?: string; error?: string } {
+    return compileWithFiles("index.tsx", source, new Map());
+}
+
+export function compileWithFiles(entryFile: string, source: string, files: Map<string, string>): { code?: string; error?: string } {
+    if (!runtimeCode) return { error: "Compiler not initialized" };
+
+    try {
+        files.set(entryFile, source);
+
+        const output: string[] = [];
+        const visited = new Set<string>();
+        const result = transpileFile(entryFile, source, files, visited, output);
+
+        if (result.error) return result;
+
+        const processed = output.join("\n");
+
+        const hasReactRef = /var React\s*=/.test(processed);
+        const finalCode = hasReactRef
+            ? processed
+            : `var React = globalThis.React;\n${processed}`;
+
+        return { code: `${runtimeCode}\n${finalCode}` };
     } catch (e) {
         return { error: e instanceof Error ? e.message : String(e) };
     }

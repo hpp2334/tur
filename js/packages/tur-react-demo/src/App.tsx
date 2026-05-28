@@ -8,30 +8,36 @@ import "./App.css";
 
 export function App() {
     const selectedCase = useAtomValue(editorAtoms.selectedCase);
+    const selectedFile = useAtomValue(editorAtoms.selectedFile);
     const source = useAtomValue(editorAtoms.source);
     const building = useAtomValue(editorAtoms.building);
     const buildError = useAtomValue(editorAtoms.buildError);
     const compilerReady = useAtomValue(editorAtoms.compilerReady);
     const selectCase = useSetAtom(editorAtoms.selectCase);
+    const selectFile = useSetAtom(editorAtoms.selectFile);
     const save = useSetAtom(editorAtoms.save);
     const initCompiler = useSetAtom(editorAtoms.initCompiler);
 
     useEffect(() => {
-        initCompiler();
+        initCompiler().then(() => {
+            selectCase("todolist");
+        });
     }, [initCompiler]);
 
     return (
         <div className="app">
             <CaseSelector
                 selectedCase={selectedCase}
-                onSelect={selectCase}
+                selectedFile={selectedFile}
+                onSelectCase={selectCase}
+                onSelectFile={selectFile}
             />
             <div className="main-area">
                 <div className="editor-panel">
                     <div className="editor-header">
                         <span>
                             {selectedCase
-                                ? `${selectedCase}/index.tsx`
+                                ? `${selectedCase}/${selectedFile}`
                                 : "select a case"}
                         </span>
                         {building && (
