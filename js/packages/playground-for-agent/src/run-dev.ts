@@ -13,10 +13,18 @@ const PORT = 3999;
 const MIME_TYPES: Record<string, string> = {
     ".html": "text/html",
     ".js": "text/javascript",
+    ".mjs": "text/javascript",
+    ".css": "text/css",
     ".wasm": "application/wasm",
     ".bin": "text/plain",
     ".map": "application/json",
     ".d.ts": "text/typescript",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+    ".ttf": "font/ttf",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
 };
 
 async function createServer(): Promise<https.Server> {
@@ -54,10 +62,13 @@ async function createServer(): Promise<https.Server> {
             const ext = path.extname(filePath);
             const contentType = MIME_TYPES[ext] || "application/octet-stream";
             const content = fs.readFileSync(filePath);
-            res.writeHead(200, {
+            const headers: Record<string, string | number> = {
                 "Content-Type": contentType,
                 "Content-Length": content.length,
-            });
+                "Cross-Origin-Opener-Policy": "same-origin",
+                "Cross-Origin-Embedder-Policy": "require-corp",
+            };
+            res.writeHead(200, headers);
             res.end(content);
         });
 
@@ -144,7 +155,9 @@ function findElement(
 function findTextSpans(elements: ElementInfo[], text: string): ElementInfo[] {
     return findAll(
         elements,
-        (e) => e.label === text && e.type === "tur_text_span",
+        (e) =>
+            e.label === text &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph"),
     );
 }
 
@@ -171,7 +184,7 @@ function findModalAddTaskButton(
             span.rect,
             "tur_pointer_interact",
         );
-        if (btn && btn.rect.y > 380) {
+        if (btn) {
             return center(btn.rect);
         }
     }
@@ -188,7 +201,7 @@ function findHeaderNewTaskButton(
             span.rect,
             "tur_pointer_interact",
         );
-        if (btn && btn.rect.y < 200) {
+        if (btn) {
             return center(btn.rect);
         }
     }
@@ -201,7 +214,9 @@ function findModalInput(
 ): ElementInfo | undefined {
     const inputs = findAll(
         elements,
-        (e) => e.type === "tur_input" && e.rect.w > 300 && e.rect.h < 50,
+        (e) =>
+            (e.type === "tur_input" || e.type === "tur_editable_text") &&
+            e.rect.h < 50,
     );
     return inputs[index];
 }
@@ -269,14 +284,16 @@ function findItemRow(
             span.rect,
             "tur_pointer_interact",
         );
-        if (row && row.rect.w > 400) return center(row.rect);
+        if (row && row.rect.w > 100) return center(row.rect);
     }
     return null;
 }
 
 function hasModalOpen(elements: ElementInfo[]): boolean {
     return elements.some(
-        (e) => e.label === "Add New Task" && e.type === "tur_text_span",
+        (e) =>
+            e.label === "Add New Task" &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph"),
     );
 }
 
@@ -284,20 +301,28 @@ function getTaskTexts(elements: ElementInfo[]): string[] {
     const taskItems: string[] = [];
     for (const e of elements) {
         if (
-            e.type === "tur_text_span" &&
+            (e.type === "tur_text_span" || e.type === "tur_paragraph") &&
             e.label &&
             e.label !== "v" &&
             e.label !== "x" &&
-            e.rect.x > 250 &&
-            e.rect.y > 180 &&
-            e.rect.y < 550
+            e.label !== "My Tasks" &&
+            e.label !== "NAVIGATION" &&
+            e.label !== "Tur Todo" &&
+            e.label !== "TodoList" &&
+            e.label !== "+ New Task" &&
+            e.label !== "Add New Task" &&
+            e.label !== "Add Task" &&
+            e.label !== "Cancel" &&
+            e.label !== "Title" &&
+            e.label !== "Description" &&
+            e.rect.h > 5
         ) {
             const hasDeleteBtn = elements.some(
                 (d) =>
                     d.type === "tur_pointer_interact" &&
                     d.rect.w <= 40 &&
                     d.rect.h <= 40 &&
-                    d.rect.x > 700 &&
+                    d.rect.x > e.rect.x + e.rect.w &&
                     Math.abs(d.rect.y - e.rect.y) < 30,
             );
             const hasCheckbox = elements.some(
@@ -350,14 +375,15 @@ async function assertClick(
     _elements: ElementInfo[],
     label: string,
     target: { x: number; y: number } | null,
+    offset: { x: number; y: number } = { x: 0, y: 0 },
 ) {
     if (!target) {
         throw new Error(`ASSERT FAIL: could not find "${label}" to click`);
     }
-    console.log(
-        `  Clicking "${label}" at (${Math.round(target.x)}, ${Math.round(target.y)})`,
-    );
-    await page.mouse.click(target.x, target.y);
+    const px = Math.round(target.x + offset.x);
+    const py = Math.round(target.y + offset.y);
+    console.log(`  Clicking "${label}" at (${px}, ${py})`);
+    await page.mouse.click(px, py);
     await waitForRender(page);
 }
 
@@ -411,7 +437,8 @@ async function main() {
 
         const context = await browser.newContext({
             ignoreHTTPSErrors: true,
-            viewport: { width: 800, height: 600 },
+            viewport: { width: 1600, height: 900 },
+            permissions: ["clipboard-read", "clipboard-write"],
         });
 
         const page = await context.newPage();
@@ -454,11 +481,39 @@ async function main() {
         });
         console.log("WebGPU:", JSON.stringify(gpuInfo));
 
+        await waitForRender(page, 1000);
+
+        // --- Step 2: Click "todolist" in sidebar ---
+        console.log("\n--- Step 2: Select todolist case ---");
+        const todolistBtn = page.locator("button.case-item", {
+            hasText: /^todolist$/,
+        });
+        await todolistBtn.click();
+
         await page.waitForFunction(
-            () => (window as Record<string, unknown>).turDemo !== undefined,
-            { timeout: 10000 },
+            () => {
+                const w = window as Record<string, unknown>;
+                if (!w.turDemo) return false;
+                try {
+                    const layout = (
+                        w.turDemo as { debugLayout: () => string }
+                    ).debugLayout();
+                    return typeof layout === "string" && layout.length > 100;
+                } catch {
+                    return false;
+                }
+            },
+            { timeout: 30000 },
         );
-        await waitForRender(page, 3000);
+        await waitForRender(page, 1000);
+
+        const canvasOffset = await page.evaluate(() => {
+            const canvas = document.querySelector("#tur-container canvas");
+            if (!canvas) return { x: 0, y: 0 };
+            const rect = canvas.getBoundingClientRect();
+            return { x: rect.x, y: rect.y };
+        });
+        console.log(`  Canvas offset: ${JSON.stringify(canvasOffset)}`);
 
         let elements = await getLayout(page);
         await screenshot(page, "initial");
@@ -486,11 +541,17 @@ async function main() {
             failed++;
         }
 
-        // --- Step 2: Click "+ New Task" button ---
-        console.log("\n--- Step 2: Click + New Task ---");
+        // --- Step 3: Click "+ New Task" button ---
+        console.log("\n--- Step 3: Click + New Task ---");
         elements = await getLayout(page);
         const newTaskBtn = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn);
+        await assertClick(
+            page,
+            elements,
+            "+ New Task (header)",
+            newTaskBtn,
+            canvasOffset,
+        );
         await screenshot(page, "click-new-task");
 
         // VERIFY: modal should be open
@@ -515,16 +576,16 @@ async function main() {
             failed++;
         }
 
-        // --- Step 3: Type in the modal's title input ---
-        console.log("\n--- Step 3: Type in input ---");
+        // --- Step 4: Type in the modal's title input ---
+        console.log("\n--- Step 4: Type in input ---");
         elements = await getLayout(page);
         const titleInput = findModalInput(elements, 0);
-        if (titleInput) {
+        if (titleInput && canvasOffset) {
             const c = center(titleInput.rect);
-            console.log(
-                `  Clicking title input at (${Math.round(c.x)}, ${Math.round(c.y)})`,
-            );
-            await page.mouse.click(c.x, c.y);
+            const px = Math.round(c.x + canvasOffset.x);
+            const py = Math.round(c.y + canvasOffset.y);
+            console.log(`  Clicking title input at (${px}, ${py})`);
+            await page.mouse.click(px, py);
             await waitForRender(page, 200);
             await page.keyboard.type("Buy groceries");
         }
@@ -535,24 +596,39 @@ async function main() {
         elements = await getLayout(page);
         const typedInput = findElement(
             elements,
-            (e) => e.type === "tur_input" && e.label.includes("Buy groceries"),
+            (e) =>
+                (e.type === "tur_input" || e.type === "tur_editable_text") &&
+                e.label.includes("Buy groceries"),
         );
         if (typedInput) {
             console.log(`  PASS: input shows "${typedInput.label}"`);
             passed++;
         } else {
             const allInputs = findAll(elements, (e) => e.type === "tur_input");
+            const allTexts = findAll(
+                elements,
+                (e) =>
+                    (e.type === "tur_text_span" ||
+                        e.type === "tur_paragraph") &&
+                    e.label.includes("Buy groceries"),
+            );
             console.log(
-                `  FAIL: input does not show "Buy groceries". Inputs: ${allInputs.map((e) => `"${e.label}"`).join(", ")}`,
+                `  FAIL: input does not show "Buy groceries". Inputs: ${allInputs.map((e) => `"${e.label}"`).join(", ")}. Texts: ${allTexts.map((e) => `"${e.label}"`).join(", ")}`,
             );
             failed++;
         }
 
-        // --- Step 4: Click "Add Task" button (in modal) ---
-        console.log("\n--- Step 4: Click Add Task (modal) ---");
+        // --- Step 5: Click "Add Task" button (in modal) ---
+        console.log("\n--- Step 5: Click Add Task (modal) ---");
         elements = await getLayout(page);
         const addTaskBtn = findModalAddTaskButton(elements);
-        await assertClick(page, elements, "Add Task (modal)", addTaskBtn);
+        await assertClick(
+            page,
+            elements,
+            "Add Task (modal)",
+            addTaskBtn,
+            canvasOffset,
+        );
         await screenshot(page, "after-add-task");
 
         // VERIFY: modal should be closed
@@ -576,11 +652,17 @@ async function main() {
             failed++;
         }
 
-        // --- Step 5: Add another task ---
-        console.log("\n--- Step 5: Add second task 'Review PR' ---");
+        // --- Step 6: Add another task ---
+        console.log("\n--- Step 6: Add second task 'Review PR' ---");
         elements = await getLayout(page);
         const newTaskBtn2 = findHeaderNewTaskButton(elements);
-        await assertClick(page, elements, "+ New Task (header)", newTaskBtn2);
+        await assertClick(
+            page,
+            elements,
+            "+ New Task (header)",
+            newTaskBtn2,
+            canvasOffset,
+        );
         await screenshot(page, "open-modal-again");
 
         elements = await getLayout(page);
@@ -589,12 +671,12 @@ async function main() {
             failed++;
         } else {
             const input2 = findModalInput(elements, 0);
-            if (input2) {
+            if (input2 && canvasOffset) {
                 const c = center(input2.rect);
-                console.log(
-                    `  Clicking title input at (${Math.round(c.x)}, ${Math.round(c.y)})`,
-                );
-                await page.mouse.click(c.x, c.y);
+                const px = Math.round(c.x + canvasOffset.x);
+                const py = Math.round(c.y + canvasOffset.y);
+                console.log(`  Clicking title input at (${px}, ${py})`);
+                await page.mouse.click(px, py);
                 await waitForRender(page, 200);
                 await page.keyboard.type("Review PR");
             }
@@ -602,7 +684,13 @@ async function main() {
 
             elements = await getLayout(page);
             const addTaskBtn2 = findModalAddTaskButton(elements);
-            await assertClick(page, elements, "Add Task (modal)", addTaskBtn2);
+            await assertClick(
+                page,
+                elements,
+                "Add Task (modal)",
+                addTaskBtn2,
+                canvasOffset,
+            );
         }
         await screenshot(page, "after-add-second-task");
 
@@ -627,8 +715,8 @@ async function main() {
             failed++;
         }
 
-        // --- Step 6: Toggle checkbox on "Build tur engine" ---
-        console.log("\n--- Step 6: Toggle checkbox ---");
+        // --- Step 7: Toggle checkbox on "Build tur engine" ---
+        console.log("\n--- Step 7: Toggle checkbox ---");
         elements = await getLayout(page);
         const checkbox = findCheckboxForItem(elements, "Build tur engine");
         await assertClick(
@@ -636,6 +724,7 @@ async function main() {
             elements,
             "checkbox for Build tur engine",
             checkbox,
+            canvasOffset,
         );
         await screenshot(page, "toggle-checkbox");
 
@@ -647,7 +736,8 @@ async function main() {
             const checkmark = findElement(
                 elements,
                 (e) =>
-                    e.type === "tur_text_span" &&
+                    (e.type === "tur_text_span" ||
+                        e.type === "tur_paragraph") &&
                     e.label === "v" &&
                     Math.abs(
                         e.rect.y +
@@ -665,8 +755,8 @@ async function main() {
             }
         }
 
-        // --- Step 7: Delete "Write documentation" ---
-        console.log("\n--- Step 7: Delete 'Write documentation' ---");
+        // --- Step 8: Delete "Write documentation" ---
+        console.log("\n--- Step 8: Delete 'Write documentation' ---");
         elements = await getLayout(page);
         const deleteBtn = findDeleteButtonForItem(
             elements,
@@ -677,6 +767,7 @@ async function main() {
             elements,
             "delete for Write documentation",
             deleteBtn,
+            canvasOffset,
         );
         await screenshot(page, "after-delete");
 
@@ -694,11 +785,17 @@ async function main() {
             failed++;
         }
 
-        // --- Step 8: Click on "Learn Rust" to select it ---
-        console.log("\n--- Step 8: Select 'Learn Rust' ---");
+        // --- Step 9: Click on "Learn Rust" to select it ---
+        console.log("\n--- Step 9: Select 'Learn Rust' ---");
         elements = await getLayout(page);
         const learnRustRow = findItemRow(elements, "Learn Rust");
-        await assertClick(page, elements, "row for Learn Rust", learnRustRow);
+        await assertClick(
+            page,
+            elements,
+            "row for Learn Rust",
+            learnRustRow,
+            canvasOffset,
+        );
         await screenshot(page, "select-item");
 
         // Print final state
@@ -749,6 +846,521 @@ async function main() {
             );
             failed++;
         }
+
+        printConsole(logs);
+
+        // ========== FILE TREE TEST ==========
+        console.log("\n========== FILE TREE TEST ==========");
+
+        // --- Step F1: Verify file tree has todolist expanded with files ---
+        console.log("\n--- Step F1: Verify file tree for todolist ---");
+        const fileTreeVisible = await page.evaluate(() => {
+            const items = document.querySelectorAll(".file-item");
+            return Array.from(items).map((el) => el.textContent);
+        });
+        console.log(`  File tree items: ${fileTreeVisible.join(", ")}`);
+        const expectedFiles = [
+            "Sidebar.tsx",
+            "index.tsx",
+            "store.ts",
+            "theme.ts",
+        ];
+        const allFilesPresent = expectedFiles.every((f) =>
+            fileTreeVisible.includes(f),
+        );
+        if (allFilesPresent) {
+            console.log("  PASS: all todolist files visible in file tree");
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: expected ${expectedFiles.join(", ")}, got ${fileTreeVisible.join(", ")}`,
+            );
+            failed++;
+        }
+
+        const activeFile = await page.evaluate(() => {
+            const active = document.querySelector(".file-item.active");
+            return active ? active.textContent : null;
+        });
+        if (activeFile === "index.tsx") {
+            console.log("  PASS: index.tsx is the active file");
+            passed++;
+        } else {
+            console.log(`  FAIL: expected index.tsx active, got ${activeFile}`);
+            failed++;
+        }
+
+        // --- Step F2: Click store.ts in file tree ---
+        console.log("\n--- Step F2: Click store.ts in file tree ---");
+        const storeFileBtn = page.locator("button.file-item", {
+            hasText: /^store\.ts$/,
+        });
+        await storeFileBtn.click();
+        await waitForRender(page, 200);
+
+        const editorContent = await page.evaluate(() => {
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .slice(0, 3)
+                .map((l) => l.textContent)
+                .join("\n");
+        });
+        console.log(`  Editor first 3 lines: ${editorContent}`);
+        if (
+            editorContent.includes("createTextEditingController") ||
+            editorContent.includes("jotai")
+        ) {
+            console.log("  PASS: editor shows store.ts content");
+            passed++;
+        } else {
+            console.log("  FAIL: editor does not show store.ts content");
+            failed++;
+        }
+
+        const activeFileAfterSwitch = await page.evaluate(() => {
+            const active = document.querySelector(".file-item.active");
+            return active ? active.textContent : null;
+        });
+        if (activeFileAfterSwitch === "store.ts") {
+            console.log("  PASS: store.ts is now the active file");
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: expected store.ts active, got ${activeFileAfterSwitch}`,
+            );
+            failed++;
+        }
+
+        await screenshot(page, "file-tree-store");
+
+        // --- Step F3: Switch back to index.tsx ---
+        console.log("\n--- Step F3: Click index.tsx in file tree ---");
+        const indexFileBtn = page.locator("button.file-item", {
+            hasText: /^index\.tsx$/,
+        });
+        await indexFileBtn.click();
+        await waitForRender(page, 200);
+
+        const editorContentIndex = await page.evaluate(() => {
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .slice(0, 3)
+                .map((l) => l.textContent)
+                .join("\n");
+        });
+        if (
+            editorContentIndex.includes("@tur/react") ||
+            editorContentIndex.includes("import")
+        ) {
+            console.log("  PASS: editor shows index.tsx content");
+            passed++;
+        } else {
+            console.log("  FAIL: editor does not show index.tsx content");
+            failed++;
+        }
+
+        // --- Step F4: Verify canvas still renders correctly after file switching ---
+        console.log(
+            "\n--- Step F4: Verify canvas still renders after file switching ---",
+        );
+        await screenshot(page, "file-tree-after-switch");
+        const elementsAfterSwitch = await getLayout(page);
+        const tasksAfterSwitch = getTaskTexts(elementsAfterSwitch);
+        if (tasksAfterSwitch.length >= 4) {
+            console.log(
+                "  PASS: canvas still renders tasks after file switching",
+            );
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: canvas lost tasks after file switching (got ${tasksAfterSwitch.length})`,
+            );
+            failed++;
+        }
+
+        // --- Step F5: Switch to counter case (single file, no tree) ---
+        console.log("\n--- Step F5: Switch to counter case ---");
+        const counterBtn = page.locator("button.case-item", {
+            hasText: /^counter$/,
+        });
+        await counterBtn.click();
+        await waitForRender(page, 500);
+
+        const counterFileTree = await page.evaluate(() => {
+            const items = document.querySelectorAll(".file-item");
+            return Array.from(items).map((el) => el.textContent);
+        });
+        console.log(`  Counter file tree items: ${counterFileTree.join(", ")}`);
+        if (
+            counterFileTree.length === 1 &&
+            counterFileTree[0] === "index.tsx"
+        ) {
+            console.log("  PASS: file tree shows index.tsx for counter");
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: unexpected file tree items for counter: ${counterFileTree.join(", ")}`,
+            );
+            failed++;
+        }
+
+        const editorHeader = await page.evaluate(() => {
+            const header = document.querySelector(".editor-header span");
+            return header ? header.textContent : null;
+        });
+        if (editorHeader?.includes("counter/index.tsx")) {
+            console.log("  PASS: editor header shows counter/index.tsx");
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: expected counter/index.tsx header, got ${editorHeader}`,
+            );
+            failed++;
+        }
+
+        await screenshot(page, "file-tree-counter");
+
+        // --- Step F6: Verify counter renders in canvas ---
+        console.log("\n--- Step F6: Verify counter renders in canvas ---");
+        await waitForRender(page, 1000);
+        const counterCanvasLayout = await page.evaluate(() => {
+            const w = window as Record<string, unknown>;
+            if (!w.turDemo) return null;
+            try {
+                return (
+                    w.turDemo as { debugLayout: () => string }
+                ).debugLayout();
+            } catch {
+                return null;
+            }
+        });
+        if (counterCanvasLayout && counterCanvasLayout.length > 50) {
+            console.log(
+                `  PASS: counter renders in canvas (${counterCanvasLayout.length} chars)`,
+            );
+            passed++;
+        } else {
+            console.log(
+                `  FAIL: counter canvas is empty (layout=${counterCanvasLayout ? counterCanvasLayout.length : "null"})`,
+            );
+            failed++;
+            // Check for build error
+            const buildErr = await page.evaluate(() => {
+                const el = document.querySelector(".build-error");
+                return el ? el.getAttribute("title") : null;
+            });
+            if (buildErr) {
+                console.log(`  Build error: ${buildErr}`);
+            }
+        }
+        await screenshot(page, "counter-case-rendered");
+
+        // ========== COUNTER APP TEST ==========
+        // Test live editing: type a counter app in the code editor, compile, and interact
+        console.log("\n========== COUNTER APP TEST ==========");
+
+        const counterSource = `import { Column, Container, Expanded, PointerInteract, Row, SizedBox, Text, Color, MainAxisAlignment, CrossAxisAlignment } from "@tur/react";
+import { renderRoot } from "@tur/react-renderer";
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  return (
+    <Expanded>
+      <Container color={Color.hex("#f8fafc")}>
+        <Column mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}>
+          <Container width={300} borderRadius={12} padding={24} color={Color.hex("#ffffff")}>
+            <Column crossAlignment={CrossAxisAlignment.Center}>
+              <Text content={"Count: " + count} queryKey={["count"]} fontSize={36} color={Color.hex("#1e293b")} />
+              <SizedBox height={20} />
+              <Row mainAlignment={MainAxisAlignment.Center}>
+                <PointerInteract
+                  onClick={() => setCount((n) => n + 1)}
+                  child={<Container width={100} height={44} borderRadius={8} color={Color.hex("#6366f1")}><Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}><Text content="+1" fontSize={18} color={Color.hex("#ffffff")} /></Row></Container>}
+                />
+                <SizedBox width={12} />
+                <PointerInteract
+                  onClick={() => setCount((n) => n - 1)}
+                  child={<Container width={100} height={44} borderRadius={8} color={Color.hex("#ef4444")}><Row mainAlignment={MainAxisAlignment.Center} crossAlignment={CrossAxisAlignment.Center}><Text content="-1" fontSize={18} color={Color.hex("#ffffff")} /></Row></Container>}
+                />
+              </Row>
+            </Column>
+          </Container>
+        </Column>
+      </Container>
+    </Expanded>
+  );
+}
+
+renderRoot(Counter);
+`;
+
+        // --- Step A: Select "todolist" case to open the editor ---
+        console.log("\n--- Step A: Select todolist case (opens editor) ---");
+        const editorCaseBtn = page.locator("button.case-item", {
+            hasText: /^todolist$/,
+        });
+        await editorCaseBtn.click();
+        await waitForRender(page, 500);
+
+        // Wait for the code editor to load with source
+        await page.waitForFunction(
+            () => {
+                const editor = document.querySelector(".cm-editor .cm-content");
+                return editor?.textContent && editor.textContent.length > 10;
+            },
+            { timeout: 5000 },
+        );
+
+        // --- Step B: Clear editor and paste the counter source ---
+        console.log("\n--- Step B: Paste counter app in editor ---");
+        const cmContent = page.locator(".cm-editor .cm-content");
+        await cmContent.click();
+        await page.keyboard.press("Meta+a");
+        await waitForRender(page, 100);
+
+        await page.evaluate(async (code) => {
+            await navigator.clipboard.writeText(code);
+        }, counterSource);
+        await waitForRender(page, 100);
+        await page.keyboard.press("Meta+v");
+        await waitForRender(page, 300);
+
+        const editorText = await page.evaluate(() => {
+            const lines = document.querySelectorAll(
+                ".cm-editor .cm-content .cm-line",
+            );
+            return Array.from(lines)
+                .map((l) => l.textContent)
+                .join("\n");
+        });
+        console.log(
+            `  Editor has "Row": ${editorText.includes("Row")}, length: ${editorText.length}`,
+        );
+        if (!editorText.includes("Row")) {
+            console.log(
+                `  Editor first 80 chars: "${editorText.substring(0, 80)}"`,
+            );
+        }
+
+        // --- Step C: Save (Cmd+S) to compile ---
+        console.log("\n--- Step C: Save (Cmd+S) to compile ---");
+        await page.keyboard.press("Meta+s");
+        await waitForRender(page, 500);
+
+        await page.waitForFunction(
+            () => {
+                const w = window as Record<string, unknown>;
+                if (!w.turDemo) return false;
+                try {
+                    const layout = (
+                        w.turDemo as { debugLayout: () => string }
+                    ).debugLayout();
+                    return (
+                        typeof layout === "string" && layout.includes("Count:")
+                    );
+                } catch {
+                    return false;
+                }
+            },
+            { timeout: 15000 },
+        );
+        await waitForRender(page, 500);
+
+        const buildErrorText = await page.evaluate(() => {
+            const errEl = document.querySelector(".build-error");
+            return errEl?.textContent ?? null;
+        });
+        if (buildErrorText) {
+            const buildErrorTitle = await page.evaluate(() => {
+                const errEl = document.querySelector(".build-error");
+                return errEl?.getAttribute("title") ?? "";
+            });
+            console.log(`  BUILD ERROR: ${buildErrorTitle}`);
+        } else {
+            console.log("  No build error badge");
+        }
+
+        await screenshot(page, "counter-initial");
+
+        elements = await getLayout(page);
+
+        console.log("  All elements:");
+        for (const el of elements) {
+            console.log(
+                `    ${el.type} "${el.label}" at (${el.rect.x},${el.rect.y}) ${el.rect.w}x${el.rect.h}`,
+            );
+        }
+
+        const allTexts = findAll(
+            elements,
+            (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
+        );
+        console.log(
+            "  All text labels:",
+            allTexts.map((e) => `"${e.label}"`).join(", "),
+        );
+
+        const counterErrors = logs.filter((e) => e.type === "error");
+        if (counterErrors.length > 0) {
+            console.log("  Browser errors:");
+            for (const err of counterErrors) {
+                console.log(`    ${err.text}`);
+            }
+        }
+
+        const countZero = findTextSpans(elements, "Count: 0");
+        if (countZero.length > 0) {
+            console.log('  PASS: "Count: 0" rendered');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 0" not found');
+            failed++;
+        }
+
+        // VERIFY: "+1" button exists
+        const plusOneTexts = findTextSpans(elements, "+1");
+        if (plusOneTexts.length > 0) {
+            console.log('  PASS: "+1" button text found');
+            passed++;
+        } else {
+            console.log('  FAIL: "+1" button text not found');
+            failed++;
+        }
+
+        // VERIFY: "-1" button exists
+        const minusOneTexts = findTextSpans(elements, "-1");
+        if (minusOneTexts.length > 0) {
+            console.log('  PASS: "-1" button text found');
+            passed++;
+        } else {
+            console.log('  FAIL: "-1" button text not found');
+            failed++;
+        }
+
+        // --- Step D: Click "+1" button ---
+        console.log("\n--- Step D: Click +1 ---");
+        elements = await getLayout(page);
+        const plusOneSpan = findTextSpans(elements, "+1");
+        let plusOneClickTarget: { x: number; y: number } | null = null;
+        if (plusOneSpan.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                plusOneSpan[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                plusOneClickTarget = center(btn.rect);
+            }
+        }
+        await assertClick(
+            page,
+            elements,
+            "+1 button",
+            plusOneClickTarget,
+            canvasOffset,
+        );
+        await screenshot(page, "counter-click-plus1");
+
+        // VERIFY: count is now 1
+        elements = await getLayout(page);
+        const countOne = findTextSpans(elements, "Count: 1");
+        if (countOne.length > 0) {
+            console.log('  PASS: "Count: 1" after clicking +1');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 1" not found after clicking +1');
+            const allTexts = findAll(
+                elements,
+                (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
+            );
+            console.log(
+                "  Texts:",
+                allTexts.map((e) => `"${e.label}"`).join(", "),
+            );
+            failed++;
+        }
+
+        // --- Step E: Click "+1" again ---
+        console.log("\n--- Step E: Click +1 again ---");
+        elements = await getLayout(page);
+        const plusOneSpan2 = findTextSpans(elements, "+1");
+        let plusOneClickTarget2: { x: number; y: number } | null = null;
+        if (plusOneSpan2.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                plusOneSpan2[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                plusOneClickTarget2 = center(btn.rect);
+            }
+        }
+        await assertClick(
+            page,
+            elements,
+            "+1 button (2nd)",
+            plusOneClickTarget2,
+            canvasOffset,
+        );
+        await screenshot(page, "counter-click-plus1-again");
+
+        // VERIFY: count is now 2
+        elements = await getLayout(page);
+        const countTwo = findTextSpans(elements, "Count: 2");
+        if (countTwo.length > 0) {
+            console.log('  PASS: "Count: 2" after clicking +1 twice');
+            passed++;
+        } else {
+            console.log('  FAIL: "Count: 2" not found after clicking +1 twice');
+            failed++;
+        }
+
+        // --- Step F: Click "-1" button ---
+        console.log("\n--- Step F: Click -1 ---");
+        elements = await getLayout(page);
+        const minusOneSpan = findTextSpans(elements, "-1");
+        let minusOneClickTarget: { x: number; y: number } | null = null;
+        if (minusOneSpan.length > 0) {
+            const btn = findSmallestContaining(
+                elements,
+                minusOneSpan[0].rect,
+                "tur_pointer_interact",
+            );
+            if (btn) {
+                minusOneClickTarget = center(btn.rect);
+            }
+        }
+        if (minusOneClickTarget) {
+            const px = Math.round(minusOneClickTarget.x + canvasOffset.x);
+            const py = Math.round(minusOneClickTarget.y + canvasOffset.y);
+            console.log(`  Clicking "-1 button" at (${px}, ${py})`);
+            await page.mouse.click(px, py);
+            await waitForRender(page);
+            await screenshot(page, "counter-click-minus1");
+
+            elements = await getLayout(page);
+            const countBackToOne = findTextSpans(elements, "Count: 1");
+            if (countBackToOne.length > 0) {
+                console.log('  PASS: "Count: 1" after clicking -1 (was 2)');
+                passed++;
+            } else {
+                console.log('  FAIL: "Count: 1" not found after clicking -1');
+                failed++;
+            }
+        } else {
+            console.log(
+                '  SKIP: "-1" button not found in layout — cannot test decrement',
+            );
+            failed++;
+            await screenshot(page, "counter-no-minus1");
+        }
+
+        console.log("\n=== Counter App Test Complete ===");
 
         printConsole(logs);
 

@@ -137,6 +137,36 @@ fn container_padding_offsets_child() {
     let sb = rt.get(sb_id).unwrap();
     assert_eq!(sb.computed_layout.offset.x, 0.0);
     assert_eq!(sb.computed_layout.offset.y, 0.0);
+}
+
+#[test]
+fn container_with_explicit_size_in_flex() {
+    let mut app = TurTestApp::new(828.0, 864.0).unwrap();
+    app.load_bundle("container-flex-sized").unwrap();
+
+    let btn_id = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let col = tree.get(root.children[0]).unwrap();
+        let row = tree.get(col.children[0]).unwrap();
+        let container = tree.get(row.children[0]).unwrap();
+        container.id
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let btn = rt.get(btn_id).unwrap();
+    assert_eq!(
+        btn.computed_layout.size.width, 100.0,
+        "container width should be 100, got {}",
+        btn.computed_layout.size.width,
+    );
+    assert_eq!(
+        btn.computed_layout.size.height, 44.0,
+        "container height should be 44, got {}",
+        btn.computed_layout.size.height,
+    );
 }#[test]
 fn container_with_shadow() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();

@@ -1,18 +1,27 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello, and boa_engine. Renders SolidJS applications via a custom universal renderer (`@tur/solidjs-renderer`).
+A JavaScript rendering engine built with winit, vello, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  js/packages/tur-solidjs-demo                       │
-│  (SolidJS app, bundled by rspack → defines           │
-│   globalThis.startApp())                             │
+│  js/packages/tur-react-demo (playground web app)     │
+│  React-DOM web app with:                             │
+│  - Case selector (sidebar)                           │
+│  - Code editor (CodeMirror 6)                        │
+│  - Tur viewer (embedded WASM canvas)                 │
+│  - Browser-side bundling via @rspack/browser          │
 ├─────────────────────────────────────────────────────┤
-│  js/packages/tur-solidjs-renderer                    │
-│  (solid-js/universal renderer → calls                │
-│   globalThis.__tur.*)                                │
+│  js/packages/tur-test-cases                          │
+│  ~60 React test cases in react-cases/                 │
+│  Each case calls renderRoot(Component)                │
+├─────────────────────────────────────────────────────┤
+│  js/packages/tur-react                                │
+│  React component wrappers (Column, Row, Container…)  │
+├─────────────────────────────────────────────────────┤
+│  js/packages/tur-react-renderer                       │
+│  Custom React reconciler → globalThis.__tur.*         │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -33,13 +42,16 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders S
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-wasm                                        │
-│  (wasm binary via wasm-pack: winit + boajs + vello)  │
+│  (wasm binary via wasm-pack: boajs + vello)           │
+│  TurWasmApp::create() — full viewport                 │
+│  TurWasmApp::create_in(id) — embed in container       │
+│  clear_and_run_js() — clear tree + evaluate new JS    │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`, `Input`, `PointerInteract`, `Focusable`, `Paragraph`, `Image`, `Svg`
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -78,12 +90,14 @@ libs/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
   tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
-  tur-wasm/                  # wasm binary (winit + vello + tur-engine)
+  tur-wasm/                  # wasm binary (boa_engine + vello + tur-engine)
 js/
   packages/
-    tur-solidjs-renderer/    # SolidJS universal renderer
-    tur-solidjs-demo/        # Demo app (todolist example)
-    tur-rspack-plugin/      # Rspack plugin for WASM build + HTML generation
+    tur-react/               # React component wrappers
+    tur-react-renderer/      # Custom React reconciler
+    tur-react-demo/          # Playground web app (React-DOM + CodeMirror + tur viewer)
+    tur-test-cases/          # Test cases (react-cases/ with ~60 cases)
+    playground-for-agent/    # Playwright integration tests
 ```
 
 ## Commands
@@ -109,17 +123,18 @@ cd libs/tur-wasm && wasm-pack build --target web
 cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
 ```
 
-### tur-rspack-plugin (WASM + HTML)
+### tur-react-demo (playground)
 
-The `TurRspackPlugin` is used in the demo's rspack config. Building the demo
-automatically runs `wasm-pack` and copies WASM artifacts into the output:
+The playground is a React-DOM web app. Building it automatically runs `wasm-pack`, builds test cases, copies WASM assets + compiled cases + workspace deps into the output:
 
 ```sh
-# Build JS bundle (plugin handles wasm-pack + HTML generation)
-cd js && pnpm --filter @tur/solidjs-demo build
+cd js && pnpm build
+cd js/packages/tur-react-demo && rspack build
 # Or use the rspack dev server
-cd js/packages/tur-solidjs-demo && rspack dev
+cd js/packages/tur-react-demo && rspack dev
 ```
+
+Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer).
 
 ### JS (js/ directory)
 
@@ -132,8 +147,9 @@ pnpm lint             # biome lint across all packages
 ### Per-package JS builds
 
 ```sh
-cd js/packages/tur-solidjs-renderer && pnpm build
-cd js/packages/tur-solidjs-demo && pnpm build
+cd js/packages/tur-react-renderer && pnpm build
+cd js/packages/tur-react && pnpm build
+cd js/packages/tur-test-cases && pnpm build
 ```
 
 ## Conventions
@@ -141,7 +157,7 @@ cd js/packages/tur-solidjs-demo && pnpm build
 - Rust edition 2024, MSRV 1.85
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: biome
-- Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned)
+- Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
 - Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
@@ -160,6 +176,36 @@ pub trait Renderer {
 
 Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
-## git-end agent
+## Debugging with playground-for-agent
 
-Dispatch `@git-end` to finalize a feature branch. It commits, rebases onto main, pushes, creates/updates a PR, and runs local CI. It reports back: commit hash, PR URL, and CI result (pass or fail with error output). If CI fails, fix the issues and re-dispatch `@git-end`. Do not include a changes summary in the prompt — the agent inspects the diff itself.
+Launches Chromium with WebGPU, loads the playground via Playwright, runs an interactive todolist scenario (add/toggle/delete tasks) and a counter live-editing scenario, and screenshots each step. Screenshots saved to `js/packages/playground-for-agent/test-results/`.
+
+### Always verify with image-reader after running
+
+After running the playground tests, you MUST use `@image-reader` (Task tool with `image-reader` subagent) to inspect the screenshots and verify the actual rendering. Layout assertions check element positions but `@image-reader` reveals what the user actually sees (colors, spacing, text rendering, missing content, blank canvases, stretched elements, etc.).
+
+Tests can pass (elements exist in layout tree, clicks register) while the canvas is visually blank or broken. Only visual verification catches these issues.
+
+Example:
+
+```
+@image-reader js/packages/playground-for-agent/test-results/01-initial.png
+```
+
+Or verify all screenshots at once by passing all file paths to a single `@image-reader` task.
+
+### Dev mode (local dist)
+
+```sh
+cd js && pnpm build
+cd js/packages/tur-react-demo && rspack build
+cd js/packages/playground-for-agent && pnpm start
+```
+
+### Prod mode (deployed URL)
+
+```sh
+DEPLOY_URL=https://tur-react-demo.pages.dev pnpm start:prod
+```
+
+

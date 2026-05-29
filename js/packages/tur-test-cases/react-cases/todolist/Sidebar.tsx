@@ -9,7 +9,7 @@ import {
     Stack,
     Text,
 } from "@tur/react";
-import { Colors } from "../theme";
+import { Colors } from "./theme";
 
 interface Tab {
     id: string;
