@@ -1,8 +1,8 @@
 use std::fmt;
 
 use tur_shared::{Brush, Color, Geometry, Offset, Size};
-use vello::kurbo::{Affine, Stroke};
-use vello::peniko::{Brush as PenikoBrush, Fill, ImageData};
+use vello::kurbo::{Affine, Rect, Stroke};
+use vello::peniko::{BlendMode, Brush as PenikoBrush, Fill, ImageData};
 use vello::Scene;
 
 use crate::core::render::Canvas;
@@ -222,6 +222,16 @@ impl Canvas for VelloPaintContext<'_> {
             border_radius,
             blur,
         );
+    }
+
+    fn push_clip(&mut self, offset: Offset, size: Size) {
+        let transform = Affine::translate((offset.x, offset.y));
+        let clip = Rect::new(0.0, 0.0, size.width, size.height);
+        self.scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, transform, &clip);
+    }
+
+    fn pop_clip(&mut self) {
+        self.scene.pop_layer();
     }
 }
 

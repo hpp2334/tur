@@ -1,4 +1,5 @@
 import type {
+    Axis,
     BorderPosition,
     BoxFit,
     Color,
@@ -123,6 +124,12 @@ declare module "react/jsx-runtime" {
                 height?: number;
                 fit?: BoxFit;
                 queryKey?: string[];
+            };
+            tur_scroll_view: RefAttributes<TurNodeHandle> & {
+                axis?: Axis;
+                scrollOffset?: number;
+                queryKey?: string[];
+                children?: React.ReactNode;
             };
         }
     }

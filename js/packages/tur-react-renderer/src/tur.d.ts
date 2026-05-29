@@ -67,6 +67,7 @@ declare global {
             controller: TextEditingController,
         ): TurNodeHandle;
         createImage(ctx: unknown): TurNodeHandle;
+        createScrollView(ctx: unknown): TurNodeHandle;
         createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
         createSvg(ctx: unknown): TurNodeHandle;
         createSvgResource(ctx: unknown, svgString: string): ResourceHandle;

@@ -144,6 +144,16 @@ impl TurTestApp {
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
+    pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::Wheel {
+                delta_x,
+                delta_y,
+                position: Offset::new(x, y),
+            }));
+        self.ensure_flushed();
+    }
+
     fn ensure_flushed(&mut self) {
         for _ in 0..6 {
             let _ = self.inner.spawn_loop_once(Duration::from_millis(3));

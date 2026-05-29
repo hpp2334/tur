@@ -34,6 +34,7 @@ web-sys = { workspace = true, features = [
     "CssStyleDeclaration",
     "DomRect",
     "DomRectReadOnly",
+    "WheelEvent",
 ] }
 js-sys = "0.3"
 console_error_panic_hook = { workspace = true }

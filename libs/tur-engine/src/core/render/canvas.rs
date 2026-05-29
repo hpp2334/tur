@@ -27,4 +27,6 @@ pub trait Canvas: fmt::Debug {
         blur: f64,
         shadow_offset: (f64, f64),
     );
+    fn push_clip(&mut self, offset: Offset, size: Size);
+    fn pop_clip(&mut self);
 }

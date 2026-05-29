@@ -19,6 +19,7 @@ pub enum AppGestureEvent {
     PointerDown { position: Offset },
     PointerUp { position: Offset },
     PointerMove { position: Offset },
+    Wheel { delta_x: f64, delta_y: f64, position: Offset },
 }
 
 #[derive(Clone, Debug)]

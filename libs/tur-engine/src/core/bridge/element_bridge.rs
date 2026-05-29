@@ -14,7 +14,7 @@ use crate::core::text::TextEditingController;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
     FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
-    PositionedElement, StackElement,
+    PositionedElement, ScrollViewElement, StackElement,
 };
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -92,6 +92,18 @@ pub(crate) fn tur_create_paragraph(
     )
 }
 simple_creator!(tur_create_image, AnyElement::new(ImageElement::new()));
+
+pub(crate) fn tur_create_scroll_view(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    create_element(
+        args,
+        context,
+        AnyElement::with_gesture(ScrollViewElement::new()),
+    )
+}
 
 pub(crate) fn tur_create_pointer_interact(
     _this: &JsValue,

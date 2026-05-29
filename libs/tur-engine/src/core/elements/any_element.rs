@@ -17,7 +17,7 @@ use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, E
 use crate::core::event::AppImeEvent;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
-type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent) -> bool;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
 type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsFunction, Vec<JsValue>)>;
 
@@ -68,9 +68,9 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnGestureContext,
     event: &ComposedGestureEvent,
-) {
+) -> bool {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, cx, event);
+    ElementOnGesture::on_gesture_event(element, cx, event)
 }
 
 fn ime_dispatch<E: ElementOnIme + 'static>(
@@ -175,6 +175,25 @@ impl AnyElement {
         AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
+            on_gesture: Some(gesture_dispatch::<E>),
+            on_ime: None,
+            emit_js_callback_fn: None,
+        }
+    }
+
+    pub fn with_gesture<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnGesture
+            + 'static,
+    >(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: None,
             on_gesture: Some(gesture_dispatch::<E>),
             on_ime: None,
             emit_js_callback_fn: None,
@@ -318,9 +337,11 @@ impl AnyElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
+    ) -> bool {
         if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), cx, event);
+            handler(self.inner.as_any_mut(), cx, event)
+        } else {
+            false
         }
     }
 

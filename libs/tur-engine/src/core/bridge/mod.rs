@@ -26,7 +26,7 @@ use crate::core::bridge::element_bridge::{
     tur_append_child, tur_create_container, tur_create_editable_text,
     tur_create_flex, tur_create_flex_item, tur_create_focusable, tur_create_image,
     tur_create_image_resource, tur_create_pointer_interact, tur_create_positioned,
-    tur_create_root, tur_create_stack, tur_create_paragraph,
+    tur_create_root, tur_create_scroll_view, tur_create_stack, tur_create_paragraph,
     tur_create_text_editing_controller,
     tur_get_char_index_at_position, tur_get_first_child, tur_get_next_sibling, tur_get_parent,
     tur_get_text_cursor_rect, tur_get_text_selection_rects, tur_insert_before, tur_remove_child,
@@ -86,7 +86,7 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 24] = [
+    ); 25] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
@@ -97,6 +97,7 @@ pub fn init_bridge(
         ("createFocusable", 1, tur_create_focusable),
         ("createEditableText", 2, tur_create_editable_text),
         ("createImage", 1, tur_create_image),
+        ("createScrollView", 1, tur_create_scroll_view),
         ("createImageResource", 2, tur_create_image_resource),
         ("createRoot", 1, tur_create_root),
         ("createTextEditingController", 2, tur_create_text_editing_controller),

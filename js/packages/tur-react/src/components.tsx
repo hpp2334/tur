@@ -1,4 +1,5 @@
 import type {
+    Axis,
     BorderPosition,
     FlexFit,
     ResourceHandle,
@@ -337,5 +338,22 @@ export function Svg(props: SvgProps) {
             fit={props.fit ?? BoxFit.Contain}
             queryKey={props.queryKey}
         />
+    );
+}
+
+export interface ScrollViewProps extends BaseProps {
+    axis?: Axis;
+    scrollOffset?: number;
+}
+
+export function ScrollView(props: ScrollViewProps) {
+    return (
+        <tur_scroll_view
+            axis={props.axis}
+            scrollOffset={props.scrollOffset}
+            queryKey={props.queryKey}
+        >
+            {props.children}
+        </tur_scroll_view>
     );
 }

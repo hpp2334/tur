@@ -6,6 +6,7 @@ mod image;
 mod positioned;
 mod rich_text;
 mod row;
+mod scroll_view;
 mod sized_box;
 mod stack;
 mod text;
