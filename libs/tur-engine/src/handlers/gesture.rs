@@ -21,6 +21,9 @@ impl AppHandler for GestureAppHandler {
             AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
                 handle_pointer_up(cx, *position);
             }
+            AppEvent::Gesture(AppGestureEvent::Wheel { delta_x, delta_y, position }) => {
+                handle_wheel(cx, *delta_x, *delta_y, *position);
+            }
             _ => {}
         }
     }
@@ -68,6 +71,20 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
     }
 }
 
+fn handle_wheel(cx: &mut HandlerContext, delta_x: f64, delta_y: f64, position: Offset) {
+    let hit_path = HitTest::new(&*cx.element_tree).path(position);
+    for node_id in &hit_path {
+        let consumed = dispatch_gesture_event_with_result(
+            cx,
+            *node_id,
+            &ComposedGestureEvent::Wheel { delta_x, delta_y },
+        );
+        if consumed {
+            break;
+        }
+    }
+}
+
 fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId) -> bool {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
@@ -96,11 +113,15 @@ fn local_position(cx: &HandlerContext, node_id: ElementNodeId, global: Offset) -
 }
 
 fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &ComposedGestureEvent) {
+    dispatch_gesture_event_with_result(cx, id, event);
+}
+
+fn dispatch_gesture_event_with_result(cx: &mut HandlerContext, id: ElementNodeId, event: &ComposedGestureEvent) -> bool {
     let Some(node) = cx.element_tree.get_mut(id) else {
-        return;
+        return false;
     };
     let Some(ref mut element) = node.element else {
-        return;
+        return false;
     };
     let mut el_cx = ElementOnGestureContext::new(
         &mut *cx.event_queue,
@@ -108,6 +129,7 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
         &mut *cx.js_command_queue,
         id,
     );
-    element.on_gesture_event(&mut el_cx, event);
+    let consumed = element.on_gesture_event(&mut el_cx, event);
     cx.element_tree.mark_dirty(id);
+    consumed
 }
