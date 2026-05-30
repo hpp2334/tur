@@ -6,7 +6,7 @@ export interface CaseInfo {
 
 const casesMap = new Map<string, CaseInfo>();
 const fileContentCache = new Map<string, string>();
-const WHITELIST = ["todolist", "counter"];
+const WHITELIST = ["todolist", "counter", "scroll-list"];
 
 let manifestReady = false;
 
