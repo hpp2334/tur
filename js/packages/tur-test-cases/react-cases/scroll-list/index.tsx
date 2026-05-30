@@ -60,11 +60,7 @@ const colors = [
 function ScrollList() {
     return (
         <Column crossAlignment={CrossAxisAlignment.Start}>
-            <Container
-                width={400}
-                height={40}
-                color={Color.rgb(99, 102, 241)}
-            >
+            <Container width={400} height={40} color={Color.rgb(99, 102, 241)}>
                 <Row>
                     <Expanded>
                         <Container height={40}>
@@ -82,6 +78,7 @@ function ScrollList() {
                     <Column crossAlignment={CrossAxisAlignment.Start}>
                         {items.map((item, i) => (
                             <Container
+                                key={item}
                                 width={400}
                                 height={56}
                                 color={
