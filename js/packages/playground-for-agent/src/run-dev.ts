@@ -1095,9 +1095,7 @@ async function main() {
             elements = await getLayout(page);
             const scrollListTexts = findAll(
                 elements,
-                (e) =>
-                    e.type === "tur_text_span" ||
-                    e.type === "tur_paragraph",
+                (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
             );
             console.log(
                 "  Scroll list texts:",
@@ -1106,16 +1104,11 @@ async function main() {
 
             const scrollItems = scrollListTexts.filter(
                 (e) =>
-                    e.label &&
-                    e.label !== "Scroll List Demo" &&
-                    e.rect.h > 5,
+                    e.label && e.label !== "Scroll List Demo" && e.rect.h > 5,
             );
             console.log(`  Found ${scrollItems.length} list items`);
 
-            const scrollHeader = findTextSpans(
-                elements,
-                "Scroll List Demo",
-            );
+            const scrollHeader = findTextSpans(elements, "Scroll List Demo");
             if (scrollHeader.length > 0) {
                 console.log('  PASS: "Scroll List Demo" header found');
                 passed++;
@@ -1124,11 +1117,8 @@ async function main() {
                 failed++;
             }
 
-            const designItem = findAll(
-                elements,
-                (e) =>
-                    e.label &&
-                    e.label.startsWith("Design system"),
+            const designItem = findAll(elements, (e) =>
+                e.label?.startsWith("Design system"),
             );
             if (designItem.length > 0) {
                 console.log(
@@ -1142,11 +1132,8 @@ async function main() {
                 failed++;
             }
 
-            const deployItem = findAll(
-                elements,
-                (e) =>
-                    e.label &&
-                    e.label.startsWith("Deploy to"),
+            const deployItem = findAll(elements, (e) =>
+                e.label?.startsWith("Deploy to"),
             );
             const deployVisibleBefore = deployItem.length > 0;
             console.log(
@@ -1191,17 +1178,11 @@ async function main() {
 
             elements = await getLayout(page);
 
-            const designAfterScroll = findAll(
-                elements,
-                (e) =>
-                    e.label &&
-                    e.label.startsWith("Design system"),
+            const designAfterScroll = findAll(elements, (e) =>
+                e.label?.startsWith("Design system"),
             );
-            const deployAfterScroll = findAll(
-                elements,
-                (e) =>
-                    e.label &&
-                    e.label.startsWith("Deploy to"),
+            const deployAfterScroll = findAll(elements, (e) =>
+                e.label?.startsWith("Deploy to"),
             );
 
             if (designAfterScroll.length === 0) {
@@ -1241,9 +1222,7 @@ async function main() {
             const scrollViewElements = findAll(elements, (e) =>
                 e.type.includes("scroll"),
             );
-            console.log(
-                `  Scroll view elements: ${scrollViewElements.length}`,
-            );
+            console.log(`  Scroll view elements: ${scrollViewElements.length}`);
             if (scrollViewElements.length > 0) {
                 console.log("  PASS: scroll_view element present");
                 passed++;
