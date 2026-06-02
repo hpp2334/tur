@@ -201,10 +201,6 @@ export default defineConfig({
         },
         host: "0.0.0.0",
         allowedHosts: "all",
-        headers: {
-            "Cross-Origin-Opener-Policy": "same-origin",
-            "Cross-Origin-Embedder-Policy": "require-corp",
-        },
     },
     entry: {
         main: "./src/index.tsx",

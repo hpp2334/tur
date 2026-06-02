@@ -12,7 +12,8 @@
         import init, { TurWasmApp } from "./tur_wasm.js";
 
         globalThis.initTurWasm = async (containerId) => {
-            await init();
+            const resp = await fetch("tur_wasm_bg.wasm");
+            await init(await resp.arrayBuffer());
             return TurWasmApp.create_in(containerId);
         };
     </script>
