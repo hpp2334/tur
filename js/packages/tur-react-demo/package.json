@@ -23,7 +23,8 @@
         "jotai": "^2.20.0",
         "react": "^19.1.0",
         "react-dom": "^19.1.0",
-        "sucrase": "^3.35.1"
+        "sucrase": "^3.35.1",
+        "vconsole": "^3.15.1"
     },
     "devDependencies": {
         "@rspack/core": "^1.2.0",
