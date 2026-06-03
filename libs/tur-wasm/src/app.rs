@@ -360,13 +360,11 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::Wheel {
-                                delta_x: event.delta_x(),
-                                delta_y: event.delta_y(),
-                                position: Offset::new(x, y),
-                            },
-                        ));
+                        s.app.push_event(AppEvent::Wheel {
+                            delta_x: event.delta_x(),
+                            delta_y: event.delta_y(),
+                            position: Offset::new(x, y),
+                        });
                     }
                 });
 

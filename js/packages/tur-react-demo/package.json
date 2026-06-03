@@ -4,7 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "rspack build",
-        "dev": "rspack serve",
+        "dev": "concurrently \"rspack serve\" \"cloudflared tunnel --url https://localhost:8080\"",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
@@ -31,6 +31,7 @@
         "@rspack/plugin-react-refresh": "^1.4.0",
         "@types/react": "^19.2.14",
         "@types/react-dom": "^19.2.0",
+        "concurrently": "^10.0.3",
         "react-refresh": "^0.17.0"
     }
 }

@@ -2,36 +2,33 @@ use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
 use tur_shared::{Axis, Size};
 
-use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, ElementOnUpdate, ElementTrace};
+use crate::core::elements::{ElementOnUpdate, ElementOnWheel, ElementOnWheelContext, ElementTrace, WheelEvent};
+use super::scroll_position::ScrollPosition;
 
 #[derive(Clone)]
 pub struct ScrollViewElement {
     pub(crate) axis: Axis,
-    pub(crate) scroll_offset: f64,
-    pub(crate) viewport_size: Size,
-    pub(crate) content_size: Size,
+    pub(crate) position: ScrollPosition,
 }
 
 impl ScrollViewElement {
     pub fn new() -> Self {
         ScrollViewElement {
             axis: Axis::Vertical,
-            scroll_offset: 0.0,
-            viewport_size: Size::ZERO,
-            content_size: Size::ZERO,
+            position: ScrollPosition::new(),
         }
     }
 
     pub fn scroll_offset(&self) -> f64 {
-        self.scroll_offset
+        self.position.pixels()
     }
 
     pub fn content_size(&self) -> Size {
-        self.content_size
+        self.position.content_size()
     }
 
     pub fn viewport_size(&self) -> Size {
-        self.viewport_size
+        self.position.viewport_size()
     }
 }
 
@@ -43,14 +40,16 @@ impl Default for ScrollViewElement {
 
 impl ElementTrace for ScrollViewElement {
     fn trace_label(&self) -> String {
+        let vp = self.viewport_size();
+        let ct = self.content_size();
         format!(
             "axis={:?} offset={:.1} viewport=({:.1},{:.1}) content=({:.1},{:.1})",
             self.axis,
-            self.scroll_offset,
-            self.viewport_size.width,
-            self.viewport_size.height,
-            self.content_size.width,
-            self.content_size.height,
+            self.position.pixels(),
+            vp.width,
+            vp.height,
+            ct.width,
+            ct.height,
         )
     }
 }
@@ -63,7 +62,7 @@ impl ElementOnUpdate for ScrollViewElement {
             }
         } else if *key == "scrollOffset" {
             if let Some(n) = value.as_number() {
-                self.scroll_offset = n;
+                self.position.correct_pixels(n);
             }
         }
     }
@@ -71,36 +70,27 @@ impl ElementOnUpdate for ScrollViewElement {
     fn reset_prop(&mut self, key: &JsString) {
         match key.to_std_string_escaped().as_str() {
             "axis" => self.axis = Axis::Vertical,
-            "scrollOffset" => self.scroll_offset = 0.0,
+            "scrollOffset" => self.position.correct_pixels(0.0),
             _ => {}
         }
     }
 }
 
-impl ElementOnGesture for ScrollViewElement {
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) -> bool {
-        let ComposedGestureEvent::Wheel { delta_x, delta_y } = event else {
-            return false;
-        };
-
+impl ElementOnWheel for ScrollViewElement {
+    fn on_wheel(&mut self, cx: &mut ElementOnWheelContext, event: &WheelEvent) -> f64 {
         let delta = match self.axis {
-            Axis::Vertical => delta_y,
-            Axis::Horizontal => delta_x,
+            Axis::Vertical => event.delta_y,
+            Axis::Horizontal => event.delta_x,
         };
 
-        let max_scroll = (self.axis.main(self.content_size) - self.axis.main(self.viewport_size)).max(0.0);
-        let new_offset = (self.scroll_offset + delta).clamp(0.0, max_scroll);
+        let old_pixels = self.position.pixels();
+        let overscroll = self.position.apply_scroll_delta(delta);
+        let new_pixels = self.position.pixels();
 
-        if (new_offset - self.scroll_offset).abs() < 0.001 {
-            return false;
+        if (new_pixels - old_pixels).abs() > 0.001 {
+            cx.request_redraw();
         }
 
-        self.scroll_offset = new_offset;
-        cx.request_redraw();
-        true
+        overscroll
     }
 }

@@ -101,7 +101,7 @@ pub(crate) fn tur_create_scroll_view(
     create_element(
         args,
         context,
-        AnyElement::with_gesture(ScrollViewElement::new()),
+        AnyElement::with_wheel(ScrollViewElement::new()),
     )
 }
 

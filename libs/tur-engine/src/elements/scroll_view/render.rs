@@ -24,7 +24,6 @@ impl ElementLayout for ScrollViewElement {
             0.0
         };
         let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
-        self.viewport_size = viewport;
 
         if let Some(&child_id) = children.first() {
             let child_constraints = match self.axis {
@@ -42,9 +41,12 @@ impl ElementLayout for ScrollViewElement {
                 },
             };
             let child_size = cx.layout_child(child_id, &child_constraints);
-            self.content_size = child_size;
+            self.position.apply_dimensions(viewport, child_size);
+            let max_scroll = (self.axis.main(child_size) - self.axis.main(viewport)).max(0.0);
+            self.position.set_extents(0.0, max_scroll);
         } else {
-            self.content_size = Size::ZERO;
+            self.position.apply_dimensions(viewport, tur_shared::Size::ZERO);
+            self.position.set_extents(0.0, 0.0);
         }
 
         viewport
@@ -53,8 +55,8 @@ impl ElementLayout for ScrollViewElement {
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         if let Some(&child_id) = children.first() {
             let offset = match self.axis {
-                tur_shared::Axis::Vertical => Offset::new(0.0, -self.scroll_offset),
-                tur_shared::Axis::Horizontal => Offset::new(-self.scroll_offset, 0.0),
+                tur_shared::Axis::Vertical => Offset::new(0.0, -self.position.pixels()),
+                tur_shared::Axis::Horizontal => Offset::new(-self.position.pixels(), 0.0),
             };
             cx.set_child_offset(child_id, offset);
         }

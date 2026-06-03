@@ -498,7 +498,7 @@ impl ElementOnGesture for EditableTextElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         let full = {
             let c = self.controller();
             c.text()
@@ -527,9 +527,7 @@ impl ElementOnGesture for EditableTextElement {
                     cx.request_redraw();
                 }
             }
-            ComposedGestureEvent::Wheel { .. } => {}
         }
-        false
     }
 }
 

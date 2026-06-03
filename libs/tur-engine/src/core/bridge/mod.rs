@@ -141,6 +141,12 @@ pub fn init_bridge(
         ctx.register_handler(Box::new(
             crate::handlers::pointer_region::PointerRegionAppHandler::new(),
         ));
+        ctx.register_handler(Box::new(
+            crate::handlers::wheel::WheelAppHandler,
+        ));
+        ctx.register_handler(Box::new(
+            crate::handlers::scroll_chaining::ScrollChainingHandler,
+        ));
     }
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), context);

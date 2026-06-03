@@ -146,11 +146,11 @@ impl TurTestApp {
 
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::Wheel {
+            .push_event(AppEvent::Wheel {
                 delta_x,
                 delta_y,
                 position: Offset::new(x, y),
-            }));
+            });
         self.ensure_flushed();
     }
 
