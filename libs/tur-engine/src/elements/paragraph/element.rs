@@ -96,7 +96,7 @@ impl ElementOnGesture for ParagraphElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
                 cx.request_own_focus();
@@ -120,9 +120,7 @@ impl ElementOnGesture for ParagraphElement {
                     cx.request_redraw();
                 }
             }
-            ComposedGestureEvent::Wheel { .. } => {}
         }
-        false
     }
 }
 

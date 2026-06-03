@@ -9,7 +9,6 @@ use crate::core::js_command::{IntoAnyJsCommand, JsCommandQueue};
 pub enum ComposedGestureEvent {
     PointerDown { local_position: Offset },
     PointerMove { local_position: Offset },
-    Wheel { delta_x: f64, delta_y: f64 },
 }
 
 pub struct ElementOnGestureContext<'a> {
@@ -56,9 +55,8 @@ pub trait ElementOnGesture: 'static {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         let _ = cx;
         let _ = event;
-        false
     }
 }
