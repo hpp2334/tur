@@ -1059,6 +1059,183 @@ async function main() {
         }
         await screenshot(page, "counter-case-rendered");
 
+        // ========== SCROLL LIST TEST ==========
+        // Test: select scroll-list case, verify rendering, scroll via wheel, verify content shifts
+        console.log("\n========== SCROLL LIST TEST ==========");
+
+        const scrollListBtn = page.locator("button.case-item", {
+            hasText: /^scroll-list$/,
+        });
+        if ((await scrollListBtn.count()) > 0) {
+            await scrollListBtn.click();
+            await waitForRender(page, 500);
+
+            await page.waitForFunction(
+                () => {
+                    const w = window as Record<string, unknown>;
+                    if (!w.turDemo) return false;
+                    try {
+                        const layout = (
+                            w.turDemo as { debugLayout: () => string }
+                        ).debugLayout();
+                        return (
+                            typeof layout === "string" &&
+                            layout.includes("scroll_view")
+                        );
+                    } catch {
+                        return false;
+                    }
+                },
+                { timeout: 30000 },
+            );
+            await waitForRender(page, 1000);
+
+            await screenshot(page, "scroll-list-initial");
+
+            elements = await getLayout(page);
+            const scrollListTexts = findAll(
+                elements,
+                (e) => e.type === "tur_text_span" || e.type === "tur_paragraph",
+            );
+            console.log(
+                "  Scroll list texts:",
+                scrollListTexts.map((e) => `"${e.label}"`).join(", "),
+            );
+
+            const scrollItems = scrollListTexts.filter(
+                (e) =>
+                    e.label && e.label !== "Scroll List Demo" && e.rect.h > 5,
+            );
+            console.log(`  Found ${scrollItems.length} list items`);
+
+            const scrollHeader = findTextSpans(elements, "Scroll List Demo");
+            if (scrollHeader.length > 0) {
+                console.log('  PASS: "Scroll List Demo" header found');
+                passed++;
+            } else {
+                console.log('  FAIL: "Scroll List Demo" header not found');
+                failed++;
+            }
+
+            const designItem = findAll(elements, (e) =>
+                e.label?.startsWith("Design system"),
+            );
+            if (designItem.length > 0) {
+                console.log(
+                    '  PASS: "Design system architecture" visible before scroll',
+                );
+                passed++;
+            } else {
+                console.log(
+                    '  FAIL: "Design system architecture" not found before scroll',
+                );
+                failed++;
+            }
+
+            const deployItem = findAll(elements, (e) =>
+                e.label?.startsWith("Deploy to"),
+            );
+            const deployVisibleBefore = deployItem.length > 0;
+            console.log(
+                `  "Deploy to production" visible before scroll: ${deployVisibleBefore}`,
+            );
+
+            // Scroll down using wheel dispatched directly on the canvas
+            const scrollResult = await page.evaluate(`
+                (async () => {
+                    const canvas = document.querySelector("#tur-container canvas");
+                    if (!canvas) return JSON.stringify({ ok: false });
+
+                    const rect = canvas.getBoundingClientRect();
+                    const cx = rect.x + rect.width / 2;
+                    const cy = rect.y + rect.height / 2;
+
+                    for (var i = 0; i < 10; i++) {
+                        var event = new WheelEvent("wheel", {
+                            deltaX: 0,
+                            deltaY: 150,
+                            clientX: cx,
+                            clientY: cy,
+                            bubbles: true,
+                            cancelable: true,
+                        });
+                        canvas.dispatchEvent(event);
+                        await new Promise(function(r) { requestAnimationFrame(function() { r(); }); });
+                        await new Promise(function(r) { setTimeout(r, 50); });
+                    }
+
+                    await new Promise(function(r) { setTimeout(r, 500); });
+                    return JSON.stringify({ ok: true });
+                })()
+            `);
+            const scrollParsed = JSON.parse(scrollResult as string);
+            if (!scrollParsed.ok) {
+                console.log("  WARN: scroll canvas not found");
+            }
+            await waitForRender(page, 500);
+
+            await screenshot(page, "scroll-list-after-scroll");
+
+            elements = await getLayout(page);
+
+            const designAfterScroll = findAll(elements, (e) =>
+                e.label?.startsWith("Design system"),
+            );
+            const deployAfterScroll = findAll(elements, (e) =>
+                e.label?.startsWith("Deploy to"),
+            );
+
+            if (designAfterScroll.length === 0) {
+                console.log(
+                    '  PASS: "Design system architecture" scrolled away (clipped)',
+                );
+                passed++;
+            } else {
+                const allScrolledAway = designAfterScroll.every(
+                    (e) => e.rect.y + e.rect.h <= 40,
+                );
+                if (allScrolledAway) {
+                    console.log(
+                        '  PASS: "Design system architecture" scrolled above viewport (clipped)',
+                    );
+                    passed++;
+                } else {
+                    console.log(
+                        '  FAIL: "Design system architecture" still visible after scroll',
+                    );
+                    failed++;
+                }
+            }
+
+            if (deployAfterScroll.length > 0) {
+                console.log(
+                    '  PASS: "Deploy to production" visible after scroll',
+                );
+                passed++;
+            } else {
+                console.log(
+                    '  FAIL: "Deploy to production" not visible after scroll',
+                );
+                failed++;
+            }
+
+            const scrollViewElements = findAll(elements, (e) =>
+                e.type.includes("scroll"),
+            );
+            console.log(`  Scroll view elements: ${scrollViewElements.length}`);
+            if (scrollViewElements.length > 0) {
+                console.log("  PASS: scroll_view element present");
+                passed++;
+            } else {
+                console.log("  FAIL: no scroll_view element found");
+                failed++;
+            }
+
+            console.log("\n=== Scroll List Test Complete ===");
+        } else {
+            console.log("  SKIP: scroll-list case not found in sidebar");
+        }
+
         // ========== COUNTER APP TEST ==========
         // Test live editing: type a counter app in the code editor, compile, and interact
         console.log("\n========== COUNTER APP TEST ==========");

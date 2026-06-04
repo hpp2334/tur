@@ -113,10 +113,13 @@ impl ElementLayout for FlexElement {
             .sum();
 
         let main_size = match self.main_axis_size {
-            MainAxisSize::Max => match self.direction {
-                Axis::Vertical => constraints.max_height,
-                Axis::Horizontal => constraints.max_width,
-            },
+            MainAxisSize::Max => {
+                let max_main = match self.direction {
+                    Axis::Vertical => constraints.max_height,
+                    Axis::Horizontal => constraints.max_width,
+                };
+                if max_main.is_finite() { max_main } else { total_main }
+            }
             MainAxisSize::Min => total_main,
         };
 

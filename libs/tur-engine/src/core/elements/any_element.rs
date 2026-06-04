@@ -13,11 +13,12 @@ use crate::core::elements::ElementTrace;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext};
+use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
 use crate::core::event::AppImeEvent;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
 type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsFunction, Vec<JsValue>)>;
 
@@ -25,6 +26,7 @@ pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
     on_gesture: Option<GestureFn>,
+    on_wheel: Option<WheelFn>,
     on_ime: Option<ImeFn>,
     emit_js_callback_fn: Option<EmitJsCallbackFn>,
 }
@@ -71,6 +73,15 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
 ) {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnGesture::on_gesture_event(element, cx, event);
+}
+
+fn wheel_dispatch<E: ElementOnWheel + 'static>(
+    any: &mut dyn Any,
+    cx: &mut ElementOnWheelContext,
+    event: &WheelEvent,
+) -> f64 {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnWheel::on_wheel(element, cx, event)
 }
 
 fn ime_dispatch<E: ElementOnIme + 'static>(
@@ -156,6 +167,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
+            on_wheel: None,
             on_ime: None,
             emit_js_callback_fn: None,
         }
@@ -176,6 +188,47 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
+            on_wheel: None,
+            on_ime: None,
+            emit_js_callback_fn: None,
+        }
+    }
+
+    pub fn with_gesture<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnGesture
+            + 'static,
+    >(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: None,
+            on_gesture: Some(gesture_dispatch::<E>),
+            on_wheel: None,
+            on_ime: None,
+            emit_js_callback_fn: None,
+        }
+    }
+
+    pub fn with_wheel<
+        E: ElementOnUpdate
+            + ElementLayout
+            + ElementRender
+            + ElementTrace
+            + ElementOnWheel
+            + 'static,
+    >(
+        element: E,
+    ) -> Self {
+        AnyElement {
+            inner: Box::new(element),
+            on_keyboard: None,
+            on_gesture: None,
+            on_wheel: Some(wheel_dispatch::<E>),
             on_ime: None,
             emit_js_callback_fn: None,
         }
@@ -195,6 +248,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: None,
+            on_wheel: None,
             on_ime: None,
             emit_js_callback_fn: None,
         }
@@ -215,6 +269,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
             on_gesture: Some(gesture_dispatch::<E>),
+            on_wheel: None,
             on_ime: None,
             emit_js_callback_fn: None,
         }
@@ -237,6 +292,7 @@ impl AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
             on_gesture: Some(gesture_dispatch::<E>),
+            on_wheel: None,
             on_ime: Some(ime_dispatch::<E>),
             emit_js_callback_fn: None,
         }
@@ -322,6 +378,22 @@ impl AnyElement {
         if let Some(handler) = self.on_gesture {
             handler(self.inner.as_any_mut(), cx, event);
         }
+    }
+
+    pub fn on_wheel_event(
+        &mut self,
+        cx: &mut ElementOnWheelContext,
+        event: &WheelEvent,
+    ) -> f64 {
+        if let Some(handler) = self.on_wheel {
+            handler(self.inner.as_any_mut(), cx, event)
+        } else {
+            0.0
+        }
+    }
+
+    pub fn has_on_wheel(&self) -> bool {
+        self.on_wheel.is_some()
     }
 
     pub fn on_ime_event(

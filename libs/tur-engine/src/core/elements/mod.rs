@@ -7,6 +7,7 @@ mod element_keyboard;
 mod element_object;
 mod element_tree;
 mod element_update;
+mod element_wheel;
 mod trace;
 
 pub use any_element::*;
@@ -18,4 +19,5 @@ pub use element_keyboard::*;
 pub use element_object::*;
 pub use element_tree::*;
 pub use element_update::*;
+pub use element_wheel::*;
 pub use trace::*;

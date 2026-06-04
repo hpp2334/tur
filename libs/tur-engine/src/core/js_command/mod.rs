@@ -37,6 +37,12 @@ impl IntoAnyJsCommand for FocusableJsCommand {
     }
 }
 
+impl IntoAnyJsCommand for ScrollViewJsCommand {
+    fn into_any_js_command(self) -> AnyJsCommand {
+        AnyJsCommand(Rc::new(self))
+    }
+}
+
 #[derive(Clone)]
 pub enum PointerInteractJsCommand {
     Click { x: f64, y: f64 },
@@ -50,6 +56,11 @@ pub enum FocusableJsCommand {
     KeyUp { key: String, code: String, modifiers: Modifiers },
     Focus,
     Blur,
+}
+
+#[derive(Clone)]
+pub enum ScrollViewJsCommand {
+    ScrollDidUpdate,
 }
 
 impl std::fmt::Debug for AnyJsCommand {

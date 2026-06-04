@@ -7,6 +7,7 @@ pub mod image;
 pub mod paragraph;
 pub mod pointer_interact;
 pub mod positioned;
+pub mod scroll_view;
 pub mod stack;
 pub mod text;
 
@@ -19,4 +20,5 @@ pub use image::ImageElement;
 pub use paragraph::ParagraphElement;
 pub use pointer_interact::PointerInteractElement;
 pub use positioned::PositionedElement;
+pub use scroll_view::ScrollViewElement;
 pub use stack::StackElement;

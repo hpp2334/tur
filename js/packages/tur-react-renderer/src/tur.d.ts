@@ -51,6 +51,25 @@ interface TextEditingControllerOptions {
     onCompositionEnd?: (text: string) => void;
 }
 
+interface ScrollInfo {
+    offset: number;
+    maxExtent: number;
+    viewportDimension: number;
+}
+
+declare class ScrollController {
+    get offset(): number;
+    get maxScrollExtent(): number;
+    get viewportDimension(): number;
+    jumpTo(offset: number): void;
+    _attach(handle: TurNodeHandle, ctx: unknown): void;
+}
+
+interface ScrollControllerOptions {
+    onScroll?: (info: ScrollInfo) => void;
+    initialOffset?: number;
+}
+
 declare global {
     var __tur: {
         __ctx: unknown;
@@ -67,6 +86,7 @@ declare global {
             controller: TextEditingController,
         ): TurNodeHandle;
         createImage(ctx: unknown): TurNodeHandle;
+        createScrollView(ctx: unknown): TurNodeHandle;
         createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
         createSvg(ctx: unknown): TurNodeHandle;
         createSvgResource(ctx: unknown, svgString: string): ResourceHandle;
@@ -75,6 +95,10 @@ declare global {
             ctx: unknown,
             options?: TextEditingControllerOptions,
         ): TextEditingController;
+        createScrollController(
+            ctx: unknown,
+            options?: ScrollControllerOptions,
+        ): ScrollController;
         setAttribute(
             ctx: unknown,
             handle: TurNodeHandle,

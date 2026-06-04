@@ -1,20 +1,51 @@
 let turApp: Record<string, unknown> | null = null;
+let wasmReady: Promise<Record<string, unknown>> | null = null;
+
+function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", url, true);
+        xhr.responseType = "arraybuffer";
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                resolve(xhr.response);
+            } else {
+                reject(new Error(`XHR ${xhr.status}: ${xhr.statusText}`));
+            }
+        };
+        xhr.onerror = () => reject(new Error("XHR error"));
+        xhr.send();
+    });
+}
+
+async function loadAndInitWasm(): Promise<Record<string, unknown>> {
+    if (wasmReady) return wasmReady;
+    wasmReady = (async () => {
+        const mod = await import(
+            /* webpackIgnore: true */
+            "./tur_wasm.js"
+        );
+        const buffer = await fetchArrayBuffer("tur_wasm_bg.wasm");
+        const compiled = await WebAssembly.compile(buffer);
+        await mod.default(compiled);
+        return mod as Record<string, unknown>;
+    })();
+    return wasmReady;
+}
 
 export async function initTur(containerId: string): Promise<void> {
-    const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
-        | ((id: string) => Promise<unknown>)
-        | undefined;
-    if (!initWasm) {
-        const msg = "WASM not loaded";
-        console.error("Tur init error:", msg);
-        throw new Error(msg);
-    }
     try {
-        turApp = (await initWasm(containerId)) as Record<string, unknown>;
+        const { TurWasmApp } = (await loadAndInitWasm()) as {
+            TurWasmApp: {
+                create_in: (id: string) => Promise<Record<string, unknown>>;
+            };
+        };
+        turApp = await TurWasmApp.create_in(containerId);
         (globalThis as Record<string, unknown>).turDemo = {
             debugLayout: () => debugLayout(),
         };
     } catch (e) {
+        wasmReady = null;
         const msg = e instanceof Error ? e.message : String(e);
         console.error("Tur init error:", msg);
         throw e;
@@ -46,15 +77,15 @@ export async function runSource(jsSource: string): Promise<void> {
 async function destroyAndRecreate(): Promise<void> {
     if (!turApp) return;
     const container = document.getElementById("tur-container");
-    const initWasm = (globalThis as Record<string, unknown>).initTurWasm as
-        | ((id: string) => Promise<unknown>)
-        | undefined;
-    if (!initWasm || !container) {
-        console.error(
-            "Tur destroyAndRecreate: WASM loader or container not found",
-        );
+    if (!container) {
+        console.error("Tur destroyAndRecreate: container not found");
         return;
     }
     container.innerHTML = "";
-    turApp = (await initWasm("tur-container")) as Record<string, unknown>;
+    const { TurWasmApp } = (await loadAndInitWasm()) as {
+        TurWasmApp: {
+            create_in: (id: string) => Promise<Record<string, unknown>>;
+        };
+    };
+    turApp = await TurWasmApp.create_in("tur-container");
 }

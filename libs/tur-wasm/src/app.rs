@@ -20,6 +20,7 @@ struct WasmState {
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _wheel_closure: Closure<dyn Fn(web_sys::WheelEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _compositionstart_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
@@ -350,6 +351,30 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            let wheel_state = state_clone.clone();
+            let wheel_closure =
+                Closure::<dyn Fn(web_sys::WheelEvent)>::new(move |event: web_sys::WheelEvent| {
+                    event.prevent_default();
+                    let guard = wheel_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        let rect = s._canvas.get_bounding_client_rect();
+                        let x = event.client_x() as f64 - rect.left();
+                        let y = event.client_y() as f64 - rect.top();
+                        s.app.push_event(AppEvent::Wheel {
+                            delta_x: event.delta_x(),
+                            delta_y: event.delta_y(),
+                            position: Offset::new(x, y),
+                        });
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "wheel",
+                    wheel_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             canvas
                 .set_attribute("tabindex", "0")
                 .err_to_jsval()?;
@@ -501,6 +526,7 @@ impl TurWasmApp {
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
                 _pointer_move_closure: pointer_move_closure,
+                _wheel_closure: wheel_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
                 _compositionstart_closure: compositionstart_closure,

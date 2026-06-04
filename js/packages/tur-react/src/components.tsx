@@ -1,7 +1,9 @@
 import type {
+    Axis,
     BorderPosition,
     FlexFit,
     ResourceHandle,
+    ScrollController,
     StackFit,
     TextEditingController,
     TurKeyEvent,
@@ -337,5 +339,29 @@ export function Svg(props: SvgProps) {
             fit={props.fit ?? BoxFit.Contain}
             queryKey={props.queryKey}
         />
+    );
+}
+
+export interface ScrollViewProps extends BaseProps {
+    axis?: Axis;
+    controller?: ScrollController;
+}
+
+export function ScrollView(props: ScrollViewProps) {
+    const { controller, axis, children, queryKey } = props;
+    return (
+        <tur_scroll_view
+            ref={
+                controller
+                    ? (el: TurNodeHandle) =>
+                          controller._attach(el, __tur.__ctx)
+                    : undefined
+            }
+            controller={controller}
+            axis={axis}
+            queryKey={queryKey}
+        >
+            {children}
+        </tur_scroll_view>
     );
 }

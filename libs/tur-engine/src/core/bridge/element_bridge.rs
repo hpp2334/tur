@@ -10,11 +10,12 @@ use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
     FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
-    PositionedElement, StackElement,
+    PositionedElement, ScrollViewElement, StackElement,
 };
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -93,6 +94,19 @@ pub(crate) fn tur_create_paragraph(
 }
 simple_creator!(tur_create_image, AnyElement::new(ImageElement::new()));
 
+pub(crate) fn tur_create_scroll_view(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    create_element(
+        args,
+        context,
+        AnyElement::with_wheel(ScrollViewElement::new())
+            .with_js_callback_emitter::<ScrollViewElement>(),
+    )
+}
+
 pub(crate) fn tur_create_pointer_interact(
     _this: &JsValue,
     args: &[JsValue],
@@ -166,6 +180,21 @@ pub(crate) fn tur_create_text_editing_controller(
         context,
     )?;
     let obj = TextEditingController::from_data(data, context)?;
+    Ok(obj.upcast().clone().into())
+}
+
+pub(crate) fn tur_create_scroll_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let data = ScrollController::data_constructor(
+        &JsValue::undefined(),
+        &args[1..],
+        context,
+    )?;
+    let obj = ScrollController::from_data(data, context)?;
     Ok(obj.upcast().clone().into())
 }
 
