@@ -4,12 +4,16 @@ import {
     Container,
     CrossAxisAlignment,
     Expanded,
+    Positioned,
     Row,
     ScrollView,
     SizedBox,
+    Stack,
     Text,
 } from "@tur/react";
+import { createScrollController } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
+import React, { useState } from "react";
 
 const items = [
     "Design system architecture",
@@ -57,13 +61,47 @@ const colors = [
     Color.rgb(45, 212, 191),
 ];
 
+const ITEM_HEIGHT = 56;
+const VIEWPORT_WIDTH = 400;
+const HEADER_HEIGHT = 40;
+const SCROLLBAR_WIDTH = 8;
+const SCROLLBAR_TRACK_COLOR = Color.rgb(51, 65, 85);
+const SCROLLBAR_THUMB_COLOR = Color.rgb(148, 163, 184);
+
 function ScrollList() {
+    const [scrollOffset, setScrollOffset] = useState(0);
+    const [maxExtent, setMaxExtent] = useState(0);
+    const [viewportDim, setViewportDim] = useState(1);
+
+    const controller = createScrollController({
+        onScroll: (info) => {
+            setScrollOffset(info.offset);
+            setMaxExtent(info.maxExtent);
+            setViewportDim(info.viewportDimension);
+        },
+    });
+
+    const contentHeight = items.length * ITEM_HEIGHT;
+    const trackHeight = viewportDim;
+    const thumbHeight =
+        maxExtent > 0
+            ? Math.max(20, (viewportDim / contentHeight) * trackHeight)
+            : trackHeight;
+    const thumbTop =
+        maxExtent > 0
+            ? (scrollOffset / maxExtent) * (trackHeight - thumbHeight)
+            : 0;
+
     return (
         <Column crossAlignment={CrossAxisAlignment.Start}>
-            <Container width={400} height={40} color={Color.rgb(99, 102, 241)}>
+            <Container
+                width={VIEWPORT_WIDTH}
+                height={HEADER_HEIGHT}
+                color={Color.rgb(99, 102, 241)}
+            >
                 <Row>
                     <Expanded>
-                        <Container height={40}>
+                        <Container height={HEADER_HEIGHT}>
                             <Text
                                 content="Scroll List Demo"
                                 fontSize={16}
@@ -74,40 +112,53 @@ function ScrollList() {
                 </Row>
             </Container>
             <Expanded>
-                <ScrollView>
-                    <Column crossAlignment={CrossAxisAlignment.Start}>
-                        {items.map((item, i) => (
-                            <Container
-                                key={item}
-                                width={400}
-                                height={56}
-                                color={
-                                    i % 2 === 0
-                                        ? Color.rgb(30, 41, 59)
-                                        : Color.rgb(15, 23, 42)
-                                }
-                            >
-                                <Row>
-                                    <SizedBox width={12} />
-                                    <Container
-                                        width={32}
-                                        height={32}
-                                        color={colors[i]}
-                                        borderRadius={16}
-                                    />
-                                    <SizedBox width={12} />
-                                    <Container height={56}>
-                                        <Text
-                                            content={item}
-                                            fontSize={14}
-                                            color={Color.rgb(226, 232, 240)}
+                <Stack>
+                    <ScrollView controller={controller}>
+                        <Column crossAlignment={CrossAxisAlignment.Start}>
+                            {items.map((item, i) => (
+                                <Container
+                                    key={item}
+                                    width={VIEWPORT_WIDTH}
+                                    height={ITEM_HEIGHT}
+                                    color={
+                                        i % 2 === 0
+                                            ? Color.rgb(30, 41, 59)
+                                            : Color.rgb(15, 23, 42)
+                                    }
+                                >
+                                    <Row>
+                                        <SizedBox width={12} />
+                                        <Container
+                                            width={32}
+                                            height={32}
+                                            color={colors[i]}
+                                            borderRadius={16}
                                         />
-                                    </Container>
-                                </Row>
-                            </Container>
-                        ))}
-                    </Column>
-                </ScrollView>
+                                        <SizedBox width={12} />
+                                        <Container height={ITEM_HEIGHT}>
+                                            <Text
+                                                content={item}
+                                                fontSize={14}
+                                                color={Color.rgb(226, 232, 240)}
+                                            />
+                                        </Container>
+                                    </Row>
+                                </Container>
+                            ))}
+                        </Column>
+                    </ScrollView>
+                    <Positioned
+                        right={4}
+                        top={thumbTop}
+                    >
+                        <Container
+                            width={SCROLLBAR_WIDTH}
+                            height={thumbHeight}
+                            color={SCROLLBAR_THUMB_COLOR}
+                            borderRadius={4}
+                        />
+                    </Positioned>
+                </Stack>
             </Expanded>
         </Column>
     );

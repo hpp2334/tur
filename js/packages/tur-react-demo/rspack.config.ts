@@ -192,15 +192,27 @@ export default defineConfig({
     devServer: {
         hot: true,
         liveReload: false,
-        server: "https",
         client: {
             overlay: {
                 errors: true,
                 warnings: false,
             },
+            ...(process.env.TUR_TUNNEL
+                ? { webSocketURL: "auto://0.0.0.0:0/ws" }
+                : {}),
         },
+        server: process.env.TUR_TUNNEL ? undefined : "https",
+        port: 8080,
         host: "0.0.0.0",
         allowedHosts: "all",
+        headers: process.env.TUR_TUNNEL
+            ? {
+                  "Cross-Origin-Opener-Policy": "same-origin",
+                  "Cross-Origin-Embedder-Policy": "credentialless",
+                  "Cache-Control": "no-store",
+                  "CDN-Cache-Control": "no-store",
+              }
+            : {},
     },
     entry: {
         main: "./src/index.tsx",
@@ -208,6 +220,9 @@ export default defineConfig({
     output: {
         publicPath: "",
         clean: true,
+        ...(process.env.TUR_TUNNEL
+            ? { filename: "[name].[contenthash].js" }
+            : {}),
     },
     module: {
         rules: [
