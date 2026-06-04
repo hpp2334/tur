@@ -1,0 +1,241 @@
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use boa_engine::class::{Class, ClassBuilder};
+use boa_engine::js_string;
+use boa_engine::native_function::NativeFunction;
+use boa_engine::object::builtins::JsFunction;
+use boa_engine::object::JsObject;
+use boa_engine::property::Attribute;
+use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
+use boa_gc::{Finalize, Trace};
+
+use crate::core::bridge::BoaOpaque;
+use crate::core::bridge::{TurJsContext, TurNodeHandle};
+use crate::core::js_command::{JsCommandQueue, ScrollViewJsCommand};
+use crate::core::element::ElementNodeId;
+use crate::elements::ScrollViewElement;
+
+#[derive(Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct ScrollController {
+    pub(crate) offset: f64,
+    pub(crate) max_scroll_extent: f64,
+    pub(crate) viewport_dimension: f64,
+    pub(crate) on_scroll: Option<JsFunction>,
+    pub(crate) handle: Option<JsObject>,
+    pub(crate) element_tree:
+        Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
+    pub(crate) js_command_queue: Option<Rc<RefCell<JsCommandQueue>>>,
+    pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
+    pub(crate) pending_initial_offset: Option<f64>,
+}
+
+fn extract_callable(value: &JsValue) -> Option<JsFunction> {
+    value.as_object().and_then(JsFunction::from_object)
+}
+
+fn extract_callable_from_opts(
+    opts: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<JsFunction> {
+    let val = opts.get(js_string!(key), ctx).ok()?;
+    extract_callable(&val)
+}
+
+impl ScrollController {
+    pub fn new() -> Self {
+        Self {
+            offset: 0.0,
+            max_scroll_extent: 0.0,
+            viewport_dimension: 0.0,
+            on_scroll: None,
+            handle: None,
+            element_tree: None,
+            js_command_queue: None,
+            dirty_flag: None,
+            pending_initial_offset: None,
+        }
+    }
+
+    fn node_id(&self) -> Option<ElementNodeId> {
+        let handle_obj = self.handle.as_ref()?;
+        let handle = BoaOpaque::<TurNodeHandle>::wrap(handle_obj)?;
+        Some(handle.id)
+    }
+}
+
+impl Default for ScrollController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+macro_rules! controller_getter {
+    ($class:expr, $name:expr, $body:expr) => {
+        let getter = NativeFunction::from_fn_ptr($body)
+            .to_js_function($class.context().realm());
+        $class.accessor(
+            js_string!($name),
+            Some(getter),
+            None,
+            Attribute::default(),
+        );
+    };
+}
+
+impl Class for ScrollController {
+    const NAME: &'static str = "ScrollController";
+    const LENGTH: usize = 1;
+
+    fn data_constructor(
+        _new_target: &JsValue,
+        args: &[JsValue],
+        ctx: &mut Context,
+    ) -> JsResult<Self> {
+        let mut ctrl = Self::new();
+        if let Some(opts) = args.get_or_undefined(0).as_object() {
+            ctrl.on_scroll = extract_callable_from_opts(&opts, "onScroll", ctx);
+            if let Ok(val) = opts.get(js_string!("initialOffset"), ctx) {
+                if let Some(n) = val.as_number() {
+                    ctrl.pending_initial_offset = Some(n);
+                }
+            }
+        }
+        Ok(ctrl)
+    }
+
+    fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
+        controller_getter!(class, "offset", |this, _, _| {
+            let obj = this.as_object().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            let ctrl = obj
+                .downcast_ref::<ScrollController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            Ok(JsValue::from(ctrl.offset))
+        });
+
+        controller_getter!(class, "maxScrollExtent", |this, _, _| {
+            let obj = this.as_object().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            let ctrl = obj
+                .downcast_ref::<ScrollController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            Ok(JsValue::from(ctrl.max_scroll_extent))
+        });
+
+        controller_getter!(class, "viewportDimension", |this, _, _| {
+            let obj = this.as_object().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            let ctrl = obj
+                .downcast_ref::<ScrollController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            Ok(JsValue::from(ctrl.viewport_dimension))
+        });
+
+        class.method(
+            js_string!("jumpTo"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, _| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<ScrollController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                let target_offset = args.get_or_undefined(0).as_number().unwrap_or(0.0);
+
+                let element_tree_rc = ctrl.element_tree.clone();
+                let dirty_flag = ctrl.dirty_flag.clone();
+                let js_command_queue = ctrl.js_command_queue.clone();
+                let node_id = ctrl.node_id();
+
+                let Some(element_tree_rc) = element_tree_rc else {
+                    return Ok(JsValue::undefined());
+                };
+                let Some(dirty_flag) = dirty_flag else {
+                    return Ok(JsValue::undefined());
+                };
+                let Some(node_id) = node_id else {
+                    return Ok(JsValue::undefined());
+                };
+
+                let mut tree = element_tree_rc.borrow_mut();
+                let Some(node) = tree.get_mut(node_id) else {
+                    return Ok(JsValue::undefined());
+                };
+                let Some(ref mut element) = node.element else {
+                    return Ok(JsValue::undefined());
+                };
+                let Some(sv) = element.cast_mut::<ScrollViewElement>() else {
+                    return Ok(JsValue::undefined());
+                };
+
+                let max = sv.position.max_scroll_extent();
+                let clamped = target_offset.clamp(0.0, max);
+                sv.position.correct_pixels(clamped);
+
+                let vp = sv.viewport_size();
+                let dim = match sv.axis {
+                    tur_shared::Axis::Vertical => vp.height,
+                    tur_shared::Axis::Horizontal => vp.width,
+                };
+                let new_offset = sv.position.pixels();
+                tree.mark_dirty(node_id);
+                drop(tree);
+
+                ctrl.offset = new_offset;
+                ctrl.max_scroll_extent = max;
+                ctrl.viewport_dimension = dim;
+                dirty_flag.set(true);
+
+                if let Some(queue_rc) = js_command_queue {
+                    queue_rc
+                        .borrow_mut()
+                        .push(node_id, ScrollViewJsCommand::ScrollDidUpdate);
+                }
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("_attach"),
+            2,
+            NativeFunction::from_fn_ptr(|this, args, _| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<ScrollController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                if let Some(handle_obj) = args.get_or_undefined(0).as_object() {
+                    if BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
+                        ctrl.handle = Some(handle_obj.clone());
+                    }
+                }
+
+                if let Some(ctx_obj) = args.get_or_undefined(1).as_object() {
+                    if let Some(js_ctx) =
+                        BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
+                    {
+                        ctrl.element_tree = Some(js_ctx.element_tree.clone());
+                        ctrl.js_command_queue =
+                            Some(js_ctx.js_command_queue.clone());
+                        ctrl.dirty_flag = Some(js_ctx.dirty.clone());
+                    }
+                }
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        Ok(())
+    }
+}

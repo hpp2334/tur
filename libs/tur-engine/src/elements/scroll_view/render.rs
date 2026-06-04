@@ -44,9 +44,13 @@ impl ElementLayout for ScrollViewElement {
             self.position.apply_dimensions(viewport, child_size);
             let max_scroll = (self.axis.main(child_size) - self.axis.main(viewport)).max(0.0);
             self.position.set_extents(0.0, max_scroll);
+            self.update_controller_metrics();
+            self.apply_pending_initial_offset();
         } else {
             self.position.apply_dimensions(viewport, tur_shared::Size::ZERO);
             self.position.set_extents(0.0, 0.0);
+            self.update_controller_metrics();
+            self.apply_pending_initial_offset();
         }
 
         viewport

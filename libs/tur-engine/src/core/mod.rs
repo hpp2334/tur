@@ -14,4 +14,5 @@ pub mod layout;
 pub mod pointer_region;
 pub mod render;
 pub mod resource;
+pub mod scroll;
 pub mod text;

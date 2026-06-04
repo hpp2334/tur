@@ -17,9 +17,13 @@ export { createImageResource } from "./image";
 export type { TurInstance } from "./renderer";
 export { renderRoot } from "./renderer";
 export { createSvgResource } from "./svg";
+export { createScrollController } from "./scroll-controller";
 export { createTextEditingController } from "./text-controller";
 export type {
     ResourceHandle,
+    ScrollController,
+    ScrollControllerOptions,
+    ScrollInfo,
     TextEditingController,
     TextEditingControllerOptions,
     TurKeyEvent,

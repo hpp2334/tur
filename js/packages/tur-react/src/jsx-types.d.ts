@@ -127,9 +127,10 @@ declare module "react/jsx-runtime" {
             };
             tur_scroll_view: RefAttributes<TurNodeHandle> & {
                 axis?: Axis;
-                scrollOffset?: number;
+                controller?: object;
                 queryKey?: string[];
                 children?: React.ReactNode;
+                ref?: (el: TurNodeHandle) => void;
             };
         }
     }

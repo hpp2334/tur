@@ -58,7 +58,11 @@ pub fn dispatch_wheel(
     let Some(ref mut element) = node.element else {
         return 0.0;
     };
-    let mut el_cx = ElementOnWheelContext::new(&mut *cx.event_queue, id);
+    let mut el_cx = ElementOnWheelContext::new(
+        &mut *cx.event_queue,
+        &mut *cx.js_command_queue,
+        id,
+    );
     let overscroll = element.on_wheel_event(&mut el_cx, &WheelEvent { delta_x, delta_y });
     cx.element_tree.mark_dirty(id);
     overscroll

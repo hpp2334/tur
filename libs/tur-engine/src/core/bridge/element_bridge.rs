@@ -10,6 +10,7 @@ use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
@@ -101,7 +102,8 @@ pub(crate) fn tur_create_scroll_view(
     create_element(
         args,
         context,
-        AnyElement::with_wheel(ScrollViewElement::new()),
+        AnyElement::with_wheel(ScrollViewElement::new())
+            .with_js_callback_emitter::<ScrollViewElement>(),
     )
 }
 
@@ -178,6 +180,21 @@ pub(crate) fn tur_create_text_editing_controller(
         context,
     )?;
     let obj = TextEditingController::from_data(data, context)?;
+    Ok(obj.upcast().clone().into())
+}
+
+pub(crate) fn tur_create_scroll_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let data = ScrollController::data_constructor(
+        &JsValue::undefined(),
+        &args[1..],
+        context,
+    )?;
+    let obj = ScrollController::from_data(data, context)?;
     Ok(obj.upcast().clone().into())
 }
 
