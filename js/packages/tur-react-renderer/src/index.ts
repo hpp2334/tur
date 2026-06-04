@@ -20,6 +20,7 @@ export type { TurInstance } from "./renderer";
 export { flushSync, renderRoot } from "./renderer";
 export { createScrollController } from "./scroll-controller";
 export { createSvgResource } from "./svg";
+export { createScrollController } from "./scroll-controller";
 export { createTextEditingController } from "./text-controller";
 export type {
     LazyListController,
