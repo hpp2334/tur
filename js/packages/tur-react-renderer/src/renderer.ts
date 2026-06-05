@@ -16,6 +16,7 @@ const creators: Record<string, () => TurNodeHandle> = {
     tur_editable_text: () => __tur.createEditableText(ctx, null as never),
     tur_image: () => __tur.createImage(ctx),
     tur_scroll_view: () => __tur.createScrollView(ctx),
+    tur_lazy_list: () => __tur.createLazyList(ctx),
 };
 
 type Props = Record<string, unknown>;

@@ -230,4 +230,8 @@ impl TurTestApp {
     pub fn load_bundle_source(&mut self, source: &str) -> Result<(), TurError> {
         self.inner.load_js(source)
     }
+
+    pub fn debug_layout(&self) -> String {
+        self.inner.debug_layout()
+    }
 }

@@ -18,12 +18,16 @@ export type { TurInstance } from "./renderer";
 export { renderRoot } from "./renderer";
 export { createSvgResource } from "./svg";
 export { createScrollController } from "./scroll-controller";
+export { createLazyListController } from "./lazy-list-controller";
 export { createTextEditingController } from "./text-controller";
 export type {
     ResourceHandle,
     ScrollController,
     ScrollControllerOptions,
     ScrollInfo,
+    LazyListController,
+    LazyListControllerOptions,
+    LazyListScrollInfo,
     TextEditingController,
     TextEditingControllerOptions,
     TurKeyEvent,

@@ -3,6 +3,7 @@ mod container;
 mod debug;
 mod expanded;
 mod image;
+mod lazy_list;
 mod positioned;
 mod rich_text;
 mod row;

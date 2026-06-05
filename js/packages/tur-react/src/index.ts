@@ -1,5 +1,8 @@
 export type {
     EdgeInsets,
+    LazyListController,
+    LazyListControllerOptions,
+    LazyListScrollInfo,
     Offset,
     ResourceHandle,
     ScrollController,
@@ -18,6 +21,7 @@ export {
     Color,
     CrossAxisAlignment,
     createImageResource,
+    createLazyListController,
     createScrollController,
     createSvgResource,
     createTextEditingController,
@@ -45,6 +49,7 @@ export type {
     SvgProps,
     TextProps,
 } from "./components";
+export type { LazyColumnProps, LazyRowProps } from "./lazy-list";
 export {
     Column,
     Container,
@@ -62,3 +67,4 @@ export {
     Svg,
     Text,
 } from "./components";
+export { LazyColumn, LazyRow } from "./lazy-list";

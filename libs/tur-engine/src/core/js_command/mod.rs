@@ -43,6 +43,12 @@ impl IntoAnyJsCommand for ScrollViewJsCommand {
     }
 }
 
+impl IntoAnyJsCommand for LazyListJsCommand {
+    fn into_any_js_command(self) -> AnyJsCommand {
+        AnyJsCommand(Rc::new(self))
+    }
+}
+
 #[derive(Clone)]
 pub enum PointerInteractJsCommand {
     Click { x: f64, y: f64 },
@@ -60,6 +66,12 @@ pub enum FocusableJsCommand {
 
 #[derive(Clone)]
 pub enum ScrollViewJsCommand {
+    ScrollDidUpdate,
+}
+
+#[derive(Clone)]
+pub enum LazyListJsCommand {
+    VisibleRangeDidChange { start_index: u64, end_index: u64 },
     ScrollDidUpdate,
 }
 
