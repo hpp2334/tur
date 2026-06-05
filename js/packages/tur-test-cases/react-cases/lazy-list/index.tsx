@@ -41,26 +41,29 @@ function TabButton({
     onClick: () => void;
 }) {
     return (
-        <PointerInteract onClick={onClick}>
-            <Container
-                width={80}
-                height={32}
-                color={active ? Color.rgb(99, 102, 241) : Color.rgb(30, 41, 59)}
-                borderRadius={6}
-            >
-                <Container height={32}>
-                    <Text
-                        content={label}
-                        fontSize={13}
-                        color={
-                            active
-                                ? Color.rgb(255, 255, 255)
-                                : Color.rgb(148, 163, 184)
-                        }
-                    />
+        <PointerInteract
+            onClick={onClick}
+            child={
+                <Container
+                    width={80}
+                    height={32}
+                    color={active ? Color.rgb(99, 102, 241) : Color.rgb(30, 41, 59)}
+                    borderRadius={6}
+                >
+                    <Container height={32}>
+                        <Text
+                            content={label}
+                            fontSize={13}
+                            color={
+                                active
+                                    ? Color.rgb(255, 255, 255)
+                                    : Color.rgb(148, 163, 184)
+                            }
+                        />
+                    </Container>
                 </Container>
-            </Container>
-        </PointerInteract>
+            }
+        />
     );
 }
 
