@@ -1,4 +1,0 @@
-[     871ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://collector.github.com/github/collect:0
-[     943ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://collector.github.com/github/collect:0
-[    1024ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://collector.github.com/github/collect:0
-[    5880ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://collector.github.com/github/collect:0
