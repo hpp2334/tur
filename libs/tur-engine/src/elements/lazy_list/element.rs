@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
@@ -11,18 +9,21 @@ use crate::elements::lazy_list::controller::LazyListController;
 use crate::elements::scroll_view::ScrollPosition;
 use tur_shared::Axis;
 
+const FALLBACK_EXTENT: f64 = 50.0;
+
 #[derive(Clone)]
 pub struct LazyListElement {
     pub(crate) axis: Axis,
     pub(crate) item_count: u64,
-    pub(crate) item_extents: HashMap<u64, f64>,
-    pub(crate) cumulative_offsets: Vec<f64>,
     pub(crate) overscan: u64,
     pub(crate) start_index: u64,
     pub(crate) position: ScrollPosition,
     pub(crate) controller: Option<JsObject>,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
+    pub(crate) measured_total_sum: f64,
+    pub(crate) measured_count: u64,
+    pub(crate) child_extents: Vec<f64>,
 }
 
 impl LazyListElement {
@@ -30,14 +31,15 @@ impl LazyListElement {
         LazyListElement {
             axis: Axis::Vertical,
             item_count: 0,
-            item_extents: HashMap::new(),
-            cumulative_offsets: Vec::new(),
             overscan: 3,
             start_index: 0,
             position: ScrollPosition::new(),
             controller: None,
             reported_start: 0,
             reported_end: 0,
+            measured_total_sum: 0.0,
+            measured_count: 0,
+            child_extents: Vec::new(),
         }
     }
 
@@ -49,53 +51,34 @@ impl LazyListElement {
         self.item_count
     }
 
-    pub fn estimate_extent(&self) -> f64 {
-        if self.item_extents.is_empty() {
-            return 50.0;
+    pub fn average_extent(&self) -> f64 {
+        if self.measured_count == 0 {
+            return FALLBACK_EXTENT;
         }
-        let sum: f64 = self.item_extents.values().sum();
-        let avg = sum / self.item_extents.len() as f64;
-        if avg <= 0.0 { 50.0 } else { avg }
-    }
-
-    pub fn rebuild_cumulative(&mut self) {
-        let est = self.estimate_extent();
-        self.cumulative_offsets.clear();
-        self.cumulative_offsets.reserve(self.item_count as usize + 1);
-        self.cumulative_offsets.push(0.0);
-        let mut cum = 0.0;
-        for i in 0..self.item_count {
-            cum += self.item_extents.get(&i).copied().unwrap_or(est);
-            self.cumulative_offsets.push(cum);
-        }
-    }
-
-    pub fn cumulative_offset(&self, index: u64) -> f64 {
-        self.cumulative_offsets.get(index as usize).copied().unwrap_or(0.0)
-    }
-
-    pub fn index_for_offset(&self, offset: f64) -> u64 {
-        if offset <= 0.0 || self.cumulative_offsets.len() <= 1 {
-            return 0;
-        }
-        match self.cumulative_offsets.binary_search_by(|probe| {
-            probe.partial_cmp(&offset).unwrap_or(std::cmp::Ordering::Less)
-        }) {
-            Ok(i) => i as u64,
-            Err(i) => i.saturating_sub(1) as u64,
-        }.min(self.item_count.saturating_sub(1))
+        let avg = self.measured_total_sum / self.measured_count as f64;
+        if avg <= 0.0 { FALLBACK_EXTENT } else { avg }
     }
 
     pub fn compute_visible_range(&self, viewport_main: f64) -> (u64, u64) {
         if self.item_count == 0 {
             return (0, 0);
         }
+        let avg = self.average_extent();
+        if avg <= 0.0 {
+            return (0, self.item_count.saturating_sub(1));
+        }
         let scroll = self.position.pixels();
-        let start = self.index_for_offset(scroll);
-        let end = self.index_for_offset(scroll + viewport_main);
+        let start = ((scroll / avg).floor() as u64)
+            .min(self.item_count.saturating_sub(1));
+        let end = (((scroll + viewport_main) / avg).ceil() as u64)
+            .min(self.item_count.saturating_sub(1));
         let start = start.saturating_sub(self.overscan);
         let end = (end + self.overscan).min(self.item_count.saturating_sub(1));
         (start, end)
+    }
+
+    pub fn estimate_total_extent(&self) -> f64 {
+        self.item_count as f64 * self.average_extent()
     }
 
     pub fn update_controller_metrics(&mut self) {
@@ -123,10 +106,10 @@ impl Default for LazyListElement {
 impl ElementTrace for LazyListElement {
     fn trace_label(&self) -> String {
         format!(
-            "axis={:?} items={} measured={} offset={:.1} range={}-{}",
+            "axis={:?} items={} avg={:.1} offset={:.1} range={}-{}",
             self.axis,
             self.item_count,
-            self.item_extents.len(),
+            self.average_extent(),
             self.position.pixels(),
             self.reported_start,
             self.reported_end,

@@ -47,14 +47,26 @@ impl ElementLayout for LazyListElement {
             },
         };
 
-        for (i, &child_id) in children.iter().enumerate() {
+        let mut measured_sum = 0.0f64;
+        let mut measured_count = 0u64;
+
+        self.child_extents.clear();
+        self.child_extents.reserve(children.len());
+
+        for &child_id in children {
             let size = cx.layout_child(child_id, &child_cs);
-            let logical_index = self.start_index + i as u64;
-            self.item_extents.insert(logical_index, self.axis.main(size));
+            let extent = self.axis.main(size);
+            self.child_extents.push(extent);
+            measured_sum += extent;
+            measured_count += 1;
         }
 
-        self.rebuild_cumulative();
-        let total_main = self.cumulative_offset(self.item_count);
+        if measured_count > 0 {
+            self.measured_total_sum += measured_sum;
+            self.measured_count += measured_count;
+        }
+
+        let total_main = self.estimate_total_extent();
 
         let content = match self.axis {
             tur_shared::Axis::Vertical => Size::new(viewport.width, total_main),
@@ -69,15 +81,20 @@ impl ElementLayout for LazyListElement {
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        let avg = self.average_extent();
+        let preceding = self.start_index as f64 * avg;
         let scroll_offset = self.position.pixels();
+        let mut cum = preceding;
+
         for (i, &child_id) in children.iter().enumerate() {
-            let logical_index = self.start_index + i as u64;
-            let main_pos = self.cumulative_offset(logical_index) - scroll_offset;
+            let extent = self.child_extents.get(i).copied().unwrap_or(avg);
+            let main_pos = cum - scroll_offset;
             let offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
             cx.set_child_offset(child_id, offset);
+            cum += extent;
         }
     }
 }
