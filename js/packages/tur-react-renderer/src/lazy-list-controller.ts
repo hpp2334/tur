@@ -1,7 +1,4 @@
-import type {
-    LazyListController,
-    LazyListControllerOptions,
-} from "./tur";
+import type { LazyListController, LazyListControllerOptions } from "./tur";
 
 export function createLazyListController(
     options?: LazyListControllerOptions,

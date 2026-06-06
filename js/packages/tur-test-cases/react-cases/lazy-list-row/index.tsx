@@ -9,7 +9,13 @@ function LazyListRow() {
     const children = Array.from({ length: 21 }, (_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: static test fixture
         <React.Fragment key={i}>
-            <Container width={ITEM_WIDTH} height={300} color={i % 2 === 0 ? Color.rgb(48, 48, 48) : Color.rgb(26, 26, 26)} />
+            <Container
+                width={ITEM_WIDTH}
+                height={300}
+                color={
+                    i % 2 === 0 ? Color.rgb(48, 48, 48) : Color.rgb(26, 26, 26)
+                }
+            />
         </React.Fragment>
     ));
 

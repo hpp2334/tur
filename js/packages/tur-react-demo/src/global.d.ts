@@ -11,3 +11,13 @@ declare const require: NodeRequire & {
         id: string;
     };
 };
+
+declare module "*/tur_wasm.js" {
+    export default function init(
+        module_or_path: WebAssembly.Module,
+    ): Promise<void>;
+    // biome-ignore lint/complexity/noStaticOnlyClass: WASM module type declaration
+    export class TurWasmApp {
+        static create_in(id: string): Promise<Record<string, unknown>>;
+    }
+}

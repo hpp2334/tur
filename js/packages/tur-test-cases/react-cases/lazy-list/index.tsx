@@ -47,7 +47,9 @@ function TabButton({
                 <Container
                     width={80}
                     height={32}
-                    color={active ? Color.rgb(99, 102, 241) : Color.rgb(30, 41, 59)}
+                    color={
+                        active ? Color.rgb(99, 102, 241) : Color.rgb(30, 41, 59)
+                    }
                     borderRadius={6}
                 >
                     <Container height={32}>

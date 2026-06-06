@@ -353,8 +353,7 @@ export function ScrollView(props: ScrollViewProps) {
         <tur_scroll_view
             ref={
                 controller
-                    ? (el: TurNodeHandle) =>
-                          controller._attach(el, __tur.__ctx)
+                    ? (el: TurNodeHandle) => controller._attach(el, __tur.__ctx)
                     : undefined
             }
             controller={controller}

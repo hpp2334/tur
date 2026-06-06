@@ -1,7 +1,4 @@
-import type {
-    ScrollController,
-    ScrollControllerOptions,
-} from "./tur";
+import type { ScrollController, ScrollControllerOptions } from "./tur";
 
 export function createScrollController(
     options?: ScrollControllerOptions,
