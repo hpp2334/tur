@@ -74,7 +74,7 @@ function ScrollList() {
     const [viewportDim, setViewportDim] = useState(1);
 
     const controller = createScrollController({
-        onScroll: (info) => {
+        onScroll: (info: { offset: number; maxExtent: number; viewportDimension: number }) => {
             setScrollOffset(info.offset);
             setMaxExtent(info.maxExtent);
             setViewportDim(info.viewportDimension);
