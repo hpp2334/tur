@@ -1,0 +1,10 @@
+- generic [ref=e2]:
+  - link "Google" [ref=e3] [cursor=pointer]:
+    - /url: //www.google.com
+    - generic "Google" [ref=e4]
+  - paragraph [ref=e5]: "NOT_FOUND: Requested entity was not found"
+  - paragraph [ref=e6]:
+    - text: You may not have access to this page. You can retry after signing in.
+    - link "Sign in" [ref=e7] [cursor=pointer]:
+      - /url: https://accounts.google.com/AccountChooser?faa=1&continue=https://android.googlesource.com/login/platform/frameworks/support/%2B/refs/heads/main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/
+  - generic [ref=e8]: "[type.googleapis.com/google.rpc.LocalizedMessage] locale: \"en-US\" message: \"Object is not found\" [type.googleapis.com/google.rpc.RequestInfo] request_id: \"c707e6dbaf2f4945b8fb3148b2ffc1d7\""

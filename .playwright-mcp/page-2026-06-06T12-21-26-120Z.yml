@@ -1,0 +1,2248 @@
+- generic [ref=e2]:
+  - generic [ref=e3]:
+    - link "Skip to content" [ref=e4] [cursor=pointer]:
+      - /url: "#start-of-content"
+    - banner [ref=e6]:
+      - heading "Navigation Menu" [level=2] [ref=e7]
+      - generic [ref=e8]:
+        - link "Homepage" [ref=e10] [cursor=pointer]:
+          - /url: /
+          - img [ref=e11]
+        - generic [ref=e13]:
+          - navigation "Global" [ref=e16]:
+            - list [ref=e17]:
+              - listitem [ref=e18]:
+                - button "Platform" [ref=e20] [cursor=pointer]:
+                  - text: Platform
+                  - img [ref=e21]
+              - listitem [ref=e23]:
+                - button "Solutions" [ref=e25] [cursor=pointer]:
+                  - text: Solutions
+                  - img [ref=e26]
+              - listitem [ref=e28]:
+                - button "Resources" [ref=e30] [cursor=pointer]:
+                  - text: Resources
+                  - img [ref=e31]
+              - listitem [ref=e33]:
+                - button "Open Source" [ref=e35] [cursor=pointer]:
+                  - text: Open Source
+                  - img [ref=e36]
+              - listitem [ref=e38]:
+                - button "Enterprise" [ref=e40] [cursor=pointer]:
+                  - text: Enterprise
+                  - img [ref=e41]
+              - listitem [ref=e43]:
+                - link "Pricing" [ref=e44] [cursor=pointer]:
+                  - /url: https://github.com/pricing
+                  - generic [ref=e45]: Pricing
+          - generic [ref=e46]:
+            - button "Search or jump to…" [ref=e49] [cursor=pointer]:
+              - img [ref=e51]
+            - link "Sign in" [ref=e54] [cursor=pointer]:
+              - /url: /login?return_to=https%3A%2F%2Fgithub.com%2Fandroidx%2Fandroidx
+            - link "Sign up" [ref=e55] [cursor=pointer]:
+              - /url: /signup?ref_cta=Sign+up&ref_loc=header+logged+out&ref_page=%2F%3Cuser-name%3E%2F%3Crepo-name%3E&source=header-repo&source_repo=androidx%2Fandroidx
+            - button "Appearance settings" [ref=e58] [cursor=pointer]:
+              - img
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e64]:
+        - generic [ref=e66]:
+          - img [ref=e67]
+          - link "androidx" [ref=e70] [cursor=pointer]:
+            - /url: /androidx
+          - generic [ref=e71]: /
+          - strong [ref=e72]:
+            - link "androidx" [ref=e73] [cursor=pointer]:
+              - /url: /androidx/androidx
+          - generic [ref=e74]: Public
+        - generic [ref=e75]:
+          - list:
+            - listitem [ref=e76]:
+              - link "You must be signed in to change notification settings" [ref=e77] [cursor=pointer]:
+                - /url: /login?return_to=%2Fandroidx%2Fandroidx
+                - img [ref=e78]
+                - text: Notifications
+            - listitem [ref=e80]:
+              - link "Fork 1.3k" [ref=e81] [cursor=pointer]:
+                - /url: /login?return_to=%2Fandroidx%2Fandroidx
+                - img [ref=e82]
+                - text: Fork
+                - generic "1,328" [ref=e84]: 1.3k
+            - listitem [ref=e85]:
+              - link "You must be signed in to star a repository" [ref=e87] [cursor=pointer]:
+                - /url: /login?return_to=%2Fandroidx%2Fandroidx
+                - img [ref=e88]
+                - text: Star
+                - generic "6003 users starred this repository" [ref=e90]: 6k
+      - navigation "Repository" [ref=e91]:
+        - list [ref=e92]:
+          - listitem [ref=e93]:
+            - link "Code" [ref=e94] [cursor=pointer]:
+              - /url: /androidx/androidx
+              - img [ref=e95]
+              - generic [ref=e97]: Code
+          - listitem [ref=e98]:
+            - link "Pull requests 53" [ref=e99] [cursor=pointer]:
+              - /url: /androidx/androidx/pulls
+              - img [ref=e100]
+              - generic [ref=e102]: Pull requests
+              - generic "53" [ref=e103]
+          - listitem [ref=e104]:
+            - link "Actions" [ref=e105] [cursor=pointer]:
+              - /url: /androidx/androidx/actions
+              - img [ref=e106]
+              - generic [ref=e108]: Actions
+          - listitem [ref=e109]:
+            - link "Security and quality" [ref=e110] [cursor=pointer]:
+              - /url: /androidx/androidx/security
+              - img [ref=e111]
+              - generic [ref=e113]: Security and quality
+          - listitem [ref=e114]:
+            - link "Insights" [ref=e115] [cursor=pointer]:
+              - /url: /androidx/androidx/pulse
+              - img [ref=e116]
+              - generic [ref=e118]: Insights
+    - generic [ref=e131]:
+      - heading "androidx/androidx" [level=1] [ref=e133]
+      - generic [ref=e134]:
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - generic [ref=e139]:
+              - button "androidx-main branch" [ref=e141] [cursor=pointer]:
+                - generic [ref=e142]:
+                  - generic [ref=e144]:
+                    - img [ref=e146]
+                    - generic [ref=e149]: androidx-main
+                  - generic:
+                    - img
+              - generic [ref=e150]:
+                - link "13 Branches" [ref=e151] [cursor=pointer]:
+                  - /url: /androidx/androidx/branches
+                  - generic [ref=e152]:
+                    - generic:
+                      - img
+                    - generic [ref=e154]:
+                      - strong [ref=e155]: "13"
+                      - text: Branches
+                - link "0 Tags" [ref=e156] [cursor=pointer]:
+                  - /url: /androidx/androidx/tags
+                  - generic [ref=e157]:
+                    - generic:
+                      - img
+                    - generic [ref=e159]:
+                      - strong [ref=e160]: "0"
+                      - text: Tags
+            - generic [ref=e161]:
+              - generic [ref=e165]:
+                - img [ref=e167]
+                - combobox "Go to file" [ref=e169]
+              - button "Code" [ref=e170] [cursor=pointer]:
+                - generic [ref=e171]:
+                  - generic:
+                    - img
+                  - generic [ref=e172]: Code
+                  - generic:
+                    - img
+          - generic [ref=e173]:
+            - generic [ref=e174]:
+              - heading "Folders and files" [level=2] [ref=e175]
+              - table "Folders and files" [ref=e176]:
+                - rowgroup:
+                  - row "Name Last commit message Last commit date":
+                    - columnheader "Name"
+                    - columnheader "Last commit message":
+                      - generic "Last commit message"
+                    - columnheader "Last commit date":
+                      - generic "Last commit date"
+                - rowgroup [ref=e177]:
+                  - row "Latest commit android-test-infra-autosubmit@system.gserviceaccount.com Gerrit Code Review android-test-infra-autosubmit@system.gserviceaccount.com and Gerrit Code Review Merge changes from topic \"perfetto56\" into androidx-main Open commit details failure Commit a030ff4 · Jun 6, 202611 hours ago History 250,781 Commits" [ref=e178]:
+                    - cell "Latest commit android-test-infra-autosubmit@system.gserviceaccount.com Gerrit Code Review android-test-infra-autosubmit@system.gserviceaccount.com and Gerrit Code Review Merge changes from topic \"perfetto56\" into androidx-main Open commit details failure Commit a030ff4 · Jun 6, 202611 hours ago History 250,781 Commits" [ref=e179]:
+                      - generic [ref=e180]:
+                        - heading "Latest commit" [level=2] [ref=e181]
+                        - generic [ref=e182]:
+                          - generic [ref=e183]:
+                            - generic [ref=e185]:
+                              - img "android-test-infra-autosubmit@system.gserviceaccount.com" [ref=e186]
+                              - img "Gerrit Code Review" [ref=e187]
+                            - generic "android-test-infra-autosubmit@system.gserviceaccount.com" [ref=e189]
+                            - generic [ref=e190]: and
+                            - generic "Gerrit Code Review" [ref=e192]
+                          - generic [ref=e193]:
+                            - link "Merge changes from topic \"perfetto56\" into androidx-main" [ref=e196] [cursor=pointer]:
+                              - /url: /androidx/androidx/commit/a030ff4b56eecabfef432f1c4045f91ef5cb0431
+                            - button "Open commit details" [ref=e197] [cursor=pointer]:
+                              - img [ref=e198]
+                            - button "failure" [ref=e200] [cursor=pointer]:
+                              - img [ref=e201]
+                        - generic [ref=e203]:
+                          - generic [ref=e205]:
+                            - link "Commit a030ff4" [ref=e206] [cursor=pointer]:
+                              - /url: /androidx/androidx/commit/a030ff4b56eecabfef432f1c4045f91ef5cb0431
+                              - text: a030ff4
+                            - text: ·
+                            - generic "Jun 6, 2026, 8:44 AM GMT+8" [ref=e207]: Jun 6, 202611 hours ago
+                          - generic [ref=e208]:
+                            - heading "History" [level=2] [ref=e209]
+                            - link "250,781 Commits" [ref=e210] [cursor=pointer]:
+                              - /url: /androidx/androidx/commits/androidx-main/
+                              - generic [ref=e211]:
+                                - generic:
+                                  - img
+                                - generic [ref=e212]: 250,781 Commits
+                  - row ".agents, (Directory) Update benchmark skill to do setup in the correct order Jun 5, 2026yesterday" [ref=e213]:
+                    - cell ".agents, (Directory)" [ref=e214]:
+                      - generic [ref=e215]:
+                        - img [ref=e216]
+                        - link ".agents, (Directory)" [ref=e221] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/.agents
+                          - text: .agents
+                    - cell "Update benchmark skill to do setup in the correct order" [ref=e222]:
+                      - link "Update benchmark skill to do setup in the correct order" [ref=e225] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dcf71ce19827287362ed50abdb913aaa0ee9edab
+                    - cell "Jun 5, 2026yesterday" [ref=e226]:
+                      - generic [ref=e227]: Jun 5, 2026yesterday
+                  - row ".github, (Directory) Exclude wasmJsBrowserTest from KSP snapshot integration test to get G… May 15, 20263 weeks ago" [ref=e228]:
+                    - cell ".github, (Directory)" [ref=e229]:
+                      - generic [ref=e230]:
+                        - img [ref=e231]
+                        - link ".github, (Directory)" [ref=e236] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/.github
+                          - text: .github
+                    - cell "Exclude wasmJsBrowserTest from KSP snapshot integration test to get G…" [ref=e237]:
+                      - link "Exclude wasmJsBrowserTest from KSP snapshot integration test to get G…" [ref=e240] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b1ec89cb0e41f38bd56da637f4d088616505480c
+                    - cell "May 15, 20263 weeks ago" [ref=e241]:
+                      - generic [ref=e242]: May 15, 20263 weeks ago
+                  - row ".idea, (Directory) Disable \"Use toml instead\" suggestion in studio Jun 18, 2025last year" [ref=e243]:
+                    - cell ".idea, (Directory)" [ref=e244]:
+                      - generic [ref=e245]:
+                        - img [ref=e246]
+                        - link ".idea, (Directory)" [ref=e251] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/.idea
+                          - text: .idea
+                    - cell "Disable \"Use toml instead\" suggestion in studio" [ref=e252]:
+                      - link "Disable \"Use toml instead\" suggestion in studio" [ref=e255] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/43c0de071dc6407d6b61c270471e36d27fd25442
+                    - cell "Jun 18, 2025last year" [ref=e256]:
+                      - generic [ref=e257]: Jun 18, 2025last year
+                  - row "a2ui, (Directory) Add SurfaceModel and SurfaceGroupModel. May 29, 2026last week" [ref=e258]:
+                    - cell "a2ui, (Directory)" [ref=e259]:
+                      - generic [ref=e260]:
+                        - img [ref=e261]
+                        - link "a2ui, (Directory)" [ref=e266] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/a2ui
+                          - text: a2ui
+                    - cell "Add SurfaceModel and SurfaceGroupModel." [ref=e267]:
+                      - link "Add SurfaceModel and SurfaceGroupModel." [ref=e270] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b0fe6f469c243402ef191977dbdc05429c2e2f9e
+                    - cell "May 29, 2026last week" [ref=e271]:
+                      - generic [ref=e272]: May 29, 2026last week
+                  - row "activity, (Directory) Move to more stable versions of dependencies where possible Apr 21, 20262 months ago" [ref=e273]:
+                    - cell "activity, (Directory)" [ref=e274]:
+                      - generic [ref=e275]:
+                        - img [ref=e276]
+                        - link "activity, (Directory)" [ref=e281] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/activity
+                          - text: activity
+                    - cell "Move to more stable versions of dependencies where possible" [ref=e282]:
+                      - link "Move to more stable versions of dependencies where possible" [ref=e285] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2967f416214009b9db47ba8c18731488fe1611ed
+                    - cell "Apr 21, 20262 months ago" [ref=e286]:
+                      - generic [ref=e287]: Apr 21, 20262 months ago
+                  - row "androidx-settings-plugins, (Directory) Check for expectedErrors list in HostTestFailureHandlerPlugin Feb 3, 20264 months ago" [ref=e288]:
+                    - cell "androidx-settings-plugins, (Directory)" [ref=e289]:
+                      - generic [ref=e290]:
+                        - img [ref=e291]
+                        - link "androidx-settings-plugins, (Directory)" [ref=e296] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/androidx-settings-plugins
+                          - text: androidx-settings-plugins
+                    - cell "Check for expectedErrors list in HostTestFailureHandlerPlugin" [ref=e297]:
+                      - link "Check for expectedErrors list in HostTestFailureHandlerPlugin" [ref=e300] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cc8a7a41ce54264b38760986d169f19a28ebe713
+                    - cell "Feb 3, 20264 months ago" [ref=e301]:
+                      - generic [ref=e302]: Feb 3, 20264 months ago
+                  - row "annotation, (Directory) Document how RestrictTo annotation is enforced Apr 7, 20262 months ago" [ref=e303]:
+                    - cell "annotation, (Directory)" [ref=e304]:
+                      - generic [ref=e305]:
+                        - img [ref=e306]
+                        - link "annotation, (Directory)" [ref=e311] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/annotation
+                          - text: annotation
+                    - cell "Document how RestrictTo annotation is enforced" [ref=e312]:
+                      - link "Document how RestrictTo annotation is enforced" [ref=e315] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/8f16d7c25c121bde2f4e97bb9ffc2a8a44a729c6
+                    - cell "Apr 7, 20262 months ago" [ref=e316]:
+                      - generic [ref=e317]: Apr 7, 20262 months ago
+                  - row "appcompat, (Directory) Remove folks no longer working on androidx Apr 16, 20262 months ago" [ref=e318]:
+                    - cell "appcompat, (Directory)" [ref=e319]:
+                      - generic [ref=e320]:
+                        - img [ref=e321]
+                        - link "appcompat, (Directory)" [ref=e326] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/appcompat
+                          - text: appcompat
+                    - cell "Remove folks no longer working on androidx" [ref=e327]:
+                      - link "Remove folks no longer working on androidx" [ref=e330] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/bc8a607acda1c7edb204965cc0f86b543af517c8
+                    - cell "Apr 16, 20262 months ago" [ref=e331]:
+                      - generic [ref=e332]: Apr 16, 20262 months ago
+                  - row "appfunctions, (Directory) Make AppFunctionCompiler compatible with Hilt Jun 5, 2026yesterday" [ref=e333]:
+                    - cell "appfunctions, (Directory)" [ref=e334]:
+                      - generic [ref=e335]:
+                        - img [ref=e336]
+                        - link "appfunctions, (Directory)" [ref=e341] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/appfunctions
+                          - text: appfunctions
+                    - cell "Make AppFunctionCompiler compatible with Hilt" [ref=e342]:
+                      - link "Make AppFunctionCompiler compatible with Hilt" [ref=e345] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cdfc027b25eabbab3d65a7ce6760aa201644cb7b
+                    - cell "Jun 5, 2026yesterday" [ref=e346]:
+                      - generic [ref=e347]: Jun 5, 2026yesterday
+                  - row "appsearch, (Directory) Copy new native fields to InitializeStats May 30, 2026last week" [ref=e348]:
+                    - cell "appsearch, (Directory)" [ref=e349]:
+                      - generic [ref=e350]:
+                        - img [ref=e351]
+                        - link "appsearch, (Directory)" [ref=e356] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/appsearch
+                          - text: appsearch
+                    - cell "Copy new native fields to InitializeStats" [ref=e357]:
+                      - link "Copy new native fields to InitializeStats" [ref=e360] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/1ffc445fe3e3df5930ab5bdc1c64b7bac0f64b65
+                    - cell "May 30, 2026last week" [ref=e361]:
+                      - generic [ref=e362]: May 30, 2026last week
+                  - row "appstate/appstate, (Directory) Revert^2 \"Introduce AppState for managing Compose state\" May 29, 2026last week" [ref=e363]:
+                    - cell "appstate/appstate, (Directory)" [ref=e364]:
+                      - generic [ref=e365]:
+                        - img [ref=e366]
+                        - link "appstate/appstate, (Directory)" [ref=e371] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/appstate/appstate
+                          - text: appstate/appstate
+                    - cell "Revert^2 \"Introduce AppState for managing Compose state\"" [ref=e372]:
+                      - link "Revert^2 \"Introduce AppState for managing Compose state\"" [ref=e375] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/a2aef99557f529cd18f7991191789d7d5b183ec4
+                    - cell "May 29, 2026last week" [ref=e376]:
+                      - generic [ref=e377]: May 29, 2026last week
+                  - row "arch, (Directory) Treat type variable as undefined nullability by default Feb 13, 20264 months ago" [ref=e378]:
+                    - cell "arch, (Directory)" [ref=e379]:
+                      - generic [ref=e380]:
+                        - img [ref=e381]
+                        - link "arch, (Directory)" [ref=e386] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/arch
+                          - text: arch
+                    - cell "Treat type variable as undefined nullability by default" [ref=e387]:
+                      - link "Treat type variable as undefined nullability by default" [ref=e390] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/fc8a52b21ff07d3f2e5bf345f8425614c611ca46
+                    - cell "Feb 13, 20264 months ago" [ref=e391]:
+                      - generic [ref=e392]: Feb 13, 20264 months ago
+                  - row "asynclayoutinflater, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e393]:
+                    - cell "asynclayoutinflater, (Directory)" [ref=e394]:
+                      - generic [ref=e395]:
+                        - img [ref=e396]
+                        - link "asynclayoutinflater, (Directory)" [ref=e401] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/asynclayoutinflater
+                          - text: asynclayoutinflater
+                    - cell "Replace build.gradle comments" [ref=e402]:
+                      - link "Replace build.gradle comments" [ref=e405] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e406]:
+                      - generic [ref=e407]: Jan 24, 20265 months ago
+                  - 'row "autofill, (Directory) Autofill: Add private pass hint to HintConstants Apr 15, 20262 months ago" [ref=e408]':
+                    - cell "autofill, (Directory)" [ref=e409]:
+                      - generic [ref=e410]:
+                        - img [ref=e411]
+                        - link "autofill, (Directory)" [ref=e416] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/autofill
+                          - text: autofill
+                    - 'cell "Autofill: Add private pass hint to HintConstants" [ref=e417]':
+                      - 'link "Autofill: Add private pass hint to HintConstants" [ref=e420] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/8d061c894a1d8ef86e87de1fb0453222a9837e56
+                    - cell "Apr 15, 20262 months ago" [ref=e421]:
+                      - generic [ref=e422]: Apr 15, 20262 months ago
+                  - row "benchmark, (Directory) Merge changes from topic \"perfetto56\" into androidx-main Jun 6, 202611 hours ago" [ref=e423]:
+                    - cell "benchmark, (Directory)" [ref=e424]:
+                      - generic [ref=e425]:
+                        - img [ref=e426]
+                        - link "benchmark, (Directory)" [ref=e431] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/benchmark
+                          - text: benchmark
+                    - cell "Merge changes from topic \"perfetto56\" into androidx-main" [ref=e432]:
+                      - link "Merge changes from topic \"perfetto56\" into androidx-main" [ref=e435] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/a030ff4b56eecabfef432f1c4045f91ef5cb0431
+                    - cell "Jun 6, 202611 hours ago" [ref=e436]:
+                      - generic [ref=e437]: Jun 6, 202611 hours ago
+                  - row "binarycompatibilityvalidator, (Directory) Remove Jeff from owners files May 15, 20263 weeks ago" [ref=e438]:
+                    - cell "binarycompatibilityvalidator, (Directory)" [ref=e439]:
+                      - generic [ref=e440]:
+                        - img [ref=e441]
+                        - link "binarycompatibilityvalidator, (Directory)" [ref=e446] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/binarycompatibilityvalidator
+                          - text: binarycompatibilityvalidator
+                    - cell "Remove Jeff from owners files" [ref=e447]:
+                      - link "Remove Jeff from owners files" [ref=e450] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/fa6b6c29d6ea65e90f3e8a55282dade2a4d74b31
+                    - cell "May 15, 20263 weeks ago" [ref=e451]:
+                      - generic [ref=e452]: May 15, 20263 weeks ago
+                  - row "biometric, (Directory) Update KotlinRunTestResultUnused lint baselines Jun 2, 20265 days ago" [ref=e453]:
+                    - cell "biometric, (Directory)" [ref=e454]:
+                      - generic [ref=e455]:
+                        - img [ref=e456]
+                        - link "biometric, (Directory)" [ref=e461] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/biometric
+                          - text: biometric
+                    - cell "Update KotlinRunTestResultUnused lint baselines" [ref=e462]:
+                      - link "Update KotlinRunTestResultUnused lint baselines" [ref=e465] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dea539088ba22c3d09018c2fb5ecd256cc803933
+                    - cell "Jun 2, 20265 days ago" [ref=e466]:
+                      - generic [ref=e467]: Jun 2, 20265 days ago
+                  - row "browser, (Directory) Merge \"Graduation CustomContextAction\" into androidx-main Jun 3, 20264 days ago" [ref=e468]:
+                    - cell "browser, (Directory)" [ref=e469]:
+                      - generic [ref=e470]:
+                        - img [ref=e471]
+                        - link "browser, (Directory)" [ref=e476] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/browser
+                          - text: browser
+                    - cell "Merge \"Graduation CustomContextAction\" into androidx-main" [ref=e477]:
+                      - link "Merge \"Graduation CustomContextAction\" into androidx-main" [ref=e480] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/976a2677b71c3fde859bf015684ce6bbe60ffcdf
+                    - cell "Jun 3, 20264 days ago" [ref=e481]:
+                      - generic [ref=e482]: Jun 3, 20264 days ago
+                  - row "buildSrc-tests, (Directory) Write allDependencies for KMP targets May 14, 20263 weeks ago" [ref=e483]:
+                    - cell "buildSrc-tests, (Directory)" [ref=e484]:
+                      - generic [ref=e485]:
+                        - img [ref=e486]
+                        - link "buildSrc-tests, (Directory)" [ref=e491] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/buildSrc-tests
+                          - text: buildSrc-tests
+                    - cell "Write allDependencies for KMP targets" [ref=e492]:
+                      - link "Write allDependencies for KMP targets" [ref=e495] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/5b172effbf0f4340f6c386da42a2312fb7aa91c9
+                    - cell "May 14, 20263 weeks ago" [ref=e496]:
+                      - generic [ref=e497]: May 14, 20263 weeks ago
+                  - row "buildSrc, (Directory) Lint against ignored runTest results Jun 2, 20265 days ago" [ref=e498]:
+                    - cell "buildSrc, (Directory)" [ref=e499]:
+                      - generic [ref=e500]:
+                        - img [ref=e501]
+                        - link "buildSrc, (Directory)" [ref=e506] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/buildSrc
+                          - text: buildSrc
+                    - cell "Lint against ignored runTest results" [ref=e507]:
+                      - link "Lint against ignored runTest results" [ref=e510] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/950fc4044f83899fbd40cb513326b3ca01b553bb
+                    - cell "Jun 2, 20265 days ago" [ref=e511]:
+                      - generic [ref=e512]: Jun 2, 20265 days ago
+                  - row "busytown, (Directory) remove --no-configuration-cache from Mac host test scripts May 20, 20262 weeks ago" [ref=e513]:
+                    - cell "busytown, (Directory)" [ref=e514]:
+                      - generic [ref=e515]:
+                        - img [ref=e516]
+                        - link "busytown, (Directory)" [ref=e521] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/busytown
+                          - text: busytown
+                    - cell "remove --no-configuration-cache from Mac host test scripts" [ref=e522]:
+                      - link "remove --no-configuration-cache from Mac host test scripts" [ref=e525] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/152a3c723c7633653ae1fdba12164bad504e9dfd
+                    - cell "May 20, 20262 weeks ago" [ref=e526]:
+                      - generic [ref=e527]: May 20, 20262 weeks ago
+                  - row "camera, (Directory) Group all the peek APIs together Jun 6, 202618 hours ago" [ref=e528]:
+                    - cell "camera, (Directory)" [ref=e529]:
+                      - generic [ref=e530]:
+                        - img [ref=e531]
+                        - link "camera, (Directory)" [ref=e536] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/camera
+                          - text: camera
+                    - cell "Group all the peek APIs together" [ref=e537]:
+                      - link "Group all the peek APIs together" [ref=e540] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/47c6f9d6e49caad158cca625dd5381f733dd6d99
+                    - cell "Jun 6, 202618 hours ago" [ref=e541]:
+                      - generic [ref=e542]: Jun 6, 202618 hours ago
+                  - row "car/app, (Directory) Merge \"Fix white-on-white icon issues in Showcase Demos\" into android… May 25, 20262 weeks ago" [ref=e543]:
+                    - cell "car/app, (Directory)" [ref=e544]:
+                      - generic [ref=e545]:
+                        - img [ref=e546]
+                        - link "car/app, (Directory)" [ref=e551] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/car/app
+                          - text: car/app
+                    - cell "Merge \"Fix white-on-white icon issues in Showcase Demos\" into android…" [ref=e552]:
+                      - link "Merge \"Fix white-on-white icon issues in Showcase Demos\" into android…" [ref=e555] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/43298028353ffb757838b7d330630272fa5e5e9e
+                    - cell "May 25, 20262 weeks ago" [ref=e556]:
+                      - generic [ref=e557]: May 25, 20262 weeks ago
+                  - row "cardview, (Directory) Remove or replace alanv@ in OWNERS files Apr 1, 20263 months ago" [ref=e558]:
+                    - cell "cardview, (Directory)" [ref=e559]:
+                      - generic [ref=e560]:
+                        - img [ref=e561]
+                        - link "cardview, (Directory)" [ref=e566] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/cardview
+                          - text: cardview
+                    - cell "Remove or replace alanv@ in OWNERS files" [ref=e567]:
+                      - link "Remove or replace alanv@ in OWNERS files" [ref=e570] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cf2cf4fbc162ed505b7bd22a2f3a331abb4b454e
+                    - cell "Apr 1, 20263 months ago" [ref=e571]:
+                      - generic [ref=e572]: Apr 1, 20263 months ago
+                  - row "collection, (Directory) Suppress API lint issues on actual items in non-android source sets May 28, 2026last week" [ref=e573]:
+                    - cell "collection, (Directory)" [ref=e574]:
+                      - generic [ref=e575]:
+                        - img [ref=e576]
+                        - link "collection, (Directory)" [ref=e581] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/collection
+                          - text: collection
+                    - cell "Suppress API lint issues on actual items in non-android source sets" [ref=e582]:
+                      - link "Suppress API lint issues on actual items in non-android source sets" [ref=e585] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2224fb3030fba2e6078219038403bd42d113560e
+                    - cell "May 28, 2026last week" [ref=e586]:
+                      - generic [ref=e587]: May 28, 2026last week
+                  - row "compose, (Directory) Add bounds check in graphicslayer Jun 6, 202613 hours ago" [ref=e588]:
+                    - cell "compose, (Directory)" [ref=e589]:
+                      - generic [ref=e590]:
+                        - img [ref=e591]
+                        - link "compose, (Directory)" [ref=e596] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/compose
+                          - text: compose
+                    - cell "Add bounds check in graphicslayer" [ref=e597]:
+                      - link "Add bounds check in graphicslayer" [ref=e600] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/60c3abc09738e1e02f69838f06b7129850e44d5e
+                    - cell "Jun 6, 202613 hours ago" [ref=e601]:
+                      - generic [ref=e602]: Jun 6, 202613 hours ago
+                  - row "concurrent, (Directory) Merge concurrent-ktx into concurrent Mar 31, 20263 months ago" [ref=e603]:
+                    - cell "concurrent, (Directory)" [ref=e604]:
+                      - generic [ref=e605]:
+                        - img [ref=e606]
+                        - link "concurrent, (Directory)" [ref=e611] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/concurrent
+                          - text: concurrent
+                    - cell "Merge concurrent-ktx into concurrent" [ref=e612]:
+                      - link "Merge concurrent-ktx into concurrent" [ref=e615] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/475fbef174d4ac15b501a2a71a7e39127f665af9
+                    - cell "Mar 31, 20263 months ago" [ref=e616]:
+                      - generic [ref=e617]: Mar 31, 20263 months ago
+                  - row "constraintlayout, (Directory) Migrate apps to keepRules source set and to optimization DSL May 16, 20263 weeks ago" [ref=e618]:
+                    - cell "constraintlayout, (Directory)" [ref=e619]:
+                      - generic [ref=e620]:
+                        - img [ref=e621]
+                        - link "constraintlayout, (Directory)" [ref=e626] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/constraintlayout
+                          - text: constraintlayout
+                    - cell "Migrate apps to keepRules source set and to optimization DSL" [ref=e627]:
+                      - link "Migrate apps to keepRules source set and to optimization DSL" [ref=e630] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9919cf2fec824583a9ec8e37bd9e904cd2c03718
+                    - cell "May 16, 20263 weeks ago" [ref=e631]:
+                      - generic [ref=e632]: May 16, 20263 weeks ago
+                  - row "coordinatorlayout, (Directory) Migrate consumer rules to keepRules source set Mar 31, 20263 months ago" [ref=e633]:
+                    - cell "coordinatorlayout, (Directory)" [ref=e634]:
+                      - generic [ref=e635]:
+                        - img [ref=e636]
+                        - link "coordinatorlayout, (Directory)" [ref=e641] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/coordinatorlayout
+                          - text: coordinatorlayout
+                    - cell "Migrate consumer rules to keepRules source set" [ref=e642]:
+                      - link "Migrate consumer rules to keepRules source set" [ref=e645] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b780700e4b66ed38927ca1de28872d915b06a57c
+                    - cell "Mar 31, 20263 months ago" [ref=e646]:
+                      - generic [ref=e647]: Mar 31, 20263 months ago
+                  - row "core, (Directory) Merge \"Allow setting parent Activity in LocationButton\" into androidx… Jun 6, 202618 hours ago" [ref=e648]:
+                    - cell "core, (Directory)" [ref=e649]:
+                      - generic [ref=e650]:
+                        - img [ref=e651]
+                        - link "core, (Directory)" [ref=e656] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/core
+                          - text: core
+                    - cell "Merge \"Allow setting parent Activity in LocationButton\" into androidx…" [ref=e657]:
+                      - link "Merge \"Allow setting parent Activity in LocationButton\" into androidx…" [ref=e660] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/147d94435cc9985f906dd2672924324e78e5d1fb
+                    - cell "Jun 6, 202618 hours ago" [ref=e661]:
+                      - generic [ref=e662]: Jun 6, 202618 hours ago
+                  - row "credentials, (Directory) Merge \"Prevent Activity memory leaks in CredentialManager via Mutable… Jun 1, 20265 days ago" [ref=e663]:
+                    - cell "credentials, (Directory)" [ref=e664]:
+                      - generic [ref=e665]:
+                        - img [ref=e666]
+                        - link "credentials, (Directory)" [ref=e671] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/credentials
+                          - text: credentials
+                    - cell "Merge \"Prevent Activity memory leaks in CredentialManager via Mutable…" [ref=e672]:
+                      - link "Merge \"Prevent Activity memory leaks in CredentialManager via Mutable…" [ref=e675] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/ce3569c91a5b3db0df10ace22ffcb103842cb1de
+                    - cell "Jun 1, 20265 days ago" [ref=e676]:
+                      - generic [ref=e677]: Jun 1, 20265 days ago
+                  - row "cursoradapter, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e678]:
+                    - cell "cursoradapter, (Directory)" [ref=e679]:
+                      - generic [ref=e680]:
+                        - img [ref=e681]
+                        - link "cursoradapter, (Directory)" [ref=e686] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/cursoradapter
+                          - text: cursoradapter
+                    - cell "Replace build.gradle comments" [ref=e687]:
+                      - link "Replace build.gradle comments" [ref=e690] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e691]:
+                      - generic [ref=e692]: Jan 24, 20265 months ago
+                  - row "customview, (Directory) Remove or replace alanv@ in OWNERS files Apr 1, 20263 months ago" [ref=e693]:
+                    - cell "customview, (Directory)" [ref=e694]:
+                      - generic [ref=e695]:
+                        - img [ref=e696]
+                        - link "customview, (Directory)" [ref=e701] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/customview
+                          - text: customview
+                    - cell "Remove or replace alanv@ in OWNERS files" [ref=e702]:
+                      - link "Remove or replace alanv@ in OWNERS files" [ref=e705] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cf2cf4fbc162ed505b7bd22a2f3a331abb4b454e
+                    - cell "Apr 1, 20263 months ago" [ref=e706]:
+                      - generic [ref=e707]: Apr 1, 20263 months ago
+                  - row "datastore, (Directory) Re-enable incremental Kotlin compilation in macrobenchmark-target. Jun 3, 20263 days ago" [ref=e708]:
+                    - cell "datastore, (Directory)" [ref=e709]:
+                      - generic [ref=e710]:
+                        - img [ref=e711]
+                        - link "datastore, (Directory)" [ref=e716] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/datastore
+                          - text: datastore
+                    - cell "Re-enable incremental Kotlin compilation in macrobenchmark-target." [ref=e717]:
+                      - link "Re-enable incremental Kotlin compilation in macrobenchmark-target." [ref=e720] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9dabb6efe75ad3a100c19acccd8015786c5539fa
+                    - cell "Jun 3, 20263 days ago" [ref=e721]:
+                      - generic [ref=e722]: Jun 3, 20263 days ago
+                  - row "development, (Directory) Merge \"Remove profiling/tracing setup from studiow.\" into androidx-main May 28, 2026last week" [ref=e723]:
+                    - cell "development, (Directory)" [ref=e724]:
+                      - generic [ref=e725]:
+                        - img [ref=e726]
+                        - link "development, (Directory)" [ref=e731] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/development
+                          - text: development
+                    - cell "Merge \"Remove profiling/tracing setup from studiow.\" into androidx-main" [ref=e732]:
+                      - link "Merge \"Remove profiling/tracing setup from studiow.\" into androidx-main" [ref=e735] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/d0f6450bf2dd8d3ecb3883d900adbfe793d2b5fa
+                    - cell "May 28, 2026last week" [ref=e736]:
+                      - generic [ref=e737]: May 28, 2026last week
+                  - row "docs-public, (Directory) Updating docs-public/build.gradle May 30, 2026last week" [ref=e738]:
+                    - cell "docs-public, (Directory)" [ref=e739]:
+                      - generic [ref=e740]:
+                        - img [ref=e741]
+                        - link "docs-public, (Directory)" [ref=e746] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/docs-public
+                          - text: docs-public
+                    - cell "Updating docs-public/build.gradle" [ref=e747]:
+                      - link "Updating docs-public/build.gradle" [ref=e750] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/471a20e9e1c5f90e7a6fbf7766cda0e16b99e878
+                    - cell "May 30, 2026last week" [ref=e751]:
+                      - generic [ref=e752]: May 30, 2026last week
+                  - row "docs-tip-of-tree, (Directory) Introduced new pdf-core submodule Jun 2, 20265 days ago" [ref=e753]:
+                    - cell "docs-tip-of-tree, (Directory)" [ref=e754]:
+                      - generic [ref=e755]:
+                        - img [ref=e756]
+                        - link "docs-tip-of-tree, (Directory)" [ref=e761] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/docs-tip-of-tree
+                          - text: docs-tip-of-tree
+                    - cell "Introduced new pdf-core submodule" [ref=e762]:
+                      - link "Introduced new pdf-core submodule" [ref=e765] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/617001cdec098f8e47ab6812a4c040a64c188bd5
+                    - cell "Jun 2, 20265 days ago" [ref=e766]:
+                      - generic [ref=e767]: Jun 2, 20265 days ago
+                  - row "docs, (Directory) Update androidx dependencies doc Jun 2, 20265 days ago" [ref=e768]:
+                    - cell "docs, (Directory)" [ref=e769]:
+                      - generic [ref=e770]:
+                        - img [ref=e771]
+                        - link "docs, (Directory)" [ref=e776] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/docs
+                          - text: docs
+                    - cell "Update androidx dependencies doc" [ref=e777]:
+                      - link "Update androidx dependencies doc" [ref=e780] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/c0652b9e978064ed90d5e4b0961383695a9267b2
+                    - cell "Jun 2, 20265 days ago" [ref=e781]:
+                      - generic [ref=e782]: Jun 2, 20265 days ago
+                  - row "documentfile, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e783]:
+                    - cell "documentfile, (Directory)" [ref=e784]:
+                      - generic [ref=e785]:
+                        - img [ref=e786]
+                        - link "documentfile, (Directory)" [ref=e791] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/documentfile
+                          - text: documentfile
+                    - cell "Replace build.gradle comments" [ref=e792]:
+                      - link "Replace build.gradle comments" [ref=e795] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e796]:
+                      - generic [ref=e797]: Jan 24, 20265 months ago
+                  - row "draganddrop, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e798]:
+                    - cell "draganddrop, (Directory)" [ref=e799]:
+                      - generic [ref=e800]:
+                        - img [ref=e801]
+                        - link "draganddrop, (Directory)" [ref=e806] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/draganddrop
+                          - text: draganddrop
+                    - cell "Replace build.gradle comments" [ref=e807]:
+                      - link "Replace build.gradle comments" [ref=e810] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e811]:
+                      - generic [ref=e812]: Jan 24, 20265 months ago
+                  - row "drawerlayout, (Directory) Clear pending peek runnables in onDetachedFromWindow Apr 29, 20262 months ago" [ref=e813]:
+                    - cell "drawerlayout, (Directory)" [ref=e814]:
+                      - generic [ref=e815]:
+                        - img [ref=e816]
+                        - link "drawerlayout, (Directory)" [ref=e821] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/drawerlayout
+                          - text: drawerlayout
+                    - cell "Clear pending peek runnables in onDetachedFromWindow" [ref=e822]:
+                      - link "Clear pending peek runnables in onDetachedFromWindow" [ref=e825] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/3dd41ad49a173b7778cdd4f78dba3ca05da0e18e
+                    - cell "Apr 29, 20262 months ago" [ref=e826]:
+                      - generic [ref=e827]: Apr 29, 20262 months ago
+                  - row "dynamicanimation, (Directory) Merge dynamicanimation-ktx into dynamicanimation Mar 31, 20263 months ago" [ref=e828]:
+                    - cell "dynamicanimation, (Directory)" [ref=e829]:
+                      - generic [ref=e830]:
+                        - img [ref=e831]
+                        - link "dynamicanimation, (Directory)" [ref=e836] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/dynamicanimation
+                          - text: dynamicanimation
+                    - cell "Merge dynamicanimation-ktx into dynamicanimation" [ref=e837]:
+                      - link "Merge dynamicanimation-ktx into dynamicanimation" [ref=e840] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/d4be1e17c304a8f8f63400fc44a189803481db74
+                    - cell "Mar 31, 20263 months ago" [ref=e841]:
+                      - generic [ref=e842]: Mar 31, 20263 months ago
+                  - 'row "emoji, (Directory) Emoji: Prevent resource exhaustion during metadata parsing May 13, 2026last month" [ref=e843]':
+                    - cell "emoji, (Directory)" [ref=e844]:
+                      - generic [ref=e845]:
+                        - img [ref=e846]
+                        - link "emoji, (Directory)" [ref=e851] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/emoji
+                          - text: emoji
+                    - 'cell "Emoji: Prevent resource exhaustion during metadata parsing" [ref=e852]':
+                      - 'link "Emoji: Prevent resource exhaustion during metadata parsing" [ref=e855] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/b064314705c79afdaa488233719ad7581012150c
+                    - cell "May 13, 2026last month" [ref=e856]:
+                      - generic [ref=e857]: May 13, 2026last month
+                  - row "emoji2, (Directory) Migrate apps to keepRules source set and to optimization DSL May 16, 20263 weeks ago" [ref=e858]:
+                    - cell "emoji2, (Directory)" [ref=e859]:
+                      - generic [ref=e860]:
+                        - img [ref=e861]
+                        - link "emoji2, (Directory)" [ref=e866] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/emoji2
+                          - text: emoji2
+                    - cell "Migrate apps to keepRules source set and to optimization DSL" [ref=e867]:
+                      - link "Migrate apps to keepRules source set and to optimization DSL" [ref=e870] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9919cf2fec824583a9ec8e37bd9e904cd2c03718
+                    - cell "May 16, 20263 weeks ago" [ref=e871]:
+                      - generic [ref=e872]: May 16, 20263 weeks ago
+                  - row "enterprise, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e873]:
+                    - cell "enterprise, (Directory)" [ref=e874]:
+                      - generic [ref=e875]:
+                        - img [ref=e876]
+                        - link "enterprise, (Directory)" [ref=e881] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/enterprise
+                          - text: enterprise
+                    - cell "Replace build.gradle comments" [ref=e882]:
+                      - link "Replace build.gradle comments" [ref=e885] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e886]:
+                      - generic [ref=e887]: Jan 24, 20265 months ago
+                  - row "exifinterface, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e888]:
+                    - cell "exifinterface, (Directory)" [ref=e889]:
+                      - generic [ref=e890]:
+                        - img [ref=e891]
+                        - link "exifinterface, (Directory)" [ref=e896] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/exifinterface
+                          - text: exifinterface
+                    - cell "Replace build.gradle comments" [ref=e897]:
+                      - link "Replace build.gradle comments" [ref=e900] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e901]:
+                      - generic [ref=e902]: Jan 24, 20265 months ago
+                  - row "external/libyuv, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e903]:
+                    - cell "external/libyuv, (Directory)" [ref=e904]:
+                      - generic [ref=e905]:
+                        - img [ref=e906]
+                        - link "external/libyuv, (Directory)" [ref=e911] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/external/libyuv
+                          - text: external/libyuv
+                    - cell "Replace build.gradle comments" [ref=e912]:
+                      - link "Replace build.gradle comments" [ref=e915] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e916]:
+                      - generic [ref=e917]: Jan 24, 20265 months ago
+                  - row "fragment, (Directory) Revert^2 \"Updates Compose compileSdk to 37\" Apr 17, 20262 months ago" [ref=e918]:
+                    - cell "fragment, (Directory)" [ref=e919]:
+                      - generic [ref=e920]:
+                        - img [ref=e921]
+                        - link "fragment, (Directory)" [ref=e926] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/fragment
+                          - text: fragment
+                    - cell "Revert^2 \"Updates Compose compileSdk to 37\"" [ref=e927]:
+                      - link "Revert^2 \"Updates Compose compileSdk to 37\"" [ref=e930] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/147dec6dd27507ea43958540a779ead80dcd3a3a
+                    - cell "Apr 17, 20262 months ago" [ref=e931]:
+                      - generic [ref=e932]: Apr 17, 20262 months ago
+                  - 'row "glance, (Directory) Add @CallSuper to GlanceWearWidgetService` lifecycle methods Jun 6, 202620 hours ago" [ref=e933]':
+                    - cell "glance, (Directory)" [ref=e934]:
+                      - generic [ref=e935]:
+                        - img [ref=e936]
+                        - link "glance, (Directory)" [ref=e941] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/glance
+                          - text: glance
+                    - 'cell "Add @CallSuper to GlanceWearWidgetService` lifecycle methods" [ref=e942]':
+                      - 'link "Add @CallSuper to GlanceWearWidgetService` lifecycle methods" [ref=e945] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/6791b1c8bfc6624a116076f10fc531122ec1f295
+                        - text: Add
+                        - code [ref=e946]: "@CallSuper to"
+                        - text: "GlanceWearWidgetService` lifecycle methods"
+                    - cell "Jun 6, 202620 hours ago" [ref=e947]:
+                      - generic [ref=e948]: Jun 6, 202620 hours ago
+                  - row "gradle, (Directory) Use dackka version 1.10.1 for AndroidX Jun 3, 20264 days ago" [ref=e949]:
+                    - cell "gradle, (Directory)" [ref=e950]:
+                      - generic [ref=e951]:
+                        - img [ref=e952]
+                        - link "gradle, (Directory)" [ref=e957] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/gradle
+                          - text: gradle
+                    - cell "Use dackka version 1.10.1 for AndroidX" [ref=e958]:
+                      - link "Use dackka version 1.10.1 for AndroidX" [ref=e961] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/ea59e603caea0dd7d3d2067b3508e45092959bce
+                    - cell "Jun 3, 20264 days ago" [ref=e962]:
+                      - generic [ref=e963]: Jun 3, 20264 days ago
+                  - row "graphics, (Directory) Fix deadlock in GLRendererTest when controlledByApp is false Jun 5, 20262 days ago" [ref=e964]:
+                    - cell "graphics, (Directory)" [ref=e965]:
+                      - generic [ref=e966]:
+                        - img [ref=e967]
+                        - link "graphics, (Directory)" [ref=e972] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/graphics
+                          - text: graphics
+                    - cell "Fix deadlock in GLRendererTest when controlledByApp is false" [ref=e973]:
+                      - link "Fix deadlock in GLRendererTest when controlledByApp is false" [ref=e976] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/03cec433768ae5ab29fe314ad0107ae8fe2172f1
+                    - cell "Jun 5, 20262 days ago" [ref=e977]:
+                      - generic [ref=e978]: Jun 5, 20262 days ago
+                  - row "gridlayout, (Directory) Fix potential integer overflows and enforce array limits May 2, 20262 months ago" [ref=e979]:
+                    - cell "gridlayout, (Directory)" [ref=e980]:
+                      - generic [ref=e981]:
+                        - img [ref=e982]
+                        - link "gridlayout, (Directory)" [ref=e987] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/gridlayout
+                          - text: gridlayout
+                    - cell "Fix potential integer overflows and enforce array limits" [ref=e988]:
+                      - link "Fix potential integer overflows and enforce array limits" [ref=e991] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/049982a5bedbe1e7de2898f6827f6acade70c8a2
+                    - cell "May 2, 20262 months ago" [ref=e992]:
+                      - generic [ref=e993]: May 2, 20262 months ago
+                  - row "health, (Directory) Update KotlinRunTestResultUnused lint baselines Jun 2, 20265 days ago" [ref=e994]:
+                    - cell "health, (Directory)" [ref=e995]:
+                      - generic [ref=e996]:
+                        - img [ref=e997]
+                        - link "health, (Directory)" [ref=e1002] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/health
+                          - text: health
+                    - cell "Update KotlinRunTestResultUnused lint baselines" [ref=e1003]:
+                      - link "Update KotlinRunTestResultUnused lint baselines" [ref=e1006] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dea539088ba22c3d09018c2fb5ecd256cc803933
+                    - cell "Jun 2, 20265 days ago" [ref=e1007]:
+                      - generic [ref=e1008]: Jun 2, 20265 days ago
+                  - row "heifwriter, (Directory) Fix buffer sizing, EXIF bounds validation, and 10-bit YUV copy logic May 2, 20262 months ago" [ref=e1009]:
+                    - cell "heifwriter, (Directory)" [ref=e1010]:
+                      - generic [ref=e1011]:
+                        - img [ref=e1012]
+                        - link "heifwriter, (Directory)" [ref=e1017] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/heifwriter
+                          - text: heifwriter
+                    - cell "Fix buffer sizing, EXIF bounds validation, and 10-bit YUV copy logic" [ref=e1018]:
+                      - link "Fix buffer sizing, EXIF bounds validation, and 10-bit YUV copy logic" [ref=e1021] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/c54adfc63fa692a649d117ce54ae5378a22b58ad
+                    - cell "May 2, 20262 months ago" [ref=e1022]:
+                      - generic [ref=e1023]: May 2, 20262 months ago
+                  - row "hilt, (Directory) Update lifecycle-viewmodel-compose dependency to stable version. Jun 6, 202618 hours ago" [ref=e1024]:
+                    - cell "hilt, (Directory)" [ref=e1025]:
+                      - generic [ref=e1026]:
+                        - img [ref=e1027]
+                        - link "hilt, (Directory)" [ref=e1032] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/hilt
+                          - text: hilt
+                    - cell "Update lifecycle-viewmodel-compose dependency to stable version." [ref=e1033]:
+                      - link "Update lifecycle-viewmodel-compose dependency to stable version." [ref=e1036] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/f0f39ccd141033c3a0eaeb8c354b293f227ead86
+                    - cell "Jun 6, 202618 hours ago" [ref=e1037]:
+                      - generic [ref=e1038]: Jun 6, 202618 hours ago
+                  - row "ink, (Directory) Enable KMP build/test for compatible Ink modules May 21, 20262 weeks ago" [ref=e1039]:
+                    - cell "ink, (Directory)" [ref=e1040]:
+                      - generic [ref=e1041]:
+                        - img [ref=e1042]
+                        - link "ink, (Directory)" [ref=e1047] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/ink
+                          - text: ink
+                    - cell "Enable KMP build/test for compatible Ink modules" [ref=e1048]:
+                      - link "Enable KMP build/test for compatible Ink modules" [ref=e1051] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/96de46b85d3bbcad4d48e90bb2776a9ccfcde2f7
+                    - cell "May 21, 20262 weeks ago" [ref=e1052]:
+                      - generic [ref=e1053]: May 21, 20262 weeks ago
+                  - row "input, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1054]:
+                    - cell "input, (Directory)" [ref=e1055]:
+                      - generic [ref=e1056]:
+                        - img [ref=e1057]
+                        - link "input, (Directory)" [ref=e1062] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/input
+                          - text: input
+                    - cell "Replace build.gradle comments" [ref=e1063]:
+                      - link "Replace build.gradle comments" [ref=e1066] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1067]:
+                      - generic [ref=e1068]: Jan 24, 20265 months ago
+                  - row "inspection, (Directory) Fix native security concerns and potential race conditions in ArtTooling Apr 28, 20262 months ago" [ref=e1069]:
+                    - cell "inspection, (Directory)" [ref=e1070]:
+                      - generic [ref=e1071]:
+                        - img [ref=e1072]
+                        - link "inspection, (Directory)" [ref=e1077] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/inspection
+                          - text: inspection
+                    - cell "Fix native security concerns and potential race conditions in ArtTooling" [ref=e1078]:
+                      - link "Fix native security concerns and potential race conditions in ArtTooling" [ref=e1081] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/ecabbf57638333f0b889c9b6103dfc29a59993b5
+                    - cell "Apr 28, 20262 months ago" [ref=e1082]:
+                      - generic [ref=e1083]: Apr 28, 20262 months ago
+                  - row "interpolator/interpolator, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1084]:
+                    - cell "interpolator/interpolator, (Directory)" [ref=e1085]:
+                      - generic [ref=e1086]:
+                        - img [ref=e1087]
+                        - link "interpolator/interpolator, (Directory)" [ref=e1092] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/interpolator/interpolator
+                          - text: interpolator/interpolator
+                    - cell "Replace build.gradle comments" [ref=e1093]:
+                      - link "Replace build.gradle comments" [ref=e1096] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1097]:
+                      - generic [ref=e1098]: Jan 24, 20265 months ago
+                  - row "javascriptengine, (Directory) Upgrade JSE to 1.1.0-rc01 Apr 13, 20262 months ago" [ref=e1099]:
+                    - cell "javascriptengine, (Directory)" [ref=e1100]:
+                      - generic [ref=e1101]:
+                        - img [ref=e1102]
+                        - link "javascriptengine, (Directory)" [ref=e1107] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/javascriptengine
+                          - text: javascriptengine
+                    - cell "Upgrade JSE to 1.1.0-rc01" [ref=e1108]:
+                      - link "Upgrade JSE to 1.1.0-rc01" [ref=e1111] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/3bb1f317d9f24720d1694128761732b35d3ed177
+                    - cell "Apr 13, 20262 months ago" [ref=e1112]:
+                      - generic [ref=e1113]: Apr 13, 20262 months ago
+                  - row "kotlin-js-store, (Directory) Upgrade to Kotlin 2.3.20 Mar 17, 20263 months ago" [ref=e1114]:
+                    - cell "kotlin-js-store, (Directory)" [ref=e1115]:
+                      - generic [ref=e1116]:
+                        - img [ref=e1117]
+                        - link "kotlin-js-store, (Directory)" [ref=e1122] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/kotlin-js-store
+                          - text: kotlin-js-store
+                    - cell "Upgrade to Kotlin 2.3.20" [ref=e1123]:
+                      - link "Upgrade to Kotlin 2.3.20" [ref=e1126] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/55c298b11311e9e9a98d3b07982efed2af02397b
+                    - cell "Mar 17, 20263 months ago" [ref=e1127]:
+                      - generic [ref=e1128]: Mar 17, 20263 months ago
+                  - row "kruth/kruth, (Directory) Support KClass.qualifiedName natively on WasmJs in kruth May 12, 2026last month" [ref=e1129]:
+                    - cell "kruth/kruth, (Directory)" [ref=e1130]:
+                      - generic [ref=e1131]:
+                        - img [ref=e1132]
+                        - link "kruth/kruth, (Directory)" [ref=e1137] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/kruth/kruth
+                          - text: kruth/kruth
+                    - cell "Support KClass.qualifiedName natively on WasmJs in kruth" [ref=e1138]:
+                      - link "Support KClass.qualifiedName natively on WasmJs in kruth" [ref=e1141] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cf02319dbe27ccdf40c1fb146a3dd04db3ada27d
+                    - cell "May 12, 2026last month" [ref=e1142]:
+                      - generic [ref=e1143]: May 12, 2026last month
+                  - 'row "leanback, (Directory) leanback-grid: expose getViewCenter() and getWindowKeyLine() Jun 5, 20262 days ago" [ref=e1144]':
+                    - cell "leanback, (Directory)" [ref=e1145]:
+                      - generic [ref=e1146]:
+                        - img [ref=e1147]
+                        - link "leanback, (Directory)" [ref=e1152] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/leanback
+                          - text: leanback
+                    - 'cell "leanback-grid: expose getViewCenter() and getWindowKeyLine()" [ref=e1153]':
+                      - 'link "leanback-grid: expose getViewCenter() and getWindowKeyLine()" [ref=e1156] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/9279e5d0721eb1bc85ad1b8c1034f47f0a43139c
+                    - cell "Jun 5, 20262 days ago" [ref=e1157]:
+                      - generic [ref=e1158]: Jun 5, 20262 days ago
+                  - 'row "lifecycle, (Directory) lifecycle: Clean-up targetState Jun 6, 202620 hours ago" [ref=e1159]':
+                    - cell "lifecycle, (Directory)" [ref=e1160]:
+                      - generic [ref=e1161]:
+                        - img [ref=e1162]
+                        - link "lifecycle, (Directory)" [ref=e1167] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/lifecycle
+                          - text: lifecycle
+                    - 'cell "lifecycle: Clean-up targetState" [ref=e1168]':
+                      - 'link "lifecycle: Clean-up targetState" [ref=e1171] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/ad3c549fab4626d6fac6e00fe6cfdd54f493e704
+                    - cell "Jun 6, 202620 hours ago" [ref=e1172]:
+                      - generic [ref=e1173]: Jun 6, 202620 hours ago
+                  - row "lint-checks, (Directory) Lint against ignored runTest results Jun 2, 20265 days ago" [ref=e1174]:
+                    - cell "lint-checks, (Directory)" [ref=e1175]:
+                      - generic [ref=e1176]:
+                        - img [ref=e1177]
+                        - link "lint-checks, (Directory)" [ref=e1182] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/lint-checks
+                          - text: lint-checks
+                    - cell "Lint against ignored runTest results" [ref=e1183]:
+                      - link "Lint against ignored runTest results" [ref=e1186] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/950fc4044f83899fbd40cb513326b3ca01b553bb
+                    - cell "Jun 2, 20265 days ago" [ref=e1187]:
+                      - generic [ref=e1188]: Jun 2, 20265 days ago
+                  - row "lint, (Directory) Remove Jeff from owners files May 15, 20263 weeks ago" [ref=e1189]:
+                    - cell "lint, (Directory)" [ref=e1190]:
+                      - generic [ref=e1191]:
+                        - img [ref=e1192]
+                        - link "lint, (Directory)" [ref=e1197] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/lint
+                          - text: lint
+                    - cell "Remove Jeff from owners files" [ref=e1198]:
+                      - link "Remove Jeff from owners files" [ref=e1201] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/fa6b6c29d6ea65e90f3e8a55282dade2a4d74b31
+                    - cell "May 15, 20263 weeks ago" [ref=e1202]:
+                      - generic [ref=e1203]: May 15, 20263 weeks ago
+                  - row "loader, (Directory) Merge loader-ktx into loader Mar 30, 20263 months ago" [ref=e1204]:
+                    - cell "loader, (Directory)" [ref=e1205]:
+                      - generic [ref=e1206]:
+                        - img [ref=e1207]
+                        - link "loader, (Directory)" [ref=e1212] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/loader
+                          - text: loader
+                    - cell "Merge loader-ktx into loader" [ref=e1213]:
+                      - link "Merge loader-ktx into loader" [ref=e1216] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/3e52a594f09c26fe6273f6334bdaa81c52389278
+                    - cell "Mar 30, 20263 months ago" [ref=e1217]:
+                      - generic [ref=e1218]: Mar 30, 20263 months ago
+                  - row "mediarouter, (Directory) Update MediaRouter OWNERS May 19, 20263 weeks ago" [ref=e1219]:
+                    - cell "mediarouter, (Directory)" [ref=e1220]:
+                      - generic [ref=e1221]:
+                        - img [ref=e1222]
+                        - link "mediarouter, (Directory)" [ref=e1227] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/mediarouter
+                          - text: mediarouter
+                    - cell "Update MediaRouter OWNERS" [ref=e1228]:
+                      - link "Update MediaRouter OWNERS" [ref=e1231] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/40236afbc371f23b86ebdde687cdfc06599f3f4e
+                    - cell "May 19, 20263 weeks ago" [ref=e1232]:
+                      - generic [ref=e1233]: May 19, 20263 weeks ago
+                  - row "metrics, (Directory) Remove usage of RestrictTo from private and internal types Apr 30, 20262 months ago" [ref=e1234]:
+                    - cell "metrics, (Directory)" [ref=e1235]:
+                      - generic [ref=e1236]:
+                        - img [ref=e1237]
+                        - link "metrics, (Directory)" [ref=e1242] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/metrics
+                          - text: metrics
+                    - cell "Remove usage of RestrictTo from private and internal types" [ref=e1243]:
+                      - link "Remove usage of RestrictTo from private and internal types" [ref=e1246] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/eb0ae2bfb2b19ed1b514014e9d125aa179e5d00f
+                    - cell "Apr 30, 20262 months ago" [ref=e1247]:
+                      - generic [ref=e1248]: Apr 30, 20262 months ago
+                  - row "navigation, (Directory) Inline NavBackStackEntryImpl into main class Jun 5, 20262 days ago" [ref=e1249]:
+                    - cell "navigation, (Directory)" [ref=e1250]:
+                      - generic [ref=e1251]:
+                        - img [ref=e1252]
+                        - link "navigation, (Directory)" [ref=e1257] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/navigation
+                          - text: navigation
+                    - cell "Inline NavBackStackEntryImpl into main class" [ref=e1258]:
+                      - link "Inline NavBackStackEntryImpl into main class" [ref=e1261] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/07ea1d73af71a8a319c6864c2fc02046be6d6cf1
+                    - cell "Jun 5, 20262 days ago" [ref=e1262]:
+                      - generic [ref=e1263]: Jun 5, 20262 days ago
+                  - row "navigation3, (Directory) Merge \"Fix UriDeepLinkMatcher mismatch between http and https\" into a… Jun 5, 20262 days ago" [ref=e1264]:
+                    - cell "navigation3, (Directory)" [ref=e1265]:
+                      - generic [ref=e1266]:
+                        - img [ref=e1267]
+                        - link "navigation3, (Directory)" [ref=e1272] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/navigation3
+                          - text: navigation3
+                    - cell "Merge \"Fix UriDeepLinkMatcher mismatch between http and https\" into a…" [ref=e1273]:
+                      - link "Merge \"Fix UriDeepLinkMatcher mismatch between http and https\" into a…" [ref=e1276] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2125a19af1082839c19b8cfe3bfe8c88be72b8c2
+                    - cell "Jun 5, 20262 days ago" [ref=e1277]:
+                      - generic [ref=e1278]: Jun 5, 20262 days ago
+                  - row "navigationevent, (Directory) Ensure DirectNavigationEventInput methods are not modified or renamed May 29, 2026last week" [ref=e1279]:
+                    - cell "navigationevent, (Directory)" [ref=e1280]:
+                      - generic [ref=e1281]:
+                        - img [ref=e1282]
+                        - link "navigationevent, (Directory)" [ref=e1287] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/navigationevent
+                          - text: navigationevent
+                    - cell "Ensure DirectNavigationEventInput methods are not modified or renamed" [ref=e1288]:
+                      - link "Ensure DirectNavigationEventInput methods are not modified or renamed" [ref=e1291] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2c3ee5fd5350187fd5a627b2f871f299c0274c6c
+                    - cell "May 29, 2026last week" [ref=e1292]:
+                      - generic [ref=e1293]: May 29, 2026last week
+                  - row "paging, (Directory) Update KotlinRunTestResultUnused lint baselines Jun 2, 20265 days ago" [ref=e1294]:
+                    - cell "paging, (Directory)" [ref=e1295]:
+                      - generic [ref=e1296]:
+                        - img [ref=e1297]
+                        - link "paging, (Directory)" [ref=e1302] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/paging
+                          - text: paging
+                    - cell "Update KotlinRunTestResultUnused lint baselines" [ref=e1303]:
+                      - link "Update KotlinRunTestResultUnused lint baselines" [ref=e1306] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dea539088ba22c3d09018c2fb5ecd256cc803933
+                    - cell "Jun 2, 20265 days ago" [ref=e1307]:
+                      - generic [ref=e1308]: Jun 2, 20265 days ago
+                  - row "palette, (Directory) Merge palette-ktx into palette Mar 30, 20263 months ago" [ref=e1309]:
+                    - cell "palette, (Directory)" [ref=e1310]:
+                      - generic [ref=e1311]:
+                        - img [ref=e1312]
+                        - link "palette, (Directory)" [ref=e1317] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/palette
+                          - text: palette
+                    - cell "Merge palette-ktx into palette" [ref=e1318]:
+                      - link "Merge palette-ktx into palette" [ref=e1321] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9748764301e5dce66cbf297f6778fa658768c213
+                    - cell "Mar 30, 20263 months ago" [ref=e1322]:
+                      - generic [ref=e1323]: Mar 30, 20263 months ago
+                  - row "pdf, (Directory) Merge \"Fix Toggle Action Mode Bug\" into androidx-main Jun 6, 202619 hours ago" [ref=e1324]:
+                    - cell "pdf, (Directory)" [ref=e1325]:
+                      - generic [ref=e1326]:
+                        - img [ref=e1327]
+                        - link "pdf, (Directory)" [ref=e1332] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/pdf
+                          - text: pdf
+                    - cell "Merge \"Fix Toggle Action Mode Bug\" into androidx-main" [ref=e1333]:
+                      - link "Merge \"Fix Toggle Action Mode Bug\" into androidx-main" [ref=e1336] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/d6bb10f20b67560d7f101e38cb8e55681a43b8b9
+                    - cell "Jun 6, 202619 hours ago" [ref=e1337]:
+                      - generic [ref=e1338]: Jun 6, 202619 hours ago
+                  - row "percentlayout, (Directory) Remove or replace alanv@ in OWNERS files Apr 1, 20263 months ago" [ref=e1339]:
+                    - cell "percentlayout, (Directory)" [ref=e1340]:
+                      - generic [ref=e1341]:
+                        - img [ref=e1342]
+                        - link "percentlayout, (Directory)" [ref=e1347] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/percentlayout
+                          - text: percentlayout
+                    - cell "Remove or replace alanv@ in OWNERS files" [ref=e1348]:
+                      - link "Remove or replace alanv@ in OWNERS files" [ref=e1351] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cf2cf4fbc162ed505b7bd22a2f3a331abb4b454e
+                    - cell "Apr 1, 20263 months ago" [ref=e1352]:
+                      - generic [ref=e1353]: Apr 1, 20263 months ago
+                  - row "photopicker, (Directory) Revert^2 \"Updates Compose compileSdk to 37\" Apr 17, 20262 months ago" [ref=e1354]:
+                    - cell "photopicker, (Directory)" [ref=e1355]:
+                      - generic [ref=e1356]:
+                        - img [ref=e1357]
+                        - link "photopicker, (Directory)" [ref=e1362] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/photopicker
+                          - text: photopicker
+                    - cell "Revert^2 \"Updates Compose compileSdk to 37\"" [ref=e1363]:
+                      - link "Revert^2 \"Updates Compose compileSdk to 37\"" [ref=e1366] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/147dec6dd27507ea43958540a779ead80dcd3a3a
+                    - cell "Apr 17, 20262 months ago" [ref=e1367]:
+                      - generic [ref=e1368]: Apr 17, 20262 months ago
+                  - row "placeholder-tests, (Directory) Migrate to using = for property setting Dec 5, 20242 years ago" [ref=e1369]:
+                    - cell "placeholder-tests, (Directory)" [ref=e1370]:
+                      - generic [ref=e1371]:
+                        - img [ref=e1372]
+                        - link "placeholder-tests, (Directory)" [ref=e1377] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/placeholder-tests
+                          - text: placeholder-tests
+                    - cell "Migrate to using = for property setting" [ref=e1378]:
+                      - link "Migrate to using = for property setting" [ref=e1381] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/7795282b4d5dff56d63c51b500d40d95bec8a8f1
+                    - cell "Dec 5, 20242 years ago" [ref=e1382]:
+                      - generic [ref=e1383]: Dec 5, 20242 years ago
+                  - row "placeholder, (Directory) Clean up project buildDirectory set up Apr 4, 20242 years ago" [ref=e1384]:
+                    - cell "placeholder, (Directory)" [ref=e1385]:
+                      - generic [ref=e1386]:
+                        - img [ref=e1387]
+                        - link "placeholder, (Directory)" [ref=e1392] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/placeholder
+                          - text: placeholder
+                    - cell "Clean up project buildDirectory set up" [ref=e1393]:
+                      - link "Clean up project buildDirectory set up" [ref=e1396] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/6f07871673df768518ba3bf5ce14f113f6e32976
+                    - cell "Apr 4, 20242 years ago" [ref=e1397]:
+                      - generic [ref=e1398]: Apr 4, 20242 years ago
+                  - row "playground-common, (Directory) Update metalava build ID to 15514982 May 29, 2026last week" [ref=e1399]:
+                    - cell "playground-common, (Directory)" [ref=e1400]:
+                      - generic [ref=e1401]:
+                        - img [ref=e1402]
+                        - link "playground-common, (Directory)" [ref=e1407] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/playground-common
+                          - text: playground-common
+                    - cell "Update metalava build ID to 15514982" [ref=e1408]:
+                      - link "Update metalava build ID to 15514982" [ref=e1411] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/c53670c3e6a8984b2cd2136bea89dd7de71ea149
+                    - cell "May 29, 2026last week" [ref=e1412]:
+                      - generic [ref=e1413]: May 29, 2026last week
+                  - row "playground-projects, (Directory) Create mediarouter playground May 20, 2025last year" [ref=e1414]:
+                    - cell "playground-projects, (Directory)" [ref=e1415]:
+                      - generic [ref=e1416]:
+                        - img [ref=e1417]
+                        - link "playground-projects, (Directory)" [ref=e1422] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/playground-projects
+                          - text: playground-projects
+                    - cell "Create mediarouter playground" [ref=e1423]:
+                      - link "Create mediarouter playground" [ref=e1426] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/4fa74ce3b2ee646f9ad5835775e430b004d7012e
+                    - cell "May 20, 2025last year" [ref=e1427]:
+                      - generic [ref=e1428]: May 20, 2025last year
+                  - row "preference, (Directory) Merge \"Merge preference-ktx into preference\" into androidx-main Apr 1, 20263 months ago" [ref=e1429]:
+                    - cell "preference, (Directory)" [ref=e1430]:
+                      - generic [ref=e1431]:
+                        - img [ref=e1432]
+                        - link "preference, (Directory)" [ref=e1437] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/preference
+                          - text: preference
+                    - cell "Merge \"Merge preference-ktx into preference\" into androidx-main" [ref=e1438]:
+                      - link "Merge \"Merge preference-ktx into preference\" into androidx-main" [ref=e1441] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/1596f5926445162c491d6ce366f276524b8c17c8
+                    - cell "Apr 1, 20263 months ago" [ref=e1442]:
+                      - generic [ref=e1443]: Apr 1, 20263 months ago
+                  - row "print/print, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1444]:
+                    - cell "print/print, (Directory)" [ref=e1445]:
+                      - generic [ref=e1446]:
+                        - img [ref=e1447]
+                        - link "print/print, (Directory)" [ref=e1452] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/print/print
+                          - text: print/print
+                    - cell "Replace build.gradle comments" [ref=e1453]:
+                      - link "Replace build.gradle comments" [ref=e1456] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1457]:
+                      - generic [ref=e1458]: Jan 24, 20265 months ago
+                  - row "privacysandbox, (Directory) Remove usage of RestrictTo from private and internal types Apr 30, 20262 months ago" [ref=e1459]:
+                    - cell "privacysandbox, (Directory)" [ref=e1460]:
+                      - generic [ref=e1461]:
+                        - img [ref=e1462]
+                        - link "privacysandbox, (Directory)" [ref=e1467] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/privacysandbox
+                          - text: privacysandbox
+                    - cell "Remove usage of RestrictTo from private and internal types" [ref=e1468]:
+                      - link "Remove usage of RestrictTo from private and internal types" [ref=e1471] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/eb0ae2bfb2b19ed1b514014e9d125aa179e5d00f
+                    - cell "Apr 30, 20262 months ago" [ref=e1472]:
+                      - generic [ref=e1473]: Apr 30, 20262 months ago
+                  - row "profileinstaller, (Directory) Migrate apps to keepRules source set and to optimization DSL May 16, 20263 weeks ago" [ref=e1474]:
+                    - cell "profileinstaller, (Directory)" [ref=e1475]:
+                      - generic [ref=e1476]:
+                        - img [ref=e1477]
+                        - link "profileinstaller, (Directory)" [ref=e1482] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/profileinstaller
+                          - text: profileinstaller
+                    - cell "Migrate apps to keepRules source set and to optimization DSL" [ref=e1483]:
+                      - link "Migrate apps to keepRules source set and to optimization DSL" [ref=e1486] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9919cf2fec824583a9ec8e37bd9e904cd2c03718
+                    - cell "May 16, 20263 weeks ago" [ref=e1487]:
+                      - generic [ref=e1488]: May 16, 20263 weeks ago
+                  - row "recommendation, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1489]:
+                    - cell "recommendation, (Directory)" [ref=e1490]:
+                      - generic [ref=e1491]:
+                        - img [ref=e1492]
+                        - link "recommendation, (Directory)" [ref=e1497] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/recommendation
+                          - text: recommendation
+                    - cell "Replace build.gradle comments" [ref=e1498]:
+                      - link "Replace build.gradle comments" [ref=e1501] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1502]:
+                      - generic [ref=e1503]: Jan 24, 20265 months ago
+                  - 'row "recyclerview, (Directory) build: Fix misconfigured dependencies in recyclerview Apr 16, 20262 months ago" [ref=e1504]':
+                    - cell "recyclerview, (Directory)" [ref=e1505]:
+                      - generic [ref=e1506]:
+                        - img [ref=e1507]
+                        - link "recyclerview, (Directory)" [ref=e1512] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/recyclerview
+                          - text: recyclerview
+                    - 'cell "build: Fix misconfigured dependencies in recyclerview" [ref=e1513]':
+                      - 'link "build: Fix misconfigured dependencies in recyclerview" [ref=e1516] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/f6617d01ec176edc7486c06311e1bae750aae465
+                    - cell "Apr 16, 20262 months ago" [ref=e1517]:
+                      - generic [ref=e1518]: Apr 16, 20262 months ago
+                  - row "resourceinspection, (Directory) Upgrade com.google.testing.compile:compile-testing to 0.22.0 Mar 10, 20263 months ago" [ref=e1519]:
+                    - cell "resourceinspection, (Directory)" [ref=e1520]:
+                      - generic [ref=e1521]:
+                        - img [ref=e1522]
+                        - link "resourceinspection, (Directory)" [ref=e1527] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/resourceinspection
+                          - text: resourceinspection
+                    - cell "Upgrade com.google.testing.compile:compile-testing to 0.22.0" [ref=e1528]:
+                      - link "Upgrade com.google.testing.compile:compile-testing to 0.22.0" [ref=e1531] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2657eb3641b2b0ba9a025aafdafe8d1ad9718fd1
+                    - cell "Mar 10, 20263 months ago" [ref=e1532]:
+                      - generic [ref=e1533]: Mar 10, 20263 months ago
+                  - row "room3, (Directory) Merge \"Add API for specifying primary key algorithm.\" into androidx-main Jun 4, 20262 days ago" [ref=e1534]:
+                    - cell "room3, (Directory)" [ref=e1535]:
+                      - generic [ref=e1536]:
+                        - img [ref=e1537]
+                        - link "room3, (Directory)" [ref=e1542] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/room3
+                          - text: room3
+                    - cell "Merge \"Add API for specifying primary key algorithm.\" into androidx-main" [ref=e1543]:
+                      - link "Merge \"Add API for specifying primary key algorithm.\" into androidx-main" [ref=e1546] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/e590b956526a26db8b43e2b78aadcb300b7c0300
+                    - cell "Jun 4, 20262 days ago" [ref=e1547]:
+                      - generic [ref=e1548]: Jun 4, 20262 days ago
+                  - row "safeparcel, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1549]:
+                    - cell "safeparcel, (Directory)" [ref=e1550]:
+                      - generic [ref=e1551]:
+                        - img [ref=e1552]
+                        - link "safeparcel, (Directory)" [ref=e1557] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/safeparcel
+                          - text: safeparcel
+                    - cell "Replace build.gradle comments" [ref=e1558]:
+                      - link "Replace build.gradle comments" [ref=e1561] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1562]:
+                      - generic [ref=e1563]: Jan 24, 20265 months ago
+                  - row "samples, (Directory) Migrate apps to keepRules source set and to optimization DSL May 16, 20263 weeks ago" [ref=e1564]:
+                    - cell "samples, (Directory)" [ref=e1565]:
+                      - generic [ref=e1566]:
+                        - img [ref=e1567]
+                        - link "samples, (Directory)" [ref=e1572] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/samples
+                          - text: samples
+                    - cell "Migrate apps to keepRules source set and to optimization DSL" [ref=e1573]:
+                      - link "Migrate apps to keepRules source set and to optimization DSL" [ref=e1576] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9919cf2fec824583a9ec8e37bd9e904cd2c03718
+                    - cell "May 16, 20263 weeks ago" [ref=e1577]:
+                      - generic [ref=e1578]: May 16, 20263 weeks ago
+                  - row "savedstate, (Directory) Suppress API lint issues on actual items in non-android source sets May 28, 2026last week" [ref=e1579]:
+                    - cell "savedstate, (Directory)" [ref=e1580]:
+                      - generic [ref=e1581]:
+                        - img [ref=e1582]
+                        - link "savedstate, (Directory)" [ref=e1587] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/savedstate
+                          - text: savedstate
+                    - cell "Suppress API lint issues on actual items in non-android source sets" [ref=e1588]:
+                      - link "Suppress API lint issues on actual items in non-android source sets" [ref=e1591] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2224fb3030fba2e6078219038403bd42d113560e
+                    - cell "May 28, 2026last week" [ref=e1592]:
+                      - generic [ref=e1593]: May 28, 2026last week
+                  - row "security, (Directory) Bump security-state library to 1.1.0-beta02 May 13, 2026last month" [ref=e1594]:
+                    - cell "security, (Directory)" [ref=e1595]:
+                      - generic [ref=e1596]:
+                        - img [ref=e1597]
+                        - link "security, (Directory)" [ref=e1602] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/security
+                          - text: security
+                    - cell "Bump security-state library to 1.1.0-beta02" [ref=e1603]:
+                      - link "Bump security-state library to 1.1.0-beta02" [ref=e1606] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/5f73d84c15da8bc881a7efcdd492ed9278e5ed3c
+                    - cell "May 13, 2026last month" [ref=e1607]:
+                      - generic [ref=e1608]: May 13, 2026last month
+                  - row "sharetarget, (Directory) Migrate consumer rules to keepRules source set Mar 31, 20263 months ago" [ref=e1609]:
+                    - cell "sharetarget, (Directory)" [ref=e1610]:
+                      - generic [ref=e1611]:
+                        - img [ref=e1612]
+                        - link "sharetarget, (Directory)" [ref=e1617] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/sharetarget
+                          - text: sharetarget
+                    - cell "Migrate consumer rules to keepRules source set" [ref=e1618]:
+                      - link "Migrate consumer rules to keepRules source set" [ref=e1621] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b780700e4b66ed38927ca1de28872d915b06a57c
+                    - cell "Mar 31, 20263 months ago" [ref=e1622]:
+                      - generic [ref=e1623]: Mar 31, 20263 months ago
+                  - row "slidingpanelayout, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1624]:
+                    - cell "slidingpanelayout, (Directory)" [ref=e1625]:
+                      - generic [ref=e1626]:
+                        - img [ref=e1627]
+                        - link "slidingpanelayout, (Directory)" [ref=e1632] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/slidingpanelayout
+                          - text: slidingpanelayout
+                    - cell "Replace build.gradle comments" [ref=e1633]:
+                      - link "Replace build.gradle comments" [ref=e1636] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1637]:
+                      - generic [ref=e1638]: Jan 24, 20265 months ago
+                  - row "sqlite, (Directory) Fix non-first row null types in WebWorker Statement Jun 4, 20262 days ago" [ref=e1639]:
+                    - cell "sqlite, (Directory)" [ref=e1640]:
+                      - generic [ref=e1641]:
+                        - img [ref=e1642]
+                        - link "sqlite, (Directory)" [ref=e1647] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/sqlite
+                          - text: sqlite
+                    - cell "Fix non-first row null types in WebWorker Statement" [ref=e1648]:
+                      - link "Fix non-first row null types in WebWorker Statement" [ref=e1651] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/57d4afce83c4e6a9d9f35d1a041bc9394c0d4a3b
+                    - cell "Jun 4, 20262 days ago" [ref=e1652]:
+                      - generic [ref=e1653]: Jun 4, 20262 days ago
+                  - row "stableaidl/stableaidl-gradle-plugin, (Directory) Upgrade to AGP 9.2.0-alpha07 Apr 11, 20262 months ago" [ref=e1654]:
+                    - cell "stableaidl/stableaidl-gradle-plugin, (Directory)" [ref=e1655]:
+                      - generic [ref=e1656]:
+                        - img [ref=e1657]
+                        - link "stableaidl/stableaidl-gradle-plugin, (Directory)" [ref=e1662] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/stableaidl/stableaidl-gradle-plugin
+                          - text: stableaidl/stableaidl-gradle-plugin
+                    - cell "Upgrade to AGP 9.2.0-alpha07" [ref=e1663]:
+                      - link "Upgrade to AGP 9.2.0-alpha07" [ref=e1666] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/52c4d1aac50d996f569bb0a44695a738a9fb85f9
+                    - cell "Apr 11, 20262 months ago" [ref=e1667]:
+                      - generic [ref=e1668]: Apr 11, 20262 months ago
+                  - row "startup, (Directory) Upgrade to AGP 9.2.0-alpha07 Apr 11, 20262 months ago" [ref=e1669]:
+                    - cell "startup, (Directory)" [ref=e1670]:
+                      - generic [ref=e1671]:
+                        - img [ref=e1672]
+                        - link "startup, (Directory)" [ref=e1677] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/startup
+                          - text: startup
+                    - cell "Upgrade to AGP 9.2.0-alpha07" [ref=e1678]:
+                      - link "Upgrade to AGP 9.2.0-alpha07" [ref=e1681] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/52c4d1aac50d996f569bb0a44695a738a9fb85f9
+                    - cell "Apr 11, 20262 months ago" [ref=e1682]:
+                      - generic [ref=e1683]: Apr 11, 20262 months ago
+                  - row "swiperefreshlayout, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1684]:
+                    - cell "swiperefreshlayout, (Directory)" [ref=e1685]:
+                      - generic [ref=e1686]:
+                        - img [ref=e1687]
+                        - link "swiperefreshlayout, (Directory)" [ref=e1692] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/swiperefreshlayout
+                          - text: swiperefreshlayout
+                    - cell "Replace build.gradle comments" [ref=e1693]:
+                      - link "Replace build.gradle comments" [ref=e1696] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1697]:
+                      - generic [ref=e1698]: Jan 24, 20265 months ago
+                  - 'row "test, (Directory) Merge \"isKeyboardVisible() should be graceful when `dumpsys input_m… Jun 4, 20263 days ago" [ref=e1699]':
+                    - cell "test, (Directory)" [ref=e1700]:
+                      - generic [ref=e1701]:
+                        - img [ref=e1702]
+                        - link "test, (Directory)" [ref=e1707] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/test
+                          - text: test
+                    - 'cell "Merge \"isKeyboardVisible() should be graceful when `dumpsys input_m…" [ref=e1708]':
+                      - 'link "Merge \"isKeyboardVisible() should be graceful when `dumpsys input_m…" [ref=e1711] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/3ebf778217c55d436ff3b7b38fb8e7099e1da6f7
+                        - text: Merge "
+                        - code [ref=e1712]: isKeyboardVisible()
+                        - text: "should be graceful when `dumpsys input_m…"
+                    - cell "Jun 4, 20263 days ago" [ref=e1713]:
+                      - generic [ref=e1714]: Jun 4, 20263 days ago
+                  - row "testutils, (Directory) Merge \"Move traceprocessor from benchmark-macro to benchmark-common\" … Jun 6, 202613 hours ago" [ref=e1715]:
+                    - cell "testutils, (Directory)" [ref=e1716]:
+                      - generic [ref=e1717]:
+                        - img [ref=e1718]
+                        - link "testutils, (Directory)" [ref=e1723] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/testutils
+                          - text: testutils
+                    - cell "Merge \"Move traceprocessor from benchmark-macro to benchmark-common\" …" [ref=e1724]:
+                      - link "Merge \"Move traceprocessor from benchmark-macro to benchmark-common\" …" [ref=e1727] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/20573118bfaf11b88910aebb6f512ee843553ae3
+                    - cell "Jun 6, 202613 hours ago" [ref=e1728]:
+                      - generic [ref=e1729]: Jun 6, 202613 hours ago
+                  - row "text, (Directory) Refactor Paint/Canvas API call for vertical text May 14, 20263 weeks ago" [ref=e1730]:
+                    - cell "text, (Directory)" [ref=e1731]:
+                      - generic [ref=e1732]:
+                        - img [ref=e1733]
+                        - link "text, (Directory)" [ref=e1738] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/text
+                          - text: text
+                    - cell "Refactor Paint/Canvas API call for vertical text" [ref=e1739]:
+                      - link "Refactor Paint/Canvas API call for vertical text" [ref=e1742] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/d0e2eccc8a6487eb6f3df34794c4b88f366ecf51
+                    - cell "May 14, 20263 weeks ago" [ref=e1743]:
+                      - generic [ref=e1744]: May 14, 20263 weeks ago
+                  - row "tracing, (Directory) Suppress API lint issues on actual items in non-android source sets May 28, 2026last week" [ref=e1745]:
+                    - cell "tracing, (Directory)" [ref=e1746]:
+                      - generic [ref=e1747]:
+                        - img [ref=e1748]
+                        - link "tracing, (Directory)" [ref=e1753] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/tracing
+                          - text: tracing
+                    - cell "Suppress API lint issues on actual items in non-android source sets" [ref=e1754]:
+                      - link "Suppress API lint issues on actual items in non-android source sets" [ref=e1757] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/2224fb3030fba2e6078219038403bd42d113560e
+                    - cell "May 28, 2026last week" [ref=e1758]:
+                      - generic [ref=e1759]: May 28, 2026last week
+                  - row "transition, (Directory) Update transition OWNERS Apr 22, 20262 months ago" [ref=e1760]:
+                    - cell "transition, (Directory)" [ref=e1761]:
+                      - generic [ref=e1762]:
+                        - img [ref=e1763]
+                        - link "transition, (Directory)" [ref=e1768] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/transition
+                          - text: transition
+                    - cell "Update transition OWNERS" [ref=e1769]:
+                      - link "Update transition OWNERS" [ref=e1772] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/daf53732e1d808a7dc1abb98095a143658ddc532
+                    - cell "Apr 22, 20262 months ago" [ref=e1773]:
+                      - generic [ref=e1774]: Apr 22, 20262 months ago
+                  - row "tv, (Directory) Migrate apps to keepRules source set and to optimization DSL May 16, 20263 weeks ago" [ref=e1775]:
+                    - cell "tv, (Directory)" [ref=e1776]:
+                      - generic [ref=e1777]:
+                        - img [ref=e1778]
+                        - link "tv, (Directory)" [ref=e1783] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/tv
+                          - text: tv
+                    - cell "Migrate apps to keepRules source set and to optimization DSL" [ref=e1784]:
+                      - link "Migrate apps to keepRules source set and to optimization DSL" [ref=e1787] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/9919cf2fec824583a9ec8e37bd9e904cd2c03718
+                    - cell "May 16, 20263 weeks ago" [ref=e1788]:
+                      - generic [ref=e1789]: May 16, 20263 weeks ago
+                  - row "tvprovider, (Directory) Treat type variable as undefined nullability by default Feb 13, 20264 months ago" [ref=e1790]:
+                    - cell "tvprovider, (Directory)" [ref=e1791]:
+                      - generic [ref=e1792]:
+                        - img [ref=e1793]
+                        - link "tvprovider, (Directory)" [ref=e1798] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/tvprovider
+                          - text: tvprovider
+                    - cell "Treat type variable as undefined nullability by default" [ref=e1799]:
+                      - link "Treat type variable as undefined nullability by default" [ref=e1802] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/fc8a52b21ff07d3f2e5bf345f8425614c611ca46
+                    - cell "Feb 13, 20264 months ago" [ref=e1803]:
+                      - generic [ref=e1804]: Feb 13, 20264 months ago
+                  - row "vectordrawable, (Directory) Migrate consumer rules to keepRules source set Mar 31, 20263 months ago" [ref=e1805]:
+                    - cell "vectordrawable, (Directory)" [ref=e1806]:
+                      - generic [ref=e1807]:
+                        - img [ref=e1808]
+                        - link "vectordrawable, (Directory)" [ref=e1813] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/vectordrawable
+                          - text: vectordrawable
+                    - cell "Migrate consumer rules to keepRules source set" [ref=e1814]:
+                      - link "Migrate consumer rules to keepRules source set" [ref=e1817] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b780700e4b66ed38927ca1de28872d915b06a57c
+                    - cell "Mar 31, 20263 months ago" [ref=e1818]:
+                      - generic [ref=e1819]: Mar 31, 20263 months ago
+                  - row "versionedparcelable, (Directory) Remove or replace alanv@ in OWNERS files Apr 1, 20263 months ago" [ref=e1820]:
+                    - cell "versionedparcelable, (Directory)" [ref=e1821]:
+                      - generic [ref=e1822]:
+                        - img [ref=e1823]
+                        - link "versionedparcelable, (Directory)" [ref=e1828] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/versionedparcelable
+                          - text: versionedparcelable
+                    - cell "Remove or replace alanv@ in OWNERS files" [ref=e1829]:
+                      - link "Remove or replace alanv@ in OWNERS files" [ref=e1832] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/cf2cf4fbc162ed505b7bd22a2f3a331abb4b454e
+                    - cell "Apr 1, 20263 months ago" [ref=e1833]:
+                      - generic [ref=e1834]: Apr 1, 20263 months ago
+                  - row "viewpager, (Directory) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e1835]:
+                    - cell "viewpager, (Directory)" [ref=e1836]:
+                      - generic [ref=e1837]:
+                        - img [ref=e1838]
+                        - link "viewpager, (Directory)" [ref=e1843] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/viewpager
+                          - text: viewpager
+                    - cell "Replace build.gradle comments" [ref=e1844]:
+                      - link "Replace build.gradle comments" [ref=e1847] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e1848]:
+                      - generic [ref=e1849]: Jan 24, 20265 months ago
+                  - row "viewpager2, (Directory) Remove unnecessary OVERRIDE_DEPRECATION suppressions Mar 17, 20263 months ago" [ref=e1850]:
+                    - cell "viewpager2, (Directory)" [ref=e1851]:
+                      - generic [ref=e1852]:
+                        - img [ref=e1853]
+                        - link "viewpager2, (Directory)" [ref=e1858] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/viewpager2
+                          - text: viewpager2
+                    - cell "Remove unnecessary OVERRIDE_DEPRECATION suppressions" [ref=e1859]:
+                      - link "Remove unnecessary OVERRIDE_DEPRECATION suppressions" [ref=e1862] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/e6fda08b0457bea3ea299a743020cc11a6934869
+                    - cell "Mar 17, 20263 months ago" [ref=e1863]:
+                      - generic [ref=e1864]: Mar 17, 20263 months ago
+                  - row "wear, (Directory) Merge changes from topic \"sync-main\" into androidx-main Jun 5, 2026yesterday" [ref=e1865]:
+                    - cell "wear, (Directory)" [ref=e1866]:
+                      - generic [ref=e1867]:
+                        - img [ref=e1868]
+                        - link "wear, (Directory)" [ref=e1873] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/wear
+                          - text: wear
+                    - cell "Merge changes from topic \"sync-main\" into androidx-main" [ref=e1874]:
+                      - link "Merge changes from topic \"sync-main\" into androidx-main" [ref=e1877] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/fbcd594f78376fc9db6f6bd7bf8773f3d66e4c89
+                    - cell "Jun 5, 2026yesterday" [ref=e1878]:
+                      - generic [ref=e1879]: Jun 5, 2026yesterday
+                  - row "webgpu, (Directory) Automatic import from webgpu.kotlin_20260325_2300_RC00 Apr 8, 20262 months ago" [ref=e1880]:
+                    - cell "webgpu, (Directory)" [ref=e1881]:
+                      - generic [ref=e1882]:
+                        - img [ref=e1883]
+                        - link "webgpu, (Directory)" [ref=e1888] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/webgpu
+                          - text: webgpu
+                    - cell "Automatic import from webgpu.kotlin_20260325_2300_RC00" [ref=e1889]:
+                      - link "Automatic import from webgpu.kotlin_20260325_2300_RC00" [ref=e1892] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/d202f9617a12c5666ed34e23f62725873c8f4410
+                    - cell "Apr 8, 20262 months ago" [ref=e1893]:
+                      - generic [ref=e1894]: Apr 8, 20262 months ago
+                  - row "webkit, (Directory) Merge \"[AW] Update ExpectedNoVarySearch APIs to Address API Council F… Jun 5, 2026yesterday" [ref=e1895]:
+                    - cell "webkit, (Directory)" [ref=e1896]:
+                      - generic [ref=e1897]:
+                        - img [ref=e1898]
+                        - link "webkit, (Directory)" [ref=e1903] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/webkit
+                          - text: webkit
+                    - cell "Merge \"[AW] Update ExpectedNoVarySearch APIs to Address API Council F…" [ref=e1904]:
+                      - link "Merge \"[AW] Update ExpectedNoVarySearch APIs to Address API Council F…" [ref=e1907] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/376441d6484504ab06b31d509501205bf8cf47fd
+                    - cell "Jun 5, 2026yesterday" [ref=e1908]:
+                      - generic [ref=e1909]: Jun 5, 2026yesterday
+                  - row "window, (Directory) Update KotlinRunTestResultUnused lint baselines Jun 2, 20265 days ago" [ref=e1910]:
+                    - cell "window, (Directory)" [ref=e1911]:
+                      - generic [ref=e1912]:
+                        - img [ref=e1913]
+                        - link "window, (Directory)" [ref=e1918] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/window
+                          - text: window
+                    - cell "Update KotlinRunTestResultUnused lint baselines" [ref=e1919]:
+                      - link "Update KotlinRunTestResultUnused lint baselines" [ref=e1922] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dea539088ba22c3d09018c2fb5ecd256cc803933
+                    - cell "Jun 2, 20265 days ago" [ref=e1923]:
+                      - generic [ref=e1924]: Jun 2, 20265 days ago
+                  - row "work, (Directory) Implement WorkMetricsInfo APIs and database schema for execution hist… Jun 3, 20263 days ago" [ref=e1925]:
+                    - cell "work, (Directory)" [ref=e1926]:
+                      - generic [ref=e1927]:
+                        - img [ref=e1928]
+                        - link "work, (Directory)" [ref=e1933] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/work
+                          - text: work
+                    - cell "Implement WorkMetricsInfo APIs and database schema for execution hist…" [ref=e1934]:
+                      - link "Implement WorkMetricsInfo APIs and database schema for execution hist…" [ref=e1937] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/6dbf63bb11adff36e050810df810814def5d0087
+                    - cell "Jun 3, 20263 days ago" [ref=e1938]:
+                      - generic [ref=e1939]: Jun 3, 20263 days ago
+                  - row "xr, (Directory) Merge \"Make Session.create a suspend function\" into androidx-main Jun 6, 202612 hours ago" [ref=e1940]:
+                    - cell "xr, (Directory)" [ref=e1941]:
+                      - generic [ref=e1942]:
+                        - img [ref=e1943]
+                        - link "xr, (Directory)" [ref=e1948] [cursor=pointer]:
+                          - /url: /androidx/androidx/tree/androidx-main/xr
+                          - text: xr
+                    - cell "Merge \"Make Session.create a suspend function\" into androidx-main" [ref=e1949]:
+                      - link "Merge \"Make Session.create a suspend function\" into androidx-main" [ref=e1952] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/856695620ad0ac4cd0742e224569753ebee68999
+                    - cell "Jun 6, 202612 hours ago" [ref=e1953]:
+                      - generic [ref=e1954]: Jun 6, 202612 hours ago
+                  - row ".gitignore, (File) Add .jetskicli/ to .gitignore May 28, 2026last week" [ref=e1955]:
+                    - cell ".gitignore, (File)" [ref=e1956]:
+                      - generic [ref=e1957]:
+                        - img [ref=e1958]
+                        - link ".gitignore, (File)" [ref=e1963] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/.gitignore
+                          - text: .gitignore
+                    - cell "Add .jetskicli/ to .gitignore" [ref=e1964]:
+                      - link "Add .jetskicli/ to .gitignore" [ref=e1967] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/89c6c84d34ccb8cc685a5b164d3e8353d6443a7e
+                    - cell "May 28, 2026last week" [ref=e1968]:
+                      - generic [ref=e1969]: May 28, 2026last week
+                  - row "AGENTS.md, (File) Add documentation for project structure and output directory. Mar 30, 20263 months ago" [ref=e1970]:
+                    - cell "AGENTS.md, (File)" [ref=e1971]:
+                      - generic [ref=e1972]:
+                        - img [ref=e1973]
+                        - link "AGENTS.md, (File)" [ref=e1978] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/AGENTS.md
+                          - text: AGENTS.md
+                    - cell "Add documentation for project structure and output directory." [ref=e1979]:
+                      - link "Add documentation for project structure and output directory." [ref=e1982] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/69ef9d5ca000aa17db5b3670904e0c4636d2ea7a
+                    - cell "Mar 30, 20263 months ago" [ref=e1983]:
+                      - generic [ref=e1984]: Mar 30, 20263 months ago
+                  - row "CONTRIBUTING.md, (File) Updating instructions to use JDK 21, since it's what is required for … May 20, 2025last year" [ref=e1985]:
+                    - cell "CONTRIBUTING.md, (File)" [ref=e1986]:
+                      - generic [ref=e1987]:
+                        - img [ref=e1988]
+                        - link "CONTRIBUTING.md, (File)" [ref=e1993] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/CONTRIBUTING.md
+                          - text: CONTRIBUTING.md
+                    - cell "Updating instructions to use JDK 21, since it's what is required for …" [ref=e1994]:
+                      - link "Updating instructions to use JDK 21, since it's what is required for …" [ref=e1997] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/01cfe3bf6ca87d1d6c6eca16ad830512733483ac
+                    - cell "May 20, 2025last year" [ref=e1998]:
+                      - generic [ref=e1999]: May 20, 2025last year
+                  - row "LICENSE.txt, (File) Poke the build Apr 17, 20197 years ago" [ref=e2000]:
+                    - cell "LICENSE.txt, (File)" [ref=e2001]:
+                      - generic [ref=e2002]:
+                        - img [ref=e2003]
+                        - link "LICENSE.txt, (File)" [ref=e2008] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/LICENSE.txt
+                          - text: LICENSE.txt
+                    - cell "Poke the build" [ref=e2009]:
+                      - link "Poke the build" [ref=e2012] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/4e64160870c4c38395c2bd8997088991e94295f6
+                    - cell "Apr 17, 20197 years ago" [ref=e2013]:
+                      - generic [ref=e2014]: Apr 17, 20197 years ago
+                  - row "MOLECULE_UI_OWNERS, (File) Add MOLECULE_UI_OWNERS and add to ui and ui-test OWNERS Dec 3, 20257 months ago" [ref=e2015]:
+                    - cell "MOLECULE_UI_OWNERS, (File)" [ref=e2016]:
+                      - generic [ref=e2017]:
+                        - img [ref=e2018]
+                        - link "MOLECULE_UI_OWNERS, (File)" [ref=e2023] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/MOLECULE_UI_OWNERS
+                          - text: MOLECULE_UI_OWNERS
+                    - cell "Add MOLECULE_UI_OWNERS and add to ui and ui-test OWNERS" [ref=e2024]:
+                      - link "Add MOLECULE_UI_OWNERS and add to ui and ui-test OWNERS" [ref=e2027] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/591783500d44aef4380d64f6bacbc0142ebf9eca
+                    - cell "Dec 3, 20257 months ago" [ref=e2028]:
+                      - generic [ref=e2029]: Dec 3, 20257 months ago
+                  - row "OWNERS, (File) Add androidx-jetpad to owners Jun 2, 20265 days ago" [ref=e2030]:
+                    - cell "OWNERS, (File)" [ref=e2031]:
+                      - generic [ref=e2032]:
+                        - img [ref=e2033]
+                        - link "OWNERS, (File)" [ref=e2038] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/OWNERS
+                          - text: OWNERS
+                    - cell "Add androidx-jetpad to owners" [ref=e2039]:
+                      - link "Add androidx-jetpad to owners" [ref=e2042] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/dade3ee1d34450e6e9fdc84dd722b64987b5ef9e
+                    - cell "Jun 2, 20265 days ago" [ref=e2043]:
+                      - generic [ref=e2044]: Jun 2, 20265 days ago
+                  - 'row "PREUPLOAD.cfg, (File) Add validation of Relnote: tags in commits Apr 29, 20262 months ago" [ref=e2045]':
+                    - cell "PREUPLOAD.cfg, (File)" [ref=e2046]:
+                      - generic [ref=e2047]:
+                        - img [ref=e2048]
+                        - link "PREUPLOAD.cfg, (File)" [ref=e2053] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/PREUPLOAD.cfg
+                          - text: PREUPLOAD.cfg
+                    - 'cell "Add validation of Relnote: tags in commits" [ref=e2054]':
+                      - 'link "Add validation of Relnote: tags in commits" [ref=e2057] [cursor=pointer]':
+                        - /url: /androidx/androidx/commit/11c833850c9b27b4ac618d3dc25e102c193ebcdd
+                    - cell "Apr 29, 20262 months ago" [ref=e2058]:
+                      - generic [ref=e2059]: Apr 29, 20262 months ago
+                  - row "README.md, (File) Update the build to use develocity at new address Apr 15, 20262 months ago" [ref=e2060]:
+                    - cell "README.md, (File)" [ref=e2061]:
+                      - generic [ref=e2062]:
+                        - img [ref=e2063]
+                        - link "README.md, (File)" [ref=e2068] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/README.md
+                          - text: README.md
+                    - cell "Update the build to use develocity at new address" [ref=e2069]:
+                      - link "Update the build to use develocity at new address" [ref=e2072] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/31d2f1a05f9b0d9f0dd08c71fb17b8109af3eb8a
+                    - cell "Apr 15, 20262 months ago" [ref=e2073]:
+                      - generic [ref=e2074]: Apr 15, 20262 months ago
+                  - row "TAG_OWNERS, (File) Add TAG owners Apr 3, 20262 months ago" [ref=e2075]:
+                    - cell "TAG_OWNERS, (File)" [ref=e2076]:
+                      - generic [ref=e2077]:
+                        - img [ref=e2078]
+                        - link "TAG_OWNERS, (File)" [ref=e2083] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/TAG_OWNERS
+                          - text: TAG_OWNERS
+                    - cell "Add TAG owners" [ref=e2084]:
+                      - link "Add TAG owners" [ref=e2087] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/04e9fef95868a226f7c6f3320d38fb3d0de23da8
+                    - cell "Apr 3, 20262 months ago" [ref=e2088]:
+                      - generic [ref=e2089]: Apr 3, 20262 months ago
+                  - row "TEXT_OWNERS, (File) Remove folks who no longer work on AndroidX Nov 14, 20257 months ago" [ref=e2090]:
+                    - cell "TEXT_OWNERS, (File)" [ref=e2091]:
+                      - generic [ref=e2092]:
+                        - img [ref=e2093]
+                        - link "TEXT_OWNERS, (File)" [ref=e2098] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/TEXT_OWNERS
+                          - text: TEXT_OWNERS
+                    - cell "Remove folks who no longer work on AndroidX" [ref=e2099]:
+                      - link "Remove folks who no longer work on AndroidX" [ref=e2102] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/17e368dca3621d3415c1440b30b114525d99eaa4
+                    - cell "Nov 14, 20257 months ago" [ref=e2103]:
+                      - generic [ref=e2104]: Nov 14, 20257 months ago
+                  - row "build.gradle, (File) Replace build.gradle comments Jan 24, 20265 months ago" [ref=e2105]:
+                    - cell "build.gradle, (File)" [ref=e2106]:
+                      - generic [ref=e2107]:
+                        - img [ref=e2108]
+                        - link "build.gradle, (File)" [ref=e2113] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/build.gradle
+                          - text: build.gradle
+                    - cell "Replace build.gradle comments" [ref=e2114]:
+                      - link "Replace build.gradle comments" [ref=e2117] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/0012d5520a519311784de40b9bfedef785823d1a
+                    - cell "Jan 24, 20265 months ago" [ref=e2118]:
+                      - generic [ref=e2119]: Jan 24, 20265 months ago
+                  - row "cleanBuild.sh, (File) assembleDebug -> assembleRelease May 8, 20215 years ago" [ref=e2120]:
+                    - cell "cleanBuild.sh, (File)" [ref=e2121]:
+                      - generic [ref=e2122]:
+                        - img [ref=e2123]
+                        - link "cleanBuild.sh, (File)" [ref=e2128] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/cleanBuild.sh
+                          - text: cleanBuild.sh
+                    - cell "assembleDebug -> assembleRelease" [ref=e2129]:
+                      - link "assembleDebug -> assembleRelease" [ref=e2132] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/6c1bd596c5ebfd37f2f0b6ae0db0b57a8ae9bc09
+                    - cell "May 8, 20215 years ago" [ref=e2133]:
+                      - generic [ref=e2134]: May 8, 20215 years ago
+                  - row "code-review.md, (File) Extend code-review etiquette Mar 25, 20206 years ago" [ref=e2135]:
+                    - cell "code-review.md, (File)" [ref=e2136]:
+                      - generic [ref=e2137]:
+                        - img [ref=e2138]
+                        - link "code-review.md, (File)" [ref=e2143] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/code-review.md
+                          - text: code-review.md
+                    - cell "Extend code-review etiquette" [ref=e2144]:
+                      - link "Extend code-review etiquette" [ref=e2147] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/56884294011dc9eacb8fc5c2ec309b34a5cebb98
+                    - cell "Mar 25, 20206 years ago" [ref=e2148]:
+                      - generic [ref=e2149]: Mar 25, 20206 years ago
+                  - row "gradle.properties, (File) Support minor API levels in compile SDK configuration May 13, 20263 weeks ago" [ref=e2150]:
+                    - cell "gradle.properties, (File)" [ref=e2151]:
+                      - generic [ref=e2152]:
+                        - img [ref=e2153]
+                        - link "gradle.properties, (File)" [ref=e2158] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/gradle.properties
+                          - text: gradle.properties
+                    - cell "Support minor API levels in compile SDK configuration" [ref=e2159]:
+                      - link "Support minor API levels in compile SDK configuration" [ref=e2162] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/81266c100b82d4ac14da033776c3ef8890e242f3
+                    - cell "May 13, 20263 weeks ago" [ref=e2163]:
+                      - generic [ref=e2164]: May 13, 20263 weeks ago
+                  - row "gradlew, (File) Remove unused build metrics generation May 5, 2026last month" [ref=e2165]:
+                    - cell "gradlew, (File)" [ref=e2166]:
+                      - generic [ref=e2167]:
+                        - img [ref=e2168]
+                        - link "gradlew, (File)" [ref=e2173] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/gradlew
+                          - text: gradlew
+                    - cell "Remove unused build metrics generation" [ref=e2174]:
+                      - link "Remove unused build metrics generation" [ref=e2177] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/a62c6d58d0050f3c2f7c8ad537bb98fdcdbbe2e5
+                    - cell "May 5, 2026last month" [ref=e2178]:
+                      - generic [ref=e2179]: May 5, 2026last month
+                  - row "libraryversions.toml, (File) Merge \"Bump RC and Glance Wear versions\" into androidx-main Jun 6, 202614 hours ago" [ref=e2180]:
+                    - cell "libraryversions.toml, (File)" [ref=e2181]:
+                      - generic [ref=e2182]:
+                        - img [ref=e2183]
+                        - link "libraryversions.toml, (File)" [ref=e2188] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/libraryversions.toml
+                          - text: libraryversions.toml
+                    - cell "Merge \"Bump RC and Glance Wear versions\" into androidx-main" [ref=e2189]:
+                      - link "Merge \"Bump RC and Glance Wear versions\" into androidx-main" [ref=e2192] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/294e89e4f8132e68bd71a72ca53594b3d1e33182
+                    - cell "Jun 6, 202614 hours ago" [ref=e2193]:
+                      - generic [ref=e2194]: Jun 6, 202614 hours ago
+                  - row "license-baseline.txt, (File) Upgrade to develocity plugin 4.3 Dec 12, 20256 months ago" [ref=e2195]:
+                    - cell "license-baseline.txt, (File)" [ref=e2196]:
+                      - generic [ref=e2197]:
+                        - img [ref=e2198]
+                        - link "license-baseline.txt, (File)" [ref=e2203] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/license-baseline.txt
+                          - text: license-baseline.txt
+                    - cell "Upgrade to develocity plugin 4.3" [ref=e2204]:
+                      - link "Upgrade to develocity plugin 4.3" [ref=e2207] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/b1342ae91b0455577c2d4a97e36e7c30ecacb7df
+                    - cell "Dec 12, 20256 months ago" [ref=e2208]:
+                      - generic [ref=e2209]: Dec 12, 20256 months ago
+                  - row "settings.gradle, (File) Introduced new pdf-core submodule Jun 2, 20265 days ago" [ref=e2210]:
+                    - cell "settings.gradle, (File)" [ref=e2211]:
+                      - generic [ref=e2212]:
+                        - img [ref=e2213]
+                        - link "settings.gradle, (File)" [ref=e2218] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/settings.gradle
+                          - text: settings.gradle
+                    - cell "Introduced new pdf-core submodule" [ref=e2219]:
+                      - link "Introduced new pdf-core submodule" [ref=e2222] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/617001cdec098f8e47ab6812a4c040a64c188bd5
+                    - cell "Jun 2, 20265 days ago" [ref=e2223]:
+                      - generic [ref=e2224]: Jun 2, 20265 days ago
+                  - row "studiow, (File) Remove profiling/tracing setup from studiow. May 28, 2026last week" [ref=e2225]:
+                    - cell "studiow, (File)" [ref=e2226]:
+                      - generic [ref=e2227]:
+                        - img [ref=e2228]
+                        - link "studiow, (File)" [ref=e2233] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/studiow
+                          - text: studiow
+                    - cell "Remove profiling/tracing setup from studiow." [ref=e2234]:
+                      - link "Remove profiling/tracing setup from studiow." [ref=e2237] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/4d24c579834db46a52abd203e050c1cd5d8372ba
+                    - cell "May 28, 2026last week" [ref=e2238]:
+                      - generic [ref=e2239]: May 28, 2026last week
+                  - row "updateAbi.log, (File) updating compose to beta02 Mar 18, 20263 months ago" [ref=e2240]:
+                    - cell "updateAbi.log, (File)" [ref=e2241]:
+                      - generic [ref=e2242]:
+                        - img [ref=e2243]
+                        - link "updateAbi.log, (File)" [ref=e2248] [cursor=pointer]:
+                          - /url: /androidx/androidx/blob/androidx-main/updateAbi.log
+                          - text: updateAbi.log
+                    - cell "updating compose to beta02" [ref=e2249]:
+                      - link "updating compose to beta02" [ref=e2252] [cursor=pointer]:
+                        - /url: /androidx/androidx/commit/f7d93b015ca57a5d58d530abd04bad57e54af82a
+                    - cell "Mar 18, 20263 months ago" [ref=e2253]:
+                      - generic [ref=e2254]: Mar 18, 20263 months ago
+            - generic [ref=e2256]:
+              - generic [ref=e2257]:
+                - heading "Repository files navigation" [level=2] [ref=e2258]
+                - navigation "Repository files" [ref=e2259]:
+                  - list [ref=e2260]:
+                    - listitem [ref=e2261]:
+                      - link "README" [ref=e2262] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2263]: README
+                    - listitem [ref=e2264]:
+                      - link "Code of conduct" [ref=e2265] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2266]: Code of conduct
+                    - listitem [ref=e2267]:
+                      - link "Contributing" [ref=e2268] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2269]: Contributing
+                    - listitem [ref=e2270]:
+                      - link "Apache-2.0 license" [ref=e2271] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2272]: Apache-2.0 license
+                    - listitem [ref=e2273]:
+                      - link "License" [ref=e2274] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2275]: License
+                    - listitem [ref=e2276]:
+                      - link "Security" [ref=e2277] [cursor=pointer]:
+                        - /url: "#"
+                        - generic [ref=e2278]: Security
+                - button "Outline" [ref=e2279] [cursor=pointer]:
+                  - img [ref=e2280]
+              - article [ref=e2283]:
+                - generic [ref=e2284]:
+                  - heading "Android Jetpack" [level=1] [ref=e2285]
+                  - 'link "Permalink: Android Jetpack" [ref=e2286] [cursor=pointer]':
+                    - /url: "#android-jetpack"
+                    - img [ref=e2287]
+                - paragraph [ref=e2289]:
+                  - link "Revved up by Develocity" [ref=e2290] [cursor=pointer]:
+                    - /url: https://androidx.develocity.cloud
+                    - img "Revved up by Develocity" [ref=e2291]
+                - paragraph [ref=e2292]: Jetpack is a suite of libraries, tools, and guidance to help developers write high-quality apps easier. These components help you follow best practices, free you from writing boilerplate code, and simplify complex tasks, so you can focus on the code you care about.
+                - paragraph [ref=e2293]:
+                  - text: Jetpack comprises the
+                  - code [ref=e2294]: androidx.*
+                  - text: package libraries, unbundled from the platform APIs. This means that it offers backward compatibility and is updated more frequently than the Android platform, making sure you always have access to the latest and greatest versions of the Jetpack components.
+                - paragraph [ref=e2295]:
+                  - text: Our official AARs and JARs binaries are distributed through
+                  - link "Google Maven" [ref=e2296] [cursor=pointer]:
+                    - /url: https://maven.google.com
+                  - text: .
+                - paragraph [ref=e2297]:
+                  - text: You can learn more about using it from
+                  - link "Android Jetpack landing page" [ref=e2298] [cursor=pointer]:
+                    - /url: https://developer.android.com/jetpack
+                  - text: .
+                - generic [ref=e2299]:
+                  - heading "Contribution Guide" [level=1] [ref=e2300]
+                  - 'link "Permalink: Contribution Guide" [ref=e2301] [cursor=pointer]':
+                    - /url: "#contribution-guide"
+                    - img [ref=e2302]
+                - paragraph [ref=e2304]:
+                  - text: For contributions via GitHub, see the
+                  - link "GitHub Contribution Guide" [ref=e2305] [cursor=pointer]:
+                    - /url: /androidx/androidx/blob/androidx-main/CONTRIBUTING.md
+                  - text: .
+                - paragraph [ref=e2306]: "Note: The contributions workflow via GitHub is currently experimental - only contributions to the following projects are being accepted at this time:"
+                - list [ref=e2307]:
+                  - listitem [ref=e2308]:
+                    - link "Activity" [ref=e2309] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/activity
+                  - listitem [ref=e2310]:
+                    - link "AppCompat" [ref=e2311] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/appcompat
+                  - listitem [ref=e2312]:
+                    - link "Biometric" [ref=e2313] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/biometric
+                  - listitem [ref=e2314]:
+                    - link "Collection" [ref=e2315] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/collection
+                  - listitem [ref=e2316]:
+                    - link "Compose Runtime" [ref=e2317] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/compose/runtime
+                  - listitem [ref=e2318]:
+                    - link "Core" [ref=e2319] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/core
+                  - listitem [ref=e2320]:
+                    - link "DataStore" [ref=e2321] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/datastore
+                  - listitem [ref=e2322]:
+                    - link "Fragment" [ref=e2323] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/fragment
+                  - listitem [ref=e2324]:
+                    - link "Lifecycle" [ref=e2325] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/lifecycle
+                  - listitem [ref=e2326]:
+                    - link "Navigation" [ref=e2327] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/navigation
+                  - listitem [ref=e2328]:
+                    - link "Paging" [ref=e2329] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/paging
+                  - listitem [ref=e2330]:
+                    - link "Room" [ref=e2331] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/room
+                  - listitem [ref=e2332]:
+                    - link "WorkManager" [ref=e2333] [cursor=pointer]:
+                      - /url: /androidx/androidx/blob/androidx-main/work
+                - generic [ref=e2334]:
+                  - heading "Code Review Etiquette" [level=2] [ref=e2335]
+                  - 'link "Permalink: Code Review Etiquette" [ref=e2336] [cursor=pointer]':
+                    - /url: "#code-review-etiquette"
+                    - img [ref=e2337]
+                - paragraph [ref=e2339]:
+                  - text: When contributing to Jetpack, follow the
+                  - link "code review etiquette" [ref=e2340] [cursor=pointer]:
+                    - /url: /androidx/androidx/blob/androidx-main/code-review.md
+                  - text: .
+                - generic [ref=e2341]:
+                  - heading "Accepted Types of Contributions" [level=2] [ref=e2342]
+                  - 'link "Permalink: Accepted Types of Contributions" [ref=e2343] [cursor=pointer]':
+                    - /url: "#accepted-types-of-contributions"
+                    - img [ref=e2344]
+                - list [ref=e2346]:
+                  - listitem [ref=e2347]:
+                    - text: Bug fixes - needs a corresponding bug report in the
+                    - link "Android Issue Tracker" [ref=e2348] [cursor=pointer]:
+                      - /url: https://issuetracker.google.com/issues/new?component=192731&template=842428
+                  - listitem [ref=e2349]: Each bug fix is expected to come with tests
+                  - listitem [ref=e2350]: Fixing spelling errors
+                  - listitem [ref=e2351]: Updating documentation
+                  - listitem [ref=e2352]: Adding new tests to the area that is not currently covered by tests
+                  - listitem [ref=e2353]: New features to existing libraries if the feature request bug has been approved by an AndroidX team member.
+                - paragraph [ref=e2354]:
+                  - text: We
+                  - strong [ref=e2355]: are not
+                  - text: currently accepting new modules.
+                - generic [ref=e2356]:
+                  - heading "Checking Out the Code" [level=2] [ref=e2357]
+                  - 'link "Permalink: Checking Out the Code" [ref=e2358] [cursor=pointer]':
+                    - /url: "#checking-out-the-code"
+                    - img [ref=e2359]
+                - paragraph [ref=e2361]:
+                  - text: Head over to the
+                  - link "onboarding docs" [ref=e2362] [cursor=pointer]:
+                    - /url: /androidx/androidx/blob/androidx-main/docs/onboarding.md
+                  - text: to learn more about getting set up and the development workflow!
+                - generic [ref=e2363]:
+                  - heading "Continuous integration" [level=3] [ref=e2364]
+                  - 'link "Permalink: Continuous integration" [ref=e2365] [cursor=pointer]':
+                    - /url: "#continuous-integration"
+                    - img [ref=e2366]
+                - paragraph [ref=e2368]:
+                  - link "Our continuous integration system" [ref=e2369] [cursor=pointer]:
+                    - /url: https://ci.android.com/builds/branches/aosp-androidx-main/grid?
+                  - text: builds all in progress (and potentially unstable) libraries as new changes are merged. You can manually download these AARs and JARs for your experimentation.
+                - generic [ref=e2370]:
+                  - heading "Password and Contributor Agreement before making a change" [level=2] [ref=e2371]
+                  - 'link "Permalink: Password and Contributor Agreement before making a change" [ref=e2372] [cursor=pointer]':
+                    - /url: "#password-and-contributor-agreement-before-making-a-change"
+                    - img [ref=e2373]
+                - paragraph [ref=e2375]: "Before uploading your first contribution, you will need setup a password and agree to the contribution agreement:"
+                - paragraph [ref=e2376]:
+                  - text: "Generate a HTTPS password:"
+                  - link "https://android-review.googlesource.com/new-password" [ref=e2377] [cursor=pointer]:
+                    - /url: https://android-review.googlesource.com/new-password
+                - paragraph [ref=e2378]:
+                  - text: "Agree to the Google Contributor Licenses Agreement:"
+                  - link "https://android-review.googlesource.com/settings/new-agreement" [ref=e2379] [cursor=pointer]:
+                    - /url: https://android-review.googlesource.com/settings/new-agreement
+                - generic [ref=e2380]:
+                  - heading "Getting reviewed" [level=2] [ref=e2381]
+                  - 'link "Permalink: Getting reviewed" [ref=e2382] [cursor=pointer]':
+                    - /url: "#getting-reviewed"
+                    - img [ref=e2383]
+                - list [ref=e2385]:
+                  - listitem [ref=e2386]:
+                    - text: After you run repo upload, open
+                    - link "r.android.com" [ref=e2387] [cursor=pointer]:
+                      - /url: http://r.android.com
+                  - listitem [ref=e2388]: Sign in into your account (or create one if you do not have one yet)
+                  - listitem [ref=e2389]: Add an appropriate reviewer (use git log to find who did most modifications on the file you are fixing or check the OWNERS file in the project's directory)
+                - generic [ref=e2390]:
+                  - heading "Handling binary dependencies" [level=2] [ref=e2391]
+                  - 'link "Permalink: Handling binary dependencies" [ref=e2392] [cursor=pointer]':
+                    - /url: "#handling-binary-dependencies"
+                    - img [ref=e2393]
+                - paragraph [ref=e2395]:
+                  - text: AndroidX uses git to store all the binary Gradle dependencies. They are stored in
+                  - code [ref=e2396]: prebuilts/androidx/internal
+                  - text: and
+                  - code [ref=e2397]: prebuilts/androidx/external
+                  - text: directories in your checkout. All the dependencies in these directories are also available from
+                  - code [ref=e2398]: google()
+                  - text: ", or"
+                  - code [ref=e2399]: mavenCentral()
+                  - text: . We store copies of these dependencies to have hermetic builds. You can pull in
+                  - link "a new dependency using our importMaven tool" [ref=e2400] [cursor=pointer]:
+                    - /url: /androidx/androidx/blob/androidx-main/development/importMaven/README.md
+                  - text: .
+        - generic [ref=e2404]:
+          - generic [ref=e2407]:
+            - heading "About" [level=2] [ref=e2408]
+            - paragraph [ref=e2409]: Development environment for Android Jetpack extension libraries under the androidx namespace. Synchronized with Android Jetpack's primary development branch on AOSP.
+            - generic [ref=e2410]:
+              - img [ref=e2411]
+              - link "android.googlesource.com/platform/frameworks/support" [ref=e2414] [cursor=pointer]:
+                - /url: https://android.googlesource.com/platform/frameworks/support
+            - heading "Topics" [level=3] [ref=e2415]
+            - generic [ref=e2417]:
+              - link "android" [ref=e2418] [cursor=pointer]:
+                - /url: /topics/android
+              - link "library" [ref=e2419] [cursor=pointer]:
+                - /url: /topics/library
+              - link "jetpack" [ref=e2420] [cursor=pointer]:
+                - /url: /topics/jetpack
+            - heading "Resources" [level=3] [ref=e2421]
+            - link "Readme" [ref=e2423] [cursor=pointer]:
+              - /url: "#readme-ov-file"
+              - img [ref=e2424]
+              - text: Readme
+            - heading "License" [level=3] [ref=e2426]
+            - group [ref=e2427]:
+              - button "Apache-2.0, Unknown licenses found" [ref=e2428] [cursor=pointer]:
+                - img [ref=e2429]
+                - text: Apache-2.0, Unknown licenses found
+            - heading "Code of conduct" [level=3] [ref=e2431]
+            - link "Code of conduct" [ref=e2433] [cursor=pointer]:
+              - /url: "#coc-ov-file"
+              - img [ref=e2434]
+              - text: Code of conduct
+            - heading "Contributing" [level=3] [ref=e2436]
+            - link "Contributing" [ref=e2438] [cursor=pointer]:
+              - /url: "#contributing-ov-file"
+              - img [ref=e2439]
+              - text: Contributing
+            - heading "Security policy" [level=3] [ref=e2441]
+            - link "Security policy" [ref=e2443] [cursor=pointer]:
+              - /url: "#security-ov-file"
+              - img [ref=e2444]
+              - text: Security policy
+            - link "Activity" [ref=e2447] [cursor=pointer]:
+              - /url: /androidx/androidx/activity
+              - img [ref=e2448]
+              - text: Activity
+            - link "Custom properties" [ref=e2451] [cursor=pointer]:
+              - /url: /androidx/androidx/custom-properties
+              - img [ref=e2452]
+              - text: Custom properties
+            - heading "Stars" [level=3] [ref=e2454]
+            - link "6k stars" [ref=e2456] [cursor=pointer]:
+              - /url: /androidx/androidx/stargazers
+              - img [ref=e2457]
+              - strong [ref=e2459]: 6k
+              - text: stars
+            - heading "Watchers" [level=3] [ref=e2460]
+            - link "131 watching" [ref=e2462] [cursor=pointer]:
+              - /url: /androidx/androidx/watchers
+              - img [ref=e2463]
+              - strong [ref=e2465]: "131"
+              - text: watching
+            - heading "Forks" [level=3] [ref=e2466]
+            - link "1.3k forks" [ref=e2468] [cursor=pointer]:
+              - /url: /androidx/androidx/forks
+              - img [ref=e2469]
+              - strong [ref=e2471]: 1.3k
+              - text: forks
+            - link "Report repository" [ref=e2473] [cursor=pointer]:
+              - /url: /contact/report-content?content_url=https%3A%2F%2Fgithub.com%2Fandroidx%2Fandroidx&report=androidx+%28user%29
+          - generic [ref=e2475]:
+            - heading "Releases" [level=2] [ref=e2476]:
+              - link "Releases" [ref=e2477] [cursor=pointer]:
+                - /url: /androidx/androidx/releases
+            - generic [ref=e2478]: No releases published
+          - generic [ref=e2480]:
+            - heading "Packages" [level=2] [ref=e2481]:
+              - link "Packages" [ref=e2482] [cursor=pointer]:
+                - /url: /orgs/androidx/packages?repo_name=androidx
+            - generic [ref=e2483]: No packages published
+          - generic [ref=e2485]:
+            - heading "Contributors 843" [level=2] [ref=e2486]:
+              - link "Contributors 843" [ref=e2487] [cursor=pointer]:
+                - /url: /androidx/androidx/graphs/contributors
+                - text: Contributors
+                - generic "843" [ref=e2488]
+            - list [ref=e2489]:
+              - listitem [ref=e2490]:
+                - link "@liutikas" [ref=e2491] [cursor=pointer]:
+                  - /url: https://github.com/liutikas
+                  - img "@liutikas" [ref=e2492]
+              - listitem [ref=e2493]:
+                - link "@dakegu2" [ref=e2494] [cursor=pointer]:
+                  - /url: https://github.com/dakegu2
+                  - img "@dakegu2" [ref=e2495]
+              - listitem [ref=e2496]:
+                - link "@yigit" [ref=e2497] [cursor=pointer]:
+                  - /url: https://github.com/yigit
+                  - img "@yigit" [ref=e2498]
+              - listitem [ref=e2499]:
+                - link "@ianhanniballake" [ref=e2500] [cursor=pointer]:
+                  - /url: https://github.com/ianhanniballake
+                  - img "@ianhanniballake" [ref=e2501]
+              - listitem [ref=e2502]:
+                - link "@alanv" [ref=e2503] [cursor=pointer]:
+                  - /url: https://github.com/alanv
+                  - img "@alanv" [ref=e2504]
+              - listitem [ref=e2505]:
+                - link "@ChrisCraik" [ref=e2506] [cursor=pointer]:
+                  - /url: https://github.com/ChrisCraik
+                  - img "@ChrisCraik" [ref=e2507]
+              - listitem [ref=e2508]:
+                - link "@android-build-merge-worker-robot" [ref=e2509] [cursor=pointer]:
+                  - /url: https://github.com/android-build-merge-worker-robot
+                  - img "@android-build-merge-worker-robot" [ref=e2510]
+              - listitem [ref=e2511]:
+                - link "@andkulikov" [ref=e2512] [cursor=pointer]:
+                  - /url: https://github.com/andkulikov
+                  - img "@andkulikov" [ref=e2513]
+              - listitem [ref=e2514]:
+                - link "@tikurahul" [ref=e2515] [cursor=pointer]:
+                  - /url: https://github.com/tikurahul
+                  - img "@tikurahul" [ref=e2516]
+              - listitem [ref=e2517]:
+                - link "@mathjeff" [ref=e2518] [cursor=pointer]:
+                  - /url: https://github.com/mathjeff
+                  - img "@mathjeff" [ref=e2519]
+              - listitem [ref=e2520]:
+                - link "@louispf" [ref=e2521] [cursor=pointer]:
+                  - /url: https://github.com/louispf
+                  - img "@louispf" [ref=e2522]
+              - listitem [ref=e2523]:
+                - link "@dlam" [ref=e2524] [cursor=pointer]:
+                  - /url: https://github.com/dlam
+                  - img "@dlam" [ref=e2525]
+              - listitem [ref=e2526]:
+                - link "@JakeWharton" [ref=e2527] [cursor=pointer]:
+                  - /url: https://github.com/JakeWharton
+                  - img "@JakeWharton" [ref=e2528]
+              - listitem [ref=e2529]:
+                - link "@danysantiago" [ref=e2530] [cursor=pointer]:
+                  - /url: https://github.com/danysantiago
+                  - img "@danysantiago" [ref=e2531]
+            - link "+ 829 contributors" [ref=e2533] [cursor=pointer]:
+              - /url: /androidx/androidx/graphs/contributors
+          - generic [ref=e2535]:
+            - heading "Languages" [level=2] [ref=e2536]
+            - list [ref=e2545]:
+              - listitem [ref=e2546]:
+                - link "Kotlin 67.6%" [ref=e2547] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=kotlin
+                  - img [ref=e2548]
+                  - generic [ref=e2550]: Kotlin
+                  - generic [ref=e2551]: 67.6%
+              - listitem [ref=e2552]:
+                - link "Java 28.1%" [ref=e2553] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=java
+                  - img [ref=e2554]
+                  - generic [ref=e2556]: Java
+                  - generic [ref=e2557]: 28.1%
+              - listitem [ref=e2558]:
+                - link "C++ 3.8%" [ref=e2559] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=c%2B%2B
+                  - img [ref=e2560]
+                  - generic [ref=e2562]: C++
+                  - generic [ref=e2563]: 3.8%
+              - listitem [ref=e2564]:
+                - link "AIDL 0.3%" [ref=e2565] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=aidl
+                  - img [ref=e2566]
+                  - generic [ref=e2568]: AIDL
+                  - generic [ref=e2569]: 0.3%
+              - listitem [ref=e2570]:
+                - link "Python 0.1%" [ref=e2571] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=python
+                  - img [ref=e2572]
+                  - generic [ref=e2574]: Python
+                  - generic [ref=e2575]: 0.1%
+              - listitem [ref=e2576]:
+                - link "Shell 0.1%" [ref=e2577] [cursor=pointer]:
+                  - /url: /androidx/androidx/search?l=shell
+                  - img [ref=e2578]
+                  - generic [ref=e2580]: Shell
+                  - generic [ref=e2581]: 0.1%
+  - contentinfo [ref=e2583]:
+    - heading "Footer" [level=2] [ref=e2584]
+    - generic [ref=e2585]:
+      - generic [ref=e2586]:
+        - link "GitHub Homepage" [ref=e2587] [cursor=pointer]:
+          - /url: https://github.com
+          - img [ref=e2588]
+        - generic [ref=e2590]: © 2026 GitHub, Inc.
+      - navigation "Footer" [ref=e2591]:
+        - heading "Footer navigation" [level=3] [ref=e2592]
+        - list "Footer navigation" [ref=e2593]:
+          - listitem [ref=e2594]:
+            - link "Terms" [ref=e2595] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/github-terms/github-terms-of-service
+          - listitem [ref=e2596]:
+            - link "Privacy" [ref=e2597] [cursor=pointer]:
+              - /url: https://docs.github.com/site-policy/privacy-policies/github-privacy-statement
+          - listitem [ref=e2598]:
+            - link "Security" [ref=e2599] [cursor=pointer]:
+              - /url: https://github.com/security
+          - listitem [ref=e2600]:
+            - link "Status" [ref=e2601] [cursor=pointer]:
+              - /url: https://www.githubstatus.com/
+          - listitem [ref=e2602]:
+            - link "Community" [ref=e2603] [cursor=pointer]:
+              - /url: https://github.community/
+          - listitem [ref=e2604]:
+            - link "Docs" [ref=e2605] [cursor=pointer]:
+              - /url: https://docs.github.com/
+          - listitem [ref=e2606]:
+            - link "Contact" [ref=e2607] [cursor=pointer]:
+              - /url: https://support.github.com?tags=dotcom-footer
+          - listitem [ref=e2608]:
+            - button "Manage cookies" [ref=e2610] [cursor=pointer]
+          - listitem [ref=e2611]:
+            - button "Do not share my personal information" [ref=e2613] [cursor=pointer]

@@ -1,0 +1,147 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "Google Git" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - img "Google Git" [ref=e5]
+      - link "Sign in" [ref=e7] [cursor=pointer]:
+        - /url: https://accounts.google.com/AccountChooser?faa=1&continue=https://android.googlesource.com/login/platform/frameworks/support/%2B/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - link "android" [ref=e11] [cursor=pointer]:
+        - /url: /?format=HTML
+      - text: /
+      - link "platform" [ref=e12] [cursor=pointer]:
+        - /url: /platform/
+      - text: /
+      - link "frameworks" [ref=e13] [cursor=pointer]:
+        - /url: /platform/frameworks/
+      - text: /
+      - link "support" [ref=e14] [cursor=pointer]:
+        - /url: /platform/frameworks/support/
+      - text: /
+      - link "refs/heads/androidx-main" [ref=e15] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main
+      - text: /
+      - link "." [ref=e16] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/
+      - text: /
+      - link "compose" [ref=e17] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose
+      - text: /
+      - link "foundation" [ref=e18] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation
+      - text: /
+      - link "foundation" [ref=e19] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation
+      - text: /
+      - link "src" [ref=e20] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src
+      - text: /
+      - link "commonMain" [ref=e21] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain?autodive=0
+      - text: /
+      - link "kotlin" [ref=e22] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin?autodive=0
+      - text: /
+      - link "androidx" [ref=e23] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx?autodive=0
+      - text: /
+      - link "compose" [ref=e24] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose?autodive=0
+      - text: /
+      - link "foundation" [ref=e25] [cursor=pointer]:
+        - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation
+      - text: / lazy
+    - generic [ref=e26]:
+      - generic [ref=e27]: "tree: b676865248265d533252695fed57ea7d2de86adc"
+      - list [ref=e28]:
+        - listitem "Tree - grid/" [ref=e29]:
+          - link "grid/" [ref=e30] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/grid/
+        - listitem "Tree - layout/" [ref=e31]:
+          - link "layout/" [ref=e32] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/layout/
+        - listitem "Tree - staggeredgrid/" [ref=e33]:
+          - link "staggeredgrid/" [ref=e34] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/staggeredgrid/
+        - listitem "Regular file - LazyDsl.kt" [ref=e35]:
+          - link "LazyDsl.kt" [ref=e36] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyDsl.kt
+        - listitem "Regular file - LazyItemScope.kt" [ref=e37]:
+          - link "LazyItemScope.kt" [ref=e38] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyItemScope.kt
+        - listitem "Regular file - LazyItemScopeImpl.kt" [ref=e39]:
+          - link "LazyItemScopeImpl.kt" [ref=e40] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyItemScopeImpl.kt
+        - listitem "Regular file - LazyLayoutSemanticState.kt" [ref=e41]:
+          - link "LazyLayoutSemanticState.kt" [ref=e42] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyLayoutSemanticState.kt
+        - listitem "Regular file - LazyList.kt" [ref=e43]:
+          - link "LazyList.kt" [ref=e44] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyList.kt
+        - listitem "Regular file - LazyListBeyondBoundsModifier.kt" [ref=e45]:
+          - link "LazyListBeyondBoundsModifier.kt" [ref=e46] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListBeyondBoundsModifier.kt
+        - listitem "Regular file - LazyListCacheWindowStrategy.kt" [ref=e47]:
+          - link "LazyListCacheWindowStrategy.kt" [ref=e48] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListCacheWindowStrategy.kt
+        - listitem "Regular file - LazyListIntervalContent.kt" [ref=e49]:
+          - link "LazyListIntervalContent.kt" [ref=e50] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListIntervalContent.kt
+        - listitem "Regular file - LazyListItemInfo.kt" [ref=e51]:
+          - link "LazyListItemInfo.kt" [ref=e52] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListItemInfo.kt
+        - listitem "Regular file - LazyListItemProvider.kt" [ref=e53]:
+          - link "LazyListItemProvider.kt" [ref=e54] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListItemProvider.kt
+        - listitem "Regular file - LazyListLayoutInfo.kt" [ref=e55]:
+          - link "LazyListLayoutInfo.kt" [ref=e56] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListLayoutInfo.kt
+        - listitem "Regular file - LazyListMeasure.kt" [ref=e57]:
+          - link "LazyListMeasure.kt" [ref=e58] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListMeasure.kt
+        - listitem "Regular file - LazyListMeasuredItem.kt" [ref=e59]:
+          - link "LazyListMeasuredItem.kt" [ref=e60] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListMeasuredItem.kt
+        - listitem "Regular file - LazyListMeasuredItemProvider.kt" [ref=e61]:
+          - link "LazyListMeasuredItemProvider.kt" [ref=e62] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListMeasuredItemProvider.kt
+        - listitem "Regular file - LazyListMeasureResult.kt" [ref=e63]:
+          - link "LazyListMeasureResult.kt" [ref=e64] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListMeasureResult.kt
+        - listitem "Regular file - LazyListPrefetchStrategy.kt" [ref=e65]:
+          - link "LazyListPrefetchStrategy.kt" [ref=e66] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListPrefetchStrategy.kt
+        - listitem "Regular file - LazyListScrollPosition.kt" [ref=e67]:
+          - link "LazyListScrollPosition.kt" [ref=e68] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListScrollPosition.kt
+        - listitem "Regular file - LazyListScrollScope.kt" [ref=e69]:
+          - link "LazyListScrollScope.kt" [ref=e70] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListScrollScope.kt
+        - listitem "Regular file - LazyListSemantics.kt" [ref=e71]:
+          - link "LazyListSemantics.kt" [ref=e72] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListSemantics.kt
+        - listitem "Regular file - LazyListState.kt" [ref=e73]:
+          - link "LazyListState.kt" [ref=e74] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyListState.kt
+        - listitem "Regular file - LazyScopeMarker.kt" [ref=e75]:
+          - link "LazyScopeMarker.kt" [ref=e76] [cursor=pointer]:
+            - /url: /platform/frameworks/support/+/refs/heads/androidx-main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/lazy/LazyScopeMarker.kt
+  - contentinfo [ref=e77]:
+    - generic [ref=e78]:
+      - generic [ref=e79]:
+        - text: Powered by
+        - link "Gitiles" [ref=e80] [cursor=pointer]:
+          - /url: https://gerrit.googlesource.com/gitiles/
+        - text: "|"
+        - link "Privacy" [ref=e81] [cursor=pointer]:
+          - /url: https://policies.google.com/privacy
+        - text: "|"
+        - link "Terms" [ref=e82] [cursor=pointer]:
+          - /url: https://policies.google.com/terms
+      - generic [ref=e83]:
+        - link "txt" [ref=e84] [cursor=pointer]:
+          - /url: "?format=TEXT"
+        - link "json" [ref=e85] [cursor=pointer]:
+          - /url: "?format=JSON"

@@ -1,4 +1,4 @@
-import { Color, Container } from "@tur/react";
+import { Axis, Color, Container } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
 import React from "react";
 
@@ -19,19 +19,16 @@ function LazyListScroll() {
         </React.Fragment>
     ));
 
-    // biome-ignore lint/suspicious/noExplicitAny: tur_lazy_list intrinsic has no TS types in test-cases
-    const LazyList = "tur_lazy_list" as any;
-
     return (
-        <LazyList
-            axis={0}
+        <tur_lazy_list
+            axis={Axis.Vertical}
             itemCount={ITEM_COUNT}
             overscan={0}
             startIndex={0}
             queryKey={["lazy-list-scroll"]}
         >
             {children}
-        </LazyList>
+        </tur_lazy_list>
     );
 }
 

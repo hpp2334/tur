@@ -1,10 +1,9 @@
 import type {
-    Axis,
     LazyListController,
     LazyListScrollInfo,
     TurNodeHandle,
 } from "@tur/react-renderer";
-import { createLazyListController, flushSync } from "@tur/react-renderer";
+import { Axis, createLazyListController, flushSync } from "@tur/react-renderer";
 import type { ReactNode } from "react";
 import React, { useState } from "react";
 
@@ -71,7 +70,7 @@ export interface LazyColumnProps {
 export function LazyColumn(props: LazyColumnProps) {
     return (
         <LazyList
-            axis={0 as Axis}
+            axis={Axis.Vertical}
             itemCount={props.itemCount}
             overscan={props.overscan}
             renderItem={props.renderItem}
@@ -90,7 +89,7 @@ export interface LazyRowProps {
 export function LazyRow(props: LazyRowProps) {
     return (
         <LazyList
-            axis={1 as Axis}
+            axis={Axis.Horizontal}
             itemCount={props.itemCount}
             overscan={props.overscan}
             renderItem={props.renderItem}

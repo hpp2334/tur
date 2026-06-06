@@ -1,0 +1,2 @@
+[     462ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://android.googlesource.com/platform/frameworks/support/+/refs/heads/main/compose/foundation/foundation/src/commonMain/kotlin/androidx/compose/foundation/:0
+[    1054ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://android.googlesource.com/favicon.ico:0
