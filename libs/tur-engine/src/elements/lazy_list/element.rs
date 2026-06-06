@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
@@ -13,7 +15,8 @@ use tur_shared::Axis;
 pub struct LazyListElement {
     pub(crate) axis: Axis,
     pub(crate) item_count: u64,
-    pub(crate) item_extent: f64,
+    pub(crate) item_extents: HashMap<u64, f64>,
+    pub(crate) cumulative_offsets: Vec<f64>,
     pub(crate) overscan: u64,
     pub(crate) start_index: u64,
     pub(crate) position: ScrollPosition,
@@ -27,7 +30,8 @@ impl LazyListElement {
         LazyListElement {
             axis: Axis::Vertical,
             item_count: 0,
-            item_extent: 0.0,
+            item_extents: HashMap::new(),
+            cumulative_offsets: Vec::new(),
             overscan: 3,
             start_index: 0,
             position: ScrollPosition::new(),
@@ -45,19 +49,52 @@ impl LazyListElement {
         self.item_count
     }
 
-    pub fn item_extent(&self) -> f64 {
-        self.item_extent
+    pub fn estimate_extent(&self) -> f64 {
+        if self.item_extents.is_empty() {
+            return 50.0;
+        }
+        let sum: f64 = self.item_extents.values().sum();
+        let avg = sum / self.item_extents.len() as f64;
+        if avg <= 0.0 { 50.0 } else { avg }
+    }
+
+    pub fn rebuild_cumulative(&mut self) {
+        let est = self.estimate_extent();
+        self.cumulative_offsets.clear();
+        self.cumulative_offsets.reserve(self.item_count as usize + 1);
+        self.cumulative_offsets.push(0.0);
+        let mut cum = 0.0;
+        for i in 0..self.item_count {
+            cum += self.item_extents.get(&i).copied().unwrap_or(est);
+            self.cumulative_offsets.push(cum);
+        }
+    }
+
+    pub fn cumulative_offset(&self, index: u64) -> f64 {
+        self.cumulative_offsets.get(index as usize).copied().unwrap_or(0.0)
+    }
+
+    pub fn index_for_offset(&self, offset: f64) -> u64 {
+        if offset <= 0.0 || self.cumulative_offsets.len() <= 1 {
+            return 0;
+        }
+        match self.cumulative_offsets.binary_search_by(|probe| {
+            probe.partial_cmp(&offset).unwrap_or(std::cmp::Ordering::Less)
+        }) {
+            Ok(i) => i as u64,
+            Err(i) => i.saturating_sub(1) as u64,
+        }.min(self.item_count.saturating_sub(1))
     }
 
     pub fn compute_visible_range(&self, viewport_main: f64) -> (u64, u64) {
-        if self.item_count == 0 || self.item_extent <= 0.0 {
+        if self.item_count == 0 {
             return (0, 0);
         }
         let scroll = self.position.pixels();
-        let raw_start = (scroll / self.item_extent).floor() as u64;
-        let raw_end = ((scroll + viewport_main) / self.item_extent).ceil() as u64;
-        let start = raw_start.saturating_sub(self.overscan);
-        let end = (raw_end + self.overscan).min(self.item_count.saturating_sub(1));
+        let start = self.index_for_offset(scroll);
+        let end = self.index_for_offset(scroll + viewport_main);
+        let start = start.saturating_sub(self.overscan);
+        let end = (end + self.overscan).min(self.item_count.saturating_sub(1));
         (start, end)
     }
 
@@ -86,10 +123,10 @@ impl Default for LazyListElement {
 impl ElementTrace for LazyListElement {
     fn trace_label(&self) -> String {
         format!(
-            "axis={:?} items={} extent={:.1} offset={:.1} range={}-{}",
+            "axis={:?} items={} measured={} offset={:.1} range={}-{}",
             self.axis,
             self.item_count,
-            self.item_extent,
+            self.item_extents.len(),
             self.position.pixels(),
             self.reported_start,
             self.reported_end,
@@ -112,11 +149,6 @@ impl ElementOnUpdate for LazyListElement {
             "itemCount" => {
                 if let Some(n) = value.as_number() {
                     self.item_count = n as u64;
-                }
-            }
-            "itemExtent" => {
-                if let Some(n) = value.as_number() {
-                    self.item_extent = n;
                 }
             }
             "overscan" => {
@@ -142,7 +174,6 @@ impl ElementOnUpdate for LazyListElement {
         match key.to_std_string_escaped().as_str() {
             "axis" => self.axis = Axis::Vertical,
             "itemCount" => self.item_count = 0,
-            "itemExtent" => self.item_extent = 0.0,
             "overscan" => self.overscan = 3,
             "startIndex" => self.start_index = 0,
             "controller" => self.controller = None,

@@ -71,7 +71,6 @@ function LazyColumnView() {
     return (
         <LazyColumn
             itemCount={ITEM_COUNT}
-            itemHeight={ITEM_HEIGHT}
             overscan={5}
             renderItem={(index) => (
                 <Container
@@ -110,7 +109,6 @@ function LazyRowView() {
     return (
         <LazyRow
             itemCount={ITEM_COUNT}
-            itemWidth={ITEM_WIDTH}
             overscan={3}
             renderItem={(index) => (
                 <Container

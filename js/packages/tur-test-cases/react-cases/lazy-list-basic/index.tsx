@@ -20,7 +20,6 @@ function LazyListBasic() {
         <LazyList
             axis={0}
             itemCount={ITEM_COUNT}
-            itemExtent={ITEM_HEIGHT}
             overscan={0}
             startIndex={0}
             queryKey={["lazy-list-basic"]}

@@ -25,14 +25,37 @@ impl ElementLayout for LazyListElement {
         };
         let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
 
-        if self.item_extent <= 0.0 || self.item_count == 0 {
+        if self.item_count == 0 {
             self.position.apply_dimensions(viewport, Size::ZERO);
             self.position.set_extents(0.0, 0.0);
             self.update_controller_metrics();
             return viewport;
         }
 
-        let total_main = self.item_count as f64 * self.item_extent;
+        let child_cs = match self.axis {
+            tur_shared::Axis::Vertical => Constraints {
+                min_width: viewport.width,
+                max_width: viewport.width,
+                min_height: 0.0,
+                max_height: f64::INFINITY,
+            },
+            tur_shared::Axis::Horizontal => Constraints {
+                min_width: 0.0,
+                max_width: f64::INFINITY,
+                min_height: viewport.height,
+                max_height: viewport.height,
+            },
+        };
+
+        for (i, &child_id) in children.iter().enumerate() {
+            let size = cx.layout_child(child_id, &child_cs);
+            let logical_index = self.start_index + i as u64;
+            self.item_extents.insert(logical_index, self.axis.main(size));
+        }
+
+        self.rebuild_cumulative();
+        let total_main = self.cumulative_offset(self.item_count);
+
         let content = match self.axis {
             tur_shared::Axis::Vertical => Size::new(viewport.width, total_main),
             tur_shared::Axis::Horizontal => Size::new(total_main, viewport.height),
@@ -41,25 +64,6 @@ impl ElementLayout for LazyListElement {
         let max_scroll = (total_main - self.axis.main(viewport)).max(0.0);
         self.position.set_extents(0.0, max_scroll);
 
-        let child_cs = match self.axis {
-            tur_shared::Axis::Vertical => Constraints {
-                min_width: viewport.width,
-                max_width: viewport.width,
-                min_height: self.item_extent,
-                max_height: self.item_extent,
-            },
-            tur_shared::Axis::Horizontal => Constraints {
-                min_width: self.item_extent,
-                max_width: self.item_extent,
-                min_height: viewport.height,
-                max_height: viewport.height,
-            },
-        };
-
-        for &child_id in children {
-            cx.layout_child(child_id, &child_cs);
-        }
-
         self.update_controller_metrics();
         viewport
     }
@@ -67,8 +71,8 @@ impl ElementLayout for LazyListElement {
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         let scroll_offset = self.position.pixels();
         for (i, &child_id) in children.iter().enumerate() {
-            let logical_index = (self.start_index + i as u64) as f64;
-            let main_pos = logical_index * self.item_extent - scroll_offset;
+            let logical_index = self.start_index + i as u64;
+            let main_pos = self.cumulative_offset(logical_index) - scroll_offset;
             let offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),

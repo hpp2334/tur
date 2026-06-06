@@ -213,6 +213,11 @@ const reconciler = ReactReconciler({
 
 let _container: ReturnType<typeof reconciler.createContainer> | null = null;
 
+export function flushSync(fn: () => void): void {
+    // biome-ignore lint/suspicious/noExplicitAny: flushSyncFromReconciler is an internal API
+    (reconciler as any).flushSyncFromReconciler(fn);
+}
+
 export function renderRoot(component: React.ComponentType): TurNodeHandle {
     const root = __tur.createRoot(ctx);
     const handleError = (error: unknown) => {

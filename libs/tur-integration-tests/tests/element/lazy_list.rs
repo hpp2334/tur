@@ -97,7 +97,6 @@ fn lazy_list_element_properties() {
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
         assert_eq!(ll.item_count(), 20);
-        assert_eq!(ll.item_extent(), 50.0);
     });
 }
 

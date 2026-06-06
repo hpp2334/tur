@@ -135,7 +135,6 @@ declare module "react/jsx-runtime" {
             tur_lazy_list: RefAttributes<TurNodeHandle> & {
                 axis?: Axis;
                 itemCount?: number;
-                itemExtent?: number;
                 overscan?: number;
                 startIndex?: number;
                 controller?: object;

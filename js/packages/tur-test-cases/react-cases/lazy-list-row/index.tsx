@@ -20,7 +20,6 @@ function LazyListRow() {
         <LazyList
             axis={1}
             itemCount={ITEM_COUNT}
-            itemExtent={ITEM_WIDTH}
             overscan={0}
             startIndex={0}
             queryKey={["lazy-list-row"]}

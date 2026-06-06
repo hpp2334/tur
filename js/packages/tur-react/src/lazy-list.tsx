@@ -4,7 +4,7 @@ import type {
     LazyListScrollInfo,
     TurNodeHandle,
 } from "@tur/react-renderer";
-import { createLazyListController } from "@tur/react-renderer";
+import { createLazyListController, flushSync } from "@tur/react-renderer";
 import type { ReactNode } from "react";
 import React, { useState } from "react";
 
@@ -19,7 +19,6 @@ function rangeFrom(start: number, end: number): number[] {
 interface LazyListInternalProps {
     axis: Axis;
     itemCount: number;
-    itemExtent: number;
     overscan?: number;
     renderItem: (index: number) => ReactNode;
     queryKey?: string[];
@@ -28,7 +27,6 @@ interface LazyListInternalProps {
 function LazyList({
     axis,
     itemCount,
-    itemExtent,
     overscan = 3,
     renderItem,
     queryKey,
@@ -39,8 +37,10 @@ function LazyList({
 
     const controller = createLazyListController({
         onVisibleRangeChange: (info: LazyListScrollInfo) => {
-            setStartIndex(info.startIndex);
-            setEndIndex(info.endIndex);
+            flushSync(() => {
+                setStartIndex(info.startIndex);
+                setEndIndex(info.endIndex);
+            });
         },
     });
 
@@ -49,7 +49,6 @@ function LazyList({
             ref={(el: TurNodeHandle) => controller._attach(el, __tur.__ctx)}
             axis={axis}
             itemCount={itemCount}
-            itemExtent={itemExtent}
             overscan={overscan}
             startIndex={startIndex}
             controller={controller}
@@ -64,7 +63,6 @@ function LazyList({
 
 export interface LazyColumnProps {
     itemCount: number;
-    itemHeight: number;
     overscan?: number;
     renderItem: (index: number) => ReactNode;
     queryKey?: string[];
@@ -75,7 +73,6 @@ export function LazyColumn(props: LazyColumnProps) {
         <LazyList
             axis={0 as Axis}
             itemCount={props.itemCount}
-            itemExtent={props.itemHeight}
             overscan={props.overscan}
             renderItem={props.renderItem}
             queryKey={props.queryKey}
@@ -85,7 +82,6 @@ export function LazyColumn(props: LazyColumnProps) {
 
 export interface LazyRowProps {
     itemCount: number;
-    itemWidth: number;
     overscan?: number;
     renderItem: (index: number) => ReactNode;
     queryKey?: string[];
@@ -96,7 +92,6 @@ export function LazyRow(props: LazyRowProps) {
         <LazyList
             axis={1 as Axis}
             itemCount={props.itemCount}
-            itemExtent={props.itemWidth}
             overscan={props.overscan}
             renderItem={props.renderItem}
             queryKey={props.queryKey}
