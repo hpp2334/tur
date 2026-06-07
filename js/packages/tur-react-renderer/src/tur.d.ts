@@ -57,6 +57,11 @@ interface ScrollInfo {
     viewportDimension: number;
 }
 
+interface LazyListScrollInfo extends ScrollInfo {
+    startIndex: number;
+    endIndex: number;
+}
+
 declare class ScrollController {
     get offset(): number;
     get maxScrollExtent(): number;
@@ -68,6 +73,19 @@ declare class ScrollController {
 interface ScrollControllerOptions {
     onScroll?: (info: ScrollInfo) => void;
     initialOffset?: number;
+}
+
+declare class LazyListController {
+    get offset(): number;
+    get maxScrollExtent(): number;
+    get viewportDimension(): number;
+    jumpTo(offset: number): void;
+    _attach(handle: TurNodeHandle, ctx: unknown): void;
+}
+
+interface LazyListControllerOptions {
+    onScroll?: (info: ScrollInfo) => void;
+    onVisibleRangeChange?: (info: LazyListScrollInfo) => void;
 }
 
 declare global {
@@ -87,6 +105,7 @@ declare global {
         ): TurNodeHandle;
         createImage(ctx: unknown): TurNodeHandle;
         createScrollView(ctx: unknown): TurNodeHandle;
+        createLazyList(ctx: unknown): TurNodeHandle;
         createImageResource(ctx: unknown, data: Uint8Array): ResourceHandle;
         createSvg(ctx: unknown): TurNodeHandle;
         createSvgResource(ctx: unknown, svgString: string): ResourceHandle;
@@ -99,6 +118,10 @@ declare global {
             ctx: unknown,
             options?: ScrollControllerOptions,
         ): ScrollController;
+        createLazyListController(
+            ctx: unknown,
+            options?: LazyListControllerOptions,
+        ): LazyListController;
         setAttribute(
             ctx: unknown,
             handle: TurNodeHandle,

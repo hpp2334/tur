@@ -132,6 +132,16 @@ declare module "react/jsx-runtime" {
                 children?: React.ReactNode;
                 ref?: (el: TurNodeHandle) => void;
             };
+            tur_lazy_list: RefAttributes<TurNodeHandle> & {
+                axis?: Axis;
+                itemCount?: number;
+                overscan?: number;
+                startIndex?: number;
+                controller?: object;
+                queryKey?: string[];
+                children?: React.ReactNode;
+                ref?: (el: TurNodeHandle) => void;
+            };
         }
     }
 }

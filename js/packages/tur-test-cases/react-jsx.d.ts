@@ -1,4 +1,5 @@
 import type {
+    Axis,
     BoxFit,
     Color,
     CrossAxisAlignment,
@@ -111,6 +112,23 @@ declare module "react/jsx-runtime" {
                 height?: number;
                 fit?: BoxFit;
                 queryKey?: string[];
+            };
+            tur_scroll_view: {
+                axis?: Axis;
+                controller?: object;
+                queryKey?: string[];
+                children?: React.ReactNode;
+                ref?: (el: TurNodeHandle) => void;
+            };
+            tur_lazy_list: {
+                axis?: Axis;
+                itemCount?: number;
+                overscan?: number;
+                startIndex?: number;
+                controller?: object;
+                queryKey?: string[];
+                children?: React.ReactNode;
+                ref?: (el: TurNodeHandle) => void;
             };
         }
     }

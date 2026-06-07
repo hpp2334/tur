@@ -3,6 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createScrollController,
     Expanded,
     Positioned,
     Row,
@@ -11,7 +12,6 @@ import {
     Stack,
     Text,
 } from "@tur/react";
-import { createScrollController } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
 import React, { useState } from "react";
 
@@ -65,7 +65,6 @@ const ITEM_HEIGHT = 56;
 const VIEWPORT_WIDTH = 400;
 const HEADER_HEIGHT = 40;
 const SCROLLBAR_WIDTH = 8;
-const SCROLLBAR_TRACK_COLOR = Color.rgb(51, 65, 85);
 const SCROLLBAR_THUMB_COLOR = Color.rgb(148, 163, 184);
 
 function ScrollList() {
@@ -74,7 +73,11 @@ function ScrollList() {
     const [viewportDim, setViewportDim] = useState(1);
 
     const controller = createScrollController({
-        onScroll: (info) => {
+        onScroll: (info: {
+            offset: number;
+            maxExtent: number;
+            viewportDimension: number;
+        }) => {
             setScrollOffset(info.offset);
             setMaxExtent(info.maxExtent);
             setViewportDim(info.viewportDimension);
@@ -147,10 +150,7 @@ function ScrollList() {
                             ))}
                         </Column>
                     </ScrollView>
-                    <Positioned
-                        right={4}
-                        top={thumbTop}
-                    >
+                    <Positioned right={4} top={thumbTop}>
                         <Container
                             width={SCROLLBAR_WIDTH}
                             height={thumbHeight}

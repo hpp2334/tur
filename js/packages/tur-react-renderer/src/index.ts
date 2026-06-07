@@ -14,12 +14,16 @@ export type { Offset } from "./generated/Offset";
 export type { Size } from "./generated/Size";
 export { StackFit } from "./generated/StackFit";
 export { createImageResource } from "./image";
+export { createLazyListController } from "./lazy-list-controller";
 export type { TurInstance } from "./renderer";
-export { renderRoot } from "./renderer";
-export { createSvgResource } from "./svg";
+export { flushSync, renderRoot } from "./renderer";
 export { createScrollController } from "./scroll-controller";
+export { createSvgResource } from "./svg";
 export { createTextEditingController } from "./text-controller";
 export type {
+    LazyListController,
+    LazyListControllerOptions,
+    LazyListScrollInfo,
     ResourceHandle,
     ScrollController,
     ScrollControllerOptions,

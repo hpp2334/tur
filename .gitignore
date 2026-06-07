@@ -46,3 +46,4 @@ logs/
 
 # Playwright test results
 test-results/
+.playwright-mcp/

@@ -14,8 +14,8 @@ use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
 use crate::elements::{
     ContainerElement, EditableTextElement, FlexElement, FlexItemElement,
-    FocusableElement, ImageElement, ParagraphElement, PointerInteractElement,
-    PositionedElement, ScrollViewElement, StackElement,
+    FocusableElement, ImageElement, LazyListController, LazyListElement, ParagraphElement,
+    PointerInteractElement, PositionedElement, ScrollViewElement, StackElement,
 };
 
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
@@ -107,6 +107,19 @@ pub(crate) fn tur_create_scroll_view(
     )
 }
 
+pub(crate) fn tur_create_lazy_list(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    create_element(
+        args,
+        context,
+        AnyElement::with_wheel(LazyListElement::new())
+            .with_js_callback_emitter::<LazyListElement>(),
+    )
+}
+
 pub(crate) fn tur_create_pointer_interact(
     _this: &JsValue,
     args: &[JsValue],
@@ -195,6 +208,21 @@ pub(crate) fn tur_create_scroll_controller(
         context,
     )?;
     let obj = ScrollController::from_data(data, context)?;
+    Ok(obj.upcast().clone().into())
+}
+
+pub(crate) fn tur_create_lazy_list_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let data = LazyListController::data_constructor(
+        &JsValue::undefined(),
+        &args[1..],
+        context,
+    )?;
+    let obj = LazyListController::from_data(data, context)?;
     Ok(obj.upcast().clone().into())
 }
 
