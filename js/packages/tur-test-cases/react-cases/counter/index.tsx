@@ -1,4 +1,5 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
@@ -37,19 +38,13 @@ function Counter() {
                                     height={44}
                                     borderRadius={8}
                                     color={Color.hex("#6366f1")}
+                                    alignment={Alignment.Center}
                                 >
-                                    <Row
-                                        mainAlignment={MainAxisAlignment.Center}
-                                        crossAlignment={
-                                            CrossAxisAlignment.Center
-                                        }
-                                    >
-                                        <Text
-                                            content="+1"
-                                            fontSize={18}
-                                            color={Color.hex("#ffffff")}
-                                        />
-                                    </Row>
+                                    <Text
+                                        content="+1"
+                                        fontSize={18}
+                                        color={Color.hex("#ffffff")}
+                                    />
                                 </Container>
                             }
                         />

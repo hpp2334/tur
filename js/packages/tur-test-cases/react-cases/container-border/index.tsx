@@ -1,4 +1,4 @@
-import { BorderPosition, Container, SizedBox } from "@tur/react";
+import { Alignment, BorderPosition, Container, Text } from "@tur/react";
 import { Color, renderRoot } from "@tur/react-renderer";
 
 function ContainerBorder() {
@@ -12,8 +12,9 @@ function ContainerBorder() {
             borderWidth={2}
             borderRadius={8}
             borderPosition={BorderPosition.Inside}
+            alignment={Alignment.Center}
         >
-            <SizedBox width={100} height={100} />
+            <Text content="Border" fontSize={16} color={Color.hex("#333333")} />
         </Container>
     );
 }

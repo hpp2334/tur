@@ -1,4 +1,5 @@
 import type {
+    Alignment,
     Axis,
     BorderPosition,
     BoxFit,
@@ -36,6 +37,7 @@ declare module "react/jsx-runtime" {
             };
             tur_stack: RefAttributes<TurNodeHandle> & {
                 fit?: StackFit;
+                alignment?: Alignment;
                 queryKey?: string[];
                 children?: React.ReactNode;
             };
@@ -59,6 +61,7 @@ declare module "react/jsx-runtime" {
                 shadowColor?: Color;
                 shadowOffset?: [number, number];
                 shadowBlur?: number;
+                alignment?: Alignment;
                 queryKey?: string[];
                 children?: React.ReactNode;
             };

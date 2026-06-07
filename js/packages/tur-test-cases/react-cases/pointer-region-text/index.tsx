@@ -1,4 +1,5 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
@@ -22,6 +23,7 @@ function PointerRegionText() {
                         width={100}
                         height={50}
                         color={Color.hex("#cccccc")}
+                        alignment={Alignment.Center}
                     >
                         <Text content={state} queryKey={["region-text"]} />
                     </Container>

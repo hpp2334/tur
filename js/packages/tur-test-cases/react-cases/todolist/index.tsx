@@ -1,4 +1,5 @@
 import {
+    Alignment,
     BorderPosition,
     Column,
     Container,
@@ -44,13 +45,9 @@ function Checkbox(props: { checked: boolean }) {
                 borderWidth={2}
                 borderColor={Colors.SUCCESS}
                 borderPosition={BorderPosition.Inside}
+                alignment={Alignment.Center}
             >
-                <Row
-                    mainAlignment={MainAxisAlignment.Center}
-                    crossAlignment={CrossAxisAlignment.Center}
-                >
-                    <Text content="v" fontSize={12} color={Colors.TEXT_WHITE} />
-                </Row>
+                <Text content="v" fontSize={12} color={Colors.TEXT_WHITE} />
             </Container>
         );
     }
@@ -117,19 +114,13 @@ function TodoItemRow(props: {
                                     height={28}
                                     borderRadius={6}
                                     color={Colors.DANGER_LIGHT}
+                                    alignment={Alignment.Center}
                                 >
-                                    <Row
-                                        mainAlignment={MainAxisAlignment.Center}
-                                        crossAlignment={
-                                            CrossAxisAlignment.Center
-                                        }
-                                    >
-                                        <Text
-                                            content="x"
-                                            fontSize={16}
-                                            color={Colors.DANGER}
-                                        />
-                                    </Row>
+                                    <Text
+                                        content="x"
+                                        fontSize={16}
+                                        color={Colors.DANGER}
+                                    />
                                 </Container>
                             }
                         />
@@ -173,17 +164,13 @@ function DetailPanel(props: { todo: Todo; onClose: () => void }) {
                                 height={28}
                                 borderRadius={6}
                                 color={Colors.PRIMARY_LIGHT}
+                                alignment={Alignment.Center}
                             >
-                                <Row
-                                    mainAlignment={MainAxisAlignment.Center}
-                                    crossAlignment={CrossAxisAlignment.Center}
-                                >
-                                    <Text
-                                        content="x"
-                                        fontSize={14}
-                                        color={Colors.TEXT_SECONDARY}
-                                    />
-                                </Row>
+                                <Text
+                                    content="x"
+                                    fontSize={14}
+                                    color={Colors.TEXT_SECONDARY}
+                                />
                             </Container>
                         }
                     />
@@ -278,23 +265,15 @@ function AddTaskModal(props: {
                                             height={28}
                                             borderRadius={6}
                                             color={Colors.PRIMARY_LIGHT}
+                                            alignment={Alignment.Center}
                                         >
-                                            <Row
-                                                mainAlignment={
-                                                    MainAxisAlignment.Center
+                                            <Text
+                                                content="x"
+                                                fontSize={14}
+                                                color={
+                                                    Colors.TEXT_SECONDARY
                                                 }
-                                                crossAlignment={
-                                                    CrossAxisAlignment.Center
-                                                }
-                                            >
-                                                <Text
-                                                    content="x"
-                                                    fontSize={14}
-                                                    color={
-                                                        Colors.TEXT_SECONDARY
-                                                    }
-                                                />
-                                            </Row>
+                                            />
                                         </Container>
                                     }
                                 />
@@ -359,24 +338,15 @@ function AddTaskModal(props: {
                                                 BorderPosition.Inside
                                             }
                                             padding={8}
+                                            alignment={Alignment.Center}
                                         >
-                                            <Row
-                                                mainAlignment={
-                                                    MainAxisAlignment.Center
+                                            <Text
+                                                content="Cancel"
+                                                fontSize={14}
+                                                color={
+                                                    Colors.TEXT_SECONDARY
                                                 }
-                                                crossAlignment={
-                                                    CrossAxisAlignment.Center
-                                                }
-                                                mainAxisSize={MainAxisSize.Min}
-                                            >
-                                                <Text
-                                                    content="Cancel"
-                                                    fontSize={14}
-                                                    color={
-                                                        Colors.TEXT_SECONDARY
-                                                    }
-                                                />
-                                            </Row>
+                                            />
                                         </Container>
                                     }
                                 />
@@ -393,26 +363,17 @@ function AddTaskModal(props: {
                                                     : Colors.BORDER
                                             }
                                             padding={8}
+                                            alignment={Alignment.Center}
                                         >
-                                            <Row
-                                                mainAlignment={
-                                                    MainAxisAlignment.Center
+                                            <Text
+                                                content="Add Task"
+                                                fontSize={14}
+                                                color={
+                                                    canAdd
+                                                        ? Colors.TEXT_WHITE
+                                                        : Colors.TEXT_MUTED
                                                 }
-                                                crossAlignment={
-                                                    CrossAxisAlignment.Center
-                                                }
-                                                mainAxisSize={MainAxisSize.Min}
-                                            >
-                                                <Text
-                                                    content="Add Task"
-                                                    fontSize={14}
-                                                    color={
-                                                        canAdd
-                                                            ? Colors.TEXT_WHITE
-                                                            : Colors.TEXT_MUTED
-                                                    }
-                                                />
-                                            </Row>
+                                            />
                                         </Container>
                                     }
                                 />
@@ -486,26 +447,15 @@ function TodoList() {
                                                     borderRadius={8}
                                                     color={Colors.PRIMARY}
                                                     padding={8}
+                                                    alignment={Alignment.Center}
                                                 >
-                                                    <Row
-                                                        mainAlignment={
-                                                            MainAxisAlignment.Center
+                                                    <Text
+                                                        content="+ New Task"
+                                                        fontSize={14}
+                                                        color={
+                                                            Colors.TEXT_WHITE
                                                         }
-                                                        crossAlignment={
-                                                            CrossAxisAlignment.Center
-                                                        }
-                                                        mainAxisSize={
-                                                            MainAxisSize.Min
-                                                        }
-                                                    >
-                                                        <Text
-                                                            content="+ New Task"
-                                                            fontSize={14}
-                                                            color={
-                                                                Colors.TEXT_WHITE
-                                                            }
-                                                        />
-                                                    </Row>
+                                                    />
                                                 </Container>
                                             }
                                         />

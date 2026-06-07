@@ -15,6 +15,7 @@ export type {
     TurNodeHandle,
 } from "@tur/react-renderer";
 export {
+    Alignment,
     Axis,
     BorderPosition,
     BoxFit,

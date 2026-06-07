@@ -1,4 +1,5 @@
 import type {
+    Alignment as AlignmentType,
     Axis,
     BorderPosition,
     FlexFit,
@@ -10,6 +11,7 @@ import type {
     TurNodeHandle,
 } from "@tur/react-renderer";
 import {
+    Alignment,
     BoxFit,
     type Color,
     CrossAxisAlignment,
@@ -46,6 +48,7 @@ export interface ExpandedProps extends BaseProps {
 
 export interface StackProps extends BaseProps {
     fit?: StackFit;
+    alignment?: AlignmentType;
 }
 
 export interface PositionedProps extends BaseProps {
@@ -72,6 +75,7 @@ export interface ContainerProps extends BaseProps {
     shadowColor?: Color;
     shadowOffset?: [number, number];
     shadowBlur?: number;
+    alignment?: AlignmentType;
 }
 
 export interface PointerInteractProps {
@@ -151,7 +155,7 @@ export function Expanded(props: ExpandedProps) {
 
 export function Stack(props: StackProps) {
     return (
-        <tur_stack fit={props.fit} queryKey={props.queryKey}>
+        <tur_stack fit={props.fit} alignment={props.alignment} queryKey={props.queryKey}>
             {props.children}
         </tur_stack>
     );
@@ -197,6 +201,7 @@ export function Container(props: ContainerProps) {
             shadowColor={props.shadowColor}
             shadowOffset={props.shadowOffset}
             shadowBlur={props.shadowBlur}
+            alignment={props.alignment}
             queryKey={props.queryKey}
         >
             {props.children}

@@ -1,11 +1,11 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
     CrossAxisAlignment,
     createTextEditingController,
     Input,
-    MainAxisAlignment,
     MainAxisSize,
     Row,
     SizedBox,
@@ -58,18 +58,13 @@ function InputJotai() {
                     width={80}
                     height={32}
                     borderRadius={4}
+                    alignment={Alignment.Center}
                 >
-                    <Row
-                        mainAlignment={MainAxisAlignment.Center}
-                        crossAlignment={CrossAxisAlignment.Center}
-                        mainAxisSize={MainAxisSize.Min}
-                    >
-                        <Text
-                            content={canAdd ? "Active" : "Disabled"}
-                            fontSize={14}
-                            queryKey={["button-text"]}
-                        />
-                    </Row>
+                    <Text
+                        content={canAdd ? "Active" : "Disabled"}
+                        fontSize={14}
+                        queryKey={["button-text"]}
+                    />
                 </Container>
                 <SizedBox height={8} />
                 <Text
