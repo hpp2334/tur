@@ -1,7 +1,7 @@
 export type { GradientStop, LinearGradientOptions } from "./color";
 export { Color, LinearGradient } from "./color";
-export { Axis } from "./generated/Axis";
 export { Alignment } from "./generated/Alignment";
+export { Axis } from "./generated/Axis";
 export { BorderPosition } from "./generated/BorderPosition";
 export { BoxFit } from "./generated/BoxFit";
 export { CrossAxisAlignment } from "./generated/CrossAxisAlignment";

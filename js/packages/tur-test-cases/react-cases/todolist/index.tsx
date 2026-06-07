@@ -270,9 +270,7 @@ function AddTaskModal(props: {
                                             <Text
                                                 content="x"
                                                 fontSize={14}
-                                                color={
-                                                    Colors.TEXT_SECONDARY
-                                                }
+                                                color={Colors.TEXT_SECONDARY}
                                             />
                                         </Container>
                                     }
@@ -343,9 +341,7 @@ function AddTaskModal(props: {
                                             <Text
                                                 content="Cancel"
                                                 fontSize={14}
-                                                color={
-                                                    Colors.TEXT_SECONDARY
-                                                }
+                                                color={Colors.TEXT_SECONDARY}
                                             />
                                         </Container>
                                     }

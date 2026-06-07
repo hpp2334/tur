@@ -127,7 +127,11 @@ function ScrollList() {
                                             : Color.rgb(15, 23, 42)
                                     }
                                 >
-                                    <Row crossAlignment={CrossAxisAlignment.Center}>
+                                    <Row
+                                        crossAlignment={
+                                            CrossAxisAlignment.Center
+                                        }
+                                    >
                                         <SizedBox width={12} />
                                         <Container
                                             width={32}

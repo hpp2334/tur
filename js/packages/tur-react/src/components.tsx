@@ -155,7 +155,11 @@ export function Expanded(props: ExpandedProps) {
 
 export function Stack(props: StackProps) {
     return (
-        <tur_stack fit={props.fit} alignment={props.alignment} queryKey={props.queryKey}>
+        <tur_stack
+            fit={props.fit}
+            alignment={props.alignment}
+            queryKey={props.queryKey}
+        >
             {props.children}
         </tur_stack>
     );
