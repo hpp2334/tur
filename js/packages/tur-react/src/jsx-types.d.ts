@@ -47,7 +47,10 @@ declare module "react/jsx-runtime" {
                 right?: number;
                 bottom?: number;
                 queryKey?: string[];
-                transition?: Record<string, { duration: number; curve?: string }>;
+                transition?: Record<
+                    string,
+                    { duration: number; curve?: string }
+                >;
                 children?: React.ReactNode;
             };
             tur_container: RefAttributes<TurNodeHandle> & {
@@ -64,7 +67,10 @@ declare module "react/jsx-runtime" {
                 shadowBlur?: number;
                 alignment?: Alignment;
                 queryKey?: string[];
-                transition?: Record<string, { duration: number; curve?: string }>;
+                transition?: Record<
+                    string,
+                    { duration: number; curve?: string }
+                >;
                 children?: React.ReactNode;
             };
             tur_pointer_interact: RefAttributes<TurNodeHandle> & {
