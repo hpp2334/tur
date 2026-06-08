@@ -14,6 +14,8 @@ import {
 import { renderRoot } from "@tur/react-renderer";
 import { useState } from "react";
 
+declare const __tur: { __ctx: unknown };
+
 function AnimationBasic() {
     const [ctrl] = useState(() => {
         const c = createAnimationController({
