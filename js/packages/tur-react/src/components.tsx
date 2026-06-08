@@ -27,7 +27,13 @@ import React from "react";
 interface BaseProps {
     children?: ReactNode;
     queryKey?: string[];
-    transition?: Record<string, { duration: number; curve?: "linear" | "easeIn" | "easeOut" | "easeInOut" }>;
+    transition?: Record<
+        string,
+        {
+            duration: number;
+            curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+        }
+    >;
 }
 
 export interface ColumnProps extends BaseProps {
@@ -194,29 +200,31 @@ export function SizedBox(props: SizedBoxProps) {
     );
 }
 
-export const Container = React.forwardRef<TurNodeHandle, ContainerProps>((props, ref) => {
-    return (
-        <tur_container
-            ref={ref}
-            width={props.width}
-            height={props.height}
-            padding={props.padding}
-            color={props.color}
-            borderColor={props.borderColor}
-            borderWidth={props.borderWidth}
-            borderRadius={props.borderRadius}
-            borderPosition={props.borderPosition}
-            shadowColor={props.shadowColor}
-            shadowOffset={props.shadowOffset}
-            shadowBlur={props.shadowBlur}
-            alignment={props.alignment}
-            queryKey={props.queryKey}
-            transition={props.transition}
-        >
-            {props.children}
-        </tur_container>
-    );
-});
+export const Container = React.forwardRef<TurNodeHandle, ContainerProps>(
+    (props, ref) => {
+        return (
+            <tur_container
+                ref={ref}
+                width={props.width}
+                height={props.height}
+                padding={props.padding}
+                color={props.color}
+                borderColor={props.borderColor}
+                borderWidth={props.borderWidth}
+                borderRadius={props.borderRadius}
+                borderPosition={props.borderPosition}
+                shadowColor={props.shadowColor}
+                shadowOffset={props.shadowOffset}
+                shadowBlur={props.shadowBlur}
+                alignment={props.alignment}
+                queryKey={props.queryKey}
+                transition={props.transition}
+            >
+                {props.children}
+            </tur_container>
+        );
+    },
+);
 
 export function PointerInteract(props: PointerInteractProps) {
     return (

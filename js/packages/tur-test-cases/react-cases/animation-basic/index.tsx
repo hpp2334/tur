@@ -1,15 +1,15 @@
 import {
+    Color,
     Column,
     Container,
     CrossAxisAlignment,
+    createAnimationController,
     Expanded,
     MainAxisAlignment,
     PointerInteract,
     Row,
     SizedBox,
     Text,
-    Color,
-    createAnimationController,
 } from "@tur/react";
 import { renderRoot } from "@tur/react-renderer";
 import { useState } from "react";

@@ -1,3 +1,4 @@
+export { createAnimationController } from "./animation-controller";
 export type { GradientStop, LinearGradientOptions } from "./color";
 export { Color, LinearGradient } from "./color";
 export { Alignment } from "./generated/Alignment";
@@ -18,7 +19,6 @@ export { createImageResource } from "./image";
 export { createLazyListController } from "./lazy-list-controller";
 export type { TurInstance } from "./renderer";
 export { flushSync, renderRoot } from "./renderer";
-export { createAnimationController } from "./animation-controller";
 export { createScrollController } from "./scroll-controller";
 export { createSvgResource } from "./svg";
 export { createTextEditingController } from "./text-controller";
