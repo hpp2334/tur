@@ -4,6 +4,7 @@ use std::rc::Rc;
 use boa_gc::{Finalize, Trace};
 use boa_engine::JsData;
 
+use crate::core::animation::AnimationManager;
 use crate::core::elements::ElementTree;
 use crate::core::focus::FocusManager;
 use crate::core::js_command::JsCommandQueue;
@@ -17,6 +18,7 @@ pub struct TurJsContext {
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) dirty: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
+    pub(crate) animation_manager: Rc<RefCell<AnimationManager>>,
 }
 
 impl TurJsContext {
@@ -33,6 +35,7 @@ impl TurJsContext {
             focus_manager,
             dirty,
             resource_map,
+            animation_manager: Rc::new(RefCell::new(AnimationManager::new())),
         }
     }
 }

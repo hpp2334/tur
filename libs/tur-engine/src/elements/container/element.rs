@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
-use tur_shared::{Alignment, BorderPosition, Brush, Color, Size};
+use tur_shared::{Alignment, AnimatableValue, BorderPosition, Brush, Color, Size};
 
 use crate::core::bridge::color::extract_brush;
 use crate::core::elements::ElementOnUpdate;
@@ -188,6 +188,75 @@ impl ElementOnUpdate for ContainerElement {
             "shadowBlur" => self.shadow_blur = None,
             "alignment" => self.alignment = None,
             _ => {}
+        }
+    }
+
+    fn apply_animated(&mut self, key: &str, value: AnimatableValue) {
+        match key {
+            "width" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.width = Some(v)
+                }
+            }
+            "height" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.height = Some(v)
+                }
+            }
+            "padding" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.padding = Some(v)
+                }
+            }
+            "borderWidth" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.border_width = Some(v)
+                }
+            }
+            "borderRadius" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.border_radius = Some(v)
+                }
+            }
+            "shadowBlur" => {
+                if let AnimatableValue::Float(v) = value {
+                    self.shadow_blur = Some(v)
+                }
+            }
+            "color" => {
+                if let AnimatableValue::Color(c) = value {
+                    self.color = Some(Brush::SolidColor(c))
+                }
+            }
+            "borderColor" => {
+                if let AnimatableValue::Color(c) = value {
+                    self.border_color = Some(c)
+                }
+            }
+            "shadowColor" => {
+                if let AnimatableValue::Color(c) = value {
+                    self.shadow_color = Some(c)
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn get_animatable(&self, key: &str) -> Option<AnimatableValue> {
+        match key {
+            "width" => self.width.map(AnimatableValue::Float),
+            "height" => self.height.map(AnimatableValue::Float),
+            "padding" => self.padding.map(AnimatableValue::Float),
+            "borderWidth" => self.border_width.map(AnimatableValue::Float),
+            "borderRadius" => self.border_radius.map(AnimatableValue::Float),
+            "shadowBlur" => self.shadow_blur.map(AnimatableValue::Float),
+            "color" => self.color.as_ref().and_then(|b| match b {
+                Brush::SolidColor(c) => Some(AnimatableValue::Color(*c)),
+                _ => None,
+            }),
+            "borderColor" => self.border_color.map(AnimatableValue::Color),
+            "shadowColor" => self.shadow_color.map(AnimatableValue::Color),
+            _ => None,
         }
     }
 }

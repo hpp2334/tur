@@ -1,4 +1,6 @@
 export type {
+    AnimationController,
+    AnimationControllerOptions,
     EdgeInsets,
     LazyListController,
     LazyListControllerOptions,
@@ -13,6 +15,7 @@ export type {
     TextEditingControllerOptions,
     TurKeyEvent,
     TurNodeHandle,
+    TweenConfig,
 } from "@tur/react-renderer";
 export {
     Alignment,
@@ -21,6 +24,7 @@ export {
     BoxFit,
     Color,
     CrossAxisAlignment,
+    createAnimationController,
     createImageResource,
     createLazyListController,
     createScrollController,

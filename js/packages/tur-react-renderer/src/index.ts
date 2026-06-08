@@ -18,11 +18,13 @@ export { createImageResource } from "./image";
 export { createLazyListController } from "./lazy-list-controller";
 export type { TurInstance } from "./renderer";
 export { flushSync, renderRoot } from "./renderer";
+export { createAnimationController } from "./animation-controller";
 export { createScrollController } from "./scroll-controller";
 export { createSvgResource } from "./svg";
-export { createScrollController } from "./scroll-controller";
 export { createTextEditingController } from "./text-controller";
 export type {
+    AnimationController,
+    AnimationControllerOptions,
     LazyListController,
     LazyListControllerOptions,
     LazyListScrollInfo,
@@ -34,5 +36,6 @@ export type {
     TextEditingControllerOptions,
     TurKeyEvent,
     TurNodeHandle,
+    TweenConfig,
 } from "./tur";
 export type { TurElement } from "./types";

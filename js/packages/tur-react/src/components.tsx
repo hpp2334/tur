@@ -27,6 +27,7 @@ import React from "react";
 interface BaseProps {
     children?: ReactNode;
     queryKey?: string[];
+    transition?: Record<string, { duration: number; curve?: "linear" | "easeIn" | "easeOut" | "easeInOut" }>;
 }
 
 export interface ColumnProps extends BaseProps {
@@ -173,6 +174,7 @@ export function Positioned(props: PositionedProps) {
             right={props.right}
             bottom={props.bottom}
             queryKey={props.queryKey}
+            transition={props.transition}
         >
             {props.children}
         </tur_positioned>
@@ -185,15 +187,17 @@ export function SizedBox(props: SizedBoxProps) {
             width={props.width}
             height={props.height}
             queryKey={props.queryKey}
+            transition={props.transition}
         >
             {props.children}
         </tur_container>
     );
 }
 
-export function Container(props: ContainerProps) {
+export const Container = React.forwardRef<TurNodeHandle, ContainerProps>((props, ref) => {
     return (
         <tur_container
+            ref={ref}
             width={props.width}
             height={props.height}
             padding={props.padding}
@@ -207,11 +211,12 @@ export function Container(props: ContainerProps) {
             shadowBlur={props.shadowBlur}
             alignment={props.alignment}
             queryKey={props.queryKey}
+            transition={props.transition}
         >
             {props.children}
         </tur_container>
     );
-}
+});
 
 export function PointerInteract(props: PointerInteractProps) {
     return (

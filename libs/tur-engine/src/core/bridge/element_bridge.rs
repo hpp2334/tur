@@ -4,12 +4,14 @@ use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
+use tur_shared::{AnimationCurve, TransitionConfig};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::animation::AnimationController;
 use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
 use crate::elements::{
@@ -226,6 +228,21 @@ pub(crate) fn tur_create_lazy_list_controller(
     Ok(obj.upcast().clone().into())
 }
 
+pub(crate) fn tur_create_animation_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _js_ctx = extract_ctx(args)?;
+    let data = AnimationController::data_constructor(
+        &JsValue::undefined(),
+        &args[1..],
+        context,
+    )?;
+    let obj = AnimationController::from_data(data, context)?;
+    Ok(obj.upcast().clone().into())
+}
+
 pub(crate) fn tur_request_focus(
     _this: &JsValue,
     args: &[JsValue],
@@ -250,6 +267,8 @@ pub(crate) fn tur_set_attribute(
 
     let value = args.get_or_undefined(3).clone();
 
+    let key_str = key.to_std_string_escaped();
+
     if key == "queryKey" {
         if let Some(obj) = value.as_object() {
             if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(obj.clone()) {
@@ -273,11 +292,27 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
+    let is_null = value.is_null() || value.is_undefined();
+
+    let should_animate = !is_null && {
+        let mgr = js_ctx.animation_manager.borrow();
+        mgr.get_transition(node_id, &key_str).is_some()
+    };
+
+    let old_animatable = if should_animate {
+        let tree = js_ctx.element_tree.borrow();
+        tree.get(node_id)
+            .and_then(|n| n.element.as_ref())
+            .and_then(|e| e.get_animatable(&key_str))
+    } else {
+        None
+    };
+
     {
         let mut tree = js_ctx.element_tree.borrow_mut();
         if let Some(node) = tree.get_mut(node_id) {
             if let Some(ref mut element) = node.element {
-                if value.is_null() || value.is_undefined() {
+                if is_null {
                     element.reset_prop(&key);
                 } else {
                     element.set_prop(context, &key, &value);
@@ -287,7 +322,94 @@ pub(crate) fn tur_set_attribute(
         tree.mark_dirty(node_id);
     }
 
+    if let Some(from) = old_animatable {
+        let now_ms = context.clock().now().millis_since_epoch();
+        let mut tree = js_ctx.element_tree.borrow_mut();
+        if let Some(node) = tree.get_mut(node_id) {
+            if let Some(ref element) = node.element {
+                let to = element.get_animatable(&key_str);
+                if let Some(to) = to {
+                    let config = js_ctx
+                        .animation_manager
+                        .borrow()
+                        .get_transition(node_id, &key_str)
+                        .cloned();
+                    if let Some(config) = config {
+                        let apply_from = from.clone();
+                        js_ctx.animation_manager.borrow_mut().start_implicit(
+                            node_id,
+                            &key_str,
+                            from,
+                            to,
+                            &config,
+                            now_ms,
+                        );
+                        if let Some(ref mut element) = node.element {
+                            element.apply_animated(&key_str, apply_from);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     js_ctx.dirty.set(true);
+    Ok(JsValue::undefined())
+}
+
+pub(crate) fn tur_set_transition(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let node_id = extract_node_id(args, 1)?;
+    let opts = args.get_or_undefined(2);
+
+    let mut transitions = std::collections::HashMap::new();
+    if let Some(obj) = opts.as_object() {
+        let keys = obj
+            .own_property_keys(context)
+            .map_err(|e| JsError::from(JsNativeError::typ().with_message(format!("{e}"))))?;
+        for prop_key in keys {
+            let prop_key_str = match &prop_key {
+                boa_engine::property::PropertyKey::String(s) => s.to_std_string_escaped(),
+                _ => continue,
+            };
+            let prop_val = obj.get(prop_key, context).unwrap_or(JsValue::undefined());
+            let Some(prop_obj) = prop_val.as_object() else {
+                continue;
+            };
+
+            let duration = prop_val
+                .as_object()
+                .and_then(|o| {
+                    o.get(boa_engine::property::PropertyKey::from(js_string!("duration")), context)
+                        .ok()
+                })
+                .and_then(|v| v.as_number())
+                .unwrap_or(300.0) as u64;
+
+            let curve_str = prop_obj
+                .get(js_string!("curve"), context)
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
+                .unwrap_or_else(|| "linear".to_string());
+
+            transitions.insert(
+                prop_key_str,
+                TransitionConfig {
+                    duration_ms: duration,
+                    curve: curve_str.parse().unwrap_or(AnimationCurve::Linear),
+                },
+            );
+        }
+    }
+
+    js_ctx
+        .animation_manager
+        .borrow_mut()
+        .set_transitions(node_id, transitions);
     Ok(JsValue::undefined())
 }
 
@@ -320,6 +442,12 @@ pub(crate) fn tur_remove_child(
     let mut tree = js_ctx.element_tree.borrow_mut();
     tree.remove_child(parent_id, child_id);
     tree.mark_dirty(parent_id);
+
+    drop(tree);
+    js_ctx
+        .animation_manager
+        .borrow_mut()
+        .remove_transitions(child_id);
 
     js_ctx.dirty.set(true);
     Ok(JsValue::undefined())

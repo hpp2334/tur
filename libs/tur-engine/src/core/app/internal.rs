@@ -67,7 +67,11 @@ impl TurAppInternal {
         let mut needs_render = false;
         loop {
             let handled_events = self.flush_app_events();
-            let dirty = self.js_context.dirty.take() || self.needs_draw.take();
+
+            let animation_did_update = self.tick_animations(boa_context);
+
+            let dirty =
+                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update;
             if dirty {
                 needs_render = true;
                 self.app_context.borrow_mut().layout();
@@ -79,19 +83,38 @@ impl TurAppInternal {
                 break;
             }
         }
+
+        if self
+            .js_context
+            .animation_manager
+            .borrow()
+            .has_active()
+        {
+            self.needs_draw.set(true);
+        }
+
         if needs_render {
             self.app_context.borrow_mut().render();
-            if let Err(e) = self
-                .app_context
-                .borrow_mut()
-                .renderer
-                .present()
-            {
+            if let Err(e) = self.app_context.borrow_mut().renderer.present() {
                 tracing::error!("present failed: {e}");
                 return Err(TurError::Render(e.to_string()));
             }
         }
         Ok(needs_render)
+    }
+
+    fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {
+        let now_ms = boa_context.clock().now().millis_since_epoch();
+        let mut mgr = self.js_context.animation_manager.borrow_mut();
+        let results = mgr.tick(now_ms);
+        mgr.tick_controllers(now_ms);
+        let has_active = mgr.has_active();
+        drop(mgr);
+        if !results.is_empty() {
+            let mut tree = self.js_context.element_tree.borrow_mut();
+            crate::core::animation::AnimationManager::apply_tick_results(&results, &mut tree);
+        }
+        has_active || !results.is_empty()
     }
 
     fn flush_app_events(&self) -> bool {
