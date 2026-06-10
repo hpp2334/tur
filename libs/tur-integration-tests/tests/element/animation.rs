@@ -3,94 +3,7 @@ use std::time::Duration;
 use tur_integration_tests::TurTestApp;
 
 #[test]
-fn transition_width_animates_over_time() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.appendChild(ctx, root, container);
-        globalThis.__tur.setTransition(ctx, container, {
-            width: { duration: 200, curve: "linear" }
-        });
-        globalThis.__tur.setAttribute(ctx, container, "width", 200);
-    "#);
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        let container = tree.get(root.children[0]).unwrap();
-        container.id
-    };
-
-    app.render();
-    {
-        let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
-        assert_eq!(node.computed_layout.size.width, 100.0,
-            "at t=0 width should still be 100 (from value)");
-    }
-
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
-    {
-        let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert!(w > 100.0 && w < 200.0,
-            "at t=100ms (halfway) width should be between 100 and 200, got {w}");
-    }
-
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
-    {
-        let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
-        let w = node.computed_layout.size.width;
-        assert_eq!(w, 200.0,
-            "at t=250ms (past duration) width should be 200, got {w}");
-    }
-}
-
-#[test]
-fn transition_cancelled_on_new_value() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "height", 50);
-        globalThis.__tur.appendChild(ctx, root, container);
-        globalThis.__tur.setTransition(ctx, container, {
-            height: { duration: 500, curve: "linear" }
-        });
-        globalThis.__tur.setAttribute(ctx, container, "height", 150);
-    "#);
-
-    let container_id = {
-        let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
-    };
-
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
-
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.createContainer(ctx);
-    "#);
-
-    let tree = app.element_tree();
-    let node = tree.get(container_id).unwrap();
-    let h = node.computed_layout.size.height;
-    assert!(h > 50.0 && h < 150.0,
-        "height should be mid-transition, got {h}");
-}
-
-#[test]
-fn animation_controller_forward_tweens_width() {
+fn animation_controller_forward_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
@@ -101,11 +14,11 @@ fn animation_controller_forward_tweens_width() {
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
-            curve: "linear"
-        });
-        ctrl._attach(container, ctx);
-        ctrl.setTweens({
-            width: { begin: 100, end: 200 }
+            curve: "linear",
+            onTick: function(value) {
+                var w = 100 + (200 - 100) * value;
+                globalThis.__tur.setAttribute(ctx, container, "width", w);
+            }
         });
         ctrl.forward();
     "#);
@@ -121,7 +34,7 @@ fn animation_controller_forward_tweens_width() {
         let tree = app.element_tree();
         let node = tree.get(container_id).unwrap();
         assert_eq!(node.computed_layout.size.width, 100.0,
-            "at t=0 width should be 100");
+            "at t=0 width should still be 100");
     }
 
     app.advance(Duration::from_millis(100)).unwrap();
@@ -146,7 +59,7 @@ fn animation_controller_forward_tweens_width() {
 }
 
 #[test]
-fn animation_controller_reverse() {
+fn animation_controller_reverse_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
@@ -157,11 +70,11 @@ fn animation_controller_reverse() {
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
-            curve: "linear"
-        });
-        ctrl._attach(container, ctx);
-        ctrl.setTweens({
-            width: { begin: 100, end: 200 }
+            curve: "linear",
+            onTick: function(value) {
+                var w = 100 + (200 - 100) * value;
+                globalThis.__tur.setAttribute(ctx, container, "width", w);
+            }
         });
         ctrl.reverse();
     "#);
@@ -204,11 +117,11 @@ fn animation_controller_stop_freezes_value() {
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
-            curve: "linear"
-        });
-        ctrl._attach(container, ctx);
-        ctrl.setTweens({
-            width: { begin: 100, end: 200 }
+            curve: "linear",
+            onTick: function(value) {
+                var w = 100 + (200 - 100) * value;
+                globalThis.__tur.setAttribute(ctx, container, "width", w);
+            }
         });
         ctrl.forward();
         globalThis.__test_ctrl = ctrl;
@@ -257,11 +170,11 @@ fn animation_controller_repeats() {
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 100,
-            curve: "linear"
-        });
-        ctrl._attach(container, ctx);
-        ctrl.setTweens({
-            width: { begin: 100, end: 200 }
+            curve: "linear",
+            onTick: function(value) {
+                var w = 100 + (200 - 100) * value;
+                globalThis.__tur.setAttribute(ctx, container, "width", w);
+            }
         });
         ctrl.repeat(3);
         ctrl.forward();
@@ -306,10 +219,6 @@ fn animation_controller_status_transitions() {
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 100
         });
-        ctrl._attach(container, ctx);
-        ctrl.setTweens({
-            width: { begin: 0, end: 100 }
-        });
         globalThis.__test_ctrl = ctrl;
 
         globalThis.__statuses = [ctrl.status];
@@ -335,7 +244,35 @@ fn animation_controller_status_transitions() {
 }
 
 #[test]
-fn transition_with_ease_in_curve() {
+fn animation_controller_on_end_callback() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_js(r#"
+        var ctx = globalThis.__tur.__ctx;
+        var root = globalThis.__tur.createRoot(ctx);
+        var container = globalThis.__tur.createContainer(ctx);
+        globalThis.__tur.appendChild(ctx, root, container);
+
+        globalThis.__ended = false;
+        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+            duration: 100,
+            onEnd: function() {
+                globalThis.__ended = true;
+            }
+        });
+        ctrl.forward();
+    "#);
+
+    app.advance(Duration::from_millis(150)).unwrap();
+    app.render();
+
+    let ended: String = app.eval_js(r#"
+        globalThis.__ended ? "true" : "false";
+    "#);
+    assert_eq!(ended, "true", "onEnd should have been called");
+}
+
+#[test]
+fn animation_controller_ease_in_curve() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
@@ -343,10 +280,15 @@ fn transition_with_ease_in_curve() {
         var container = globalThis.__tur.createContainer(ctx);
         globalThis.__tur.setAttribute(ctx, container, "width", 0);
         globalThis.__tur.appendChild(ctx, root, container);
-        globalThis.__tur.setTransition(ctx, container, {
-            width: { duration: 1000, curve: "easeIn" }
+
+        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+            duration: 1000,
+            curve: "easeIn",
+            onTick: function(value) {
+                globalThis.__tur.setAttribute(ctx, container, "width", 1000 * value);
+            }
         });
-        globalThis.__tur.setAttribute(ctx, container, "width", 1000);
+        ctrl.forward();
     "#);
 
     let container_id = {
@@ -364,33 +306,4 @@ fn transition_with_ease_in_curve() {
         assert!(w < 500.0,
             "easeIn at t=0.5: width should be < 500 (slow start), got {w}");
     }
-}
-
-#[test]
-fn transition_removed_with_element() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var col = globalThis.__tur.createFlex(ctx);
-        globalThis.__tur.setAttribute(ctx, col, "direction", 1);
-        globalThis.__tur.appendChild(ctx, root, col);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.appendChild(ctx, col, container);
-        globalThis.__tur.setTransition(ctx, container, {
-            width: { duration: 200, curve: "linear" }
-        });
-        globalThis.__tur.setAttribute(ctx, container, "width", 200);
-        globalThis.__tur.removeChild(ctx, col, container);
-    "#);
-
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
-
-    let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let col = tree.get(root.children[0]).unwrap();
-    assert_eq!(col.children.len(), 0,
-        "container should be removed from tree");
 }

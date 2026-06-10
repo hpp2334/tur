@@ -2,7 +2,7 @@ use std::any::Any;
 
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsString, JsValue};
-use tur_shared::{AnimatableValue, ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::js_command::AnyJsCommand;
@@ -39,8 +39,7 @@ trait Erased: 'static {
     fn trace_label(&self) -> String;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn reset_prop(&mut self, key: &JsString);
-    fn apply_animated(&mut self, key: &str, value: AnimatableValue);
-    fn get_animatable(&self, key: &str) -> Option<AnimatableValue>;
+
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -130,14 +129,6 @@ where
 
     fn reset_prop(&mut self, key: &JsString) {
         <Self as ElementOnUpdate>::reset_prop(self, key);
-    }
-
-    fn apply_animated(&mut self, key: &str, value: AnimatableValue) {
-        <Self as ElementOnUpdate>::apply_animated(self, key, value);
-    }
-
-    fn get_animatable(&self, key: &str) -> Option<AnimatableValue> {
-        <Self as ElementOnUpdate>::get_animatable(self, key)
     }
 
     fn perform_layout_size(
@@ -339,14 +330,6 @@ impl AnyElement {
 
     pub fn reset_prop(&mut self, key: &JsString) {
         self.inner.reset_prop(key);
-    }
-
-    pub fn apply_animated(&mut self, key: &str, value: AnimatableValue) {
-        self.inner.apply_animated(key, value);
-    }
-
-    pub fn get_animatable(&self, key: &str) -> Option<AnimatableValue> {
-        self.inner.get_animatable(key)
     }
 
     pub fn perform_layout_size(

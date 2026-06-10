@@ -21,19 +21,15 @@ import {
     MainAxisAlignment,
     type MainAxisSize,
 } from "@tur/react-renderer";
+import {
+    createAnimationController,
+} from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
 import React from "react";
 
 interface BaseProps {
     children?: ReactNode;
     queryKey?: string[];
-    transition?: Record<
-        string,
-        {
-            duration: number;
-            curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
-        }
-    >;
 }
 
 export interface ColumnProps extends BaseProps {
@@ -180,7 +176,6 @@ export function Positioned(props: PositionedProps) {
             right={props.right}
             bottom={props.bottom}
             queryKey={props.queryKey}
-            transition={props.transition}
         >
             {props.children}
         </tur_positioned>
@@ -193,7 +188,6 @@ export function SizedBox(props: SizedBoxProps) {
             width={props.width}
             height={props.height}
             queryKey={props.queryKey}
-            transition={props.transition}
         >
             {props.children}
         </tur_container>
@@ -218,13 +212,210 @@ export const Container = React.forwardRef<TurNodeHandle, ContainerProps>(
                 shadowBlur={props.shadowBlur}
                 alignment={props.alignment}
                 queryKey={props.queryKey}
-                transition={props.transition}
             >
                 {props.children}
             </tur_container>
         );
     },
 );
+
+export interface AnimatedContainerProps {
+    children?: ReactNode;
+    duration?: number;
+    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    onEnd?: () => void;
+    width?: number;
+    height?: number;
+    padding?: number;
+    color?: Color | LinearGradient;
+    borderColor?: Color;
+    borderWidth?: number;
+    borderRadius?: number;
+    borderPosition?: BorderPosition;
+    shadowColor?: Color;
+    shadowOffset?: [number, number];
+    shadowBlur?: number;
+    alignment?: AlignmentType;
+    queryKey?: string[];
+}
+
+type TweenEntry = {
+    begin: number;
+    end: number;
+    type: "float";
+} | {
+    begin: { r: number; g: number; b: number; a: number };
+    end: { r: number; g: number; b: number; a: number };
+    type: "color";
+};
+
+const ANIMATABLE_FLOAT_KEYS = [
+    "width", "height", "padding", "borderWidth", "borderRadius", "shadowBlur",
+] as const;
+
+const ANIMATABLE_COLOR_KEYS = [
+    "color", "borderColor", "shadowColor",
+] as const;
+
+export function AnimatedContainer({
+    duration = 300,
+    curve = "linear",
+    onEnd,
+    children,
+    ...containerProps
+}: AnimatedContainerProps) {
+    const handleRef = React.useRef<TurNodeHandle>(null);
+    const controllerRef = React.useRef<ReturnType<typeof createAnimationController> | null>(null);
+    const tweenMapRef = React.useRef<Record<string, TweenEntry>>({});
+    const prevPropsRef = React.useRef<typeof containerProps | null>(null);
+
+    const onTick = React.useCallback((value: number) => {
+        const handle = handleRef.current;
+        if (!handle) return;
+        for (const [key, tween] of Object.entries(tweenMapRef.current)) {
+            if (tween.type === "float") {
+                const interpolated = tween.begin + (tween.end - tween.begin) * value;
+                __tur.setAttribute(undefined as never, handle, key, interpolated);
+            } else {
+                const lerp = (a: number, b: number) => Math.round(a + (b - a) * value);
+                const interpolated = {
+                    r: lerp(tween.begin.r, tween.end.r),
+                    g: lerp(tween.begin.g, tween.end.g),
+                    b: lerp(tween.begin.b, tween.end.b),
+                    a: lerp(tween.begin.a, tween.end.a),
+                };
+                __tur.setAttribute(undefined as never, handle, key, interpolated);
+            }
+        }
+    }, []);
+
+    const setHandle = React.useCallback((handle: TurNodeHandle | null) => {
+        handleRef.current = handle;
+        if (handle && !controllerRef.current) {
+            const ctrl = createAnimationController({ duration, curve, onTick, onEnd });
+            controllerRef.current = ctrl;
+        }
+    }, [duration, curve, onTick, onEnd]);
+
+    React.useLayoutEffect(() => {
+        const ctrl = controllerRef.current;
+        const prev = prevPropsRef.current;
+        if (!ctrl || !prev) {
+            prevPropsRef.current = containerProps;
+            return;
+        }
+
+        const tweens: Record<string, TweenEntry> = {};
+
+        for (const key of ANIMATABLE_FLOAT_KEYS) {
+            const newVal = (containerProps as Record<string, unknown>)[key] as number | undefined;
+            const oldVal = (prev as Record<string, unknown>)[key] as number | undefined;
+            if (newVal !== undefined && oldVal !== undefined && newVal !== oldVal) {
+                tweens[key] = { begin: oldVal, end: newVal, type: "float" };
+            }
+        }
+
+        for (const key of ANIMATABLE_COLOR_KEYS) {
+            const newVal = (containerProps as Record<string, unknown>)[key] as Color | undefined;
+            const oldVal = (prev as Record<string, unknown>)[key] as Color | undefined;
+            if (newVal && oldVal && typeof newVal === "object" && typeof oldVal === "object"
+                && (newVal.r !== oldVal.r || newVal.g !== oldVal.g
+                    || newVal.b !== oldVal.b || (newVal.a ?? 1) !== (oldVal.a ?? 1))) {
+                tweens[key] = {
+                    begin: { r: oldVal.r, g: oldVal.g, b: oldVal.b, a: oldVal.a ?? 1 },
+                    end: { r: newVal.r, g: newVal.g, b: newVal.b, a: newVal.a ?? 1 },
+                    type: "color",
+                };
+            }
+        }
+
+        if (Object.keys(tweens).length > 0) {
+            tweenMapRef.current = tweens;
+            ctrl.forward();
+        }
+
+        prevPropsRef.current = containerProps;
+    });
+
+    return (
+        <tur_container ref={setHandle} {...(containerProps as Record<string, unknown>)}>
+            {children}
+        </tur_container>
+    );
+}
+
+export interface AnimatedPositionedProps {
+    children?: ReactNode;
+    duration?: number;
+    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    onEnd?: () => void;
+    left?: number;
+    top?: number;
+    right?: number;
+    bottom?: number;
+    queryKey?: string[];
+}
+
+export function AnimatedPositioned({
+    duration = 300,
+    curve = "linear",
+    onEnd,
+    children,
+    ...positionedProps
+}: AnimatedPositionedProps) {
+    const handleRef = React.useRef<TurNodeHandle>(null);
+    const controllerRef = React.useRef<ReturnType<typeof createAnimationController> | null>(null);
+    const tweenMapRef = React.useRef<Record<string, { begin: number; end: number }>>({});
+    const prevPropsRef = React.useRef<typeof positionedProps | null>(null);
+
+    const onTick = React.useCallback((value: number) => {
+        const handle = handleRef.current;
+        if (!handle) return;
+        for (const [key, { begin, end }] of Object.entries(tweenMapRef.current)) {
+            const interpolated = begin + (end - begin) * value;
+            __tur.setAttribute(undefined as never, handle, key, interpolated);
+        }
+    }, []);
+
+    const setHandle = React.useCallback((handle: TurNodeHandle | null) => {
+        handleRef.current = handle;
+        if (handle && !controllerRef.current) {
+            const ctrl = createAnimationController({ duration, curve, onTick, onEnd });
+            controllerRef.current = ctrl;
+        }
+    }, [duration, curve, onTick, onEnd]);
+
+    React.useLayoutEffect(() => {
+        const ctrl = controllerRef.current;
+        const prev = prevPropsRef.current;
+        if (!ctrl || !prev) {
+            prevPropsRef.current = positionedProps;
+            return;
+        }
+
+        const tweens: Record<string, { begin: number; end: number }> = {};
+        for (const key of ["left", "top", "right", "bottom"] as const) {
+            const newVal = positionedProps[key];
+            const oldVal = prev[key];
+            if (newVal !== undefined && oldVal !== undefined && newVal !== oldVal) {
+                tweens[key] = { begin: oldVal, end: newVal };
+            }
+        }
+
+        if (Object.keys(tweens).length > 0) {
+            tweenMapRef.current = tweens;
+            ctrl.forward();
+        }
+
+        prevPropsRef.current = positionedProps;
+    });
+
+    return (
+        <tur_positioned ref={setHandle} {...(positionedProps as Record<string, unknown>)}>
+            {children}
+        </tur_positioned>
+    );
+}
 
 export function PointerInteract(props: PointerInteractProps) {
     return (

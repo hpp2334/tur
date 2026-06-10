@@ -84,18 +84,14 @@ declare class LazyListController {
 }
 
 interface LazyListControllerOptions {
-    onScroll?: (info: ScrollInfo) => void;
+    onScroll?: (info: LazyListScrollInfo) => void;
     onVisibleRangeChange?: (info: LazyListScrollInfo) => void;
-}
-
-interface TransitionConfig {
-    duration: number;
-    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
 }
 
 interface AnimationControllerOptions {
     duration?: number;
     curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    onTick?: (value: number) => void;
     onEnd?: () => void;
 }
 
@@ -107,17 +103,7 @@ declare class AnimationController {
     reverse(): void;
     stop(): void;
     repeat(count?: number): void;
-    setTweens(tweens: Record<string, TweenConfig>): void;
-    _attach(handle: TurNodeHandle, ctx: unknown): void;
 }
-
-interface TweenConfig {
-    begin: number | ColorValue;
-    end: number | ColorValue;
-    type?: "float" | "color";
-}
-
-type ColorValue = { r: number; g: number; b: number; a?: number };
 
 declare global {
     var __tur: {
@@ -162,11 +148,6 @@ declare global {
             handle: TurNodeHandle,
             key: string,
             value: unknown,
-        ): void;
-        setTransition(
-            ctx: unknown,
-            handle: TurNodeHandle,
-            transitions: Record<string, TransitionConfig>,
         ): void;
         appendChild(
             ctx: unknown,

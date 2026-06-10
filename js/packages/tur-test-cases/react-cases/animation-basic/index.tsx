@@ -1,9 +1,9 @@
 import {
+    AnimatedContainer,
     Color,
     Column,
     Container,
     CrossAxisAlignment,
-    createAnimationController,
     Expanded,
     MainAxisAlignment,
     PointerInteract,
@@ -14,31 +14,8 @@ import {
 import { renderRoot } from "@tur/react-renderer";
 import { useState } from "react";
 
-declare const __tur: { __ctx: unknown };
-
 function AnimationBasic() {
-    const [ctrl] = useState(() => {
-        const c = createAnimationController({
-            duration: 600,
-            curve: "easeInOut",
-        });
-        c.setTweens({
-            width: { begin: 60, end: 200 },
-            height: { begin: 60, end: 200 },
-        });
-        return c;
-    });
-
-    const handlePlay = () => {
-        const s = ctrl.status;
-        if (s === "forward" || s === "reverse") {
-            ctrl.stop();
-        } else if (ctrl.value > 0.5) {
-            ctrl.reverse();
-        } else {
-            ctrl.forward();
-        }
-    };
+    const [size, setSize] = useState(60);
 
     return (
         <Expanded>
@@ -46,16 +23,17 @@ function AnimationBasic() {
                 mainAlignment={MainAxisAlignment.Center}
                 crossAlignment={CrossAxisAlignment.Center}
             >
-                <Container
-                    width={60}
-                    height={60}
+                <AnimatedContainer
+                    width={size}
+                    height={size}
                     color={Color.rgb(59, 130, 246)}
                     borderRadius={12}
-                    ref={(el) => ctrl._attach(el, __tur.__ctx)}
+                    duration={600}
+                    curve="easeInOut"
                 />
                 <SizedBox height={20} />
                 <PointerInteract
-                    onClick={handlePlay}
+                    onClick={() => setSize((s) => (s === 60 ? 200 : 60))}
                     child={
                         <Container
                             width={120}

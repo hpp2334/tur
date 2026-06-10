@@ -1,5 +1,4 @@
 use boa_engine::{Context, JsString, JsValue};
-use tur_shared::AnimatableValue;
 
 use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
@@ -67,27 +66,6 @@ impl ElementOnUpdate for PositionedElement {
             "right" => self.right = None,
             "bottom" => self.bottom = None,
             _ => {}
-        }
-    }
-
-    fn apply_animated(&mut self, key: &str, value: AnimatableValue) {
-        let AnimatableValue::Float(v) = value else { return };
-        match key {
-            "left" => self.left = Some(v),
-            "top" => self.top = Some(v),
-            "right" => self.right = Some(v),
-            "bottom" => self.bottom = Some(v),
-            _ => {}
-        }
-    }
-
-    fn get_animatable(&self, key: &str) -> Option<AnimatableValue> {
-        match key {
-            "left" => self.left.map(AnimatableValue::Float),
-            "top" => self.top.map(AnimatableValue::Float),
-            "right" => self.right.map(AnimatableValue::Float),
-            "bottom" => self.bottom.map(AnimatableValue::Float),
-            _ => None,
         }
     }
 }

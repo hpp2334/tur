@@ -1,6 +1,6 @@
 import React from "react";
 import ReactReconciler from "react-reconciler";
-import type { TransitionConfig, TurNodeHandle } from "./tur";
+import type { TurNodeHandle } from "./tur";
 
 const ctx = __tur.__ctx;
 
@@ -32,22 +32,11 @@ function setProps(
     props: Props,
     previousProps: Props | null,
 ) {
-    const transition = props.transition;
-    const prevTransition = previousProps?.transition;
-    if (transition && transition !== prevTransition) {
-        __tur.setTransition(
-            ctx,
-            handle,
-            transition as Record<string, TransitionConfig>,
-        );
-    }
-
     for (const key in props) {
         if (
             key === "children" ||
             key === "key" ||
-            key === "ref" ||
-            key === "transition"
+            key === "ref"
         )
             continue;
         const value = props[key];

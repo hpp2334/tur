@@ -65,10 +65,17 @@ impl TurAppInternal {
         boa_context: &mut boa_engine::Context,
     ) -> Result<bool, TurError> {
         let mut needs_render = false;
+        let mut animation_ticked = false;
+
         loop {
             let handled_events = self.flush_app_events();
 
-            let animation_did_update = self.tick_animations(boa_context);
+            let animation_did_update = if !animation_ticked {
+                animation_ticked = true;
+                self.tick_animations(boa_context)
+            } else {
+                self.js_context.animation_manager.borrow().has_active()
+            };
 
             let dirty =
                 self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update;
@@ -106,15 +113,10 @@ impl TurAppInternal {
     fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let now_ms = boa_context.clock().now().millis_since_epoch();
         let mut mgr = self.js_context.animation_manager.borrow_mut();
-        let results = mgr.tick(now_ms);
-        mgr.tick_controllers(now_ms);
+        mgr.tick_controllers(now_ms, boa_context);
         let has_active = mgr.has_active();
         drop(mgr);
-        if !results.is_empty() {
-            let mut tree = self.js_context.element_tree.borrow_mut();
-            crate::core::animation::AnimationManager::apply_tick_results(&results, &mut tree);
-        }
-        has_active || !results.is_empty()
+        has_active
     }
 
     fn flush_app_events(&self) -> bool {

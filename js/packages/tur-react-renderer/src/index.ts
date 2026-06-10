@@ -36,6 +36,5 @@ export type {
     TextEditingControllerOptions,
     TurKeyEvent,
     TurNodeHandle,
-    TweenConfig,
 } from "./tur";
 export type { TurElement } from "./types";
