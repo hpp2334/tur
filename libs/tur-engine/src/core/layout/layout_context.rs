@@ -62,6 +62,14 @@ impl<'a> LayoutContext<'a> {
             .unwrap_or("tur_container")
     }
 
+    pub fn child_computed_size(&self, child_id: ElementNodeId) -> Size {
+        self.tree
+            .nodes
+            .get(&child_id)
+            .map(|n| n.computed_layout.size)
+            .unwrap_or(Size::ZERO)
+    }
+
     pub fn child_element<T: 'static>(&self, child_id: ElementNodeId) -> Option<&T> {
         self.tree
             .nodes

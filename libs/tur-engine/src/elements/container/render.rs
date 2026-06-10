@@ -21,9 +21,18 @@ impl ElementLayout for ContainerElement {
         };
 
         let padding = self.padding.map(EdgeInsets::all);
-        let inner_constraints = match padding {
+        let padding_constraints = match padding {
             Some(p) => sized_constraints.deflate(p),
             None => sized_constraints,
+        };
+
+        let inner_constraints = if self.alignment.is_some() {
+            Constraints::loose(Size::new(
+                padding_constraints.max_width,
+                padding_constraints.max_height,
+            ))
+        } else {
+            padding_constraints
         };
 
         let child_size = if let Some(&child_id) = children.first() {
@@ -37,12 +46,28 @@ impl ElementLayout for ContainerElement {
             None => child_size,
         };
 
-        sized_constraints.constrain(inflated)
+        let final_size = sized_constraints.constrain(inflated);
+        self.computed_size = Some(final_size);
+        final_size
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
-        if let (Some(&child_id), Some(p)) = (children.first(), self.padding) {
-            cx.set_child_offset(child_id, Offset::new(p, p));
+        if let Some(&child_id) = children.first() {
+            let padding = self.padding.unwrap_or(0.0);
+            let offset = match self.alignment {
+                Some(ref align) => {
+                    let container_size = self.computed_size.unwrap_or(Size::ZERO);
+                    let inner_size = Size::new(
+                        (container_size.width - padding * 2.0).max(0.0),
+                        (container_size.height - padding * 2.0).max(0.0),
+                    );
+                    let child_size = cx.child_computed_size(child_id);
+                    let inner_offset = align.align_offset(inner_size, child_size);
+                    Offset::new(padding + inner_offset.x, padding + inner_offset.y)
+                }
+                None => Offset::new(padding, padding),
+            };
+            cx.set_child_offset(child_id, offset);
         }
     }
 }

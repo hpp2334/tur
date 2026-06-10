@@ -320,6 +320,40 @@ pub enum BorderPosition {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
 #[ts(export, export_to = "generated/", repr(enum))]
+pub enum Alignment {
+    #[default]
+    TopLeft,
+    TopCenter,
+    TopRight,
+    CenterLeft,
+    Center,
+    CenterRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+}
+
+impl Alignment {
+    pub fn align_offset(&self, container: Size, child: Size) -> Offset {
+        let dw = (container.width - child.width).max(0.0);
+        let dh = (container.height - child.height).max(0.0);
+        let (fx, fy) = match self {
+            Alignment::TopLeft => (0.0, 0.0),
+            Alignment::TopCenter => (0.5, 0.0),
+            Alignment::TopRight => (1.0, 0.0),
+            Alignment::CenterLeft => (0.0, 0.5),
+            Alignment::Center => (0.5, 0.5),
+            Alignment::CenterRight => (1.0, 0.5),
+            Alignment::BottomLeft => (0.0, 1.0),
+            Alignment::BottomCenter => (0.5, 1.0),
+            Alignment::BottomRight => (1.0, 1.0),
+        };
+        Offset::new(dw * fx, dh * fy)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
+#[ts(export, export_to = "generated/", repr(enum))]
 pub enum HitTestBehavior {
     #[default]
     Opaque,

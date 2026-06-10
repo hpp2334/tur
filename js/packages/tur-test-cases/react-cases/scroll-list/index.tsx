@@ -1,4 +1,5 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
@@ -102,16 +103,13 @@ function ScrollList() {
                 height={HEADER_HEIGHT}
                 color={Color.rgb(99, 102, 241)}
             >
-                <Row>
-                    <Expanded>
-                        <Container height={HEADER_HEIGHT}>
-                            <Text
-                                content="Scroll List Demo"
-                                fontSize={16}
-                                color={Color.rgb(255, 255, 255)}
-                            />
-                        </Container>
-                    </Expanded>
+                <Row crossAlignment={CrossAxisAlignment.Center}>
+                    <SizedBox width={12} />
+                    <Text
+                        content="Scroll List Demo"
+                        fontSize={16}
+                        color={Color.rgb(255, 255, 255)}
+                    />
                 </Row>
             </Container>
             <Expanded>
@@ -129,7 +127,11 @@ function ScrollList() {
                                             : Color.rgb(15, 23, 42)
                                     }
                                 >
-                                    <Row>
+                                    <Row
+                                        crossAlignment={
+                                            CrossAxisAlignment.Center
+                                        }
+                                    >
                                         <SizedBox width={12} />
                                         <Container
                                             width={32}
@@ -138,13 +140,11 @@ function ScrollList() {
                                             borderRadius={16}
                                         />
                                         <SizedBox width={12} />
-                                        <Container height={ITEM_HEIGHT}>
-                                            <Text
-                                                content={item}
-                                                fontSize={14}
-                                                color={Color.rgb(226, 232, 240)}
-                                            />
-                                        </Container>
+                                        <Text
+                                            content={item}
+                                            fontSize={14}
+                                            color={Color.rgb(226, 232, 240)}
+                                        />
                                     </Row>
                                 </Container>
                             ))}

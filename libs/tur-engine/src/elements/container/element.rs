@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsString, JsValue};
 use num_traits::FromPrimitive;
-use tur_shared::{BorderPosition, Brush, Color};
+use tur_shared::{Alignment, BorderPosition, Brush, Color, Size};
 
 use crate::core::bridge::color::extract_brush;
 use crate::core::elements::ElementOnUpdate;
@@ -19,6 +19,8 @@ pub struct ContainerElement {
     pub(crate) shadow_color: Option<Color>,
     pub(crate) shadow_offset: Option<(f64, f64)>,
     pub(crate) shadow_blur: Option<f64>,
+    pub(crate) alignment: Option<Alignment>,
+    pub(crate) computed_size: Option<Size>,
 }
 
 impl ContainerElement {
@@ -35,6 +37,8 @@ impl ContainerElement {
             shadow_color: None,
             shadow_offset: None,
             shadow_blur: None,
+            alignment: None,
+            computed_size: None,
         }
     }
 
@@ -120,6 +124,9 @@ impl ElementTrace for ContainerElement {
         if let Some(b) = self.shadow_blur {
             parts.push(format!("shadowBlur={b}"));
         }
+        if let Some(ref a) = self.alignment {
+            parts.push(format!("alignment={a:?}"));
+        }
         parts.join(" ")
     }
 }
@@ -159,6 +166,10 @@ impl ElementOnUpdate for ContainerElement {
             self.shadow_offset = extract_offset_array(value, _ctx);
         } else if *key == "shadowBlur" {
             self.shadow_blur = value.as_number();
+        } else if *key == "alignment" {
+            if let Some(n) = value.as_number() {
+                self.alignment = Alignment::from_i32(n as i32);
+            }
         }
     }
 
@@ -175,6 +186,7 @@ impl ElementOnUpdate for ContainerElement {
             "shadowColor" => self.shadow_color = None,
             "shadowOffset" => self.shadow_offset = None,
             "shadowBlur" => self.shadow_blur = None,
+            "alignment" => self.alignment = None,
             _ => {}
         }
     }

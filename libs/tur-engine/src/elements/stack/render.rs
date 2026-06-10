@@ -32,15 +32,20 @@ impl ElementLayout for StackElement {
             );
         }
 
-        constraints.constrain(max_size)
+        let final_size = constraints.constrain(max_size);
+        self.computed_size = Some(final_size);
+        final_size
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        let stack_size = self.computed_size.unwrap_or(Size::ZERO);
         for &child_id in children {
             let is_positioned = cx.child_type_name(child_id) == "tur_positioned";
 
             if !is_positioned {
-                cx.set_child_offset(child_id, Offset::ZERO);
+                let child_size = cx.child_computed_size(child_id);
+                let offset = self.alignment.align_offset(stack_size, child_size);
+                cx.set_child_offset(child_id, offset);
             }
         }
     }

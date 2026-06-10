@@ -1,4 +1,5 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
@@ -51,18 +52,17 @@ function TabButton({
                         active ? Color.rgb(99, 102, 241) : Color.rgb(30, 41, 59)
                     }
                     borderRadius={6}
+                    alignment={Alignment.Center}
                 >
-                    <Container height={32}>
-                        <Text
-                            content={label}
-                            fontSize={13}
-                            color={
-                                active
-                                    ? Color.rgb(255, 255, 255)
-                                    : Color.rgb(148, 163, 184)
-                            }
-                        />
-                    </Container>
+                    <Text
+                        content={label}
+                        fontSize={13}
+                        color={
+                            active
+                                ? Color.rgb(255, 255, 255)
+                                : Color.rgb(148, 163, 184)
+                        }
+                    />
                 </Container>
             }
         />
@@ -84,7 +84,7 @@ function LazyColumnView() {
                             : Color.rgb(15, 23, 42)
                     }
                 >
-                    <Row>
+                    <Row crossAlignment={CrossAxisAlignment.Center}>
                         <SizedBox width={12} />
                         <Container
                             width={32}
@@ -93,13 +93,11 @@ function LazyColumnView() {
                             borderRadius={16}
                         />
                         <SizedBox width={12} />
-                        <Container height={ITEM_HEIGHT}>
-                            <Text
-                                content={`Item #${index + 1}`}
-                                fontSize={14}
-                                color={Color.rgb(226, 232, 240)}
-                            />
-                        </Container>
+                        <Text
+                            content={`Item #${index + 1}`}
+                            fontSize={14}
+                            color={Color.rgb(226, 232, 240)}
+                        />
                     </Row>
                 </Container>
             )}
@@ -119,7 +117,7 @@ function LazyRowView() {
                     color={accentColors[index % accentColors.length]}
                     borderRadius={8}
                 >
-                    <Column>
+                    <Column crossAlignment={CrossAxisAlignment.Center}>
                         <SizedBox height={12} />
                         <Container
                             width={40}
@@ -128,13 +126,11 @@ function LazyRowView() {
                             borderRadius={20}
                         />
                         <SizedBox height={6} />
-                        <Container height={20}>
-                            <Text
-                                content={`#${index + 1}`}
-                                fontSize={12}
-                                color={Color.rgb(255, 255, 255)}
-                            />
-                        </Container>
+                        <Text
+                            content={`#${index + 1}`}
+                            fontSize={12}
+                            color={Color.rgb(255, 255, 255)}
+                        />
                     </Column>
                 </Container>
             )}

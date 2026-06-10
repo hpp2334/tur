@@ -1,4 +1,4 @@
-import { Container, SizedBox } from "@tur/react";
+import { Alignment, Container, Text } from "@tur/react";
 import { Color, renderRoot } from "@tur/react-renderer";
 
 function ContainerShadow() {
@@ -11,8 +11,9 @@ function ContainerShadow() {
             shadowColor={Color.rgba(0, 0, 0, 80)}
             shadowOffset={[4, 4]}
             shadowBlur={12}
+            alignment={Alignment.Center}
         >
-            <SizedBox width={100} height={100} />
+            <Text content="Shadow" fontSize={16} color={Color.hex("#333333")} />
         </Container>
     );
 }
