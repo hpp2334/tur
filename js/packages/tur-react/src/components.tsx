@@ -21,7 +21,6 @@ import {
     type LinearGradient,
     MainAxisAlignment,
     type MainAxisSize,
-    setNodeAttribute,
 } from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
 import React from "react";
@@ -268,50 +267,43 @@ export function AnimatedContainer({
     children,
     ...containerProps
 }: AnimatedContainerProps) {
-    const handleRef = React.useRef<TurNodeHandle>(null);
+    const [animatedValues, setAnimatedValues] = React.useState<
+        Record<string, unknown>
+    >({});
     const controllerRef = React.useRef<ReturnType<
         typeof createAnimationController
     > | null>(null);
     const tweenMapRef = React.useRef<Record<string, TweenEntry>>({});
     const prevPropsRef = React.useRef<typeof containerProps | null>(null);
 
-    const onTick = React.useCallback((value: number) => {
-        const handle = handleRef.current;
-        if (!handle) return;
-        for (const [key, tween] of Object.entries(tweenMapRef.current)) {
-            if (tween.type === "float") {
-                const interpolated =
-                    tween.begin + (tween.end - tween.begin) * value;
-                setNodeAttribute(handle, key, interpolated);
-            } else {
-                const lerp = (a: number, b: number) =>
-                    Math.round(a + (b - a) * value);
-                const interpolated = {
-                    r: lerp(tween.begin.r, tween.end.r),
-                    g: lerp(tween.begin.g, tween.end.g),
-                    b: lerp(tween.begin.b, tween.end.b),
-                    a: lerp(tween.begin.a, tween.end.a),
-                };
-                setNodeAttribute(handle, key, interpolated);
-            }
-        }
-    }, []);
-
-    const setHandle = React.useCallback(
-        (handle: TurNodeHandle | null) => {
-            handleRef.current = handle;
-            if (handle && !controllerRef.current) {
-                const ctrl = createAnimationController({
-                    duration,
-                    curve,
-                    onTick,
-                    onEnd,
-                });
-                controllerRef.current = ctrl;
-            }
-        },
-        [duration, curve, onTick, onEnd],
-    );
+    if (!controllerRef.current) {
+        controllerRef.current = createAnimationController({
+            duration,
+            curve,
+            onTick: (value: number) => {
+                const newValues: Record<string, unknown> = {};
+                for (const [key, tween] of Object.entries(
+                    tweenMapRef.current,
+                )) {
+                    if (tween.type === "float") {
+                        newValues[key] =
+                            tween.begin + (tween.end - tween.begin) * value;
+                    } else {
+                        const lerp = (a: number, b: number) =>
+                            Math.round(a + (b - a) * value);
+                        newValues[key] = {
+                            r: lerp(tween.begin.r, tween.end.r),
+                            g: lerp(tween.begin.g, tween.end.g),
+                            b: lerp(tween.begin.b, tween.end.b),
+                            a: lerp(tween.begin.a, tween.end.a),
+                        };
+                    }
+                }
+                setAnimatedValues((prev) => ({ ...prev, ...newValues }));
+            },
+            onEnd,
+        });
+    }
 
     React.useLayoutEffect(() => {
         const ctrl = controllerRef.current;
@@ -384,8 +376,8 @@ export function AnimatedContainer({
 
     return (
         <tur_container
-            ref={setHandle}
             {...(containerProps as Record<string, unknown>)}
+            {...animatedValues}
         >
             {children}
         </tur_container>
@@ -411,7 +403,9 @@ export function AnimatedPositioned({
     children,
     ...positionedProps
 }: AnimatedPositionedProps) {
-    const handleRef = React.useRef<TurNodeHandle>(null);
+    const [animatedValues, setAnimatedValues] = React.useState<
+        Record<string, unknown>
+    >({});
     const controllerRef = React.useRef<ReturnType<
         typeof createAnimationController
     > | null>(null);
@@ -420,32 +414,22 @@ export function AnimatedPositioned({
     >({});
     const prevPropsRef = React.useRef<typeof positionedProps | null>(null);
 
-    const onTick = React.useCallback((value: number) => {
-        const handle = handleRef.current;
-        if (!handle) return;
-        for (const [key, { begin, end }] of Object.entries(
-            tweenMapRef.current,
-        )) {
-            const interpolated = begin + (end - begin) * value;
-            setNodeAttribute(handle, key, interpolated);
-        }
-    }, []);
-
-    const setHandle = React.useCallback(
-        (handle: TurNodeHandle | null) => {
-            handleRef.current = handle;
-            if (handle && !controllerRef.current) {
-                const ctrl = createAnimationController({
-                    duration,
-                    curve,
-                    onTick,
-                    onEnd,
-                });
-                controllerRef.current = ctrl;
-            }
-        },
-        [duration, curve, onTick, onEnd],
-    );
+    if (!controllerRef.current) {
+        controllerRef.current = createAnimationController({
+            duration,
+            curve,
+            onTick: (value: number) => {
+                const newValues: Record<string, unknown> = {};
+                for (const [key, { begin, end }] of Object.entries(
+                    tweenMapRef.current,
+                )) {
+                    newValues[key] = begin + (end - begin) * value;
+                }
+                setAnimatedValues((prev) => ({ ...prev, ...newValues }));
+            },
+            onEnd,
+        });
+    }
 
     React.useLayoutEffect(() => {
         const ctrl = controllerRef.current;
@@ -478,8 +462,8 @@ export function AnimatedPositioned({
 
     return (
         <tur_positioned
-            ref={setHandle}
             {...(positionedProps as Record<string, unknown>)}
+            {...animatedValues}
         >
             {children}
         </tur_positioned>

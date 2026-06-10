@@ -1,7 +1,4 @@
-export {
-    createAnimationController,
-    setNodeAttribute,
-} from "./animation-controller";
+export { createAnimationController } from "./animation-controller";
 export type { GradientStop, LinearGradientOptions } from "./color";
 export { Color, LinearGradient } from "./color";
 export { Alignment } from "./generated/Alignment";
