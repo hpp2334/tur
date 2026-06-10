@@ -1,4 +1,8 @@
-import type { AnimationController, AnimationControllerOptions, TurNodeHandle } from "./tur";
+import type {
+    AnimationController,
+    AnimationControllerOptions,
+    TurNodeHandle,
+} from "./tur";
 
 export function createAnimationController(
     options?: AnimationControllerOptions,

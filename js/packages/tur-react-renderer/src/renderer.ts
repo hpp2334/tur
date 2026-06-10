@@ -33,12 +33,7 @@ function setProps(
     previousProps: Props | null,
 ) {
     for (const key in props) {
-        if (
-            key === "children" ||
-            key === "key" ||
-            key === "ref"
-        )
-            continue;
+        if (key === "children" || key === "key" || key === "ref") continue;
         const value = props[key];
         const prev = previousProps?.[key];
         if (value === null || value === undefined) {

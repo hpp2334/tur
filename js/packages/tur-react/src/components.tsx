@@ -15,14 +15,12 @@ import {
     BoxFit,
     type Color,
     CrossAxisAlignment,
+    createAnimationController,
     FlexDirection,
     type HitTestBehavior,
     type LinearGradient,
     MainAxisAlignment,
     type MainAxisSize,
-} from "@tur/react-renderer";
-import {
-    createAnimationController,
     setNodeAttribute,
 } from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
@@ -240,23 +238,28 @@ export interface AnimatedContainerProps {
     queryKey?: string[];
 }
 
-type TweenEntry = {
-    begin: number;
-    end: number;
-    type: "float";
-} | {
-    begin: { r: number; g: number; b: number; a: number };
-    end: { r: number; g: number; b: number; a: number };
-    type: "color";
-};
+type TweenEntry =
+    | {
+          begin: number;
+          end: number;
+          type: "float";
+      }
+    | {
+          begin: { r: number; g: number; b: number; a: number };
+          end: { r: number; g: number; b: number; a: number };
+          type: "color";
+      };
 
 const ANIMATABLE_FLOAT_KEYS = [
-    "width", "height", "padding", "borderWidth", "borderRadius", "shadowBlur",
+    "width",
+    "height",
+    "padding",
+    "borderWidth",
+    "borderRadius",
+    "shadowBlur",
 ] as const;
 
-const ANIMATABLE_COLOR_KEYS = [
-    "color", "borderColor", "shadowColor",
-] as const;
+const ANIMATABLE_COLOR_KEYS = ["color", "borderColor", "shadowColor"] as const;
 
 export function AnimatedContainer({
     duration = 300,
@@ -266,7 +269,9 @@ export function AnimatedContainer({
     ...containerProps
 }: AnimatedContainerProps) {
     const handleRef = React.useRef<TurNodeHandle>(null);
-    const controllerRef = React.useRef<ReturnType<typeof createAnimationController> | null>(null);
+    const controllerRef = React.useRef<ReturnType<
+        typeof createAnimationController
+    > | null>(null);
     const tweenMapRef = React.useRef<Record<string, TweenEntry>>({});
     const prevPropsRef = React.useRef<typeof containerProps | null>(null);
 
@@ -275,10 +280,12 @@ export function AnimatedContainer({
         if (!handle) return;
         for (const [key, tween] of Object.entries(tweenMapRef.current)) {
             if (tween.type === "float") {
-                const interpolated = tween.begin + (tween.end - tween.begin) * value;
+                const interpolated =
+                    tween.begin + (tween.end - tween.begin) * value;
                 setNodeAttribute(handle, key, interpolated);
             } else {
-                const lerp = (a: number, b: number) => Math.round(a + (b - a) * value);
+                const lerp = (a: number, b: number) =>
+                    Math.round(a + (b - a) * value);
                 const interpolated = {
                     r: lerp(tween.begin.r, tween.end.r),
                     g: lerp(tween.begin.g, tween.end.g),
@@ -290,13 +297,21 @@ export function AnimatedContainer({
         }
     }, []);
 
-    const setHandle = React.useCallback((handle: TurNodeHandle | null) => {
-        handleRef.current = handle;
-        if (handle && !controllerRef.current) {
-            const ctrl = createAnimationController({ duration, curve, onTick, onEnd });
-            controllerRef.current = ctrl;
-        }
-    }, [duration, curve, onTick, onEnd]);
+    const setHandle = React.useCallback(
+        (handle: TurNodeHandle | null) => {
+            handleRef.current = handle;
+            if (handle && !controllerRef.current) {
+                const ctrl = createAnimationController({
+                    duration,
+                    curve,
+                    onTick,
+                    onEnd,
+                });
+                controllerRef.current = ctrl;
+            }
+        },
+        [duration, curve, onTick, onEnd],
+    );
 
     React.useLayoutEffect(() => {
         const ctrl = controllerRef.current;
@@ -309,22 +324,51 @@ export function AnimatedContainer({
         const tweens: Record<string, TweenEntry> = {};
 
         for (const key of ANIMATABLE_FLOAT_KEYS) {
-            const newVal = (containerProps as Record<string, unknown>)[key] as number | undefined;
-            const oldVal = (prev as Record<string, unknown>)[key] as number | undefined;
-            if (newVal !== undefined && oldVal !== undefined && newVal !== oldVal) {
+            const newVal = (containerProps as Record<string, unknown>)[key] as
+                | number
+                | undefined;
+            const oldVal = (prev as Record<string, unknown>)[key] as
+                | number
+                | undefined;
+            if (
+                newVal !== undefined &&
+                oldVal !== undefined &&
+                newVal !== oldVal
+            ) {
                 tweens[key] = { begin: oldVal, end: newVal, type: "float" };
             }
         }
 
         for (const key of ANIMATABLE_COLOR_KEYS) {
-            const newVal = (containerProps as Record<string, unknown>)[key] as Color | undefined;
-            const oldVal = (prev as Record<string, unknown>)[key] as Color | undefined;
-            if (newVal && oldVal && typeof newVal === "object" && typeof oldVal === "object"
-                && (newVal.r !== oldVal.r || newVal.g !== oldVal.g
-                    || newVal.b !== oldVal.b || (newVal.a ?? 1) !== (oldVal.a ?? 1))) {
+            const newVal = (containerProps as Record<string, unknown>)[key] as
+                | Color
+                | undefined;
+            const oldVal = (prev as Record<string, unknown>)[key] as
+                | Color
+                | undefined;
+            if (
+                newVal &&
+                oldVal &&
+                typeof newVal === "object" &&
+                typeof oldVal === "object" &&
+                (newVal.r !== oldVal.r ||
+                    newVal.g !== oldVal.g ||
+                    newVal.b !== oldVal.b ||
+                    (newVal.a ?? 1) !== (oldVal.a ?? 1))
+            ) {
                 tweens[key] = {
-                    begin: { r: oldVal.r, g: oldVal.g, b: oldVal.b, a: oldVal.a ?? 1 },
-                    end: { r: newVal.r, g: newVal.g, b: newVal.b, a: newVal.a ?? 1 },
+                    begin: {
+                        r: oldVal.r,
+                        g: oldVal.g,
+                        b: oldVal.b,
+                        a: oldVal.a ?? 1,
+                    },
+                    end: {
+                        r: newVal.r,
+                        g: newVal.g,
+                        b: newVal.b,
+                        a: newVal.a ?? 1,
+                    },
                     type: "color",
                 };
             }
@@ -339,7 +383,10 @@ export function AnimatedContainer({
     });
 
     return (
-        <tur_container ref={setHandle} {...(containerProps as Record<string, unknown>)}>
+        <tur_container
+            ref={setHandle}
+            {...(containerProps as Record<string, unknown>)}
+        >
             {children}
         </tur_container>
     );
@@ -365,26 +412,40 @@ export function AnimatedPositioned({
     ...positionedProps
 }: AnimatedPositionedProps) {
     const handleRef = React.useRef<TurNodeHandle>(null);
-    const controllerRef = React.useRef<ReturnType<typeof createAnimationController> | null>(null);
-    const tweenMapRef = React.useRef<Record<string, { begin: number; end: number }>>({});
+    const controllerRef = React.useRef<ReturnType<
+        typeof createAnimationController
+    > | null>(null);
+    const tweenMapRef = React.useRef<
+        Record<string, { begin: number; end: number }>
+    >({});
     const prevPropsRef = React.useRef<typeof positionedProps | null>(null);
 
     const onTick = React.useCallback((value: number) => {
         const handle = handleRef.current;
         if (!handle) return;
-        for (const [key, { begin, end }] of Object.entries(tweenMapRef.current)) {
+        for (const [key, { begin, end }] of Object.entries(
+            tweenMapRef.current,
+        )) {
             const interpolated = begin + (end - begin) * value;
             setNodeAttribute(handle, key, interpolated);
         }
     }, []);
 
-    const setHandle = React.useCallback((handle: TurNodeHandle | null) => {
-        handleRef.current = handle;
-        if (handle && !controllerRef.current) {
-            const ctrl = createAnimationController({ duration, curve, onTick, onEnd });
-            controllerRef.current = ctrl;
-        }
-    }, [duration, curve, onTick, onEnd]);
+    const setHandle = React.useCallback(
+        (handle: TurNodeHandle | null) => {
+            handleRef.current = handle;
+            if (handle && !controllerRef.current) {
+                const ctrl = createAnimationController({
+                    duration,
+                    curve,
+                    onTick,
+                    onEnd,
+                });
+                controllerRef.current = ctrl;
+            }
+        },
+        [duration, curve, onTick, onEnd],
+    );
 
     React.useLayoutEffect(() => {
         const ctrl = controllerRef.current;
@@ -398,7 +459,11 @@ export function AnimatedPositioned({
         for (const key of ["left", "top", "right", "bottom"] as const) {
             const newVal = positionedProps[key];
             const oldVal = prev[key];
-            if (newVal !== undefined && oldVal !== undefined && newVal !== oldVal) {
+            if (
+                newVal !== undefined &&
+                oldVal !== undefined &&
+                newVal !== oldVal
+            ) {
                 tweens[key] = { begin: oldVal, end: newVal };
             }
         }
@@ -412,7 +477,10 @@ export function AnimatedPositioned({
     });
 
     return (
-        <tur_positioned ref={setHandle} {...(positionedProps as Record<string, unknown>)}>
+        <tur_positioned
+            ref={setHandle}
+            {...(positionedProps as Record<string, unknown>)}
+        >
             {children}
         </tur_positioned>
     );
