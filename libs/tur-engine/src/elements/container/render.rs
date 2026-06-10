@@ -21,9 +21,18 @@ impl ElementLayout for ContainerElement {
         };
 
         let padding = self.padding.map(EdgeInsets::all);
-        let inner_constraints = match padding {
+        let padding_constraints = match padding {
             Some(p) => sized_constraints.deflate(p),
             None => sized_constraints,
+        };
+
+        let inner_constraints = if self.alignment.is_some() {
+            Constraints::loose(Size::new(
+                padding_constraints.max_width,
+                padding_constraints.max_height,
+            ))
+        } else {
+            padding_constraints
         };
 
         let child_size = if let Some(&child_id) = children.first() {
