@@ -23,6 +23,7 @@ import {
 } from "@tur/react-renderer";
 import {
     createAnimationController,
+    setNodeAttribute,
 } from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
 import React from "react";
@@ -275,7 +276,7 @@ export function AnimatedContainer({
         for (const [key, tween] of Object.entries(tweenMapRef.current)) {
             if (tween.type === "float") {
                 const interpolated = tween.begin + (tween.end - tween.begin) * value;
-                __tur.setAttribute(undefined as never, handle, key, interpolated);
+                setNodeAttribute(handle, key, interpolated);
             } else {
                 const lerp = (a: number, b: number) => Math.round(a + (b - a) * value);
                 const interpolated = {
@@ -284,7 +285,7 @@ export function AnimatedContainer({
                     b: lerp(tween.begin.b, tween.end.b),
                     a: lerp(tween.begin.a, tween.end.a),
                 };
-                __tur.setAttribute(undefined as never, handle, key, interpolated);
+                setNodeAttribute(handle, key, interpolated);
             }
         }
     }, []);
@@ -373,7 +374,7 @@ export function AnimatedPositioned({
         if (!handle) return;
         for (const [key, { begin, end }] of Object.entries(tweenMapRef.current)) {
             const interpolated = begin + (end - begin) * value;
-            __tur.setAttribute(undefined as never, handle, key, interpolated);
+            setNodeAttribute(handle, key, interpolated);
         }
     }, []);
 
