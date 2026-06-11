@@ -1,3 +1,4 @@
+export { createAnimationController } from "./animation-controller";
 export type { GradientStop, LinearGradientOptions } from "./color";
 export { Color, LinearGradient } from "./color";
 export { Alignment } from "./generated/Alignment";
@@ -22,6 +23,8 @@ export { createScrollController } from "./scroll-controller";
 export { createSvgResource } from "./svg";
 export { createTextEditingController } from "./text-controller";
 export type {
+    AnimationController,
+    AnimationControllerOptions,
     LazyListController,
     LazyListControllerOptions,
     LazyListScrollInfo,

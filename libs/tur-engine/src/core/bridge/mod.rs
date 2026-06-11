@@ -23,7 +23,7 @@ use boa_engine::Context;
 
 use crate::core::app::TurAppInternal;
 use crate::core::bridge::element_bridge::{
-    tur_append_child, tur_create_container, tur_create_editable_text,
+    tur_append_child, tur_create_animation_controller, tur_create_container, tur_create_editable_text,
     tur_create_flex, tur_create_flex_item, tur_create_focusable, tur_create_image,
     tur_create_image_resource, tur_create_lazy_list, tur_create_lazy_list_controller,
     tur_create_pointer_interact, tur_create_positioned, tur_create_root,
@@ -91,11 +91,15 @@ pub fn init_bridge(
         .register_global_class::<crate::elements::LazyListController>()
         .expect("failed to register LazyListController class");
 
+    context
+        .register_global_class::<crate::core::animation::AnimationController>()
+        .expect("failed to register AnimationController class");
+
     let fns: [(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 28] = [
+    ); 29] = [
         ("createFlex", 1, tur_create_flex),
         ("createFlexItem", 1, tur_create_flex_item),
         ("createStack", 1, tur_create_stack),
@@ -113,6 +117,7 @@ pub fn init_bridge(
         ("createTextEditingController", 2, tur_create_text_editing_controller),
         ("createScrollController", 2, tur_create_scroll_controller),
         ("createLazyListController", 2, tur_create_lazy_list_controller),
+        ("createAnimationController", 2, tur_create_animation_controller),
         ("setAttribute", 4, tur_set_attribute),
         ("appendChild", 3, tur_append_child),
         ("removeChild", 3, tur_remove_child),

@@ -1,4 +1,6 @@
 export type {
+    AnimationController,
+    AnimationControllerOptions,
     EdgeInsets,
     LazyListController,
     LazyListControllerOptions,
@@ -21,6 +23,7 @@ export {
     BoxFit,
     Color,
     CrossAxisAlignment,
+    createAnimationController,
     createImageResource,
     createLazyListController,
     createScrollController,
@@ -34,6 +37,8 @@ export {
     StackFit,
 } from "@tur/react-renderer";
 export type {
+    AnimatedContainerProps,
+    AnimatedPositionedProps,
     ColumnProps,
     ContainerProps,
     ExpandedProps,
@@ -51,6 +56,8 @@ export type {
     TextProps,
 } from "./components";
 export {
+    AnimatedContainer,
+    AnimatedPositioned,
     Column,
     Container,
     Expanded,

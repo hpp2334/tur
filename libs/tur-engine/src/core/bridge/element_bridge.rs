@@ -10,6 +10,7 @@ use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
 use crate::core::resource::ImageResource;
+use crate::core::animation::AnimationController;
 use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
 use crate::elements::{
@@ -226,6 +227,24 @@ pub(crate) fn tur_create_lazy_list_controller(
     Ok(obj.upcast().clone().into())
 }
 
+pub(crate) fn tur_create_animation_controller(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let data = AnimationController::data_constructor(
+        &JsValue::undefined(),
+        &args[1..],
+        context,
+    )?;
+    let obj = AnimationController::from_data(data, context)?;
+    if let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() {
+        ctrl.set_animation_manager(js_ctx.animation_manager.clone());
+    }
+    Ok(obj.upcast().clone().into())
+}
+
 pub(crate) fn tur_request_focus(
     _this: &JsValue,
     args: &[JsValue],
@@ -273,11 +292,13 @@ pub(crate) fn tur_set_attribute(
         return Ok(JsValue::undefined());
     }
 
+    let is_null = value.is_null() || value.is_undefined();
+
     {
         let mut tree = js_ctx.element_tree.borrow_mut();
         if let Some(node) = tree.get_mut(node_id) {
             if let Some(ref mut element) = node.element {
-                if value.is_null() || value.is_undefined() {
+                if is_null {
                     element.reset_prop(&key);
                 } else {
                     element.set_prop(context, &key, &value);

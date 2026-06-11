@@ -39,6 +39,7 @@ trait Erased: 'static {
     fn trace_label(&self) -> String;
     fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
     fn reset_prop(&mut self, key: &JsString);
+
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,

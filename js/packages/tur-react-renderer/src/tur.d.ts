@@ -84,8 +84,25 @@ declare class LazyListController {
 }
 
 interface LazyListControllerOptions {
-    onScroll?: (info: ScrollInfo) => void;
+    onScroll?: (info: LazyListScrollInfo) => void;
     onVisibleRangeChange?: (info: LazyListScrollInfo) => void;
+}
+
+interface AnimationControllerOptions {
+    duration?: number;
+    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    onTick?: (value: number) => void;
+    onEnd?: () => void;
+}
+
+declare class AnimationController {
+    get value(): number;
+    get status(): "stopped" | "forward" | "reverse" | "completed";
+    get duration(): number;
+    forward(): void;
+    reverse(): void;
+    stop(): void;
+    repeat(count?: number): void;
 }
 
 declare global {
@@ -122,6 +139,10 @@ declare global {
             ctx: unknown,
             options?: LazyListControllerOptions,
         ): LazyListController;
+        createAnimationController(
+            ctx: unknown,
+            options?: AnimationControllerOptions,
+        ): AnimationController;
         setAttribute(
             ctx: unknown,
             handle: TurNodeHandle,

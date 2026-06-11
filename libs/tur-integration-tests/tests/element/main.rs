@@ -1,3 +1,4 @@
+mod animation;
 mod column;
 mod container;
 mod debug;
