@@ -76,14 +76,20 @@ function AnimationPlayground() {
                                         color={targetColor}
                                         duration={duration}
                                         curve={curve}
-                                        repeatCount={infinite ? 999999 : undefined}
+                                        repeatCount={
+                                            infinite ? 999999 : undefined
+                                        }
                                     />
                                 </AnimatedPositioned>
                             </Stack>
 
                             <SizedBox height={16} />
 
-                            <Text content="CURVE" fontSize={10} color={Color.rgb(148, 163, 184)} />
+                            <Text
+                                content="CURVE"
+                                fontSize={10}
+                                color={Color.rgb(148, 163, 184)}
+                            />
                             <SizedBox height={4} />
                             <Row mainAlignment={MainAxisAlignment.Center}>
                                 {CURVES.map((c, i) => (
@@ -95,13 +101,37 @@ function AnimationPlayground() {
                                                 width={70}
                                                 height={30}
                                                 borderRadius={6}
-                                                color={i === curveIdx ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                                color={
+                                                    i === curveIdx
+                                                        ? Color.rgb(
+                                                              59,
+                                                              130,
+                                                              246,
+                                                          )
+                                                        : Color.rgb(
+                                                              226,
+                                                              232,
+                                                              240,
+                                                          )
+                                                }
                                                 alignment={Alignment.Center}
                                             >
                                                 <Text
                                                     content={c}
                                                     fontSize={11}
-                                                    color={i === curveIdx ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                                    color={
+                                                        i === curveIdx
+                                                            ? Color.rgb(
+                                                                  255,
+                                                                  255,
+                                                                  255,
+                                                              )
+                                                            : Color.rgb(
+                                                                  71,
+                                                                  85,
+                                                                  105,
+                                                              )
+                                                    }
                                                 />
                                             </Container>
                                         }
@@ -111,7 +141,11 @@ function AnimationPlayground() {
 
                             <SizedBox height={12} />
 
-                            <Text content="DURATION (ms)" fontSize={10} color={Color.rgb(148, 163, 184)} />
+                            <Text
+                                content="DURATION (ms)"
+                                fontSize={10}
+                                color={Color.rgb(148, 163, 184)}
+                            />
                             <SizedBox height={4} />
                             <Row mainAlignment={MainAxisAlignment.Center}>
                                 {DURATIONS.map((d, i) => (
@@ -123,13 +157,37 @@ function AnimationPlayground() {
                                                 width={70}
                                                 height={30}
                                                 borderRadius={6}
-                                                color={i === durIdx ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                                color={
+                                                    i === durIdx
+                                                        ? Color.rgb(
+                                                              59,
+                                                              130,
+                                                              246,
+                                                          )
+                                                        : Color.rgb(
+                                                              226,
+                                                              232,
+                                                              240,
+                                                          )
+                                                }
                                                 alignment={Alignment.Center}
                                             >
                                                 <Text
                                                     content={String(d)}
                                                     fontSize={11}
-                                                    color={i === durIdx ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                                    color={
+                                                        i === durIdx
+                                                            ? Color.rgb(
+                                                                  255,
+                                                                  255,
+                                                                  255,
+                                                              )
+                                                            : Color.rgb(
+                                                                  71,
+                                                                  85,
+                                                                  105,
+                                                              )
+                                                    }
                                                 />
                                             </Container>
                                         }
@@ -147,13 +205,25 @@ function AnimationPlayground() {
                                             width={70}
                                             height={30}
                                             borderRadius={6}
-                                            color={toggled ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                            color={
+                                                toggled
+                                                    ? Color.rgb(59, 130, 246)
+                                                    : Color.rgb(226, 232, 240)
+                                            }
                                             alignment={Alignment.Center}
                                         >
                                             <Text
                                                 content="Size"
                                                 fontSize={11}
-                                                color={toggled ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                                color={
+                                                    toggled
+                                                        ? Color.rgb(
+                                                              255,
+                                                              255,
+                                                              255,
+                                                          )
+                                                        : Color.rgb(71, 85, 105)
+                                                }
                                             />
                                         </Container>
                                     }
@@ -166,13 +236,25 @@ function AnimationPlayground() {
                                             width={70}
                                             height={30}
                                             borderRadius={6}
-                                            color={colorIdx > 0 ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                            color={
+                                                colorIdx > 0
+                                                    ? Color.rgb(59, 130, 246)
+                                                    : Color.rgb(226, 232, 240)
+                                            }
                                             alignment={Alignment.Center}
                                         >
                                             <Text
                                                 content="Color"
                                                 fontSize={11}
-                                                color={colorIdx > 0 ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                                color={
+                                                    colorIdx > 0
+                                                        ? Color.rgb(
+                                                              255,
+                                                              255,
+                                                              255,
+                                                          )
+                                                        : Color.rgb(71, 85, 105)
+                                                }
                                             />
                                         </Container>
                                     }
@@ -185,13 +267,25 @@ function AnimationPlayground() {
                                             width={70}
                                             height={30}
                                             borderRadius={6}
-                                            color={posToggled ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                            color={
+                                                posToggled
+                                                    ? Color.rgb(59, 130, 246)
+                                                    : Color.rgb(226, 232, 240)
+                                            }
                                             alignment={Alignment.Center}
                                         >
                                             <Text
                                                 content="Move"
                                                 fontSize={11}
-                                                color={posToggled ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                                color={
+                                                    posToggled
+                                                        ? Color.rgb(
+                                                              255,
+                                                              255,
+                                                              255,
+                                                          )
+                                                        : Color.rgb(71, 85, 105)
+                                                }
                                             />
                                         </Container>
                                     }
@@ -207,13 +301,25 @@ function AnimationPlayground() {
                                         width={100}
                                         height={30}
                                         borderRadius={6}
-                                        color={infinite ? Color.rgb(59, 130, 246) : Color.rgb(226, 232, 240)}
+                                        color={
+                                            infinite
+                                                ? Color.rgb(59, 130, 246)
+                                                : Color.rgb(226, 232, 240)
+                                        }
                                         alignment={Alignment.Center}
                                     >
                                         <Text
-                                            content={infinite ? "Infinite ✓" : "Infinite"}
+                                            content={
+                                                infinite
+                                                    ? "Infinite ✓"
+                                                    : "Infinite"
+                                            }
                                             fontSize={11}
-                                            color={infinite ? Color.rgb(255, 255, 255) : Color.rgb(71, 85, 105)}
+                                            color={
+                                                infinite
+                                                    ? Color.rgb(255, 255, 255)
+                                                    : Color.rgb(71, 85, 105)
+                                            }
                                         />
                                     </Container>
                                 }
