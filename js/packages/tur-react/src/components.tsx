@@ -22,6 +22,7 @@ import {
     MainAxisAlignment,
     type MainAxisSize,
 } from "@tur/react-renderer";
+import { flushSync } from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
 import React from "react";
 
@@ -221,6 +222,7 @@ export interface AnimatedContainerProps {
     children?: ReactNode;
     duration?: number;
     curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    repeatCount?: number;
     onEnd?: () => void;
     width?: number;
     height?: number;
@@ -263,6 +265,7 @@ const ANIMATABLE_COLOR_KEYS = ["color", "borderColor", "shadowColor"] as const;
 export function AnimatedContainer({
     duration = 300,
     curve = "linear",
+    repeatCount,
     onEnd,
     children,
     ...containerProps
@@ -281,10 +284,11 @@ export function AnimatedContainer({
             duration,
             curve,
             onTick: (value: number) => {
+                const tweens = tweenMapRef.current;
+                const keys = Object.keys(tweens);
+                if (keys.length === 0) return;
                 const newValues: Record<string, unknown> = {};
-                for (const [key, tween] of Object.entries(
-                    tweenMapRef.current,
-                )) {
+                for (const [key, tween] of Object.entries(tweens)) {
                     if (tween.type === "float") {
                         newValues[key] =
                             tween.begin + (tween.end - tween.begin) * value;
@@ -292,6 +296,7 @@ export function AnimatedContainer({
                         const lerp = (a: number, b: number) =>
                             Math.round(a + (b - a) * value);
                         newValues[key] = {
+                            type: "solid",
                             r: lerp(tween.begin.r, tween.end.r),
                             g: lerp(tween.begin.g, tween.end.g),
                             b: lerp(tween.begin.b, tween.end.b),
@@ -299,7 +304,9 @@ export function AnimatedContainer({
                         };
                     }
                 }
-                setAnimatedValues((prev) => ({ ...prev, ...newValues }));
+                flushSync(() =>
+                    setAnimatedValues((prev) => ({ ...prev, ...newValues })),
+                );
             },
             onEnd,
         });
@@ -366,8 +373,12 @@ export function AnimatedContainer({
             }
         }
 
-        if (Object.keys(tweens).length > 0) {
+        const tweenKeys = Object.keys(tweens);
+        if (tweenKeys.length > 0) {
             tweenMapRef.current = tweens;
+            if (repeatCount !== undefined) {
+                ctrl.repeat(repeatCount);
+            }
             ctrl.forward();
         }
 
@@ -388,6 +399,7 @@ export interface AnimatedPositionedProps {
     children?: ReactNode;
     duration?: number;
     curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    repeatCount?: number;
     onEnd?: () => void;
     left?: number;
     top?: number;
@@ -399,6 +411,7 @@ export interface AnimatedPositionedProps {
 export function AnimatedPositioned({
     duration = 300,
     curve = "linear",
+    repeatCount,
     onEnd,
     children,
     ...positionedProps
@@ -425,7 +438,9 @@ export function AnimatedPositioned({
                 )) {
                     newValues[key] = begin + (end - begin) * value;
                 }
-                setAnimatedValues((prev) => ({ ...prev, ...newValues }));
+                flushSync(() =>
+                    setAnimatedValues((prev) => ({ ...prev, ...newValues })),
+                );
             },
             onEnd,
         });
@@ -454,6 +469,9 @@ export function AnimatedPositioned({
 
         if (Object.keys(tweens).length > 0) {
             tweenMapRef.current = tweens;
+            if (repeatCount !== undefined) {
+                ctrl.repeat(repeatCount);
+            }
             ctrl.forward();
         }
 
