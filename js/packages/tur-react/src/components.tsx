@@ -17,12 +17,12 @@ import {
     CrossAxisAlignment,
     createAnimationController,
     FlexDirection,
+    flushSync,
     type HitTestBehavior,
     type LinearGradient,
     MainAxisAlignment,
     type MainAxisSize,
 } from "@tur/react-renderer";
-import { flushSync } from "@tur/react-renderer";
 import type { ReactNode, Ref } from "react";
 import React from "react";
 
