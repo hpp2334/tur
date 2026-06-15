@@ -7,17 +7,16 @@ fn animation_controller_forward_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var width$ = globalThis.__tur.source(ctx, 100);
+        var container = globalThis.__tur.Container(ctx, { width: width$ });
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
             curve: "linear",
             onTick: function(value) {
                 var w = 100 + (200 - 100) * value;
-                globalThis.__tur.setAttribute(ctx, container, "width", w);
+                globalThis.__tur.set(ctx, width$, w);
             }
         });
         ctrl.forward();
@@ -63,17 +62,16 @@ fn animation_controller_reverse_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 200);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var width$ = globalThis.__tur.source(ctx, 200);
+        var container = globalThis.__tur.Container(ctx, { width: width$ });
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
             curve: "linear",
             onTick: function(value) {
                 var w = 100 + (200 - 100) * value;
-                globalThis.__tur.setAttribute(ctx, container, "width", w);
+                globalThis.__tur.set(ctx, width$, w);
             }
         });
         ctrl.reverse();
@@ -110,17 +108,16 @@ fn animation_controller_stop_freezes_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var width$ = globalThis.__tur.source(ctx, 100);
+        var container = globalThis.__tur.Container(ctx, { width: width$ });
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 200,
             curve: "linear",
             onTick: function(value) {
                 var w = 100 + (200 - 100) * value;
-                globalThis.__tur.setAttribute(ctx, container, "width", w);
+                globalThis.__tur.set(ctx, width$, w);
             }
         });
         ctrl.forward();
@@ -163,17 +160,16 @@ fn animation_controller_repeats() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 100);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var width$ = globalThis.__tur.source(ctx, 100);
+        var container = globalThis.__tur.Container(ctx, { width: width$ });
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 100,
             curve: "linear",
             onTick: function(value) {
                 var w = 100 + (200 - 100) * value;
-                globalThis.__tur.setAttribute(ctx, container, "width", w);
+                globalThis.__tur.set(ctx, width$, w);
             }
         });
         ctrl.repeat(3);
@@ -212,9 +208,8 @@ fn animation_controller_status_transitions() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var container = globalThis.__tur.Container(ctx, {});
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 100
@@ -248,9 +243,8 @@ fn animation_controller_on_end_callback() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var container = globalThis.__tur.Container(ctx, {});
+        globalThis.__tur.render(ctx, container);
 
         globalThis.__ended = false;
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
@@ -276,16 +270,15 @@ fn animation_controller_ease_in_curve() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_js(r#"
         var ctx = globalThis.__tur.__ctx;
-        var root = globalThis.__tur.createRoot(ctx);
-        var container = globalThis.__tur.createContainer(ctx);
-        globalThis.__tur.setAttribute(ctx, container, "width", 0);
-        globalThis.__tur.appendChild(ctx, root, container);
+        var width$ = globalThis.__tur.source(ctx, 0);
+        var container = globalThis.__tur.Container(ctx, { width: width$ });
+        globalThis.__tur.render(ctx, container);
 
         var ctrl = globalThis.__tur.createAnimationController(ctx, {
             duration: 1000,
             curve: "easeIn",
             onTick: function(value) {
-                globalThis.__tur.setAttribute(ctx, container, "width", 1000 * value);
+                globalThis.__tur.set(ctx, width$, 1000 * value);
             }
         });
         ctrl.forward();

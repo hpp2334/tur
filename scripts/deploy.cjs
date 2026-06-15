@@ -4,8 +4,8 @@ const fs = require("fs");
 
 const root = path.join(__dirname, "..");
 const jsDir = path.join(root, "js");
-const distDir = path.join(jsDir, "packages", "tur-react-demo", "dist");
-const projectName = "tur-react-demo";
+const distDir = path.join(jsDir, "packages", "tur-demo", "dist");
+const projectName = "tur-demo";
 
 function run(cmd, opts) {
   console.log(`> ${cmd}`);

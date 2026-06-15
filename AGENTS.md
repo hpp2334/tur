@@ -6,7 +6,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  js/packages/tur-react-demo (playground web app)     │
+│  js/packages/tur-demo (playground web app)             │
 │  React-DOM web app with:                             │
 │  - Case selector (sidebar)                           │
 │  - Code editor (CodeMirror 6)                        │
@@ -95,7 +95,7 @@ js/
   packages/
     tur-react/               # React component wrappers
     tur-react-renderer/      # Custom React reconciler
-    tur-react-demo/          # Playground web app (React-DOM + CodeMirror + tur viewer)
+    tur-demo/              # Playground web app (React-DOM + CodeMirror + tur viewer)
     tur-test-cases/          # Test cases (react-cases/ with ~60 cases)
     playground-for-agent/    # Playwright integration tests
 ```
@@ -123,15 +123,15 @@ cd libs/tur-wasm && wasm-pack build --target web
 cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
 ```
 
-### tur-react-demo (playground)
+### tur-demo (playground)
 
 The playground is a React-DOM web app. Building it automatically runs `wasm-pack`, builds test cases, copies WASM assets + compiled cases + workspace deps into the output:
 
 ```sh
 cd js && pnpm build
-cd js/packages/tur-react-demo && rspack build
+cd js/packages/tur-demo && rspack build
 # Or use the rspack dev server
-cd js/packages/tur-react-demo && rspack dev
+cd js/packages/tur-demo && rspack dev
 ```
 
 Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer).
@@ -198,14 +198,14 @@ Or verify all screenshots at once by passing all file paths to a single `@image-
 
 ```sh
 cd js && pnpm build
-cd js/packages/tur-react-demo && rspack build
+cd js/packages/tur-demo && rspack build
 cd js/packages/playground-for-agent && pnpm start
 ```
 
 ### Prod mode (deployed URL)
 
 ```sh
-DEPLOY_URL=https://tur-react-demo.pages.dev pnpm start:prod
+DEPLOY_URL=https://tur-demo.pages.dev pnpm start:prod
 ```
 
 

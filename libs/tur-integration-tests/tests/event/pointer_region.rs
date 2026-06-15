@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::ParagraphElement;
+use tur_engine::elements::Text;
 use tur_integration_tests::TurTestApp;
 
 fn build_pointer_region_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -16,7 +16,7 @@ fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
 
 fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
     app.with_element(container_id, |e| {
-        e.cast::<ParagraphElement>()
+        e.cast::<Text>()
             .map(|tc| tc.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })

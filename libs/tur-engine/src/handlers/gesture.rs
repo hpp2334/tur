@@ -4,7 +4,7 @@ use crate::core::gesture::make_click_command;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
-use crate::elements::PointerInteractElement;
+use crate::elements::PointerInteract;
 use tur_shared::Offset;
 
 pub struct GestureAppHandler;
@@ -72,7 +72,7 @@ fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId)
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteractElement>()
+            e.cast::<PointerInteract>()
                 .map(|p| p.is_click_opaque())
                 .unwrap_or(false)
         })

@@ -1,91 +1,188 @@
+use std::rc::Rc;
+
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
-use boa_engine::property::PropertyDescriptor;
-use boa_engine::{js_string, Context, JsString, JsValue};
+use boa_engine::{Context, JsValue};
+use tur_shared::Axis;
 
-use crate::core::elements::{ElementJsCallbackEmitter, ElementOnUpdate, ElementOnWheel, ElementOnWheelContext, ElementTrace, WheelEvent};
+use crate::core::element::ElementNodeId;
+use crate::core::elements::{
+    AnyElement, ElementJsCallbackEmitter, ElementOnWheel, ElementOnWheelContext, ElementTrace,
+    WheelEvent,
+};
 use crate::core::js_command::{AnyJsCommand, LazyListJsCommand};
+use crate::core::widget::{
+    extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+};
+
 use crate::elements::lazy_list::controller::LazyListController;
 use crate::elements::scroll_view::ScrollPosition;
-use tur_shared::Axis;
 
 const FALLBACK_EXTENT: f64 = 50.0;
 
+// ---------------------------------------------------------------------------
+// LazyListSpec — the user's declaration.
+//
+// `axis`, `itemCount`, and `overscan` are reactive (`Val<T>`). `builder` is a
+// JS function `(index) => EdgyElement` captured at factory time and stored as a
+// `JsFunction`. The spec uses `unsafe_empty_trace` — same risk profile as the
+// old EdgyHandle holding a JsFunction: the closure is kept alive by the JS
+// module scope for the lifetime of the app, so the GC always sees it via that
+// root.
+// ---------------------------------------------------------------------------
+
 #[derive(Clone)]
-pub struct LazyListElement {
-    pub(crate) axis: Axis,
-    pub(crate) item_count: u64,
-    pub(crate) overscan: u64,
-    pub(crate) start_index: u64,
-    pub(crate) position: ScrollPosition,
-    pub(crate) controller: Option<JsObject>,
-    pub(crate) reported_start: u64,
-    pub(crate) reported_end: u64,
-    pub(crate) measured_total_sum: f64,
-    pub(crate) measured_count: u64,
-    pub(crate) child_extents: Vec<f64>,
+pub struct LazyListSpec {
+    pub axis: Option<Val<Axis>>,
+    pub item_count: Val<u64>,
+    pub overscan: Option<Val<u64>>,
+    pub builder: JsFunction,
+    pub query_key: Option<Vec<String>>,
 }
 
-impl LazyListElement {
-    pub fn new() -> Self {
-        LazyListElement {
-            axis: Axis::Vertical,
-            item_count: 0,
-            overscan: 3,
-            start_index: 0,
-            position: ScrollPosition::new(),
-            controller: None,
-            reported_start: 0,
-            reported_end: 0,
-            measured_total_sum: 0.0,
-            measured_count: 0,
-            child_extents: Vec::new(),
-        }
-    }
+impl Spec for LazyListSpec {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+        let id = cx.alloc_node();
 
+        // Resolve the eager props needed by the element up-front.
+        let axis = self
+            .axis
+            .as_ref()
+            .and_then(|v| cx.read_val(v, boa))
+            .unwrap_or(Axis::Vertical);
+        let item_count = cx.read_val(&self.item_count, boa).unwrap_or(0);
+        let overscan = self
+            .overscan
+            .as_ref()
+            .and_then(|v| cx.read_val(v, boa))
+            .unwrap_or(3);
+
+        // Build items eagerly up to `item_count`. Items are built BEFORE this
+        // node is inserted, so each item's self-link to `id` is a no-op; we
+        // explicitly link them after inserting to get a single edge per item.
+        let builder = self.builder.clone();
+        let mut visible: Vec<(u64, ElementNodeId)> = Vec::new();
+        for index in 0..item_count {
+            let Some(spec) = build_item_spec(&builder, index, boa) else {
+                continue;
+            };
+            let item_id = spec.build(cx, boa, id);
+            visible.push((index, item_id));
+        }
+        let item_ids: Vec<ElementNodeId> = visible.iter().map(|&(_, id)| id).collect();
+
+        cx.insert_node(
+            id,
+            AnyElement::with_wheel(LazyList {
+                spec: self.clone(),
+                node_id: id,
+                axis,
+                overscan,
+                position: ScrollPosition::new(),
+                child_extents: Vec::new(),
+                visible,
+                reported_start: 0,
+                reported_end: 0,
+            })
+            .with_js_callback_emitter::<LazyList>(),
+            boa,
+        );
+
+        for item_id in item_ids {
+            cx.link_child(id, item_id);
+        }
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
+        cx.link_child(parent, id);
+        id
+    }
+}
+
+/// Invoke the JS builder closure for `index`, returning the produced spec.
+fn build_item_spec(
+    builder: &JsFunction,
+    index: u64,
+    boa: &mut Context,
+) -> Option<Rc<dyn Spec>> {
+    let result = builder
+        .call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa)
+        .ok()?;
+    extract_spec(&result)
+}
+
+// ---------------------------------------------------------------------------
+// LazyList — the built element. A scroll container that lays its built items
+// out sequentially along the main axis, clips to the viewport, and offsets
+// children by the current scroll position.
+// ---------------------------------------------------------------------------
+
+pub struct LazyList {
+    pub spec: LazyListSpec,
+    pub(crate) node_id: ElementNodeId,
+    pub(crate) axis: Axis,
+    pub(crate) overscan: u64,
+    pub(crate) position: ScrollPosition,
+    pub(crate) child_extents: Vec<f64>,
+    /// (index, built node id) for every item currently in the tree.
+    pub(crate) visible: Vec<(u64, ElementNodeId)>,
+    pub(crate) reported_start: u64,
+    pub(crate) reported_end: u64,
+}
+
+impl LazyList {
     pub fn scroll_offset(&self) -> f64 {
         self.position.pixels()
     }
 
+    pub fn axis(&self) -> Axis {
+        self.axis
+    }
+
+    /// The declared item count (static value only; reactive counts fall back
+    /// to the number of items actually built, which is kept in sync by the
+    /// effect).
     pub fn item_count(&self) -> u64 {
-        self.item_count
+        match &self.spec.item_count {
+            Val::Static(v) => *v,
+            Val::Reactive(_) => self.visible.len() as u64,
+        }
+    }
+
+    /// The number of items currently built into the tree.
+    pub fn built_count(&self) -> usize {
+        self.visible.len()
     }
 
     pub fn average_extent(&self) -> f64 {
-        if self.measured_count == 0 {
+        let n = self.child_extents.len();
+        if n == 0 {
             return FALLBACK_EXTENT;
         }
-        let avg = self.measured_total_sum / self.measured_count as f64;
+        let sum: f64 = self.child_extents.iter().sum();
+        let avg = sum / n as f64;
         if avg <= 0.0 { FALLBACK_EXTENT } else { avg }
     }
 
     pub fn compute_visible_range(&self, viewport_main: f64) -> (u64, u64) {
-        if self.item_count == 0 {
+        let count = self.item_count();
+        if count == 0 {
             return (0, 0);
         }
         let avg = self.average_extent();
         if avg <= 0.0 {
-            return (0, self.item_count.saturating_sub(1));
+            return (0, count.saturating_sub(1));
         }
         let scroll = self.position.pixels();
-        let start = ((scroll / avg).floor() as u64)
-            .min(self.item_count.saturating_sub(1));
-        let end = (((scroll + viewport_main) / avg).ceil() as u64)
-            .min(self.item_count.saturating_sub(1));
+        let start = ((scroll / avg).floor() as u64).min(count.saturating_sub(1));
+        let end = (((scroll + viewport_main) / avg).ceil() as u64).min(count.saturating_sub(1));
         let start = start.saturating_sub(self.overscan);
-        let end = (end + self.overscan).min(self.item_count.saturating_sub(1));
+        let end = (end + self.overscan).min(count.saturating_sub(1));
         (start, end)
     }
 
-    pub fn estimate_total_extent(&self) -> f64 {
-        self.item_count as f64 * self.average_extent()
-    }
-
-    pub fn update_controller_metrics(&mut self) {
-        let Some(ref ctrl_obj) = self.controller else { return };
-        let Some(mut ctrl) = ctrl_obj.downcast_mut::<LazyListController>() else {
-            return;
-        };
+    #[allow(dead_code)]
+    pub(crate) fn update_controller_metrics(&mut self, ctrl: &mut LazyListController) {
         let vp = self.position.viewport_size();
         let dim = match self.axis {
             Axis::Vertical => vp.height,
@@ -97,19 +194,74 @@ impl LazyListElement {
     }
 }
 
-impl Default for LazyListElement {
-    fn default() -> Self {
-        Self::new()
+// ---------------------------------------------------------------------------
+// Effect — rebuild the item set when itemCount changes.
+// ---------------------------------------------------------------------------
+
+impl Effect for LazyList {
+    fn effect(
+        &mut self,
+        cx: &mut WidgetCx,
+        boa: &mut Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    ) {
+        let count_dirty = self.spec.item_count.is_dirty(dirties);
+        let axis_dirty = self.spec.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
+
+        if axis_dirty {
+            self.axis = self
+                .spec
+                .axis
+                .as_ref()
+                .and_then(|v| cx.read_val(v, boa))
+                .unwrap_or(self.axis);
+        }
+
+        if !count_dirty {
+            return;
+        }
+
+        let new_count = cx.read_val(&self.spec.item_count, boa).unwrap_or(0);
+        let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
+
+        if new_count < current_max {
+            // Destroy items whose index is at or beyond the new count.
+            let to_destroy: Vec<ElementNodeId> = self
+                .visible
+                .iter()
+                .filter(|(i, _)| *i >= new_count)
+                .map(|&(_, id)| id)
+                .collect();
+            for id in to_destroy {
+                cx.destroy_subtree(id);
+            }
+            self.visible.retain(|(i, _)| *i < new_count);
+        } else if new_count > current_max {
+            // Build items for the newly-visible indices. The LazyList node is
+            // in the tree during the effect, so each item's self-link succeeds
+            // — no explicit link needed.
+            let builder = self.spec.builder.clone();
+            let node_id = self.node_id;
+            for index in current_max..new_count {
+                let Some(spec) = build_item_spec(&builder, index, boa) else {
+                    continue;
+                };
+                let item_id = spec.build(cx, boa, node_id);
+                self.visible.push((index, item_id));
+            }
+        }
+
+        cx.mark_dirty(self.node_id);
     }
 }
 
-impl ElementTrace for LazyListElement {
+impl ElementTrace for LazyList {
     fn trace_label(&self) -> String {
         format!(
-            "axis={:?} items={} avg={:.1} offset={:.1} range={}-{}",
+            "axis={:?} items={} built={} offset={:.1} range={}-{}",
             self.axis,
-            self.item_count,
-            self.average_extent(),
+            self.item_count(),
+            self.visible.len(),
             self.position.pixels(),
             self.reported_start,
             self.reported_end,
@@ -117,55 +269,11 @@ impl ElementTrace for LazyListElement {
     }
 }
 
-impl ElementOnUpdate for LazyListElement {
-    fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
-        match key.to_std_string_escaped().as_str() {
-            "axis" => {
-                if let Some(n) = value.as_number() {
-                    self.axis = match n as u64 {
-                        0 => Axis::Vertical,
-                        1 => Axis::Horizontal,
-                        _ => Axis::Vertical,
-                    };
-                }
-            }
-            "itemCount" => {
-                if let Some(n) = value.as_number() {
-                    self.item_count = n as u64;
-                }
-            }
-            "overscan" => {
-                if let Some(n) = value.as_number() {
-                    self.overscan = n as u64;
-                }
-            }
-            "startIndex" => {
-                if let Some(n) = value.as_number() {
-                    self.start_index = n as u64;
-                }
-            }
-            "controller" => {
-                if let Some(obj) = value.as_object() {
-                    self.controller = Some(obj.clone());
-                }
-            }
-            _ => {}
-        }
-    }
+// ---------------------------------------------------------------------------
+// Wheel handling — scroll the viewport along the main axis.
+// ---------------------------------------------------------------------------
 
-    fn reset_prop(&mut self, key: &JsString) {
-        match key.to_std_string_escaped().as_str() {
-            "axis" => self.axis = Axis::Vertical,
-            "itemCount" => self.item_count = 0,
-            "overscan" => self.overscan = 3,
-            "startIndex" => self.start_index = 0,
-            "controller" => self.controller = None,
-            _ => {}
-        }
-    }
-}
-
-impl ElementOnWheel for LazyListElement {
+impl ElementOnWheel for LazyList {
     fn on_wheel(&mut self, cx: &mut ElementOnWheelContext, event: &WheelEvent) -> f64 {
         let delta = match self.axis {
             Axis::Vertical => event.delta_y,
@@ -177,20 +285,6 @@ impl ElementOnWheel for LazyListElement {
         let new_pixels = self.position.pixels();
 
         if (new_pixels - old_pixels).abs() > 0.001 {
-            let vp = self.position.viewport_size();
-            let viewport_main = self.axis.main(vp);
-            let (start, end) = self.compute_visible_range(viewport_main);
-
-            if start != self.reported_start || end != self.reported_end {
-                cx.push_js_command(LazyListJsCommand::VisibleRangeDidChange {
-                    start_index: start,
-                    end_index: end,
-                });
-                self.reported_start = start;
-                self.reported_end = end;
-            }
-
-            self.update_controller_metrics();
             cx.push_js_command(LazyListJsCommand::ScrollDidUpdate);
             cx.request_redraw();
         }
@@ -199,56 +293,70 @@ impl ElementOnWheel for LazyListElement {
     }
 }
 
-impl ElementJsCallbackEmitter for LazyListElement {
+// ---------------------------------------------------------------------------
+// JS callback emission — forward scroll events to an attached controller.
+// (Controller attachment is not wired into the new spec model yet, so this is
+// inert; it exists to keep the LazyListController class compiling and ready
+// for future wiring.)
+// ---------------------------------------------------------------------------
+
+impl ElementJsCallbackEmitter for LazyList {
     fn emit_js_callback(
         &self,
-        context: &mut Context,
+        _context: &mut Context,
         command: AnyJsCommand,
     ) -> Option<(JsFunction, Vec<JsValue>)> {
-        let ctrl_obj = self.controller.as_ref()?;
-        let ctrl = ctrl_obj.downcast_ref::<LazyListController>()?;
+        let _ = command.downcast_ref::<LazyListJsCommand>()?;
+        None
+    }
+}
 
-        match command.downcast_ref::<LazyListJsCommand>()? {
-            LazyListJsCommand::VisibleRangeDidChange { start_index, end_index } => {
-                let on_visible_range_change = ctrl.on_visible_range_change.as_ref()?;
+// ---------------------------------------------------------------------------
+// Factory — called from the JS bridge to parse props into a spec.
+// ---------------------------------------------------------------------------
 
-                let proto = context.intrinsics().constructors().object().prototype();
-                let obj = JsObject::from_proto_and_data(proto, ());
-                let desc = |v: f64| {
-                    PropertyDescriptor::builder()
-                        .value(JsValue::from(v))
-                        .writable(true)
-                        .enumerable(true)
-                        .configurable(true)
-                        .build()
-                };
-                obj.insert_property(js_string!("offset"), desc(self.position.pixels()));
-                obj.insert_property(js_string!("maxExtent"), desc(self.position.max_scroll_extent()));
-                obj.insert_property(js_string!("viewportDimension"), desc(ctrl.viewport_dimension));
-                obj.insert_property(js_string!("startIndex"), desc(*start_index as f64));
-                obj.insert_property(js_string!("endIndex"), desc(*end_index as f64));
+fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    val_from_js(&v)
+}
 
-                Some((on_visible_range_change.clone(), vec![obj.into()]))
-            }
-            LazyListJsCommand::ScrollDidUpdate => {
-                let on_scroll = ctrl.on_scroll.as_ref()?;
-
-                let proto = context.intrinsics().constructors().object().prototype();
-                let obj = JsObject::from_proto_and_data(proto, ());
-                let desc = |v: f64| {
-                    PropertyDescriptor::builder()
-                        .value(JsValue::from(v))
-                        .writable(true)
-                        .enumerable(true)
-                        .configurable(true)
-                        .build()
-                };
-                obj.insert_property(js_string!("offset"), desc(self.position.pixels()));
-                obj.insert_property(js_string!("maxExtent"), desc(self.position.max_scroll_extent()));
-                obj.insert_property(js_string!("viewportDimension"), desc(ctrl.viewport_dimension));
-
-                Some((on_scroll.clone(), vec![obj.into()]))
+fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
+    let len = arr.length(ctx).ok()? as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if let Ok(val) = arr.at(i as i64, ctx) {
+            if let Some(s) = val.as_string() {
+                out.push(s.to_std_string_escaped());
             }
         }
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    v.as_object().and_then(JsFunction::from_object)
+}
+
+impl LazyListSpec {
+    /// Build a `LazyListSpec` from a JS props object. Returns `None` when a
+    /// required prop (`itemCount`, `builder`) is missing.
+    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
+        let item_count = prop_val::<u64>(props, "itemCount", ctx)?;
+        let builder = prop_builder(props, "builder", ctx)?;
+        Some(LazyListSpec {
+            axis: prop_val::<Axis>(props, "axis", ctx),
+            item_count,
+            overscan: prop_val::<u64>(props, "overscan", ctx),
+            builder,
+            query_key: prop_query_key(props, "queryKey", ctx),
+        })
     }
 }

@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::FlexItemElement;
+pub use element::{Expanded, ExpandedSpec};

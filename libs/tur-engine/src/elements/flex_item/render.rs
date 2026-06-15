@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::FlexItemElement;
+use super::element::Expanded;
 
-impl ElementLayout for FlexItemElement {
+impl ElementLayout for Expanded {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -23,7 +23,7 @@ impl ElementLayout for FlexItemElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for FlexItemElement {
+impl ElementRender for Expanded {
     fn type_name(&self) -> &'static str {
         "tur_flex_item"
     }

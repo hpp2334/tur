@@ -21,7 +21,7 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
-use elements::editable_text::EditableTextElement;
+use elements::editable_text::EditableText;
 
 pub struct TurApp {
     boa_context: Context,
@@ -140,7 +140,7 @@ impl TurApp {
 
         let node = tree.get(focused_id)?;
         let element = node.element.as_ref()?;
-        let editable_el = element.cast::<EditableTextElement>()?;
+        let editable_el = element.cast::<EditableText>()?;
         let layout_data = editable_el.cached_layout.as_ref()?;
 
         let full = editable_el.text();
@@ -172,7 +172,7 @@ impl TurApp {
         let Some(ref element) = node.element else {
             return false;
         };
-        element.cast::<EditableTextElement>().is_some()
+        element.cast::<EditableText>().is_some()
     }
 
     #[cfg(feature = "trace")]

@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::FlexElement;
+pub use element::{Flex, FlexSpec};

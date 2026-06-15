@@ -7,7 +7,7 @@ import { chromium, type Page } from "playwright";
 import { generate as generateCert } from "selfsigned";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIST_DIR = path.resolve(__dirname, "../../tur-react-demo/dist");
+const DIST_DIR = path.resolve(__dirname, "../../tur-demo/dist");
 const RESULTS_DIR = path.resolve(__dirname, "../test-results");
 const PORT = 4030;
 

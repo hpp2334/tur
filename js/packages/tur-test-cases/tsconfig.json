@@ -2,8 +2,7 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "outDir": "dist",
-        "rootDir": "react-cases",
-        "jsx": "react-jsx"
+        "rootDir": "edgy-cases"
     },
-    "include": ["react-cases", "react-jsx.d.ts"]
+    "include": ["edgy-cases"]
 }

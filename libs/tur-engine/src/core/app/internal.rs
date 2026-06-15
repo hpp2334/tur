@@ -41,6 +41,10 @@ impl TurAppInternal {
             resource_map.clone(),
         );
 
+        // Give the tree access to the reactive store so layout/paint can
+        // resolve `Val<T>` values on demand.
+        element_tree.borrow_mut().set_store(js_context.store.clone());
+
         let app_context = TurAppContext::new(
             element_tree,
             js_command_queue,
@@ -77,8 +81,14 @@ impl TurAppInternal {
                 self.js_context.animation_manager.borrow().has_active()
             };
 
+            // Reactive flush: drain the store, expand dirty atoms, and dispatch
+            // `do_update(dirties)` to the mounted edgy root. This may mutate
+            // the ElementTree, which sets `dirty`/`needs_draw` for the next
+            // layout pass.
+            let reactive_changed = self.flush_reactive(boa_context);
+
             let dirty =
-                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update;
+                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
             if dirty {
                 needs_render = true;
                 self.app_context.borrow_mut().layout();
@@ -108,6 +118,76 @@ impl TurAppInternal {
             }
         }
         Ok(needs_render)
+    }
+
+    /// Drain the reactive store and mark affected tree nodes dirty via the
+    /// dep tracker. Returns `true` if any nodes were dirtied.
+    fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> bool {
+        let store = self.js_context.store.clone();
+        if !store.borrow().has_pending() {
+            return false;
+        }
+        let store_ctx_obj = match crate::core::bridge::reactive_bridge::build_ctx_object_for(
+            store.clone(),
+            boa_context,
+        ) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("reactive store-ctx build failed: {e}");
+                return false;
+            }
+        };
+        let dirties = store.borrow().flush(boa_context, &store_ctx_obj);
+        if dirties.is_empty() {
+            return false;
+        }
+        // Mark nodes whose atoms are dirty, so the next layout pass
+        // re-reads fresh values via `LayoutContext::read_val`.
+        let dirty_nodes = self
+            .js_context
+            .element_tree
+            .borrow()
+            .dep_tracker()
+            .dirty_nodes(&dirties);
+        let mut tree = self.js_context.element_tree.borrow_mut();
+        for node_id in &dirty_nodes {
+            tree.mark_dirty(*node_id);
+        }
+        drop(tree);
+
+        // Run effects (Condition branch swaps, LazyList range adjustments).
+        self.run_effects(boa_context, &dirties);
+
+        !dirty_nodes.is_empty()
+    }
+
+    /// Walk all tree nodes and invoke `run_effect` — lets Condition /
+    /// LazyList react to dirty atoms before layout.
+    fn run_effects(
+        &self,
+        boa_context: &mut boa_engine::Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    ) {
+        let node_ids: Vec<crate::core::element::ElementNodeId> = {
+            let tree = self.js_context.element_tree.borrow();
+            tree.nodes.keys().copied().collect()
+        };
+        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
+        for id in node_ids {
+            let mut element = {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                tree.get_mut(id).and_then(|n| n.element.take())
+            };
+            if let Some(ref mut elem) = element {
+                elem.run_effect(&mut cx, boa_context, dirties);
+            }
+            if let Some(elem) = element {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                if let Some(node) = tree.get_mut(id) {
+                    node.element = Some(elem);
+                }
+            }
+        }
     }
 
     fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {

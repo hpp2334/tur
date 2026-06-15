@@ -6,7 +6,7 @@ import { chromium, type Page } from "playwright";
 import { generate as generateCert } from "selfsigned";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DIST_DIR = path.resolve(__dirname, "../../tur-react-demo/dist");
+const DIST_DIR = path.resolve(__dirname, "../../tur-demo/dist");
 const RESULTS_DIR = path.resolve(__dirname, "../test-results");
 const PORT = 3999;
 
@@ -404,7 +404,7 @@ async function printConsole(logs: ConsoleEntry[]) {
 async function main() {
     if (!fs.existsSync(DIST_DIR)) {
         console.error(`dist not found: ${DIST_DIR}`);
-        console.error("Run: cd js/packages/tur-react-demo && pnpm build");
+        console.error("Run: cd js/packages/tur-demo && pnpm build");
         process.exit(1);
     }
 

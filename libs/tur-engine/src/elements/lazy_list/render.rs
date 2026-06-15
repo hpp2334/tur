@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::LazyListElement;
+use super::element::LazyList;
 
-impl ElementLayout for LazyListElement {
+impl ElementLayout for LazyList {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -25,10 +25,9 @@ impl ElementLayout for LazyListElement {
         };
         let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
 
-        if self.item_count == 0 {
+        if self.item_count() == 0 || children.is_empty() {
             self.position.apply_dimensions(viewport, Size::ZERO);
             self.position.set_extents(0.0, 0.0);
-            self.update_controller_metrics();
             return viewport;
         }
 
@@ -47,26 +46,16 @@ impl ElementLayout for LazyListElement {
             },
         };
 
-        let mut measured_sum = 0.0f64;
-        let mut measured_count = 0u64;
-
         self.child_extents.clear();
         self.child_extents.reserve(children.len());
 
+        let mut total_main = 0.0f64;
         for &child_id in children {
             let size = cx.layout_child(child_id, &child_cs);
             let extent = self.axis.main(size);
             self.child_extents.push(extent);
-            measured_sum += extent;
-            measured_count += 1;
+            total_main += extent;
         }
-
-        if measured_count > 0 {
-            self.measured_total_sum += measured_sum;
-            self.measured_count += measured_count;
-        }
-
-        let total_main = self.estimate_total_extent();
 
         let content = match self.axis {
             tur_shared::Axis::Vertical => Size::new(viewport.width, total_main),
@@ -76,18 +65,14 @@ impl ElementLayout for LazyListElement {
         let max_scroll = (total_main - self.axis.main(viewport)).max(0.0);
         self.position.set_extents(0.0, max_scroll);
 
-        self.update_controller_metrics();
         viewport
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
-        let avg = self.average_extent();
-        let preceding = self.start_index as f64 * avg;
         let scroll_offset = self.position.pixels();
-        let mut cum = preceding;
-
+        let mut cum = 0.0;
         for (i, &child_id) in children.iter().enumerate() {
-            let extent = self.child_extents.get(i).copied().unwrap_or(avg);
+            let extent = self.child_extents.get(i).copied().unwrap_or(0.0);
             let main_pos = cum - scroll_offset;
             let offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
@@ -99,7 +84,7 @@ impl ElementLayout for LazyListElement {
     }
 }
 
-impl ElementRender for LazyListElement {
+impl ElementRender for LazyList {
     fn type_name(&self) -> &'static str {
         "tur_lazy_list"
     }
