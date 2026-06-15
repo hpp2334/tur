@@ -26,13 +26,14 @@ impl ElementLayout for Text {
             s.clone()
         } else {
             let text = cx.read_val_opt(self.spec.text.as_ref()).unwrap_or_default();
+            let color = cx.read_val_opt(self.spec.color.as_ref());
             vec![SpanData {
                 text,
                 bold: false,
                 italic: false,
                 underline: false,
                 font_size: None,
-                color: None,
+                color,
             }]
         };
 

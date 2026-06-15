@@ -11,6 +11,7 @@ use crate::core::js_command::{AnyJsCommand, IntoAnyJsCommand};
 use crate::core::widget::{val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
+use tur_shared::Color;
 
 // ---------------------------------------------------------------------------
 // TextSpec — the user's declaration. Pure Rust, no JsValues.
@@ -25,6 +26,8 @@ use crate::elements::text::text_layout::TextLayoutData;
 pub struct TextSpec {
     pub text: Option<Val<String>>,
     pub font_size: Option<Val<f64>>,
+    /// Default color applied to the anonymous span in the plain-text case.
+    pub color: Option<Val<Color>>,
     /// Parsed eagerly at factory time (not reactive).
     pub spans: Option<Vec<SpanData>>,
     pub query_key: Option<Vec<String>>,
@@ -234,6 +237,7 @@ impl TextSpec {
         TextSpec {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
+            color: prop_val::<Color>(props, "color", ctx),
             spans: prop_spans(props, "spans", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }

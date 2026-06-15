@@ -12,8 +12,12 @@
 // handles; closures receive a `{get, set}` ctx as their first argument.
 // ---------------------------------------------------------------------------
 
-export type Atom<T> = unknown;
-export type Mutation<Args extends unknown[] = [], R = void> = unknown;
+export interface Atom<T> {
+    readonly __turAtom?: T;
+}
+export interface Mutation<Args extends unknown[] = [], R = void> {
+    readonly __turMutation?: [Args, R];
+}
 export type Readable<T> = Atom<T>;
 export type Val<T> = T | Readable<T>;
 
@@ -30,17 +34,23 @@ export interface StoreCtx {
 }
 
 export function source<T>(value: T): Atom<T> {
-    return __tur.source(__ctx, value);
+    return __tur.source(__ctx, value) as Atom<T>;
 }
 
 export function derive<T>(fn: (get: StoreCtx["get"]) => T): Readable<T> {
-    return __tur.derive(__ctx, (ctx: StoreCtx) => fn(ctx.get.bind(ctx)) as T);
+    return __tur.derive(
+        __ctx,
+        (ctx: StoreCtx) => fn(ctx.get.bind(ctx)) as T,
+    ) as Readable<T>;
 }
 
 export function mutate<Args extends unknown[], R>(
     fn: (ctx: StoreCtx, ...args: Args) => R,
 ): Mutation<Args, R> {
-    return __tur.mutate(__ctx, fn as (ctx: StoreCtx, ...args: unknown[]) => unknown);
+    return __tur.mutate(
+        __ctx,
+        fn as (ctx: StoreCtx, ...args: unknown[]) => unknown,
+    ) as Mutation<Args, R>;
 }
 
 export function get<T>(a: Readable<T>): T {
@@ -48,7 +58,10 @@ export function get<T>(a: Readable<T>): T {
 }
 
 export function set<T>(s: Atom<T>, value: T): void;
-export function set<Args extends unknown[], R>(m: Mutation<Args, R>, ...args: Args): R;
+export function set<Args extends unknown[], R>(
+    m: Mutation<Args, R>,
+    ...args: Args
+): R;
 export function set(target: unknown, ...rest: unknown[]): unknown {
     return __tur.set(__ctx, target, ...rest);
 }
@@ -62,9 +75,9 @@ export function isReadable(x: unknown): x is Readable<unknown> {
 // edgy-js-demo API).
 // ---------------------------------------------------------------------------
 
-export type EdgyComponent<Props extends Record<string, unknown> = Record<string, unknown>> = (
-    props: Props,
-) => EdgyElement;
+export type EdgyComponent<
+    Props extends Record<string, unknown> = Record<string, unknown>,
+> = (props: Props) => EdgyElement;
 
 export function component<P extends Record<string, unknown>>(
     f: (props: P) => EdgyElement,
@@ -126,7 +139,10 @@ export function Row(props: FlexProps): EdgyElement {
     return __tur.Row(__ctx, props);
 }
 
-export function Expanded(props: { flex?: Val<number>; child: EdgyElement }): EdgyElement {
+export function Expanded(props: {
+    flex?: Val<number>;
+    child: EdgyElement;
+}): EdgyElement {
     return __tur.Expanded(__ctx, props);
 }
 
@@ -151,6 +167,7 @@ export function Positioned(props: PositionedProps): EdgyElement {
 export interface TextProps {
     text: Val<string>;
     fontSize?: Val<number>;
+    color?: Val<unknown>;
     spans?: Val<unknown>;
     queryKey?: Val<string[]>;
 }
@@ -164,7 +181,7 @@ export interface PointerInteractProps {
     onPointerEnter?: Mutation;
     onPointerExit?: Mutation;
     behavior?: Val<number>;
-    child: EdgyElement;
+    child?: EdgyElement;
 }
 
 export function PointerInteract(props: PointerInteractProps): EdgyElement {
@@ -175,6 +192,7 @@ export interface ConditionProps {
     condition: Val<boolean>;
     child?: EdgyElement;
     elseChild?: EdgyElement;
+    queryKey?: Val<string[]>;
 }
 
 export function Condition(props: ConditionProps): EdgyElement {
@@ -185,7 +203,9 @@ export interface ScrollViewProps {
     axis?: Val<number>;
     padding?: Val<number>;
     color?: Val<unknown>;
+    controller?: unknown;
     child: EdgyElement;
+    queryKey?: Val<string[]>;
 }
 
 export function ScrollView(props: ScrollViewProps): EdgyElement {
@@ -197,6 +217,7 @@ export interface LazyListProps {
     itemCount: Val<number>;
     overscan?: Val<number>;
     builder: (index: number) => EdgyElement;
+    queryKey?: Val<string[]>;
 }
 
 export function LazyList(props: LazyListProps): EdgyElement {
@@ -207,6 +228,9 @@ export function ImageEdgy(props: {
     resourceId: Val<number>;
     width?: Val<number>;
     height?: Val<number>;
+    fit?: Val<number>;
+    queryKey?: Val<string[]>;
+    child?: EdgyElement;
 }): EdgyElement {
     return __tur.ImageEdgy(__ctx, props);
 }
@@ -215,7 +239,13 @@ export function InputEdgy(props: {
     controller?: unknown;
     placeholder?: Val<string>;
     color?: Val<unknown>;
+    placeholderColor?: Val<unknown>;
+    cursorColor?: Val<unknown>;
     fontSize?: Val<number>;
+    width?: Val<number>;
+    height?: Val<number>;
+    multiline?: Val<boolean>;
+    queryKey?: Val<string[]>;
 }): EdgyElement {
     return __tur.InputEdgy(__ctx, props);
 }
@@ -228,19 +258,27 @@ export function Fragment(props: { children: EdgyElement[] }): EdgyElement {
 // Controllers (reuse existing bridge factories).
 // ---------------------------------------------------------------------------
 
-export function createTextEditingController(opts: Record<string, unknown> = {}): unknown {
+export function createTextEditingController(
+    opts: Record<string, unknown> = {},
+): unknown {
     return __tur.createTextEditingController(__ctx, opts);
 }
 
-export function createScrollController(opts: Record<string, unknown> = {}): unknown {
+export function createScrollController(
+    opts: Record<string, unknown> = {},
+): unknown {
     return __tur.createScrollController(__ctx, opts);
 }
 
-export function createLazyListController(opts: Record<string, unknown> = {}): unknown {
+export function createLazyListController(
+    opts: Record<string, unknown> = {},
+): unknown {
     return __tur.createLazyListController(__ctx, opts);
 }
 
-export function createAnimationController(opts: Record<string, unknown> = {}): unknown {
+export function createAnimationController(
+    opts: Record<string, unknown> = {},
+): unknown {
     return __tur.createAnimationController(__ctx, opts);
 }
 
@@ -317,10 +355,13 @@ export enum BorderPosition {
 // ---------------------------------------------------------------------------
 
 interface TurGlobal {
-    source(ctx: unknown, value: unknown): Atom<unknown>;
-    derive(ctx: unknown, fn: (ctx: StoreCtx) => unknown): Readable<unknown>;
-    mutate(ctx: unknown, fn: (ctx: StoreCtx, ...args: unknown[]) => unknown): Mutation;
-    get(ctx: unknown, a: Readable<unknown>): unknown;
+    source(ctx: unknown, value: unknown): unknown;
+    derive(ctx: unknown, fn: (ctx: StoreCtx) => unknown): unknown;
+    mutate(
+        ctx: unknown,
+        fn: (ctx: StoreCtx, ...args: unknown[]) => unknown,
+    ): unknown;
+    get(ctx: unknown, a: unknown): unknown;
     set(ctx: unknown, target: unknown, ...rest: unknown[]): unknown;
     component(ctx: unknown, f: unknown): unknown;
 
