@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::ContainerElement;
+pub use element::{Container, ContainerSpec};

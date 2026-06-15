@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::PositionedElement;
+pub use element::{Positioned, PositionedSpec};

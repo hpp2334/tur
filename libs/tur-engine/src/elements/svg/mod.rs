@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::SvgElement;
+pub use element::{Svg, SvgSpec};

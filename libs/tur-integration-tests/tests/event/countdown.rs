@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::ParagraphElement;
+use tur_engine::elements::Text;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
     app.with_element(id, |e| {
-        e.cast::<ParagraphElement>()
+        e.cast::<Text>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })

@@ -5,25 +5,47 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text::paint_helpers;
+use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout;
 
-use super::element::ParagraphElement;
+use super::element::Text;
 
-impl ElementLayout for ParagraphElement {
+impl ElementLayout for Text {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let full_text: String = self.spans.iter().map(|s| s.text.as_str()).collect();
+        let base_font_size = cx.read_val_opt(self.spec.font_size.as_ref()).unwrap_or(14.0);
+
+        // Resolve the spans to lay out. If the spec carries explicit spans,
+        // use them; otherwise build a single anonymous span from the `text`
+        // prop (the common "plain Text" case).
+        let spans: Vec<SpanData> = if let Some(s) = self.spec.spans.as_ref() {
+            s.clone()
+        } else {
+            let text = cx.read_val_opt(self.spec.text.as_ref()).unwrap_or_default();
+            vec![SpanData {
+                text,
+                bold: false,
+                italic: false,
+                underline: false,
+                font_size: None,
+                color: None,
+            }]
+        };
+
+        // Cache the resolved spans so test code can read the current text
+        // via `Text::spans()` without re-resolving.
+        self.cached_spans = spans.clone();
+
+        let full_text: String = spans.iter().map(|s| s.text.as_str()).collect();
 
         if full_text.is_empty() {
             self.cached_layout = None;
             return constraints.constrain(Size::ZERO);
         }
-
-        let base_font_size = self.default_font_size;
 
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
@@ -34,7 +56,7 @@ impl ElementLayout for ParagraphElement {
         let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
         let mut byte_offset = 0usize;
 
-        for span in &self.spans {
+        for span in &spans {
             let span_byte_len = span.text.len();
             let range = byte_offset..byte_offset + span_byte_len;
 
@@ -67,7 +89,8 @@ impl ElementLayout for ParagraphElement {
         layout.break_all_lines(max_width);
         layout.align(Alignment::Start, AlignmentOptions::default());
 
-        let (layout_data, width, height) = text_layout::extract_layout_data(&mut layout, &underline_ranges);
+        let (layout_data, width, height) =
+            text_layout::extract_layout_data(&mut layout, &underline_ranges);
 
         self.cached_layout = Some(layout_data);
 
@@ -77,7 +100,7 @@ impl ElementLayout for ParagraphElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for ParagraphElement {
+impl ElementRender for Text {
     fn type_name(&self) -> &'static str {
         "tur_paragraph"
     }

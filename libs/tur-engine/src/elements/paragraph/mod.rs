@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::ParagraphElement;
+pub use element::{Text, TextSpec};

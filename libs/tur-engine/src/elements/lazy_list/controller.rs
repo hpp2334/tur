@@ -13,7 +13,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
 use crate::core::js_command::{JsCommandQueue, LazyListJsCommand};
 use crate::core::element::ElementNodeId;
-use crate::elements::LazyListElement;
+use crate::elements::LazyList;
 
 fn extract_callable(value: &JsValue) -> Option<JsFunction> {
     value.as_object().and_then(JsFunction::from_object)
@@ -168,7 +168,7 @@ impl Class for LazyListController {
                 let Some(ref mut element) = node.element else {
                     return Ok(JsValue::undefined());
                 };
-                let Some(ll) = element.cast_mut::<LazyListElement>() else {
+                let Some(ll) = element.cast_mut::<LazyList>() else {
                     return Ok(JsValue::undefined());
                 };
 

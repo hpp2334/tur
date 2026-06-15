@@ -8,15 +8,11 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@tur/react": "workspace:*",
-        "@tur/react-renderer": "workspace:*",
-        "jotai": "^2.20.0",
-        "react": "^19.1.0"
+        "@tur/edgy": "workspace:*"
     },
     "devDependencies": {
         "@rspack/cli": "^1.2.0",
         "@rspack/core": "^1.2.0",
-        "@types/react": "^19.1.0",
         "typescript": "^5.7.0"
     }
 }

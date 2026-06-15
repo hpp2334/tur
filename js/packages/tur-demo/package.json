@@ -1,0 +1,37 @@
+{
+    "name": "@tur/demo",
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "build": "rspack build",
+        "dev": "rspack serve",
+        "dev:tunnel": "TUR_TUNNEL=1 concurrently \"rspack serve\" \"cloudflared tunnel run tur-local\"",
+        "typecheck": "tsc --noEmit"
+    },
+    "dependencies": {
+        "@codemirror/autocomplete": "^6.18.0",
+        "@codemirror/commands": "^6.8.0",
+        "@codemirror/lang-javascript": "^6.2.4",
+        "@codemirror/language": "^6.11.0",
+        "@codemirror/state": "^6.5.0",
+        "@codemirror/theme-one-dark": "^6.1.2",
+        "@codemirror/view": "^6.36.0",
+        "@tur/edgy": "workspace:*",
+        "@tur/test-cases": "workspace:*",
+        "acorn": "^8.16.0",
+        "codemirror": "^6.0.1",
+        "jotai": "^2.20.0",
+        "react": "^19.1.0",
+        "react-dom": "^19.1.0",
+        "sucrase": "^3.35.1",
+        "vconsole": "^3.15.1"
+    },
+    "devDependencies": {
+        "@rspack/core": "^1.2.0",
+        "@rspack/plugin-react-refresh": "^1.4.0",
+        "@types/react": "^19.2.14",
+        "@types/react-dom": "^19.2.0",
+        "concurrently": "^10.0.3",
+        "react-refresh": "^0.17.0"
+    }
+}

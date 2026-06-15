@@ -1,15 +1,15 @@
 use std::any::Any;
 
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsString, JsValue};
+use boa_engine::{Context, JsValue};
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::js_command::AnyJsCommand;
 use crate::core::elements::ElementJsCallbackEmitter;
 use crate::core::elements::dispatch_emit_js_callback;
-use crate::core::elements::ElementOnUpdate;
 use crate::core::elements::ElementTrace;
+use crate::core::widget::Effect;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -37,8 +37,6 @@ trait Erased: 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn trace_label(&self) -> String;
-    fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue);
-    fn reset_prop(&mut self, key: &JsString);
 
     fn perform_layout_size(
         &mut self,
@@ -56,6 +54,13 @@ trait Erased: 'static {
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+
+    fn run_effect(
+        &mut self,
+        cx: &mut crate::core::widget::WidgetCx,
+        boa: &mut Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    );
 }
 
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
@@ -96,7 +101,7 @@ fn ime_dispatch<E: ElementOnIme + 'static>(
 
 impl<E> Erased for E
 where
-    E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static,
+    E: ElementLayout + ElementRender + ElementTrace + Effect + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -121,14 +126,6 @@ where
         } else {
             label
         }
-    }
-
-    fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
-        <Self as ElementOnUpdate>::set_prop(self, ctx, key, value);
-    }
-
-    fn reset_prop(&mut self, key: &JsString) {
-        <Self as ElementOnUpdate>::reset_prop(self, key);
     }
 
     fn perform_layout_size(
@@ -158,10 +155,19 @@ where
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         <Self as ElementRender>::hit_test(self, position, layout)
     }
+
+    fn run_effect(
+        &mut self,
+        cx: &mut crate::core::widget::WidgetCx,
+        boa: &mut Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    ) {
+        <Self as Effect>::effect(self, cx, boa, dirties);
+    }
 }
 
 impl AnyElement {
-    pub fn new<E: ElementOnUpdate + ElementLayout + ElementRender + ElementTrace + 'static>(
+    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Effect + 'static>(
         element: E,
     ) -> Self {
         AnyElement {
@@ -175,10 +181,10 @@ impl AnyElement {
     }
 
     pub fn with_interactivity<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnKeyboard
             + ElementOnGesture
             + 'static,
@@ -196,10 +202,10 @@ impl AnyElement {
     }
 
     pub fn with_gesture<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnGesture
             + 'static,
     >(
@@ -216,10 +222,10 @@ impl AnyElement {
     }
 
     pub fn with_wheel<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnWheel
             + 'static,
     >(
@@ -236,10 +242,10 @@ impl AnyElement {
     }
 
     pub fn with_focusability<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnFocus
             + 'static,
     >(
@@ -256,10 +262,10 @@ impl AnyElement {
     }
 
     pub fn with_gesture_and_focus<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnFocus
             + ElementOnGesture
             + 'static,
@@ -277,10 +283,10 @@ impl AnyElement {
     }
 
     pub fn with_full_interactivity<
-        E: ElementOnUpdate
-            + ElementLayout
+        E: ElementLayout
             + ElementRender
             + ElementTrace
+            + Effect
             + ElementOnKeyboard
             + ElementOnGesture
             + ElementOnFocus
@@ -324,14 +330,6 @@ impl AnyElement {
         self.inner.trace_label()
     }
 
-    pub fn set_prop(&mut self, ctx: &mut Context, key: &JsString, value: &JsValue) {
-        self.inner.set_prop(ctx, key, value);
-    }
-
-    pub fn reset_prop(&mut self, key: &JsString) {
-        self.inner.reset_prop(key);
-    }
-
     pub fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -359,6 +357,17 @@ impl AnyElement {
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
+    }
+
+    /// Run the widget's effect hook (Condition branch swap, LazyList range
+    /// adjustment, etc.). No-op for most widgets.
+    pub fn run_effect(
+        &mut self,
+        cx: &mut crate::core::widget::WidgetCx,
+        boa: &mut Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    ) {
+        self.inner.run_effect(cx, boa, dirties);
     }
 
     pub fn on_keyboard_event(

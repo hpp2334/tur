@@ -7,42 +7,50 @@ use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text::paint_helpers;
 use crate::elements::text::text_layout;
 
-use super::element::EditableTextElement;
+use super::element::EditableText;
 
 const DEFAULT_TEXT_COLOR: Color = Color::rgb(0, 0, 0);
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
 
-impl ElementLayout for EditableTextElement {
+impl ElementLayout for EditableText {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
+        // Resolve reactive props and cache `multiline` for the gesture/keyboard
+        // handlers (those contexts lack store access).
+        self.resolved_multiline = cx.read_val_opt(self.spec.multiline.as_ref()).unwrap_or(false);
+        let font_size = cx.read_val_opt(self.spec.font_size.as_ref()).unwrap_or(14.0);
+        let placeholder = cx.read_val_opt(self.spec.placeholder.as_ref());
+        let color = cx.read_val_opt(self.spec.color.as_ref());
+        let placeholder_color = cx.read_val_opt(self.spec.placeholder_color.as_ref());
+
         let display_text = self.composition_display_text();
 
-        if display_text.is_empty() && self.placeholder.is_none() {
+        if display_text.is_empty() && placeholder.is_none() {
             self.cached_layout = None;
-            let height = self.font_size * 1.2;
+            let height = font_size * 1.2;
             return constraints.constrain(Size::new(0.0, height));
         }
 
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
         let text = if display_text.is_empty() {
-            self.placeholder.as_deref().unwrap_or("")
+            placeholder.as_deref().unwrap_or("")
         } else {
             &display_text
         };
 
         let text_color = if display_text.is_empty() {
-            self.placeholder_color.unwrap_or(Color::rgb(153, 153, 153))
+            placeholder_color.unwrap_or(Color::rgb(153, 153, 153))
         } else {
-            self.color.unwrap_or(DEFAULT_TEXT_COLOR)
+            color.unwrap_or(DEFAULT_TEXT_COLOR)
         };
 
         let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, false);
-        builder.push_default(StyleProperty::FontSize(self.font_size as f32));
+        builder.push_default(StyleProperty::FontSize(font_size as f32));
         builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
         builder.push(StyleProperty::Brush([text_color.r(), text_color.g(), text_color.b(), text_color.a()]), 0..text.len());
 
@@ -67,7 +75,7 @@ impl ElementLayout for EditableTextElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for EditableTextElement {
+impl ElementRender for EditableText {
     fn type_name(&self) -> &'static str {
         "tur_editable_text"
     }
@@ -83,6 +91,9 @@ impl ElementRender for EditableTextElement {
         let Some(ref layout_data) = self.cached_layout else {
             return;
         };
+
+        let color = paint_ctx.read_val_opt(self.spec.color.as_ref());
+        let cursor_color = paint_ctx.read_val_opt(self.spec.cursor_color.as_ref());
 
         let c = self.controller();
         let full = c.text();
@@ -119,7 +130,7 @@ impl ElementRender for EditableTextElement {
             let cursor_char = byte_to_char_offset(&full, cursor_pos);
             paint_cursor(
                 canvas, offset, layout_data, cursor_char,
-                self.cursor_color.or(self.color).unwrap_or(DEFAULT_TEXT_COLOR),
+                cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
             );
         }
     }

@@ -14,7 +14,7 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
 use crate::core::js_command::{JsCommandQueue, ScrollViewJsCommand};
 use crate::core::element::ElementNodeId;
-use crate::elements::ScrollViewElement;
+use crate::elements::ScrollView;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -172,7 +172,7 @@ impl Class for ScrollController {
                 let Some(ref mut element) = node.element else {
                     return Ok(JsValue::undefined());
                 };
-                let Some(sv) = element.cast_mut::<ScrollViewElement>() else {
+                let Some(sv) = element.cast_mut::<ScrollView>() else {
                     return Ok(JsValue::undefined());
                 };
 
@@ -181,7 +181,7 @@ impl Class for ScrollController {
                 sv.position.correct_pixels(clamped);
 
                 let vp = sv.viewport_size();
-                let dim = match sv.axis {
+                let dim = match sv.axis() {
                     tur_shared::Axis::Vertical => vp.height,
                     tur_shared::Axis::Horizontal => vp.width,
                 };

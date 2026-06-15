@@ -1,32 +1,42 @@
-use tur_shared::{BorderPosition, ComputedLayout, Constraints, EdgeInsets, Geometry, Offset, Size};
+use tur_shared::{
+    BorderPosition, ComputedLayout, Constraints, EdgeInsets, Geometry, Offset, Size,
+};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::ContainerElement;
+use super::element::Container;
 
-impl ElementLayout for ContainerElement {
+impl ElementLayout for Container {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
+        let width = cx.read_val_opt(self.spec.width.as_ref());
+        let height = cx.read_val_opt(self.spec.height.as_ref());
+        let padding = cx.read_val_opt(self.spec.padding.as_ref());
+        let alignment = cx.read_val_opt(self.spec.alignment.as_ref());
+
+        self.cached_color = cx.read_val_opt(self.spec.color.as_ref());
+        self.cached_border_color = cx.read_val_opt(self.spec.border_color.as_ref());
+
         let sized_constraints = Constraints {
-            min_width: self.width.unwrap_or(constraints.min_width),
-            max_width: self.width.unwrap_or(constraints.max_width),
-            min_height: self.height.unwrap_or(constraints.min_height),
-            max_height: self.height.unwrap_or(constraints.max_height),
+            min_width: width.unwrap_or(constraints.min_width),
+            max_width: width.unwrap_or(constraints.max_width),
+            min_height: height.unwrap_or(constraints.min_height),
+            max_height: height.unwrap_or(constraints.max_height),
         };
 
-        let padding = self.padding.map(EdgeInsets::all);
-        let padding_constraints = match padding {
+        let padding_ed = padding.map(EdgeInsets::all);
+        let padding_constraints = match padding_ed {
             Some(p) => sized_constraints.deflate(p),
             None => sized_constraints,
         };
 
-        let inner_constraints = if self.alignment.is_some() {
+        let inner_constraints = if alignment.is_some() {
             Constraints::loose(Size::new(
                 padding_constraints.max_width,
                 padding_constraints.max_height,
@@ -41,22 +51,21 @@ impl ElementLayout for ContainerElement {
             inner_constraints.constrain(Size::ZERO)
         };
 
-        let inflated = match padding {
+        let inflated = match padding_ed {
             Some(p) => p.inflate_size(child_size),
             None => child_size,
         };
 
-        let final_size = sized_constraints.constrain(inflated);
-        self.computed_size = Some(final_size);
-        final_size
+        sized_constraints.constrain(inflated)
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         if let Some(&child_id) = children.first() {
-            let padding = self.padding.unwrap_or(0.0);
-            let offset = match self.alignment {
+            let padding = cx.read_val_opt(self.spec.padding.as_ref()).unwrap_or(0.0);
+            let alignment = cx.read_val_opt(self.spec.alignment.as_ref());
+            let container_size = cx.self_computed_size();
+            let offset = match alignment {
                 Some(ref align) => {
-                    let container_size = self.computed_size.unwrap_or(Size::ZERO);
                     let inner_size = Size::new(
                         (container_size.width - padding * 2.0).max(0.0),
                         (container_size.height - padding * 2.0).max(0.0),
@@ -72,7 +81,7 @@ impl ElementLayout for ContainerElement {
     }
 }
 
-impl ElementRender for ContainerElement {
+impl ElementRender for Container {
     fn type_name(&self) -> &'static str {
         "tur_container"
     }
@@ -85,25 +94,26 @@ impl ElementRender for ContainerElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        if let (Some(ref shadow_color), Some(shadow_blur)) =
-            (self.shadow_color, self.shadow_blur)
-        {
-            if shadow_blur > 0.0 {
-                let shadow_offset = self.shadow_offset.unwrap_or((0.0, 0.0));
-                let radius = self.border_radius.unwrap_or(0.0);
-                canvas.draw_shadow(
-                    offset,
-                    layout.size,
-                    shadow_color,
-                    radius,
-                    shadow_blur,
-                    shadow_offset,
-                );
+        let shadow_blur = paint_ctx.read_val_opt(self.spec.shadow_blur.as_ref());
+        let shadow_color = paint_ctx.read_val_opt(self.spec.shadow_color.as_ref());
+        let color = paint_ctx.read_val_opt(self.spec.color.as_ref());
+        let border_color = paint_ctx.read_val_opt(self.spec.border_color.as_ref());
+        let border_width = paint_ctx.read_val_opt(self.spec.border_width.as_ref());
+        let border_radius = paint_ctx.read_val_opt(self.spec.border_radius.as_ref());
+        let border_position = paint_ctx
+            .read_val_opt(self.spec.border_position.as_ref())
+            .unwrap_or_default();
+
+        if let (Some(sc), Some(sb)) = (shadow_color.as_ref(), shadow_blur) {
+            if sb > 0.0 {
+                let shadow_offset = self.spec.shadow_offset.unwrap_or((0.0, 0.0));
+                let radius = border_radius.unwrap_or(0.0);
+                canvas.draw_shadow(offset, layout.size, sc, radius, sb, shadow_offset);
             }
         }
 
-        if let Some(ref brush) = self.color {
-            let geometry = match self.border_radius {
+        if let Some(ref brush) = color {
+            let geometry = match border_radius {
                 Some(r) if r > 0.0 => Geometry::RoundedRect {
                     size: layout.size,
                     radius: r,
@@ -113,31 +123,29 @@ impl ElementRender for ContainerElement {
             canvas.fill_geometry(offset, &geometry, brush);
         }
 
-        if let (Some(ref border_color), Some(border_width)) =
-            (self.border_color, self.border_width)
-        {
-            if border_width > 0.0 {
-                let half = border_width / 2.0;
+        if let (Some(bc), Some(bw)) = (border_color.as_ref(), border_width) {
+            if bw > 0.0 {
+                let half = bw / 2.0;
                 let s = layout.size;
-                let (ox, oy, size) = match self.border_position {
+                let (ox, oy, size) = match border_position {
                     BorderPosition::Inside => (
                         half,
                         half,
-                        Size::new((s.width - border_width).max(0.0), (s.height - border_width).max(0.0)),
+                        Size::new((s.width - bw).max(0.0), (s.height - bw).max(0.0)),
                     ),
                     BorderPosition::Outside => (
                         -half,
                         -half,
-                        Size::new(s.width + border_width, s.height + border_width),
+                        Size::new(s.width + bw, s.height + bw),
                     ),
                     BorderPosition::Center => (0.0, 0.0, s),
                 };
                 let border_offset = Offset::new(offset.x + ox, offset.y + oy);
-                let geometry = match self.border_radius {
+                let geometry = match border_radius {
                     Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
                     _ => Geometry::Rect(size),
                 };
-                canvas.stroke_geometry(border_offset, &geometry, border_color, border_width);
+                canvas.stroke_geometry(border_offset, &geometry, bc, bw);
             }
         }
 

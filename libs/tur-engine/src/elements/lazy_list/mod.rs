@@ -3,4 +3,4 @@ mod element;
 mod render;
 
 pub use controller::LazyListController;
-pub use element::LazyListElement;
+pub use element::{LazyList, LazyListSpec};

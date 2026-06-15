@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::ScrollViewElement;
+use tur_engine::elements::ScrollView;
 use tur_integration_tests::TurTestApp;
 
 fn setup_basic() -> (TurTestApp, ElementNodeId, ElementNodeId) {
@@ -24,7 +24,7 @@ fn wheel_updates_scroll_offset() {
     app.wheel(0.0, 50.0, 200.0, 150.0);
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(sv.scroll_offset(), 50.0);
     });
 }
@@ -36,7 +36,7 @@ fn wheel_clamps_at_zero() {
     app.wheel(0.0, -50.0, 200.0, 150.0);
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(sv.scroll_offset(), 0.0);
     });
 }
@@ -48,7 +48,7 @@ fn wheel_clamps_at_max_scroll() {
     app.wheel(0.0, 9999.0, 200.0, 150.0);
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(sv.scroll_offset(), 300.0);
     });
 }
@@ -61,7 +61,7 @@ fn wheel_accumulates_offset() {
     app.wheel(0.0, 50.0, 200.0, 150.0);
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(sv.scroll_offset(), 150.0);
     });
 }
@@ -84,7 +84,7 @@ fn wheel_miss_does_nothing() {
     app.wheel(0.0, 50.0, 999.0, 999.0);
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(sv.scroll_offset(), 0.0);
     });
 }
@@ -110,7 +110,7 @@ fn wheel_chains_to_parent_at_boundary() {
     app.wheel(0.0, 9999.0, 300.0, 200.0);
 
     app.with_element(inner_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         let max_inner = sv.content_size().height - sv.viewport_size().height;
         assert!(
             (sv.scroll_offset() - max_inner).abs() < 1.0,
@@ -121,14 +121,14 @@ fn wheel_chains_to_parent_at_boundary() {
     });
 
     let inner_max = app.with_element(inner_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         sv.scroll_offset()
     }).unwrap();
 
     app.wheel(0.0, 100.0, 300.0, 200.0);
 
     app.with_element(outer_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert!(
             sv.scroll_offset() > 0.0,
             "outer should have scrolled because inner was at boundary"
@@ -136,7 +136,7 @@ fn wheel_chains_to_parent_at_boundary() {
     });
 
     app.with_element(inner_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
+        let sv = e.cast::<ScrollView>().unwrap();
         assert_eq!(
             sv.scroll_offset(), inner_max,
             "inner should still be at max"

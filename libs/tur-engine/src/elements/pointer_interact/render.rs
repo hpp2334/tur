@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::PointerInteractElement;
+use super::element::PointerInteract;
 
-impl ElementLayout for PointerInteractElement {
+impl ElementLayout for PointerInteract {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -23,7 +23,7 @@ impl ElementLayout for PointerInteractElement {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for PointerInteractElement {
+impl ElementRender for PointerInteract {
     fn type_name(&self) -> &'static str {
         "tur_pointer_interact"
     }

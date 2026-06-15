@@ -5,7 +5,7 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::js_command::PointerInteractJsCommand;
 use crate::core::pointer_region::PointerRegionTracker;
-use crate::elements::PointerInteractElement;
+use crate::elements::PointerInteract;
 
 pub struct PointerRegionAppHandler {
     tracker: PointerRegionTracker,
@@ -53,7 +53,7 @@ fn has_pointer_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteractElement>()
+            e.cast::<PointerInteract>()
                 .map(|p| p.has_pointer_region_callbacks())
                 .unwrap_or(false)
         })
@@ -64,7 +64,7 @@ fn is_pointer_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteractElement>()
+            e.cast::<PointerInteract>()
                 .map(|p| p.is_pointer_region_opaque())
                 .unwrap_or(false)
         })

@@ -5,7 +5,7 @@ import { chromium } from "playwright";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.resolve(__dirname, "../test-results");
-const DEPLOY_URL = process.env.DEPLOY_URL || "https://tur-react-demo.pages.dev";
+const DEPLOY_URL = process.env.DEPLOY_URL || "https://tur-demo.pages.dev";
 
 interface ConsoleEntry {
     type: string;

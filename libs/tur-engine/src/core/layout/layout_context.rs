@@ -5,6 +5,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::fonts::FontManager;
 use crate::core::resource::{ResourceId, ResourceMap};
+use crate::core::widget::{PropValue, Val};
 
 pub struct LayoutContext<'a> {
     pub(crate) tree: &'a mut ElementTree,
@@ -70,6 +71,16 @@ impl<'a> LayoutContext<'a> {
             .unwrap_or(Size::ZERO)
     }
 
+    /// The current node's own computed size (set by `perform_layout_size`
+    /// and available during `perform_layout_position`).
+    pub fn self_computed_size(&self) -> Size {
+        self.tree
+            .nodes
+            .get(&self.node_id)
+            .map(|n| n.computed_layout.size)
+            .unwrap_or(Size::ZERO)
+    }
+
     pub fn child_element<T: 'static>(&self, child_id: ElementNodeId) -> Option<&T> {
         self.tree
             .nodes
@@ -86,5 +97,30 @@ impl<'a> LayoutContext<'a> {
 
     pub fn get_image_natural_size(&self, resource_id: ResourceId) -> Option<Size> {
         self.resource_map.get_image(resource_id).map(|r| r.natural_size)
+    }
+
+    /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
+    /// atom is read from the store (no boa `Context` needed) and the
+    /// dependency `(atom, node)` is recorded so a future flush can mark
+    /// this node dirty.
+    ///
+    /// Returns `None` if the prop is absent (`Option<Val<T>>::None`) or the
+    /// atom value can't be decoded as `T`.
+    pub fn read_val<T: PropValue>(&mut self, val: &Val<T>) -> Option<T> {
+        match val {
+            Val::Static(t) => Some(t.clone()),
+            Val::Reactive(atom) => {
+                let id = atom.id();
+                self.tree.dep_tracker.track(id, self.node_id);
+                let store = self.tree.store.as_ref()?;
+                let js = store.borrow().get_raw(id);
+                T::from_js(&js)
+            }
+        }
+    }
+
+    /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
+    pub fn read_val_opt<T: PropValue>(&mut self, val: Option<&Val<T>>) -> Option<T> {
+        val.and_then(|v| self.read_val(v))
     }
 }

@@ -1,29 +1,33 @@
-use tur_shared::{ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{ComputedLayout, Constraints, Offset, Size, StackFit};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::StackElement;
+use super::element::Stack;
 
-impl ElementLayout for StackElement {
+impl ElementLayout for Stack {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
+        let fit = cx
+            .read_val_opt(self.spec.fit.as_ref())
+            .unwrap_or(StackFit::Loose);
+
         let mut max_size = Size::ZERO;
 
         for &child_id in children {
-            let child_constraints = match self.fit {
-                tur_shared::StackFit::Loose => Constraints::loose(
+            let child_constraints = match fit {
+                StackFit::Loose => Constraints::loose(
                     constraints.constrain(Size::new(constraints.max_width, constraints.max_height)),
                 ),
-                tur_shared::StackFit::Expand => Constraints::tight(
+                StackFit::Expand => Constraints::tight(
                     constraints.constrain(Size::new(constraints.max_width, constraints.max_height)),
                 ),
-                tur_shared::StackFit::Passthrough => *constraints,
+                StackFit::Passthrough => *constraints,
             };
             let size = cx.layout_child(child_id, &child_constraints);
             max_size = Size::new(
@@ -39,19 +43,22 @@ impl ElementLayout for StackElement {
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         let stack_size = self.computed_size.unwrap_or(Size::ZERO);
+        let alignment = cx
+            .read_val_opt(self.spec.alignment.as_ref())
+            .unwrap_or_default();
         for &child_id in children {
             let is_positioned = cx.child_type_name(child_id) == "tur_positioned";
 
             if !is_positioned {
                 let child_size = cx.child_computed_size(child_id);
-                let offset = self.alignment.align_offset(stack_size, child_size);
+                let offset = alignment.align_offset(stack_size, child_size);
                 cx.set_child_offset(child_id, offset);
             }
         }
     }
 }
 
-impl ElementRender for StackElement {
+impl ElementRender for Stack {
     fn type_name(&self) -> &'static str {
         "tur_stack"
     }

@@ -1,193 +1,228 @@
-use boa_engine::{Context, JsString, JsValue};
-use num_traits::FromPrimitive;
-use tur_shared::{Alignment, BorderPosition, Brush, Color, Size};
+use std::rc::Rc;
 
-use crate::core::bridge::color::extract_brush;
-use crate::core::elements::ElementOnUpdate;
-use crate::core::elements::ElementTrace;
+use boa_engine::Context;
+use tur_shared::{Alignment, BorderPosition, Brush, Color};
+
+use crate::core::element::ElementNodeId;
+use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::widget::{
+    val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+};
+
+// ---------------------------------------------------------------------------
+// ContainerSpec — the user's declaration. Pure Rust, no JsValues.
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
-pub struct ContainerElement {
-    pub(crate) width: Option<f64>,
-    pub(crate) height: Option<f64>,
-    pub(crate) padding: Option<f64>,
-    pub(crate) color: Option<Brush>,
-    pub(crate) border_color: Option<Color>,
-    pub(crate) border_width: Option<f64>,
-    pub(crate) border_radius: Option<f64>,
-    pub(crate) border_position: BorderPosition,
-    pub(crate) shadow_color: Option<Color>,
-    pub(crate) shadow_offset: Option<(f64, f64)>,
-    pub(crate) shadow_blur: Option<f64>,
-    pub(crate) alignment: Option<Alignment>,
-    pub(crate) computed_size: Option<Size>,
+pub struct ContainerSpec {
+    pub width: Option<Val<f64>>,
+    pub height: Option<Val<f64>>,
+    pub padding: Option<Val<f64>>,
+    pub color: Option<Val<Brush>>,
+    pub border_color: Option<Val<Color>>,
+    pub border_width: Option<Val<f64>>,
+    pub border_radius: Option<Val<f64>>,
+    pub border_position: Option<Val<BorderPosition>>,
+    pub shadow_color: Option<Val<Color>>,
+    pub shadow_blur: Option<Val<f64>>,
+    pub alignment: Option<Val<Alignment>>,
+    /// shadowOffset is `[x, y]` — parsed at factory time (not reactive).
+    pub shadow_offset: Option<(f64, f64)>,
+    pub query_key: Option<Vec<String>>,
+    pub children: Vec<Rc<dyn Spec>>,
 }
 
-impl ContainerElement {
-    pub fn new() -> Self {
-        ContainerElement {
-            width: None,
-            height: None,
-            padding: None,
-            color: None,
-            border_color: None,
-            border_width: None,
-            border_radius: None,
-            border_position: BorderPosition::default(),
-            shadow_color: None,
-            shadow_offset: None,
-            shadow_blur: None,
-            alignment: None,
-            computed_size: None,
+impl Spec for ContainerSpec {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+        let id = cx.alloc_node();
+        cx.insert_node(
+            id,
+            AnyElement::new(Container { spec: self.clone(), cached_color: None, cached_border_color: None }),
+            boa,
+        );
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
+        for child_spec in &self.children {
+            let _child_id = child_spec.build(cx, boa, id);
+        }
+        cx.link_child(parent, id);
+        id
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Container — the built element. Holds its spec; layout/paint read Val<T>
+// on demand via `cx.read_val`.
+// ---------------------------------------------------------------------------
+
+pub struct Container {
+    pub spec: ContainerSpec,
+    pub cached_color: Option<Brush>,
+    pub cached_border_color: Option<Color>,
+}
+
+fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
+    match val {
+        Some(Val::Static(v)) => Some(*v),
+        _ => None,
+    }
+}
+
+impl Container {
+    pub fn width(&self) -> Option<f64> { static_f64(&self.spec.width) }
+    pub fn height(&self) -> Option<f64> { static_f64(&self.spec.height) }
+    pub fn padding(&self) -> Option<f64> { static_f64(&self.spec.padding) }
+    pub fn border_width(&self) -> Option<f64> { static_f64(&self.spec.border_width) }
+    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.spec.border_radius) }
+    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.spec.shadow_blur) }
+    pub fn color(&self) -> Option<Brush> {
+        match &self.spec.color {
+            Some(Val::Static(v)) => Some(v.clone()),
+            _ => self.cached_color.clone(),
         }
     }
-
-    pub fn border_color(&self) -> Option<&Color> {
-        self.border_color.as_ref()
+    pub fn border_color(&self) -> Option<Color> {
+        match &self.spec.border_color {
+            Some(Val::Static(v)) => Some(*v),
+            _ => self.cached_border_color,
+        }
     }
-
-    pub fn color(&self) -> Option<&Brush> {
-        self.color.as_ref()
+    pub fn shadow_color(&self) -> Option<Color> {
+        match &self.spec.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
     }
-
-    pub fn border_width(&self) -> Option<f64> {
-        self.border_width
-    }
-
-    pub fn border_radius(&self) -> Option<f64> {
-        self.border_radius
-    }
-
+    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.spec.shadow_offset }
     pub fn border_position(&self) -> BorderPosition {
-        self.border_position
-    }
-
-    pub fn width(&self) -> Option<f64> {
-        self.width
-    }
-
-    pub fn height(&self) -> Option<f64> {
-        self.height
-    }
-
-    pub fn padding(&self) -> Option<f64> {
-        self.padding
-    }
-
-    pub fn shadow_color(&self) -> Option<&Color> {
-        self.shadow_color.as_ref()
-    }
-
-    pub fn shadow_offset(&self) -> Option<(f64, f64)> {
-        self.shadow_offset
-    }
-
-    pub fn shadow_blur(&self) -> Option<f64> {
-        self.shadow_blur
+        match &self.spec.border_position {
+            Some(Val::Static(v)) => *v,
+            _ => BorderPosition::default(),
+        }
     }
 }
 
-impl ElementTrace for ContainerElement {
+impl Effect for Container {}
+
+impl ElementTrace for Container {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(w) = self.width {
+        if let Some(w) = self.spec.width.as_ref().and_then(|v| match v {
+            Val::Static(f) => Some(*f),
+            _ => None,
+        }) {
             parts.push(format!("width={w}"));
         }
-        if let Some(h) = self.height {
+        if let Some(h) = self.spec.height.as_ref().and_then(|v| match v {
+            Val::Static(f) => Some(*f),
+            _ => None,
+        }) {
             parts.push(format!("height={h}"));
-        }
-        if let Some(p) = self.padding {
-            parts.push(format!("padding={p}"));
-        }
-        if let Some(ref b) = self.color {
-            match b {
-                Brush::SolidColor(c) => parts.push(format!("color={c}")),
-                Brush::LinearGradient { .. } => parts.push("color=linearGradient".into()),
-            }
-        }
-        if let Some(c) = self.border_color {
-            parts.push(format!("borderColor={c}"));
-        }
-        if let Some(w) = self.border_width {
-            parts.push(format!("borderWidth={w}"));
-        }
-        if let Some(r) = self.border_radius {
-            parts.push(format!("borderRadius={r}"));
-        }
-        parts.push(format!("borderPosition={:?}", self.border_position));
-        if let Some(c) = self.shadow_color {
-            parts.push(format!("shadowColor={c}"));
-        }
-        if let Some((x, y)) = self.shadow_offset {
-            parts.push(format!("shadowOffset=({x},{y})"));
-        }
-        if let Some(b) = self.shadow_blur {
-            parts.push(format!("shadowBlur={b}"));
-        }
-        if let Some(ref a) = self.alignment {
-            parts.push(format!("alignment={a:?}"));
         }
         parts.join(" ")
     }
 }
 
-fn extract_offset_array(value: &JsValue, ctx: &mut Context) -> Option<(f64, f64)> {
-    let obj = value.as_object()?;
-    let arr = boa_engine::object::builtins::JsArray::from_object(obj.clone()).ok()?;
+// ---------------------------------------------------------------------------
+// Factory — called from the JS bridge to parse props into a spec.
+// ---------------------------------------------------------------------------
+
+/// Extract a `Val<T>` prop from a JS props object.
+fn prop_val<T: PropValue>(
+    props: &boa_engine::object::JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Val<T>> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    val_from_js(&v)
+}
+
+/// Extract a `(f64, f64)` offset prop (shadowOffset) — parsed eagerly.
+fn prop_offset(
+    props: &boa_engine::object::JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<(f64, f64)> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
     let x = arr.at(0, ctx).ok()?.as_number()?;
     let y = arr.at(1, ctx).ok()?.as_number()?;
     Some((x, y))
 }
 
-impl ElementOnUpdate for ContainerElement {
-    fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
-        if *key == "width" {
-            self.width = value.as_number();
-        } else if *key == "height" {
-            self.height = value.as_number();
-        } else if *key == "padding" {
-            self.padding = value.as_number();
-        } else if *key == "color" {
-            self.color = extract_brush(value, _ctx);
-        } else if *key == "borderColor" {
-            self.border_color = crate::core::bridge::color::extract_color(value, _ctx);
-        } else if *key == "borderWidth" {
-            self.border_width = value.as_number();
-        } else if *key == "borderRadius" {
-            self.border_radius = value.as_number();
-        } else if *key == "borderPosition" {
-            if let Some(n) = value.as_number() {
-                self.border_position =
-                    BorderPosition::from_u8(n as u8).unwrap_or_default();
-            }
-        } else if *key == "shadowColor" {
-            self.shadow_color = crate::core::bridge::color::extract_color(value, _ctx);
-        } else if *key == "shadowOffset" {
-            self.shadow_offset = extract_offset_array(value, _ctx);
-        } else if *key == "shadowBlur" {
-            self.shadow_blur = value.as_number();
-        } else if *key == "alignment" {
-            if let Some(n) = value.as_number() {
-                self.alignment = Alignment::from_i32(n as i32);
+/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
+fn prop_query_key(
+    props: &boa_engine::object::JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Vec<String>> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
+    let len = arr.length(ctx).ok()? as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if let Ok(val) = arr.at(i as i64, ctx) {
+            if let Some(s) = val.as_string() {
+                out.push(s.to_std_string_escaped());
             }
         }
     }
+    if out.is_empty() { None } else { Some(out) }
+}
 
-    fn reset_prop(&mut self, key: &JsString) {
-        match key.to_std_string_escaped().as_str() {
-            "width" => self.width = None,
-            "height" => self.height = None,
-            "padding" => self.padding = None,
-            "color" => self.color = None,
-            "borderColor" => self.border_color = None,
-            "borderWidth" => self.border_width = None,
-            "borderRadius" => self.border_radius = None,
-            "borderPosition" => self.border_position = BorderPosition::default(),
-            "shadowColor" => self.shadow_color = None,
-            "shadowOffset" => self.shadow_offset = None,
-            "shadowBlur" => self.shadow_blur = None,
-            "alignment" => self.alignment = None,
-            _ => {}
+/// Extract child specs from a JS array of SpecHandle opaques.
+fn prop_children(
+    props: &boa_engine::object::JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Vec<Rc<dyn Spec>> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    use crate::core::widget::extract_spec;
+    let Ok(v) = props.get(js_string!(key), ctx) else {
+        return Vec::new();
+    };
+    let Some(obj) = v.as_object() else {
+        return Vec::new();
+    };
+    let Ok(arr) = JsArray::from_object(obj.clone()) else {
+        return Vec::new();
+    };
+    let len = arr.length(ctx).unwrap_or(0);
+    let mut out = Vec::with_capacity(len as usize);
+    for i in 0..len {
+        if let Ok(item) = arr.at(i as i64, ctx) {
+            if let Some(spec) = extract_spec(&item) {
+                out.push(spec);
+            }
+        }
+    }
+    out
+}
+
+impl ContainerSpec {
+    /// Build a `ContainerSpec` from a JS props object.
+    pub fn from_js(props: &boa_engine::object::JsObject, ctx: &mut Context) -> Self {
+        ContainerSpec {
+            width: prop_val::<f64>(props, "width", ctx),
+            height: prop_val::<f64>(props, "height", ctx),
+            padding: prop_val::<f64>(props, "padding", ctx),
+            color: prop_val::<Brush>(props, "color", ctx),
+            border_color: prop_val::<Color>(props, "borderColor", ctx),
+            border_width: prop_val::<f64>(props, "borderWidth", ctx),
+            border_radius: prop_val::<f64>(props, "borderRadius", ctx),
+            border_position: prop_val::<BorderPosition>(props, "borderPosition", ctx),
+            shadow_color: prop_val::<Color>(props, "shadowColor", ctx),
+            shadow_blur: prop_val::<f64>(props, "shadowBlur", ctx),
+            alignment: prop_val::<Alignment>(props, "alignment", ctx),
+            shadow_offset: prop_offset(props, "shadowOffset", ctx),
+            query_key: prop_query_key(props, "queryKey", ctx),
+            children: prop_children(props, "children", ctx),
         }
     }
 }

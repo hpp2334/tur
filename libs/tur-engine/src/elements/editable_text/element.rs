@@ -1,20 +1,23 @@
+use boa_engine::class::Class;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
-use boa_engine::{Context, JsString, JsValue};
-use tur_shared::{Color, Offset};
+use boa_engine::{Context, JsValue};
+use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::core::bridge::color::extract_color;
+use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
+    AnyElement, ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
-    ElementOnKeyboardContext, ElementOnUpdate, ElementTrace,
+    ElementOnKeyboardContext, ElementTrace,
 };
 use crate::core::event::AppImeEvent;
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, IntoAnyJsCommand};
 use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
+use crate::core::reactive::{extract_atom, AtomId};
 use crate::core::text::TextEditingController;
+use crate::core::widget::{val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
 use crate::elements::text::text_layout::TextLayoutData;
 
 #[derive(Clone)]
@@ -75,45 +78,97 @@ impl IntoAnyJsCommand for EditableTextNotification {
     }
 }
 
-pub struct EditableTextElement {
-    controller_obj: JsObject,
-    pub(crate) font_size: f64,
-    pub(crate) color: Option<Color>,
-    pub(crate) cursor_color: Option<Color>,
-    pub(crate) placeholder: Option<String>,
-    pub(crate) placeholder_color: Option<Color>,
-    pub(crate) multiline: bool,
-    pub(crate) cached_layout: Option<TextLayoutData>,
+// ---------------------------------------------------------------------------
+// EditableTextSpec — the user's declaration. Pure Rust, no JsValues except
+// the opaque `controller` (a TextEditingController class instance).
+//
+// `controller` is parsed eagerly (not reactive). The text-style props
+// (`placeholder`, `color`, `placeholder_color`, `cursor_color`, `font_size`,
+// `multiline`) are reactive (`Val<T>`).
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct EditableTextSpec {
+    pub controller: Option<JsObject>,
+    pub controller_atom: Option<AtomId>,
+    pub placeholder: Option<Val<String>>,
+    pub color: Option<Val<Color>>,
+    pub placeholder_color: Option<Val<Color>>,
+    pub cursor_color: Option<Val<Color>>,
+    pub font_size: Option<Val<f64>>,
+    pub multiline: Option<Val<bool>>,
+    pub query_key: Option<Vec<String>>,
 }
 
-impl Default for EditableTextElement {
-    fn default() -> Self {
-        Self::new(JsObject::with_null_proto())
-    }
-}
+impl Spec for EditableTextSpec {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+        let id = cx.alloc_node();
+        let mut spec = self.clone();
 
-impl EditableTextElement {
-    pub fn new(controller_obj: JsObject) -> Self {
-        EditableTextElement {
-            controller_obj,
-            font_size: 14.0,
-            color: None,
-            cursor_color: None,
-            placeholder: None,
-            placeholder_color: None,
-            multiline: false,
-            cached_layout: None,
+        if spec.controller.is_none() {
+            if let Some(atom_id) = spec.controller_atom {
+                let js_val = cx.read_atom_raw(atom_id, boa);
+                if let Some(obj) = js_val.as_object() {
+                    if obj.downcast_ref::<TextEditingController>().is_some() {
+                        spec.controller = Some(obj.clone());
+                    }
+                }
+            }
         }
-    }
 
+        if spec.controller.is_none() {
+            let data = TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
+                .expect("failed to construct default TextEditingController");
+            let obj = TextEditingController::from_data(data, boa)
+                .expect("failed to wrap default TextEditingController");
+            spec.controller = Some(obj.upcast().clone());
+        }
+        cx.insert_node(
+            id,
+            AnyElement::with_full_interactivity(EditableText {
+                spec,
+                cached_layout: None,
+                resolved_multiline: false,
+            })
+            .with_js_callback_emitter::<EditableText>(),
+            boa,
+        );
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
+        cx.link_child(parent, id);
+        id
+    }
+}
+
+// ---------------------------------------------------------------------------
+// EditableText — the built element. Holds its spec plus the runtime
+// text-layout cache and the last-resolved `multiline` flag (needed by the
+// gesture/keyboard/IME handlers which lack store access — those props are
+// refreshed during layout via `LayoutContext::read_val`).
+// ---------------------------------------------------------------------------
+
+pub struct EditableText {
+    pub spec: EditableTextSpec,
+    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) resolved_multiline: bool,
+}
+
+impl EditableText {
     pub(crate) fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
-        self.controller_obj
+        self.spec
+            .controller
+            .as_ref()
+            .expect("controller is always present")
             .downcast_ref::<TextEditingController>()
             .expect("controller is always a valid TextEditingController")
     }
 
     pub(crate) fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
-        self.controller_obj
+        self.spec
+            .controller
+            .as_ref()
+            .expect("controller is always present")
             .downcast_mut::<TextEditingController>()
             .expect("controller is always a valid TextEditingController")
     }
@@ -143,6 +198,7 @@ impl EditableTextElement {
         shift: bool,
         nav_info: Option<&LineNavInfo>,
     ) -> bool {
+        let multiline = self.resolved_multiline;
         let mut c = self.controller_mut();
         let full = c.text();
         let cursor = c.cursor_position();
@@ -229,7 +285,7 @@ impl EditableTextElement {
                 }
                 true
             }
-            "ArrowUp" if self.multiline => {
+            "ArrowUp" if multiline => {
                 if let Some(info) = nav_info {
                     let target_byte = compute_vertical_target(info, &full, -1);
                     if shift {
@@ -246,7 +302,7 @@ impl EditableTextElement {
                     false
                 }
             }
-            "ArrowDown" if self.multiline => {
+            "ArrowDown" if multiline => {
                 if let Some(info) = nav_info {
                     let target_byte = compute_vertical_target(info, &full, 1);
                     if shift {
@@ -264,7 +320,7 @@ impl EditableTextElement {
                 }
             }
             "Home" => {
-                let target = if self.multiline {
+                let target = if multiline {
                     if let Some(info) = nav_info {
                         let line_start = info.line_start_chars[info.current_line];
                         char_to_byte_offset(&full, line_start)
@@ -286,7 +342,7 @@ impl EditableTextElement {
                 true
             }
             "End" => {
-                let target = if self.multiline {
+                let target = if multiline {
                     if let Some(info) = nav_info {
                         let line_end = info.line_end_chars[info.current_line];
                         char_to_byte_offset(&full, line_end)
@@ -314,7 +370,7 @@ impl EditableTextElement {
                 true
             }
             "Enter" => {
-                if self.multiline {
+                if multiline {
                     if has_sel {
                         let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
                         c.delete_range(s, e);
@@ -358,11 +414,11 @@ impl EditableTextElement {
         handled
     }
 
-    fn char_index_at(&self, local_position: &Offset) -> usize {
+    fn char_index_at(&self, local_position: &tur_shared::Offset) -> usize {
         self.cached_layout
             .as_ref()
             .map(|ld| {
-                if self.multiline {
+                if self.resolved_multiline {
                     ld.char_index_at_xy(local_position.x as f32, local_position.y as f32)
                 } else {
                     ld.char_index_at_x(local_position.x as f32)
@@ -433,7 +489,9 @@ fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
     s[..byte_pos.min(s.len())].chars().count()
 }
 
-impl ElementTrace for EditableTextElement {
+impl Effect for EditableText {}
+
+impl ElementTrace for EditableText {
     fn trace_label(&self) -> String {
         let text = self.text();
         if text.is_empty() {
@@ -445,55 +503,9 @@ impl ElementTrace for EditableTextElement {
     }
 }
 
-impl ElementOnUpdate for EditableTextElement {
-    fn set_prop(&mut self, _ctx: &mut Context, key: &JsString, value: &JsValue) {
-        match key.to_std_string_escaped().as_str() {
-            "controller" => {
-                if let Some(obj) = value.as_object() {
-                    if obj.downcast_ref::<TextEditingController>().is_some() {
-                        self.controller_obj = obj;
-                    }
-                }
-            }
-            "fontSize" => {
-                self.font_size = value.as_number().unwrap_or(14.0);
-            }
-            "color" => {
-                self.color = extract_color(value, _ctx);
-            }
-            "cursorColor" => {
-                self.cursor_color = extract_color(value, _ctx);
-            }
-            "placeholder" => {
-                self.placeholder = value.as_string().map(|s| s.to_std_string_escaped());
-            }
-            "placeholderColor" => {
-                self.placeholder_color = extract_color(value, _ctx);
-            }
-            "multiline" => {
-                self.multiline = value.as_boolean().unwrap_or(value.to_boolean());
-            }
-            _ => {}
-        }
-    }
+impl ElementOnFocus for EditableText {}
 
-    fn reset_prop(&mut self, key: &JsString) {
-        match key.to_std_string_escaped().as_str() {
-            "controller" => {}
-            "fontSize" => self.font_size = 14.0,
-            "color" => self.color = None,
-            "cursorColor" => self.cursor_color = None,
-            "placeholder" => self.placeholder = None,
-            "placeholderColor" => self.placeholder_color = None,
-            "multiline" => self.multiline = false,
-            _ => {}
-        }
-    }
-}
-
-impl ElementOnFocus for EditableTextElement {}
-
-impl ElementOnGesture for EditableTextElement {
+impl ElementOnGesture for EditableText {
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
@@ -531,7 +543,7 @@ impl ElementOnGesture for EditableTextElement {
     }
 }
 
-impl ElementOnKeyboard for EditableTextElement {
+impl ElementOnKeyboard for EditableText {
     fn on_keyboard_event(
         &mut self,
         cx: &mut ElementOnKeyboardContext,
@@ -566,7 +578,7 @@ impl ElementOnKeyboard for EditableTextElement {
             let c = self.controller();
             let new_text = c.text();
             if new_text != prev_text {
-                let enter = event.key == "Enter" && !self.multiline;
+                let enter = event.key == "Enter" && !self.resolved_multiline;
                 cx.push_js_command(EditableTextNotification::TextChanged {
                     text: new_text,
                     enter,
@@ -590,7 +602,7 @@ impl ElementOnKeyboard for EditableTextElement {
     }
 }
 
-impl ElementOnIme for EditableTextElement {
+impl ElementOnIme for EditableText {
     fn on_ime_event(
         &mut self,
         cx: &mut ElementOnImeContext,
@@ -641,7 +653,7 @@ impl ElementOnIme for EditableTextElement {
     }
 }
 
-impl ElementJsCallbackEmitter for EditableTextElement {
+impl ElementJsCallbackEmitter for EditableText {
     fn emit_js_callback(
         &self,
         context: &mut Context,
@@ -705,6 +717,89 @@ impl ElementJsCallbackEmitter for EditableTextElement {
             }
         } else {
             None
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Factory helpers — called from the JS bridge to parse props into a spec.
+// ---------------------------------------------------------------------------
+
+/// Extract a `Val<T>` prop from a JS props object.
+pub(super) fn prop_val<T: PropValue>(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Val<T>> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    val_from_js(&v)
+}
+
+/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
+pub(super) fn prop_query_key(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Vec<String>> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
+    let len = arr.length(ctx).ok()? as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if let Ok(val) = arr.at(i as i64, ctx) {
+            if let Some(s) = val.as_string() {
+                out.push(s.to_std_string_escaped());
+            }
+        }
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+/// Extract the `controller` prop — a TextEditingController class instance
+/// (opaque JsObject). Parsed eagerly (not reactive).
+pub(super) fn prop_controller(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<JsObject> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    if obj.downcast_ref::<TextEditingController>().is_some() {
+        Some(obj.clone())
+    } else {
+        None
+    }
+}
+
+/// Extract the atom id from the controller prop (if it was passed reactively).
+pub(super) fn prop_controller_atom(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<AtomId> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    extract_atom(&v)
+}
+
+impl EditableTextSpec {
+    /// Build an `EditableTextSpec` from a JS props object.
+    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        EditableTextSpec {
+            controller: prop_controller(props, "controller", ctx),
+            controller_atom: prop_controller_atom(props, "controller", ctx),
+            placeholder: prop_val::<String>(props, "placeholder", ctx),
+            color: prop_val::<Color>(props, "color", ctx),
+            placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
+            cursor_color: prop_val::<Color>(props, "cursorColor", ctx),
+            font_size: prop_val::<f64>(props, "fontSize", ctx),
+            multiline: prop_val::<bool>(props, "multiline", ctx),
+            query_key: prop_query_key(props, "queryKey", ctx),
         }
     }
 }

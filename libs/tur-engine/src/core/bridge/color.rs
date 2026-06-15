@@ -1,6 +1,70 @@
 use boa_engine::js_string;
-use boa_engine::{Context, JsValue};
+use boa_engine::{Context, JsArgs, JsValue};
 use tur_shared::{Brush, Color, GradientStop};
+
+use crate::core::bridge::BoaOpaque;
+use crate::core::widget::val::{BrushOpaque, ColorOpaque};
+
+/// Bridge function `createColor(r, g, b, a)` → JS opaque wrapping `Color`.
+/// Called by the TS `Color` class so that Rust can read the value via
+/// `downcast_ref::<ColorOpaque>()` without needing a boa `Context`.
+pub(crate) fn tur_create_color(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let r = args.get_or_undefined(0).as_number().unwrap_or(0.0) as u8;
+    let g = args.get_or_undefined(1).as_number().unwrap_or(0.0) as u8;
+    let b = args.get_or_undefined(2).as_number().unwrap_or(0.0) as u8;
+    let a = args.get_or_undefined(3).as_number().unwrap_or(255.0) as u8;
+    let opaque = BoaOpaque::new(ColorOpaque(Color::rgba(r, g, b, a)), context);
+    Ok(opaque.object().clone().into())
+}
+
+/// Bridge function `createLinearGradient(startX, startY, endX, endY, stops)`
+/// where stops is an array of `{offset, r, g, b, a}`. Returns JS opaque
+/// wrapping `Brush::LinearGradient`.
+pub(crate) fn tur_create_linear_gradient(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let start = (
+        args.get_or_undefined(0).as_number().unwrap_or(0.0),
+        args.get_or_undefined(1).as_number().unwrap_or(0.0),
+    );
+    let end = (
+        args.get_or_undefined(2).as_number().unwrap_or(0.0),
+        args.get_or_undefined(3).as_number().unwrap_or(0.0),
+    );
+    let mut stops: Vec<GradientStop> = Vec::new();
+    if let Some(stops_val) = args.get_or_undefined(4).as_object() {
+        if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone()) {
+            let len = arr.length(context).unwrap_or(0);
+            for i in 0..len {
+                if let Ok(stop_val) = arr.at(i as i64, context) {
+                    let stop_obj = match stop_val.as_object() {
+                        Some(o) => o,
+                        None => continue,
+                    };
+                    let offset = stop_obj
+                        .get(js_string!("offset"), context)
+                        .ok()
+                        .and_then(|v| v.as_number())
+                        .unwrap_or(0.0) as f32;
+                    let r = stop_obj.get(js_string!("r"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
+                    let g = stop_obj.get(js_string!("g"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
+                    let b = stop_obj.get(js_string!("b"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
+                    let a = stop_obj.get(js_string!("a"), context).ok().and_then(|v| v.as_number()).unwrap_or(255.0) as u8;
+                    stops.push(GradientStop { offset, color: Color::rgba(r, g, b, a) });
+                }
+            }
+        }
+    }
+    let brush = Brush::LinearGradient { start, end, stops };
+    let opaque = BoaOpaque::new(BrushOpaque(brush), context);
+    Ok(opaque.object().clone().into())
+}
 
 pub(crate) fn extract_color(value: &JsValue, context: &mut Context) -> Option<Color> {
     let obj = value.as_object()?;
@@ -28,7 +92,7 @@ fn extract_offset_pair(
     Some((x, y))
 }
 
-fn extract_stops(
+#[allow(dead_code)] fn extract_stops(
     obj: &boa_engine::object::JsObject,
     context: &mut Context,
 ) -> Option<Vec<GradientStop>> {
@@ -51,7 +115,7 @@ fn extract_stops(
     Some(stops)
 }
 
-pub(crate) fn extract_brush(value: &JsValue, context: &mut Context) -> Option<Brush> {
+#[allow(dead_code)] pub(crate) fn extract_brush(value: &JsValue, context: &mut Context) -> Option<Brush> {
     let obj = value.as_object()?;
     let type_val = obj.get(js_string!("type"), context).ok()?;
     let type_str = type_val.as_string()?.to_std_string_escaped();

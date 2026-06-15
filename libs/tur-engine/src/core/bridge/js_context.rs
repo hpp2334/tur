@@ -8,6 +8,7 @@ use crate::core::animation::AnimationManager;
 use crate::core::elements::ElementTree;
 use crate::core::focus::FocusManager;
 use crate::core::js_command::JsCommandQueue;
+use crate::core::reactive::Store;
 use crate::core::resource::ResourceMap;
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
@@ -19,6 +20,7 @@ pub struct TurJsContext {
     pub(crate) dirty: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub(crate) animation_manager: Rc<RefCell<AnimationManager>>,
+    pub(crate) store: Rc<RefCell<Store>>,
 }
 
 impl TurJsContext {
@@ -29,6 +31,7 @@ impl TurJsContext {
         dirty: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
     ) -> Self {
+        let store = Rc::new(RefCell::new(Store::new(dirty.clone())));
         Self {
             element_tree,
             js_command_queue,
@@ -36,6 +39,7 @@ impl TurJsContext {
             dirty,
             resource_map,
             animation_manager: Rc::new(RefCell::new(AnimationManager::new())),
+            store,
         }
     }
 }

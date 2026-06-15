@@ -5,13 +5,13 @@ import { defineConfig } from "@rspack/cli";
 
 const casesDir = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
-    "react-cases",
+    "edgy-cases",
 );
 const entries: Record<string, string> = {};
 
-for (const dir of globSync("*/index.tsx", { cwd: casesDir })) {
+for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
-    entries[name] = `./react-cases/${dir}`;
+    entries[name] = `./edgy-cases/${dir}`;
 }
 
 export default defineConfig({
@@ -38,12 +38,7 @@ export default defineConfig({
                         jsc: {
                             parser: {
                                 syntax: "typescript",
-                                tsx: true,
-                            },
-                            transform: {
-                                react: {
-                                    runtime: "automatic",
-                                },
+                                tsx: false,
                             },
                         },
                     },
@@ -52,6 +47,6 @@ export default defineConfig({
         ],
     },
     resolve: {
-        extensions: [".tsx", ".ts", ".js"],
+        extensions: [".ts", ".tsx", ".js"],
     },
 });
