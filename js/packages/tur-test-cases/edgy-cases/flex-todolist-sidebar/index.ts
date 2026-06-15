@@ -1,13 +1,13 @@
 import {
+    Color,
     Column,
     Container,
     CrossAxisAlignment,
     MainAxisAlignment,
     Row,
+    render,
     SizedBox,
     Text,
-    Color,
-    render,
 } from "@tur/edgy";
 
 const TABS = [{ id: "todolist", label: "TodoList" }];
@@ -23,9 +23,13 @@ render(() =>
                     Column({
                         children: TABS.map((tab) =>
                             Container({
-                                color: Color.hex(tab.id === activeId ? "#0f3460" : "#16213e"),
+                                color: Color.hex(
+                                    tab.id === activeId ? "#0f3460" : "#16213e",
+                                ),
                                 padding: 12,
-                                children: [Text({ text: tab.label, fontSize: 14 })],
+                                children: [
+                                    Text({ text: tab.label, fontSize: 14 }),
+                                ],
                             }),
                         ),
                     }),
@@ -42,7 +46,8 @@ render(() =>
                             Column({
                                 children: [
                                     Row({
-                                        mainAlignment: MainAxisAlignment.SpaceBetween,
+                                        mainAlignment:
+                                            MainAxisAlignment.SpaceBetween,
                                         children: [
                                             Text({ text: "Buy milk" }),
                                             Text({ text: "\u2713" }),

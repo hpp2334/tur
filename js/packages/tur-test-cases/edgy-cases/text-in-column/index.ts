@@ -1,4 +1,4 @@
-import { Column, CrossAxisAlignment, Text, render } from "@tur/edgy";
+import { Column, CrossAxisAlignment, render, Text } from "@tur/edgy";
 
 render(() =>
     Column({

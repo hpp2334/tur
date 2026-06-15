@@ -2,8 +2,8 @@ import {
     Column,
     CrossAxisAlignment,
     MainAxisSize,
-    SizedBox,
     render,
+    SizedBox,
 } from "@tur/edgy";
 
 render(() =>

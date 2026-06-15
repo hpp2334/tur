@@ -3,9 +3,9 @@ import {
     Container,
     CrossAxisAlignment,
     Row,
+    render,
     ScrollView,
     SizedBox,
-    render,
 } from "@tur/edgy";
 
 render(() =>
@@ -25,7 +25,8 @@ render(() =>
                                 ScrollView({
                                     queryKey: ["inner-scroll"],
                                     child: Column({
-                                        crossAlignment: CrossAxisAlignment.Start,
+                                        crossAlignment:
+                                            CrossAxisAlignment.Start,
                                         children: [
                                             SizedBox({ height: 200 }),
                                             SizedBox({ height: 200 }),

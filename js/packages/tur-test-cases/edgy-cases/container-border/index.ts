@@ -3,8 +3,8 @@ import {
     BorderPosition,
     Color,
     Container,
-    Text,
     render,
+    Text,
 } from "@tur/edgy";
 
 render(() =>

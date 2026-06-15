@@ -1,4 +1,10 @@
-import { CrossAxisAlignment, MainAxisAlignment, Row, SizedBox, render } from "@tur/edgy";
+import {
+    CrossAxisAlignment,
+    MainAxisAlignment,
+    Row,
+    render,
+    SizedBox,
+} from "@tur/edgy";
 
 render(() =>
     Row({

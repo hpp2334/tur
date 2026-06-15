@@ -1,11 +1,8 @@
-import { Text, render } from "@tur/edgy";
+import { render, Text } from "@tur/edgy";
 
 render(() =>
     Text({
         fontSize: 14,
-        spans: [
-            { content: "Normal" },
-            { content: "Italic", italic: true },
-        ],
+        spans: [{ content: "Normal" }, { content: "Italic", italic: true }],
     } as never),
 );

@@ -2,9 +2,9 @@ import {
     BorderPosition,
     Color,
     Container,
-    PointerInteract,
     derive,
     mutate,
+    PointerInteract,
     render,
     source,
 } from "@tur/edgy";
@@ -12,8 +12,8 @@ import {
 const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);
 const gray = Color.rgba(226, 232, 240, 255);
-const color$ = derive((g) => (!!g(checked$) ? green : undefined));
-const borderColor$ = derive((g) => (!!g(checked$) ? green : gray));
+const color$ = derive((g) => (g(checked$) ? green : undefined));
+const borderColor$ = derive((g) => (g(checked$) ? green : gray));
 
 render(() =>
     Container({

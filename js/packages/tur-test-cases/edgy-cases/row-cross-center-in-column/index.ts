@@ -3,8 +3,8 @@ import {
     CrossAxisAlignment,
     MainAxisSize,
     Row,
-    SizedBox,
     render,
+    SizedBox,
 } from "@tur/edgy";
 
 render(() =>

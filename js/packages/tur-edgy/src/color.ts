@@ -1,8 +1,17 @@
 declare const __tur: {
     createColor(r: number, g: number, b: number, a: number): unknown;
     createLinearGradient(
-        sx: number, sy: number, ex: number, ey: number,
-        stops: Array<{ offset: number; r: number; g: number; b: number; a: number }>,
+        sx: number,
+        sy: number,
+        ex: number,
+        ey: number,
+        stops: Array<{
+            offset: number;
+            r: number;
+            g: number;
+            b: number;
+            a: number;
+        }>,
     ): unknown;
 };
 

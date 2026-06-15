@@ -1,4 +1,4 @@
-import { Alignment, Color, Container, Text, render } from "@tur/edgy";
+import { Alignment, Color, Container, render, Text } from "@tur/edgy";
 
 render(() =>
     Container({

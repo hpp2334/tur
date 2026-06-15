@@ -1,4 +1,12 @@
-import { Alignment, Color, Column, Container, Row, Text, render } from "@tur/edgy";
+import {
+    Alignment,
+    Color,
+    Column,
+    Container,
+    Row,
+    render,
+    Text,
+} from "@tur/edgy";
 
 render(() =>
     Column({

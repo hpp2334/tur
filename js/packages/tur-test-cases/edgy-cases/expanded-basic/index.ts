@@ -1,4 +1,10 @@
-import { Expanded, Column, CrossAxisAlignment, SizedBox, render } from "@tur/edgy";
+import {
+    Column,
+    CrossAxisAlignment,
+    Expanded,
+    render,
+    SizedBox,
+} from "@tur/edgy";
 
 render(() =>
     Column({

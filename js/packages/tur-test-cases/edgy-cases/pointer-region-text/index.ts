@@ -4,12 +4,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    PointerInteract,
-    Text,
     derive,
     mutate,
+    PointerInteract,
     render,
     source,
+    Text,
 } from "@tur/edgy";
 
 const state$ = source("idle");

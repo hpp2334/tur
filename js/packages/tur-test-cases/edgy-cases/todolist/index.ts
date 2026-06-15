@@ -7,9 +7,9 @@ import {
     MainAxisAlignment,
     PointerInteract,
     Row,
+    render,
     SizedBox,
     Text,
-    render,
 } from "@tur/edgy";
 
 interface Task {
@@ -34,7 +34,9 @@ function TaskItem({ task }: { task: Task }) {
                         child: Container({
                             width: 24,
                             height: 24,
-                            color: task.completed ? Color.hex("#22c55e") : Color.hex("#334155"),
+                            color: task.completed
+                                ? Color.hex("#22c55e")
+                                : Color.hex("#334155"),
                             children: [
                                 Text({
                                     text: task.completed ? "x" : "",
@@ -48,7 +50,9 @@ function TaskItem({ task }: { task: Task }) {
                     Text({
                         text: task.title,
                         fontSize: 16,
-                        color: task.completed ? Color.hex("#64748b") : Color.hex("#e2e8f0"),
+                        color: task.completed
+                            ? Color.hex("#64748b")
+                            : Color.hex("#e2e8f0"),
                     }),
                 ],
             }),
@@ -114,22 +118,29 @@ render(() =>
                                     Column({
                                         children: [
                                             Row({
-                                                mainAlignment: MainAxisAlignment.SpaceBetween,
+                                                mainAlignment:
+                                                    MainAxisAlignment.SpaceBetween,
                                                 children: [
                                                     Text({
                                                         text: "TodoList",
                                                         fontSize: 24,
-                                                        color: Color.hex("#f8fafc"),
+                                                        color: Color.hex(
+                                                            "#f8fafc",
+                                                        ),
                                                     }),
                                                     PointerInteract({
                                                         child: Container({
-                                                            color: Color.hex("#4f46e5"),
+                                                            color: Color.hex(
+                                                                "#4f46e5",
+                                                            ),
                                                             padding: 8,
                                                             children: [
                                                                 Text({
                                                                     text: "+ New Task",
                                                                     fontSize: 14,
-                                                                    color: Color.hex("#ffffff"),
+                                                                    color: Color.hex(
+                                                                        "#ffffff",
+                                                                    ),
                                                                 }),
                                                             ],
                                                         }),
@@ -137,7 +148,9 @@ render(() =>
                                                 ],
                                             }),
                                             SizedBox({ height: 16 }),
-                                            ...TASKS.map((t) => TaskItem({ task: t })),
+                                            ...TASKS.map((t) =>
+                                                TaskItem({ task: t }),
+                                            ),
                                         ],
                                     }),
                                 ],

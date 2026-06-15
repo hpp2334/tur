@@ -1,4 +1,4 @@
-import { Container, SizedBox, render } from "@tur/edgy";
+import { Container, render, SizedBox } from "@tur/edgy";
 
 render(() =>
     Container({

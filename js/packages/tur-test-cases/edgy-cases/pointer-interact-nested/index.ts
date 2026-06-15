@@ -2,15 +2,15 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    derive,
     HitTestBehavior,
     MainAxisSize,
+    mutate,
     PointerInteract,
     Row,
-    Text,
-    derive,
-    mutate,
     render,
     source,
+    Text,
 } from "@tur/edgy";
 
 const outerClicks$ = source(0);
@@ -24,7 +24,9 @@ render(() =>
         mainAxisSize: MainAxisSize.Min,
         children: [
             PointerInteract({
-                onClick: mutate(({ get, set }) => set(outerClicks$, get(outerClicks$) + 1)),
+                onClick: mutate(({ get, set }) =>
+                    set(outerClicks$, get(outerClicks$) + 1),
+                ),
                 child: Container({
                     queryKey: ["outer-opaque"],
                     width: 80,
@@ -34,7 +36,10 @@ render(() =>
                             children: [
                                 PointerInteract({
                                     onClick: mutate(({ get, set }) =>
-                                        set(innerClicks$, get(innerClicks$) + 1),
+                                        set(
+                                            innerClicks$,
+                                            get(innerClicks$) + 1,
+                                        ),
                                     ),
                                     child: Container({
                                         queryKey: ["inner-opaque"],
@@ -49,7 +54,10 @@ render(() =>
             }),
             PointerInteract({
                 onClick: mutate(({ get, set }) =>
-                    set(translucentOuterClicks$, get(translucentOuterClicks$) + 1),
+                    set(
+                        translucentOuterClicks$,
+                        get(translucentOuterClicks$) + 1,
+                    ),
                 ),
                 child: Container({
                     queryKey: ["outer-translucent"],
@@ -61,7 +69,10 @@ render(() =>
                                 PointerInteract({
                                     behavior: HitTestBehavior.Translucent,
                                     onClick: mutate(({ get, set }) =>
-                                        set(translucentInnerClicks$, get(translucentInnerClicks$) + 1),
+                                        set(
+                                            translucentInnerClicks$,
+                                            get(translucentInnerClicks$) + 1,
+                                        ),
                                     ),
                                     child: Container({
                                         queryKey: ["inner-translucent"],
@@ -75,11 +86,16 @@ render(() =>
                 }),
             }),
             Text({
-                text: derive((g) => `opaque:${g(outerClicks$)}/${g(innerClicks$)}`),
+                text: derive(
+                    (g) => `opaque:${g(outerClicks$)}/${g(innerClicks$)}`,
+                ),
                 queryKey: ["result-opaque"],
             }),
             Text({
-                text: derive((g) => `translucent:${g(translucentOuterClicks$)}/${g(translucentInnerClicks$)}`),
+                text: derive(
+                    (g) =>
+                        `translucent:${g(translucentOuterClicks$)}/${g(translucentInnerClicks$)}`,
+                ),
                 queryKey: ["result-translucent"],
             }),
         ],

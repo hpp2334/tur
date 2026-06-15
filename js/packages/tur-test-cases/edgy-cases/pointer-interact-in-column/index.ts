@@ -1,4 +1,10 @@
-import { Column, Container, CrossAxisAlignment, PointerInteract, render } from "@tur/edgy";
+import {
+    Column,
+    Container,
+    CrossAxisAlignment,
+    PointerInteract,
+    render,
+} from "@tur/edgy";
 
 render(() =>
     Column({

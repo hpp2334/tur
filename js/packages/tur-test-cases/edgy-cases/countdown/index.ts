@@ -3,15 +3,15 @@ import {
     Condition,
     Container,
     createTextEditingController,
+    derive,
     InputEdgy,
     MainAxisAlignment,
+    mutate,
     PointerInteract,
     Row,
-    Text,
-    derive,
-    mutate,
     render,
     source,
+    Text,
 } from "@tur/edgy";
 
 const DEFAULT_TIME = 60;
@@ -146,8 +146,11 @@ render(() =>
                                             queryKey: ["edit-input"],
                                             children: [
                                                 InputEdgy({
-                                                    controller: derive((g) => g(editController$)),
-                                                    placeholder: "Positive integer",
+                                                    controller: derive((g) =>
+                                                        g(editController$),
+                                                    ),
+                                                    placeholder:
+                                                        "Positive integer",
                                                     fontSize: 14,
                                                     width: 200,
                                                     height: 30,
@@ -159,7 +162,9 @@ render(() =>
                                             child: Container({
                                                 padding: 8,
                                                 queryKey: ["btn-confirm"],
-                                                children: [Text({ text: "Confirm" })],
+                                                children: [
+                                                    Text({ text: "Confirm" }),
+                                                ],
                                             }),
                                         }),
                                     ],

@@ -1,4 +1,4 @@
-import { Color, Text, render } from "@tur/edgy";
+import { Color, render, Text } from "@tur/edgy";
 
 render(() =>
     Text({

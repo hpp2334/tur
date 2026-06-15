@@ -86,7 +86,10 @@ async function main() {
         console.log("[browser pageerror]", err.message);
     });
 
-    await page.goto(`https://localhost:${PORT}/`, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await page.goto(`https://localhost:${PORT}/`, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+    });
 
     // Wait for case buttons to appear.
     await page.waitForSelector("button.case-item", { timeout: 30000 });
@@ -114,7 +117,9 @@ async function main() {
         await page.waitForTimeout(500);
         layout = await page.evaluate(() => {
             const w = window as Record<string, unknown>;
-            const turApp = w.turApp as { debug_layout: () => string } | undefined;
+            const turApp = w.turApp as
+                | { debug_layout: () => string }
+                | undefined;
             return turApp?.debug_layout?.() ?? "";
         });
         if (layout.length > 0) break;
@@ -149,7 +154,9 @@ async function main() {
 
     // Click +1 a few times.
     const canvas = await page.evaluate(() => {
-        const el = document.querySelector("#tur-container canvas") as HTMLCanvasElement | null;
+        const el = document.querySelector(
+            "#tur-container canvas",
+        ) as HTMLCanvasElement | null;
         if (!el) return null;
         const r = el.getBoundingClientRect();
         return { x: r.x, y: r.y, w: r.width, h: r.height };
@@ -162,7 +169,10 @@ async function main() {
             const w = window as Record<string, unknown>;
             return (w.turDemo as { debugLayout: () => string }).debugLayout();
         });
-        console.log("  initial layout snippet:", initial.split("\n").slice(0, 6).join(" | "));
+        console.log(
+            "  initial layout snippet:",
+            initial.split("\n").slice(0, 6).join(" | "),
+        );
 
         // Click roughly where +1 should be (center-bottom).
         const cx = canvas.x + canvas.w / 2;
@@ -171,14 +181,19 @@ async function main() {
         await page.waitForTimeout(400);
         await page.mouse.click(cx, cy);
         await page.waitForTimeout(400);
-        await page.screenshot({ path: path.join(RESULTS_DIR, "counter-clicked.png") });
+        await page.screenshot({
+            path: path.join(RESULTS_DIR, "counter-clicked.png"),
+        });
         console.log("  screenshot saved: counter-clicked.png");
 
         const after = await page.evaluate(() => {
             const w = window as Record<string, unknown>;
             return (w.turDemo as { debugLayout: () => string }).debugLayout();
         });
-        console.log("  after-click layout snippet:", after.split("\n").slice(0, 6).join(" | "));
+        console.log(
+            "  after-click layout snippet:",
+            after.split("\n").slice(0, 6).join(" | "),
+        );
     }
 
     // 2) Verify todolist case loads.
@@ -189,8 +204,12 @@ async function main() {
             const w = window as Record<string, unknown>;
             if (!w.turDemo) return false;
             try {
-                const layout = (w.turDemo as { debugLayout: () => string }).debugLayout();
-                return typeof layout === "string" && layout.includes("Todolist");
+                const layout = (
+                    w.turDemo as { debugLayout: () => string }
+                ).debugLayout();
+                return (
+                    typeof layout === "string" && layout.includes("Todolist")
+                );
             } catch {
                 return false;
             }
@@ -203,13 +222,17 @@ async function main() {
 
     // 3) Verify clickable-text case loads.
     console.log("\n=== clickable-text case ===");
-    await page.locator("button.case-item", { hasText: /^clickable-text$/ }).click();
+    await page
+        .locator("button.case-item", { hasText: /^clickable-text$/ })
+        .click();
     await page.waitForFunction(
         () => {
             const w = window as Record<string, unknown>;
             if (!w.turDemo) return false;
             try {
-                const layout = (w.turDemo as { debugLayout: () => string }).debugLayout();
+                const layout = (
+                    w.turDemo as { debugLayout: () => string }
+                ).debugLayout();
                 return typeof layout === "string" && layout.includes("before");
             } catch {
                 return false;
@@ -218,12 +241,16 @@ async function main() {
         { timeout: 30000 },
     );
     await page.waitForTimeout(500);
-    await page.screenshot({ path: path.join(RESULTS_DIR, "clickable-text.png") });
+    await page.screenshot({
+        path: path.join(RESULTS_DIR, "clickable-text.png"),
+    });
     console.log("  screenshot saved: clickable-text.png");
 
     // Click the text — should change to "after".
     const offset = await page.evaluate(() => {
-        const el = document.querySelector("#tur-container canvas") as HTMLCanvasElement | null;
+        const el = document.querySelector(
+            "#tur-container canvas",
+        ) as HTMLCanvasElement | null;
         if (!el) return null;
         const r = el.getBoundingClientRect();
         return { x: r.x, y: r.y };
@@ -231,7 +258,9 @@ async function main() {
     if (offset) {
         await page.mouse.click(offset.x + 50, offset.y + 30);
         await page.waitForTimeout(500);
-        await page.screenshot({ path: path.join(RESULTS_DIR, "clickable-text-clicked.png") });
+        await page.screenshot({
+            path: path.join(RESULTS_DIR, "clickable-text-clicked.png"),
+        });
         const after = await page.evaluate(() => {
             const w = window as Record<string, unknown>;
             return (w.turDemo as { debugLayout: () => string }).debugLayout();

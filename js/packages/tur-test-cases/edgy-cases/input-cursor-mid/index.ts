@@ -1,4 +1,9 @@
-import { Container, createTextEditingController, InputEdgy, render } from "@tur/edgy";
+import {
+    Container,
+    createTextEditingController,
+    InputEdgy,
+    render,
+} from "@tur/edgy";
 
 const ctrl = createTextEditingController({});
 
@@ -6,6 +11,13 @@ const ctrl = createTextEditingController({});
 
 render(() =>
     Container({
-        children: [InputEdgy({ controller: ctrl, fontSize: 14, width: 200, height: 30 })],
+        children: [
+            InputEdgy({
+                controller: ctrl,
+                fontSize: 14,
+                width: 200,
+                height: 30,
+            }),
+        ],
     }),
 );

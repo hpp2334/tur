@@ -1,4 +1,10 @@
-import { Container, CrossAxisAlignment, Row, SizedBox, render } from "@tur/edgy";
+import {
+    Container,
+    CrossAxisAlignment,
+    Row,
+    render,
+    SizedBox,
+} from "@tur/edgy";
 
 render(() =>
     Container({

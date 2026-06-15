@@ -1,4 +1,4 @@
-import { Fragment, Text, render } from "@tur/edgy";
+import { Fragment, render, Text } from "@tur/edgy";
 
 render(() =>
     Fragment({

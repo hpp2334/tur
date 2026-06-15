@@ -1,12 +1,12 @@
 import {
     Column,
     CrossAxisAlignment,
-    PointerInteract,
-    Text,
     derive,
     mutate,
+    PointerInteract,
     render,
     source,
+    Text,
 } from "@tur/edgy";
 
 const content$ = source("before");
