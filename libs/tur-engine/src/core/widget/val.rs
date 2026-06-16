@@ -137,15 +137,30 @@ impl_prop_value_enum!(
 
 // ---------------------------------------------------------------------------
 // ReadableAtom<T> — typed read-only handle to a reactive atom.
+//
+// Only a phantom marker for `T`; the `PropValue` requirement is enforced
+// where the atom is actually decoded (`Val<T>` / `WidgetCx::read_val`).  This
+// lets object-valued atoms (e.g. `ReadableAtom<TextEditingController>`) be
+// carried as typed handles even though their value is resolved via a raw
+// `JsValue` read + downcast rather than `PropValue::from_js`.
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy)]
-pub struct ReadableAtom<T: PropValue> {
+pub struct ReadableAtom<T: 'static> {
     pub(crate) id: AtomId,
     _marker: PhantomData<T>,
 }
 
-impl<T: PropValue> ReadableAtom<T> {
+// Manual Clone/Copy — PhantomData is always Copy regardless of T, so no
+// T: Clone/Copy bounds are needed.
+impl<T: 'static> Clone for ReadableAtom<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T: 'static> Copy for ReadableAtom<T> {}
+
+impl<T: 'static> ReadableAtom<T> {
     pub fn new(id: AtomId) -> Self {
         ReadableAtom {
             id,

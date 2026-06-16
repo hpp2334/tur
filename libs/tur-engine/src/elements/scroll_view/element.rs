@@ -1,9 +1,8 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
-use boa_engine::property::PropertyDescriptor;
-use boa_engine::{js_string, Context, JsValue};
+use boa_engine::{Context, JsValue};
 use tur_shared::{Axis, Brush, Size};
 
 use crate::core::element::ElementNodeId;
@@ -12,7 +11,10 @@ use crate::core::elements::{
     WheelEvent,
 };
 use crate::core::js_command::{AnyJsCommand, ScrollViewJsCommand};
+use crate::core::reactive::Store;
 use crate::core::scroll::ScrollController;
+use crate::core::scroll::ScrollEvent;
+use crate::core::widget::callback::EventArg;
 use crate::core::widget::{
     extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };
@@ -168,28 +170,19 @@ impl ElementJsCallbackEmitter for ScrollView {
     fn emit_js_callback(
         &self,
         context: &mut Context,
+        _store: &Rc<RefCell<Store>>,
         command: AnyJsCommand,
-    ) -> Option<(JsFunction, Vec<JsValue>)> {
+    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
         let _ = command.downcast_ref::<ScrollViewJsCommand>()?;
         let ctrl_obj = self.spec.controller.as_ref()?;
         let ctrl = ctrl_obj.downcast_ref::<ScrollController>()?;
-        let on_scroll = ctrl.on_scroll.as_ref()?;
-
-        let proto = context.intrinsics().constructors().object().prototype();
-        let obj = JsObject::from_proto_and_data(proto, ());
-        let desc = |v: f64| {
-            PropertyDescriptor::builder()
-                .value(JsValue::from(v))
-                .writable(true)
-                .enumerable(true)
-                .configurable(true)
-                .build()
+        let cb = ctrl.on_scroll.as_ref()?;
+        let event = ScrollEvent {
+            offset: ctrl.offset,
+            max_extent: ctrl.max_scroll_extent,
+            viewport_dimension: ctrl.viewport_dimension,
         };
-        obj.insert_property(js_string!("offset"), desc(ctrl.offset));
-        obj.insert_property(js_string!("maxExtent"), desc(ctrl.max_scroll_extent));
-        obj.insert_property(js_string!("viewportDimension"), desc(ctrl.viewport_dimension));
-
-        Some((on_scroll.clone(), vec![obj.into()]))
+        Some((cb.func().clone(), event.to_js_args(context)))
     }
 }
 

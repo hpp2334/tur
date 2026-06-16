@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::object::builtins::JsFunction;
@@ -11,6 +12,8 @@ use crate::core::elements::{
     WheelEvent,
 };
 use crate::core::js_command::{AnyJsCommand, LazyListJsCommand};
+use crate::core::reactive::Store;
+use crate::core::widget::callback::EventArg;
 use crate::core::widget::{
     extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };
@@ -304,8 +307,9 @@ impl ElementJsCallbackEmitter for LazyList {
     fn emit_js_callback(
         &self,
         _context: &mut Context,
+        _store: &Rc<RefCell<Store>>,
         command: AnyJsCommand,
-    ) -> Option<(JsFunction, Vec<JsValue>)> {
+    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
         let _ = command.downcast_ref::<LazyListJsCommand>()?;
         None
     }
@@ -358,5 +362,25 @@ impl LazyListSpec {
             builder,
             query_key: prop_query_key(props, "queryKey", ctx),
         })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Visible-range event payload — JS callback arguments for
+// onVisibleRangeChange (LazyListController only).
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct VisibleRangeChangeEvent {
+    pub start_index: u64,
+    pub end_index: u64,
+}
+
+impl EventArg for VisibleRangeChangeEvent {
+    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
+        vec![
+            JsValue::from(self.start_index as f64),
+            JsValue::from(self.end_index as f64),
+        ]
     }
 }

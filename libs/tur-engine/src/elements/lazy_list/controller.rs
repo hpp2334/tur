@@ -4,7 +4,6 @@ use std::rc::Rc;
 use boa_engine::class::{Class, ClassBuilder};
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
@@ -13,20 +12,10 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
 use crate::core::js_command::{JsCommandQueue, LazyListJsCommand};
 use crate::core::element::ElementNodeId;
+use crate::core::scroll::ScrollEvent;
+use crate::core::widget::callback::{extract_callback_from_opts, Callback};
+use crate::elements::lazy_list::VisibleRangeChangeEvent;
 use crate::elements::LazyList;
-
-fn extract_callable(value: &JsValue) -> Option<JsFunction> {
-    value.as_object().and_then(JsFunction::from_object)
-}
-
-fn extract_callable_from_opts(
-    opts: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsFunction> {
-    let val = opts.get(js_string!(key), ctx).ok()?;
-    extract_callable(&val)
-}
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -34,8 +23,8 @@ pub struct LazyListController {
     pub(crate) offset: f64,
     pub(crate) max_scroll_extent: f64,
     pub(crate) viewport_dimension: f64,
-    pub(crate) on_scroll: Option<JsFunction>,
-    pub(crate) on_visible_range_change: Option<JsFunction>,
+    pub(crate) on_scroll: Option<Callback<ScrollEvent>>,
+    pub(crate) on_visible_range_change: Option<Callback<VisibleRangeChangeEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
         Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
@@ -95,9 +84,9 @@ impl Class for LazyListController {
     ) -> JsResult<Self> {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_scroll = extract_callable_from_opts(&opts, "onScroll", ctx);
+            ctrl.on_scroll = extract_callback_from_opts(&opts, "onScroll", ctx);
             ctrl.on_visible_range_change =
-                extract_callable_from_opts(&opts, "onVisibleRangeChange", ctx);
+                extract_callback_from_opts(&opts, "onVisibleRangeChange", ctx);
         }
         Ok(ctrl)
     }

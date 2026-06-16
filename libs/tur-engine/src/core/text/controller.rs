@@ -1,7 +1,6 @@
 use boa_engine::class::{Class, ClassBuilder};
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
@@ -10,6 +9,13 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
 use crate::core::bridge::TurNodeHandle;
+use crate::core::focus::{BlurEvent, FocusEvent};
+use crate::core::keyboard::{KeydownEvent, KeyupEvent};
+use crate::core::text::{
+    CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
+    InputEvent, SelectionChangeEvent,
+};
+use crate::core::widget::callback::{extract_callback_from_opts, Callback};
 use crate::elements::text::span_data::SpanData;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -22,26 +28,18 @@ pub struct TextEditingController {
     composing_text: Option<String>,
     composing_start: usize,
     handle: Option<JsObject>,
-    on_input: Option<JsFunction>,
-    on_cursor_change: Option<JsFunction>,
-    on_selection_change: Option<JsFunction>,
-    on_key_down: Option<JsFunction>,
-    on_key_up: Option<JsFunction>,
-    on_focus: Option<JsFunction>,
-    on_blur: Option<JsFunction>,
-    on_composition_start: Option<JsFunction>,
-    on_composition_update: Option<JsFunction>,
-    on_composition_end: Option<JsFunction>,
+    on_input: Option<Callback<InputEvent>>,
+    on_cursor_change: Option<Callback<CursorChangeEvent>>,
+    on_selection_change: Option<Callback<SelectionChangeEvent>>,
+    on_key_down: Option<Callback<KeydownEvent>>,
+    on_key_up: Option<Callback<KeyupEvent>>,
+    on_focus: Option<Callback<FocusEvent>>,
+    on_blur: Option<Callback<BlurEvent>>,
+    on_composition_start: Option<Callback<CompositionStartEvent>>,
+    on_composition_update: Option<Callback<CompositionUpdateEvent>>,
+    on_composition_end: Option<Callback<CompositionEndEvent>>,
 }
 
-fn extract_callable(value: &JsValue) -> Option<JsFunction> {
-    value.as_object().and_then(JsFunction::from_object)
-}
-
-fn extract_callable_from_opts(opts: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {
-    let val = opts.get(js_string!(key), ctx).ok()?;
-    extract_callable(&val)
-}
 
 impl TextEditingController {
     pub fn new() -> Self {
@@ -183,43 +181,43 @@ impl TextEditingController {
         self.selection_end = end;
     }
 
-    pub fn on_input(&self) -> Option<&JsFunction> {
+    pub fn on_input(&self) -> Option<&Callback<InputEvent>> {
         self.on_input.as_ref()
     }
 
-    pub fn on_cursor_change(&self) -> Option<&JsFunction> {
+    pub fn on_cursor_change(&self) -> Option<&Callback<CursorChangeEvent>> {
         self.on_cursor_change.as_ref()
     }
 
-    pub fn on_selection_change(&self) -> Option<&JsFunction> {
+    pub fn on_selection_change(&self) -> Option<&Callback<SelectionChangeEvent>> {
         self.on_selection_change.as_ref()
     }
 
-    pub fn on_key_down(&self) -> Option<&JsFunction> {
+    pub fn on_key_down(&self) -> Option<&Callback<KeydownEvent>> {
         self.on_key_down.as_ref()
     }
 
-    pub fn on_key_up(&self) -> Option<&JsFunction> {
+    pub fn on_key_up(&self) -> Option<&Callback<KeyupEvent>> {
         self.on_key_up.as_ref()
     }
 
-    pub fn on_focus(&self) -> Option<&JsFunction> {
+    pub fn on_focus(&self) -> Option<&Callback<FocusEvent>> {
         self.on_focus.as_ref()
     }
 
-    pub fn on_blur(&self) -> Option<&JsFunction> {
+    pub fn on_blur(&self) -> Option<&Callback<BlurEvent>> {
         self.on_blur.as_ref()
     }
 
-    pub fn on_composition_start(&self) -> Option<&JsFunction> {
+    pub fn on_composition_start(&self) -> Option<&Callback<CompositionStartEvent>> {
         self.on_composition_start.as_ref()
     }
 
-    pub fn on_composition_update(&self) -> Option<&JsFunction> {
+    pub fn on_composition_update(&self) -> Option<&Callback<CompositionUpdateEvent>> {
         self.on_composition_update.as_ref()
     }
 
-    pub fn on_composition_end(&self) -> Option<&JsFunction> {
+    pub fn on_composition_end(&self) -> Option<&Callback<CompositionEndEvent>> {
         self.on_composition_end.as_ref()
     }
 
@@ -337,16 +335,16 @@ impl Class for TextEditingController {
     ) -> JsResult<Self> {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_input = extract_callable_from_opts(&opts, "onInput", ctx);
-            ctrl.on_cursor_change = extract_callable_from_opts(&opts, "onCursorChange", ctx);
-            ctrl.on_selection_change = extract_callable_from_opts(&opts, "onSelectionChange", ctx);
-            ctrl.on_key_down = extract_callable_from_opts(&opts, "onKeyDown", ctx);
-            ctrl.on_key_up = extract_callable_from_opts(&opts, "onKeyUp", ctx);
-            ctrl.on_focus = extract_callable_from_opts(&opts, "onFocus", ctx);
-            ctrl.on_blur = extract_callable_from_opts(&opts, "onBlur", ctx);
-            ctrl.on_composition_start = extract_callable_from_opts(&opts, "onCompositionStart", ctx);
-            ctrl.on_composition_update = extract_callable_from_opts(&opts, "onCompositionUpdate", ctx);
-            ctrl.on_composition_end = extract_callable_from_opts(&opts, "onCompositionEnd", ctx);
+            ctrl.on_input = extract_callback_from_opts(&opts, "onInput", ctx);
+            ctrl.on_cursor_change = extract_callback_from_opts(&opts, "onCursorChange", ctx);
+            ctrl.on_selection_change = extract_callback_from_opts(&opts, "onSelectionChange", ctx);
+            ctrl.on_key_down = extract_callback_from_opts(&opts, "onKeyDown", ctx);
+            ctrl.on_key_up = extract_callback_from_opts(&opts, "onKeyUp", ctx);
+            ctrl.on_focus = extract_callback_from_opts(&opts, "onFocus", ctx);
+            ctrl.on_blur = extract_callback_from_opts(&opts, "onBlur", ctx);
+            ctrl.on_composition_start = extract_callback_from_opts(&opts, "onCompositionStart", ctx);
+            ctrl.on_composition_update = extract_callback_from_opts(&opts, "onCompositionUpdate", ctx);
+            ctrl.on_composition_end = extract_callback_from_opts(&opts, "onCompositionEnd", ctx);
         }
         Ok(ctrl)
     }

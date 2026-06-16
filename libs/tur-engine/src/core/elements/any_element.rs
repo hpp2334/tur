@@ -1,4 +1,6 @@
 use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsValue};
@@ -6,6 +8,7 @@ use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::js_command::AnyJsCommand;
+use crate::core::reactive::Store;
 use crate::core::elements::ElementJsCallbackEmitter;
 use crate::core::elements::dispatch_emit_js_callback;
 use crate::core::elements::ElementTrace;
@@ -20,7 +23,12 @@ type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
-type EmitJsCallbackFn = fn(&dyn Any, &mut Context, AnyJsCommand) -> Option<(JsFunction, Vec<JsValue>)>;
+type EmitJsCallbackFn = fn(
+    &dyn Any,
+    &mut Context,
+    &Rc<RefCell<Store>>,
+    AnyJsCommand,
+) -> Option<(JsFunction, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -423,10 +431,11 @@ impl AnyElement {
     pub fn emit_js_callback(
         &self,
         context: &mut Context,
+        store: &Rc<RefCell<Store>>,
         command: AnyJsCommand,
     ) -> Option<(JsFunction, Vec<JsValue>)> {
         let f = self.emit_js_callback_fn?;
-        f(self.inner.as_any(), context, command)
+        f(self.inner.as_any(), context, store, command)
     }
 
     pub fn has_js_callback_emitter(&self) -> bool {

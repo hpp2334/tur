@@ -4,7 +4,6 @@ use std::rc::Rc;
 use boa_engine::class::{Class, ClassBuilder};
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
@@ -14,6 +13,8 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
 use crate::core::js_command::{JsCommandQueue, ScrollViewJsCommand};
 use crate::core::element::ElementNodeId;
+use crate::core::scroll::ScrollEvent;
+use crate::core::widget::callback::{extract_callback_from_opts, Callback};
 use crate::elements::ScrollView;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -22,26 +23,13 @@ pub struct ScrollController {
     pub(crate) offset: f64,
     pub(crate) max_scroll_extent: f64,
     pub(crate) viewport_dimension: f64,
-    pub(crate) on_scroll: Option<JsFunction>,
+    pub(crate) on_scroll: Option<Callback<ScrollEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
         Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
     pub(crate) js_command_queue: Option<Rc<RefCell<JsCommandQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
     pub(crate) pending_initial_offset: Option<f64>,
-}
-
-fn extract_callable(value: &JsValue) -> Option<JsFunction> {
-    value.as_object().and_then(JsFunction::from_object)
-}
-
-fn extract_callable_from_opts(
-    opts: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsFunction> {
-    let val = opts.get(js_string!(key), ctx).ok()?;
-    extract_callable(&val)
 }
 
 impl ScrollController {
@@ -96,7 +84,7 @@ impl Class for ScrollController {
     ) -> JsResult<Self> {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_scroll = extract_callable_from_opts(&opts, "onScroll", ctx);
+            ctrl.on_scroll = extract_callback_from_opts(&opts, "onScroll", ctx);
             if let Ok(val) = opts.get(js_string!("initialOffset"), ctx) {
                 if let Some(n) = val.as_number() {
                     ctrl.pending_initial_offset = Some(n);
