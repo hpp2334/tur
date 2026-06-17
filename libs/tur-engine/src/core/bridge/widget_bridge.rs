@@ -52,6 +52,8 @@ spec_factory!(tur_text, TextSpec);
 spec_factory!(tur_stack, StackSpec);
 spec_factory!(tur_image_edgy, ImageSpec);
 spec_factory!(tur_condition, ConditionSpec);
+spec_factory!(tur_match, MatchSpec);
+spec_factory!(tur_dynamic, DynamicSpec);
 spec_factory!(tur_input_edgy, InputSpec);
 spec_factory!(tur_fragment, FragmentSpec);
 spec_factory!(tur_pointer_interact, PointerInteractSpec);

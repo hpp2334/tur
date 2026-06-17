@@ -8,6 +8,8 @@
             "!!**/.runtime-build",
             "!!**/node_modules",
             "!!**/generated",
+            "!!**/cases-generated.ts",
+            "!!**/.test-entries",
             "!!**/test-results"
         ]
     },

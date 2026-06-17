@@ -1,6 +1,6 @@
-import { Column, CrossAxisAlignment, render, Text } from "@tur/edgy";
+import { Column, CrossAxisAlignment, component, Text } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Column({
         crossAlignment: CrossAxisAlignment.End,
         children: [

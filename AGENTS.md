@@ -93,11 +93,11 @@ libs/
   tur-wasm/                  # wasm binary (boa_engine + vello + tur-engine)
 js/
   packages/
-    tur-react/               # React component wrappers
-    tur-react-renderer/      # Custom React reconciler
-    tur-demo/              # Playground web app (React-DOM + CodeMirror + tur viewer)
-    tur-test-cases/          # Test cases (react-cases/ with ~60 cases)
-    playground-for-agent/    # Playwright integration tests
+    tur-edgy/                # Flutter-like component wrappers + reactivity (Column, Row, Match, Dynamic, ...)
+    tur-demo/                # Playground: thin browser wrapper (loads wasm + impl bundle)
+    tur-demo-impl/           # Playground UI built with @tur/edgy (Sidebar/Editor/Viewer)
+    tur-test-cases/          # Test cases (edgy-cases/, ~60 cases)
+    tur-react-renderer/      # (legacy) React reconciler, superseded by @tur/edgy
 ```
 
 ## Commands
@@ -176,36 +176,28 @@ pub trait Renderer {
 
 Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
-## Debugging with playground-for-agent
+## Debugging the playground (Playwright MCP + image-reader)
 
-Launches Chromium with WebGPU, loads the playground via Playwright, runs an interactive todolist scenario (add/toggle/delete tasks) and a counter live-editing scenario, and screenshots each step. Screenshots saved to `js/packages/playground-for-agent/test-results/`.
+The `playground-for-agent` package has been removed. Playground interaction and visual verification are now done directly with the **Playwright MCP** tools and the **image-reader** subagent against the running dev server — there is no separate Playwright harness anymore.
 
-### Always verify with image-reader after running
-
-After running the playground tests, you MUST use `@image-reader` (Task tool with `image-reader` subagent) to inspect the screenshots and verify the actual rendering. Layout assertions check element positions but `@image-reader` reveals what the user actually sees (colors, spacing, text rendering, missing content, blank canvases, stretched elements, etc.).
-
-Tests can pass (elements exist in layout tree, clicks register) while the canvas is visually blank or broken. Only visual verification catches these issues.
-
-Example:
-
-```
-@image-reader js/packages/playground-for-agent/test-results/01-initial.png
-```
-
-Or verify all screenshots at once by passing all file paths to a single `@image-reader` task.
-
-### Dev mode (local dist)
+### Start the dev server
 
 ```sh
-cd js && pnpm build
-cd js/packages/tur-demo && rspack build
-cd js/packages/playground-for-agent && pnpm start
+node scripts/prepare-js-fixtures.cjs    # build JS fixtures once
+cd js/packages/tur-demo && TUR_TUNNEL=1 rspack dev
+# → http://localhost:8080/ (must be HTTP: Playwright MCP rejects the self-signed HTTPS cert)
 ```
 
-### Prod mode (deployed URL)
+### Drive the canvas via Playwright MCP
 
-```sh
-DEPLOY_URL=https://tur-demo.pages.dev pnpm start:prod
-```
+The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. Typical flow:
 
+1. `playwright_browser_navigate` → `http://localhost:8080/`.
+2. `playwright_browser_evaluate` → read `globalThis.turApp.debug_layout()` for exact element rects. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
+3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: `new KeyboardEvent('keydown', { key, metaKey })` — events route to the focused element. The editor's `EditableText` supports select-all (`Meta+a`), typing, `Backspace`, arrows, `Enter`, and `Cmd-S` (recompile).
+4. Re-read `debug_layout()` or take a screenshot to confirm the result.
+
+### Always verify visually with image-reader
+
+`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot with `playwright_browser_take_screenshot` and inspect it with the **image-reader** subagent (Task tool, `image-reader` type). Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements.
 

@@ -4,13 +4,17 @@ import { defineConfig } from "@rspack/cli";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+// Builds the self-hosted playground as a single IIFE bundle (`impl.js`) that
+// the thin `tur-demo` wrapper loads via `TurWasmApp.load_and_run_js`. The
+// bundle contains @tur/edgy + the Shell UI + inlined case sources; it sets
+// `globalThis.TurEdgy` and calls `render(Shell)` on eval.
 export default defineConfig({
     entry: {
-        runtime: "./src/lib/runtime-entry.ts",
+        impl: "./src/index.ts",
     },
     output: {
-        path: resolve(__dirname, ".runtime-build"),
-        filename: "runtime.js",
+        path: resolve(__dirname, "dist"),
+        filename: "impl.js",
         clean: true,
         library: { type: "iife" },
     },
@@ -28,12 +32,7 @@ export default defineConfig({
                         jsc: {
                             parser: {
                                 syntax: "typescript",
-                                tsx: true,
-                            },
-                            transform: {
-                                react: {
-                                    runtime: "automatic",
-                                },
+                                tsx: false,
                             },
                         },
                     },
@@ -42,6 +41,6 @@ export default defineConfig({
         ],
     },
     resolve: {
-        extensions: [".tsx", ".ts", ".js"],
+        extensions: [".ts", ".tsx", ".js"],
     },
 });

@@ -1,17 +1,17 @@
 import {
     Column,
     CrossAxisAlignment,
+    component,
     derive,
     mutate,
     PointerInteract,
-    render,
     source,
     Text,
 } from "@tur/edgy";
 
 const content$ = source("before");
 
-render(() =>
+export default component(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

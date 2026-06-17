@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    component,
     Row,
-    render,
     SizedBox,
 } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Row({
         children: [
             Container({

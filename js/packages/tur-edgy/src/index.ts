@@ -199,6 +199,31 @@ export function Condition(props: ConditionProps): EdgyElement {
     return __tur.Condition(__ctx, props);
 }
 
+export interface MatchProps {
+    /** Reactive key to match on (string | number | bool), or a static value. */
+    value: Val<string | number | boolean>;
+    /** Ordered list of `[key, element]` pairs. First match wins. */
+    cases: Array<[string | number | boolean, EdgyElement]>;
+    /** Mounted when no case matches. */
+    fallback?: EdgyElement;
+    queryKey?: Val<string[]>;
+}
+
+export function Match(props: MatchProps): EdgyElement {
+    return __tur.Match(__ctx, props);
+}
+
+export interface DynamicProps {
+    /** An EdgyElement, or an atom producing one. The subtree is rebuilt when
+     * the atom yields a different element object. */
+    child: Val<EdgyElement>;
+    queryKey?: Val<string[]>;
+}
+
+export function Dynamic(props: DynamicProps): EdgyElement {
+    return __tur.Dynamic(__ctx, props);
+}
+
 export interface ScrollViewProps {
     axis?: Val<number>;
     padding?: Val<number>;
@@ -242,6 +267,7 @@ export function InputEdgy(props: {
     placeholderColor?: Val<unknown>;
     cursorColor?: Val<unknown>;
     fontSize?: Val<number>;
+    fontFamily?: Val<string>;
     width?: Val<number>;
     height?: Val<number>;
     multiline?: Val<boolean>;
@@ -416,6 +442,8 @@ interface TurGlobal {
     Text(ctx: unknown, props: unknown): EdgyElement;
     PointerInteract(ctx: unknown, props: unknown): EdgyElement;
     Condition(ctx: unknown, props: unknown): EdgyElement;
+    Match(ctx: unknown, props: unknown): EdgyElement;
+    Dynamic(ctx: unknown, props: unknown): EdgyElement;
     ScrollView(ctx: unknown, props: unknown): EdgyElement;
     LazyList(ctx: unknown, props: unknown): EdgyElement;
     ImageEdgy(ctx: unknown, props: unknown): EdgyElement;

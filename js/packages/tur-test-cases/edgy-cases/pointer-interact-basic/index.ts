@@ -1,6 +1,6 @@
-import { Container, PointerInteract, render } from "@tur/edgy";
+import { Container, component, PointerInteract } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     PointerInteract({
         child: Container({ width: 100, height: 50 }),
     }),

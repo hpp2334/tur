@@ -2,6 +2,7 @@ import {
     Column,
     Condition,
     Container,
+    component,
     createTextEditingController,
     derive,
     InputEdgy,
@@ -9,7 +10,6 @@ import {
     mutate,
     PointerInteract,
     Row,
-    render,
     source,
     Text,
 } from "@tur/edgy";
@@ -87,7 +87,7 @@ const confirmEdit$ = mutate(({ get, set }) => {
     set(editController$, null);
 });
 
-render(() =>
+export default component(() =>
     Container({
         padding: 16,
         queryKey: ["root"],

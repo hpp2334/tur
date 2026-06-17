@@ -3,11 +3,11 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    component,
     Expanded,
     MainAxisAlignment,
     PointerInteract,
     Row,
-    render,
     SizedBox,
     Text,
 } from "@tur/edgy";
@@ -74,7 +74,7 @@ function TaskItem({ task }: { task: Task }) {
     });
 }
 
-render(() =>
+export default component(() =>
     Expanded({
         child: Container({
             color: Color.hex("#0f172a"),

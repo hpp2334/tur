@@ -28,6 +28,7 @@ pub struct InputSpec {
     pub placeholder_color: Option<Val<Color>>,
     pub cursor_color: Option<Val<Color>>,
     pub font_size: Option<Val<f64>>,
+    pub font_family: Option<Val<String>>,
     pub multiline: Option<Val<bool>>,
     pub query_key: Option<Vec<String>>,
 }
@@ -42,6 +43,7 @@ impl Spec for InputSpec {
             placeholder_color: self.placeholder_color.clone(),
             cursor_color: self.cursor_color.clone(),
             font_size: self.font_size.clone(),
+            font_family: self.font_family.clone(),
             multiline: self.multiline.clone(),
             query_key: None,
         });
@@ -69,6 +71,7 @@ impl InputSpec {
             placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
             cursor_color: prop_val::<Color>(props, "cursorColor", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
+            font_family: prop_val::<String>(props, "fontFamily", ctx),
             multiline: prop_val::<bool>(props, "multiline", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }

@@ -6,10 +6,18 @@
     <title>tur playground</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body, #root { width: 100%; height: 100%; overflow: hidden; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #0f172a; }
+        body { display: block; }
+        #status {
+            position: fixed; top: 12px; left: 12px; z-index: 10;
+            font: 12px ui-monospace, monospace; color: #94a3b8;
+            background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="status">starting…</div>
+    <!-- tur mounts a full-viewport canvas on <body>. -->
 </body>
 </html>
