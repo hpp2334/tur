@@ -1,6 +1,3 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use boa_engine::class::Class;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
@@ -9,23 +6,18 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
     ElementOnKeyboardContext, ElementTrace,
 };
 use crate::core::event::AppImeEvent;
-use crate::core::focus::FocusableJsCommand;
-use crate::core::js_command::{AnyJsCommand, IntoAnyJsCommand};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
-use crate::core::reactive::{extract_atom, Store};
+use crate::core::reactive::extract_atom;
 use crate::core::text::TextEditingController;
-use crate::core::focus::{BlurEvent, FocusEvent};
-use crate::core::keyboard::{KeydownEvent, KeyupEvent};
 use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::widget::callback::EventArg;
 use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Spec, Val, WidgetCx};
 use crate::elements::text::text_layout::TextLayoutData;
 
@@ -68,22 +60,6 @@ impl LineNavInfo {
             cursor_xy,
             current_line,
         }
-    }
-}
-
-#[derive(Clone)]
-pub(crate) enum EditableTextNotification {
-    TextChanged { text: String, enter: bool },
-    CursorChanged { position: usize },
-    SelectionChanged { anchor: usize, end: usize },
-    CompositionStarted,
-    CompositionUpdated { text: String },
-    CompositionEnded { text: String },
-}
-
-impl IntoAnyJsCommand for EditableTextNotification {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(std::rc::Rc::new(self))
     }
 }
 
@@ -139,7 +115,7 @@ impl Spec for EditableTextSpec {
                 cached_layout: None,
                 resolved_multiline: false,
             })
-            .with_js_callback_emitter::<EditableText>(),
+            .with_callbacks(),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -588,24 +564,22 @@ impl ElementOnKeyboard for EditableText {
             let new_text = c.text();
             if new_text != prev_text {
                 let enter = event.key == "Enter" && !self.resolved_multiline;
-                cx.push_js_command(EditableTextNotification::TextChanged {
-                    text: new_text,
-                    enter,
-                });
+                if let Some(m) = c.on_input() {
+                    cx.push_event(m, InputEvent { value: new_text, enter });
+                }
             }
             let cursor = c.cursor_position();
             if cursor != prev_cursor {
-                cx.push_js_command(EditableTextNotification::CursorChanged {
-                    position: cursor,
-                });
+                if let Some(m) = c.on_cursor_change() {
+                    cx.push_event(m, CursorChangeEvent { position: cursor });
+                }
             }
             let anchor = c.selection_anchor();
             let end = c.selection_end();
             if anchor != prev_anchor || end != prev_end {
-                cx.push_js_command(EditableTextNotification::SelectionChanged {
-                    anchor,
-                    end,
-                });
+                if let Some(m) = c.on_selection_change() {
+                    cx.push_event(m, SelectionChangeEvent { anchor, end });
+                }
             }
         }
     }
@@ -619,19 +593,17 @@ impl ElementOnIme for EditableText {
     ) {
         match event {
             AppImeEvent::CompositionStart => {
-                let mut c = self.controller_mut();
-                c.start_composition();
-                drop(c);
-                cx.push_js_command(EditableTextNotification::CompositionStarted);
+                self.controller_mut().start_composition();
+                if let Some(m) = self.controller().on_composition_start() {
+                    cx.push_event(m, CompositionStartEvent);
+                }
                 cx.request_redraw();
             }
             AppImeEvent::CompositionUpdate { text, .. } => {
-                let mut c = self.controller_mut();
-                c.update_composition(text.clone());
-                drop(c);
-                cx.push_js_command(EditableTextNotification::CompositionUpdated {
-                    text: text.clone(),
-                });
+                self.controller_mut().update_composition(text.clone());
+                if let Some(m) = self.controller().on_composition_update() {
+                    cx.push_event(m, CompositionUpdateEvent { text: text.clone() });
+                }
                 cx.request_redraw();
             }
             AppImeEvent::CompositionEnd { text } => {
@@ -644,88 +616,23 @@ impl ElementOnIme for EditableText {
 
                     let new_text = c.text();
                     let cursor = c.cursor_position();
+                    let m_end = c.on_composition_end();
+                    let m_input = c.on_input();
+                    let m_cursor = c.on_cursor_change();
+                    let text_end = text.clone();
                     drop(c);
-                    cx.push_js_command(EditableTextNotification::CompositionEnded {
-                        text: text.clone(),
-                    });
-                    cx.push_js_command(EditableTextNotification::TextChanged {
-                        text: new_text,
-                        enter: false,
-                    });
-                    cx.push_js_command(EditableTextNotification::CursorChanged {
-                        position: cursor,
-                    });
+                    if let Some(m) = m_end {
+                        cx.push_event(m, CompositionEndEvent { text: text_end });
+                    }
+                    if let Some(m) = m_input {
+                        cx.push_event(m, InputEvent { value: new_text, enter: false });
+                    }
+                    if let Some(m) = m_cursor {
+                        cx.push_event(m, CursorChangeEvent { position: cursor });
+                    }
                     cx.request_redraw();
                 }
             }
-        }
-    }
-}
-
-impl ElementJsCallbackEmitter for EditableText {
-    fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        _store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let ctrl = self.controller();
-
-        if let Some(c) = command.downcast_ref::<EditableTextNotification>() {
-            match c {
-                EditableTextNotification::TextChanged { text, enter } => {
-                    let cb = ctrl.on_input()?;
-                    let event = InputEvent { value: text.clone(), enter: *enter };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                EditableTextNotification::CursorChanged { position } => {
-                    let cb = ctrl.on_cursor_change()?;
-                    let event = CursorChangeEvent { position: *position };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                EditableTextNotification::SelectionChanged { anchor, end } => {
-                    let cb = ctrl.on_selection_change()?;
-                    let event = SelectionChangeEvent { anchor: *anchor, end: *end };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                EditableTextNotification::CompositionStarted => {
-                    let cb = ctrl.on_composition_start()?;
-                    Some((cb.func().clone(), CompositionStartEvent.to_js_args(context)))
-                }
-                EditableTextNotification::CompositionUpdated { text } => {
-                    let cb = ctrl.on_composition_update()?;
-                    let event = CompositionUpdateEvent { text: text.clone() };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                EditableTextNotification::CompositionEnded { text } => {
-                    let cb = ctrl.on_composition_end()?;
-                    let event = CompositionEndEvent { text: text.clone() };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-            }
-        } else if let Some(c) = command.downcast_ref::<FocusableJsCommand>() {
-            match c {
-                FocusableJsCommand::KeyDown { key, code, modifiers } => {
-                    let cb = ctrl.on_key_down()?;
-                    let event = KeydownEvent { key: key.clone(), code: code.clone(), modifiers: *modifiers };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                FocusableJsCommand::KeyUp { key, code, modifiers } => {
-                    let cb = ctrl.on_key_up()?;
-                    let event = KeyupEvent { key: key.clone(), code: code.clone(), modifiers: *modifiers };
-                    Some((cb.func().clone(), event.to_js_args(context)))
-                }
-                FocusableJsCommand::Focus => {
-                    let cb = ctrl.on_focus()?;
-                    Some((cb.func().clone(), FocusEvent.to_js_args(context)))
-                }
-                FocusableJsCommand::Blur => {
-                    let cb = ctrl.on_blur()?;
-                    Some((cb.func().clone(), BlurEvent.to_js_args(context)))
-                }
-            }
-        } else {
-            None
         }
     }
 }

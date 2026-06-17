@@ -1,13 +1,9 @@
 pub mod helper;
-pub mod js_command;
-
-pub use js_command::FocusableJsCommand;
 
 use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
-use crate::core::js_command::JsCommandQueue;
-use crate::core::widget::callback::EventArg;
+use crate::core::edgy_event::EventArg;
 
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
@@ -31,9 +27,25 @@ impl EventArg for BlurEvent {
     }
 }
 
+// ---------------------------------------------------------------------------
+// FocusChange — a deferred focus/blur notification. `set_focus` / `clear_focus`
+// only update `focused_id` and record a pending change; a flush step
+// (`flush_focus_notifications` in the app loop) resolves each pending id to its
+// `EdgyMutation` via the element tree and pushes the invocation. This keeps
+// `set_focus` free of tree/queue borrows so it can be called from inside
+// element gesture handlers (which already hold the tree).
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum FocusChange {
+    Focus(ElementNodeId),
+    Blur(ElementNodeId),
+}
+
 #[derive(Debug)]
 pub struct FocusManager {
     focused_id: Option<ElementNodeId>,
+    pending: Vec<FocusChange>,
 }
 
 impl Default for FocusManager {
@@ -44,7 +56,7 @@ impl Default for FocusManager {
 
 impl FocusManager {
     pub fn new() -> Self {
-        Self { focused_id: None }
+        Self { focused_id: None, pending: Vec::new() }
     }
 
     pub fn focused(&self) -> Option<ElementNodeId> {
@@ -55,19 +67,23 @@ impl FocusManager {
         self.focused_id == Some(id)
     }
 
-    pub fn set_focus(&mut self, new_id: ElementNodeId, queue: &mut JsCommandQueue) {
+    pub fn set_focus(&mut self, new_id: ElementNodeId) {
         let old = self.focused_id.replace(new_id);
         if let Some(old) = old {
             if old != new_id {
-                queue.push(old, FocusableJsCommand::Blur);
+                self.pending.push(FocusChange::Blur(old));
             }
         }
-        queue.push(new_id, FocusableJsCommand::Focus);
+        self.pending.push(FocusChange::Focus(new_id));
     }
 
-    pub fn clear_focus(&mut self, queue: &mut JsCommandQueue) {
+    pub fn clear_focus(&mut self) {
         if let Some(old) = self.focused_id.take() {
-            queue.push(old, FocusableJsCommand::Blur);
+            self.pending.push(FocusChange::Blur(old));
         }
+    }
+
+    pub(crate) fn drain_pending(&mut self) -> Vec<FocusChange> {
+        std::mem::take(&mut self.pending)
     }
 }

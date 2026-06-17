@@ -5,6 +5,7 @@ use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::event::AppEvent;
+use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 use crate::error::TurError;
@@ -23,19 +24,19 @@ impl TurAppInternal {
         executor: Rc<TurJobExecutor>,
     ) -> Self {
         use crate::core::elements::ElementTree;
+        use crate::core::edgy_event::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
-        use crate::core::js_command::JsCommandQueue;
         use crate::core::resource::ResourceMap;
 
         let element_tree = Rc::new(RefCell::new(ElementTree::new()));
-        let js_command_queue = Rc::new(RefCell::new(JsCommandQueue::new()));
+        let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
         let js_context = TurJsContext::new(
             element_tree.clone(),
-            js_command_queue.clone(),
+            mutation_queue.clone(),
             focus_manager.clone(),
             dirty,
             resource_map.clone(),
@@ -47,7 +48,7 @@ impl TurAppInternal {
 
         let app_context = TurAppContext::new(
             element_tree,
-            js_command_queue,
+            mutation_queue,
             focus_manager,
             resource_map,
             renderer,
@@ -93,10 +94,11 @@ impl TurAppInternal {
                 needs_render = true;
                 self.app_context.borrow_mut().layout();
             }
-            let handled_commands = self.flush_js_commands(boa_context);
+            self.flush_focus_notifications();
+            let handled_mutations = self.flush_pending_mutations(boa_context);
             let _ = self.executor.drain(boa_context);
             let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
-            if !handled_events && !handled_commands && !new_dirty {
+            if !handled_events && !handled_mutations && !new_dirty {
                 break;
             }
         }
@@ -217,39 +219,87 @@ impl TurAppInternal {
         true
     }
 
-    fn flush_js_commands(
-        &self,
-        boa_context: &mut boa_engine::Context,
-    ) -> bool {
-        let mut pending_callbacks: Vec<(
-            boa_engine::object::builtins::JsFunction,
-            Vec<boa_engine::JsValue>,
-        )> = Vec::new();
-
-        let entries = self.js_context.js_command_queue.borrow_mut().drain();
-        if entries.is_empty() {
-            return false;
+    /// Resolve pending focus/blur notifications recorded by `FocusManager`.
+    /// Each pending id is looked up in the element tree; if it resolves to a
+    /// focusable element (Focusable or EditableText) with an `on_focus` /
+    /// `on_blur` mutation, the invocation is pushed onto the pending-mutation
+    /// queue. Runs before `flush_pending_mutations` so focus callbacks fire in
+    /// the same pass.
+    fn flush_focus_notifications(&self) {
+        let changes = self.js_context.focus_manager.borrow_mut().drain_pending();
+        if changes.is_empty() {
+            return;
         }
-
-        let store = self.js_context.store.clone();
-
-        for (target, command) in entries {
-            let tree = self.js_context.element_tree.borrow();
-            if let Some(node) = tree.get(target) {
-                if let Some(ref element) = node.element {
-                    if let Some(pair) = element.emit_js_callback(boa_context, &store, command) {
-                        pending_callbacks.push(pair);
+        let tree = self.js_context.element_tree.borrow();
+        let mut queue = self.js_context.mutation_queue.borrow_mut();
+        for change in changes {
+            match change {
+                FocusChange::Focus(id) => {
+                    if let Some(m) = focus_mutation(&tree, id) {
+                        queue.push(m, FocusEvent);
+                    }
+                }
+                FocusChange::Blur(id) => {
+                    if let Some(m) = blur_mutation(&tree, id) {
+                        queue.push(m, BlurEvent);
                     }
                 }
             }
         }
-
-        let handled = !pending_callbacks.is_empty();
-
-        for (callback, args) in pending_callbacks {
-            let _ = callback.call(&boa_engine::JsValue::undefined(), &args, boa_context);
-        }
-
-        handled
     }
+
+    /// Drain the pending-mutation queue and invoke each mutation via the
+    /// reactive store, prepending the `{get, set}` context object. No element
+    /// tree access is needed: every entry is a self-contained `(AtomId, args)`.
+    fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
+        let invs = self.js_context.mutation_queue.borrow_mut().drain();
+        if invs.is_empty() {
+            return false;
+        }
+        let store = self.js_context.store.clone();
+        let ctx_obj = crate::core::reactive::build_store_context_object(boa_context, store.clone())
+            .ok()
+            .map(boa_engine::JsValue::from);
+        for inv in invs {
+            let mut args: Vec<boa_engine::JsValue> = Vec::new();
+            if let Some(o) = &ctx_obj {
+                args.push(o.clone());
+            }
+            args.extend(inv.args.to_js_args(boa_context));
+            let _ = store.borrow().invoke_mutation(inv.atom_id, &args, boa_context);
+        }
+        true
+    }
+}
+
+fn focus_mutation(
+    tree: &crate::core::elements::ElementTree,
+    id: crate::core::element::ElementNodeId,
+) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::FocusEvent>> {
+    use crate::elements::{EditableText, Focusable};
+    let node = tree.get(id)?;
+    let element = node.element.as_ref()?;
+    if let Some(f) = element.cast::<Focusable>() {
+        return f.spec.on_focus;
+    }
+    if let Some(e) = element.cast::<EditableText>() {
+        return e.controller().on_focus();
+    }
+    None
+}
+
+fn blur_mutation(
+    tree: &crate::core::elements::ElementTree,
+    id: crate::core::element::ElementNodeId,
+) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::BlurEvent>> {
+    use crate::elements::{EditableText, Focusable};
+    let node = tree.get(id)?;
+    let element = node.element.as_ref()?;
+    if let Some(f) = element.cast::<Focusable>() {
+        return f.spec.on_blur;
+    }
+    if let Some(e) = element.cast::<EditableText>() {
+        return e.controller().on_blur();
+    }
+    None
 }

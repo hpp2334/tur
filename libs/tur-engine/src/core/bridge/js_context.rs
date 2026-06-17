@@ -5,9 +5,9 @@ use boa_gc::{Finalize, Trace};
 use boa_engine::JsData;
 
 use crate::core::animation::AnimationManager;
+use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::ElementTree;
 use crate::core::focus::FocusManager;
-use crate::core::js_command::JsCommandQueue;
 use crate::core::reactive::Store;
 use crate::core::resource::ResourceMap;
 
@@ -15,7 +15,7 @@ use crate::core::resource::ResourceMap;
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurJsContext {
     pub(crate) element_tree: Rc<RefCell<ElementTree>>,
-    pub(crate) js_command_queue: Rc<RefCell<JsCommandQueue>>,
+    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) dirty: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
@@ -26,7 +26,7 @@ pub struct TurJsContext {
 impl TurJsContext {
     pub fn new(
         element_tree: Rc<RefCell<ElementTree>>,
-        js_command_queue: Rc<RefCell<JsCommandQueue>>,
+        mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
@@ -34,7 +34,7 @@ impl TurJsContext {
         let store = Rc::new(RefCell::new(Store::new(dirty.clone())));
         Self {
             element_tree,
-            js_command_queue,
+            mutation_queue,
             focus_manager,
             dirty,
             resource_map,

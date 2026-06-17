@@ -5,14 +5,9 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::element::ElementNodeId;
 
-pub mod callback;
 pub mod context;
 pub mod val;
 
-pub use callback::{
-    callback_from_js, extract_callback_from_opts, make_mutation_callback, mutation_from_js,
-    Callback, EventArg, Mutation, ReturnVal,
-};
 pub use context::WidgetCx;
 pub use val::{val_from_js, PropValue, ReadableAtom, Val};
 

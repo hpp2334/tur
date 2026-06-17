@@ -11,10 +11,9 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
-use crate::core::js_command::JsCommandQueue;
+use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
 use crate::core::element::ElementNodeId;
-use crate::core::scroll::{ScrollEvent, ScrollViewJsCommand};
-use crate::core::widget::callback::{extract_callback_from_opts, Callback};
+use crate::core::scroll::ScrollEvent;
 use crate::elements::ScrollView;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -23,11 +22,11 @@ pub struct ScrollController {
     pub(crate) offset: f64,
     pub(crate) max_scroll_extent: f64,
     pub(crate) viewport_dimension: f64,
-    pub(crate) on_scroll: Option<Callback<ScrollEvent>>,
+    pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
         Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
-    pub(crate) js_command_queue: Option<Rc<RefCell<JsCommandQueue>>>,
+    pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
     pub(crate) pending_initial_offset: Option<f64>,
 }
@@ -41,7 +40,7 @@ impl ScrollController {
             on_scroll: None,
             handle: None,
             element_tree: None,
-            js_command_queue: None,
+            mutation_queue: None,
             dirty_flag: None,
             pending_initial_offset: None,
         }
@@ -84,7 +83,7 @@ impl Class for ScrollController {
     ) -> JsResult<Self> {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_scroll = extract_callback_from_opts(&opts, "onScroll", ctx);
+            ctrl.on_scroll = extract_mutation_from_opts(&opts, "onScroll", ctx);
             if let Ok(val) = opts.get(js_string!("initialOffset"), ctx) {
                 if let Some(n) = val.as_number() {
                     ctrl.pending_initial_offset = Some(n);
@@ -140,8 +139,9 @@ impl Class for ScrollController {
 
                 let element_tree_rc = ctrl.element_tree.clone();
                 let dirty_flag = ctrl.dirty_flag.clone();
-                let js_command_queue = ctrl.js_command_queue.clone();
+                let mutation_queue = ctrl.mutation_queue.clone();
                 let node_id = ctrl.node_id();
+                let on_scroll = ctrl.on_scroll;
 
                 let Some(element_tree_rc) = element_tree_rc else {
                     return Ok(JsValue::undefined());
@@ -182,10 +182,17 @@ impl Class for ScrollController {
                 ctrl.viewport_dimension = dim;
                 dirty_flag.set(true);
 
-                if let Some(queue_rc) = js_command_queue {
-                    queue_rc
-                        .borrow_mut()
-                        .push(node_id, ScrollViewJsCommand::ScrollDidUpdate);
+                if let Some(queue_rc) = mutation_queue {
+                    if let Some(m) = on_scroll {
+                        queue_rc.borrow_mut().push(
+                            m,
+                            ScrollEvent {
+                                offset: ctrl.offset,
+                                max_extent: ctrl.max_scroll_extent,
+                                viewport_dimension: ctrl.viewport_dimension,
+                            },
+                        );
+                    }
                 }
 
                 Ok(JsValue::undefined())
@@ -214,8 +221,7 @@ impl Class for ScrollController {
                         BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
                     {
                         ctrl.element_tree = Some(js_ctx.element_tree.clone());
-                        ctrl.js_command_queue =
-                            Some(js_ctx.js_command_queue.clone());
+                        ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
                         ctrl.dirty_flag = Some(js_ctx.dirty.clone());
                     }
                 }

@@ -60,7 +60,7 @@ pub fn dispatch_wheel(
     };
     let mut el_cx = ElementOnWheelContext::new(
         &mut *cx.event_queue,
-        &mut *cx.js_command_queue,
+        &mut *cx.mutation_queue,
         id,
     );
     let overscroll = element.on_wheel_event(&mut el_cx, &WheelEvent { delta_x, delta_y });

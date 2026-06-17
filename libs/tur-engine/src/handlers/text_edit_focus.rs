@@ -20,7 +20,7 @@ impl AppHandler for TextEditFocusAppHandler {
                     return;
                 }
             }
-            cx.focus_manager.clear_focus(cx.js_command_queue);
+            cx.focus_manager.clear_focus();
         }
     }
 }

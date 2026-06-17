@@ -1,10 +1,10 @@
 use tur_shared::Offset;
 
 use crate::core::element::ElementNodeId;
+use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
-use crate::core::js_command::{IntoAnyJsCommand, JsCommandQueue};
 
 pub enum ComposedGestureEvent {
     PointerDown { local_position: Offset },
@@ -14,7 +14,7 @@ pub enum ComposedGestureEvent {
 pub struct ElementOnGestureContext<'a> {
     event_queue: &'a mut AppEventQueue,
     focus_manager: &'a mut FocusManager,
-    js_command_queue: &'a mut JsCommandQueue,
+    mutation_queue: &'a mut PendingMutationInvocationQueue,
     node_id: ElementNodeId,
 }
 
@@ -22,13 +22,13 @@ impl<'a> ElementOnGestureContext<'a> {
     pub fn new(
         event_queue: &'a mut AppEventQueue,
         focus_manager: &'a mut FocusManager,
-        js_command_queue: &'a mut JsCommandQueue,
+        mutation_queue: &'a mut PendingMutationInvocationQueue,
         node_id: ElementNodeId,
     ) -> Self {
         Self {
             event_queue,
             focus_manager,
-            js_command_queue,
+            mutation_queue,
             node_id,
         }
     }
@@ -38,15 +38,15 @@ impl<'a> ElementOnGestureContext<'a> {
     }
 
     pub fn request_focus(&mut self, id: ElementNodeId) {
-        self.focus_manager.set_focus(id, self.js_command_queue);
+        self.focus_manager.set_focus(id);
     }
 
     pub fn request_own_focus(&mut self) {
-        self.focus_manager.set_focus(self.node_id, self.js_command_queue);
+        self.focus_manager.set_focus(self.node_id);
     }
 
-    pub fn push_js_command(&mut self, command: impl IntoAnyJsCommand) {
-        self.js_command_queue.push(self.node_id, command);
+    pub fn push_event<E: EventArg>(&mut self, mutation: EdgyMutation<E>, event: E) {
+        self.mutation_queue.push(mutation, event);
     }
 }
 

@@ -9,13 +9,13 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
 use crate::core::bridge::TurNodeHandle;
+use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation};
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
 use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::widget::callback::{extract_callback_from_opts, Callback};
 use crate::elements::text::span_data::SpanData;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -28,16 +28,16 @@ pub struct TextEditingController {
     composing_text: Option<String>,
     composing_start: usize,
     handle: Option<JsObject>,
-    on_input: Option<Callback<InputEvent>>,
-    on_cursor_change: Option<Callback<CursorChangeEvent>>,
-    on_selection_change: Option<Callback<SelectionChangeEvent>>,
-    on_key_down: Option<Callback<KeydownEvent>>,
-    on_key_up: Option<Callback<KeyupEvent>>,
-    on_focus: Option<Callback<FocusEvent>>,
-    on_blur: Option<Callback<BlurEvent>>,
-    on_composition_start: Option<Callback<CompositionStartEvent>>,
-    on_composition_update: Option<Callback<CompositionUpdateEvent>>,
-    on_composition_end: Option<Callback<CompositionEndEvent>>,
+    on_input: Option<EdgyMutation<InputEvent>>,
+    on_cursor_change: Option<EdgyMutation<CursorChangeEvent>>,
+    on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
+    on_key_down: Option<EdgyMutation<KeydownEvent>>,
+    on_key_up: Option<EdgyMutation<KeyupEvent>>,
+    on_focus: Option<EdgyMutation<FocusEvent>>,
+    on_blur: Option<EdgyMutation<BlurEvent>>,
+    on_composition_start: Option<EdgyMutation<CompositionStartEvent>>,
+    on_composition_update: Option<EdgyMutation<CompositionUpdateEvent>>,
+    on_composition_end: Option<EdgyMutation<CompositionEndEvent>>,
 }
 
 
@@ -181,44 +181,44 @@ impl TextEditingController {
         self.selection_end = end;
     }
 
-    pub fn on_input(&self) -> Option<&Callback<InputEvent>> {
-        self.on_input.as_ref()
+    pub fn on_input(&self) -> Option<EdgyMutation<InputEvent>> {
+        self.on_input
     }
 
-    pub fn on_cursor_change(&self) -> Option<&Callback<CursorChangeEvent>> {
-        self.on_cursor_change.as_ref()
+    pub fn on_cursor_change(&self) -> Option<EdgyMutation<CursorChangeEvent>> {
+        self.on_cursor_change
     }
 
-    pub fn on_selection_change(&self) -> Option<&Callback<SelectionChangeEvent>> {
-        self.on_selection_change.as_ref()
+    pub fn on_selection_change(&self) -> Option<EdgyMutation<SelectionChangeEvent>> {
+        self.on_selection_change
     }
 
-    pub fn on_key_down(&self) -> Option<&Callback<KeydownEvent>> {
-        self.on_key_down.as_ref()
+    pub fn on_key_down(&self) -> Option<EdgyMutation<KeydownEvent>> {
+        self.on_key_down
     }
 
-    pub fn on_key_up(&self) -> Option<&Callback<KeyupEvent>> {
-        self.on_key_up.as_ref()
+    pub fn on_key_up(&self) -> Option<EdgyMutation<KeyupEvent>> {
+        self.on_key_up
     }
 
-    pub fn on_focus(&self) -> Option<&Callback<FocusEvent>> {
-        self.on_focus.as_ref()
+    pub fn on_focus(&self) -> Option<EdgyMutation<FocusEvent>> {
+        self.on_focus
     }
 
-    pub fn on_blur(&self) -> Option<&Callback<BlurEvent>> {
-        self.on_blur.as_ref()
+    pub fn on_blur(&self) -> Option<EdgyMutation<BlurEvent>> {
+        self.on_blur
     }
 
-    pub fn on_composition_start(&self) -> Option<&Callback<CompositionStartEvent>> {
-        self.on_composition_start.as_ref()
+    pub fn on_composition_start(&self) -> Option<EdgyMutation<CompositionStartEvent>> {
+        self.on_composition_start
     }
 
-    pub fn on_composition_update(&self) -> Option<&Callback<CompositionUpdateEvent>> {
-        self.on_composition_update.as_ref()
+    pub fn on_composition_update(&self) -> Option<EdgyMutation<CompositionUpdateEvent>> {
+        self.on_composition_update
     }
 
-    pub fn on_composition_end(&self) -> Option<&Callback<CompositionEndEvent>> {
-        self.on_composition_end.as_ref()
+    pub fn on_composition_end(&self) -> Option<EdgyMutation<CompositionEndEvent>> {
+        self.on_composition_end
     }
 
     fn span_index_at(&self, byte_pos: usize) -> (usize, usize) {
@@ -335,16 +335,16 @@ impl Class for TextEditingController {
     ) -> JsResult<Self> {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            ctrl.on_input = extract_callback_from_opts(&opts, "onInput", ctx);
-            ctrl.on_cursor_change = extract_callback_from_opts(&opts, "onCursorChange", ctx);
-            ctrl.on_selection_change = extract_callback_from_opts(&opts, "onSelectionChange", ctx);
-            ctrl.on_key_down = extract_callback_from_opts(&opts, "onKeyDown", ctx);
-            ctrl.on_key_up = extract_callback_from_opts(&opts, "onKeyUp", ctx);
-            ctrl.on_focus = extract_callback_from_opts(&opts, "onFocus", ctx);
-            ctrl.on_blur = extract_callback_from_opts(&opts, "onBlur", ctx);
-            ctrl.on_composition_start = extract_callback_from_opts(&opts, "onCompositionStart", ctx);
-            ctrl.on_composition_update = extract_callback_from_opts(&opts, "onCompositionUpdate", ctx);
-            ctrl.on_composition_end = extract_callback_from_opts(&opts, "onCompositionEnd", ctx);
+            ctrl.on_input = extract_mutation_from_opts(&opts, "onInput", ctx);
+            ctrl.on_cursor_change = extract_mutation_from_opts(&opts, "onCursorChange", ctx);
+            ctrl.on_selection_change = extract_mutation_from_opts(&opts, "onSelectionChange", ctx);
+            ctrl.on_key_down = extract_mutation_from_opts(&opts, "onKeyDown", ctx);
+            ctrl.on_key_up = extract_mutation_from_opts(&opts, "onKeyUp", ctx);
+            ctrl.on_focus = extract_mutation_from_opts(&opts, "onFocus", ctx);
+            ctrl.on_blur = extract_mutation_from_opts(&opts, "onBlur", ctx);
+            ctrl.on_composition_start = extract_mutation_from_opts(&opts, "onCompositionStart", ctx);
+            ctrl.on_composition_update = extract_mutation_from_opts(&opts, "onCompositionUpdate", ctx);
+            ctrl.on_composition_end = extract_mutation_from_opts(&opts, "onCompositionEnd", ctx);
         }
         Ok(ctrl)
     }
@@ -485,8 +485,7 @@ impl Class for TextEditingController {
                     JsNativeError::typ().with_message("expected __ctx")
                 })?;
                 let mut focus = js_ctx.focus_manager.borrow_mut();
-                let mut js_eq = js_ctx.js_command_queue.borrow_mut();
-                focus.set_focus(node_id, &mut js_eq);
+                focus.set_focus(node_id);
                 Ok(JsValue::undefined())
             }),
         );

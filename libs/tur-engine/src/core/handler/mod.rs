@@ -1,10 +1,10 @@
 use std::cell::Cell;
 
+use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::ElementTree;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::focus::FocusManager;
 use crate::core::gesture::GestureEventComposer;
-use crate::core::js_command::JsCommandQueue;
 use crate::core::render::Renderer;
 
 pub trait AppHandler {
@@ -14,7 +14,7 @@ pub trait AppHandler {
 pub struct HandlerContext<'a> {
     pub element_tree: &'a mut ElementTree,
     pub focus_manager: &'a mut FocusManager,
-    pub js_command_queue: &'a mut JsCommandQueue,
+    pub mutation_queue: &'a mut PendingMutationInvocationQueue,
     pub event_queue: &'a mut AppEventQueue,
     pub gesture_composer: &'a mut GestureEventComposer,
     pub renderer: &'a mut dyn Renderer,

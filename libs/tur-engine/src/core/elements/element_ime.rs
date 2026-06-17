@@ -1,30 +1,26 @@
-use crate::core::element::ElementNodeId;
+use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::event::AppImeEvent;
-use crate::core::js_command::{IntoAnyJsCommand, JsCommandQueue};
 
 pub struct ElementOnImeContext<'a> {
-    js_command_queue: &'a mut JsCommandQueue,
+    mutation_queue: &'a mut PendingMutationInvocationQueue,
     app_event_queue: &'a mut AppEventQueue,
-    node_id: ElementNodeId,
 }
 
 impl<'a> ElementOnImeContext<'a> {
     pub fn new(
-        js_command_queue: &'a mut JsCommandQueue,
+        mutation_queue: &'a mut PendingMutationInvocationQueue,
         app_event_queue: &'a mut AppEventQueue,
-        node_id: ElementNodeId,
     ) -> Self {
         Self {
-            js_command_queue,
+            mutation_queue,
             app_event_queue,
-            node_id,
         }
     }
 
-    pub fn push_js_command(&mut self, command: impl IntoAnyJsCommand) {
-        self.js_command_queue.push(self.node_id, command);
+    pub fn push_event<E: EventArg>(&mut self, mutation: EdgyMutation<E>, event: E) {
+        self.mutation_queue.push(mutation, event);
     }
 
     pub fn request_redraw(&mut self) {

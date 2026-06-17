@@ -256,22 +256,64 @@ export function Fragment(props: { children: EdgyElement[] }): EdgyElement {
 
 // ---------------------------------------------------------------------------
 // Controllers (reuse existing bridge factories).
+//
+// Every callback is a `Mutation` atom (created via `mutate(fn)`). At invoke
+// time the engine prepends the `{ get, set }` store context as the first
+// argument, so each callback's `Args` describes only the event payload.
 // ---------------------------------------------------------------------------
 
+export interface KeyEvent {
+    key: string;
+    code: string;
+    ctrl: boolean;
+    shift: boolean;
+    alt: boolean;
+    meta: boolean;
+}
+
+export interface ScrollEvent {
+    offset: number;
+    maxExtent: number;
+    viewportDimension: number;
+}
+
+export interface TextEditingControllerOpts {
+    onInput?: Mutation<[string, boolean], void>;
+    onCursorChange?: Mutation<[number], void>;
+    onSelectionChange?: Mutation<[number, number], void>;
+    onKeyDown?: Mutation<[KeyEvent], void>;
+    onKeyUp?: Mutation<[KeyEvent], void>;
+    onFocus?: Mutation<[], void>;
+    onBlur?: Mutation<[], void>;
+    onCompositionStart?: Mutation<[], void>;
+    onCompositionUpdate?: Mutation<[string], void>;
+    onCompositionEnd?: Mutation<[string], void>;
+}
+
+export interface ScrollControllerOpts {
+    onScroll?: Mutation<[ScrollEvent], void>;
+    initialOffset?: number;
+}
+
+export interface LazyListControllerOpts {
+    onScroll?: Mutation<[ScrollEvent], void>;
+    onVisibleRangeChange?: Mutation<[number, number], void>;
+}
+
 export function createTextEditingController(
-    opts: Record<string, unknown> = {},
+    opts: TextEditingControllerOpts = {},
 ): unknown {
     return __tur.createTextEditingController(__ctx, opts);
 }
 
 export function createScrollController(
-    opts: Record<string, unknown> = {},
+    opts: ScrollControllerOpts = {},
 ): unknown {
     return __tur.createScrollController(__ctx, opts);
 }
 
 export function createLazyListController(
-    opts: Record<string, unknown> = {},
+    opts: LazyListControllerOpts = {},
 ): unknown {
     return __tur.createLazyListController(__ctx, opts);
 }

@@ -103,7 +103,6 @@ pub(crate) fn tur_request_focus(
     let handle = BoaOpaque::<TurNodeHandle>::wrap(&obj)
         .ok_or_else(|| JsNativeError::typ().with_message("expected TurNodeHandle"))?;
     let mut focus = js_ctx.focus_manager.borrow_mut();
-    let mut js_eq = js_ctx.js_command_queue.borrow_mut();
-    focus.set_focus(handle.id, &mut js_eq);
+    focus.set_focus(handle.id);
     Ok(JsValue::undefined())
 }

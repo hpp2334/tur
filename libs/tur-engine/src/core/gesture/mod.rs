@@ -1,6 +1,3 @@
-pub mod helper;
-pub use helper::*;
-
 use crate::core::element::ElementNodeId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
