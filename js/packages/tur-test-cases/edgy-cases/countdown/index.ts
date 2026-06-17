@@ -69,7 +69,7 @@ const openEdit$ = mutate(({ get, set }) => {
     set(running$, false);
     set(editText$, String(get(initial$)));
     const ctrl = createTextEditingController({
-        onInput: mutate(({ set }, text: string) => set(editText$, text)),
+        onInput: mutate(({ set }, text: string, _enter: boolean) => set(editText$, text)),
     });
     set(editController$, ctrl);
     set(editing$, true);
