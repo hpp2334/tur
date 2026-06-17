@@ -44,7 +44,17 @@ import * as Edgy from "@tur/edgy";
 // ---------------------------------------------------------------------------
 // Reactive state
 // ---------------------------------------------------------------------------
-const CASE_NAMES = Object.keys(CASE_SOURCES).sort();
+const WHITELIST = new Set([
+    "counter",
+    "clickable-text",
+    "container-basic",
+    "column-basic",
+    "todolist",
+]);
+
+const CASE_NAMES = Object.keys(CASE_SOURCES)
+    .filter((name) => WHITELIST.has(name))
+    .sort();
 const INITIAL_CASE = CASE_NAMES.includes("counter")
     ? "counter"
     : (CASE_NAMES[0] ?? "");
@@ -269,22 +279,22 @@ function Viewer(): EdgyElement {
                                     Match({
                                         value: status$,
                                         cases: [
-                                            [
-                                                "ready",
-                                                Text({
+                                            {
+                                                key: "ready",
+                                                child: Text({
                                                     text: "ready",
                                                     fontSize: 11,
                                                     color: Color.hex("#22c55e"),
                                                 }),
-                                            ],
-                                            [
-                                                "error",
-                                                Text({
+                                            },
+                                            {
+                                                key: "error",
+                                                child: Text({
                                                     text: "error",
                                                     fontSize: 11,
                                                     color: Color.hex("#ef4444"),
                                                 }),
-                                            ],
+                                            },
                                         ],
                                     }),
                                 ],
