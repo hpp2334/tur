@@ -1,6 +1,8 @@
 pub mod controller;
+pub mod js_command;
 
 pub use controller::ScrollController;
+pub use js_command::ScrollViewJsCommand;
 
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsValue};

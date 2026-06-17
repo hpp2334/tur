@@ -10,9 +10,9 @@ use crate::core::elements::{
     AnyElement, ElementJsCallbackEmitter, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     WheelEvent,
 };
-use crate::core::js_command::{AnyJsCommand, ScrollViewJsCommand};
+use crate::core::js_command::AnyJsCommand;
 use crate::core::reactive::Store;
-use crate::core::scroll::ScrollController;
+use crate::core::scroll::{ScrollController, ScrollViewJsCommand};
 use crate::core::scroll::ScrollEvent;
 use crate::core::widget::callback::EventArg;
 use crate::core::widget::{

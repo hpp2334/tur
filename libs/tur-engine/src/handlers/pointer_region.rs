@@ -3,8 +3,8 @@ use crate::core::elements::ElementTree;
 use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
-use crate::core::js_command::PointerInteractJsCommand;
 use crate::core::pointer_region::PointerRegionTracker;
+use crate::elements::pointer_interact::PointerInteractJsCommand;
 use crate::elements::PointerInteract;
 
 pub struct PointerRegionAppHandler {

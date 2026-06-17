@@ -10,10 +10,11 @@ use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
-use crate::core::js_command::{JsCommandQueue, LazyListJsCommand};
+use crate::core::js_command::JsCommandQueue;
 use crate::core::element::ElementNodeId;
 use crate::core::scroll::ScrollEvent;
 use crate::core::widget::callback::{extract_callback_from_opts, Callback};
+use super::LazyListJsCommand;
 use crate::elements::lazy_list::VisibleRangeChangeEvent;
 use crate::elements::LazyList;
 

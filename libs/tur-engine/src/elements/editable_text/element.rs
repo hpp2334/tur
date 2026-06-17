@@ -14,7 +14,8 @@ use crate::core::elements::{
     ElementOnKeyboardContext, ElementTrace,
 };
 use crate::core::event::AppImeEvent;
-use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, IntoAnyJsCommand};
+use crate::core::focus::FocusableJsCommand;
+use crate::core::js_command::{AnyJsCommand, IntoAnyJsCommand};
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::core::reactive::{extract_atom, Store};
 use crate::core::text::TextEditingController;

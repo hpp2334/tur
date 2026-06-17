@@ -1,9 +1,12 @@
 pub mod helper;
+pub mod js_command;
+
+pub use js_command::FocusableJsCommand;
 
 use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
-use crate::core::js_command::{FocusableJsCommand, JsCommandQueue};
+use crate::core::js_command::JsCommandQueue;
 use crate::core::widget::callback::EventArg;
 
 // ---------------------------------------------------------------------------

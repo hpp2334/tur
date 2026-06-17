@@ -4,7 +4,6 @@ use std::any::Any;
 use std::rc::Rc;
 
 use crate::core::element::ElementNodeId;
-use crate::core::keyboard::Modifiers;
 
 #[derive(Clone)]
 pub struct AnyJsCommand(pub(crate) Rc<dyn Any>);
@@ -23,56 +22,6 @@ impl IntoAnyJsCommand for AnyJsCommand {
     fn into_any_js_command(self) -> AnyJsCommand {
         self
     }
-}
-
-impl IntoAnyJsCommand for PointerInteractJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
-impl IntoAnyJsCommand for FocusableJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
-impl IntoAnyJsCommand for ScrollViewJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
-impl IntoAnyJsCommand for LazyListJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(Rc::new(self))
-    }
-}
-
-#[derive(Clone)]
-pub enum PointerInteractJsCommand {
-    Click { x: f64, y: f64 },
-    PointerEnter,
-    PointerExit,
-}
-
-#[derive(Clone)]
-pub enum FocusableJsCommand {
-    KeyDown { key: String, code: String, modifiers: Modifiers },
-    KeyUp { key: String, code: String, modifiers: Modifiers },
-    Focus,
-    Blur,
-}
-
-#[derive(Clone)]
-pub enum ScrollViewJsCommand {
-    ScrollDidUpdate,
-}
-
-#[derive(Clone)]
-pub enum LazyListJsCommand {
-    VisibleRangeDidChange { start_index: u64, end_index: u64 },
-    ScrollDidUpdate,
 }
 
 impl std::fmt::Debug for AnyJsCommand {

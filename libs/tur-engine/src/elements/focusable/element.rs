@@ -7,8 +7,8 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ElementJsCallbackEmitter, ElementOnFocus, ElementTrace,
 };
-use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
-use crate::core::focus::{BlurEvent, FocusEvent};
+use crate::core::focus::{BlurEvent, FocusEvent, FocusableJsCommand};
+use crate::core::js_command::AnyJsCommand;
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
 use crate::core::reactive::Store;
 use crate::core::widget::callback::{EventArg, Mutation};
