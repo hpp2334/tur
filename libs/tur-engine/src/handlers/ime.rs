@@ -24,9 +24,8 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
         };
 
         let mut el_cx = ElementOnImeContext::new(
-            &mut *cx.js_command_queue,
+            &mut *cx.mutation_queue,
             &mut *cx.event_queue,
-            focused_id,
         );
         element.on_ime_event(&mut el_cx, ime_event);
         cx.element_tree.mark_dirty(focused_id);

@@ -1,16 +1,9 @@
 use std::any::Any;
-use std::cell::RefCell;
-use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsValue};
+use boa_engine::Context;
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
-use crate::core::js_command::AnyJsCommand;
-use crate::core::reactive::Store;
-use crate::core::elements::ElementJsCallbackEmitter;
-use crate::core::elements::dispatch_emit_js_callback;
 use crate::core::elements::ElementTrace;
 use crate::core::widget::Effect;
 use crate::core::keyboard::AppKeyEvent;
@@ -23,12 +16,6 @@ type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
-type EmitJsCallbackFn = fn(
-    &dyn Any,
-    &mut Context,
-    &Rc<RefCell<Store>>,
-    AnyJsCommand,
-) -> Option<(JsFunction, Vec<JsValue>)>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -36,7 +23,7 @@ pub struct AnyElement {
     on_gesture: Option<GestureFn>,
     on_wheel: Option<WheelFn>,
     on_ime: Option<ImeFn>,
-    emit_js_callback_fn: Option<EmitJsCallbackFn>,
+    has_callbacks: bool,
 }
 
 trait Erased: 'static {
@@ -184,7 +171,7 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: None,
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -205,7 +192,7 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -225,7 +212,7 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -245,7 +232,7 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: Some(wheel_dispatch::<E>),
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -265,7 +252,7 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: None,
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -286,7 +273,7 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
@@ -309,12 +296,12 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: Some(ime_dispatch::<E>),
-            emit_js_callback_fn: None,
+            has_callbacks: false,
         }
     }
 
-    pub fn with_js_callback_emitter<E: ElementJsCallbackEmitter + 'static>(mut self) -> Self {
-        self.emit_js_callback_fn = Some(dispatch_emit_js_callback::<E>);
+    pub fn with_callbacks(mut self) -> Self {
+        self.has_callbacks = true;
         self
     }
 
@@ -425,20 +412,6 @@ impl AnyElement {
     }
 
     pub fn has_focus(&self) -> bool {
-        self.emit_js_callback_fn.is_some()
-    }
-
-    pub fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(JsFunction, Vec<JsValue>)> {
-        let f = self.emit_js_callback_fn?;
-        f(self.inner.as_any(), context, store, command)
-    }
-
-    pub fn has_js_callback_emitter(&self) -> bool {
-        self.emit_js_callback_fn.is_some()
+        self.has_callbacks
     }
 }

@@ -1,11 +1,8 @@
-pub mod helper;
-pub use helper::*;
-
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{js_string, Context, JsValue};
 
-use crate::core::widget::callback::EventArg;
+use crate::core::edgy_event::EventArg;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Modifiers {

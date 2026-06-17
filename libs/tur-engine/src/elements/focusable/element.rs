@@ -1,20 +1,14 @@
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
+use boa_engine::Context;
 
+use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{
-    AnyElement, ElementJsCallbackEmitter, ElementOnFocus, ElementTrace,
-};
-use crate::core::focus::{BlurEvent, FocusEvent, FocusableJsCommand};
-use crate::core::js_command::AnyJsCommand;
+use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
+use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
-use crate::core::reactive::Store;
-use crate::core::widget::callback::{EventArg, Mutation};
 use crate::core::widget::{extract_spec, Effect, Spec, WidgetCx};
-
-use std::cell::RefCell;
 
 // ---------------------------------------------------------------------------
 // FocusableSpec — wraps a child and provides keyboard / focus callbacks.
@@ -22,10 +16,10 @@ use std::cell::RefCell;
 
 #[derive(Clone)]
 pub struct FocusableSpec {
-    pub on_key_down: Option<Mutation<KeydownEvent>>,
-    pub on_key_up: Option<Mutation<KeyupEvent>>,
-    pub on_focus: Option<Mutation<FocusEvent>>,
-    pub on_blur: Option<Mutation<BlurEvent>>,
+    pub on_key_down: Option<EdgyMutation<KeydownEvent>>,
+    pub on_key_up: Option<EdgyMutation<KeyupEvent>>,
+    pub on_focus: Option<EdgyMutation<FocusEvent>>,
+    pub on_blur: Option<EdgyMutation<BlurEvent>>,
     pub child: Option<Rc<dyn Spec>>,
 }
 
@@ -37,7 +31,7 @@ impl Spec for FocusableSpec {
             AnyElement::new(Focusable {
                 spec: self.clone(),
             })
-            .with_js_callback_emitter::<Focusable>(),
+            .with_callbacks(),
             boa,
         );
         if let Some(child) = &self.child {
@@ -50,7 +44,7 @@ impl Spec for FocusableSpec {
 
 // ---------------------------------------------------------------------------
 // Focusable — the built element. Stores only the spec; mutations are
-// resolved from the spec at emit time via the store.
+// resolved from the spec at push time and invoked via the reactive store.
 // ---------------------------------------------------------------------------
 
 pub struct Focusable {
@@ -63,61 +57,18 @@ impl ElementTrace for Focusable {}
 
 impl ElementOnFocus for Focusable {}
 
-impl ElementJsCallbackEmitter for Focusable {
-    fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let c = command.downcast_ref::<FocusableJsCommand>()?;
-        match c {
-            FocusableJsCommand::KeyDown { key, code, modifiers } => {
-                let mutation = self.spec.on_key_down?;
-                let func = crate::core::widget::make_mutation_callback(store, context, &mutation);
-                let event = KeydownEvent {
-                    key: key.clone(),
-                    code: code.clone(),
-                    modifiers: *modifiers,
-                };
-                Some((func, event.to_js_args(context)))
-            }
-            FocusableJsCommand::KeyUp { key, code, modifiers } => {
-                let mutation = self.spec.on_key_up?;
-                let func = crate::core::widget::make_mutation_callback(store, context, &mutation);
-                let event = KeyupEvent {
-                    key: key.clone(),
-                    code: code.clone(),
-                    modifiers: *modifiers,
-                };
-                Some((func, event.to_js_args(context)))
-            }
-            FocusableJsCommand::Focus => {
-                let mutation = self.spec.on_focus?;
-                let func = crate::core::widget::make_mutation_callback(store, context, &mutation);
-                Some((func, FocusEvent.to_js_args(context)))
-            }
-            FocusableJsCommand::Blur => {
-                let mutation = self.spec.on_blur?;
-                let func = crate::core::widget::make_mutation_callback(store, context, &mutation);
-                Some((func, BlurEvent.to_js_args(context)))
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-fn prop_mutation<E: EventArg, R: crate::core::widget::ReturnVal>(
+fn prop_mutation<E: EventArg>(
     props: &JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Option<Mutation<E, R>> {
+) -> Option<EdgyMutation<E>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    crate::core::widget::mutation_from_js(&v)
+    edgy_mutation_from_js(&v)
 }
 
 fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
@@ -129,10 +80,10 @@ fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn S
 impl FocusableSpec {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         FocusableSpec {
-            on_key_down: prop_mutation::<KeydownEvent, _>(props, "onKeyDown", ctx),
-            on_key_up: prop_mutation::<KeyupEvent, _>(props, "onKeyUp", ctx),
-            on_focus: prop_mutation::<FocusEvent, _>(props, "onFocus", ctx),
-            on_blur: prop_mutation::<BlurEvent, _>(props, "onBlur", ctx),
+            on_key_down: prop_mutation::<KeydownEvent>(props, "onKeyDown", ctx),
+            on_key_up: prop_mutation::<KeyupEvent>(props, "onKeyUp", ctx),
+            on_focus: prop_mutation::<FocusEvent>(props, "onFocus", ctx),
+            on_blur: prop_mutation::<BlurEvent>(props, "onBlur", ctx),
             child: prop_child(props, "child", ctx),
         }
     }

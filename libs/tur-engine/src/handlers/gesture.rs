@@ -1,9 +1,9 @@
 use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
 use crate::core::event::{AppEvent, AppGestureEvent};
-use crate::core::gesture::make_click_command;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
+use crate::elements::pointer_interact::ClickEvent;
 use crate::elements::PointerInteract;
 use tur_shared::Offset;
 
@@ -60,7 +60,16 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
     if clicked {
         let hit_path = HitTest::new(&*cx.element_tree).path(position);
         for node_id in &hit_path {
-            cx.js_command_queue.push(*node_id, make_click_command(position.x, position.y));
+            if let Some(node) = cx.element_tree.get(*node_id) {
+                if let Some(ref element) = node.element {
+                    if let Some(p) = element.cast::<PointerInteract>() {
+                        if let Some(m) = p.spec.on_click {
+                            cx.mutation_queue
+                                .push(m, ClickEvent { x: position.x, y: position.y });
+                        }
+                    }
+                }
+            }
             if is_click_opaque(&*cx.element_tree, *node_id) {
                 break;
             }
@@ -105,7 +114,7 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
     let mut el_cx = ElementOnGestureContext::new(
         &mut *cx.event_queue,
         &mut *cx.focus_manager,
-        &mut *cx.js_command_queue,
+        &mut *cx.mutation_queue,
         id,
     );
     element.on_gesture_event(&mut el_cx, event);

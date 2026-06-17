@@ -1,6 +1,7 @@
 pub mod animation;
 pub mod app;
 pub mod bridge;
+pub mod edgy_event;
 pub mod element;
 pub mod elements;
 pub mod event;
@@ -9,7 +10,6 @@ pub mod fonts;
 pub mod gesture;
 pub mod handler;
 pub mod hit_test;
-pub mod js_command;
 pub mod keyboard;
 pub mod layout;
 pub mod pointer_region;

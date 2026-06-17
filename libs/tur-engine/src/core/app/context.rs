@@ -6,6 +6,7 @@ use std::rc::Rc;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
+use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::ElementTree;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
@@ -13,13 +14,12 @@ use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
 use crate::core::handler::{AppHandler, HandlerContext};
-use crate::core::js_command::JsCommandQueue;
 use crate::core::render::Renderer;
 use crate::core::resource::ResourceMap;
 
 pub struct TurAppContext {
     pub(crate) element_tree: Rc<RefCell<ElementTree>>,
-    pub(crate) js_command_queue: Rc<RefCell<JsCommandQueue>>,
+    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub(crate) renderer: Box<dyn Renderer>,
@@ -42,7 +42,7 @@ impl fmt::Debug for TurAppContext {
 impl TurAppContext {
     pub fn new(
         element_tree: Rc<RefCell<ElementTree>>,
-        js_command_queue: Rc<RefCell<JsCommandQueue>>,
+        mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         resource_map: Rc<RefCell<ResourceMap>>,
         renderer: Box<dyn Renderer>,
@@ -51,7 +51,7 @@ impl TurAppContext {
         let font_manager = FontManager::new(font_loader);
         Self {
             element_tree,
-            js_command_queue,
+            mutation_queue,
             focus_manager,
             resource_map,
             renderer,
@@ -71,11 +71,11 @@ impl TurAppContext {
     pub fn dispatch_handlers(&mut self, event: &AppEvent, needs_draw: &Cell<bool>) {
         let mut tree = self.element_tree.borrow_mut();
         let mut focus = self.focus_manager.borrow_mut();
-        let mut js_q = self.js_command_queue.borrow_mut();
+        let mut mq = self.mutation_queue.borrow_mut();
         let mut cx = HandlerContext {
             element_tree: &mut tree,
             focus_manager: &mut focus,
-            js_command_queue: &mut js_q,
+            mutation_queue: &mut mq,
             event_queue: &mut self.event_queue,
             gesture_composer: &mut self.gesture_composer,
             renderer: self.renderer.as_mut(),

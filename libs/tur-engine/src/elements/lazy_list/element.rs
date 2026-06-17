@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::object::builtins::JsFunction;
@@ -6,15 +5,12 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::Axis;
 
+use crate::core::edgy_event::EventArg;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    AnyElement, ElementJsCallbackEmitter, ElementOnWheel, ElementOnWheelContext, ElementTrace,
+    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     WheelEvent,
 };
-use crate::core::js_command::AnyJsCommand;
-use crate::core::reactive::Store;
-use crate::core::widget::callback::EventArg;
-use super::LazyListJsCommand;
 use crate::core::widget::{
     extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };
@@ -88,7 +84,7 @@ impl Spec for LazyListSpec {
                 reported_start: 0,
                 reported_end: 0,
             })
-            .with_js_callback_emitter::<LazyList>(),
+            .with_callbacks(),
             boa,
         );
 
@@ -289,30 +285,10 @@ impl ElementOnWheel for LazyList {
         let new_pixels = self.position.pixels();
 
         if (new_pixels - old_pixels).abs() > 0.001 {
-            cx.push_js_command(LazyListJsCommand::ScrollDidUpdate);
             cx.request_redraw();
         }
 
         overscroll
-    }
-}
-
-// ---------------------------------------------------------------------------
-// JS callback emission — forward scroll events to an attached controller.
-// (Controller attachment is not wired into the new spec model yet, so this is
-// inert; it exists to keep the LazyListController class compiling and ready
-// for future wiring.)
-// ---------------------------------------------------------------------------
-
-impl ElementJsCallbackEmitter for LazyList {
-    fn emit_js_callback(
-        &self,
-        _context: &mut Context,
-        _store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let _ = command.downcast_ref::<LazyListJsCommand>()?;
-        None
     }
 }
 

@@ -1,20 +1,15 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
+use boa_engine::Context;
 use tur_shared::{Axis, Brush, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    AnyElement, ElementJsCallbackEmitter, ElementOnWheel, ElementOnWheelContext, ElementTrace,
+    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     WheelEvent,
 };
-use crate::core::js_command::AnyJsCommand;
-use crate::core::reactive::Store;
-use crate::core::scroll::{ScrollController, ScrollViewJsCommand};
-use crate::core::scroll::ScrollEvent;
-use crate::core::widget::callback::EventArg;
+use crate::core::scroll::{ScrollController, ScrollEvent};
 use crate::core::widget::{
     extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };
@@ -58,7 +53,7 @@ impl Spec for ScrollViewSpec {
                 axis,
                 position: ScrollPosition::new(),
             })
-            .with_js_callback_emitter::<ScrollView>(),
+            .with_callbacks(),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -158,31 +153,24 @@ impl ElementOnWheel for ScrollView {
 
         if (new_pixels - old_pixels).abs() > 0.001 {
             self.update_controller_metrics();
-            cx.push_js_command(ScrollViewJsCommand::ScrollDidUpdate);
+            if let Some(ref ctrl_obj) = self.spec.controller {
+                if let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>() {
+                    if let Some(m) = ctrl.on_scroll {
+                        cx.push_event(
+                            m,
+                            ScrollEvent {
+                                offset: ctrl.offset,
+                                max_extent: ctrl.max_scroll_extent,
+                                viewport_dimension: ctrl.viewport_dimension,
+                            },
+                        );
+                    }
+                }
+            }
             cx.request_redraw();
         }
 
         overscroll
-    }
-}
-
-impl ElementJsCallbackEmitter for ScrollView {
-    fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        _store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let _ = command.downcast_ref::<ScrollViewJsCommand>()?;
-        let ctrl_obj = self.spec.controller.as_ref()?;
-        let ctrl = ctrl_obj.downcast_ref::<ScrollController>()?;
-        let cb = ctrl.on_scroll.as_ref()?;
-        let event = ScrollEvent {
-            offset: ctrl.offset,
-            max_extent: ctrl.max_scroll_extent,
-            viewport_dimension: ctrl.viewport_dimension,
-        };
-        Some((cb.func().clone(), event.to_js_args(context)))
     }
 }
 

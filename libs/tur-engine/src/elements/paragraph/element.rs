@@ -1,20 +1,15 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
+use boa_engine::Context;
 
+use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementJsCallbackEmitter, ElementOnFocus, ElementOnGesture,
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementTrace,
 };
-use crate::core::js_command::{AnyJsCommand, IntoAnyJsCommand};
-use crate::core::reactive::Store;
 use crate::core::text::SelectionChangeEvent;
-use crate::core::widget::callback::{EventArg, Mutation};
 use crate::core::widget::{
-    make_mutation_callback, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
@@ -38,7 +33,7 @@ pub struct TextSpec {
     /// Parsed eagerly at factory time (not reactive).
     pub spans: Option<Vec<SpanData>>,
     pub query_key: Option<Vec<String>>,
-    pub on_selection_change: Option<Mutation<SelectionChangeEvent>>,
+    pub on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
 }
 
 impl Spec for TextSpec {
@@ -47,7 +42,7 @@ impl Spec for TextSpec {
         cx.insert_node(
             id,
             AnyElement::with_gesture_and_focus(Text::new(self.clone()))
-                .with_js_callback_emitter::<Text>(),
+                .with_callbacks(),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -137,52 +132,24 @@ impl ElementOnGesture for Text {
                 let char_idx = self.char_index_at(local_position.x, local_position.y);
                 self.selection_anchor = char_idx;
                 self.selection_end = char_idx;
-                cx.push_js_command(TextJsCommand::SelectionChanged {
-                    anchor: self.selection_anchor,
-                    end: self.selection_end,
-                });
+                let anchor = self.selection_anchor;
+                let end = self.selection_end;
+                if let Some(m) = self.spec.on_selection_change {
+                    cx.push_event(m, SelectionChangeEvent { anchor, end });
+                }
                 cx.request_redraw();
             }
             ComposedGestureEvent::PointerMove { local_position } => {
                 let char_idx = self.char_index_at(local_position.x, local_position.y);
                 if char_idx != self.selection_end {
                     self.selection_end = char_idx;
-                    cx.push_js_command(TextJsCommand::SelectionChanged {
-                        anchor: self.selection_anchor,
-                        end: self.selection_end,
-                    });
+                    let anchor = self.selection_anchor;
+                    let end = self.selection_end;
+                    if let Some(m) = self.spec.on_selection_change {
+                        cx.push_event(m, SelectionChangeEvent { anchor, end });
+                    }
                     cx.request_redraw();
                 }
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub(crate) enum TextJsCommand {
-    SelectionChanged { anchor: usize, end: usize },
-}
-
-impl IntoAnyJsCommand for TextJsCommand {
-    fn into_any_js_command(self) -> AnyJsCommand {
-        AnyJsCommand(std::rc::Rc::new(self))
-    }
-}
-
-impl ElementJsCallbackEmitter for Text {
-    fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let c = command.downcast_ref::<TextJsCommand>()?;
-        match c {
-            TextJsCommand::SelectionChanged { anchor, end } => {
-                let mutation = self.spec.on_selection_change?;
-                let func = make_mutation_callback(store, context, &mutation);
-                let event = SelectionChangeEvent { anchor: *anchor, end: *end };
-                Some((func, event.to_js_args(context)))
             }
         }
     }
@@ -236,7 +203,7 @@ impl TextSpec {
         let on_selection_change = props
             .get(js_string!("onSelectionChange"), ctx)
             .ok()
-            .and_then(|v| crate::core::widget::mutation_from_js(&v));
+            .and_then(|v| edgy_mutation_from_js(&v));
         TextSpec {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),

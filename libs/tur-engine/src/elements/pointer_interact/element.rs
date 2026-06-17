@@ -1,36 +1,32 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::HitTestBehavior;
 
+use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementJsCallbackEmitter, ElementTrace};
-use crate::core::js_command::AnyJsCommand;
-use crate::core::reactive::Store;
-use super::PointerInteractJsCommand;
-use crate::core::widget::callback::Mutation;
+use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
-    callback::EventArg, extract_spec, make_mutation_callback, val_from_js, Effect, PropValue, Spec,
+    extract_spec, val_from_js, Effect, PropValue, Spec,
     Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
 // PointerInteractSpec — the user's declaration. Pure Rust, no JsValues.
 //
-// Callbacks are mutation atoms typed as `Mutation<E>`.  The JS bridge wraps
-// user callbacks as mutation atoms and passes the `AtomHandle` as the prop
-// value.  At emit time these are resolved via `make_mutation_callback` using
-// the store.
+// Callbacks are mutation atoms typed as `EdgyMutation<E>`.  The JS bridge
+// wraps user callbacks as mutation atoms and passes the `AtomHandle` as the
+// prop value.  At event time the gesture / pointer-region handlers resolve
+// these and push invocations onto the pending-mutation queue.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct PointerInteractSpec {
     pub behavior: Option<Val<HitTestBehavior>>,
-    pub on_click: Option<Mutation<ClickEvent>>,
-    pub on_pointer_enter: Option<Mutation<PointerEnterEvent>>,
-    pub on_pointer_exit: Option<Mutation<PointerExitEvent>>,
+    pub on_click: Option<EdgyMutation<ClickEvent>>,
+    pub on_pointer_enter: Option<EdgyMutation<PointerEnterEvent>>,
+    pub on_pointer_exit: Option<EdgyMutation<PointerExitEvent>>,
     pub child: Option<Rc<dyn Spec>>,
 }
 
@@ -49,7 +45,7 @@ impl Spec for PointerInteractSpec {
                 spec: self.clone(),
                 behavior,
             })
-            .with_js_callback_emitter::<PointerInteract>(),
+            .with_callbacks(),
             boa,
         );
         if let Some(child) = &self.child {
@@ -94,35 +90,6 @@ impl Effect for PointerInteract {}
 
 impl ElementTrace for PointerInteract {}
 
-impl ElementJsCallbackEmitter for PointerInteract {
-    fn emit_js_callback(
-        &self,
-        context: &mut Context,
-        store: &Rc<RefCell<Store>>,
-        command: AnyJsCommand,
-    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
-        let c = command.downcast_ref::<PointerInteractJsCommand>()?;
-        match c {
-            PointerInteractJsCommand::Click { x, y } => {
-                let mutation = self.spec.on_click?;
-                let func = make_mutation_callback(store, context, &mutation);
-                let event = ClickEvent { x: *x, y: *y };
-                Some((func, event.to_js_args(context)))
-            }
-            PointerInteractJsCommand::PointerEnter => {
-                let mutation = self.spec.on_pointer_enter?;
-                let func = make_mutation_callback(store, context, &mutation);
-                Some((func, PointerEnterEvent.to_js_args(context)))
-            }
-            PointerInteractJsCommand::PointerExit => {
-                let mutation = self.spec.on_pointer_exit?;
-                let func = make_mutation_callback(store, context, &mutation);
-                Some((func, PointerExitEvent.to_js_args(context)))
-            }
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
@@ -133,14 +100,14 @@ fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Opt
     val_from_js(&v)
 }
 
-fn prop_mutation<E: EventArg, R: crate::core::widget::ReturnVal>(
+fn prop_mutation<E: EventArg>(
     props: &JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Option<Mutation<E, R>> {
+) -> Option<EdgyMutation<E>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    crate::core::widget::mutation_from_js(&v)
+    edgy_mutation_from_js(&v)
 }
 
 fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
@@ -153,9 +120,9 @@ impl PointerInteractSpec {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         PointerInteractSpec {
             behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
-            on_click: prop_mutation::<ClickEvent, _>(props, "onClick", ctx),
-            on_pointer_enter: prop_mutation::<PointerEnterEvent, _>(props, "onPointerEnter", ctx),
-            on_pointer_exit: prop_mutation::<PointerExitEvent, _>(props, "onPointerExit", ctx),
+            on_click: prop_mutation::<ClickEvent>(props, "onClick", ctx),
+            on_pointer_enter: prop_mutation::<PointerEnterEvent>(props, "onPointerEnter", ctx),
+            on_pointer_exit: prop_mutation::<PointerExitEvent>(props, "onPointerExit", ctx),
             child: prop_child(props, "child", ctx),
         }
     }

@@ -4,7 +4,7 @@ use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::pointer_region::PointerRegionTracker;
-use crate::elements::pointer_interact::PointerInteractJsCommand;
+use crate::elements::pointer_interact::{PointerEnterEvent, PointerExitEvent};
 use crate::elements::PointerInteract;
 
 pub struct PointerRegionAppHandler {
@@ -38,15 +38,39 @@ impl AppHandler for PointerRegionAppHandler {
         });
 
         for id in &diff.entered {
-            cx.js_command_queue
-                .push(*id, PointerInteractJsCommand::PointerEnter);
+            let m = pointer_enter_mutation(&*cx.element_tree, *id);
+            if let Some(m) = m {
+                cx.mutation_queue.push(m, PointerEnterEvent);
+            }
         }
 
         for id in &diff.exited {
-            cx.js_command_queue
-                .push(*id, PointerInteractJsCommand::PointerExit);
+            let m = pointer_exit_mutation(&*cx.element_tree, *id);
+            if let Some(m) = m {
+                cx.mutation_queue.push(m, PointerExitEvent);
+            }
         }
     }
+}
+
+fn pointer_enter_mutation(
+    tree: &ElementTree,
+    id: ElementNodeId,
+) -> Option<crate::core::edgy_event::EdgyMutation<PointerEnterEvent>> {
+    tree.get(id)
+        .and_then(|node| node.element.as_ref())
+        .and_then(|e| e.cast::<PointerInteract>())
+        .and_then(|p| p.spec.on_pointer_enter)
+}
+
+fn pointer_exit_mutation(
+    tree: &ElementTree,
+    id: ElementNodeId,
+) -> Option<crate::core::edgy_event::EdgyMutation<PointerExitEvent>> {
+    tree.get(id)
+        .and_then(|node| node.element.as_ref())
+        .and_then(|e| e.cast::<PointerInteract>())
+        .and_then(|p| p.spec.on_pointer_exit)
 }
 
 fn has_pointer_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
