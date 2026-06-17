@@ -1,15 +1,18 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::Context;
 use boa_gc::{Finalize, Trace};
 
 use crate::core::element::ElementNodeId;
-use crate::core::reactive::AtomId;
 
+pub mod callback;
 pub mod context;
 pub mod val;
 
+pub use callback::{
+    callback_from_js, extract_callback_from_opts, make_mutation_callback, mutation_from_js,
+    Callback, EventArg, Mutation, ReturnVal,
+};
 pub use context::WidgetCx;
 pub use val::{val_from_js, PropValue, ReadableAtom, Val};
 
@@ -71,43 +74,4 @@ pub trait Effect {
     ) {
         let _ = (cx, boa, dirties);
     }
-}
-
-// ---------------------------------------------------------------------------
-// make_mutation_callback — build a JS function that, when called, invokes the
-// mutation atom identified by `atom_id` with whatever arguments the caller
-// passes.  Used during `Spec::build` to turn `onClick` / `onPointerEnter` /
-// etc. mutation atoms into the `JsFunction`s that elements store for later
-// callback emission.
-//
-// The returned `JsFunction` is NOT GC-traced by the element it lives in (the
-// element sits behind `AnyElement`'s `unsafe_empty_trace`).  This is safe for
-// the same reason it was in the old model: mutation closures are held alive
-// by the reactive `Store` (on `TurJsContext`) for the lifetime of the app,
-// so the GC always sees them via that root.
-// ---------------------------------------------------------------------------
-
-pub fn make_mutation_callback(
-    cx: &WidgetCx,
-    boa: &mut Context,
-    atom_id: AtomId,
-) -> Option<JsFunction> {
-    let store = cx.store();
-    let store_ctx_obj = crate::core::reactive::build_store_context_object(boa, store.clone())
-        .ok()
-        .map(boa_engine::JsValue::from);
-    let store_for_closure = store.clone();
-    let callback = unsafe {
-        boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let mut full_args = Vec::with_capacity(args.len() + 1);
-            if let Some(ref obj) = store_ctx_obj {
-                full_args.push(obj.clone());
-            }
-            full_args.extend_from_slice(args);
-            let _ = store_for_closure.borrow().invoke_mutation(atom_id, &full_args, ctx)?;
-            Ok(boa_engine::JsValue::undefined())
-        })
-    };
-    let func = boa_engine::object::FunctionObjectBuilder::new(boa.realm(), callback).build();
-    Some(func)
 }

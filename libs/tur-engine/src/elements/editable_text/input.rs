@@ -5,8 +5,8 @@ use boa_engine::Context;
 use tur_shared::Color;
 
 use crate::core::element::ElementNodeId;
-use crate::core::reactive::AtomId;
-use crate::core::widget::{Spec, Val, WidgetCx};
+use crate::core::text::TextEditingController;
+use crate::core::widget::{ReadableAtom, Spec, Val, WidgetCx};
 use crate::elements::ContainerSpec;
 
 use super::element::{prop_controller, prop_controller_atom, prop_query_key, prop_val, EditableTextSpec};
@@ -22,7 +22,7 @@ pub struct InputSpec {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub controller: Option<JsObject>,
-    pub controller_atom: Option<AtomId>,
+    pub controller_atom: Option<ReadableAtom<TextEditingController>>,
     pub placeholder: Option<Val<String>>,
     pub color: Option<Val<Color>>,
     pub placeholder_color: Option<Val<Color>>,

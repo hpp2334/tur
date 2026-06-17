@@ -1,4 +1,6 @@
-use boa_engine::object::builtins::JsFunction;
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
@@ -8,7 +10,12 @@ use crate::core::elements::{
     ElementOnGestureContext, ElementTrace,
 };
 use crate::core::js_command::{AnyJsCommand, IntoAnyJsCommand};
-use crate::core::widget::{val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
+use crate::core::reactive::Store;
+use crate::core::text::SelectionChangeEvent;
+use crate::core::widget::callback::{EventArg, Mutation};
+use crate::core::widget::{
+    make_mutation_callback, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+};
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 use tur_shared::Color;
@@ -31,6 +38,7 @@ pub struct TextSpec {
     /// Parsed eagerly at factory time (not reactive).
     pub spans: Option<Vec<SpanData>>,
     pub query_key: Option<Vec<String>>,
+    pub on_selection_change: Option<Mutation<SelectionChangeEvent>>,
 }
 
 impl Spec for TextSpec {
@@ -62,7 +70,6 @@ pub struct Text {
     pub(crate) cached_spans: Vec<SpanData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
-    on_selection_change: Option<JsFunction>,
 }
 
 impl Text {
@@ -73,7 +80,6 @@ impl Text {
             cached_spans: Vec::new(),
             selection_anchor: 0,
             selection_end: 0,
-            on_selection_change: None,
         }
     }
 
@@ -83,10 +89,6 @@ impl Text {
         } else {
             self.spec.spans.as_deref().unwrap_or(&[])
         }
-    }
-
-    pub fn set_on_selection_change(&mut self, handler: Option<JsFunction>) {
-        self.on_selection_change = handler;
     }
 
     fn char_index_at(&self, x: f64, y: f64) -> usize {
@@ -170,21 +172,17 @@ impl IntoAnyJsCommand for TextJsCommand {
 impl ElementJsCallbackEmitter for Text {
     fn emit_js_callback(
         &self,
-        _context: &mut Context,
+        context: &mut Context,
+        store: &Rc<RefCell<Store>>,
         command: AnyJsCommand,
-    ) -> Option<(JsFunction, Vec<JsValue>)> {
+    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
         let c = command.downcast_ref::<TextJsCommand>()?;
         match c {
             TextJsCommand::SelectionChanged { anchor, end } => {
-                self.on_selection_change.as_ref().map(|h| {
-                    (
-                        h.clone(),
-                        vec![
-                            boa_engine::JsValue::from(*anchor as f64),
-                            boa_engine::JsValue::from(*end as f64),
-                        ],
-                    )
-                })
+                let mutation = self.spec.on_selection_change?;
+                let func = make_mutation_callback(store, context, &mutation);
+                let event = SelectionChangeEvent { anchor: *anchor, end: *end };
+                Some((func, event.to_js_args(context)))
             }
         }
     }
@@ -234,12 +232,18 @@ fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<Span
 impl TextSpec {
     /// Build a `TextSpec` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        use boa_engine::js_string;
+        let on_selection_change = props
+            .get(js_string!("onSelectionChange"), ctx)
+            .ok()
+            .and_then(|v| crate::core::widget::mutation_from_js(&v));
         TextSpec {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
             color: prop_val::<Color>(props, "color", ctx),
             spans: prop_spans(props, "spans", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
+            on_selection_change,
         }
     }
 }

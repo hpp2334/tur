@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{PointerInteract, PointerInteractSpec};
+pub use element::{ClickEvent, PointerEnterEvent, PointerExitEvent, PointerInteract, PointerInteractSpec};

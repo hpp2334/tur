@@ -1,5 +1,7 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use boa_engine::class::Class;
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::Color;
@@ -13,11 +15,17 @@ use crate::core::elements::{
 };
 use crate::core::event::AppImeEvent;
 use crate::core::js_command::{AnyJsCommand, FocusableJsCommand, IntoAnyJsCommand};
-use crate::core::js_command::helpers::build_key_event_object;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType};
-use crate::core::reactive::{extract_atom, AtomId};
+use crate::core::reactive::{extract_atom, Store};
 use crate::core::text::TextEditingController;
-use crate::core::widget::{val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
+use crate::core::focus::{BlurEvent, FocusEvent};
+use crate::core::keyboard::{KeydownEvent, KeyupEvent};
+use crate::core::text::{
+    CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
+    InputEvent, SelectionChangeEvent,
+};
+use crate::core::widget::callback::EventArg;
+use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Spec, Val, WidgetCx};
 use crate::elements::text::text_layout::TextLayoutData;
 
 #[derive(Clone)]
@@ -90,7 +98,7 @@ impl IntoAnyJsCommand for EditableTextNotification {
 #[derive(Clone)]
 pub struct EditableTextSpec {
     pub controller: Option<JsObject>,
-    pub controller_atom: Option<AtomId>,
+    pub controller_atom: Option<ReadableAtom<TextEditingController>>,
     pub placeholder: Option<Val<String>>,
     pub color: Option<Val<Color>>,
     pub placeholder_color: Option<Val<Color>>,
@@ -106,8 +114,8 @@ impl Spec for EditableTextSpec {
         let mut spec = self.clone();
 
         if spec.controller.is_none() {
-            if let Some(atom_id) = spec.controller_atom {
-                let js_val = cx.read_atom_raw(atom_id, boa);
+            if let Some(atom) = spec.controller_atom {
+                let js_val = cx.read_atom_raw(atom.id(), boa);
                 if let Some(obj) = js_val.as_object() {
                     if obj.downcast_ref::<TextEditingController>().is_some() {
                         spec.controller = Some(obj.clone());
@@ -657,62 +665,62 @@ impl ElementJsCallbackEmitter for EditableText {
     fn emit_js_callback(
         &self,
         context: &mut Context,
+        _store: &Rc<RefCell<Store>>,
         command: AnyJsCommand,
-    ) -> Option<(JsFunction, Vec<JsValue>)> {
-        use boa_engine::js_string;
-
+    ) -> Option<(boa_engine::object::builtins::JsFunction, Vec<JsValue>)> {
         let ctrl = self.controller();
 
         if let Some(c) = command.downcast_ref::<EditableTextNotification>() {
             match c {
                 EditableTextNotification::TextChanged { text, enter } => {
-                    ctrl.on_input().cloned().map(|h| {
-                        (h, vec![JsValue::from(js_string!(text.as_str())), JsValue::from(*enter)])
-                    })
+                    let cb = ctrl.on_input()?;
+                    let event = InputEvent { value: text.clone(), enter: *enter };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 EditableTextNotification::CursorChanged { position } => {
-                    ctrl.on_cursor_change().cloned().map(|h| {
-                        (h, vec![JsValue::from(*position as f64)])
-                    })
+                    let cb = ctrl.on_cursor_change()?;
+                    let event = CursorChangeEvent { position: *position };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 EditableTextNotification::SelectionChanged { anchor, end } => {
-                    ctrl.on_selection_change().cloned().map(|h| {
-                        (h, vec![JsValue::from(*anchor as f64), JsValue::from(*end as f64)])
-                    })
+                    let cb = ctrl.on_selection_change()?;
+                    let event = SelectionChangeEvent { anchor: *anchor, end: *end };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 EditableTextNotification::CompositionStarted => {
-                    ctrl.on_composition_start().cloned().map(|h| (h, vec![]))
+                    let cb = ctrl.on_composition_start()?;
+                    Some((cb.func().clone(), CompositionStartEvent.to_js_args(context)))
                 }
                 EditableTextNotification::CompositionUpdated { text } => {
-                    ctrl.on_composition_update().cloned().map(|h| {
-                        (h, vec![JsValue::from(js_string!(text.as_str()))])
-                    })
+                    let cb = ctrl.on_composition_update()?;
+                    let event = CompositionUpdateEvent { text: text.clone() };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 EditableTextNotification::CompositionEnded { text } => {
-                    ctrl.on_composition_end().cloned().map(|h| {
-                        (h, vec![JsValue::from(js_string!(text.as_str()))])
-                    })
+                    let cb = ctrl.on_composition_end()?;
+                    let event = CompositionEndEvent { text: text.clone() };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
             }
         } else if let Some(c) = command.downcast_ref::<FocusableJsCommand>() {
             match c {
                 FocusableJsCommand::KeyDown { key, code, modifiers } => {
-                    ctrl.on_key_down().cloned().map(|h| {
-                        let event_obj = build_key_event_object(key, code, modifiers, context);
-                        (h, vec![event_obj])
-                    })
+                    let cb = ctrl.on_key_down()?;
+                    let event = KeydownEvent { key: key.clone(), code: code.clone(), modifiers: *modifiers };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 FocusableJsCommand::KeyUp { key, code, modifiers } => {
-                    ctrl.on_key_up().cloned().map(|h| {
-                        let event_obj = build_key_event_object(key, code, modifiers, context);
-                        (h, vec![event_obj])
-                    })
+                    let cb = ctrl.on_key_up()?;
+                    let event = KeyupEvent { key: key.clone(), code: code.clone(), modifiers: *modifiers };
+                    Some((cb.func().clone(), event.to_js_args(context)))
                 }
                 FocusableJsCommand::Focus => {
-                    ctrl.on_focus().cloned().map(|h| (h, vec![]))
+                    let cb = ctrl.on_focus()?;
+                    Some((cb.func().clone(), FocusEvent.to_js_args(context)))
                 }
                 FocusableJsCommand::Blur => {
-                    ctrl.on_blur().cloned().map(|h| (h, vec![]))
+                    let cb = ctrl.on_blur()?;
+                    Some((cb.func().clone(), BlurEvent.to_js_args(context)))
                 }
             }
         } else {
@@ -776,15 +784,16 @@ pub(super) fn prop_controller(
     }
 }
 
-/// Extract the atom id from the controller prop (if it was passed reactively).
+/// Extract the controller atom from the controller prop (if it was passed
+/// reactively).  Returns a typed handle to the reactive atom.
 pub(super) fn prop_controller_atom(
     props: &JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Option<AtomId> {
+) -> Option<ReadableAtom<TextEditingController>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_atom(&v)
+    extract_atom(&v).map(ReadableAtom::new)
 }
 
 impl EditableTextSpec {

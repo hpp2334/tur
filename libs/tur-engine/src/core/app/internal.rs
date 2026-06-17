@@ -231,11 +231,13 @@ impl TurAppInternal {
             return false;
         }
 
+        let store = self.js_context.store.clone();
+
         for (target, command) in entries {
             let tree = self.js_context.element_tree.borrow();
             if let Some(node) = tree.get(target) {
                 if let Some(ref element) = node.element {
-                    if let Some(pair) = element.emit_js_callback(boa_context, command) {
+                    if let Some(pair) = element.emit_js_callback(boa_context, &store, command) {
                         pending_callbacks.push(pair);
                     }
                 }
