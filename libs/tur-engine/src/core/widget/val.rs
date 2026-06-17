@@ -2,28 +2,13 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use boa_engine::JsValue;
-use boa_gc::{Finalize, Trace};
 use num_traits::FromPrimitive;
 use tur_shared::{
-    Alignment, Axis, BorderPosition, BoxFit, Brush, Color, CrossAxisAlignment, FlexDirection,
-    FlexFit, HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
+    Alignment, Axis, BorderPosition, BoxFit, CrossAxisAlignment, FlexDirection, FlexFit,
+    HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
 };
 
 use crate::core::reactive::{extract_atom, AtomId};
-
-// ---------------------------------------------------------------------------
-// Opaque wrappers for tur-shared types so they can be stored inside boa
-// JS objects (NativeObject).  tur-shared cannot depend on boa, so we wrap
-// here.
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct ColorOpaque(pub Color);
-
-#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
-#[boa_gc(unsafe_empty_trace)]
-pub struct BrushOpaque(pub Brush);
 
 // ---------------------------------------------------------------------------
 // PropValue — trait for types that can be decoded from a JsValue WITHOUT a
@@ -31,8 +16,8 @@ pub struct BrushOpaque(pub Brush);
 // resolve reactive atoms without touching the JS runtime.
 //
 // Primitive / enum types read directly off the JsValue variant tag.
-// Complex types (Color, Brush) are stored as boa NativeObject opaques so a
-// simple `downcast_ref` suffices — no property access, no Context.
+// Complex types (Color, Brush) are stored as boa NativeObject opaques; their
+// `PropValue` impls live in `core/bridge/color.rs` next to the opaque defs.
 // ---------------------------------------------------------------------------
 
 pub trait PropValue: Clone + 'static {
@@ -81,28 +66,6 @@ impl PropValue for String {
     fn from_js(v: &JsValue) -> Option<Self> {
         v.as_string()
             .map(|s| s.to_std_string_escaped())
-    }
-}
-
-// --- opaque types (stored as boa NativeObject) ---
-
-impl PropValue for Color {
-    fn from_js(v: &JsValue) -> Option<Self> {
-        v.as_object()?.downcast_ref::<ColorOpaque>().map(|c| c.0)
-    }
-}
-
-impl PropValue for Brush {
-    fn from_js(v: &JsValue) -> Option<Self> {
-        let obj = v.as_object()?;
-        if let Some(b) = obj.downcast_ref::<BrushOpaque>() {
-            return Some(b.0.clone());
-        }
-        // A Color is implicitly a solid Brush.
-        if let Some(c) = obj.downcast_ref::<ColorOpaque>() {
-            return Some(Brush::SolidColor(c.0));
-        }
-        None
     }
 }
 

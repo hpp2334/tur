@@ -7,8 +7,9 @@ use tur_shared::HitTestBehavior;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementJsCallbackEmitter, ElementTrace};
-use crate::core::js_command::{AnyJsCommand, PointerInteractJsCommand};
+use crate::core::js_command::AnyJsCommand;
 use crate::core::reactive::Store;
+use super::PointerInteractJsCommand;
 use crate::core::widget::callback::Mutation;
 use crate::core::widget::{
     callback::EventArg, extract_spec, make_mutation_callback, val_from_js, Effect, PropValue, Spec,

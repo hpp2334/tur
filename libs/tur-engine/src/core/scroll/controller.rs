@@ -11,9 +11,9 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
-use crate::core::js_command::{JsCommandQueue, ScrollViewJsCommand};
+use crate::core::js_command::JsCommandQueue;
 use crate::core::element::ElementNodeId;
-use crate::core::scroll::ScrollEvent;
+use crate::core::scroll::{ScrollEvent, ScrollViewJsCommand};
 use crate::core::widget::callback::{extract_callback_from_opts, Callback};
 use crate::elements::ScrollView;
 

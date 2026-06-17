@@ -11,9 +11,10 @@ use crate::core::elements::{
     AnyElement, ElementJsCallbackEmitter, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     WheelEvent,
 };
-use crate::core::js_command::{AnyJsCommand, LazyListJsCommand};
+use crate::core::js_command::AnyJsCommand;
 use crate::core::reactive::Store;
 use crate::core::widget::callback::EventArg;
+use super::LazyListJsCommand;
 use crate::core::widget::{
     extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
 };

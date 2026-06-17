@@ -1,9 +1,47 @@
 use boa_engine::js_string;
 use boa_engine::{Context, JsArgs, JsValue};
+use boa_gc::{Finalize, Trace};
 use tur_shared::{Brush, Color, GradientStop};
 
 use crate::core::bridge::BoaOpaque;
-use crate::core::widget::val::{BrushOpaque, ColorOpaque};
+use crate::core::widget::val::PropValue;
+
+// ---------------------------------------------------------------------------
+// Opaque wrappers for tur-shared color/brush types so they can be stored
+// inside boa JS objects (NativeObject).  tur-shared cannot depend on boa, so
+// we wrap here.  Construction happens in the bridge functions below; decoding
+// happens via the `PropValue` impls.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct ColorOpaque(pub Color);
+
+#[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+pub struct BrushOpaque(pub Brush);
+
+// --- PropValue impls (no boa Context needed to decode) ---
+
+impl PropValue for Color {
+    fn from_js(v: &JsValue) -> Option<Self> {
+        v.as_object()?.downcast_ref::<ColorOpaque>().map(|c| c.0)
+    }
+}
+
+impl PropValue for Brush {
+    fn from_js(v: &JsValue) -> Option<Self> {
+        let obj = v.as_object()?;
+        if let Some(b) = obj.downcast_ref::<BrushOpaque>() {
+            return Some(b.0.clone());
+        }
+        // A Color is implicitly a solid Brush.
+        if let Some(c) = obj.downcast_ref::<ColorOpaque>() {
+            return Some(Brush::SolidColor(c.0));
+        }
+        None
+    }
+}
 
 /// Bridge function `createColor(r, g, b, a)` → JS opaque wrapping `Color`.
 /// Called by the TS `Color` class so that Rust can read the value via

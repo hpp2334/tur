@@ -1,4 +1,5 @@
-use crate::core::js_command::{AnyJsCommand, FocusableJsCommand};
+use crate::core::focus::FocusableJsCommand;
+use crate::core::js_command::AnyJsCommand;
 use crate::core::keyboard::AppKeyEvent;
 
 pub fn make_key_down_command(event: &AppKeyEvent) -> AnyJsCommand {
