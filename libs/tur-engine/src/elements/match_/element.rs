@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
-use boa_engine::Context;
+use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
@@ -10,31 +10,26 @@ use crate::core::widget::{
 };
 
 // ---------------------------------------------------------------------------
-// MatchKey — a value-normalized comparison key. One concrete type so `Match`
-// stays non-generic while accepting string / number / bool keys from JS.
+// MatchKey — a raw JS comparison key. It stores the original `JsValue`
+// verbatim (no normalization) so any JS value — string, number, boolean,
+// null, undefined, bigint, even objects — can be a case key. Equality is
+// `JsValue`'s derived `PartialEq` (`same_value_zero`: `===` for primitives,
+// pointer identity for objects), which matches JS `switch` semantics and,
+// crucially, needs no boa `Context` — so `Match` can resolve branches during
+// layout/paint without touching the JS runtime.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum MatchKey {
-    Num(f64),
-    Str(String),
-    Bool(bool),
-}
+pub struct MatchKey(pub JsValue);
 
 impl PropValue for MatchKey {
-    fn from_js(v: &boa_engine::JsValue) -> Option<Self> {
-        if let Some(b) = v.as_boolean() {
-            Some(MatchKey::Bool(b))
-        } else if let Some(n) = v.as_number() {
-            Some(MatchKey::Num(n))
-        } else {
-            v.as_string().map(|s| MatchKey::Str(s.to_std_string_escaped()))
-        }
+    fn from_js(v: &JsValue) -> Option<Self> {
+        Some(MatchKey(v.clone()))
     }
 }
 
 // ---------------------------------------------------------------------------
-// MatchSpec — the user's declaration. Pure Rust, no JsValues.
+// MatchSpec — the user's declaration.
 //
 // `value` is reactive (`Val<MatchKey>`). `cases` is an ordered list of
 // (key, branch spec) pairs; the first pair whose key equals the current value
@@ -239,11 +234,12 @@ fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn S
     extract_spec(&v)
 }
 
-/// Parse `cases` — a JS array of `[key, element]` pairs — into an ordered
-/// `Vec<(MatchKey, Spec)>`.
+/// Parse `cases` — a JS array of `{ key, child }` entries — into an ordered
+/// `Vec<(MatchKey, Spec)>`. Any `key` value is accepted (it is stored as a raw
+/// `JsValue`); an entry is skipped only if its `child` is not a valid element.
 fn prop_cases(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<(MatchKey, Rc<dyn Spec>)> {
-    use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
+    use boa_engine::object::builtins::JsArray;
 
     let v = match props.get(js_string!(key), ctx) {
         Ok(v) if !v.is_undefined() && !v.is_null() => v,
@@ -267,31 +263,27 @@ fn prop_cases(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<(MatchKey, 
         let Some(entry_obj) = entry.as_object() else {
             continue;
         };
-        let Ok(entry_arr) = JsArray::from_object(entry_obj.clone()) else {
-            continue;
-        };
-        let key_val = entry_arr.at(0, ctx).ok().unwrap_or(boa_engine::JsValue::undefined());
-        let spec_val = entry_arr.at(1, ctx).ok().unwrap_or(boa_engine::JsValue::undefined());
-        let Some(k) = MatchKey::from_js(&key_val) else {
-            continue;
-        };
+        let key_val = entry_obj
+            .get(js_string!("key"), ctx)
+            .unwrap_or(JsValue::undefined());
+        let spec_val = entry_obj
+            .get(js_string!("child"), ctx)
+            .unwrap_or(JsValue::undefined());
         let Some(spec) = extract_spec(&spec_val) else {
             continue;
         };
-        out.push((k, spec));
+        out.push((MatchKey(key_val), spec));
     }
     out
 }
 
 impl MatchSpec {
-    /// Build a `MatchSpec` from a JS props object.
-    ///
-    /// `value` is the reactive key; `cases` is a list of `[key, element]`
-    /// pairs; `fallback` is the optional default branch.
+    /// `value` is the reactive key; `cases` is a list of `{ key, child }`
+    /// entries; `fallback` is the optional default branch.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         MatchSpec {
             value: prop_val::<MatchKey>(props, "value", ctx)
-                .unwrap_or(Val::Static(MatchKey::Str(String::new()))),
+                .unwrap_or_else(|| Val::Static(MatchKey(JsValue::undefined()))),
             cases: prop_cases(props, "cases", ctx),
             fallback: prop_child(props, "fallback", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),

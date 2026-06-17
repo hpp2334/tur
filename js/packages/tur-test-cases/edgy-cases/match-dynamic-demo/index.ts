@@ -74,18 +74,18 @@ export default component(() =>
                             child: Match({
                                 value: tab$,
                                 cases: [
-                                    [
-                                        "red",
-                                        coloredPanel("Match: RED", HEX.red),
-                                    ],
-                                    [
-                                        "green",
-                                        coloredPanel("Match: GREEN", HEX.green),
-                                    ],
-                                    [
-                                        "blue",
-                                        coloredPanel("Match: BLUE", HEX.blue),
-                                    ],
+                                    {
+                                        key: "red",
+                                        child: coloredPanel("Match: RED", HEX.red),
+                                    },
+                                    {
+                                        key: "green",
+                                        child: coloredPanel("Match: GREEN", HEX.green),
+                                    },
+                                    {
+                                        key: "blue",
+                                        child: coloredPanel("Match: BLUE", HEX.blue),
+                                    },
                                 ],
                             }),
                         }),

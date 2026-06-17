@@ -7,8 +7,8 @@ globalThis.__key = T.source(ctx, "a");
 const root = T.Match(ctx, {
     value: globalThis.__key,
     cases: [
-        ["a", T.Text(ctx, { text: "AAA", queryKey: ["case_a"] })],
-        ["b", T.Text(ctx, { text: "BBB", queryKey: ["case_b"] })],
+        { key: "a", child: T.Text(ctx, { text: "AAA", queryKey: ["case_a"] }) },
+        { key: "b", child: T.Text(ctx, { text: "BBB", queryKey: ["case_b"] }) },
     ],
     fallback: T.Text(ctx, { text: "FALL", queryKey: ["case_fallback"] }),
 });
