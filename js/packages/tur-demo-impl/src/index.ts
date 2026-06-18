@@ -19,9 +19,9 @@ import {
     render,
     ScrollView,
     SizedBox,
+    Switch,
     set,
     source,
-    Switch,
     Text,
 } from "@tur/edgy";
 import { CASE_SOURCES } from "./cases-generated";
@@ -222,7 +222,8 @@ function Editor(): EdgyElement {
                                 children: [
                                     Text({
                                         text: derive(
-                                            () => `editor — ${get(selectedCase$)}`,
+                                            () =>
+                                                `editor — ${get(selectedCase$)}`,
                                         ),
                                         fontSize: 12,
                                         color: Color.hex("#94a3b8"),
@@ -318,7 +319,9 @@ function Viewer(): EdgyElement {
                             value: selectedCase$,
                             cases: CASE_NAMES.map((name) => ({
                                 key: name,
-                                child: caseComponents.get(name)?.() ?? Placeholder(),
+                                child:
+                                    caseComponents.get(name)?.() ??
+                                    Placeholder(),
                             })),
                             fallback: Placeholder(),
                         }),

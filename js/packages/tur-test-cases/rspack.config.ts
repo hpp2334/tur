@@ -1,8 +1,8 @@
 import { globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as rspack from "@rspack/core";
 import { defineConfig } from "@rspack/cli";
+import * as rspack from "@rspack/core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.resolve(__dirname, "edgy-cases");

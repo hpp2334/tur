@@ -12,8 +12,8 @@ import {
     mutate,
     PointerInteract,
     Row,
-    source,
     Switch,
+    source,
     Text,
 } from "@tur/edgy";
 
@@ -76,15 +76,24 @@ export default component(() =>
                                 cases: [
                                     {
                                         key: "red",
-                                        child: coloredPanel("Switch: RED", HEX.red),
+                                        child: coloredPanel(
+                                            "Switch: RED",
+                                            HEX.red,
+                                        ),
                                     },
                                     {
                                         key: "green",
-                                        child: coloredPanel("Switch: GREEN", HEX.green),
+                                        child: coloredPanel(
+                                            "Switch: GREEN",
+                                            HEX.green,
+                                        ),
                                     },
                                     {
                                         key: "blue",
-                                        child: coloredPanel("Switch: BLUE", HEX.blue),
+                                        child: coloredPanel(
+                                            "Switch: BLUE",
+                                            HEX.blue,
+                                        ),
                                     },
                                 ],
                             }),
@@ -96,7 +105,10 @@ export default component(() =>
                             alignment: Alignment.Center,
                             children: [
                                 Text({
-                                    text: derive(() => `Switch sees: ${get(tab$).toUpperCase()}`),
+                                    text: derive(
+                                        () =>
+                                            `Switch sees: ${get(tab$).toUpperCase()}`,
+                                    ),
                                     fontSize: 20,
                                     color: Color.hex("#e2e8f0"),
                                 }),

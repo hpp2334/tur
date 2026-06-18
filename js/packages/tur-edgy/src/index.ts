@@ -203,7 +203,10 @@ export interface SwitchProps {
     /** Reactive key to match on (any value), or a static value. */
     value: Val<string | number | boolean | null | undefined>;
     /** Ordered list of `{ key, child }` entries. First match wins. */
-    cases: Array<{ key: string | number | boolean | null | undefined; child: EdgyElement }>;
+    cases: Array<{
+        key: string | number | boolean | null | undefined;
+        child: EdgyElement;
+    }>;
     /** Mounted when no case matches. */
     fallback?: EdgyElement;
     queryKey?: Val<string[]>;
