@@ -1,9 +1,9 @@
-import { Axis, Color, Container, LazyList, render } from "@tur/edgy";
+import { Axis, Color, Container, component, LazyList } from "@tur/edgy";
 
 const ITEM_HEIGHT = 50;
 const ITEM_COUNT = 100;
 
-render(() =>
+export default component(() =>
     LazyList({
         axis: Axis.Vertical,
         itemCount: ITEM_COUNT,

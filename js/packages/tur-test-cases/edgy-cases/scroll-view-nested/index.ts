@@ -2,13 +2,13 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    component,
     Row,
-    render,
     ScrollView,
     SizedBox,
 } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Row({
         children: [
             SizedBox({ width: 200 }),

@@ -4,20 +4,20 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    component,
     derive,
     Expanded,
     MainAxisAlignment,
     mutate,
     PointerInteract,
     Row,
-    render,
     source,
     Text,
 } from "@tur/edgy";
 
 const count$ = source(0);
 
-render(() =>
+export default component(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),

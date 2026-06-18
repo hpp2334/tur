@@ -3,11 +3,11 @@ import {
     BorderPosition,
     Color,
     Container,
-    render,
+    component,
     Text,
 } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Container({
         width: 200,
         height: 200,

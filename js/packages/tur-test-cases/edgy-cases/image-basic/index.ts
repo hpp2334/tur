@@ -1,4 +1,9 @@
-import { Container, createImageResource, ImageEdgy, render } from "@tur/edgy";
+import {
+    Container,
+    component,
+    createImageResource,
+    ImageEdgy,
+} from "@tur/edgy";
 
 const pngBytes = new Uint8Array([
     137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0,
@@ -8,7 +13,7 @@ const pngBytes = new Uint8Array([
 ]);
 const resource = createImageResource(pngBytes);
 
-render(() =>
+export default component(() =>
     Container({
         width: 200,
         height: 100,

@@ -1,6 +1,6 @@
-import { render, SizedBox, Stack } from "@tur/edgy";
+import { component, SizedBox, Stack } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Stack({
         children: [
             SizedBox({ width: 100, height: 100 }),

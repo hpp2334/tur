@@ -1,6 +1,6 @@
-import { Column, Container, render } from "@tur/edgy";
+import { Column, Container, component } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Column({
         children: [
             Container({ width: 200, height: 50 }),

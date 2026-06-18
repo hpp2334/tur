@@ -80,6 +80,22 @@ impl TextEditingController {
         self.composing_text = None;
     }
 
+    /// Replace the spans while preserving the current cursor position and
+    /// selection (clamped to the new length). Use this for live
+    /// re-tokenization (e.g. syntax highlighting) where `set_spans` would
+    /// yank the caret to EOF. Mirrors Flutter's `TextEditingController`,
+    /// where selection is part of the `TextEditingValue` and is preserved
+    /// across value updates.
+    pub fn set_spans_preserve_cursor(&mut self, spans: Vec<SpanData>) {
+        let len = spans.iter().map(|s| s.text.len()).sum();
+        self.spans = spans;
+        self.cursor_position = self.cursor_position.min(len);
+        self.selection_anchor = self.selection_anchor.min(len);
+        self.selection_end = self.selection_end.min(len);
+        // Do NOT clear composing_text — composition can continue across a
+        // re-highlight pass.
+    }
+
     pub fn clear(&mut self) {
         self.spans.clear();
         self.cursor_position = 0;
@@ -405,6 +421,25 @@ impl Class for TextEditingController {
                     ctx,
                 );
                 ctrl.set_spans(spans);
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("setSpansPreserveCursor"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let spans = crate::elements::text::span_data::extract_spans_from_js(
+                    args.get_or_undefined(0),
+                    ctx,
+                );
+                ctrl.set_spans_preserve_cursor(spans);
                 Ok(JsValue::undefined())
             }),
         );

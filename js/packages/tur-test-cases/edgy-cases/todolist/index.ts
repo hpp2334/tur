@@ -1,14 +1,21 @@
 import {
+    Alignment,
     Color,
     Column,
     Container,
     CrossAxisAlignment,
+    component,
+    Each,
     Expanded,
+    get,
     MainAxisAlignment,
+    MainAxisSize,
+    mutate,
     PointerInteract,
     Row,
-    render,
     SizedBox,
+    set,
+    source,
     Text,
 } from "@tur/edgy";
 
@@ -17,23 +24,36 @@ interface Task {
     completed: boolean;
 }
 
-const TASKS: Task[] = [
+const tasks$ = source<Task[]>([
     { title: "Buy groceries", completed: false },
     { title: "Walk the dog", completed: true },
     { title: "Finish report", completed: false },
     { title: "Call mom", completed: false },
-];
+]);
 
-function TaskItem({ task }: { task: Task }) {
+function TaskItem({ task, index }: { task: Task; index: number }) {
     return Row({
         mainAlignment: MainAxisAlignment.SpaceBetween,
         children: [
             Row({
+                mainAxisSize: MainAxisSize.Min,
                 children: [
                     PointerInteract({
+                        onClick: mutate(({ get, set }) => {
+                            const tasks = get(tasks$);
+                            set(
+                                tasks$,
+                                tasks.map((t, i) =>
+                                    i === index
+                                        ? { ...t, completed: !t.completed }
+                                        : t,
+                                ),
+                            );
+                        }),
                         child: Container({
                             width: 24,
                             height: 24,
+                            alignment: Alignment.Center,
                             color: task.completed
                                 ? Color.hex("#22c55e")
                                 : Color.hex("#334155"),
@@ -57,9 +77,17 @@ function TaskItem({ task }: { task: Task }) {
                 ],
             }),
             PointerInteract({
+                onClick: mutate(({ get, set }) => {
+                    const tasks = get(tasks$);
+                    set(
+                        tasks$,
+                        tasks.filter((_, i) => i !== index),
+                    );
+                }),
                 child: Container({
                     width: 32,
                     height: 32,
+                    alignment: Alignment.Center,
                     color: Color.hex("#dc2626"),
                     children: [
                         Text({
@@ -74,7 +102,7 @@ function TaskItem({ task }: { task: Task }) {
     });
 }
 
-render(() =>
+export default component(() =>
     Expanded({
         child: Container({
             color: Color.hex("#0f172a"),
@@ -129,6 +157,19 @@ render(() =>
                                                         ),
                                                     }),
                                                     PointerInteract({
+                                                        onClick: mutate(
+                                                            ({ get, set }) => {
+                                                                const tasks =
+                                                                    get(tasks$);
+                                                                set(tasks$, [
+                                                                    ...tasks,
+                                                                    {
+                                                                        title: "New task",
+                                                                        completed: false,
+                                                                    },
+                                                                ]);
+                                                            },
+                                                        ),
                                                         child: Container({
                                                             color: Color.hex(
                                                                 "#4f46e5",
@@ -148,9 +189,11 @@ render(() =>
                                                 ],
                                             }),
                                             SizedBox({ height: 16 }),
-                                            ...TASKS.map((t) =>
-                                                TaskItem({ task: t }),
-                                            ),
+                                            Each<Task>({
+                                                items: tasks$,
+                                                build: (task, index) =>
+                                                    TaskItem({ task, index }),
+                                            }),
                                         ],
                                     }),
                                 ],

@@ -1,6 +1,6 @@
-import { CrossAxisAlignment, Row, render, SizedBox } from "@tur/edgy";
+import { CrossAxisAlignment, component, Row, SizedBox } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Row({
         crossAlignment: CrossAxisAlignment.Start,
         children: [SizedBox({ width: 50 }), SizedBox({ width: 30 })],

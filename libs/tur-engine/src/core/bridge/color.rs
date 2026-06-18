@@ -106,6 +106,11 @@ pub(crate) fn tur_create_linear_gradient(
 
 pub(crate) fn extract_color(value: &JsValue, context: &mut Context) -> Option<Color> {
     let obj = value.as_object()?;
+    // Fast path: a Rust `ColorOpaque` (what `Color.hex/rgb/rgba` produce).
+    if let Some(c) = obj.downcast_ref::<ColorOpaque>() {
+        return Some(c.0);
+    }
+    // Legacy fallback: a plain `{ r, g, b, a }` object.
     let r = obj.get(js_string!("r"), context).ok()?.as_number()? as u8;
     let g = obj.get(js_string!("g"), context).ok()?.as_number()? as u8;
     let b = obj.get(js_string!("b"), context).ok()?.as_number()? as u8;

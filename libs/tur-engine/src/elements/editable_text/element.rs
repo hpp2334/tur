@@ -11,7 +11,7 @@ use crate::core::elements::{
     ElementOnKeyboardContext, ElementTrace,
 };
 use crate::core::event::AppImeEvent;
-use crate::core::keyboard::{AppKeyEvent, KeyEventType};
+use crate::core::keyboard::{AppKeyEvent, KeyEventType, KeydownEvent};
 use crate::core::reactive::extract_atom;
 use crate::core::text::TextEditingController;
 use crate::core::text::{
@@ -81,6 +81,7 @@ pub struct EditableTextSpec {
     pub placeholder_color: Option<Val<Color>>,
     pub cursor_color: Option<Val<Color>>,
     pub font_size: Option<Val<f64>>,
+    pub font_family: Option<Val<String>>,
     pub multiline: Option<Val<bool>>,
     pub query_key: Option<Vec<String>>,
 }
@@ -538,6 +539,20 @@ impl ElementOnKeyboard for EditableText {
             return;
         }
 
+        // Dispatch the controller's `onKeyDown` listener for every keydown
+        // (e.g. Cmd+S shortcuts). The text-mutation callbacks below only fire
+        // when the buffer changes, so this is dispatched unconditionally.
+        if let Some(m) = self.controller().on_key_down() {
+            cx.push_event(
+                m,
+                KeydownEvent {
+                    key: event.key.clone(),
+                    code: event.code.clone(),
+                    modifiers: event.modifiers,
+                },
+            );
+        }
+
         let (prev_text, prev_cursor, prev_anchor, prev_end, cursor_char) = {
             let c = self.controller();
             let text = c.text();
@@ -715,6 +730,7 @@ impl EditableTextSpec {
             placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
             cursor_color: prop_val::<Color>(props, "cursorColor", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
+            font_family: prop_val::<String>(props, "fontFamily", ctx),
             multiline: prop_val::<bool>(props, "multiline", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }

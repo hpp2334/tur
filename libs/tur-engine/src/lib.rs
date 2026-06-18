@@ -83,6 +83,67 @@ impl TurApp {
         Ok(s)
     }
 
+    /// Register a host function on `globalThis.__turHost.<name>`.
+    ///
+    /// Generic, compiler-agnostic extension point: lets an embedder (e.g.
+    /// `tur-wasm`) expose native services to JS without polluting the core
+    /// `__tur` widget namespace. The `__turHost` object is created on first
+    /// call. The embedder owns any heavy dependencies (e.g. swc) — tur-engine
+    /// itself only provides this hook.
+    pub fn register_host_fn(
+        &mut self,
+        name: &str,
+        length: usize,
+        f: boa_engine::native_function::NativeFunction,
+    ) -> Result<(), boa_engine::JsError> {
+        use boa_engine::js_string;
+        use boa_engine::object::FunctionObjectBuilder;
+        use boa_engine::property::PropertyDescriptor;
+
+        let host_key = js_string!("__turHost");
+
+        // Get-or-create globalThis.__turHost.
+        let host_obj = {
+            let global = self.boa_context.global_object();
+            let existing = global.get(host_key.clone(), &mut self.boa_context)?;
+            if let Some(obj) = existing.as_object() {
+                obj.clone()
+            } else {
+                let proto = self
+                    .boa_context
+                    .intrinsics()
+                    .constructors()
+                    .object()
+                    .prototype();
+                let obj = boa_engine::object::JsObject::from_proto_and_data(proto, ());
+                let desc = PropertyDescriptor::builder()
+                    .value(obj.clone())
+                    .writable(true)
+                    .enumerable(false)
+                    .configurable(true)
+                    .build();
+                global.insert_property(host_key.clone(), desc);
+                obj
+            }
+        };
+
+        // Build the function and attach it to __turHost.<name>.
+        let fn_obj = FunctionObjectBuilder::new(self.boa_context.realm(), f)
+            .name(js_string!(name))
+            .length(length)
+            .build();
+        let desc = PropertyDescriptor::builder()
+            .value(fn_obj)
+            .writable(true)
+            .enumerable(false)
+            .configurable(true)
+            .build();
+        host_obj.insert_property(js_string!(name), desc);
+
+        tracing::info!("registered host function __turHost.{name}");
+        Ok(())
+}
+
     pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
         self.clock.forward(advanced_time.as_millis() as u64);
         self.internal.flush(&mut self.boa_context)?;

@@ -1,16 +1,32 @@
-use parley::{Alignment, AlignmentOptions, GenericFamily, StyleProperty};
+use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
 use tur_shared::{Brush, Color, ComputedLayout, Constraints, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text::paint_helpers;
+use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout;
 
 use super::element::EditableText;
 
 const DEFAULT_TEXT_COLOR: Color = Color::rgb(0, 0, 0);
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
+
+/// Map a `fontFamily` string to a parley generic family. Accepts the common
+/// Flutter-style names; falls back to sans-serif. "monospace" is the value
+/// used by the code editor.
+fn generic_family_for(font_family: Option<&str>) -> GenericFamily {
+    match font_family {
+        Some(f) if f.eq_ignore_ascii_case("monospace") => GenericFamily::Monospace,
+        Some(f) if f.eq_ignore_ascii_case("serif") => GenericFamily::Serif,
+        _ => GenericFamily::SansSerif,
+    }
+}
+
+fn brush_arr(c: Color) -> [u8; 4] {
+    [c.r(), c.g(), c.b(), c.a()]
+}
 
 impl ElementLayout for EditableText {
     fn perform_layout_size(
@@ -23,6 +39,7 @@ impl ElementLayout for EditableText {
         // handlers (those contexts lack store access).
         self.resolved_multiline = cx.read_val_opt(self.spec.multiline.as_ref()).unwrap_or(false);
         let font_size = cx.read_val_opt(self.spec.font_size.as_ref()).unwrap_or(14.0);
+        let font_family = cx.read_val_opt(self.spec.font_family.as_ref());
         let placeholder = cx.read_val_opt(self.spec.placeholder.as_ref());
         let color = cx.read_val_opt(self.spec.color.as_ref());
         let placeholder_color = cx.read_val_opt(self.spec.placeholder_color.as_ref());
@@ -37,10 +54,15 @@ impl ElementLayout for EditableText {
 
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
-        let text = if display_text.is_empty() {
-            placeholder.as_deref().unwrap_or("")
-        } else {
-            &display_text
+        // Flutter-aligned: render the controller's span tree (so per-range
+        // colors from syntax highlighting are visible). We fall back to a
+        // flat single-color layout during IME composition (the composition
+        // text is substituted into the display string, so byte offsets from
+        // the base spans no longer line up) or when the controller has no
+        // spans yet (placeholder display).
+        let (is_composing, base_spans): (bool, Vec<SpanData>) = {
+            let c = self.controller();
+            (c.is_composing(), c.spans().to_vec())
         };
 
         let text_color = if display_text.is_empty() {
@@ -49,12 +71,54 @@ impl ElementLayout for EditableText {
             color.unwrap_or(DEFAULT_TEXT_COLOR)
         };
 
-        let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, false);
-        builder.push_default(StyleProperty::FontSize(font_size as f32));
-        builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
-        builder.push(StyleProperty::Brush([text_color.r(), text_color.g(), text_color.b(), text_color.a()]), 0..text.len());
+        let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
 
-        let mut layout = builder.build(text);
+        // Flutter-aligned: render the controller's span tree (so per-range
+        // colors from syntax highlighting are visible). We fall back to a flat
+        // single-color layout during IME composition (the composition text is
+        // substituted into the display string, so byte offsets from the base
+        // spans no longer line up) or when the controller has no spans yet.
+        let build_from_spans = !is_composing && !base_spans.is_empty() && !display_text.is_empty();
+
+        let full_text: String = if build_from_spans {
+            base_spans.iter().map(|s| s.text.as_str()).collect()
+        } else if display_text.is_empty() {
+            placeholder.as_deref().unwrap_or("").to_string()
+        } else {
+            display_text.clone()
+        };
+
+        let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0, false);
+        builder.push_default(StyleProperty::FontSize(font_size as f32));
+        builder.push_default(StyleProperty::from(generic_family_for(font_family.as_deref())));
+        // Base color over the whole text; per-span colors override below.
+        builder.push(StyleProperty::Brush(brush_arr(text_color)), 0..full_text.len());
+
+        if build_from_spans {
+            let mut byte_offset = 0usize;
+            for span in &base_spans {
+                let span_byte_len = span.text.len();
+                let range = byte_offset..byte_offset + span_byte_len;
+                if let Some(c) = &span.color {
+                    builder.push(StyleProperty::Brush(brush_arr(*c)), range.clone());
+                }
+                if span.bold {
+                    builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+                }
+                if span.italic {
+                    builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+                }
+                if let Some(fs) = span.font_size {
+                    builder.push(StyleProperty::FontSize(fs as f32), range.clone());
+                }
+                if span.underline {
+                    underline_ranges.push((byte_offset, byte_offset + span_byte_len));
+                }
+                byte_offset += span_byte_len;
+            }
+        }
+
+        let mut layout = builder.build(&full_text);
 
         let max_width = if constraints.max_width.is_finite() && constraints.max_width > 0.0 {
             Some(constraints.max_width as f32)
@@ -64,7 +128,6 @@ impl ElementLayout for EditableText {
         layout.break_all_lines(max_width);
         layout.align(Alignment::Start, AlignmentOptions::default());
 
-        let underline_ranges = Vec::new();
         let (layout_data, width, height) = text_layout::extract_layout_data(&mut layout, &underline_ranges);
 
         self.cached_layout = Some(layout_data);

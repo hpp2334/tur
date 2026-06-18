@@ -1,3 +1,3 @@
-import { PointerInteract, render } from "@tur/edgy";
+import { component, PointerInteract } from "@tur/edgy";
 
-render(() => PointerInteract({}));
+export default component(() => PointerInteract({}));

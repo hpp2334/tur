@@ -1,3 +1,3 @@
-import { render, Text } from "@tur/edgy";
+import { component, Text } from "@tur/edgy";
 
-render(() => Text({ text: "Hello", fontSize: 14 }));
+export default component(() => Text({ text: "Hello", fontSize: 14 }));

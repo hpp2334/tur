@@ -44,6 +44,57 @@ impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
     }
 }
 
+/// Register the swc-backed compiler services as `globalThis.__turHost`.
+/// `transpileTsx(src: string): string` (throws on parse error) and
+/// `tokenizeTsx(src: string): Array<{ start, end, kind }>` (coarse token
+/// categories for syntax highlighting).
+fn register_host_services(app: &mut TurApp) {
+    use boa_engine::native_function::NativeFunction;
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::object::JsObject;
+    use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsValue};
+
+    let transpile = NativeFunction::from_copy_closure(|_this, args, _ctx| {
+        let src = args
+            .get_or_undefined(0)
+            .as_string()
+            .ok_or_else(|| {
+                JsError::from(JsNativeError::typ().with_message("transpileTsx: expected a string"))
+            })?
+            .to_std_string_escaped();
+        match crate::compiler::transpile_tsx(&src) {
+            Ok(code) => Ok(JsValue::from(js_string!(code))),
+            Err(e) => Err(JsError::from(JsNativeError::typ().with_message(e))),
+        }
+    });
+    if let Err(e) = app.register_host_fn("transpileTsx", 1, transpile) {
+        tracing::error!("failed to register transpileTsx: {e}");
+    }
+
+    let tokenize = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        let src = args
+            .get_or_undefined(0)
+            .as_string()
+            .ok_or_else(|| {
+                JsError::from(JsNativeError::typ().with_message("tokenizeTsx: expected a string"))
+            })?
+            .to_std_string_escaped();
+        let spans = crate::compiler::tokenize_tsx(&src);
+        let arr = JsArray::new(ctx)?;
+        for sp in spans {
+            let obj = JsObject::with_object_proto(ctx.intrinsics());
+            obj.create_data_property(js_string!("start"), JsValue::from(sp.start as f64), ctx)?;
+            obj.create_data_property(js_string!("end"), JsValue::from(sp.end as f64), ctx)?;
+            obj.create_data_property(js_string!("kind"), JsValue::from(sp.kind as f64), ctx)?;
+            arr.push(obj, ctx)?;
+        }
+        Ok(arr.into())
+    });
+    if let Err(e) = app.register_host_fn("tokenizeTsx", 1, tokenize) {
+        tracing::error!("failed to register tokenizeTsx: {e}");
+    }
+}
+
 #[wasm_bindgen]
 impl TurWasmApp {
     pub fn create() -> js_sys::Promise {
@@ -238,6 +289,11 @@ impl TurWasmApp {
                 Box::new(PresetFontLoader::new()),
             )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+            // Register the swc-backed compiler services on `globalThis.__turHost`
+            // so JS (e.g. tur-demo-impl) can call `transpileTsx` / `tokenizeTsx`.
+            // swc lives only in tur-wasm; tur-engine provides the generic hook.
+            register_host_services(&mut app);
 
             app.push_event(AppEvent::Resize {
                 logical_width,

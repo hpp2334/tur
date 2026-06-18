@@ -5,21 +5,14 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
 import type { Compiler, RspackPluginInstance } from "@rspack/core";
 import * as rspack from "@rspack/core";
-import ReactRefreshPlugin from "@rspack/plugin-react-refresh";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(__dirname, "../../..");
 const wasmDir = join(workspaceRoot, "libs", "tur-wasm");
 const wasmPkgDir = join(wasmDir, "pkg");
-const testCasesDir = join(__dirname, "../tur-test-cases");
+const implDir = join(__dirname, "../tur-demo-impl");
 
-function findCaseNames(): string[] {
-    const casesRoot = join(testCasesDir, "edgy-cases");
-    return readdirSync(casesRoot, { withFileTypes: true })
-        .filter((d) => d.isDirectory())
-        .map((d) => d.name);
-}
-
+/** Build the tur WASM (boa + vello + swc) and copy the pkg assets to dist. */
 class WasmBuildPlugin implements RspackPluginInstance {
     apply(compiler: Compiler): void {
         const buildWasm = () => {
@@ -31,34 +24,23 @@ class WasmBuildPlugin implements RspackPluginInstance {
                 stdio: "inherit",
             });
         };
-
-        compiler.hooks.beforeRun.tapPromise("WasmBuildPlugin", async () => {
-            buildWasm();
-        });
-
-        compiler.hooks.watchRun.tapPromise("WasmBuildPlugin", async () => {
-            buildWasm();
-        });
-
+        compiler.hooks.beforeRun.tapPromise("WasmBuildPlugin", async () =>
+            buildWasm(),
+        );
+        compiler.hooks.watchRun.tapPromise("WasmBuildPlugin", async () =>
+            buildWasm(),
+        );
         compiler.hooks.emit.tapPromise(
             "WasmBuildPlugin",
             async (compilation) => {
                 const logger = compilation.getLogger("WasmBuildPlugin");
-                const files = readdirSync(wasmPkgDir);
-                const wasmAssets = files.filter(
-                    (f) =>
-                        f.endsWith(".js") ||
-                        f.endsWith(".wasm") ||
-                        f.endsWith(".d.ts"),
-                );
-
-                for (const file of wasmAssets) {
-                    const src = join(wasmPkgDir, file);
-                    const content = readFileSync(src);
-                    const source = new compiler.webpack.sources.RawSource(
-                        content,
+                for (const file of readdirSync(wasmPkgDir)) {
+                    if (!/\.(js|wasm|d\.ts)$/.test(file)) continue;
+                    const content = readFileSync(join(wasmPkgDir, file));
+                    compilation.emitAsset(
+                        file,
+                        new compiler.webpack.sources.RawSource(content),
                     );
-                    compilation.emitAsset(file, source);
                     logger.info(`Copied WASM asset: ${file}`);
                 }
             },
@@ -66,141 +48,43 @@ class WasmBuildPlugin implements RspackPluginInstance {
     }
 }
 
-class TestCasesPlugin implements RspackPluginInstance {
+/** Build the self-hosted playground (tur-demo-impl) and emit impl.js. */
+class ImplBundlePlugin implements RspackPluginInstance {
     apply(compiler: Compiler): void {
-        compiler.hooks.beforeRun.tapPromise("TestCasesPlugin", async () => {
+        const buildImpl = () => {
             compiler
-                .getInfrastructureLogger("TestCasesPlugin")
-                .info("Building test cases...");
-            execSync("npx rspack build", {
-                cwd: testCasesDir,
-                stdio: "inherit",
-            });
-        });
-
-        compiler.hooks.watchRun.tapPromise("TestCasesPlugin", async () => {
-            compiler
-                .getInfrastructureLogger("TestCasesPlugin")
-                .info("Building test cases...");
-            execSync("npx rspack build", {
-                cwd: testCasesDir,
-                stdio: "inherit",
-            });
-        });
-
-        compiler.hooks.emit.tapPromise(
-            "TestCasesPlugin",
-            async (compilation) => {
-                const logger = compilation.getLogger("TestCasesPlugin");
-                const distDir = join(testCasesDir, "dist");
-                const casesRoot = join(testCasesDir, "edgy-cases");
-                const caseNames = findCaseNames();
-                const manifest: Record<string, string[]> = {};
-
-                for (const name of caseNames) {
-                    const jsFile = `${name}.js`;
-                    const src = join(distDir, jsFile);
-                    try {
-                        const content = readFileSync(src);
-                        const source = new compiler.webpack.sources.RawSource(
-                            content,
-                        );
-                        compilation.emitAsset(`cases/${jsFile}`, source);
-                    } catch {
-                        logger.warn(`Test case not built: ${jsFile}`);
-                    }
-
-                    const caseDir = join(casesRoot, name);
-                    const filesForCase: string[] = [];
-                    try {
-                        const files = readdirSync(caseDir);
-                        for (const file of files) {
-                            if (!/\.(ts|tsx)$/.test(file)) continue;
-                            const content = readFileSync(
-                                join(caseDir, file),
-                                "utf-8",
-                            );
-                            const source =
-                                new compiler.webpack.sources.RawSource(content);
-                            compilation.emitAsset(
-                                `sources/${name}/${file}`,
-                                source,
-                            );
-                            filesForCase.push(file);
-                        }
-                    } catch {
-                        logger.warn(`Test case source not found: ${name}`);
-                    }
-                    manifest[name] = filesForCase.sort();
-                }
-
-                const manifestJson = JSON.stringify(manifest);
-                compilation.emitAsset(
-                    "cases-manifest.json",
-                    new compiler.webpack.sources.RawSource(manifestJson),
-                );
-
-                logger.info(
-                    `Copied ${caseNames.length} test case bundles + sources`,
-                );
-            },
-        );
-    }
-}
-
-class RuntimeBundlePlugin implements RspackPluginInstance {
-    apply(compiler: Compiler): void {
-        const buildRuntime = () => {
-            compiler
-                .getInfrastructureLogger("RuntimeBundlePlugin")
-                .info("Building boa runtime bundle...");
-            execSync("npx rspack build --config runtime.rspack.config.ts", {
-                cwd: __dirname,
-                stdio: "inherit",
-            });
+                .getInfrastructureLogger("ImplBundlePlugin")
+                .info("Building tur-demo-impl...");
+            execSync("pnpm build", { cwd: implDir, stdio: "inherit" });
         };
-
-        compiler.hooks.beforeRun.tapPromise("RuntimeBundlePlugin", async () =>
-            buildRuntime(),
+        compiler.hooks.beforeRun.tapPromise("ImplBundlePlugin", async () =>
+            buildImpl(),
         );
-
-        compiler.hooks.watchRun.tapPromise("RuntimeBundlePlugin", async () =>
-            buildRuntime(),
+        compiler.hooks.watchRun.tapPromise("ImplBundlePlugin", async () =>
+            buildImpl(),
         );
-
         compiler.hooks.emit.tapPromise(
-            "RuntimeBundlePlugin",
+            "ImplBundlePlugin",
             async (compilation) => {
-                const logger = compilation.getLogger("RuntimeBundlePlugin");
-                const src = join(__dirname, ".runtime-build", "runtime.js");
-                const content = readFileSync(src);
-                const source = new compiler.webpack.sources.RawSource(content);
-                compilation.emitAsset("runtime.js", source);
-                logger.info("Emitted runtime.js");
+                const logger = compilation.getLogger("ImplBundlePlugin");
+                const content = readFileSync(join(implDir, "dist", "impl.js"));
+                compilation.emitAsset(
+                    "impl.js",
+                    new compiler.webpack.sources.RawSource(content),
+                );
+                logger.info("Emitted impl.js");
             },
         );
     }
 }
 
 export default defineConfig({
-    experiments: {
-        css: true,
-    },
     optimization: {
         minimize: false,
     },
     devServer: {
-        hot: true,
+        hot: false,
         liveReload: false,
-        client: {
-            overlay: {
-                errors: true,
-                warnings: false,
-            },
-            ...(process.env.TUR_TUNNEL
-                ? { webSocketURL: "auto://0.0.0.0:0/ws" }
-                : {}),
-        },
         server: process.env.TUR_TUNNEL ? undefined : "https",
         port: 8080,
         host: "0.0.0.0",
@@ -210,7 +94,6 @@ export default defineConfig({
                   "Cross-Origin-Opener-Policy": "same-origin",
                   "Cross-Origin-Embedder-Policy": "credentialless",
                   "Cache-Control": "no-store",
-                  "CDN-Cache-Control": "no-store",
               }
             : {},
     },
@@ -233,23 +116,10 @@ export default defineConfig({
                     loader: "builtin:swc-loader",
                     options: {
                         jsc: {
-                            parser: {
-                                syntax: "typescript",
-                                tsx: true,
-                            },
-                            transform: {
-                                react: {
-                                    runtime: "automatic",
-                                    refresh: true,
-                                },
-                            },
+                            parser: { syntax: "typescript", tsx: true },
                         },
                     },
                 },
-            },
-            {
-                test: /\.css$/,
-                type: "css",
             },
         ],
     },
@@ -257,15 +127,9 @@ export default defineConfig({
         extensions: [".tsx", ".ts", ".js"],
     },
     plugins: [
-        new rspack.HtmlRspackPlugin({
-            template: "./index.html",
-        }),
+        new rspack.HtmlRspackPlugin({ template: "./index.html" }),
         new WasmBuildPlugin(),
-        new TestCasesPlugin(),
-        new RuntimeBundlePlugin(),
-        new rspack.CopyRspackPlugin({
-            patterns: [{ from: "public" }],
-        }),
-        new ReactRefreshPlugin(),
+        new ImplBundlePlugin(),
+        new rspack.CopyRspackPlugin({ patterns: [{ from: "public" }] }),
     ],
 });

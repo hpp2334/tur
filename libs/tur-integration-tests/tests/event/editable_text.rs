@@ -260,3 +260,117 @@ fn mouse_drag_select_then_backspace() {
     eprintln!("text after backspace: '{}'", text_after);
     assert_eq!(text_after.len(), expected_remaining, "selected {} chars but got '{}' after delete", selected_len, text_after);
 }
+
+const ONKEY_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__keyHit = "";
+globalThis.__ctrlHeld = "false";
+const onKey = T.mutate(ctx, (_storeCtx, ev) => {
+    globalThis.__keyHit = ev.key;
+    globalThis.__ctrlHeld = String(ev.ctrl);
+});
+globalThis.__ctrl = new globalThis.TextEditingController({ onKeyDown: onKey });
+T.render(ctx, T.InputEdgy(ctx, { controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
+"#;
+
+/// Regression: the controller's `onKeyDown` listener must fire on every
+/// keydown. Previously the field was stored but never dispatched, which left
+/// the playground's Cmd+S shortcut (and any controller onKeyDown handler)
+/// completely dead.
+#[test]
+fn controller_on_key_down_fires_on_keydown() {
+    let mut app = TurTestApp::new(300.0, 100.0).unwrap();
+    app.load_bundle_source(ONKEY_BUNDLE).unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    focus_editable(&mut app, input_id);
+    app.render();
+
+    // Ctrl+S must not insert text but must still fire onKeyDown.
+    assert_eq!(get_text(&app, input_id), "");
+    app.send_key_with_modifiers("s", false, true);
+    app.render();
+    assert_eq!(
+        app.eval_js("globalThis.__keyHit"),
+        "s",
+        "onKeyDown must fire for Ctrl+S",
+    );
+    assert_eq!(
+        app.eval_js("globalThis.__ctrlHeld"),
+        "true",
+        "modifier flag must be forwarded to onKeyDown",
+    );
+    assert_eq!(get_text(&app, input_id), "", "Ctrl+S must not insert text");
+
+    // A plain printable key must also fire onKeyDown (and insert the char).
+    app.send_key("a");
+    app.render();
+    assert_eq!(
+        app.eval_js("globalThis.__keyHit"),
+        "a",
+        "onKeyDown must also fire for normal typing",
+    );
+    assert_eq!(get_text(&app, input_id), "a");
+}
+
+const SPANS_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{ content: "hello" }]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    fontSize: 20,
+    width: 200,
+    height: 44,
+}));
+"#;
+
+/// `setSpansPreserveCursor` must keep the caret where it is across a
+/// re-tokenize pass (e.g. live syntax highlighting); the legacy `setSpans`
+/// must continue to reset the caret to end-of-text.
+#[test]
+fn set_spans_preserve_cursor_keeps_caret() {
+    let mut app = TurTestApp::new(300.0, 100.0).unwrap();
+    app.load_bundle_source(SPANS_BUNDLE).unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    focus_editable(&mut app, input_id);
+    app.render();
+
+    // Normalize the caret to a known position: Home → 0, then right twice → 2.
+    app.send_key("Home");
+    app.render();
+    app.send_key("ArrowRight");
+    app.send_key("ArrowRight");
+    app.render();
+    assert_eq!(get_text(&app, input_id), "hello");
+    assert_eq!(get_cursor_pos(&app, input_id), 2);
+
+    // Re-tokenize with colored spans while preserving the caret.
+    app.eval_js(
+        r#"globalThis.__ctrl.setSpansPreserveCursor([
+            { content: "he", color: { r: 255, g: 80, b: 80, a: 255 } },
+            { content: "llo", color: { r: 80, g: 200, b: 120, a: 255 } },
+        ]);"#,
+    );
+    app.render();
+    assert_eq!(get_text(&app, input_id), "hello");
+    assert_eq!(
+        get_cursor_pos(&app, input_id),
+        2,
+        "caret must stay at 2 after preserve-cursor re-tokenize",
+    );
+
+    // Contrast: the legacy `setSpans` resets the caret to end-of-text (5).
+    app.eval_js(r#"globalThis.__ctrl.setSpans([{ content: "hello" }]);"#);
+    app.render();
+    assert_eq!(
+        get_cursor_pos(&app, input_id),
+        5,
+        "setSpans resets caret to end of text",
+    );
+}

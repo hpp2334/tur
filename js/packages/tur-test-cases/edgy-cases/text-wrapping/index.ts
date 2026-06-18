@@ -1,6 +1,6 @@
-import { render, Text } from "@tur/edgy";
+import { component, Text } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Text({
         text: "Hello World this is a long text that should wrap",
         fontSize: 14,

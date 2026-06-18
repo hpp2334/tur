@@ -1,15 +1,15 @@
 import {
     Column,
     CrossAxisAlignment,
+    component,
     createScrollController,
-    render,
     ScrollView,
     SizedBox,
 } from "@tur/edgy";
 
 const controller = createScrollController({ initialOffset: 100 });
 
-render(() =>
+export default component(() =>
     ScrollView({
         controller,
         queryKey: ["scroll-view"],

@@ -199,6 +199,23 @@ export function Condition(props: ConditionProps): EdgyElement {
     return __tur.Condition(__ctx, props);
 }
 
+export interface SwitchProps {
+    /** Reactive key to match on (any value), or a static value. */
+    value: Val<string | number | boolean | null | undefined>;
+    /** Ordered list of `{ key, child }` entries. First match wins. */
+    cases: Array<{
+        key: string | number | boolean | null | undefined;
+        child: EdgyElement;
+    }>;
+    /** Mounted when no case matches. */
+    fallback?: EdgyElement;
+    queryKey?: Val<string[]>;
+}
+
+export function Switch(props: SwitchProps): EdgyElement {
+    return __tur.Switch(__ctx, props);
+}
+
 export interface ScrollViewProps {
     axis?: Val<number>;
     padding?: Val<number>;
@@ -224,6 +241,21 @@ export function LazyList(props: LazyListProps): EdgyElement {
     return __tur.LazyList(__ctx, props);
 }
 
+export interface EachProps<T> {
+    /** Reactive array (atom) of items. The list is rebuilt when this changes. */
+    items: Readable<T[]>;
+    /** Build one element per item. */
+    build: (item: T, index: number) => EdgyElement;
+    mainAlignment?: Val<MainAxisAlignment>;
+    crossAlignment?: Val<CrossAxisAlignment>;
+    mainAxisSize?: Val<MainAxisSize>;
+    queryKey?: Val<string[]>;
+}
+
+export function Each<T>(props: EachProps<T>): EdgyElement {
+    return __tur.Each(__ctx, props);
+}
+
 export function ImageEdgy(props: {
     resourceId: Val<number>;
     width?: Val<number>;
@@ -242,6 +274,7 @@ export function InputEdgy(props: {
     placeholderColor?: Val<unknown>;
     cursorColor?: Val<unknown>;
     fontSize?: Val<number>;
+    fontFamily?: Val<string>;
     width?: Val<number>;
     height?: Val<number>;
     multiline?: Val<boolean>;
@@ -416,8 +449,10 @@ interface TurGlobal {
     Text(ctx: unknown, props: unknown): EdgyElement;
     PointerInteract(ctx: unknown, props: unknown): EdgyElement;
     Condition(ctx: unknown, props: unknown): EdgyElement;
+    Switch(ctx: unknown, props: unknown): EdgyElement;
     ScrollView(ctx: unknown, props: unknown): EdgyElement;
     LazyList(ctx: unknown, props: unknown): EdgyElement;
+    Each(ctx: unknown, props: unknown): EdgyElement;
     ImageEdgy(ctx: unknown, props: unknown): EdgyElement;
     InputEdgy(ctx: unknown, props: unknown): EdgyElement;
     Fragment(ctx: unknown, props: unknown): EdgyElement;

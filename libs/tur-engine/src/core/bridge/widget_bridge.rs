@@ -52,6 +52,7 @@ spec_factory!(tur_text, TextSpec);
 spec_factory!(tur_stack, StackSpec);
 spec_factory!(tur_image_edgy, ImageSpec);
 spec_factory!(tur_condition, ConditionSpec);
+spec_factory!(tur_switch, SwitchSpec);
 spec_factory!(tur_input_edgy, InputSpec);
 spec_factory!(tur_fragment, FragmentSpec);
 spec_factory!(tur_pointer_interact, PointerInteractSpec);
@@ -81,6 +82,7 @@ spec_factory_opt!(tur_expanded, ExpandedSpec);
 spec_factory_opt!(tur_positioned, PositionedSpec);
 spec_factory_opt!(tur_scroll_view, ScrollViewSpec);
 spec_factory_opt!(tur_lazy_list, LazyListSpec);
+spec_factory_opt!(tur_each, EachSpec);
 
 pub(crate) fn tur_column(
     _this: &JsValue, args: &[JsValue], context: &mut Context,

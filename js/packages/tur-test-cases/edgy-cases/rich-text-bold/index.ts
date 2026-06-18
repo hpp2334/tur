@@ -1,6 +1,6 @@
-import { render, Text } from "@tur/edgy";
+import { component, Text } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Text({
         fontSize: 14,
         spans: [{ content: "Normal" }, { content: "Bold", bold: true }],

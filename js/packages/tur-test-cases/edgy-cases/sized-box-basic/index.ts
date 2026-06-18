@@ -1,5 +1,5 @@
-import { render, SizedBox, Text } from "@tur/edgy";
+import { component, SizedBox, Text } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     SizedBox({ width: 100, height: 50, children: [Text({ text: "Hi" })] }),
 );

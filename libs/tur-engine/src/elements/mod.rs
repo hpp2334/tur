@@ -1,5 +1,6 @@
 pub mod container;
 pub mod condition;
+pub mod each;
 pub mod editable_text;
 pub mod flex;
 pub mod flex_item;
@@ -13,10 +14,12 @@ pub mod positioned;
 pub mod scroll_view;
 pub mod stack;
 pub mod svg;
+pub mod switch;
 pub mod text;
 
 pub use container::{Container, ContainerSpec};
 pub use condition::{Condition, ConditionSpec};
+pub use each::{Each, EachSpec};
 pub use editable_text::{EditableText, EditableTextSpec, InputSpec};
 pub use flex::{Flex, FlexSpec};
 pub use flex_item::{Expanded, ExpandedSpec};
@@ -31,3 +34,4 @@ pub use positioned::{Positioned, PositionedSpec};
 pub use scroll_view::{ScrollView, ScrollViewSpec};
 pub use stack::{Stack, StackSpec};
 pub use svg::{Svg, SvgSpec};
+pub use switch::{Switch, SwitchKey, SwitchSpec};

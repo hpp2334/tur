@@ -1,6 +1,6 @@
-import { Positioned, render, SizedBox, Stack } from "@tur/edgy";
+import { component, Positioned, SizedBox, Stack } from "@tur/edgy";
 
-render(() =>
+export default component(() =>
     Stack({
         children: [
             Positioned({
