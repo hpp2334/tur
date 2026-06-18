@@ -10,37 +10,37 @@ use crate::core::widget::{
 };
 
 // ---------------------------------------------------------------------------
-// MatchKey — a raw JS comparison key. It stores the original `JsValue`
+// SwitchKey — a raw JS comparison key. It stores the original `JsValue`
 // verbatim (no normalization) so any JS value — string, number, boolean,
 // null, undefined, bigint, even objects — can be a case key. Equality is
 // `JsValue`'s derived `PartialEq` (`same_value_zero`: `===` for primitives,
 // pointer identity for objects), which matches JS `switch` semantics and,
-// crucially, needs no boa `Context` — so `Match` can resolve branches during
+// crucially, needs no boa `Context` — so `Switch` can resolve branches during
 // layout/paint without touching the JS runtime.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct MatchKey(pub JsValue);
+pub struct SwitchKey(pub JsValue);
 
-impl PropValue for MatchKey {
+impl PropValue for SwitchKey {
     fn from_js(v: &JsValue) -> Option<Self> {
-        Some(MatchKey(v.clone()))
+        Some(SwitchKey(v.clone()))
     }
 }
 
 // ---------------------------------------------------------------------------
-// MatchSpec — the user's declaration.
+// SwitchSpec — the user's declaration.
 //
-// `value` is reactive (`Val<MatchKey>`). `cases` is an ordered list of
+// `value` is reactive (`Val<SwitchKey>`). `cases` is an ordered list of
 // (key, branch spec) pairs; the first pair whose key equals the current value
-// is mounted. `fallback` is mounted when no case matches. Match is a
+// is mounted. `fallback` is mounted when no case matches. Switch is a
 // transparent widget (like Condition): it relays layout/paint to one branch.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct MatchSpec {
-    pub value: Val<MatchKey>,
-    pub cases: Vec<(MatchKey, Rc<dyn Spec>)>,
+pub struct SwitchSpec {
+    pub value: Val<SwitchKey>,
+    pub cases: Vec<(SwitchKey, Rc<dyn Spec>)>,
     pub fallback: Option<Rc<dyn Spec>>,
     pub query_key: Option<Vec<String>>,
 }
@@ -52,14 +52,14 @@ pub struct MatchSpec {
 #[derive(Clone, PartialEq)]
 pub(crate) enum Mounted {
     None,
-    Case(MatchKey),
+    Case(SwitchKey),
     Fallback,
 }
 
 impl Mounted {
     /// Resolve which branch should be mounted for a given (possibly absent)
     /// current value. Absent value / no matching case → fallback (if any).
-    fn resolve(spec: &MatchSpec, value: Option<MatchKey>) -> Mounted {
+    fn resolve(spec: &SwitchSpec, value: Option<SwitchKey>) -> Mounted {
         match value {
             Some(k) => {
                 if spec.cases.iter().any(|(key, _)| *key == k) {
@@ -81,7 +81,7 @@ impl Mounted {
     }
 
     /// The spec to build for this branch (None for `Mounted::None`).
-    fn spec(&self, spec: &MatchSpec) -> Option<Rc<dyn Spec>> {
+    fn spec(&self, spec: &SwitchSpec) -> Option<Rc<dyn Spec>> {
         match self {
             Mounted::Case(k) => spec
                 .cases
@@ -94,7 +94,7 @@ impl Mounted {
     }
 }
 
-impl Spec for MatchSpec {
+impl Spec for SwitchSpec {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
 
@@ -110,7 +110,7 @@ impl Spec for MatchSpec {
 
         cx.insert_node(
             id,
-            AnyElement::new(Match {
+            AnyElement::new(Switch {
                 spec: self.clone(),
                 node_id: id,
                 mounted,
@@ -130,24 +130,24 @@ impl Spec for MatchSpec {
     }
 }
 
-impl MatchSpec {
+impl SwitchSpec {
     fn mounted_spec_for(&self, mounted: &Mounted) -> Option<Rc<dyn Spec>> {
         mounted.spec(self)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Match — the built element.
+// Switch — the built element.
 // ---------------------------------------------------------------------------
 
-pub struct Match {
-    pub spec: MatchSpec,
+pub struct Switch {
+    pub spec: SwitchSpec,
     pub(crate) node_id: ElementNodeId,
     pub(crate) mounted: Mounted,
     pub(crate) mounted_child: Option<ElementNodeId>,
 }
 
-impl Effect for Match {
+impl Effect for Switch {
     fn effect(
         &mut self,
         cx: &mut WidgetCx,
@@ -169,7 +169,7 @@ impl Effect for Match {
             cx.destroy_subtree(old);
         }
 
-        // Build the new branch. Match's node IS in the tree during the
+        // Build the new branch. Switch's node IS in the tree during the
         // effect, so the branch's self-link succeeds — no explicit link needed.
         let node_id = self.node_id;
         if let Some(spec) = new_mounted.spec(&self.spec) {
@@ -183,7 +183,7 @@ impl Effect for Match {
     }
 }
 
-impl ElementTrace for Match {
+impl ElementTrace for Switch {
     fn trace_label(&self) -> String {
         match &self.mounted {
             Mounted::None => "branch=none".to_string(),
@@ -235,9 +235,9 @@ fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn S
 }
 
 /// Parse `cases` — a JS array of `{ key, child }` entries — into an ordered
-/// `Vec<(MatchKey, Spec)>`. Any `key` value is accepted (it is stored as a raw
+/// `Vec<(SwitchKey, Spec)>`. Any `key` value is accepted (it is stored as a raw
 /// `JsValue`); an entry is skipped only if its `child` is not a valid element.
-fn prop_cases(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<(MatchKey, Rc<dyn Spec>)> {
+fn prop_cases(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<(SwitchKey, Rc<dyn Spec>)> {
     use boa_engine::js_string;
     use boa_engine::object::builtins::JsArray;
 
@@ -272,18 +272,18 @@ fn prop_cases(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<(MatchKey, 
         let Some(spec) = extract_spec(&spec_val) else {
             continue;
         };
-        out.push((MatchKey(key_val), spec));
+        out.push((SwitchKey(key_val), spec));
     }
     out
 }
 
-impl MatchSpec {
+impl SwitchSpec {
     /// `value` is the reactive key; `cases` is a list of `{ key, child }`
     /// entries; `fallback` is the optional default branch.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        MatchSpec {
-            value: prop_val::<MatchKey>(props, "value", ctx)
-                .unwrap_or_else(|| Val::Static(MatchKey(JsValue::undefined()))),
+        SwitchSpec {
+            value: prop_val::<SwitchKey>(props, "value", ctx)
+                .unwrap_or_else(|| Val::Static(SwitchKey(JsValue::undefined()))),
             cases: prop_cases(props, "cases", ctx),
             fallback: prop_child(props, "fallback", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),

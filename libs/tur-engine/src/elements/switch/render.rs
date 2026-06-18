@@ -4,13 +4,13 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Match;
+use super::element::Switch;
 
-// Match is a transparent pass-through (like Condition): it relays constraints
+// Switch is a transparent pass-through (like Condition): it relays constraints
 // to its single mounted child, takes the child's size, positions the child at
 // the origin, and paints nothing itself.
 
-impl ElementLayout for Match {
+impl ElementLayout for Switch {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -31,9 +31,9 @@ impl ElementLayout for Match {
     }
 }
 
-impl ElementRender for Match {
+impl ElementRender for Switch {
     fn type_name(&self) -> &'static str {
-        "tur_match"
+        "tur_switch"
     }
 
     fn paint(

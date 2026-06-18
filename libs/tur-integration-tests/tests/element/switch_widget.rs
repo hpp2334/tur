@@ -4,7 +4,7 @@ const RUNTIME: &str = r#"
 const T = globalThis.__tur;
 const ctx = T.__ctx;
 globalThis.__key = T.source(ctx, "a");
-const root = T.Match(ctx, {
+const root = T.Switch(ctx, {
     value: globalThis.__key,
     cases: [
         { key: "a", child: T.Text(ctx, { text: "AAA", queryKey: ["case_a"] }) },
@@ -16,7 +16,7 @@ T.render(ctx, root);
 "#;
 
 #[test]
-fn match_mounts_initial_branch() {
+fn switch_mounts_initial_branch() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.load_bundle_source(RUNTIME).unwrap();
     app.render();
@@ -31,7 +31,7 @@ fn match_mounts_initial_branch() {
 }
 
 #[test]
-fn match_swaps_branch_on_value_change() {
+fn switch_swaps_branch_on_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.load_bundle_source(RUNTIME).unwrap();
     app.render();
@@ -52,7 +52,7 @@ fn match_swaps_branch_on_value_change() {
 }
 
 #[test]
-fn match_uses_fallback_when_no_case_matches() {
+fn switch_uses_fallback_when_no_case_matches() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.load_bundle_source(RUNTIME).unwrap();
     app.render();
@@ -72,7 +72,7 @@ fn match_uses_fallback_when_no_case_matches() {
 }
 
 #[test]
-fn match_no_rebuild_when_value_re_emits_same_key() {
+fn switch_no_rebuild_when_value_re_emits_same_key() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.load_bundle_source(RUNTIME).unwrap();
     app.render();

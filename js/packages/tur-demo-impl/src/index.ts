@@ -1,11 +1,11 @@
 import {
     Color,
     Column,
+    Condition,
     Container,
     CrossAxisAlignment,
     component,
     createTextEditingController,
-    Dynamic,
     derive,
     type EdgyElement,
     Expanded,
@@ -13,7 +13,6 @@ import {
     InputEdgy,
     type KeyEvent,
     MainAxisAlignment,
-    Match,
     mutate,
     PointerInteract,
     Row,
@@ -22,6 +21,7 @@ import {
     SizedBox,
     set,
     source,
+    Switch,
     Text,
 } from "@tur/edgy";
 import { CASE_SOURCES } from "./cases-generated";
@@ -62,8 +62,20 @@ const INITIAL_CASE = CASE_NAMES.includes("counter")
 const selectedCase$ = source<string>(INITIAL_CASE);
 const status$ = source<string>("ready");
 const errorMsg$ = source("");
-// Atom holding the element currently rendered in the viewer.
-const currentCaseElement$ = source<EdgyElement>(Placeholder());
+
+// One compiled component factory per case. Pre-compiled at startup so the
+// viewer can declare a `Switch` with a case per name. Recompile (Cmd-S)
+// overwrites an entry and re-renders the shell so the new component is used.
+const caseComponents = new Map<string, () => EdgyElement>();
+function compileIntoCache(name: string): void {
+    const result = compileCase(CASE_SOURCES[name] ?? "");
+    if (result.component) {
+        caseComponents.set(name, result.component as () => EdgyElement);
+    }
+}
+for (const name of CASE_NAMES) {
+    compileIntoCache(name);
+}
 
 // The editor controller. `onInput` re-highlights live; `onKeyDown` handles
 // Cmd-S to recompile.
@@ -79,39 +91,33 @@ const editorCtrl = createTextEditingController({
 }) as unknown as EditorController;
 
 // ---------------------------------------------------------------------------
-// Case loading / compilation
+// Case loading / recompilation
 // ---------------------------------------------------------------------------
 function loadCase(name: string): void {
-    const src = CASE_SOURCES[name];
-    if (src === undefined) return;
+    if (!CASE_SOURCES[name]) return;
     set(selectedCase$, name);
-    editorCtrl.setSpans(buildHighlightSpans(src));
-    const result = compileCase(src);
-    if (result.error || !result.component) {
-        set(status$, "error");
-        set(errorMsg$, result.error ?? "unknown error");
-        return;
-    }
+    editorCtrl.setSpans(buildHighlightSpans(CASE_SOURCES[name]));
     set(status$, "ready");
     set(errorMsg$, "");
-    set(currentCaseElement$, (result.component as () => EdgyElement)());
 }
 
 function recompile(): void {
-    const src = editorCtrl.text;
-    const result = compileCase(src);
+    const name = get(selectedCase$);
+    const result = compileCase(editorCtrl.text);
     if (result.error || !result.component) {
         set(status$, "error");
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
+    caseComponents.set(name, result.component as () => EdgyElement);
     set(status$, "ready");
     set(errorMsg$, "");
-    set(currentCaseElement$, (result.component as () => EdgyElement)());
+    // Rebuild the shell so the viewer's Switch picks up the new component.
+    render(Shell);
 }
 
-// Load the initial case once the bundle has evaluated.
-loadCase(INITIAL_CASE);
+// Initialise the editor with the first case's source.
+editorCtrl.setSpans(buildHighlightSpans(CASE_SOURCES[INITIAL_CASE] ?? ""));
 
 // ---------------------------------------------------------------------------
 // UI primitives
@@ -186,6 +192,19 @@ function Sidebar(): EdgyElement {
     });
 }
 
+// A single editor input spec, reused as the child of every editor Switch
+// case. Switch rebuilds it on case change, which forces the EditableText to
+// re-read the (just-updated) controller spans.
+const editorInput: EdgyElement = InputEdgy({
+    controller: editorCtrl,
+    multiline: true,
+    fontFamily: "monospace",
+    fontSize: 13,
+    color: Color.hex("#cdd6f4"),
+    cursorColor: Color.hex("#f5e0dc"),
+    placeholderColor: Color.hex("#585b70"),
+});
+
 function Editor(): EdgyElement {
     return Container({
         color: Color.hex("#1e1e2e"),
@@ -203,8 +222,7 @@ function Editor(): EdgyElement {
                                 children: [
                                     Text({
                                         text: derive(
-                                            () =>
-                                                `editor — ${get(selectedCase$)}`,
+                                            () => `editor — ${get(selectedCase$)}`,
                                         ),
                                         fontSize: 12,
                                         color: Color.hex("#94a3b8"),
@@ -231,22 +249,16 @@ function Editor(): EdgyElement {
                         child: Container({
                             padding: 8,
                             children: [
-                                Dynamic({
-                                    child: derive(() => {
-                                        // Rebuild the editor element when the selected case
-                                        // changes (loadCase resets the controller spans first).
-                                        void get(selectedCase$);
-                                        return InputEdgy({
-                                            controller: editorCtrl,
-                                            multiline: true,
-                                            fontFamily: "monospace",
-                                            fontSize: 13,
-                                            color: Color.hex("#cdd6f4"),
-                                            cursorColor: Color.hex("#f5e0dc"),
-                                            placeholderColor:
-                                                Color.hex("#585b70"),
-                                        });
-                                    }),
+                                // Rebuild the editor element whenever the
+                                // selected case changes so it re-reads the
+                                // controller spans (reset by loadCase).
+                                Switch({
+                                    value: selectedCase$,
+                                    cases: CASE_NAMES.map((name) => ({
+                                        key: name,
+                                        child: editorInput,
+                                    })),
+                                    fallback: editorInput,
                                 }),
                             ],
                         }),
@@ -276,7 +288,7 @@ function Viewer(): EdgyElement {
                                         fontSize: 12,
                                         color: Color.hex("#94a3b8"),
                                     }),
-                                    Match({
+                                    Switch({
                                         value: status$,
                                         cases: [
                                             {
@@ -302,25 +314,30 @@ function Viewer(): EdgyElement {
                         ],
                     }),
                     Expanded({
-                        child: Dynamic({ child: currentCaseElement$ }),
+                        child: Switch({
+                            value: selectedCase$,
+                            cases: CASE_NAMES.map((name) => ({
+                                key: name,
+                                child: caseComponents.get(name)?.() ?? Placeholder(),
+                            })),
+                            fallback: Placeholder(),
+                        }),
                     }),
                     // Error overlay.
-                    Dynamic({
-                        child: derive(() => {
-                            const msg = get(errorMsg$);
-                            if (!msg) return SizedBox({ height: 0 });
-                            return Container({
-                                padding: 8,
-                                color: Color.hex("#3b1116"),
-                                children: [
-                                    Text({
-                                        text: msg,
-                                        fontSize: 11,
-                                        color: Color.hex("#fca5a5"),
-                                    }),
-                                ],
-                            });
+                    Condition({
+                        condition: derive(() => !!get(errorMsg$)),
+                        child: Container({
+                            padding: 8,
+                            color: Color.hex("#3b1116"),
+                            children: [
+                                Text({
+                                    text: derive(() => get(errorMsg$)),
+                                    fontSize: 11,
+                                    color: Color.hex("#fca5a5"),
+                                }),
+                            ],
                         }),
+                        elseChild: SizedBox({ height: 0 }),
                     }),
                 ],
             }),

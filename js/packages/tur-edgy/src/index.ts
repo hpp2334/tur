@@ -199,7 +199,7 @@ export function Condition(props: ConditionProps): EdgyElement {
     return __tur.Condition(__ctx, props);
 }
 
-export interface MatchProps {
+export interface SwitchProps {
     /** Reactive key to match on (any value), or a static value. */
     value: Val<string | number | boolean | null | undefined>;
     /** Ordered list of `{ key, child }` entries. First match wins. */
@@ -209,19 +209,8 @@ export interface MatchProps {
     queryKey?: Val<string[]>;
 }
 
-export function Match(props: MatchProps): EdgyElement {
-    return __tur.Match(__ctx, props);
-}
-
-export interface DynamicProps {
-    /** An EdgyElement, or an atom producing one. The subtree is rebuilt when
-     * the atom yields a different element object. */
-    child: Val<EdgyElement>;
-    queryKey?: Val<string[]>;
-}
-
-export function Dynamic(props: DynamicProps): EdgyElement {
-    return __tur.Dynamic(__ctx, props);
+export function Switch(props: SwitchProps): EdgyElement {
+    return __tur.Switch(__ctx, props);
 }
 
 export interface ScrollViewProps {
@@ -247,6 +236,21 @@ export interface LazyListProps {
 
 export function LazyList(props: LazyListProps): EdgyElement {
     return __tur.LazyList(__ctx, props);
+}
+
+export interface EachProps<T> {
+    /** Reactive array (atom) of items. The list is rebuilt when this changes. */
+    items: Readable<T[]>;
+    /** Build one element per item. */
+    build: (item: T, index: number) => EdgyElement;
+    mainAlignment?: Val<MainAxisAlignment>;
+    crossAlignment?: Val<CrossAxisAlignment>;
+    mainAxisSize?: Val<MainAxisSize>;
+    queryKey?: Val<string[]>;
+}
+
+export function Each<T>(props: EachProps<T>): EdgyElement {
+    return __tur.Each(__ctx, props);
 }
 
 export function ImageEdgy(props: {
@@ -442,10 +446,10 @@ interface TurGlobal {
     Text(ctx: unknown, props: unknown): EdgyElement;
     PointerInteract(ctx: unknown, props: unknown): EdgyElement;
     Condition(ctx: unknown, props: unknown): EdgyElement;
-    Match(ctx: unknown, props: unknown): EdgyElement;
-    Dynamic(ctx: unknown, props: unknown): EdgyElement;
+    Switch(ctx: unknown, props: unknown): EdgyElement;
     ScrollView(ctx: unknown, props: unknown): EdgyElement;
     LazyList(ctx: unknown, props: unknown): EdgyElement;
+    Each(ctx: unknown, props: unknown): EdgyElement;
     ImageEdgy(ctx: unknown, props: unknown): EdgyElement;
     InputEdgy(ctx: unknown, props: unknown): EdgyElement;
     Fragment(ctx: unknown, props: unknown): EdgyElement;

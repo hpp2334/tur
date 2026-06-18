@@ -5,15 +5,15 @@ import {
     Container,
     CrossAxisAlignment,
     component,
-    Dynamic,
     derive,
     Expanded,
+    get,
     MainAxisAlignment,
-    Match,
     mutate,
     PointerInteract,
     Row,
     source,
+    Switch,
     Text,
 } from "@tur/edgy";
 
@@ -71,20 +71,20 @@ export default component(() =>
                         }),
                         Container({ height: 16 }),
                         Expanded({
-                            child: Match({
+                            child: Switch({
                                 value: tab$,
                                 cases: [
                                     {
                                         key: "red",
-                                        child: coloredPanel("Match: RED", HEX.red),
+                                        child: coloredPanel("Switch: RED", HEX.red),
                                     },
                                     {
                                         key: "green",
-                                        child: coloredPanel("Match: GREEN", HEX.green),
+                                        child: coloredPanel("Switch: GREEN", HEX.green),
                                     },
                                     {
                                         key: "blue",
-                                        child: coloredPanel("Match: BLUE", HEX.blue),
+                                        child: coloredPanel("Switch: BLUE", HEX.blue),
                                     },
                                 ],
                             }),
@@ -95,14 +95,10 @@ export default component(() =>
                             color: Color.hex("#0f172a"),
                             alignment: Alignment.Center,
                             children: [
-                                Dynamic({
-                                    child: derive((get) =>
-                                        Text({
-                                            text: `Dynamic sees: ${get(tab$).toUpperCase()}`,
-                                            fontSize: 20,
-                                            color: Color.hex("#e2e8f0"),
-                                        }),
-                                    ),
+                                Text({
+                                    text: derive(() => `Switch sees: ${get(tab$).toUpperCase()}`),
+                                    fontSize: 20,
+                                    color: Color.hex("#e2e8f0"),
                                 }),
                             ],
                         }),
