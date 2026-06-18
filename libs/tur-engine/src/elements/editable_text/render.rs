@@ -224,8 +224,16 @@ fn paint_composition_underline(
             continue;
         }
 
-        let x_start = layout_data.cursor_x_at(ul_start);
-        let x_end = layout_data.cursor_x_at(ul_end);
+        let x_start = if ul_start == line_start {
+            0.0
+        } else {
+            layout_data.cursor_x_at(ul_start)
+        };
+        let x_end = if ul_end == line_end {
+            layout_data.line_right_x(line_idx)
+        } else {
+            layout_data.cursor_x_at(ul_end)
+        };
         let line_info = &layout_data.line_infos[line_idx];
 
         let underline_y = offset.y + line_info.top as f64 + line_info.height as f64 - 2.0;
