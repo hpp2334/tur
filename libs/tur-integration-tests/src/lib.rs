@@ -144,6 +144,30 @@ impl TurTestApp {
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
+    /// Queue a pointer-down without flushing — used to simulate the browser's
+    /// batching of multiple input events between animation frames. Pair with
+    /// `pointer_move_no_flush` / `pointer_up_no_flush` and a single `tick()`.
+    pub fn pointer_down_no_flush(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+                position: Offset::new(x, y),
+            }));
+    }
+
+    pub fn pointer_move_no_flush(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+                position: Offset::new(x, y),
+            }));
+    }
+
+    pub fn pointer_up_no_flush(&mut self, x: f64, y: f64) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+                position: Offset::new(x, y),
+            }));
+    }
+
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner
             .push_event(AppEvent::Wheel {

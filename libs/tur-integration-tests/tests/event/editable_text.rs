@@ -261,6 +261,140 @@ fn mouse_drag_select_then_backspace() {
     assert_eq!(text_after.len(), expected_remaining, "selected {} chars but got '{}' after delete", selected_len, text_after);
 }
 
+#[test]
+fn multiline_drag_select_across_lines() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("input-multiline").unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    let bounds = app.get_element_absolute_bounds(input_id).unwrap();
+    let (left, top) = (bounds.left, bounds.top);
+
+    focus_editable(&mut app, input_id);
+    app.render();
+
+    // Type three lines: "aaaa\nbbbb\ncccc"
+    for _ in 0..4 { app.send_key("a"); }
+    app.send_key("Enter");
+    for _ in 0..4 { app.send_key("b"); }
+    app.send_key("Enter");
+    for _ in 0..4 { app.send_key("c"); }
+    app.render();
+    assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
+
+    // Compute y for line 0 (top) and line 2 (two lines down).
+    // With fontSize 14, line height ≈ 14 * 1.2 = 16.8. The text occupies the
+    // top portion of the (tall) element; subsequent lines sit at predictable
+    // y offsets from `top`.
+    let line_h = 14.0 * 1.2;
+    let y_line0 = top + line_h * 0.5;
+    let y_line2 = top + line_h * 2.5;
+
+    // Drag from line 0 to line 2.
+    app.pointer_down(left + 5.0, y_line0);
+    app.pointer_move(left + 5.0, y_line2);
+    app.pointer_up(left + 5.0, y_line2);
+    app.render();
+
+    let (anchor, end) = get_selection(&app, input_id);
+    eprintln!(
+        "after multi-line drag: anchor={}, end={}, text='{}'",
+        anchor,
+        end,
+        get_text(&app, input_id)
+    );
+    assert_ne!(anchor, end, "should have selection spanning multiple lines");
+
+    // The selection should cover at least one newline character, meaning it
+    // spans more than a single line.
+    let (s, e) = if anchor < end { (anchor, end) } else { (end, anchor) };
+    let selected = &get_text(&app, input_id)[s..e];
+    assert!(
+        selected.contains('\n'),
+        "multi-line drag should select across newlines; got '{}'",
+        selected
+    );
+
+    // Backspace should delete the selected range.
+    let expected_remaining: String = {
+        let full = get_text(&app, input_id);
+        let mut out = String::new();
+        out.push_str(&full[..s]);
+        out.push_str(&full[e..]);
+        out
+    };
+    app.send_key("Backspace");
+    app.render();
+    assert_eq!(
+        get_text(&app, input_id),
+        expected_remaining,
+        "text should be the unselected remainder after backspace",
+    );
+}
+
+#[test]
+fn multiline_drag_select_batched_events() {
+    // Reproduces the browser scenario: queue down + several moves + up without
+    // flushing in between, then flush once. This is how the wasm frame loop
+    // processes events that arrive between animation frames.
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("input-multiline").unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    let bounds = app.get_element_absolute_bounds(input_id).unwrap();
+    let (left, top) = (bounds.left, bounds.top);
+
+    focus_editable(&mut app, input_id);
+    app.render();
+
+    for _ in 0..4 { app.send_key("a"); }
+    app.send_key("Enter");
+    for _ in 0..4 { app.send_key("b"); }
+    app.send_key("Enter");
+    for _ in 0..4 { app.send_key("c"); }
+    app.render();
+    assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
+
+    let line_h = 14.0 * 1.2;
+    let y_line0 = top + line_h * 0.5;
+    let y_line2 = top + line_h * 2.5;
+
+    // Queue all drag events WITHOUT flushing between them — this mirrors how
+    // the browser's frame loop sees multiple mouse events that arrive between
+    // animation frames.
+    app.pointer_down_no_flush(left + 5.0, y_line0);
+    for frac in [1, 2, 3] {
+        let y = y_line0 + (y_line2 - y_line0) * (frac as f64 / 4.0);
+        app.pointer_move_no_flush(left + 5.0, y);
+    }
+    app.pointer_move_no_flush(left + 5.0, y_line2);
+    app.pointer_up_no_flush(left + 5.0, y_line2);
+    // Single flush processes all events at once.
+    app.tick().unwrap();
+    app.render();
+
+    let (anchor, end) = get_selection(&app, input_id);
+    eprintln!(
+        "after batched multi-line drag: anchor={}, end={}, text='{}'",
+        anchor,
+        end,
+        get_text(&app, input_id)
+    );
+    assert_ne!(
+        anchor, end,
+        "should have multi-line selection even when events are processed in one batch",
+    );
+    let (s, e) = if anchor < end { (anchor, end) } else { (end, anchor) };
+    let selected = &get_text(&app, input_id)[s..e];
+    assert!(
+        selected.contains('\n'),
+        "batched multi-line drag should select across newlines; got '{}'",
+        selected
+    );
+}
+
 const ONKEY_BUNDLE: &str = r#"
 const T = globalThis.__tur;
 const ctx = T.__ctx;

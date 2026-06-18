@@ -109,6 +109,24 @@ impl TextLayoutData {
             .sum()
     }
 
+    /// Returns the x coordinate of the RIGHT edge of the last glyph on the
+    /// given line (i.e. where the cursor would sit at the end of the line).
+    /// Returns 0.0 for an empty line. This is the line-aware counterpart to
+    /// `cursor_x_at(line_end_char(line_index))`, which (because glyph x
+    /// coordinates reset to 0 at each line start) would otherwise return the
+    /// left edge of the FOLLOWING line.
+    pub fn line_right_x(&self, line_index: usize) -> f32 {
+        let mut last_right = 0.0f32;
+        for run in &self.runs {
+            if run.line_index == line_index {
+                if let Some(g) = run.glyphs.last() {
+                    last_right = last_right.max(g.x + g.advance);
+                }
+            }
+        }
+        last_right
+    }
+
     #[allow(dead_code)]
     pub fn line_count(&self) -> usize {
         self.line_infos.len()

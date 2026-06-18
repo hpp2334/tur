@@ -25,8 +25,22 @@ pub(crate) fn paint_selection(
             continue;
         }
 
-        let x_start = layout_data.cursor_x_at(sel_start);
-        let x_end = layout_data.cursor_x_at(sel_end);
+        // `cursor_x_at(N)` returns the x where glyph N starts. When the
+        // selection ends exactly at a line boundary (sel_end == line_end),
+        // glyph `sel_end` is the FIRST glyph of the NEXT line — its x has
+        // reset to the line's left edge, so `cursor_x_at(sel_end)` would
+        // return ~0 and the rect would have zero or negative width. Use the
+        // right edge of the current line instead.
+        let x_start = if sel_start == line_start {
+            0.0
+        } else {
+            layout_data.cursor_x_at(sel_start)
+        };
+        let x_end = if sel_end == line_end {
+            layout_data.line_right_x(line_idx)
+        } else {
+            layout_data.cursor_x_at(sel_end)
+        };
         let line_info = &layout_data.line_infos[line_idx];
 
         canvas.fill_geometry(
