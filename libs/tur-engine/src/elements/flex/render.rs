@@ -7,21 +7,21 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::{ChildData, Flex};
+use super::element::{ChildData, FlexElement};
 
-impl ElementLayout for Flex {
+impl ElementLayout for FlexElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let direction = self.spec.direction.unwrap_or(Axis::Vertical);
+        let direction = self.component.direction.unwrap_or(Axis::Vertical);
         let cross_alignment = cx
-            .read_val_opt(self.spec.cross_alignment.as_ref())
+            .read_val_opt(self.component.cross_alignment.as_ref())
             .unwrap_or(CrossAxisAlignment::Center);
         let main_axis_size = cx
-            .read_val_opt(self.spec.main_axis_size.as_ref())
+            .read_val_opt(self.component.main_axis_size.as_ref())
             .unwrap_or(MainAxisSize::Max);
 
         self.child_data.clear();
@@ -149,12 +149,12 @@ impl ElementLayout for Flex {
             return;
         }
 
-        let direction = self.spec.direction.unwrap_or(Axis::Vertical);
+        let direction = self.component.direction.unwrap_or(Axis::Vertical);
         let main_alignment = cx
-            .read_val_opt(self.spec.main_alignment.as_ref())
+            .read_val_opt(self.component.main_alignment.as_ref())
             .unwrap_or(MainAxisAlignment::Start);
         let cross_alignment = cx
-            .read_val_opt(self.spec.cross_alignment.as_ref())
+            .read_val_opt(self.component.cross_alignment.as_ref())
             .unwrap_or(CrossAxisAlignment::Center);
 
         let allocated_main: f64 = self.child_data.iter().map(|d| direction.main(d.size)).sum();
@@ -215,7 +215,7 @@ impl ElementLayout for Flex {
     }
 }
 
-impl ElementRender for Flex {
+impl ElementRender for FlexElement {
     fn type_name(&self) -> &'static str {
         "tur_flex"
     }

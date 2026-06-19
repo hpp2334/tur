@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementKind;
-use tur_engine::elements::Container;
+use tur_engine::elements::ContainerElement;
 use tur_shared::BorderPosition;
 use tur_integration_tests::TurTestApp;
 
@@ -54,7 +54,7 @@ fn container_update_clears_removed_props() {
     };
 
     app.with_element(checkbox_id, |el| {
-        let c = el.cast::<Container>().unwrap();
+        let c = el.cast::<ContainerElement>().unwrap();
         eprintln!("[test] before toggle: color={:?}", c.color());
         assert!(c.color().is_some(), "checked state should have color");
     });
@@ -67,7 +67,7 @@ fn container_update_clears_removed_props() {
     let tree = app.element_tree();
     let checkbox_node = tree.get(checkbox_id).unwrap();
     let checkbox_el = checkbox_node.element.as_ref().unwrap();
-    let c = checkbox_el.cast::<Container>().unwrap();
+    let c = checkbox_el.cast::<ContainerElement>().unwrap();
     eprintln!("[test] after toggle: color={:?}, border_color={:?}", c.color(), c.border_color());
     assert!(c.color().is_none(), "unchecked state should NOT have color, got {:?}", c.color());
 }
@@ -90,7 +90,7 @@ fn container_with_border() {
     };
 
     app.with_element(container_id, |el| {
-        let c = el.cast::<Container>().unwrap();
+        let c = el.cast::<ContainerElement>().unwrap();
         assert_eq!(c.width(), Some(200.0));
         assert_eq!(c.height(), Some(200.0));
         assert_eq!(c.padding(), Some(16.0));
@@ -185,7 +185,7 @@ fn container_with_shadow() {
     };
 
     app.with_element(container_id, |el| {
-        let c = el.cast::<Container>().unwrap();
+        let c = el.cast::<ContainerElement>().unwrap();
         assert_eq!(c.width(), Some(200.0));
         assert_eq!(c.height(), Some(200.0));
         assert_eq!(c.border_radius(), Some(8.0));

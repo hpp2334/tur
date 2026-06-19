@@ -5,7 +5,7 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::pointer_region::PointerRegionTracker;
 use crate::elements::pointer_interact::{PointerEnterEvent, PointerExitEvent};
-use crate::elements::PointerInteract;
+use crate::elements::PointerInteractElement;
 
 pub struct PointerRegionAppHandler {
     tracker: PointerRegionTracker,
@@ -59,8 +59,8 @@ fn pointer_enter_mutation(
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerEnterEvent>> {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
-        .and_then(|e| e.cast::<PointerInteract>())
-        .and_then(|p| p.spec.on_pointer_enter)
+        .and_then(|e| e.cast::<PointerInteractElement>())
+        .and_then(|p| p.component.on_pointer_enter)
 }
 
 fn pointer_exit_mutation(
@@ -69,15 +69,15 @@ fn pointer_exit_mutation(
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerExitEvent>> {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
-        .and_then(|e| e.cast::<PointerInteract>())
-        .and_then(|p| p.spec.on_pointer_exit)
+        .and_then(|e| e.cast::<PointerInteractElement>())
+        .and_then(|p| p.component.on_pointer_exit)
 }
 
 fn has_pointer_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteract>()
+            e.cast::<PointerInteractElement>()
                 .map(|p| p.has_pointer_region_callbacks())
                 .unwrap_or(false)
         })
@@ -88,7 +88,7 @@ fn is_pointer_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteract>()
+            e.cast::<PointerInteractElement>()
                 .map(|p| p.is_pointer_region_opaque())
                 .unwrap_or(false)
         })

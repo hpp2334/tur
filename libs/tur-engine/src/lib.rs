@@ -21,7 +21,7 @@ use core::element::ElementNodeId;
 use core::elements::AnyElement;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
-use elements::editable_text::EditableText;
+use elements::editable_text::EditableTextElement;
 
 pub struct TurApp {
     boa_context: Context,
@@ -201,17 +201,13 @@ impl TurApp {
 
         let node = tree.get(focused_id)?;
         let element = node.element.as_ref()?;
-        let editable_el = element.cast::<EditableText>()?;
+        let editable_el = element.cast::<EditableTextElement>()?;
         let layout_data = editable_el.cached_layout.as_ref()?;
 
-        let full = editable_el.text();
-        fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
-            s[..byte_pos.min(s.len())].chars().count()
-        }
-        let cursor_char = byte_to_char_offset(&full, editable_el.cursor_position());
+        let cursor_byte = editable_el.cursor_position();
 
-        let (cursor_x, _) = layout_data.cursor_xy_at(cursor_char);
-        let line_idx = layout_data.line_index_for_char(cursor_char);
+        let (cursor_x, _) = layout_data.cursor_xy_at(cursor_byte);
+        let line_idx = layout_data.line_index_for_byte(cursor_byte);
         let line_info = &layout_data.line_infos[line_idx];
 
         Some((
@@ -233,7 +229,7 @@ impl TurApp {
         let Some(ref element) = node.element else {
             return false;
         };
-        element.cast::<EditableText>().is_some()
+        element.cast::<EditableTextElement>().is_some()
     }
 
     #[cfg(feature = "trace")]

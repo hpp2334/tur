@@ -1,6 +1,6 @@
 use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::EditableText;
+use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
@@ -23,7 +23,7 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 
 fn get_cursor_pos(app: &TurTestApp, id: ElementNodeId) -> usize {
     app.with_element(id, |e| {
-        e.cast::<EditableText>()
+        e.cast::<EditableTextElement>()
             .map(|el| el.cursor_position())
             .unwrap_or(0)
     })
@@ -32,7 +32,7 @@ fn get_cursor_pos(app: &TurTestApp, id: ElementNodeId) -> usize {
 
 fn get_text(app: &TurTestApp, id: ElementNodeId) -> String {
     app.with_element(id, |e| {
-        e.cast::<EditableText>()
+        e.cast::<EditableTextElement>()
             .map(|el| el.text())
             .unwrap_or_default()
     })
@@ -41,7 +41,7 @@ fn get_text(app: &TurTestApp, id: ElementNodeId) -> String {
 
 fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
     app.with_element(id, |e| {
-        e.cast::<EditableText>()
+        e.cast::<EditableTextElement>()
             .map(|el| el.selection())
             .unwrap_or((0, 0))
     })

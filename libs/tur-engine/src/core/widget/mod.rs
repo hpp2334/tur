@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
-use boa_engine::Context;
+use boa_engine::object::builtins::JsFunction;
+use boa_engine::{Context, JsValue};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::element::ElementNodeId;
@@ -12,15 +13,14 @@ pub use context::WidgetCx;
 pub use val::{val_from_js, PropValue, ReadableAtom, Val};
 
 // ---------------------------------------------------------------------------
-// Spec — the user's declaration of a widget. Pure Rust data (no JsValues).
+// Component — the user's declaration of a widget.
 //
-// A Spec describes HOW to build a widget: its reactive props (Val<T>) and
-// its children (Vec<Rc<dyn Spec>>).  `build()` instantiates the widget into
-// the ElementTree.  Specs are immutable after creation; Condition/LazyList
-// hold onto branch/range specs and rebuild subtrees on demand.
+// For native widgets this is pure Rust data (no JsValues): reactive props are
+// `Val<T>` and children are `Vec<Rc<dyn Component>>`. `build()` instantiates the
+// widget into the ElementTree. Components are immutable after creation.
 // ---------------------------------------------------------------------------
 
-pub trait Spec: 'static {
+pub trait Component: 'static {
     fn build(
         &self,
         cx: &mut WidgetCx,
@@ -30,27 +30,86 @@ pub trait Spec: 'static {
 }
 
 // ---------------------------------------------------------------------------
-// SpecHandle — boa opaque wrapper so JS can hold and pass specs around.
+// ComponentFactory — produces a Component on demand.
 //
-// `unsafe_empty_trace` is safe because specs contain NO JsValues/JsObjects:
-// all props are decoded to pure Rust types (Val<T> where T: PropValue) at
-// factory time.  Children are `Rc<dyn Spec>` (pure Rust ownership).
+// Used for branches whose concrete subtree is only determined at runtime
+// (Condition/Switch branches). The factory is retained and `create()` is
+// invoked when the branch is selected, and re-invoked on a branch swap.
+// ---------------------------------------------------------------------------
+
+pub trait ComponentFactory: 'static {
+    fn create(&self, boa: &mut Context) -> Option<Rc<dyn Component>>;
+}
+
+/// Invoke a JS thunk `() => EdgyElement` and resolve the returned Component.
+fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn Component>> {
+    let result = thunk.call(&JsValue::undefined(), &[], boa).ok()?;
+    extract_component(&result)
+}
+
+// ---------------------------------------------------------------------------
+// JsComponent — a user-defined component created via `component(fn)` in JS.
+//
+// It wraps the JS thunk `() => EdgyElement` and is itself a Component: `build`
+// invokes the thunk, resolves the returned Component, and builds it under the
+// parent. It allocates no node of its own (transparent pass-through), so the
+// element-tree shape is identical to invoking the thunk eagerly.
+// ---------------------------------------------------------------------------
+
+pub struct JsComponent(pub JsFunction);
+
+impl Component for JsComponent {
+    fn build(
+        &self,
+        cx: &mut WidgetCx,
+        boa: &mut Context,
+        parent: ElementNodeId,
+    ) -> ElementNodeId {
+        match invoke_thunk(&self.0, boa) {
+            Some(inner) => inner.build(cx, boa, parent),
+            None => parent,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// JsComponentFactory — a ComponentFactory backed by a JS thunk
+// `() => EdgyElement`. Used for Condition/Switch branches: `create()` invokes
+// the thunk and returns the produced Component.
+// ---------------------------------------------------------------------------
+
+pub struct JsComponentFactory(pub JsFunction);
+
+impl ComponentFactory for JsComponentFactory {
+    fn create(&self, boa: &mut Context) -> Option<Rc<dyn Component>> {
+        invoke_thunk(&self.0, boa)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ComponentHandle — boa opaque wrapper so JS can hold and pass Components.
+//
+// `unsafe_empty_trace` note: native Components contain no JsValues (props are
+// pure Rust). JsComponent/JsComponentFactory (and Each/LazyList builders) do
+// hold a `JsFunction`, but in this boa fork a `JsObject`/`JsFunction` clone
+// held in Rust is a strong GC root via refcounting, so the conservative
+// `unsafe_empty_trace` cannot collect them prematurely (worst case: a leak).
 // ---------------------------------------------------------------------------
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
-pub struct SpecHandle(pub Rc<dyn Spec>);
+pub struct ComponentHandle(pub Rc<dyn Component>);
 
-impl SpecHandle {
-    pub fn new(spec: Rc<dyn Spec>) -> Self {
-        SpecHandle(spec)
+impl ComponentHandle {
+    pub fn new(component: Rc<dyn Component>) -> Self {
+        ComponentHandle(component)
     }
 }
 
-/// Extract a spec from a JS value wrapping a `SpecHandle`.
-pub fn extract_spec(value: &boa_engine::JsValue) -> Option<Rc<dyn Spec>> {
+/// Extract a Component from a JS value wrapping a `ComponentHandle`.
+pub fn extract_component(value: &JsValue) -> Option<Rc<dyn Component>> {
     let obj = value.as_object()?;
-    obj.downcast_ref::<SpecHandle>().map(|h| h.0.clone())
+    obj.downcast_ref::<ComponentHandle>().map(|h| h.0.clone())
 }
 
 // ---------------------------------------------------------------------------

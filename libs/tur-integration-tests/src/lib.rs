@@ -8,7 +8,7 @@ use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
-use tur_engine::elements::PointerInteract;
+use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
@@ -186,7 +186,7 @@ impl TurTestApp {
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
         self.inner.with_element(id, |e| {
-            e.cast::<PointerInteract>()
+            e.cast::<PointerInteractElement>()
                 .map(|p| p.has_on_click())
                 .unwrap_or(false)
         }).unwrap_or(false)
@@ -194,7 +194,7 @@ impl TurTestApp {
 
     pub fn has_pointer_region_callbacks(&self, id: ElementNodeId) -> bool {
         self.inner.with_element(id, |e| {
-            e.cast::<PointerInteract>()
+            e.cast::<PointerInteractElement>()
                 .map(|p| p.has_pointer_region_callbacks())
                 .unwrap_or(false)
         }).unwrap_or(false)

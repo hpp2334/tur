@@ -64,26 +64,28 @@ export function StatusBar(): EdgyElement {
                                     // Edited indicator (only when edited).
                                     Condition({
                                         condition: edited$,
-                                        child: Row({
-                                            mainAxisSize: MainAxisSize.Min,
-                                            children: [
-                                                SizedBox({ width: 12 }),
-                                                Container({
-                                                    width: 6,
-                                                    height: 6,
-                                                    borderRadius: 999,
-                                                    color: tokens.accent
-                                                        .complement,
-                                                }),
-                                                SizedBox({ width: 6 }),
-                                                Text({
-                                                    text: "edited",
-                                                    fontSize: 11,
-                                                    color: tokens.text.tertiary,
-                                                }),
-                                            ],
-                                        }),
-                                        elseChild: SizedBox({ width: 0 }),
+                                        child: () =>
+                                            Row({
+                                                mainAxisSize: MainAxisSize.Min,
+                                                children: [
+                                                    SizedBox({ width: 12 }),
+                                                    Container({
+                                                        width: 6,
+                                                        height: 6,
+                                                        borderRadius: 999,
+                                                        color: tokens.accent
+                                                            .complement,
+                                                    }),
+                                                    SizedBox({ width: 6 }),
+                                                    Text({
+                                                        text: "edited",
+                                                        fontSize: 11,
+                                                        color: tokens.text
+                                                            .tertiary,
+                                                    }),
+                                                ],
+                                            }),
+                                        elseChild: () => SizedBox({ width: 0 }),
                                     }),
                                     SizedBox({ width: 12 }),
                                     Text({

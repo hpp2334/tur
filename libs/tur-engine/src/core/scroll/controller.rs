@@ -14,7 +14,7 @@ use crate::core::bridge::{TurJsContext, TurNodeHandle};
 use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
 use crate::core::element::ElementNodeId;
 use crate::core::scroll::ScrollEvent;
-use crate::elements::ScrollView;
+use crate::elements::ScrollViewElement;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -160,7 +160,7 @@ impl Class for ScrollController {
                 let Some(ref mut element) = node.element else {
                     return Ok(JsValue::undefined());
                 };
-                let Some(sv) = element.cast_mut::<ScrollView>() else {
+                let Some(sv) = element.cast_mut::<ScrollViewElement>() else {
                     return Ok(JsValue::undefined());
                 };
 

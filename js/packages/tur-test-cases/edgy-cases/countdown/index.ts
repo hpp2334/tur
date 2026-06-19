@@ -137,42 +137,48 @@ export default component(() =>
                     }),
                     Condition({
                         condition: derive((g) => !!g(editing$)),
-                        child: Container({
-                            padding: 16,
-                            queryKey: ["modal"],
-                            children: [
-                                Column({
-                                    children: [
-                                        Text({ text: "Set time:" }),
-                                        Container({
-                                            queryKey: ["edit-input"],
-                                            children: [
-                                                InputEdgy({
-                                                    controller: derive((g) =>
-                                                        g(editController$),
-                                                    ),
-                                                    placeholder:
-                                                        "Positive integer",
-                                                    fontSize: 14,
-                                                    width: 200,
-                                                    height: 30,
-                                                }),
-                                            ],
-                                        }),
-                                        PointerInteract({
-                                            onClick: confirmEdit$,
-                                            child: Container({
-                                                padding: 8,
-                                                queryKey: ["btn-confirm"],
+                        child: () =>
+                            Container({
+                                padding: 16,
+                                queryKey: ["modal"],
+                                children: [
+                                    Column({
+                                        children: [
+                                            Text({ text: "Set time:" }),
+                                            Container({
+                                                queryKey: ["edit-input"],
                                                 children: [
-                                                    Text({ text: "Confirm" }),
+                                                    InputEdgy({
+                                                        controller: derive(
+                                                            (g) =>
+                                                                g(
+                                                                    editController$,
+                                                                ),
+                                                        ),
+                                                        placeholder:
+                                                            "Positive integer",
+                                                        fontSize: 14,
+                                                        width: 200,
+                                                        height: 30,
+                                                    }),
                                                 ],
                                             }),
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
+                                            PointerInteract({
+                                                onClick: confirmEdit$,
+                                                child: Container({
+                                                    padding: 8,
+                                                    queryKey: ["btn-confirm"],
+                                                    children: [
+                                                        Text({
+                                                            text: "Confirm",
+                                                        }),
+                                                    ],
+                                                }),
+                                            }),
+                                        ],
+                                    }),
+                                ],
+                            }),
                     }),
                 ],
             }),

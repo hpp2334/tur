@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementKind;
-use tur_engine::elements::ScrollView;
+use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -91,7 +91,7 @@ fn scroll_view_content_and_viewport_size() {
     app.render();
 
     app.with_element(sv_id, |e| {
-        let sv = e.cast::<ScrollView>().unwrap();
+        let sv = e.cast::<ScrollViewElement>().unwrap();
         assert_eq!(sv.viewport_size().width, 400.0);
         assert_eq!(sv.viewport_size().height, 300.0);
         assert_eq!(sv.content_size().height, 600.0);

@@ -12,7 +12,7 @@ use crate::core::elements::{
     WheelEvent,
 };
 use crate::core::widget::{
-    extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 
 use crate::elements::lazy_list::controller::LazyListController;
@@ -21,7 +21,7 @@ use crate::elements::scroll_view::ScrollPosition;
 const FALLBACK_EXTENT: f64 = 50.0;
 
 // ---------------------------------------------------------------------------
-// LazyListSpec — the user's declaration.
+// LazyListComponent — the user's declaration.
 //
 // `axis`, `itemCount`, and `overscan` are reactive (`Val<T>`). `builder` is a
 // JS function `(index) => EdgyElement` captured at factory time and stored as a
@@ -32,7 +32,7 @@ const FALLBACK_EXTENT: f64 = 50.0;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct LazyListSpec {
+pub struct LazyListComponent {
     pub axis: Option<Val<Axis>>,
     pub item_count: Val<u64>,
     pub overscan: Option<Val<u64>>,
@@ -40,7 +40,7 @@ pub struct LazyListSpec {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for LazyListSpec {
+impl Component for LazyListComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
 
@@ -73,8 +73,8 @@ impl Spec for LazyListSpec {
 
         cx.insert_node(
             id,
-            AnyElement::with_wheel(LazyList {
-                spec: self.clone(),
+            AnyElement::with_wheel(LazyListElement {
+                component: self.clone(),
                 node_id: id,
                 axis,
                 overscan,
@@ -104,21 +104,21 @@ fn build_item_spec(
     builder: &JsFunction,
     index: u64,
     boa: &mut Context,
-) -> Option<Rc<dyn Spec>> {
+) -> Option<Rc<dyn Component>> {
     let result = builder
         .call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa)
         .ok()?;
-    extract_spec(&result)
+    extract_component(&result)
 }
 
 // ---------------------------------------------------------------------------
-// LazyList — the built element. A scroll container that lays its built items
+// LazyListElement — the built element. A scroll container that lays its built items
 // out sequentially along the main axis, clips to the viewport, and offsets
 // children by the current scroll position.
 // ---------------------------------------------------------------------------
 
-pub struct LazyList {
-    pub spec: LazyListSpec,
+pub struct LazyListElement {
+    pub component: LazyListComponent,
     pub(crate) node_id: ElementNodeId,
     pub(crate) axis: Axis,
     pub(crate) overscan: u64,
@@ -130,7 +130,7 @@ pub struct LazyList {
     pub(crate) reported_end: u64,
 }
 
-impl LazyList {
+impl LazyListElement {
     pub fn scroll_offset(&self) -> f64 {
         self.position.pixels()
     }
@@ -143,7 +143,7 @@ impl LazyList {
     /// to the number of items actually built, which is kept in sync by the
     /// effect).
     pub fn item_count(&self) -> u64 {
-        match &self.spec.item_count {
+        match &self.component.item_count {
             Val::Static(v) => *v,
             Val::Reactive(_) => self.visible.len() as u64,
         }
@@ -198,19 +198,19 @@ impl LazyList {
 // Effect — rebuild the item set when itemCount changes.
 // ---------------------------------------------------------------------------
 
-impl Effect for LazyList {
+impl Effect for LazyListElement {
     fn effect(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        let count_dirty = self.spec.item_count.is_dirty(dirties);
-        let axis_dirty = self.spec.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
+        let count_dirty = self.component.item_count.is_dirty(dirties);
+        let axis_dirty = self.component.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
 
         if axis_dirty {
             self.axis = self
-                .spec
+                .component
                 .axis
                 .as_ref()
                 .and_then(|v| cx.read_val(v, boa))
@@ -221,7 +221,7 @@ impl Effect for LazyList {
             return;
         }
 
-        let new_count = cx.read_val(&self.spec.item_count, boa).unwrap_or(0);
+        let new_count = cx.read_val(&self.component.item_count, boa).unwrap_or(0);
         let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
 
         if new_count < current_max {
@@ -237,10 +237,10 @@ impl Effect for LazyList {
             }
             self.visible.retain(|(i, _)| *i < new_count);
         } else if new_count > current_max {
-            // Build items for the newly-visible indices. The LazyList node is
+            // Build items for the newly-visible indices. The LazyListElement node is
             // in the tree during the effect, so each item's self-link succeeds
             // — no explicit link needed.
-            let builder = self.spec.builder.clone();
+            let builder = self.component.builder.clone();
             let node_id = self.node_id;
             for index in current_max..new_count {
                 let Some(spec) = build_item_spec(&builder, index, boa) else {
@@ -255,7 +255,7 @@ impl Effect for LazyList {
     }
 }
 
-impl ElementTrace for LazyList {
+impl ElementTrace for LazyListElement {
     fn trace_label(&self) -> String {
         format!(
             "axis={:?} items={} built={} offset={:.1} range={}-{}",
@@ -273,7 +273,7 @@ impl ElementTrace for LazyList {
 // Wheel handling — scroll the viewport along the main axis.
 // ---------------------------------------------------------------------------
 
-impl ElementOnWheel for LazyList {
+impl ElementOnWheel for LazyListElement {
     fn on_wheel(&mut self, cx: &mut ElementOnWheelContext, event: &WheelEvent) -> f64 {
         let delta = match self.axis {
             Axis::Vertical => event.delta_y,
@@ -326,13 +326,13 @@ fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunc
     v.as_object().and_then(JsFunction::from_object)
 }
 
-impl LazyListSpec {
-    /// Build a `LazyListSpec` from a JS props object. Returns `None` when a
+impl LazyListComponent {
+    /// Build a `LazyListComponent` from a JS props object. Returns `None` when a
     /// required prop (`itemCount`, `builder`) is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let item_count = prop_val::<u64>(props, "itemCount", ctx)?;
         let builder = prop_builder(props, "builder", ctx)?;
-        Some(LazyListSpec {
+        Some(LazyListComponent {
             axis: prop_val::<Axis>(props, "axis", ctx),
             item_count,
             overscan: prop_val::<u64>(props, "overscan", ctx),

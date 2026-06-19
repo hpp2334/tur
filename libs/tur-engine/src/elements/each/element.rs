@@ -9,27 +9,27 @@ use tur_shared::{CrossAxisAlignment, MainAxisSize, MainAxisAlignment};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::reactive::{extract_atom, AtomId};
-use crate::core::widget::{extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
-use crate::elements::flex::Flex;
-use crate::elements::FlexSpec;
+use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::elements::flex::FlexElement;
+use crate::elements::FlexComponent;
 
 // ---------------------------------------------------------------------------
-// EachSpec — render one child per item of a reactive array.
+// EachComponent — render one child per item of a reactive array.
 //
 // `items` is an atom (source or derived) holding a JS array. `build` is a JS
 // function `(item, index) => EdgyElement` invoked once per item to produce
 // that item's subtree. Whenever the `items` atom changes, the mounted item
-// subtrees are rebuilt. `Each` lays its children out as a vertical flex
-// (Column); the layout is delegated to a `Flex` instance, so `mainAlignment`,
+// subtrees are rebuilt. `EachElement` lays its children out as a vertical flex
+// (Column); the layout is delegated to a `FlexElement` instance, so `mainAlignment`,
 // `crossAlignment`, and `mainAxisSize` behave exactly like `Column`.
 //
-// Like `LazyListSpec`, this holds a `JsFunction`; the spec rides on
-// `SpecHandle`'s `unsafe_empty_trace`, so the build closure must be kept
+// Like `LazyListComponent`, this holds a `JsFunction`; the spec rides on
+// `ComponentHandle`'s `unsafe_empty_trace`, so the build closure must be kept
 // alive by the JS module scope for the lifetime of the app (it always is).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct EachSpec {
+pub struct EachComponent {
     pub items: AtomId,
     pub build: JsFunction,
     pub main_alignment: Option<Val<MainAxisAlignment>>,
@@ -44,7 +44,7 @@ fn build_item_spec(
     item: &JsValue,
     index: u64,
     boa: &mut Context,
-) -> Option<Rc<dyn Spec>> {
+) -> Option<Rc<dyn Component>> {
     let result = builder
         .call(
             &JsValue::undefined(),
@@ -52,10 +52,10 @@ fn build_item_spec(
             boa,
         )
         .ok()?;
-    extract_spec(&result)
+    extract_component(&result)
 }
 
-impl EachSpec {
+impl EachComponent {
     /// Read the current `items` array from the store and build one child per
     /// entry under `parent`. Returns the built node ids in array order.
     fn build_items(
@@ -84,27 +84,27 @@ impl EachSpec {
     }
 }
 
-impl Spec for EachSpec {
+impl Component for EachComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
 
         // Build items BEFORE inserting this node so each item's self-link to
         // `id` is a no-op; we then explicitly link them after inserting to
-        // yield a single edge per item (same pattern as `LazyList`).
+        // yield a single edge per item (same pattern as `LazyListElement`).
         let mounted = self.build_items(cx, boa, id);
         let mounted_ids = mounted.clone();
 
         cx.insert_node(
             id,
-            AnyElement::new(Each {
-                flex: Flex {
-                    spec: FlexSpec {
-                        // `Each` is a vertical list (Column-like).
+            AnyElement::new(EachElement {
+                flex: FlexElement {
+                    component: FlexComponent {
+                        // `EachElement` is a vertical list (Column-like).
                         direction: Some(tur_shared::Axis::Vertical),
                         main_alignment: self.main_alignment.clone(),
                         cross_alignment: self.cross_alignment.clone(),
                         main_axis_size: self.main_axis_size.clone(),
-                        // Children live directly under the `Each` node, not
+                        // Children live directly under the `EachElement` node, not
                         // inside this delegate — `children` is unused.
                         children: Vec::new(),
                         query_key: None,
@@ -113,7 +113,7 @@ impl Spec for EachSpec {
                     constraints: None,
                     computed_size: None,
                 },
-                spec: self.clone(),
+                component: self.clone(),
                 node_id: id,
                 mounted,
             }),
@@ -132,24 +132,24 @@ impl Spec for EachSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Each — the built element.
+// EachElement — the built element.
 // ---------------------------------------------------------------------------
 
-pub struct Each {
-    pub(crate) flex: Flex,
-    pub spec: EachSpec,
+pub struct EachElement {
+    pub(crate) flex: FlexElement,
+    pub component: EachComponent,
     pub(crate) node_id: ElementNodeId,
     pub(crate) mounted: Vec<ElementNodeId>,
 }
 
-impl Effect for Each {
+impl Effect for EachElement {
     fn effect(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<AtomId>,
     ) {
-        if !dirties.contains(&self.spec.items) {
+        if !dirties.contains(&self.component.items) {
             return;
         }
 
@@ -160,12 +160,12 @@ impl Effect for Each {
         for old in self.mounted.drain(..) {
             cx.destroy_subtree(old);
         }
-        self.mounted = self.spec.build_items(cx, boa, node_id);
+        self.mounted = self.component.build_items(cx, boa, node_id);
         cx.mark_dirty(node_id);
     }
 }
 
-impl ElementTrace for Each {
+impl ElementTrace for EachElement {
     fn trace_label(&self) -> String {
         format!("items={}", self.mounted.len())
     }
@@ -215,9 +215,9 @@ fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunc
     v.as_object().and_then(JsFunction::from_object)
 }
 
-impl EachSpec {
+impl EachComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        Some(EachSpec {
+        Some(EachComponent {
             items: prop_items(props, "items", ctx)?,
             build: prop_builder(props, "build", ctx)?,
             main_alignment: prop_val::<MainAxisAlignment>(props, "mainAlignment", ctx),

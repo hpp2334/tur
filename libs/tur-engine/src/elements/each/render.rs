@@ -4,14 +4,14 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Each;
+use super::element::EachElement;
 
-// `Each` is a transparent relay to a `Flex` layout: it forwards the incoming
+// `EachElement` is a transparent relay to a `FlexElement` layout: it forwards the incoming
 // constraints to its mounted item children (laid out as a vertical flex via
-// the `Flex` delegate held on the element), positions them, and paints
+// the `FlexElement` delegate held on the element), positions them, and paints
 // nothing itself.
 
-impl ElementLayout for Each {
+impl ElementLayout for EachElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -26,7 +26,7 @@ impl ElementLayout for Each {
     }
 }
 
-impl ElementRender for Each {
+impl ElementRender for EachElement {
     fn type_name(&self) -> &'static str {
         "tur_each"
     }

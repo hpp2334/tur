@@ -2,35 +2,35 @@ use tur_shared::{Brush, Color, Geometry, Offset, Size};
 
 use super::text_layout::TextLayoutData;
 
-const DEFAULT_SELECTION_COLOR: Color = Color::rgba(0, 120, 215, 77);
+const DEFAULT_SELECTION_COLOR: Color = Color::rgba(56, 132, 255, 140);
 
 pub(crate) fn paint_selection(
     canvas: &mut dyn crate::core::render::Canvas,
     offset: Offset,
     layout_data: &TextLayoutData,
-    start_char: usize,
-    end_char: usize,
+    start_byte: usize,
+    end_byte: usize,
 ) {
-    let start_line = layout_data.line_index_for_char(start_char);
-    let end_line = layout_data.line_index_for_char(end_char);
+    let start_line = layout_data.line_index_for_byte(start_byte);
+    let end_line = layout_data.line_index_for_byte(end_byte);
 
     for line_idx in start_line..=end_line {
-        let line_start = layout_data.line_start_char(line_idx);
-        let line_end = layout_data.line_end_char(line_idx);
+        let line_start = layout_data.line_start_byte(line_idx);
+        let line_end = layout_data.line_end_byte(line_idx);
 
-        let sel_start = start_char.max(line_start);
-        let sel_end = end_char.min(line_end);
+        let sel_start = start_byte.max(line_start);
+        let sel_end = end_byte.min(line_end);
 
         if sel_start >= sel_end {
             continue;
         }
 
-        // `cursor_x_at(N)` returns the x where glyph N starts. When the
-        // selection ends exactly at a line boundary (sel_end == line_end),
-        // glyph `sel_end` is the FIRST glyph of the NEXT line — its x has
-        // reset to the line's left edge, so `cursor_x_at(sel_end)` would
-        // return ~0 and the rect would have zero or negative width. Use the
-        // right edge of the current line instead.
+        // `cursor_x_at(N)` returns the x where the glyph at byte N starts.
+        // When the selection ends exactly at a line boundary (sel_end ==
+        // line_end), byte `sel_end` is the FIRST glyph of the NEXT line — its
+        // x has reset to the line's left edge, so `cursor_x_at(sel_end)`
+        // would return ~0 and the rect would have zero or negative width. Use
+        // the right edge of the current line instead.
         let x_start = if sel_start == line_start {
             0.0
         } else {

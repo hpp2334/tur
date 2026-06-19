@@ -8,7 +8,7 @@ use crate::elements::text::paint_helpers;
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout;
 
-use super::element::EditableText;
+use super::element::EditableTextElement;
 
 const DEFAULT_TEXT_COLOR: Color = Color::rgb(0, 0, 0);
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
@@ -28,7 +28,7 @@ fn brush_arr(c: Color) -> [u8; 4] {
     [c.r(), c.g(), c.b(), c.a()]
 }
 
-impl ElementLayout for EditableText {
+impl ElementLayout for EditableTextElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -37,12 +37,12 @@ impl ElementLayout for EditableText {
     ) -> Size {
         // Resolve reactive props and cache `multiline` for the gesture/keyboard
         // handlers (those contexts lack store access).
-        self.resolved_multiline = cx.read_val_opt(self.spec.multiline.as_ref()).unwrap_or(false);
-        let font_size = cx.read_val_opt(self.spec.font_size.as_ref()).unwrap_or(14.0);
-        let font_family = cx.read_val_opt(self.spec.font_family.as_ref());
-        let placeholder = cx.read_val_opt(self.spec.placeholder.as_ref());
-        let color = cx.read_val_opt(self.spec.color.as_ref());
-        let placeholder_color = cx.read_val_opt(self.spec.placeholder_color.as_ref());
+        self.resolved_multiline = cx.read_val_opt(self.component.multiline.as_ref()).unwrap_or(false);
+        let font_size = cx.read_val_opt(self.component.font_size.as_ref()).unwrap_or(14.0);
+        let font_family = cx.read_val_opt(self.component.font_family.as_ref());
+        let placeholder = cx.read_val_opt(self.component.placeholder.as_ref());
+        let color = cx.read_val_opt(self.component.color.as_ref());
+        let placeholder_color = cx.read_val_opt(self.component.placeholder_color.as_ref());
 
         let display_text = self.composition_display_text();
 
@@ -128,7 +128,8 @@ impl ElementLayout for EditableText {
         layout.break_all_lines(max_width);
         layout.align(Alignment::Start, AlignmentOptions::default());
 
-        let (layout_data, width, height) = text_layout::extract_layout_data(&mut layout, &underline_ranges);
+        let (layout_data, width, height) =
+            text_layout::extract_layout_data(&mut layout, &underline_ranges, &full_text);
 
         self.cached_layout = Some(layout_data);
 
@@ -138,7 +139,7 @@ impl ElementLayout for EditableText {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for EditableText {
+impl ElementRender for EditableTextElement {
     fn type_name(&self) -> &'static str {
         "tur_editable_text"
     }
@@ -155,11 +156,10 @@ impl ElementRender for EditableText {
             return;
         };
 
-        let color = paint_ctx.read_val_opt(self.spec.color.as_ref());
-        let cursor_color = paint_ctx.read_val_opt(self.spec.cursor_color.as_ref());
+        let color = paint_ctx.read_val_opt(self.component.color.as_ref());
+        let cursor_color = paint_ctx.read_val_opt(self.component.cursor_color.as_ref());
 
         let c = self.controller();
-        let full = c.text();
         let cursor_pos = c.cursor_position();
         let sel_anchor = c.selection_anchor();
         let sel_end = c.selection_end();
@@ -174,51 +174,44 @@ impl ElementRender for EditableText {
             } else {
                 (sel_end, sel_anchor)
             };
-            let a_char = byte_to_char_offset(&full, a);
-            let b_char = byte_to_char_offset(&full, b);
-            paint_helpers::paint_selection(canvas, offset, layout_data, a_char, b_char);
+            paint_helpers::paint_selection(canvas, offset, layout_data, a, b);
         }
 
         canvas.fill_text_layout(offset, layout_data);
 
         if let Some(ref comp) = composing_text {
-            let comp_start_char = byte_to_char_offset(&full, composing_start);
-            let comp_end_char = comp_start_char + comp.chars().count();
-            if comp_start_char != comp_end_char {
-                paint_composition_underline(canvas, offset, layout_data, comp_start_char, comp_end_char);
+            let comp_start_byte = composing_start;
+            let comp_end_byte = composing_start + comp.len();
+            if comp_start_byte != comp_end_byte {
+                paint_composition_underline(canvas, offset, layout_data, comp_start_byte, comp_end_byte);
             }
         }
 
         if paint_ctx.is_focused() && !has_selection {
-            let cursor_char = byte_to_char_offset(&full, cursor_pos);
             paint_cursor(
-                canvas, offset, layout_data, cursor_char,
+                canvas, offset, layout_data, cursor_pos,
                 cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
             );
         }
     }
 }
 
-fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
-    s[..byte_pos.min(s.len())].chars().count()
-}
-
 fn paint_composition_underline(
     canvas: &mut dyn Canvas,
     offset: Offset,
     layout_data: &text_layout::TextLayoutData,
-    start_char: usize,
-    end_char: usize,
+    start_byte: usize,
+    end_byte: usize,
 ) {
-    let start_line = layout_data.line_index_for_char(start_char);
-    let end_line = layout_data.line_index_for_char(end_char);
+    let start_line = layout_data.line_index_for_byte(start_byte);
+    let end_line = layout_data.line_index_for_byte(end_byte);
 
     for line_idx in start_line..=end_line {
-        let line_start = layout_data.line_start_char(line_idx);
-        let line_end = layout_data.line_end_char(line_idx);
+        let line_start = layout_data.line_start_byte(line_idx);
+        let line_end = layout_data.line_end_byte(line_idx);
 
-        let ul_start = start_char.max(line_start);
-        let ul_end = end_char.min(line_end);
+        let ul_start = start_byte.max(line_start);
+        let ul_end = end_byte.min(line_end);
 
         if ul_start >= ul_end {
             continue;
@@ -250,11 +243,11 @@ fn paint_cursor(
     canvas: &mut dyn Canvas,
     offset: Offset,
     layout_data: &text_layout::TextLayoutData,
-    cursor_pos: usize,
+    cursor_byte: usize,
     cursor_color: Color,
 ) {
-    let (cursor_x, _) = layout_data.cursor_xy_at(cursor_pos);
-    let line_idx = layout_data.line_index_for_char(cursor_pos);
+    let (cursor_x, _) = layout_data.cursor_xy_at(cursor_byte);
+    let line_idx = layout_data.line_index_for_byte(cursor_byte);
     let line_info = &layout_data.line_infos[line_idx];
 
     canvas.fill_geometry(

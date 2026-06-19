@@ -5,24 +5,24 @@ use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::widget::{extract_spec, Effect, Spec, WidgetCx};
+use crate::core::widget::{extract_component, Effect, Component, WidgetCx};
 
 // ---------------------------------------------------------------------------
-// FragmentSpec — a transparent multi-child container. Children are built
-// directly under a single Fragment node (which renders nothing and sizes to
+// FragmentComponent — a transparent multi-child container. Children are built
+// directly under a single FragmentElement node (which renders nothing and sizes to
 // the union of its children).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct FragmentSpec {
-    pub children: Vec<Rc<dyn Spec>>,
+pub struct FragmentComponent {
+    pub children: Vec<Rc<dyn Component>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for FragmentSpec {
+impl Component for FragmentComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
-        // Fragment is truly transparent — no node is created. Children are
-        // built directly under the parent. This matches React Fragment
+        // FragmentElement is truly transparent — no node is created. Children are
+        // built directly under the parent. This matches React FragmentElement
         // semantics and keeps the tree flat for tests that navigate
         // root.children directly.
         for child_spec in &self.children {
@@ -33,18 +33,18 @@ impl Spec for FragmentSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Fragment element — only used if a Fragment node is ever created directly
-// (normally Fragment is transparent and creates no node). Kept for potential
+// FragmentElement element — only used if a FragmentElement node is ever created directly
+// (normally FragmentElement is transparent and creates no node). Kept for potential
 // future use.
 // ---------------------------------------------------------------------------
 
-pub struct Fragment {
-    pub spec: FragmentSpec,
+pub struct FragmentElement {
+    pub component: FragmentComponent,
 }
 
-impl Effect for Fragment {}
+impl Effect for FragmentElement {}
 
-impl ElementTrace for Fragment {}
+impl ElementTrace for FragmentElement {}
 
 // ---------------------------------------------------------------------------
 // Factory — called from the JS bridge to parse props into a spec.
@@ -73,8 +73,8 @@ fn prop_query_key(
     if out.is_empty() { None } else { Some(out) }
 }
 
-/// Extract child specs from a JS array of SpecHandle opaques.
-fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn Spec>> {
+/// Extract child specs from a JS array of ComponentHandle opaques.
+fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn Component>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
     let Ok(v) = props.get(js_string!(key), ctx) else {
@@ -90,7 +90,7 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn S
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_spec(&item) {
+            if let Some(spec) = extract_component(&item) {
                 out.push(spec);
             }
         }
@@ -98,10 +98,10 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn S
     out
 }
 
-impl FragmentSpec {
-    /// Build a `FragmentSpec` from a JS props object.
+impl FragmentComponent {
+    /// Build a `FragmentComponent` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        FragmentSpec {
+        FragmentComponent {
             children: prop_children(props, "children", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }

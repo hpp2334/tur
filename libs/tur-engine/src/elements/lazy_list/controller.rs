@@ -14,7 +14,7 @@ use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingM
 use crate::core::element::ElementNodeId;
 use crate::core::scroll::ScrollEvent;
 use crate::elements::lazy_list::VisibleRangeChangeEvent;
-use crate::elements::LazyList;
+use crate::elements::LazyListElement;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -158,7 +158,7 @@ impl Class for LazyListController {
                 let Some(ref mut element) = node.element else {
                     return Ok(JsValue::undefined());
                 };
-                let Some(ll) = element.cast_mut::<LazyList>() else {
+                let Some(ll) = element.cast_mut::<LazyListElement>() else {
                     return Ok(JsValue::undefined());
                 };
 

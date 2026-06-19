@@ -6,19 +6,19 @@ use tur_shared::Color;
 
 use crate::core::element::ElementNodeId;
 use crate::core::text::TextEditingController;
-use crate::core::widget::{ReadableAtom, Spec, Val, WidgetCx};
-use crate::elements::ContainerSpec;
+use crate::core::widget::{ReadableAtom, Component, Val, WidgetCx};
+use crate::elements::ContainerComponent;
 
-use super::element::{prop_controller, prop_controller_atom, prop_query_key, prop_val, EditableTextSpec};
+use super::element::{prop_controller, prop_controller_atom, prop_query_key, prop_val, EditableTextComponent};
 
 // ---------------------------------------------------------------------------
-// InputSpec — composes a Container (sizing/border wrapper) with a single
-// EditableText child. Input is NOT its own element; it's a spec that builds
-// a Container + EditableText subtree.
+// InputComponent — composes a ContainerElement (sizing/border wrapper) with a single
+// EditableTextElement child. Input is NOT its own element; it's a spec that builds
+// a ContainerElement + EditableTextElement subtree.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct InputSpec {
+pub struct InputComponent {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub controller: Option<JsObject>,
@@ -33,9 +33,9 @@ pub struct InputSpec {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for InputSpec {
+impl Component for InputComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
-        let editable = Rc::new(EditableTextSpec {
+        let editable = Rc::new(EditableTextComponent {
             controller: self.controller.clone(),
             controller_atom: self.controller_atom,
             placeholder: self.placeholder.clone(),
@@ -47,7 +47,7 @@ impl Spec for InputSpec {
             multiline: self.multiline.clone(),
             query_key: None,
         });
-        let container_spec = ContainerSpec {
+        let container_spec = ContainerComponent {
             width: self.width.clone(),
             height: self.height.clone(),
             children: vec![editable],
@@ -58,10 +58,10 @@ impl Spec for InputSpec {
     }
 }
 
-impl InputSpec {
-    /// Build an `InputSpec` from a JS props object.
+impl InputComponent {
+    /// Build an `InputComponent` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        InputSpec {
+        InputComponent {
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),
             controller: prop_controller(props, "controller", ctx),

@@ -6,26 +6,28 @@ use boa_engine::Context;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
-    extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    val_from_js, Component, ComponentFactory, Effect, JsComponentFactory, PropValue, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// ConditionSpec — the user's declaration. Pure Rust, no JsValues.
+// ConditionComponent — the user's declaration. Pure Rust, no JsValues.
 //
 // `condition` is reactive (`Val<bool>`). `then_child` / `else_child` are the
-// branch specs (Option since each is optional). Condition is a transparent
-// widget: it mounts exactly one branch and relays layout/paint to it.
+// branch factories (`Option<ComponentFactory>`): the concrete subtree is only
+// known at runtime, so `create()` is invoked when a branch is selected.
+// ConditionElement is a transparent widget: it mounts exactly one branch and relays
+// layout/paint to it.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ConditionSpec {
+pub struct ConditionComponent {
     pub condition: Val<bool>,
-    pub then_child: Option<Rc<dyn Spec>>,
-    pub else_child: Option<Rc<dyn Spec>>,
+    pub then_child: Option<Rc<dyn ComponentFactory>>,
+    pub else_child: Option<Rc<dyn ComponentFactory>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for ConditionSpec {
+impl Component for ConditionComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
 
@@ -36,7 +38,7 @@ impl Spec for ConditionSpec {
         } else {
             MountedBranch::Else
         };
-        let branch_spec = match branch {
+        let branch_factory = match branch {
             MountedBranch::Then => self.then_child.clone(),
             MountedBranch::Else => self.else_child.clone(),
             MountedBranch::None => None,
@@ -45,17 +47,21 @@ impl Spec for ConditionSpec {
         // Build the chosen branch BEFORE inserting this node so the branch's
         // self-link to `id` is a no-op (parent not yet in the tree). We then
         // explicitly link the branch after inserting — yielding a single edge.
-        let (mounted, mounted_child) = if let Some(spec) = branch_spec {
-            let child_id = spec.build(cx, boa, id);
-            (branch, Some(child_id))
+        let (mounted, mounted_child) = if let Some(factory) = branch_factory {
+            if let Some(component) = factory.create(boa) {
+                let child_id = component.build(cx, boa, id);
+                (branch, Some(child_id))
+            } else {
+                (MountedBranch::None, None)
+            }
         } else {
             (MountedBranch::None, None)
         };
 
         cx.insert_node(
             id,
-            AnyElement::new(Condition {
-                spec: self.clone(),
+            AnyElement::new(ConditionElement {
+                component: self.clone(),
                 node_id: id,
                 mounted,
                 mounted_child,
@@ -86,29 +92,29 @@ pub enum MountedBranch {
 }
 
 // ---------------------------------------------------------------------------
-// Condition — the built element. Holds its spec, its own node id (so the
+// ConditionElement — the built element. Holds its spec, its own node id (so the
 // effect can rebuild branches), and which branch is currently mounted.
 // ---------------------------------------------------------------------------
 
-pub struct Condition {
-    pub spec: ConditionSpec,
+pub struct ConditionElement {
+    pub component: ConditionComponent,
     pub(crate) node_id: ElementNodeId,
     pub(crate) mounted: MountedBranch,
     pub(crate) mounted_child: Option<ElementNodeId>,
 }
 
-impl Effect for Condition {
+impl Effect for ConditionElement {
     fn effect(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        if !self.spec.condition.is_dirty(dirties) {
+        if !self.component.condition.is_dirty(dirties) {
             return;
         }
 
-        let new_value = cx.read_val(&self.spec.condition, boa).unwrap_or(false);
+        let new_value = cx.read_val(&self.component.condition, boa).unwrap_or(false);
         let new_branch = if new_value {
             MountedBranch::Then
         } else {
@@ -123,17 +129,21 @@ impl Effect for Condition {
             cx.destroy_subtree(old);
         }
 
-        // Build the new branch. Condition's node IS in the tree during the
+        // Build the new branch. ConditionElement's node IS in the tree during the
         // effect, so the branch's self-link succeeds — no explicit link needed.
-        let new_spec = match new_branch {
-            MountedBranch::Then => self.spec.then_child.clone(),
-            MountedBranch::Else => self.spec.else_child.clone(),
+        let new_factory = match new_branch {
+            MountedBranch::Then => self.component.then_child.clone(),
+            MountedBranch::Else => self.component.else_child.clone(),
             MountedBranch::None => None,
         };
         let node_id = self.node_id;
-        if let Some(spec) = new_spec {
-            let child_id = spec.build(cx, boa, node_id);
-            self.mounted_child = Some(child_id);
+        if let Some(factory) = new_factory {
+            if let Some(component) = factory.create(boa) {
+                let child_id = component.build(cx, boa, node_id);
+                self.mounted_child = Some(child_id);
+            } else {
+                self.mounted_child = None;
+            }
         } else {
             self.mounted_child = None;
         }
@@ -142,7 +152,7 @@ impl Effect for Condition {
     }
 }
 
-impl ElementTrace for Condition {
+impl ElementTrace for ConditionElement {
     fn trace_label(&self) -> String {
         let branch = match self.mounted {
             MountedBranch::Then => "then",
@@ -181,27 +191,30 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     if out.is_empty() { None } else { Some(out) }
 }
 
-/// Extract an optional child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
+/// Extract an optional branch factory from a JS props object. The prop value
+/// is a JS thunk `() => EdgyElement`; it is wrapped in a `JsComponentFactory`.
+fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ComponentFactory>> {
     use boa_engine::js_string;
+    use boa_engine::object::builtins::JsFunction;
     let v = props.get(js_string!(key), ctx).ok()?;
     if v.is_undefined() || v.is_null() {
         return None;
     }
-    extract_spec(&v)
+    let f = v.as_object().and_then(JsFunction::from_object)?;
+    Some(Rc::new(JsComponentFactory(f)))
 }
 
-impl ConditionSpec {
-    /// Build a `ConditionSpec` from a JS props object.
+impl ConditionComponent {
+    /// Build a `ConditionComponent` from a JS props object.
     ///
     /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
-    /// the JS `ConditionProps` interface).
+    /// the JS `ConditionProps` interface). Both are thunks `() => EdgyElement`.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        ConditionSpec {
+        ConditionComponent {
             condition: prop_val::<bool>(props, "condition", ctx)
                 .unwrap_or(Val::Static(false)),
-            then_child: prop_child(props, "child", ctx),
-            else_child: prop_child(props, "elseChild", ctx),
+            then_child: prop_factory(props, "child", ctx),
+            else_child: prop_factory(props, "elseChild", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }
     }

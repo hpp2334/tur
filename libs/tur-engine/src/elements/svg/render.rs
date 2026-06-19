@@ -4,17 +4,17 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Svg;
+use super::element::SvgElement;
 
-impl ElementLayout for Svg {
+impl ElementLayout for SvgElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let width = cx.read_val_opt(self.spec.width.as_ref());
-        let height = cx.read_val_opt(self.spec.height.as_ref());
+        let width = cx.read_val_opt(self.component.width.as_ref());
+        let height = cx.read_val_opt(self.component.height.as_ref());
 
         let w = width.unwrap_or_else(|| {
             if constraints.max_width.is_finite() {
@@ -37,7 +37,7 @@ impl ElementLayout for Svg {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for Svg {
+impl ElementRender for SvgElement {
     fn type_name(&self) -> &'static str {
         "tur_svg"
     }
@@ -53,7 +53,7 @@ impl ElementRender for Svg {
         let _ = canvas;
         let _ = offset;
         let _ = paint_ctx
-            .read_val_opt(self.spec.fit.as_ref())
+            .read_val_opt(self.component.fit.as_ref())
             .unwrap_or_default();
 
         for &child_id in children {

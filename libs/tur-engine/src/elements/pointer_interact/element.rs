@@ -8,12 +8,12 @@ use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
-    extract_spec, val_from_js, Effect, PropValue, Spec,
+    extract_component, val_from_js, Effect, PropValue, Component,
     Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// PointerInteractSpec — the user's declaration. Pure Rust, no JsValues.
+// PointerInteractComponent — the user's declaration. Pure Rust, no JsValues.
 //
 // Callbacks are mutation atoms typed as `EdgyMutation<E>`.  The JS bridge
 // wraps user callbacks as mutation atoms and passes the `AtomHandle` as the
@@ -22,15 +22,15 @@ use crate::core::widget::{
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct PointerInteractSpec {
+pub struct PointerInteractComponent {
     pub behavior: Option<Val<HitTestBehavior>>,
     pub on_click: Option<EdgyMutation<ClickEvent>>,
     pub on_pointer_enter: Option<EdgyMutation<PointerEnterEvent>>,
     pub on_pointer_exit: Option<EdgyMutation<PointerExitEvent>>,
-    pub child: Option<Rc<dyn Spec>>,
+    pub child: Option<Rc<dyn Component>>,
 }
 
-impl Spec for PointerInteractSpec {
+impl Component for PointerInteractComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let behavior = self
             .behavior
@@ -41,8 +41,8 @@ impl Spec for PointerInteractSpec {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::new(PointerInteract {
-                spec: self.clone(),
+            AnyElement::new(PointerInteractElement {
+                component: self.clone(),
                 behavior,
             })
             .with_callbacks(),
@@ -57,38 +57,38 @@ impl Spec for PointerInteractSpec {
 }
 
 // ---------------------------------------------------------------------------
-// PointerInteract — the built element. Stores spec + eagerly-resolved
+// PointerInteractElement — the built element. Stores spec + eagerly-resolved
 // behavior (read by gesture/pointer-region handlers at event time where no
 // store/Context is available).
 // ---------------------------------------------------------------------------
 
-pub struct PointerInteract {
-    pub spec: PointerInteractSpec,
+pub struct PointerInteractElement {
+    pub component: PointerInteractComponent,
     behavior: HitTestBehavior,
 }
 
-impl PointerInteract {
+impl PointerInteractElement {
     pub fn has_on_click(&self) -> bool {
-        self.spec.on_click.is_some()
+        self.component.on_click.is_some()
     }
 
     pub fn has_pointer_region_callbacks(&self) -> bool {
-        self.spec.on_pointer_enter.is_some() || self.spec.on_pointer_exit.is_some()
+        self.component.on_pointer_enter.is_some() || self.component.on_pointer_exit.is_some()
     }
 
     pub fn is_click_opaque(&self) -> bool {
-        self.behavior == HitTestBehavior::Opaque && self.spec.on_click.is_some()
+        self.behavior == HitTestBehavior::Opaque && self.component.on_click.is_some()
     }
 
     pub fn is_pointer_region_opaque(&self) -> bool {
         self.behavior == HitTestBehavior::Opaque
-            && (self.spec.on_pointer_enter.is_some() || self.spec.on_pointer_exit.is_some())
+            && (self.component.on_pointer_enter.is_some() || self.component.on_pointer_exit.is_some())
     }
 }
 
-impl Effect for PointerInteract {}
+impl Effect for PointerInteractElement {}
 
-impl ElementTrace for PointerInteract {}
+impl ElementTrace for PointerInteractElement {}
 
 // ---------------------------------------------------------------------------
 // Factory — called from the JS bridge to parse props into a spec.
@@ -110,15 +110,15 @@ fn prop_mutation<E: EventArg>(
     edgy_mutation_from_js(&v)
 }
 
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_spec(&v)
+    extract_component(&v)
 }
 
-impl PointerInteractSpec {
+impl PointerInteractComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        PointerInteractSpec {
+        PointerInteractComponent {
             behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
             on_click: prop_mutation::<ClickEvent>(props, "onClick", ctx),
             on_pointer_enter: prop_mutation::<PointerEnterEvent>(props, "onPointerEnter", ctx),

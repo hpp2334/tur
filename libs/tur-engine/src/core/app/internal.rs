@@ -221,7 +221,7 @@ impl TurAppInternal {
 
     /// Resolve pending focus/blur notifications recorded by `FocusManager`.
     /// Each pending id is looked up in the element tree; if it resolves to a
-    /// focusable element (Focusable or EditableText) with an `on_focus` /
+    /// focusable element (FocusableElement or EditableTextElement) with an `on_focus` /
     /// `on_blur` mutation, the invocation is pushed onto the pending-mutation
     /// queue. Runs before `flush_pending_mutations` so focus callbacks fire in
     /// the same pass.
@@ -276,13 +276,13 @@ fn focus_mutation(
     tree: &crate::core::elements::ElementTree,
     id: crate::core::element::ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::FocusEvent>> {
-    use crate::elements::{EditableText, Focusable};
+    use crate::elements::{EditableTextElement, FocusableElement};
     let node = tree.get(id)?;
     let element = node.element.as_ref()?;
-    if let Some(f) = element.cast::<Focusable>() {
-        return f.spec.on_focus;
+    if let Some(f) = element.cast::<FocusableElement>() {
+        return f.component.on_focus;
     }
-    if let Some(e) = element.cast::<EditableText>() {
+    if let Some(e) = element.cast::<EditableTextElement>() {
         return e.controller().on_focus();
     }
     None
@@ -292,13 +292,13 @@ fn blur_mutation(
     tree: &crate::core::elements::ElementTree,
     id: crate::core::element::ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::BlurEvent>> {
-    use crate::elements::{EditableText, Focusable};
+    use crate::elements::{EditableTextElement, FocusableElement};
     let node = tree.get(id)?;
     let element = node.element.as_ref()?;
-    if let Some(f) = element.cast::<Focusable>() {
-        return f.spec.on_blur;
+    if let Some(f) = element.cast::<FocusableElement>() {
+        return f.component.on_blur;
     }
-    if let Some(e) = element.cast::<EditableText>() {
+    if let Some(e) = element.cast::<EditableTextElement>() {
         return e.controller().on_blur();
     }
     None

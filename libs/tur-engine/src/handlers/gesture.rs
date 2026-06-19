@@ -4,7 +4,7 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
 use crate::elements::pointer_interact::ClickEvent;
-use crate::elements::PointerInteract;
+use crate::elements::PointerInteractElement;
 use tur_shared::Offset;
 
 pub struct GestureAppHandler;
@@ -62,8 +62,8 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
         for node_id in &hit_path {
             if let Some(node) = cx.element_tree.get(*node_id) {
                 if let Some(ref element) = node.element {
-                    if let Some(p) = element.cast::<PointerInteract>() {
-                        if let Some(m) = p.spec.on_click {
+                    if let Some(p) = element.cast::<PointerInteractElement>() {
+                        if let Some(m) = p.component.on_click {
                             cx.mutation_queue
                                 .push(m, ClickEvent { x: position.x, y: position.y });
                         }
@@ -81,7 +81,7 @@ fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId)
     tree.get(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
-            e.cast::<PointerInteract>()
+            e.cast::<PointerInteractElement>()
                 .map(|p| p.is_click_opaque())
                 .unwrap_or(false)
         })

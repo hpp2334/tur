@@ -2,7 +2,7 @@ use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::keyboard::KeydownEvent;
-use crate::elements::Focusable;
+use crate::elements::FocusableElement;
 
 pub struct KeyboardAppHandler;
 
@@ -24,8 +24,8 @@ impl AppHandler for KeyboardAppHandler {
         while let Some(id) = current {
             if let Some(node) = cx.element_tree.get(id) {
                 if let Some(ref element) = node.element {
-                    if let Some(f) = element.cast::<Focusable>() {
-                        if let Some(m) = f.spec.on_key_down {
+                    if let Some(f) = element.cast::<FocusableElement>() {
+                        if let Some(m) = f.component.on_key_down {
                             cx.mutation_queue.push(
                                 m,
                                 KeydownEvent {

@@ -1,13 +1,38 @@
 use parley::layout::PositionedLayoutItem;
 
+/// One user-positionable glyph stop on a line, in source-string BYTE space.
+///
+/// `byte` is the byte offset in the source string where this glyph starts.
+/// This is the single source of truth that keeps the layout's geometry (x/y)
+/// aligned with the `TextEditingController`'s byte-based cursor/selection
+/// offsets — newlines (`\n`) consume a byte in the string but produce no
+/// glyph, so we must never count glyphs as if they were string indices.
+#[derive(Copy, Clone)]
+pub(crate) struct LineGlyphStop {
+    pub byte: usize,
+    pub x: f32,
+    pub y: f32,
+    pub advance: f32,
+}
+
 pub(crate) struct LineInfo {
     pub top: f32,
     pub height: f32,
     #[allow(dead_code)]
     pub baseline: f32,
-    #[allow(dead_code)]
-    pub start_char: usize,
-    pub glyph_count: usize,
+    /// Byte offset of the first character of this line (after the previous
+    /// line's terminating `\n`, or 0 for the first line).
+    pub start_byte: usize,
+    /// Byte offset of the cursor sitting at the END of this line's visible
+    /// text — i.e. just past the last non-newline character. For a line ended
+    /// by `\n`, this points AT the `\n` (cursor before it). For the final
+    /// line, this is the full text length.
+    pub end_byte: usize,
+    /// x of the right edge of the last glyph on this line (where the cursor
+    /// sits at `end_byte`).
+    pub right_x: f32,
+    /// Glyphs on this line, in visual order, each tagged with its source byte.
+    pub stops: Vec<LineGlyphStop>,
 }
 
 pub(crate) struct TextLayoutData {
@@ -36,38 +61,36 @@ pub(crate) struct TextGlyph {
 }
 
 impl TextLayoutData {
-    pub fn cursor_x_at(&self, char_index: usize) -> f32 {
-        let mut chars_seen = 0;
-        for run in &self.runs {
-            for glyph in &run.glyphs {
-                if chars_seen == char_index {
-                    return glyph.x;
-                }
-                chars_seen += 1;
-            }
-        }
-        self.runs
-            .last()
-            .and_then(|r| r.glyphs.last())
-            .map(|g| g.x + g.advance)
-            .unwrap_or(0.0)
+    /// x of the cursor at `byte` (single-line convenience).
+    pub fn cursor_x_at(&self, byte: usize) -> f32 {
+        self.cursor_xy_at(byte).0
     }
 
-    pub fn cursor_xy_at(&self, char_index: usize) -> (f32, f32) {
-        let mut chars_seen = 0;
-        for run in &self.runs {
-            for glyph in &run.glyphs {
-                if chars_seen == char_index {
-                    return (glyph.x, glyph.y);
-                }
-                chars_seen += 1;
+    /// (x, y) of the cursor caret at the given source-string byte offset.
+    pub fn cursor_xy_at(&self, byte: usize) -> (f32, f32) {
+        let line = self.line_index_for_byte(byte);
+        let info = &self.line_infos[line];
+        let b = byte.clamp(info.start_byte, info.end_byte);
+
+        // Exact glyph at this byte?
+        for s in &info.stops {
+            if s.byte == b {
+                return (s.x, s.y);
             }
         }
-        self.runs
-            .last()
-            .and_then(|r| r.glyphs.last())
-            .map(|g| (g.x + g.advance, g.y))
-            .unwrap_or((0.0, 0.0))
+        // b == start_byte with no matching glyph (empty line / before first
+        // glyph): caret at the line's left edge.
+        if b <= info.start_byte {
+            if let Some(first) = info.stops.first() {
+                return (first.x, first.y);
+            }
+            return (0.0, info.baseline);
+        }
+        // b == end_byte (after the last glyph): caret at the line's right edge.
+        if let Some(last) = info.stops.last() {
+            return (last.x + last.advance, last.y);
+        }
+        (0.0, info.baseline)
     }
 
     pub fn line_index_at_y(&self, y: f32) -> usize {
@@ -79,52 +102,40 @@ impl TextLayoutData {
         self.line_infos.len().saturating_sub(1)
     }
 
-    pub fn line_index_for_char(&self, char_index: usize) -> usize {
-        let mut chars_seen = 0;
-        for (i, line) in self.line_infos.iter().enumerate() {
-            if char_index < chars_seen + line.glyph_count {
-                return i;
+    /// Index of the layout line containing the given source-string byte.
+    /// A `\n` byte belongs to the line it terminates.
+    pub fn line_index_for_byte(&self, byte: usize) -> usize {
+        let mut idx = 0;
+        for (i, info) in self.line_infos.iter().enumerate() {
+            if byte >= info.start_byte {
+                idx = i;
+            } else {
+                break;
             }
-            chars_seen += line.glyph_count;
         }
-        self.line_infos.len().saturating_sub(1)
+        idx
     }
 
-    pub fn line_start_char(&self, line_index: usize) -> usize {
-        if line_index == 0 {
-            return 0;
-        }
+    pub fn line_start_byte(&self, line_index: usize) -> usize {
         self.line_infos
-            .iter()
-            .take(line_index)
-            .map(|l| l.glyph_count)
-            .sum()
+            .get(line_index)
+            .map(|l| l.start_byte)
+            .unwrap_or(0)
     }
 
-    pub fn line_end_char(&self, line_index: usize) -> usize {
+    pub fn line_end_byte(&self, line_index: usize) -> usize {
         self.line_infos
-            .iter()
-            .take(line_index + 1)
-            .map(|l| l.glyph_count)
-            .sum()
+            .get(line_index)
+            .map(|l| l.end_byte)
+            .unwrap_or(0)
     }
 
-    /// Returns the x coordinate of the RIGHT edge of the last glyph on the
-    /// given line (i.e. where the cursor would sit at the end of the line).
-    /// Returns 0.0 for an empty line. This is the line-aware counterpart to
-    /// `cursor_x_at(line_end_char(line_index))`, which (because glyph x
-    /// coordinates reset to 0 at each line start) would otherwise return the
-    /// left edge of the FOLLOWING line.
+    /// x of the right edge of the last glyph on the given line.
     pub fn line_right_x(&self, line_index: usize) -> f32 {
-        let mut last_right = 0.0f32;
-        for run in &self.runs {
-            if run.line_index == line_index {
-                if let Some(g) = run.glyphs.last() {
-                    last_right = last_right.max(g.x + g.advance);
-                }
-            }
-        }
-        last_right
+        self.line_infos
+            .get(line_index)
+            .map(|l| l.right_x)
+            .unwrap_or(0.0)
     }
 
     #[allow(dead_code)]
@@ -132,63 +143,63 @@ impl TextLayoutData {
         self.line_infos.len()
     }
 
-    #[allow(dead_code)]
-    pub fn char_index_at_x(&self, x: f32) -> usize {
-        let mut chars_seen = 0;
-        let mut total_chars = 0;
-        for run in &self.runs {
-            total_chars += run.glyphs.len();
-            for glyph in &run.glyphs {
-                let glyph_center = glyph.x + glyph.advance / 2.0;
-                if x <= glyph_center {
-                    return chars_seen;
-                }
-                chars_seen += 1;
-            }
-        }
-        total_chars
+    /// Single-line hit test: byte offset at the given x on line 0.
+    pub fn byte_index_at_x(&self, x: f32) -> usize {
+        let Some(info) = self.line_infos.first() else {
+            return 0;
+        };
+        byte_at_x(info, x)
     }
 
-    pub fn char_index_at_xy(&self, x: f32, y: f32) -> usize {
-        let line_idx = self.line_index_at_y(y);
-        let start = self.line_start_char(line_idx);
-        let end = self.line_end_char(line_idx);
-
-        let mut chars_seen = 0;
-        for run in &self.runs {
-            for glyph in &run.glyphs {
-                if chars_seen >= end {
-                    return end;
-                }
-                if chars_seen >= start {
-                    let glyph_center = glyph.x + glyph.advance / 2.0;
-                    if x <= glyph_center {
-                        return chars_seen;
-                    }
-                }
-                chars_seen += 1;
-            }
-        }
-        end
+    /// Multi-line hit test: byte offset at the given (x, y).
+    pub fn byte_index_at_xy(&self, x: f32, y: f32) -> usize {
+        let line = self.line_index_at_y(y);
+        let Some(info) = self.line_infos.get(line) else {
+            return 0;
+        };
+        byte_at_x(info, x)
     }
+}
 
+fn byte_at_x(info: &LineInfo, x: f32) -> usize {
+    for s in &info.stops {
+        let center = s.x + s.advance / 2.0;
+        if x <= center {
+            return s.byte;
+        }
+    }
+    info.end_byte
 }
 
 pub(crate) fn extract_layout_data(
     layout: &mut parley::Layout<[u8; 4]>,
     underline_ranges: &[(usize, usize)],
+    full_text: &str,
 ) -> (TextLayoutData, f32, f32) {
     let width = layout.width();
     let height = layout.height();
 
-    let mut char_offset = 0usize;
+    let text_bytes = full_text.as_bytes();
     let mut runs = Vec::new();
     let mut line_infos = Vec::new();
 
     for (line_idx, line) in layout.lines().enumerate() {
         let metrics = line.metrics();
-        let line_start_char = char_offset;
-        let mut line_glyph_count = 0usize;
+        let line_range = line.text_range();
+
+        let start_byte = line_range.start;
+        // `end_byte` is the caret position past the last visible char: strip
+        // any trailing `\n` that parley may have included in the line range.
+        let mut end_byte = line_range.end.min(full_text.len());
+        while end_byte > start_byte && text_bytes.get(end_byte - 1) == Some(&b'\n') {
+            end_byte -= 1;
+        }
+        // parley sometimes leaves the cursor stop on the empty trailing line
+        // of a text ending in `\n`; keep start within bounds.
+        let start_byte = start_byte.min(full_text.len());
+
+        let mut stops: Vec<LineGlyphStop> = Vec::new();
+        let mut right_x = 0.0f32;
 
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
@@ -200,19 +211,35 @@ pub(crate) fn extract_layout_data(
             let normalized_coords = run.normalized_coords().to_vec();
             let style = glyph_run.style();
 
-            let glyph_count = glyph_run.glyphs().count();
-
+            let run_range = run.text_range();
             let run_underline = underline_ranges
                 .iter()
-                .any(|&(start, end)| char_offset < end && char_offset + glyph_count > start);
+                .any(|&(start, end)| run_range.start < end && run_range.end > start);
 
             let mut glyphs = Vec::new();
             let mut x = glyph_run.offset();
             let y = glyph_run.baseline();
+
+            // Pair each glyph with the next source char in the run's byte
+            // range. For monospace code (1 char = 1 glyph) this is exact; for
+            // ligatures / combining marks the last glyph absorbs the trailing
+            // chars, which is an acceptable approximation for a code editor.
+            let mut char_offsets = full_text[run_range.clone()].char_indices();
             for glyph in glyph_run.glyphs() {
                 let gx = x + glyph.x;
                 let gy = y - glyph.y;
                 x += glyph.advance;
+                let byte = char_offsets
+                    .next()
+                    .map(|(off, _)| run_range.start + off)
+                    .unwrap_or(run_range.end);
+                right_x = right_x.max(gx + glyph.advance);
+                stops.push(LineGlyphStop {
+                    byte,
+                    x: gx,
+                    y: gy,
+                    advance: glyph.advance,
+                });
                 glyphs.push(TextGlyph {
                     id: glyph.id,
                     x: gx,
@@ -220,9 +247,6 @@ pub(crate) fn extract_layout_data(
                     advance: glyph.advance,
                 });
             }
-
-            char_offset += glyph_count;
-            line_glyph_count += glyph_count;
 
             runs.push(TextRunData {
                 font,
@@ -239,8 +263,10 @@ pub(crate) fn extract_layout_data(
             top: metrics.baseline - metrics.ascent,
             height: metrics.size(),
             baseline: metrics.baseline,
-            start_char: line_start_char,
-            glyph_count: line_glyph_count,
+            start_byte,
+            end_byte,
+            right_x,
+            stops,
         });
     }
 

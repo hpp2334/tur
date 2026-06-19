@@ -6,22 +6,22 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Container;
+use super::element::ContainerElement;
 
-impl ElementLayout for Container {
+impl ElementLayout for ContainerElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let width = cx.read_val_opt(self.spec.width.as_ref());
-        let height = cx.read_val_opt(self.spec.height.as_ref());
-        let padding = cx.read_val_opt(self.spec.padding.as_ref());
-        let alignment = cx.read_val_opt(self.spec.alignment.as_ref());
+        let width = cx.read_val_opt(self.component.width.as_ref());
+        let height = cx.read_val_opt(self.component.height.as_ref());
+        let padding = cx.read_val_opt(self.component.padding.as_ref());
+        let alignment = cx.read_val_opt(self.component.alignment.as_ref());
 
-        self.cached_color = cx.read_val_opt(self.spec.color.as_ref());
-        self.cached_border_color = cx.read_val_opt(self.spec.border_color.as_ref());
+        self.cached_color = cx.read_val_opt(self.component.color.as_ref());
+        self.cached_border_color = cx.read_val_opt(self.component.border_color.as_ref());
 
         let sized_constraints = Constraints {
             min_width: width.unwrap_or(constraints.min_width),
@@ -61,8 +61,8 @@ impl ElementLayout for Container {
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         if let Some(&child_id) = children.first() {
-            let padding = cx.read_val_opt(self.spec.padding.as_ref()).unwrap_or(0.0);
-            let alignment = cx.read_val_opt(self.spec.alignment.as_ref());
+            let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
+            let alignment = cx.read_val_opt(self.component.alignment.as_ref());
             let container_size = cx.self_computed_size();
             let offset = match alignment {
                 Some(ref align) => {
@@ -81,7 +81,7 @@ impl ElementLayout for Container {
     }
 }
 
-impl ElementRender for Container {
+impl ElementRender for ContainerElement {
     fn type_name(&self) -> &'static str {
         "tur_container"
     }
@@ -94,19 +94,19 @@ impl ElementRender for Container {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let shadow_blur = paint_ctx.read_val_opt(self.spec.shadow_blur.as_ref());
-        let shadow_color = paint_ctx.read_val_opt(self.spec.shadow_color.as_ref());
-        let color = paint_ctx.read_val_opt(self.spec.color.as_ref());
-        let border_color = paint_ctx.read_val_opt(self.spec.border_color.as_ref());
-        let border_width = paint_ctx.read_val_opt(self.spec.border_width.as_ref());
-        let border_radius = paint_ctx.read_val_opt(self.spec.border_radius.as_ref());
+        let shadow_blur = paint_ctx.read_val_opt(self.component.shadow_blur.as_ref());
+        let shadow_color = paint_ctx.read_val_opt(self.component.shadow_color.as_ref());
+        let color = paint_ctx.read_val_opt(self.component.color.as_ref());
+        let border_color = paint_ctx.read_val_opt(self.component.border_color.as_ref());
+        let border_width = paint_ctx.read_val_opt(self.component.border_width.as_ref());
+        let border_radius = paint_ctx.read_val_opt(self.component.border_radius.as_ref());
         let border_position = paint_ctx
-            .read_val_opt(self.spec.border_position.as_ref())
+            .read_val_opt(self.component.border_position.as_ref())
             .unwrap_or_default();
 
         if let (Some(sc), Some(sb)) = (shadow_color.as_ref(), shadow_blur) {
             if sb > 0.0 {
-                let shadow_offset = self.spec.shadow_offset.unwrap_or((0.0, 0.0));
+                let shadow_offset = self.component.shadow_offset.unwrap_or((0.0, 0.0));
                 let radius = border_radius.unwrap_or(0.0);
                 canvas.draw_shadow(offset, layout.size, sc, radius, sb, shadow_offset);
             }

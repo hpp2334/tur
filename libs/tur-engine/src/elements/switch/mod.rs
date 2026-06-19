@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Switch, SwitchKey, SwitchSpec};
+pub use element::{SwitchElement, SwitchKey, SwitchComponent};

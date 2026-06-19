@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Fragment, FragmentSpec};
+pub use element::{FragmentElement, FragmentComponent};

@@ -61,13 +61,14 @@ function NavItem(name: string): EdgyElement {
                                 () =>
                                     get(edited$) && get(selectedCase$) === name,
                             ),
-                            child: Container({
-                                width: 6,
-                                height: 6,
-                                borderRadius: 999,
-                                color: tokens.accent.complement,
-                            }),
-                            elseChild: SizedBox({ width: 0, height: 0 }),
+                            child: () =>
+                                Container({
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 999,
+                                    color: tokens.accent.complement,
+                                }),
+                            elseChild: () => SizedBox({ width: 0, height: 0 }),
                         }),
                     ],
                 }),

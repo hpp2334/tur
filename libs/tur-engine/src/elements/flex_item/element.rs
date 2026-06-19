@@ -5,23 +5,23 @@ use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::widget::{extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
+use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 // ---------------------------------------------------------------------------
-// ExpandedSpec — declares a flex item. Has exactly one child; the parent Flex
+// ExpandedComponent — declares a flex item. Has exactly one child; the parent FlexElement
 // detects it via the `tur_flex_item` type name and allocates remaining space.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ExpandedSpec {
+pub struct ExpandedComponent {
     pub flex: Option<Val<f64>>,
-    pub child: Rc<dyn Spec>,
+    pub child: Rc<dyn Component>,
 }
 
-impl Spec for ExpandedSpec {
+impl Component for ExpandedComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
-        cx.insert_node(id, AnyElement::new(Expanded { spec: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(ExpandedElement { component: self.clone() }), boa);
         let _child_id = self.child.build(cx, boa, id);
         cx.link_child(parent, id);
         id
@@ -29,19 +29,19 @@ impl Spec for ExpandedSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Expanded — the built element. Passes constraints straight through to its
+// ExpandedElement — the built element. Passes constraints straight through to its
 // single child; the layout contribution (flex space) is decided by the parent.
 // ---------------------------------------------------------------------------
 
-pub struct Expanded {
-    pub spec: ExpandedSpec,
+pub struct ExpandedElement {
+    pub component: ExpandedComponent,
 }
 
-impl Effect for Expanded {}
+impl Effect for ExpandedElement {}
 
-impl ElementTrace for Expanded {
+impl ElementTrace for ExpandedElement {
     fn trace_label(&self) -> String {
-        match &self.spec.flex {
+        match &self.component.flex {
             Some(Val::Static(f)) => format!("flex={f}"),
             _ => String::from("flex"),
         }
@@ -60,18 +60,18 @@ fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Opt
 }
 
 /// Extract the single child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_spec(&v)
+    extract_component(&v)
 }
 
-impl ExpandedSpec {
-    /// Build an `ExpandedSpec` from a JS props object. Returns `None` when the
+impl ExpandedComponent {
+    /// Build an `ExpandedComponent` from a JS props object. Returns `None` when the
     /// required `child` prop is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let child = prop_child(props, "child", ctx)?;
-        Some(ExpandedSpec {
+        Some(ExpandedComponent {
             flex: prop_val::<f64>(props, "flex", ctx),
             child,
         })

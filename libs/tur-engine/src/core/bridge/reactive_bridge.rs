@@ -108,13 +108,20 @@ pub(crate) fn tur_set(
     }
 }
 
-/// `component(factory)` — identity helper for DX. Returns the same function.
+/// `component(factory)` — wrap a JS thunk `() => EdgyElement` as a `JsComponent`
+/// (a Component) and return it as a `ComponentHandle`. The thunk is invoked
+/// lazily when the component is built (transparent pass-through).
 pub(crate) fn tur_component(
     _this: &JsValue,
     args: &[JsValue],
-    _context: &mut Context,
+    context: &mut Context,
 ) -> JsResult<JsValue> {
-    Ok(args.get_or_undefined(0).clone())
+    let f = require_callable(args, 1)?;
+    let component: Rc<dyn crate::core::widget::Component> =
+        Rc::new(crate::core::widget::JsComponent(f));
+    let handle = crate::core::widget::ComponentHandle::new(component);
+    let opaque = BoaOpaque::new(handle, context);
+    Ok(opaque.object().clone().into())
 }
 
 /// Build (or fetch the cached) per-store `{ get, set }` JS context object.

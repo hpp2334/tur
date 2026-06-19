@@ -18,45 +18,46 @@ use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Spec, Val, WidgetCx};
+use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Component, Val, WidgetCx};
 use crate::elements::text::text_layout::TextLayoutData;
 
 #[derive(Clone)]
 pub(crate) struct LineNavInfo {
-    line_start_chars: Vec<usize>,
-    line_end_chars: Vec<usize>,
-    line_glyph_xs: Vec<Vec<f32>>,
+    line_start_bytes: Vec<usize>,
+    line_end_bytes: Vec<usize>,
+    /// (byte, x) cursor stops per line — used by ArrowUp/Down to pick the
+    /// closest column on the target line.
+    line_stops: Vec<Vec<(usize, f32)>>,
     cursor_xy: (f32, f32),
     current_line: usize,
 }
 
 impl LineNavInfo {
-    fn extract(ld: &TextLayoutData, cursor_char_idx: usize) -> Self {
-        let current_line = ld.line_index_for_char(cursor_char_idx);
-        let cursor_xy = ld.cursor_xy_at(cursor_char_idx);
+    fn extract(ld: &TextLayoutData, cursor_byte: usize) -> Self {
+        let current_line = ld.line_index_for_byte(cursor_byte);
+        let cursor_xy = ld.cursor_xy_at(cursor_byte);
 
-        let mut line_glyph_xs = Vec::new();
-        for line_idx in 0..ld.line_infos.len() {
-            let start = ld.line_start_char(line_idx);
-            let end = ld.line_end_char(line_idx);
-            let mut xs = Vec::new();
-            for ci in start..end {
-                let (x, _) = ld.cursor_xy_at(ci);
-                xs.push(x);
-            }
-            let last_x = ld.runs.last().and_then(|r| r.glyphs.last()).map(|g| g.x + g.advance).unwrap_or(0.0);
-            xs.push(last_x);
-            line_glyph_xs.push(xs);
-        }
+        let line_stops = (0..ld.line_infos.len())
+            .map(|i| {
+                let info = &ld.line_infos[i];
+                let mut stops: Vec<(usize, f32)> =
+                    info.stops.iter().map(|s| (s.byte, s.x)).collect();
+                // Virtual stop for the end-of-line caret position (after the
+                // last glyph) so ArrowUp/Down preserve the column when the
+                // cursor sits at a line's right edge.
+                stops.push((info.end_byte, info.right_x));
+                stops
+            })
+            .collect();
 
         LineNavInfo {
-            line_start_chars: (0..ld.line_infos.len())
-                .map(|i| ld.line_start_char(i))
+            line_start_bytes: (0..ld.line_infos.len())
+                .map(|i| ld.line_start_byte(i))
                 .collect(),
-            line_end_chars: (0..ld.line_infos.len())
-                .map(|i| ld.line_end_char(i))
+            line_end_bytes: (0..ld.line_infos.len())
+                .map(|i| ld.line_end_byte(i))
                 .collect(),
-            line_glyph_xs,
+            line_stops,
             cursor_xy,
             current_line,
         }
@@ -64,7 +65,7 @@ impl LineNavInfo {
 }
 
 // ---------------------------------------------------------------------------
-// EditableTextSpec — the user's declaration. Pure Rust, no JsValues except
+// EditableTextComponent — the user's declaration. Pure Rust, no JsValues except
 // the opaque `controller` (a TextEditingController class instance).
 //
 // `controller` is parsed eagerly (not reactive). The text-style props
@@ -73,7 +74,7 @@ impl LineNavInfo {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct EditableTextSpec {
+pub struct EditableTextComponent {
     pub controller: Option<JsObject>,
     pub controller_atom: Option<ReadableAtom<TextEditingController>>,
     pub placeholder: Option<Val<String>>,
@@ -86,7 +87,7 @@ pub struct EditableTextSpec {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for EditableTextSpec {
+impl Component for EditableTextComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
         let mut spec = self.clone();
@@ -111,8 +112,8 @@ impl Spec for EditableTextSpec {
         }
         cx.insert_node(
             id,
-            AnyElement::with_full_interactivity(EditableText {
-                spec,
+            AnyElement::with_full_interactivity(EditableTextElement {
+                component: spec,
                 cached_layout: None,
                 resolved_multiline: false,
             })
@@ -128,21 +129,21 @@ impl Spec for EditableTextSpec {
 }
 
 // ---------------------------------------------------------------------------
-// EditableText — the built element. Holds its spec plus the runtime
+// EditableTextElement — the built element. Holds its spec plus the runtime
 // text-layout cache and the last-resolved `multiline` flag (needed by the
 // gesture/keyboard/IME handlers which lack store access — those props are
 // refreshed during layout via `LayoutContext::read_val`).
 // ---------------------------------------------------------------------------
 
-pub struct EditableText {
-    pub spec: EditableTextSpec,
+pub struct EditableTextElement {
+    pub component: EditableTextComponent,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) resolved_multiline: bool,
 }
 
-impl EditableText {
+impl EditableTextElement {
     pub(crate) fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
-        self.spec
+        self.component
             .controller
             .as_ref()
             .expect("controller is always present")
@@ -151,7 +152,7 @@ impl EditableText {
     }
 
     pub(crate) fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
-        self.spec
+        self.component
             .controller
             .as_ref()
             .expect("controller is always present")
@@ -273,7 +274,7 @@ impl EditableText {
             }
             "ArrowUp" if multiline => {
                 if let Some(info) = nav_info {
-                    let target_byte = compute_vertical_target(info, &full, -1);
+                    let target_byte = compute_vertical_target(info, -1);
                     if shift {
                         if !has_sel { new_anchor = cursor; }
                         new_end = target_byte;
@@ -290,7 +291,7 @@ impl EditableText {
             }
             "ArrowDown" if multiline => {
                 if let Some(info) = nav_info {
-                    let target_byte = compute_vertical_target(info, &full, 1);
+                    let target_byte = compute_vertical_target(info, 1);
                     if shift {
                         if !has_sel { new_anchor = cursor; }
                         new_end = target_byte;
@@ -308,8 +309,7 @@ impl EditableText {
             "Home" => {
                 let target = if multiline {
                     if let Some(info) = nav_info {
-                        let line_start = info.line_start_chars[info.current_line];
-                        char_to_byte_offset(&full, line_start)
+                        info.line_start_bytes[info.current_line]
                     } else {
                         return false;
                     }
@@ -330,8 +330,7 @@ impl EditableText {
             "End" => {
                 let target = if multiline {
                     if let Some(info) = nav_info {
-                        let line_end = info.line_end_chars[info.current_line];
-                        char_to_byte_offset(&full, line_end)
+                        info.line_end_bytes[info.current_line]
                     } else {
                         return false;
                     }
@@ -405,19 +404,19 @@ impl EditableText {
             .as_ref()
             .map(|ld| {
                 if self.resolved_multiline {
-                    ld.char_index_at_xy(local_position.x as f32, local_position.y as f32)
+                    ld.byte_index_at_xy(local_position.x as f32, local_position.y as f32)
                 } else {
-                    ld.char_index_at_x(local_position.x as f32)
+                    ld.byte_index_at_x(local_position.x as f32)
                 }
             })
             .unwrap_or(0)
     }
 }
 
-fn compute_vertical_target(info: &LineNavInfo, full: &str, direction: i32) -> usize {
+fn compute_vertical_target(info: &LineNavInfo, direction: i32) -> usize {
     let current_line = info.current_line;
     let cursor_x = info.cursor_xy.0;
-    let num_lines = info.line_start_chars.len();
+    let num_lines = info.line_start_bytes.len();
 
     let target_line = if direction < 0 {
         current_line.saturating_sub(1)
@@ -426,25 +425,33 @@ fn compute_vertical_target(info: &LineNavInfo, full: &str, direction: i32) -> us
     };
 
     if target_line == current_line {
-        return char_to_byte_offset(full, info.line_start_chars[current_line]);
+        // Already on the top/bottom line: ArrowUp on the first line moves to
+        // the line start, ArrowDown on the last line moves to the line end
+        // (matches typical editor behavior).
+        return if direction < 0 {
+            info.line_start_bytes[current_line]
+        } else {
+            info.line_end_bytes[current_line]
+        };
     }
 
-    let target_char = {
-        let xs = &info.line_glyph_xs[target_line];
-        let line_start = info.line_start_chars[target_line];
-        let mut best_idx = xs.len().saturating_sub(1);
-        let mut best_dist = f32::MAX;
-        for (i, &x) in xs.iter().enumerate() {
-            let dist = (x - cursor_x).abs();
-            if dist < best_dist {
-                best_dist = dist;
-                best_idx = i;
-            }
-        }
-        line_start + best_idx
-    };
+    let stops = &info.line_stops[target_line];
+    if stops.is_empty() {
+        return info.line_start_bytes[target_line];
+    }
 
-    char_to_byte_offset(full, target_char)
+    // Pick the stop closest to the current cursor x. On a tie prefer the
+    // earlier (leftward) stop so repeated ArrowDown doesn't drift right.
+    let mut best_byte = stops.last().unwrap().0;
+    let mut best_dist = f32::MAX;
+    for &(byte, x) in stops.iter() {
+        let dist = (x - cursor_x).abs();
+        if dist < best_dist {
+            best_dist = dist;
+            best_byte = byte;
+        }
+    }
+    best_byte
 }
 
 fn prev_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
@@ -467,45 +474,32 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
     s.len()
 }
 
-fn char_to_byte_offset(s: &str, char_idx: usize) -> usize {
-    s.char_indices().nth(char_idx).map(|(i, _)| i).unwrap_or(s.len())
-}
+impl Effect for EditableTextElement {}
 
-fn byte_to_char_offset(s: &str, byte_pos: usize) -> usize {
-    s[..byte_pos.min(s.len())].chars().count()
-}
-
-impl Effect for EditableText {}
-
-impl ElementTrace for EditableText {
+impl ElementTrace for EditableTextElement {
     fn trace_label(&self) -> String {
         let text = self.text();
         if text.is_empty() {
             String::new()
         } else {
-            let t = if text.len() > 20 { &text[..20] } else { &text };
+            let t: String = text.chars().take(20).collect();
             format!("\"{}\"", t)
         }
     }
 }
 
-impl ElementOnFocus for EditableText {}
+impl ElementOnFocus for EditableTextElement {}
 
-impl ElementOnGesture for EditableText {
+impl ElementOnGesture for EditableTextElement {
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
     ) {
-        let full = {
-            let c = self.controller();
-            c.text()
-        };
         match event {
             ComposedGestureEvent::PointerDown { local_position } => {
                 cx.request_own_focus();
-                let char_idx = self.char_index_at(local_position);
-                let byte_pos = char_to_byte_offset(&full, char_idx);
+                let byte_pos = self.char_index_at(local_position);
                 let mut c = self.controller_mut();
                 c.set_cursor_position(byte_pos);
                 c.set_selection(byte_pos, byte_pos);
@@ -513,8 +507,7 @@ impl ElementOnGesture for EditableText {
                 cx.request_redraw();
             }
             ComposedGestureEvent::PointerMove { local_position } => {
-                let char_idx = self.char_index_at(local_position);
-                let byte_pos = char_to_byte_offset(&full, char_idx);
+                let byte_pos = self.char_index_at(local_position);
                 let mut c = self.controller_mut();
                 let anchor = c.selection_anchor();
                 let sel_end = c.selection_end();
@@ -529,7 +522,7 @@ impl ElementOnGesture for EditableText {
     }
 }
 
-impl ElementOnKeyboard for EditableText {
+impl ElementOnKeyboard for EditableTextElement {
     fn on_keyboard_event(
         &mut self,
         cx: &mut ElementOnKeyboardContext,
@@ -553,15 +546,14 @@ impl ElementOnKeyboard for EditableText {
             );
         }
 
-        let (prev_text, prev_cursor, prev_anchor, prev_end, cursor_char) = {
+        let (prev_text, prev_cursor, prev_anchor, prev_end) = {
             let c = self.controller();
-            let text = c.text();
-            let cursor_char = byte_to_char_offset(&text, c.cursor_position());
-            (text, c.cursor_position(), c.selection_anchor(), c.selection_end(), cursor_char)
+            (c.text(), c.cursor_position(), c.selection_anchor(), c.selection_end())
         };
+        let cursor_byte = prev_cursor;
 
         let nav_info = self.cached_layout.as_ref().map(|ld| {
-            LineNavInfo::extract(ld, cursor_char)
+            LineNavInfo::extract(ld, cursor_byte)
         });
 
         let changed = self.handle_key_event(
@@ -600,7 +592,7 @@ impl ElementOnKeyboard for EditableText {
     }
 }
 
-impl ElementOnIme for EditableText {
+impl ElementOnIme for EditableTextElement {
     fn on_ime_event(
         &mut self,
         cx: &mut ElementOnImeContext,
@@ -719,10 +711,10 @@ pub(super) fn prop_controller_atom(
     extract_atom(&v).map(ReadableAtom::new)
 }
 
-impl EditableTextSpec {
-    /// Build an `EditableTextSpec` from a JS props object.
+impl EditableTextComponent {
+    /// Build an `EditableTextComponent` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        EditableTextSpec {
+        EditableTextComponent {
             controller: prop_controller(props, "controller", ctx),
             controller_atom: prop_controller_atom(props, "controller", ctx),
             placeholder: prop_val::<String>(props, "placeholder", ctx),

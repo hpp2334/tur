@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::Text;
+use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
@@ -16,7 +16,7 @@ fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
 
 fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
     app.with_element(container_id, |e| {
-        e.cast::<Text>()
+        e.cast::<TextElement>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
             .unwrap_or_default()
     })

@@ -5,7 +5,7 @@ use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAl
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::widget::{val_from_js, Effect, PropValue, Spec, Val, WidgetCx};
+use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 pub(crate) struct ChildData {
     pub id: ElementNodeId,
@@ -14,7 +14,7 @@ pub(crate) struct ChildData {
 }
 
 // ---------------------------------------------------------------------------
-// FlexSpec — the user's declaration. Pure Rust, no JsValues.
+// FlexComponent — the user's declaration. Pure Rust, no JsValues.
 //
 // `direction` is static (chosen by the factory: Vertical for Column, Horizontal
 // for Row) and therefore stored as a plain `Axis` rather than a `Val<Axis>`.
@@ -22,22 +22,22 @@ pub(crate) struct ChildData {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct FlexSpec {
+pub struct FlexComponent {
     pub direction: Option<Axis>,
     pub main_alignment: Option<Val<MainAxisAlignment>>,
     pub cross_alignment: Option<Val<CrossAxisAlignment>>,
     pub main_axis_size: Option<Val<MainAxisSize>>,
-    pub children: Vec<Rc<dyn Spec>>,
+    pub children: Vec<Rc<dyn Component>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Spec for FlexSpec {
+impl Component for FlexComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::new(Flex {
-                spec: self.clone(),
+            AnyElement::new(FlexElement {
+                component: self.clone(),
                 child_data: Vec::new(),
                 constraints: None,
                 computed_size: None,
@@ -56,22 +56,22 @@ impl Spec for FlexSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Flex — the built element. Holds its spec plus transient layout state that
+// FlexElement — the built element. Holds its spec plus transient layout state that
 // must flow from `perform_layout_size` to `perform_layout_position`.
 // ---------------------------------------------------------------------------
 
-pub struct Flex {
-    pub spec: FlexSpec,
+pub struct FlexElement {
+    pub component: FlexComponent,
     pub(crate) child_data: Vec<ChildData>,
     pub(crate) constraints: Option<Constraints>,
     pub(crate) computed_size: Option<Size>,
 }
 
-impl Effect for Flex {}
+impl Effect for FlexElement {}
 
-impl ElementTrace for Flex {
+impl ElementTrace for FlexElement {
     fn trace_label(&self) -> String {
-        format!("{:?}", self.spec.direction.unwrap_or(Axis::Vertical))
+        format!("{:?}", self.component.direction.unwrap_or(Axis::Vertical))
     }
 }
 
@@ -113,15 +113,15 @@ fn prop_query_key(
     if out.is_empty() { None } else { Some(out) }
 }
 
-/// Extract child specs from a JS array of SpecHandle opaques.
+/// Extract child specs from a JS array of ComponentHandle opaques.
 fn prop_children(
     props: &boa_engine::object::JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Vec<Rc<dyn Spec>> {
+) -> Vec<Rc<dyn Component>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
-    use crate::core::widget::extract_spec;
+    use crate::core::widget::extract_component;
     let Ok(v) = props.get(js_string!(key), ctx) else {
         return Vec::new();
     };
@@ -135,7 +135,7 @@ fn prop_children(
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_spec(&item) {
+            if let Some(spec) = extract_component(&item) {
                 out.push(spec);
             }
         }
@@ -143,11 +143,11 @@ fn prop_children(
     out
 }
 
-impl FlexSpec {
-    /// Build a `FlexSpec` from a JS props object. `direction` is supplied by
+impl FlexComponent {
+    /// Build a `FlexComponent` from a JS props object. `direction` is supplied by
     /// the factory (`Axis::Vertical` for Column, `Axis::Horizontal` for Row).
     pub fn from_js(direction: Axis, props: &boa_engine::object::JsObject, ctx: &mut Context) -> Self {
-        FlexSpec {
+        FlexComponent {
             direction: Some(direction),
             main_alignment: prop_val::<MainAxisAlignment>(props, "mainAlignment", ctx),
             cross_alignment: prop_val::<CrossAxisAlignment>(props, "crossAlignment", ctx),

@@ -5,7 +5,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use tur_shared::Axis;
 
 use crate::core::bridge::utils::extract_ctx;
-use crate::core::widget::{Spec, SpecHandle, WidgetCx};
+use crate::core::widget::{Component, ComponentHandle, WidgetCx};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -23,8 +23,8 @@ fn require_props_object(args: &[JsValue], idx: usize, ctx: &mut Context) -> JsRe
     Ok(obj.clone())
 }
 
-fn wrap_spec(spec: Rc<dyn Spec>, context: &mut Context) -> JsValue {
-    let opaque = crate::core::bridge::BoaOpaque::new(SpecHandle::new(spec), context);
+fn wrap_component(spec: Rc<dyn Component>, context: &mut Context) -> JsValue {
+    let opaque = crate::core::bridge::BoaOpaque::new(ComponentHandle::new(spec), context);
     opaque.object().clone().into()
 }
 
@@ -42,22 +42,22 @@ macro_rules! spec_factory {
             let _ = extract_ctx(args)?;
             let props = require_props_object(args, 1, context)?;
             let spec = crate::elements::$spec_ty::from_js(&props, context);
-            Ok(wrap_spec(Rc::new(spec), context))
+            Ok(wrap_component(Rc::new(spec), context))
         }
     };
 }
 
-spec_factory!(tur_container, ContainerSpec);
-spec_factory!(tur_text, TextSpec);
-spec_factory!(tur_stack, StackSpec);
-spec_factory!(tur_image_edgy, ImageSpec);
-spec_factory!(tur_condition, ConditionSpec);
-spec_factory!(tur_switch, SwitchSpec);
-spec_factory!(tur_input_edgy, InputSpec);
-spec_factory!(tur_fragment, FragmentSpec);
-spec_factory!(tur_pointer_interact, PointerInteractSpec);
-spec_factory!(tur_svg_edgy, SvgSpec);
-spec_factory!(tur_focusable, FocusableSpec);
+spec_factory!(tur_container, ContainerComponent);
+spec_factory!(tur_text, TextComponent);
+spec_factory!(tur_stack, StackComponent);
+spec_factory!(tur_image_edgy, ImageComponent);
+spec_factory!(tur_condition, ConditionComponent);
+spec_factory!(tur_switch, SwitchComponent);
+spec_factory!(tur_input_edgy, InputComponent);
+spec_factory!(tur_fragment, FragmentComponent);
+spec_factory!(tur_pointer_interact, PointerInteractComponent);
+spec_factory!(tur_svg_edgy, SvgComponent);
+spec_factory!(tur_focusable, FocusableComponent);
 
 macro_rules! spec_factory_opt {
     ($fn_name:ident, $spec_ty:ident) => {
@@ -73,24 +73,24 @@ macro_rules! spec_factory_opt {
                     JsError::from(JsNativeError::typ()
                         .with_message(concat!("missing required prop for ", stringify!($spec_ty))))
                 })?;
-            Ok(wrap_spec(Rc::new(spec), context))
+            Ok(wrap_component(Rc::new(spec), context))
         }
     };
 }
 
-spec_factory_opt!(tur_expanded, ExpandedSpec);
-spec_factory_opt!(tur_positioned, PositionedSpec);
-spec_factory_opt!(tur_scroll_view, ScrollViewSpec);
-spec_factory_opt!(tur_lazy_list, LazyListSpec);
-spec_factory_opt!(tur_each, EachSpec);
+spec_factory_opt!(tur_expanded, ExpandedComponent);
+spec_factory_opt!(tur_positioned, PositionedComponent);
+spec_factory_opt!(tur_scroll_view, ScrollViewComponent);
+spec_factory_opt!(tur_lazy_list, LazyListComponent);
+spec_factory_opt!(tur_each, EachComponent);
 
 pub(crate) fn tur_column(
     _this: &JsValue, args: &[JsValue], context: &mut Context,
 ) -> JsResult<JsValue> {
     let _ = extract_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
-    let spec = crate::elements::FlexSpec::from_js(Axis::Vertical, &props, context);
-    Ok(wrap_spec(Rc::new(spec), context))
+    let spec = crate::elements::FlexComponent::from_js(Axis::Vertical, &props, context);
+    Ok(wrap_component(Rc::new(spec), context))
 }
 
 pub(crate) fn tur_row(
@@ -98,12 +98,12 @@ pub(crate) fn tur_row(
 ) -> JsResult<JsValue> {
     let _ = extract_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
-    let spec = crate::elements::FlexSpec::from_js(Axis::Horizontal, &props, context);
-    Ok(wrap_spec(Rc::new(spec), context))
+    let spec = crate::elements::FlexComponent::from_js(Axis::Horizontal, &props, context);
+    Ok(wrap_component(Rc::new(spec), context))
 }
 
 // ---------------------------------------------------------------------------
-// render(ctx, rootSpecHandle) — mount the spec tree into ElementTree
+// render(ctx, rootComponentHandle) — mount the component tree into ElementTree
 // ---------------------------------------------------------------------------
 
 pub(crate) fn tur_render(
@@ -112,33 +112,35 @@ pub(crate) fn tur_render(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let user_spec = crate::core::widget::extract_spec(args.get_or_undefined(1))
+    let user_component = crate::core::widget::extract_component(args.get_or_undefined(1))
         .ok_or_else(|| {
             JsError::from(
                 JsNativeError::typ()
-                    .with_message("render: expected a spec handle as second argument"),
+                    .with_message("render: expected a component handle as second argument"),
             )
         })?;
 
-    // Wrap the user's spec in a root flex container so the tree always has
-    // a stable root node (tests expect root.kind == "tur_flex").
-    let root_spec = crate::elements::FlexSpec {
+    // Wrap the user's component in a root flex container so the tree always has
+    // a stable root node (tests expect root.kind == "tur_flex"). The user
+    // component is typically a `JsComponent` whose `build()` invokes the JS
+    // thunk to produce the real subtree.
+    let root_component = crate::elements::FlexComponent {
         direction: Some(tur_shared::Axis::Vertical),
         main_alignment: None,
         cross_alignment: None,
         main_axis_size: None,
-        children: vec![user_spec],
+        children: vec![user_component],
         query_key: None,
     };
 
     let mut cx = WidgetCx::new(js_ctx.clone());
     let temp_parent = cx.alloc_node();
-    let root_id = root_spec.build(&mut cx, context, temp_parent);
+    let root_id = root_component.build(&mut cx, context, temp_parent);
     {
         let mut tree = js_ctx.element_tree.borrow_mut();
         tree.set_root(root_id);
     }
 
-    tracing::info!("render: spec tree built");
+    tracing::info!("render: component tree built");
     Ok(JsValue::undefined())
 }
