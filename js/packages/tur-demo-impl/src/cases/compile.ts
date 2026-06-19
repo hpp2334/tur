@@ -1,4 +1,4 @@
-import { Color } from "@tur/edgy";
+import { code } from "../theme/tokens";
 
 /** `__turHost` is registered by tur-wasm (swc-backed compiler services). */
 interface TurHost {
@@ -14,15 +14,16 @@ interface TokenSpan {
 const host = (): TurHost =>
     (globalThis as unknown as { __turHost: TurHost }).__turHost;
 
-/** Highlight palette indexed by token kind (see tur-wasm `classify_token`). */
-const KIND_HEX = [
-    "#abb2bf", // 0 default
-    "#c678dd", // 1 keyword
-    "#98c379", // 2 string
-    "#d19a66", // 3 number
-    "#7f848e", // 4 comment
-    "#56b6c2", // 5 operator/punct
-    "#e5c07b", // 6 literal (true/false/null)
+/** Highlight palette indexed by token kind (see tur-wasm `classify_token`).
+ *  Pulled from `code.*` design tokens — see DESIGN-SYSTEM.md §1.1. */
+const KIND_COLOR: unknown[] = [
+    code.fg, // 0 default
+    code.keyword, // 1 keyword
+    code.string, // 2 string
+    code.number, // 3 number
+    code.comment, // 4 comment
+    code.operator, // 5 operator/punct
+    code.literal, // 6 literal (true/false/null)
 ];
 
 export interface CaseCompileResult {
@@ -91,7 +92,7 @@ export function buildHighlightSpans(
     try {
         tokens = host().tokenizeTsx(source);
     } catch {
-        return [{ content: source, color: Color.hex(KIND_HEX[0]) }];
+        return [{ content: source, color: code.fg }];
     }
 
     const spans: Array<{ content: string; color?: unknown }> = [];
@@ -100,19 +101,19 @@ export function buildHighlightSpans(
         if (t.start > pos) {
             spans.push({
                 content: source.slice(pos, t.start),
-                color: Color.hex(KIND_HEX[0]),
+                color: code.fg,
             });
         }
         spans.push({
             content: source.slice(t.start, t.end),
-            color: Color.hex(KIND_HEX[t.kind] ?? KIND_HEX[0]),
+            color: KIND_COLOR[t.kind] ?? KIND_COLOR[0],
         });
         pos = t.end;
     }
     if (pos < source.length) {
         spans.push({
             content: source.slice(pos),
-            color: Color.hex(KIND_HEX[0]),
+            color: code.fg,
         });
     }
     return spans;

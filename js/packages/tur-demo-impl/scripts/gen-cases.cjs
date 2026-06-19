@@ -1,4 +1,4 @@
-// Generates `src/cases-generated.ts` — inlines every edgy-case source as a
+// Generates `src/cases/generated.ts` — inlines every edgy-case source as a
 // string so the self-hosted playground (tur-demo-impl) has all case sources
 // in-memory without any fetch/host I/O. Run via `pnpm gen-cases` or the
 // prebuild step.
@@ -12,7 +12,7 @@ const casesDir = path.resolve(
     "tur-test-cases",
     "edgy-cases",
 );
-const outDir = path.resolve(__dirname, "..", "src");
+const outDir = path.resolve(__dirname, "..", "src", "cases");
 fs.mkdirSync(outDir, { recursive: true });
 
 const entries = [];
@@ -28,5 +28,5 @@ export const CASE_SOURCES: Record<string, string> = {
 ${entries.join(",\n")},
 };
 `;
-fs.writeFileSync(path.join(outDir, "cases-generated.ts"), code);
+fs.writeFileSync(path.join(outDir, "generated.ts"), code);
 console.log(`generated ${entries.length} case sources`);
