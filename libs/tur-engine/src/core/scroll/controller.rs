@@ -24,6 +24,10 @@ pub struct ScrollController {
     pub(crate) viewport_dimension: f64,
     pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
     pub(crate) handle: Option<JsObject>,
+    /// The scroll-view node this controller is bound to. Set at build time by
+    /// `ScrollViewComponent::build` (the `_attach` JS path is the legacy
+    /// fallback). `jumpTo`/drag use this to locate the scroll element.
+    pub(crate) bound_node: Option<ElementNodeId>,
     pub(crate) element_tree:
         Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
@@ -39,6 +43,7 @@ impl ScrollController {
             viewport_dimension: 0.0,
             on_scroll: None,
             handle: None,
+            bound_node: None,
             element_tree: None,
             mutation_queue: None,
             dirty_flag: None,
@@ -47,6 +52,9 @@ impl ScrollController {
     }
 
     fn node_id(&self) -> Option<ElementNodeId> {
+        if let Some(n) = self.bound_node {
+            return Some(n);
+        }
         let handle_obj = self.handle.as_ref()?;
         let handle = BoaOpaque::<TurNodeHandle>::wrap(handle_obj)?;
         Some(handle.id)

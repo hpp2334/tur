@@ -228,6 +228,22 @@ export function ScrollView(props: ScrollViewProps): EdgyElement {
     return __tur.ScrollView(__ctx, props);
 }
 
+export interface ScrollbarProps {
+    /** A `ScrollController` shared with a `ScrollView`. */
+    controller?: unknown;
+    /** Thumb brush (color). Defaults to a semi-transparent gray. */
+    color?: Val<unknown>;
+    /** Track thickness (width for a vertical scrollbar). Defaults to 10. */
+    thickness?: Val<number>;
+    /** Thumb corner radius. Defaults to half the track width. */
+    thumbRadius?: Val<number>;
+    queryKey?: Val<string[]>;
+}
+
+export function Scrollbar(props: ScrollbarProps): EdgyElement {
+    return __tur.Scrollbar(__ctx, props);
+}
+
 export interface LazyListProps {
     axis?: Val<number>;
     itemCount: Val<number>;
@@ -449,6 +465,7 @@ interface TurGlobal {
     Condition(ctx: unknown, props: unknown): EdgyElement;
     Switch(ctx: unknown, props: unknown): EdgyElement;
     ScrollView(ctx: unknown, props: unknown): EdgyElement;
+    Scrollbar(ctx: unknown, props: unknown): EdgyElement;
     LazyList(ctx: unknown, props: unknown): EdgyElement;
     Each(ctx: unknown, props: unknown): EdgyElement;
     ImageEdgy(ctx: unknown, props: unknown): EdgyElement;

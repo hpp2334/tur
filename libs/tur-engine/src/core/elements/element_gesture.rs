@@ -37,6 +37,14 @@ impl<'a> ElementOnGestureContext<'a> {
         self.event_queue.push(AppEvent::RequestDraw);
     }
 
+    /// Request that the scroll-view node be scrolled to an absolute offset.
+    /// Resolved post-dispatch by the `ScrollToHandler` (the tree is mutably
+    /// borrowed for the duration of a gesture event, so we defer).
+    pub fn request_scroll_to(&mut self, node_id: ElementNodeId, offset: f64) {
+        self.event_queue
+            .push(AppEvent::ScrollTo { node_id, offset });
+    }
+
     pub fn request_focus(&mut self, id: ElementNodeId) {
         self.focus_manager.set_focus(id);
     }

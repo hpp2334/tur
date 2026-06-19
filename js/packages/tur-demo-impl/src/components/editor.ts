@@ -1,6 +1,16 @@
-import { Container, type EdgyElement, InputEdgy, Switch } from "@tur/edgy";
-import { CASE_NAMES, editorCtrl, selectedCase$ } from "../state";
+import {
+    type EdgyElement,
+    Container,
+    Expanded,
+    InputEdgy,
+    Row,
+    ScrollView,
+    Scrollbar,
+    Switch,
+    createScrollController,
+} from "@tur/edgy";
 import { tokens } from "../theme/tokens";
+import { CASE_NAMES, editorCtrl, selectedCase$ } from "../state";
 
 const editorInput: EdgyElement = InputEdgy({
     controller: editorCtrl,
@@ -13,6 +23,30 @@ const editorInput: EdgyElement = InputEdgy({
     queryKey: ["editor-input"],
 });
 
+/** A scrollable editor pane: a `ScrollView` next to a draggable `Scrollbar`
+ *  that shares the same controller. (A Row column rather than an overlay,
+ *  because `Positioned` doesn't honor `right`/`bottom` for placement.) */
+function scrollableEditor(): EdgyElement {
+    // A fresh controller per build so it binds to the right scroll-view node
+    // whenever the case (and thus the subtree) is rebuilt.
+    const controller = createScrollController();
+    return Row({
+        children: [
+            Expanded({
+                child: ScrollView({ controller, child: editorInput }),
+            }),
+            // Dedicated 10px scrollbar column.
+            Scrollbar({
+                controller,
+                color: tokens.text.placeholder,
+                thickness: 10,
+                thumbRadius: 5,
+                queryKey: ["editor-scrollbar"],
+            }),
+        ],
+    });
+}
+
 export function Editor(): EdgyElement {
     return Container({
         color: tokens.bg.code,
@@ -24,9 +58,9 @@ export function Editor(): EdgyElement {
                 value: selectedCase$,
                 cases: CASE_NAMES.map((name) => ({
                     key: name,
-                    child: () => editorInput,
+                    child: () => scrollableEditor(),
                 })),
-                fallback: () => editorInput,
+                fallback: () => scrollableEditor(),
             }),
         ],
     });

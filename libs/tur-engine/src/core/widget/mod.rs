@@ -43,7 +43,13 @@ pub trait ComponentFactory: 'static {
 
 /// Invoke a JS thunk `() => EdgyElement` and resolve the returned Component.
 fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn Component>> {
-    let result = thunk.call(&JsValue::undefined(), &[], boa).ok()?;
+    let result = match thunk.call(&JsValue::undefined(), &[], boa) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("invoke_thunk JS error: {e}");
+            return None;
+        }
+    };
     extract_component(&result)
 }
 

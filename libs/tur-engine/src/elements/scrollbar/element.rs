@@ -1,0 +1,217 @@
+use boa_engine::object::JsObject;
+use boa_engine::Context;
+use tur_shared::{Brush, Size};
+
+use crate::core::element::ElementNodeId;
+use crate::core::elements::{
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
+    ElementOnGestureContext, ElementTrace,
+};
+use crate::core::scroll::ScrollController;
+use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+
+/// Minimum thumb height so it stays grabbable even for very tall content.
+pub(crate) const MIN_THUMB: f64 = 24.0;
+/// Default track thickness (width for a vertical scrollbar).
+pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
+
+// ---------------------------------------------------------------------------
+// ScrollbarComponent — the user's declaration. Pure Rust except for the
+// opaque `controller` (a `ScrollController` class instance shared with a
+// `ScrollView`). `color` and `thumbRadius` are reactive (`Val<T>`).
+//
+// Vertical only (the editor use case). Horizontal support can be added later.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct ScrollbarComponent {
+    /// Shared `ScrollController` — provides offset/maxExtent/viewport and the
+    /// bound scroll-view node id (for `ScrollTo` requests during drag).
+    pub controller: Option<JsObject>,
+    pub color: Option<Val<Brush>>,
+    pub thumb_radius: Option<Val<f64>>,
+    /// Track thickness (width for a vertical scrollbar). Defaults to 10.
+    pub thickness: Option<Val<f64>>,
+    pub query_key: Option<Vec<String>>,
+}
+
+#[derive(Clone, Copy)]
+struct DragState {
+    /// Pointer y (local) at drag start.
+    start_y: f64,
+    /// Scroll offset the drag started from (after the initial click-jump).
+    start_offset: f64,
+}
+
+pub struct ScrollbarElement {
+    pub component: ScrollbarComponent,
+    /// Last computed track size — used by the drag handler for offset math.
+    pub(crate) cached_track: Size,
+    /// `Some` while a drag is in progress; cleared on the next pointer-down.
+    drag: Option<DragState>,
+}
+
+impl Component for ScrollbarComponent {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+        let id = cx.alloc_node();
+        cx.insert_node(
+            id,
+            AnyElement::with_gesture_and_focus(ScrollbarElement {
+                component: self.clone(),
+                cached_track: Size::ZERO,
+                drag: None,
+            })
+            .with_callbacks(),
+            boa,
+        );
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
+        cx.link_child(parent, id);
+        id
+    }
+}
+
+impl ScrollbarElement {
+    /// Read the bound controller's live metrics: `(node_id, offset,
+    /// max_extent, viewport)`. `None` if there is no controller or it isn't
+    /// bound to a scroll-view yet.
+    pub(crate) fn metrics(&self) -> Option<(ElementNodeId, f64, f64, f64)> {
+        let ctrl = self.component.controller.as_ref()?;
+        let ctrl = ctrl.downcast_ref::<ScrollController>()?;
+        let node = ctrl.bound_node?;
+        Some((node, ctrl.offset, ctrl.max_scroll_extent, ctrl.viewport_dimension))
+    }
+
+    /// Thumb height for the given track length.
+    pub(crate) fn thumb_height(track: f64, max_extent: f64, viewport: f64) -> f64 {
+        let content = max_extent + viewport;
+        if content <= 0.0 {
+            return track;
+        }
+        ((viewport / content) * track).clamp(MIN_THUMB, track)
+    }
+}
+
+impl Effect for ScrollbarElement {}
+
+impl ElementTrace for ScrollbarElement {
+    fn trace_label(&self) -> String {
+        self.metrics()
+            .map(|(_, offset, max, vp)| {
+                format!("offset={offset:.1} max={max:.1} vp={vp:.1}")
+            })
+            .unwrap_or_default()
+    }
+}
+
+impl ElementOnFocus for ScrollbarElement {}
+
+impl ElementOnGesture for ScrollbarElement {
+    fn on_gesture_event(
+        &mut self,
+        cx: &mut ElementOnGestureContext,
+        event: &ComposedGestureEvent,
+    ) {
+        let track = self.cached_track.height;
+        if track <= 0.0 {
+            return;
+        }
+        let (node, _offset, max_extent, viewport) = match self.metrics() {
+            Some(v) => v,
+            None => return,
+        };
+        // Nothing to scroll (content fits the viewport).
+        if max_extent <= 0.0 {
+            return;
+        }
+        let thumb = Self::thumb_height(track, max_extent, viewport);
+        let thumb_range = track - thumb;
+        if thumb_range <= 0.0 {
+            return;
+        }
+
+        match event {
+            ComposedGestureEvent::PointerDown { local_position } => {
+                cx.request_own_focus();
+                // Jump so the thumb's center sits under the pointer, then drag
+                // relative to that position.
+                let target = ((local_position.y - thumb / 2.0) / thumb_range * max_extent)
+                    .clamp(0.0, max_extent);
+                cx.request_scroll_to(node, target);
+                self.drag = Some(DragState {
+                    start_y: local_position.y,
+                    start_offset: target,
+                });
+            }
+            ComposedGestureEvent::PointerMove { local_position } => {
+                let Some(d) = self.drag else { return; };
+                let delta = local_position.y - d.start_y;
+                let new_offset =
+                    (d.start_offset + delta * max_extent / thumb_range).clamp(0.0, max_extent);
+                cx.request_scroll_to(node, new_offset);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Factory helpers — called from the JS bridge to parse props into a spec.
+// ---------------------------------------------------------------------------
+
+pub(super) fn prop_val<T: PropValue>(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Val<T>> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    val_from_js(&v)
+}
+
+pub(super) fn prop_controller(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<JsObject> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    v.as_object().filter(|obj| {
+        obj.downcast_ref::<ScrollController>().is_some()
+    })
+}
+
+pub(super) fn prop_query_key(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<Vec<String>> {
+    use boa_engine::js_string;
+    use boa_engine::object::builtins::JsArray;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
+    let len = arr.length(ctx).ok()? as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        if let Ok(val) = arr.at(i as i64, ctx) {
+            if let Some(s) = val.as_string() {
+                out.push(s.to_std_string_escaped());
+            }
+        }
+    }
+    if out.is_empty() { None } else { Some(out) }
+}
+
+impl ScrollbarComponent {
+    /// Build a `ScrollbarComponent` from a JS props object.
+    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        ScrollbarComponent {
+            controller: prop_controller(props, "controller", ctx),
+            color: prop_val::<Brush>(props, "color", ctx),
+            thumb_radius: prop_val::<f64>(props, "thumbRadius", ctx),
+            thickness: prop_val::<f64>(props, "thickness", ctx),
+            query_key: prop_query_key(props, "queryKey", ctx),
+        }
+    }
+}
