@@ -1,16 +1,16 @@
 import {
-    type EdgyElement,
     Container,
+    createScrollController,
+    type EdgyElement,
     Expanded,
     InputEdgy,
     Row,
-    ScrollView,
     Scrollbar,
+    ScrollView,
     Switch,
-    createScrollController,
 } from "@tur/edgy";
-import { tokens } from "../theme/tokens";
 import { CASE_NAMES, editorCtrl, selectedCase$ } from "../state";
+import { tokens } from "../theme/tokens";
 
 const editorInput: EdgyElement = InputEdgy({
     controller: editorCtrl,
