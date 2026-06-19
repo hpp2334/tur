@@ -1,4 +1,4 @@
-import { code } from "./tokens";
+import { code } from "../theme/tokens";
 
 /** `__turHost` is registered by tur-wasm (swc-backed compiler services). */
 interface TurHost {

@@ -1,8 +1,8 @@
 // Design tokens — the single source of truth for visual decisions.
 //
-// This is the only file (besides compile.ts, which owns the code-highlighting
-// palette) where `Color.hex(...)` is allowed. Components import from `tokens`
-// and never touch primitives directly. See DESIGN-SYSTEM.md §8.
+// This is the only file (besides cases/compile.ts, which owns the code-
+// highlighting palette) where `Color.hex(...)` is allowed. Components import
+// from `tokens` and never touch primitives directly. See DESIGN-SYSTEM.md §8.
 //
 // Light theme. Saturation: ink.* (warm-tinted neutrals) + teal.* (saturated
 // cyan-leaning signature) + coral.* (warm complement) + status.* (AA-verified).
@@ -51,8 +51,8 @@ export const status = {
     info: teal[700],
 } as const;
 
-// Code-highlight palette — used by compile.ts to color TSX tokens. Tuned for
-// AA on `code.bg` (ink.50). See DESIGN-SYSTEM.md §1.1.
+// Code-highlight palette — used by cases/compile.ts to color TSX tokens. Tuned
+// for AA on `code.bg` (ink.50). See DESIGN-SYSTEM.md §1.1.
 export const code = {
     bg: ink[50],
     fg: ink[800],

@@ -9,6 +9,7 @@
             "!!**/node_modules",
             "!!**/generated",
             "!!**/cases-generated.ts",
+            "!!**/generated.ts",
             "!!**/test-results"
         ]
     },
