@@ -58,6 +58,7 @@ spec_factory!(tur_fragment, FragmentComponent);
 spec_factory!(tur_pointer_interact, PointerInteractComponent);
 spec_factory!(tur_svg_edgy, SvgComponent);
 spec_factory!(tur_focusable, FocusableComponent);
+spec_factory!(tur_scrollbar, ScrollbarComponent);
 
 macro_rules! spec_factory_opt {
     ($fn_name:ident, $spec_ty:ident) => {
@@ -136,10 +137,7 @@ pub(crate) fn tur_render(
     let mut cx = WidgetCx::new(js_ctx.clone());
     let temp_parent = cx.alloc_node();
     let root_id = root_component.build(&mut cx, context, temp_parent);
-    {
-        let mut tree = js_ctx.element_tree.borrow_mut();
-        tree.set_root(root_id);
-    }
+    js_ctx.element_tree.borrow_mut().set_root(root_id);
 
     tracing::info!("render: component tree built");
     Ok(JsValue::undefined())

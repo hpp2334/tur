@@ -20,6 +20,13 @@ pub enum AppEvent {
         source_id: ElementNodeId,
         delta: f64,
     },
+    /// Programmatic scroll request — set the absolute scroll offset of the
+    /// target scroll-view node. Emitted by scrollbar drag (where the gesture
+    /// handler can't mutate the tree directly due to an active borrow).
+    ScrollTo {
+        node_id: ElementNodeId,
+        offset: f64,
+    },
     Key(AppKeyEvent),
     Ime(AppImeEvent),
     RequestDraw,

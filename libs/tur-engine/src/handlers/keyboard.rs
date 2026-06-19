@@ -3,6 +3,7 @@ use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::keyboard::KeydownEvent;
 use crate::elements::FocusableElement;
+use crate::handlers::ensure_visible::ensure_caret_visible;
 
 pub struct KeyboardAppHandler;
 
@@ -13,6 +14,9 @@ impl AppHandler for KeyboardAppHandler {
         };
 
         dispatch_key_event(cx, key_event);
+
+        // Keep the caret on screen after cursor-moving keys / typed text.
+        ensure_caret_visible(cx);
 
         let Some(focused_id) = cx.focus_manager.focused() else {
             return;

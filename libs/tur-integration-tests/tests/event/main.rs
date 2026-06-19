@@ -5,3 +5,5 @@ mod counter;
 mod editable_text;
 mod pointer_region;
 mod scroll;
+mod scrollbar;
+mod caret_into_view;

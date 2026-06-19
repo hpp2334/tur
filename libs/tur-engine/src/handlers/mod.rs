@@ -1,8 +1,10 @@
 pub mod gesture;
+pub mod ensure_visible;
 pub mod ime;
 pub mod keyboard;
 pub mod pointer_region;
 pub mod resize;
 pub mod scroll_chaining;
+pub mod scroll_to;
 pub mod text_edit_focus;
 pub mod wheel;

@@ -1,5 +1,6 @@
 use crate::core::elements::ElementOnImeContext;
 use crate::core::event::AppEvent;
+use crate::handlers::ensure_visible::ensure_caret_visible;
 
 pub struct ImeAppHandler;
 
@@ -16,18 +17,21 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
         let Some(focused_id) = cx.focus_manager.focused() else {
             return;
         };
-        let Some(node) = cx.element_tree.get_mut(focused_id) else {
-            return;
-        };
-        let Some(ref mut element) = node.element else {
-            return;
-        };
+        {
+            let Some(node) = cx.element_tree.get_mut(focused_id) else {
+                return;
+            };
+            let Some(ref mut element) = node.element else {
+                return;
+            };
 
-        let mut el_cx = ElementOnImeContext::new(
-            &mut *cx.mutation_queue,
-            &mut *cx.event_queue,
-        );
-        element.on_ime_event(&mut el_cx, ime_event);
+            let mut el_cx =
+                ElementOnImeContext::new(&mut *cx.mutation_queue, &mut *cx.event_queue);
+            element.on_ime_event(&mut el_cx, ime_event);
+        }
         cx.element_tree.mark_dirty(focused_id);
+
+        // A composition end inserts text and moves the caret; keep it visible.
+        ensure_caret_visible(cx);
     }
 }

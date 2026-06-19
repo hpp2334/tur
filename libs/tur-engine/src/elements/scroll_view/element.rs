@@ -59,6 +59,16 @@ impl Component for ScrollViewComponent {
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
+        // Bind the controller to this node so `jumpTo` (and drag-driven
+        // `ScrollTo` events from a sibling Scrollbar) can locate this element.
+        if let Some(ctrl_obj) = &self.controller {
+            if let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() {
+                ctrl.bound_node = Some(id);
+                ctrl.element_tree = Some(cx.js_ctx().element_tree.clone());
+                ctrl.mutation_queue = Some(cx.js_ctx().mutation_queue.clone());
+                ctrl.dirty_flag = Some(cx.js_ctx().dirty.clone());
+            }
+        }
         let _child_id = self.child.build(cx, boa, id);
         cx.link_child(parent, id);
         id
@@ -79,6 +89,12 @@ pub struct ScrollViewElement {
 impl ScrollViewElement {
     pub fn scroll_offset(&self) -> f64 {
         self.position.pixels()
+    }
+
+    /// Maximum scrollable offset along the scroll axis (content - viewport,
+    /// clamped to be non-negative).
+    pub fn max_scroll_extent(&self) -> f64 {
+        self.position.max_scroll_extent()
     }
 
     pub fn content_size(&self) -> Size {
