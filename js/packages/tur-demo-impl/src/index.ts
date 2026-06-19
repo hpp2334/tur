@@ -1,31 +1,31 @@
 import {
-    type EdgyComponent,
-    type EdgyElement,
-    type KeyEvent,
-    CrossAxisAlignment,
-    Stack,
-    Positioned,
     Column,
     Condition,
     Container,
-    Expanded,
-    InputEdgy,
-    MainAxisAlignment,
-    MainAxisSize,
-    PointerInteract,
-    Row,
-    ScrollView,
-    SizedBox,
-    Switch,
-    Text,
+    CrossAxisAlignment,
     component,
     createTextEditingController,
     derive,
+    type EdgyComponent,
+    type EdgyElement,
+    Expanded,
     get,
+    InputEdgy,
+    type KeyEvent,
+    MainAxisAlignment,
+    MainAxisSize,
     mutate,
+    PointerInteract,
+    Positioned,
+    Row,
     render,
+    ScrollView,
+    SizedBox,
+    Stack,
+    Switch,
     set,
     source,
+    Text,
 } from "@tur/edgy";
 import { CASE_SOURCES } from "./cases-generated";
 import { buildHighlightSpans, compileCase } from "./compile";
@@ -114,9 +114,7 @@ let autoRunTimer: ReturnType<typeof setTimeout> | null = null;
 
 const editorCtrl = createTextEditingController({
     onInput: mutate((_ctx, _text: string, _enter: boolean) => {
-        editorCtrl.setSpansPreserveCursor(
-            buildHighlightSpans(editorCtrl.text),
-        );
+        editorCtrl.setSpansPreserveCursor(buildHighlightSpans(editorCtrl.text));
         refreshEditedState();
         if (get(autoRun$)) {
             if (autoRunTimer) clearTimeout(autoRunTimer);
@@ -231,7 +229,10 @@ function NavItem(name: string): EdgyElement {
             color: derive(() => {
                 const selected = get(selectedCase$) === name;
                 const hovered = get(hoveredCase$) === name;
-                if (selected) return hovered ? tokens.bg.selectedHover : tokens.bg.selected;
+                if (selected)
+                    return hovered
+                        ? tokens.bg.selectedHover
+                        : tokens.bg.selected;
                 return hovered ? tokens.bg.hover : tokens.bg.panel;
             }),
             children: [
@@ -253,8 +254,7 @@ function NavItem(name: string): EdgyElement {
                         Condition({
                             condition: derive(
                                 () =>
-                                    get(edited$) &&
-                                    get(selectedCase$) === name,
+                                    get(edited$) && get(selectedCase$) === name,
                             ),
                             child: Container({
                                 width: 6,
@@ -285,7 +285,7 @@ function Sidebar(): EdgyElement {
                             child: Column({
                                 crossAlignment: CrossAxisAlignment.Start,
                                 children: CASE_NAMES.map((name) =>
-                                    NavItem(name)
+                                    NavItem(name),
                                 ),
                             }),
                         }),
@@ -627,15 +627,11 @@ function EditorAndViewer(): EdgyElement {
     return Row({
         children: [
             Expanded({
-                flex: derive(() =>
-                    layoutFlex("editor", get(layoutMode$)),
-                ),
+                flex: derive(() => layoutFlex("editor", get(layoutMode$))),
                 child: Editor(),
             }),
             Expanded({
-                flex: derive(() =>
-                    layoutFlex("viewer", get(layoutMode$)),
-                ),
+                flex: derive(() => layoutFlex("viewer", get(layoutMode$))),
                 child: Viewer(),
             }),
         ],
@@ -696,9 +692,8 @@ function StatusBar(): EdgyElement {
                                                     width: 6,
                                                     height: 6,
                                                     borderRadius: 999,
-                                                    color:
-                                                        tokens.accent
-                                                            .complement,
+                                                    color: tokens.accent
+                                                        .complement,
                                                 }),
                                                 SizedBox({ width: 6 }),
                                                 Text({
@@ -712,8 +707,9 @@ function StatusBar(): EdgyElement {
                                     }),
                                     SizedBox({ width: 12 }),
                                     Text({
-                                        text: derive(() =>
-                                            `compiled ${relativeTime(get(lastCompiledAtMs$), get(now$))}`,
+                                        text: derive(
+                                            () =>
+                                                `compiled ${relativeTime(get(lastCompiledAtMs$), get(now$))}`,
                                         ),
                                         fontSize: 11,
                                         color: tokens.text.tertiary,
