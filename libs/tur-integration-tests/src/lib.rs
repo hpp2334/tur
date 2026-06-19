@@ -66,6 +66,16 @@ impl TurTestApp {
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
+    /// Push a viewport resize and flush, exercising the full relayout path.
+    pub fn resize(&mut self, width: f64, height: f64) {
+        self.inner.push_event(AppEvent::Resize {
+            logical_width: width as u32,
+            logical_height: height as u32,
+            dpr: 1.0,
+        });
+        self.ensure_flushed();
+    }
+
     pub fn tick(&mut self) -> Result<(), TurError> {
         self.inner.spawn_loop_once(Duration::ZERO)
     }

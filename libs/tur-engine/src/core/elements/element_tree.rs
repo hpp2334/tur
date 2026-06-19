@@ -280,11 +280,14 @@ impl ElementTree {
     }
 
     pub fn mark_root_dirty(&mut self) {
-        if let Some(root_id) = self.root_id {
-            if let Some(node) = self.nodes.get_mut(&root_id) {
-                node.dirty_layout = true;
-                node.dirty_paint = true;
-            }
+        // A change to the viewport size can alter the constraints of every
+        // node, so the whole tree must be re-laid-out. (`layout_size`
+        // short-circuits on the per-node `dirty_layout` flag, so marking only
+        // the root would leave the rest of the tree with stale sizes.) This is
+        // only invoked on resize.
+        for node in self.nodes.values_mut() {
+            node.dirty_layout = true;
+            node.dirty_paint = true;
         }
     }
 
