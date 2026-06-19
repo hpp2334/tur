@@ -41,9 +41,9 @@ function ReadyViewer(): EdgyElement {
                 value: selectedCase$,
                 cases: CASE_NAMES.map((name) => ({
                     key: name,
-                    child: getCaseComponent(name)?.() ?? Placeholder(),
+                    child: () => getCaseComponent(name) ?? Placeholder(),
                 })),
-                fallback: Placeholder(),
+                fallback: () => Placeholder(),
             }),
         ],
     });
@@ -93,9 +93,9 @@ export function Viewer(): EdgyElement {
     return Switch({
         value: status$,
         cases: [
-            { key: "ready", child: ReadyViewer() },
-            { key: "error", child: ErrorPanel() },
+            { key: "ready", child: ReadyViewer },
+            { key: "error", child: ErrorPanel },
         ],
-        fallback: ReadyViewer(),
+        fallback: ReadyViewer,
     });
 }

@@ -28,14 +28,14 @@ const KIND_COLOR: unknown[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** A component factory (the case's default export). */
-    component?: () => unknown;
+    /** The case's default export — a component handle (`EdgyElement`). */
+    component?: unknown;
 }
 
 /**
  * Transpile a case source (TSX → JS via the swc bridge), rewrite its
  * `@tur/edgy` import to the in-scope `globalThis.TurEdgy`, capture the
- * `export default`, and eval it. Returns the case's component factory.
+ * `export default`, and eval it. Returns the case's component handle.
  */
 export function compileCase(source: string): CaseCompileResult {
     let js: string;
@@ -78,10 +78,10 @@ export function compileCase(source: string): CaseCompileResult {
     }
 
     const comp = g.__tur_case;
-    if (typeof comp !== "function") {
+    if (comp == null) {
         return { error: "case has no default export component" };
     }
-    return { component: comp as () => unknown };
+    return { component: comp };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */

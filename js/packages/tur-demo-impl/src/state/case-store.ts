@@ -24,12 +24,12 @@ import type { EditorController } from "./types";
 // Case cache & last-compiled-source tracking
 // ---------------------------------------------------------------------------
 
-const caseComponents = new Map<string, () => EdgyElement>();
+const caseComponents = new Map<string, EdgyElement>();
 
 function compileIntoCache(name: string): void {
     const result = compileCase(CASE_SOURCES[name] ?? "");
     if (result.component) {
-        caseComponents.set(name, result.component as () => EdgyElement);
+        caseComponents.set(name, result.component as EdgyElement);
     }
 }
 
@@ -99,7 +99,7 @@ export function recompile(): void {
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
-    caseComponents.set(name, result.component as () => EdgyElement);
+    caseComponents.set(name, result.component as EdgyElement);
     lastCompiledText.set(name, editorCtrl.text);
     set(lastCompiledAtMs$, Date.now());
     set(status$, "ready");
@@ -114,11 +114,9 @@ export function resetCase(): void {
     recompile();
 }
 
-/** Look up the cached component factory for a case (or undefined). Used by
+/** Look up the cached component handle for a case (or undefined). Used by
  *  the viewer pane to render the active case. */
-export function getCaseComponent(
-    name: string,
-): (() => EdgyElement) | undefined {
+export function getCaseComponent(name: string): EdgyElement | undefined {
     return caseComponents.get(name);
 }
 

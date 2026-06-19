@@ -7,27 +7,27 @@ use tur_shared::BoxFit;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
-    extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// SvgSpec — the user's declaration. Pure Rust, no JsValues.
+// SvgComponent — the user's declaration. Pure Rust, no JsValues.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct SvgSpec {
+pub struct SvgComponent {
     pub resource_id: Option<Val<u64>>,
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub fit: Option<Val<BoxFit>>,
     pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn Spec>>,
+    pub child: Option<Rc<dyn Component>>,
 }
 
-impl Spec for SvgSpec {
+impl Component for SvgComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
-        cx.insert_node(id, AnyElement::new(Svg { spec: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(SvgElement { component: self.clone() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -40,28 +40,28 @@ impl Spec for SvgSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Svg — the built element. Layout and paint read `Val<T>` props on demand.
+// SvgElement — the built element. Layout and paint read `Val<T>` props on demand.
 // ---------------------------------------------------------------------------
 
-pub struct Svg {
-    pub spec: SvgSpec,
+pub struct SvgElement {
+    pub component: SvgComponent,
 }
 
-impl Effect for Svg {}
+impl Effect for SvgElement {}
 
-impl ElementTrace for Svg {
+impl ElementTrace for SvgElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(Val::Static(rid)) = &self.spec.resource_id {
+        if let Some(Val::Static(rid)) = &self.component.resource_id {
             parts.push(format!("resource={rid}"));
         }
-        if let Some(Val::Static(w)) = &self.spec.width {
+        if let Some(Val::Static(w)) = &self.component.width {
             parts.push(format!("width={w}"));
         }
-        if let Some(Val::Static(h)) = &self.spec.height {
+        if let Some(Val::Static(h)) = &self.component.height {
             parts.push(format!("height={h}"));
         }
-        if let Some(Val::Static(f)) = &self.spec.fit {
+        if let Some(Val::Static(f)) = &self.component.fit {
             parts.push(format!("fit={f:?}"));
         }
         parts.join(" ")
@@ -96,15 +96,15 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     if out.is_empty() { None } else { Some(out) }
 }
 
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_spec(&v)
+    extract_component(&v)
 }
 
-impl SvgSpec {
+impl SvgComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        SvgSpec {
+        SvgComponent {
             resource_id: prop_val::<u64>(props, "resourceId", ctx),
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),

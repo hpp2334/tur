@@ -6,15 +6,15 @@ use tur_shared::{Alignment, BorderPosition, Brush, Color};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
-    val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// ContainerSpec — the user's declaration. Pure Rust, no JsValues.
+// ContainerComponent — the user's declaration. Pure Rust, no JsValues.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
-pub struct ContainerSpec {
+pub struct ContainerComponent {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub padding: Option<Val<f64>>,
@@ -29,15 +29,15 @@ pub struct ContainerSpec {
     /// shadowOffset is `[x, y]` — parsed at factory time (not reactive).
     pub shadow_offset: Option<(f64, f64)>,
     pub query_key: Option<Vec<String>>,
-    pub children: Vec<Rc<dyn Spec>>,
+    pub children: Vec<Rc<dyn Component>>,
 }
 
-impl Spec for ContainerSpec {
+impl Component for ContainerComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::new(Container { spec: self.clone(), cached_color: None, cached_border_color: None }),
+            AnyElement::new(ContainerElement { component: self.clone(), cached_color: None, cached_border_color: None }),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -52,12 +52,12 @@ impl Spec for ContainerSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Container — the built element. Holds its spec; layout/paint read Val<T>
+// ContainerElement — the built element. Holds its spec; layout/paint read Val<T>
 // on demand via `cx.read_val`.
 // ---------------------------------------------------------------------------
 
-pub struct Container {
-    pub spec: ContainerSpec,
+pub struct ContainerElement {
+    pub component: ContainerComponent,
     pub cached_color: Option<Brush>,
     pub cached_border_color: Option<Color>,
 }
@@ -69,49 +69,49 @@ fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
     }
 }
 
-impl Container {
-    pub fn width(&self) -> Option<f64> { static_f64(&self.spec.width) }
-    pub fn height(&self) -> Option<f64> { static_f64(&self.spec.height) }
-    pub fn padding(&self) -> Option<f64> { static_f64(&self.spec.padding) }
-    pub fn border_width(&self) -> Option<f64> { static_f64(&self.spec.border_width) }
-    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.spec.border_radius) }
-    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.spec.shadow_blur) }
+impl ContainerElement {
+    pub fn width(&self) -> Option<f64> { static_f64(&self.component.width) }
+    pub fn height(&self) -> Option<f64> { static_f64(&self.component.height) }
+    pub fn padding(&self) -> Option<f64> { static_f64(&self.component.padding) }
+    pub fn border_width(&self) -> Option<f64> { static_f64(&self.component.border_width) }
+    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.component.border_radius) }
+    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.component.shadow_blur) }
     pub fn color(&self) -> Option<Brush> {
-        match &self.spec.color {
+        match &self.component.color {
             Some(Val::Static(v)) => Some(v.clone()),
             _ => self.cached_color.clone(),
         }
     }
     pub fn border_color(&self) -> Option<Color> {
-        match &self.spec.border_color {
+        match &self.component.border_color {
             Some(Val::Static(v)) => Some(*v),
             _ => self.cached_border_color,
         }
     }
     pub fn shadow_color(&self) -> Option<Color> {
-        match &self.spec.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
+        match &self.component.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
     }
-    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.spec.shadow_offset }
+    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.component.shadow_offset }
     pub fn border_position(&self) -> BorderPosition {
-        match &self.spec.border_position {
+        match &self.component.border_position {
             Some(Val::Static(v)) => *v,
             _ => BorderPosition::default(),
         }
     }
 }
 
-impl Effect for Container {}
+impl Effect for ContainerElement {}
 
-impl ElementTrace for Container {
+impl ElementTrace for ContainerElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(w) = self.spec.width.as_ref().and_then(|v| match v {
+        if let Some(w) = self.component.width.as_ref().and_then(|v| match v {
             Val::Static(f) => Some(*f),
             _ => None,
         }) {
             parts.push(format!("width={w}"));
         }
-        if let Some(h) = self.spec.height.as_ref().and_then(|v| match v {
+        if let Some(h) = self.component.height.as_ref().and_then(|v| match v {
             Val::Static(f) => Some(*f),
             _ => None,
         }) {
@@ -175,15 +175,15 @@ fn prop_query_key(
     if out.is_empty() { None } else { Some(out) }
 }
 
-/// Extract child specs from a JS array of SpecHandle opaques.
+/// Extract child specs from a JS array of ComponentHandle opaques.
 fn prop_children(
     props: &boa_engine::object::JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Vec<Rc<dyn Spec>> {
+) -> Vec<Rc<dyn Component>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
-    use crate::core::widget::extract_spec;
+    use crate::core::widget::extract_component;
     let Ok(v) = props.get(js_string!(key), ctx) else {
         return Vec::new();
     };
@@ -197,7 +197,7 @@ fn prop_children(
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_spec(&item) {
+            if let Some(spec) = extract_component(&item) {
                 out.push(spec);
             }
         }
@@ -205,10 +205,10 @@ fn prop_children(
     out
 }
 
-impl ContainerSpec {
-    /// Build a `ContainerSpec` from a JS props object.
+impl ContainerComponent {
+    /// Build a `ContainerComponent` from a JS props object.
     pub fn from_js(props: &boa_engine::object::JsObject, ctx: &mut Context) -> Self {
-        ContainerSpec {
+        ContainerComponent {
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),
             padding: prop_val::<f64>(props, "padding", ctx),

@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Condition, ConditionSpec, MountedBranch};
+pub use element::{ConditionElement, ConditionComponent, MountedBranch};

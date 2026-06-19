@@ -4,21 +4,21 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Positioned;
+use super::element::PositionedElement;
 
-impl ElementLayout for Positioned {
+impl ElementLayout for PositionedElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let left = cx.read_val_opt(self.spec.left.as_ref());
-        let top = cx.read_val_opt(self.spec.top.as_ref());
-        let right = cx.read_val_opt(self.spec.right.as_ref());
-        let bottom = cx.read_val_opt(self.spec.bottom.as_ref());
-        let width = cx.read_val_opt(self.spec.width.as_ref());
-        let height = cx.read_val_opt(self.spec.height.as_ref());
+        let left = cx.read_val_opt(self.component.left.as_ref());
+        let top = cx.read_val_opt(self.component.top.as_ref());
+        let right = cx.read_val_opt(self.component.right.as_ref());
+        let bottom = cx.read_val_opt(self.component.bottom.as_ref());
+        let width = cx.read_val_opt(self.component.width.as_ref());
+        let height = cx.read_val_opt(self.component.height.as_ref());
 
         // Resolve each axis independently: explicit size wins; otherwise a
         // pair of opposing edges implies a tight extent; else loose.
@@ -58,13 +58,13 @@ impl ElementLayout for Positioned {
     }
 
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
-        let offset_x = cx.read_val_opt(self.spec.left.as_ref()).unwrap_or(0.0);
-        let offset_y = cx.read_val_opt(self.spec.top.as_ref()).unwrap_or(0.0);
+        let offset_x = cx.read_val_opt(self.component.left.as_ref()).unwrap_or(0.0);
+        let offset_y = cx.read_val_opt(self.component.top.as_ref()).unwrap_or(0.0);
         cx.set_child_offset_self(Offset::new(offset_x, offset_y));
     }
 }
 
-impl ElementRender for Positioned {
+impl ElementRender for PositionedElement {
     fn type_name(&self) -> &'static str {
         "tur_positioned"
     }

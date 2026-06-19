@@ -9,23 +9,23 @@ use crate::core::elements::{
 };
 use crate::core::text::SelectionChangeEvent;
 use crate::core::widget::{
-    val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 use tur_shared::Color;
 
 // ---------------------------------------------------------------------------
-// TextSpec — the user's declaration. Pure Rust, no JsValues.
+// TextComponent — the user's declaration. Pure Rust, no JsValues.
 //
-// `Text` is a leaf element (no children). The `text` and `font_size` props are
+// `TextElement` is a leaf element (no children). The `text` and `font_size` props are
 // reactive (`Val<T>`); `spans` is parsed eagerly at factory time because each
 // span is a composite object (not a primitive the bridge can decode without a
 // boa `Context`).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct TextSpec {
+pub struct TextComponent {
     pub text: Option<Val<String>>,
     pub font_size: Option<Val<f64>>,
     /// Default color applied to the anonymous span in the plain-text case.
@@ -36,12 +36,12 @@ pub struct TextSpec {
     pub on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
 }
 
-impl Spec for TextSpec {
+impl Component for TextComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::with_gesture_and_focus(Text::new(self.clone()))
+            AnyElement::with_gesture_and_focus(TextElement::new(self.clone()))
                 .with_callbacks(),
             boa,
         );
@@ -54,23 +54,23 @@ impl Spec for TextSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Text — the built element. Holds its spec plus the runtime text-layout cache
+// TextElement — the built element. Holds its spec plus the runtime text-layout cache
 // and selection state. Layout/paint read the `Val<T>` props on demand via
 // `cx.read_val`.
 // ---------------------------------------------------------------------------
 
-pub struct Text {
-    pub spec: TextSpec,
+pub struct TextElement {
+    pub component: TextComponent,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) cached_spans: Vec<SpanData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,
 }
 
-impl Text {
-    pub fn new(spec: TextSpec) -> Self {
-        Text {
-            spec,
+impl TextElement {
+    pub fn new(spec: TextComponent) -> Self {
+        TextElement {
+            component: spec,
             cached_layout: None,
             cached_spans: Vec::new(),
             selection_anchor: 0,
@@ -82,7 +82,7 @@ impl Text {
         if !self.cached_spans.is_empty() {
             &self.cached_spans
         } else {
-            self.spec.spans.as_deref().unwrap_or(&[])
+            self.component.spans.as_deref().unwrap_or(&[])
         }
     }
 
@@ -90,21 +90,21 @@ impl Text {
         let Some(ref layout) = self.cached_layout else {
             return 0;
         };
-        layout.char_index_at_xy(x as f32, y as f32)
+        layout.byte_index_at_xy(x as f32, y as f32)
     }
 }
 
-impl Effect for Text {}
+impl Effect for TextElement {}
 
-impl ElementTrace for Text {
+impl ElementTrace for TextElement {
     fn trace_label(&self) -> String {
         // Prefer eagerly-parsed spans; fall back to a static `text` prop.
         // Reactive text vals can't be decoded here (no store/Context), so
-        // they contribute nothing — same convention as `Container::trace_label`.
-        let text: String = if let Some(spans) = &self.spec.spans {
+        // they contribute nothing — same convention as `ContainerElement::trace_label`.
+        let text: String = if let Some(spans) = &self.component.spans {
             spans.iter().map(|s| s.text.as_str()).collect()
         } else {
-            match &self.spec.text {
+            match &self.component.text {
                 Some(Val::Static(s)) => s.clone(),
                 _ => String::new(),
             }
@@ -118,9 +118,9 @@ impl ElementTrace for Text {
     }
 }
 
-impl ElementOnFocus for Text {}
+impl ElementOnFocus for TextElement {}
 
-impl ElementOnGesture for Text {
+impl ElementOnGesture for TextElement {
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
@@ -134,7 +134,7 @@ impl ElementOnGesture for Text {
                 self.selection_end = char_idx;
                 let anchor = self.selection_anchor;
                 let end = self.selection_end;
-                if let Some(m) = self.spec.on_selection_change {
+                if let Some(m) = self.component.on_selection_change {
                     cx.push_event(m, SelectionChangeEvent { anchor, end });
                 }
                 cx.request_redraw();
@@ -145,7 +145,7 @@ impl ElementOnGesture for Text {
                     self.selection_end = char_idx;
                     let anchor = self.selection_anchor;
                     let end = self.selection_end;
-                    if let Some(m) = self.spec.on_selection_change {
+                    if let Some(m) = self.component.on_selection_change {
                         cx.push_event(m, SelectionChangeEvent { anchor, end });
                     }
                     cx.request_redraw();
@@ -196,15 +196,15 @@ fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<Span
     if parsed.is_empty() { None } else { Some(parsed) }
 }
 
-impl TextSpec {
-    /// Build a `TextSpec` from a JS props object.
+impl TextComponent {
+    /// Build a `TextComponent` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         use boa_engine::js_string;
         let on_selection_change = props
             .get(js_string!("onSelectionChange"), ctx)
             .ok()
             .and_then(|v| edgy_mutation_from_js(&v));
-        TextSpec {
+        TextComponent {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
             color: prop_val::<Color>(props, "color", ctx),

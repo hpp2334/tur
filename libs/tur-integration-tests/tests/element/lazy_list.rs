@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementKind;
-use tur_engine::elements::LazyList;
+use tur_engine::elements::LazyListElement;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -95,7 +95,7 @@ fn lazy_list_element_properties() {
     app.render();
 
     app.with_element(ll_id, |e| {
-        let ll = e.cast::<LazyList>().unwrap();
+        let ll = e.cast::<LazyListElement>().unwrap();
         assert_eq!(ll.item_count(), 20);
     });
 }
@@ -164,7 +164,7 @@ fn lazy_list_scroll_clamps_at_content_end() {
     app.render();
 
     app.with_element(ll_id, |e| {
-        let ll = e.cast::<LazyList>().unwrap();
+        let ll = e.cast::<LazyListElement>().unwrap();
         let max_scroll = 100.0 * 50.0 - 600.0;
         let offset = ll.scroll_offset();
         assert!(

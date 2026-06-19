@@ -4,14 +4,14 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Fragment;
+use super::element::FragmentElement;
 
-// Fragment is a transparent pass-through with multiple children: it relays
+// FragmentElement is a transparent pass-through with multiple children: it relays
 // the incoming constraints to every child, sizes itself to the union (max)
 // of the child sizes, positions all children at the origin, and paints
 // nothing itself — it only forwards to children.
 
-impl ElementLayout for Fragment {
+impl ElementLayout for FragmentElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -39,7 +39,7 @@ impl ElementLayout for Fragment {
     }
 }
 
-impl ElementRender for Fragment {
+impl ElementRender for FragmentElement {
     fn type_name(&self) -> &'static str {
         "tur_fragment"
     }

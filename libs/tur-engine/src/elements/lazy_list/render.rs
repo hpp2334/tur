@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::LazyList;
+use super::element::LazyListElement;
 
-impl ElementLayout for LazyList {
+impl ElementLayout for LazyListElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -84,7 +84,7 @@ impl ElementLayout for LazyList {
     }
 }
 
-impl ElementRender for LazyList {
+impl ElementRender for LazyListElement {
     fn type_name(&self) -> &'static str {
         "tur_lazy_list"
     }

@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Focusable, FocusableSpec};
+pub use element::{FocusableElement, FocusableComponent};

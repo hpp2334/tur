@@ -71,18 +71,14 @@ export function isReadable(x: unknown): x is Readable<unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Component helper — identity passthrough for DX (matches the reference
-// edgy-js-demo API).
+// Component helper — wraps a `() => EdgyElement` thunk as a component handle.
+// The thunk is invoked lazily by the engine when the component is built.
 // ---------------------------------------------------------------------------
 
-export type EdgyComponent<
-    Props extends Record<string, unknown> = Record<string, unknown>,
-> = (props: Props) => EdgyElement;
+export type EdgyComponent = EdgyElement;
 
-export function component<P extends Record<string, unknown>>(
-    f: (props: P) => EdgyElement,
-): EdgyComponent<P> {
-    return f as EdgyComponent<P>;
+export function component(f: () => EdgyElement): EdgyComponent {
+    return __tur.component(__ctx, f) as EdgyComponent;
 }
 
 // ---------------------------------------------------------------------------
@@ -190,8 +186,10 @@ export function PointerInteract(props: PointerInteractProps): EdgyElement {
 
 export interface ConditionProps {
     condition: Val<boolean>;
-    child?: EdgyElement;
-    elseChild?: EdgyElement;
+    /** Then-branch thunk — built only when `condition` is truthy. */
+    child?: () => EdgyElement;
+    /** Else-branch thunk — built only when `condition` is falsy. */
+    elseChild?: () => EdgyElement;
     queryKey?: Val<string[]>;
 }
 
@@ -202,13 +200,14 @@ export function Condition(props: ConditionProps): EdgyElement {
 export interface SwitchProps {
     /** Reactive key to match on (any value), or a static value. */
     value: Val<string | number | boolean | null | undefined>;
-    /** Ordered list of `{ key, child }` entries. First match wins. */
+    /** Ordered list of `{ key, child }` entries. First match wins. Each `child`
+     *  is a thunk built only when its case is selected. */
     cases: Array<{
         key: string | number | boolean | null | undefined;
-        child: EdgyElement;
+        child: () => EdgyElement;
     }>;
-    /** Mounted when no case matches. */
-    fallback?: EdgyElement;
+    /** Mounted (built) when no case matches. */
+    fallback?: () => EdgyElement;
     queryKey?: Val<string[]>;
 }
 
@@ -366,8 +365,7 @@ export function createImageResource(bytes: Uint8Array | ArrayBuffer): number {
 // ---------------------------------------------------------------------------
 
 export function render(comp: EdgyComponent): void {
-    const root: EdgyElement = comp({} as Record<string, unknown>);
-    __tur.render(__ctx, root);
+    __tur.render(__ctx, comp);
 }
 
 export * from "./color";
@@ -438,7 +436,7 @@ interface TurGlobal {
     ): unknown;
     get(ctx: unknown, a: unknown): unknown;
     set(ctx: unknown, target: unknown, ...rest: unknown[]): unknown;
-    component(ctx: unknown, f: unknown): unknown;
+    component(ctx: unknown, f: () => EdgyElement): EdgyElement;
 
     Container(ctx: unknown, props: unknown): EdgyElement;
     Column(ctx: unknown, props: unknown): EdgyElement;

@@ -115,7 +115,7 @@ impl WidgetCx {
     /// Build a child spec under `parent` and return the resulting node id.
     pub fn build_child(
         &mut self,
-        spec: &dyn crate::core::widget::Spec,
+        spec: &dyn crate::core::widget::Component,
         boa: &mut Context,
         parent: ElementNodeId,
     ) -> ElementNodeId {

@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Image, ImageSpec};
+pub use element::{ImageElement, ImageComponent};

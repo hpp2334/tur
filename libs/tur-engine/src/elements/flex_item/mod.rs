@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Expanded, ExpandedSpec};
+pub use element::{ExpandedElement, ExpandedComponent};

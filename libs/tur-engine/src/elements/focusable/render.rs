@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Focusable;
+use super::element::FocusableElement;
 
-impl ElementLayout for Focusable {
+impl ElementLayout for FocusableElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -23,7 +23,7 @@ impl ElementLayout for Focusable {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for Focusable {
+impl ElementRender for FocusableElement {
     fn type_name(&self) -> &'static str {
         "tur_focusable"
     }

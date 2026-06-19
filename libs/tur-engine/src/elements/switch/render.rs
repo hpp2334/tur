@@ -4,13 +4,13 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Switch;
+use super::element::SwitchElement;
 
-// Switch is a transparent pass-through (like Condition): it relays constraints
+// SwitchElement is a transparent pass-through (like ConditionElement): it relays constraints
 // to its single mounted child, takes the child's size, positions the child at
 // the origin, and paints nothing itself.
 
-impl ElementLayout for Switch {
+impl ElementLayout for SwitchElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -31,7 +31,7 @@ impl ElementLayout for Switch {
     }
 }
 
-impl ElementRender for Switch {
+impl ElementRender for SwitchElement {
     fn type_name(&self) -> &'static str {
         "tur_switch"
     }

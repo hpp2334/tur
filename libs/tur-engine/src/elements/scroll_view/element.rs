@@ -11,13 +11,13 @@ use crate::core::elements::{
 };
 use crate::core::scroll::{ScrollController, ScrollEvent};
 use crate::core::widget::{
-    extract_spec, val_from_js, Effect, PropValue, Spec, Val, WidgetCx,
+    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 
 use super::scroll_position::ScrollPosition;
 
 // ---------------------------------------------------------------------------
-// ScrollViewSpec — the user's declaration. Pure Rust, no JsValues.
+// ScrollViewComponent — the user's declaration. Pure Rust, no JsValues.
 //
 // `axis`, `padding`, and `color` are reactive (`Val<T>`).
 // `controller` is a JS `ScrollController` opaque — parsed eagerly at factory
@@ -25,17 +25,17 @@ use super::scroll_position::ScrollPosition;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ScrollViewSpec {
+pub struct ScrollViewComponent {
     pub axis: Option<Val<Axis>>,
     pub padding: Option<Val<f64>>,
     pub color: Option<Val<Brush>>,
     /// JS `ScrollController` opaque — parsed eagerly (not reactive).
     pub controller: Option<JsObject>,
     pub query_key: Option<Vec<String>>,
-    pub child: Rc<dyn Spec>,
+    pub child: Rc<dyn Component>,
 }
 
-impl Spec for ScrollViewSpec {
+impl Component for ScrollViewComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         // Resolve axis eagerly — the wheel handler and controller-metric
         // updates need it at event time where no store/Context is available.
@@ -48,8 +48,8 @@ impl Spec for ScrollViewSpec {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::with_wheel(ScrollView {
-                spec: self.clone(),
+            AnyElement::with_wheel(ScrollViewElement {
+                component: self.clone(),
                 axis,
                 position: ScrollPosition::new(),
             })
@@ -66,17 +66,17 @@ impl Spec for ScrollViewSpec {
 }
 
 // ---------------------------------------------------------------------------
-// ScrollView — the built element. Holds its spec, the eagerly-resolved axis,
+// ScrollViewElement — the built element. Holds its spec, the eagerly-resolved axis,
 // and the mutable scroll position.
 // ---------------------------------------------------------------------------
 
-pub struct ScrollView {
-    pub spec: ScrollViewSpec,
+pub struct ScrollViewElement {
+    pub component: ScrollViewComponent,
     pub(crate) axis: Axis,
     pub(crate) position: ScrollPosition,
 }
 
-impl ScrollView {
+impl ScrollViewElement {
     pub fn scroll_offset(&self) -> f64 {
         self.position.pixels()
     }
@@ -94,7 +94,7 @@ impl ScrollView {
     }
 
     pub(crate) fn update_controller_metrics(&mut self) {
-        let Some(ref ctrl_obj) = self.spec.controller else { return };
+        let Some(ref ctrl_obj) = self.component.controller else { return };
         let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
             return;
         };
@@ -109,7 +109,7 @@ impl ScrollView {
     }
 
     pub(crate) fn apply_pending_initial_offset(&mut self) {
-        let Some(ref ctrl_obj) = self.spec.controller else { return };
+        let Some(ref ctrl_obj) = self.component.controller else { return };
         let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
             return;
         };
@@ -122,9 +122,9 @@ impl ScrollView {
     }
 }
 
-impl Effect for ScrollView {}
+impl Effect for ScrollViewElement {}
 
-impl ElementTrace for ScrollView {
+impl ElementTrace for ScrollViewElement {
     fn trace_label(&self) -> String {
         let vp = self.viewport_size();
         let ct = self.content_size();
@@ -140,7 +140,7 @@ impl ElementTrace for ScrollView {
     }
 }
 
-impl ElementOnWheel for ScrollView {
+impl ElementOnWheel for ScrollViewElement {
     fn on_wheel(&mut self, cx: &mut ElementOnWheelContext, event: &WheelEvent) -> f64 {
         let delta = match self.axis {
             Axis::Vertical => event.delta_y,
@@ -153,7 +153,7 @@ impl ElementOnWheel for ScrollView {
 
         if (new_pixels - old_pixels).abs() > 0.001 {
             self.update_controller_metrics();
-            if let Some(ref ctrl_obj) = self.spec.controller {
+            if let Some(ref ctrl_obj) = self.component.controller {
                 if let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>() {
                     if let Some(m) = ctrl.on_scroll {
                         cx.push_event(
@@ -212,18 +212,18 @@ fn prop_controller(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsO
 }
 
 /// Extract the single child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Spec>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_spec(&v)
+    extract_component(&v)
 }
 
-impl ScrollViewSpec {
-    /// Build a `ScrollViewSpec` from a JS props object. Returns `None` when
+impl ScrollViewComponent {
+    /// Build a `ScrollViewComponent` from a JS props object. Returns `None` when
     /// the required `child` prop is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let child = prop_child(props, "child", ctx)?;
-        Some(ScrollViewSpec {
+        Some(ScrollViewComponent {
             axis: prop_val::<Axis>(props, "axis", ctx),
             padding: prop_val::<f64>(props, "padding", ctx),
             color: prop_val::<Brush>(props, "color", ctx),

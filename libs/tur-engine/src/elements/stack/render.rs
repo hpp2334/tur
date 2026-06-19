@@ -4,9 +4,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Stack;
+use super::element::StackElement;
 
-impl ElementLayout for Stack {
+impl ElementLayout for StackElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -14,7 +14,7 @@ impl ElementLayout for Stack {
         cx: &mut LayoutContext,
     ) -> Size {
         let fit = cx
-            .read_val_opt(self.spec.fit.as_ref())
+            .read_val_opt(self.component.fit.as_ref())
             .unwrap_or(StackFit::Loose);
 
         let mut max_size = Size::ZERO;
@@ -44,7 +44,7 @@ impl ElementLayout for Stack {
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         let stack_size = self.computed_size.unwrap_or(Size::ZERO);
         let alignment = cx
-            .read_val_opt(self.spec.alignment.as_ref())
+            .read_val_opt(self.component.alignment.as_ref())
             .unwrap_or_default();
         for &child_id in children {
             let is_positioned = cx.child_type_name(child_id) == "tur_positioned";
@@ -58,7 +58,7 @@ impl ElementLayout for Stack {
     }
 }
 
-impl ElementRender for Stack {
+impl ElementRender for StackElement {
     fn type_name(&self) -> &'static str {
         "tur_stack"
     }

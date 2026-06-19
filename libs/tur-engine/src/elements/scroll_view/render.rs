@@ -4,16 +4,16 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::ScrollView;
+use super::element::ScrollViewElement;
 
-impl ElementLayout for ScrollView {
+impl ElementLayout for ScrollViewElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let padding = cx.read_val_opt(self.spec.padding.as_ref());
+        let padding = cx.read_val_opt(self.component.padding.as_ref());
 
         let viewport_w = if constraints.max_width.is_finite() {
             constraints.max_width
@@ -64,7 +64,7 @@ impl ElementLayout for ScrollView {
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         if let Some(&child_id) = children.first() {
-            let padding = cx.read_val_opt(self.spec.padding.as_ref()).unwrap_or(0.0);
+            let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
             let scroll_offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(padding, padding - self.position.pixels()),
                 tur_shared::Axis::Horizontal => {
@@ -76,7 +76,7 @@ impl ElementLayout for ScrollView {
     }
 }
 
-impl ElementRender for ScrollView {
+impl ElementRender for ScrollViewElement {
     fn type_name(&self) -> &'static str {
         "tur_scroll_view"
     }
@@ -89,7 +89,7 @@ impl ElementRender for ScrollView {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        if let Some(ref brush) = paint_ctx.read_val_opt(self.spec.color.as_ref()) {
+        if let Some(ref brush) = paint_ctx.read_val_opt(self.component.color.as_ref()) {
             canvas.fill_geometry(offset, &Geometry::Rect(layout.size), brush);
         }
 

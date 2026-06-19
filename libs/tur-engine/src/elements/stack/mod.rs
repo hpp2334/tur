@@ -1,4 +1,4 @@
 mod element;
 mod render;
 
-pub use element::{Stack, StackSpec};
+pub use element::{StackElement, StackComponent};

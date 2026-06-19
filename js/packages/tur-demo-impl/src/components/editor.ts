@@ -24,9 +24,9 @@ export function Editor(): EdgyElement {
                 value: selectedCase$,
                 cases: CASE_NAMES.map((name) => ({
                     key: name,
-                    child: editorInput,
+                    child: () => editorInput,
                 })),
-                fallback: editorInput,
+                fallback: () => editorInput,
             }),
         ],
     });

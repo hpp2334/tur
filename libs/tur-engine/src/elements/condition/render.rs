@@ -4,13 +4,13 @@ use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::Condition;
+use super::element::ConditionElement;
 
-// Condition is a transparent pass-through: it relays constraints to its single
+// ConditionElement is a transparent pass-through: it relays constraints to its single
 // mounted child, takes the child's size, and positions the child at the origin.
 // It paints nothing itself — it only forwards to children.
 
-impl ElementLayout for Condition {
+impl ElementLayout for ConditionElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -31,7 +31,7 @@ impl ElementLayout for Condition {
     }
 }
 
-impl ElementRender for Condition {
+impl ElementRender for ConditionElement {
     fn type_name(&self) -> &'static str {
         "tur_condition"
     }

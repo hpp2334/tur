@@ -5,9 +5,9 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::resource::ResourceId;
 
-use super::element::Image;
+use super::element::ImageElement;
 
-impl ElementLayout for Image {
+impl ElementLayout for ImageElement {
     fn perform_layout_size(
         &mut self,
         constraints: &Constraints,
@@ -15,10 +15,10 @@ impl ElementLayout for Image {
         cx: &mut LayoutContext,
     ) -> Size {
         let resource_id = cx
-            .read_val_opt(self.spec.resource_id.as_ref())
+            .read_val_opt(self.component.resource_id.as_ref())
             .map(ResourceId::new);
-        let width = cx.read_val_opt(self.spec.width.as_ref());
-        let height = cx.read_val_opt(self.spec.height.as_ref());
+        let width = cx.read_val_opt(self.component.width.as_ref());
+        let height = cx.read_val_opt(self.component.height.as_ref());
 
         let natural = resource_id
             .and_then(|rid| cx.get_image_natural_size(rid))
@@ -45,7 +45,7 @@ impl ElementLayout for Image {
     fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }
 
-impl ElementRender for Image {
+impl ElementRender for ImageElement {
     fn type_name(&self) -> &'static str {
         "tur_image"
     }
@@ -59,7 +59,7 @@ impl ElementRender for Image {
         paint_ctx: &PaintContext,
     ) {
         let rid = match paint_ctx
-            .read_val_opt(self.spec.resource_id.as_ref())
+            .read_val_opt(self.component.resource_id.as_ref())
             .map(ResourceId::new)
         {
             Some(id) => id,
@@ -85,7 +85,7 @@ impl ElementRender for Image {
         let natural_h = img_res.natural_size.height;
         if natural_w > 0.0 && natural_h > 0.0 {
             let fit = paint_ctx
-                .read_val_opt(self.spec.fit.as_ref())
+                .read_val_opt(self.component.fit.as_ref())
                 .unwrap_or_default();
 
             let layout_w = layout.size.width;
