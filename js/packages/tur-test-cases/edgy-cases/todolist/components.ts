@@ -12,6 +12,7 @@ import {
     ImageEdgy,
     InputEdgy,
     MainAxisAlignment,
+    MainAxisSize,
     MouseRegion,
     mutate,
     PointerInteract,
@@ -35,27 +36,30 @@ import {
     toggleTask,
 } from "./state";
 
-// --- Palette (todolist uses a dark slate theme) ----------------------------
+// --- Light palette (Notion / Linear-style) --------------------------------
 
 const COLORS = {
-    pageBg: Color.hex("#0f172a"),
-    cardBg: Color.hex("#1e293b"),
-    cardBorder: Color.hex("#334155"),
-    text: Color.hex("#f8fafc"),
-    textMuted: Color.hex("#94a3b8"),
-    textStrike: Color.hex("#64748b"),
-    accent: Color.hex("#4f46e5"),
-    accentHover: Color.hex("#6366f1"),
-    success: Color.hex("#22c55e"),
-    successBorder: Color.hex("#16a34a"),
-    danger: Color.hex("#ef4444"),
-    inputBg: Color.hex("#0f172a"),
-    inputBorder: Color.hex("#334155"),
-    backdrop: Color.rgba(2, 6, 23, 180),
-    subtleButton: Color.hex("#334155"),
+    cardBg: Color.hex("#ffffff"),
+    cardBorder: Color.hex("#e2e8f0"), // slate-200
+    text: Color.hex("#0f172a"), // slate-900
+    textMuted: Color.hex("#64748b"), // slate-500
+    textStrike: Color.hex("#94a3b8"), // slate-400
+    accent: Color.hex("#4f46e5"), // indigo-600
+    accentFg: Color.hex("#ffffff"),
+    success: Color.hex("#22c55e"), // green-500
+    successBorder: Color.hex("#16a34a"), // green-600
+    danger: Color.hex("#ef4444"), // red-500
+    dangerFg: Color.hex("#ffffff"),
+    inputBg: Color.hex("#f8fafc"), // slate-50
+    inputBorder: Color.hex("#cbd5e1"), // slate-300
+    backdrop: Color.rgba(15, 23, 42, 110), // ~45% slate scrim
+    subtleButton: Color.hex("#f1f5f9"), // slate-100
+    subtleButtonFg: Color.hex("#334155"), // slate-700
+    cardShadow: Color.rgba(15, 23, 42, 8),
+    cardShadowLg: Color.rgba(15, 23, 42, 24),
 } as const;
 
-// --- TaskItem --------------------------------------------------------------
+// --- TaskItem -------------------------------------------------------------
 
 export function TaskItem({
     task,
@@ -70,6 +74,9 @@ export function TaskItem({
         color: COLORS.cardBg,
         borderColor: COLORS.cardBorder,
         borderWidth: 1,
+        shadowColor: COLORS.cardShadow,
+        shadowBlur: 6,
+        shadowOffset: [0, 1],
         children: [
             Row({
                 crossAlignment: CrossAxisAlignment.Start,
@@ -82,21 +89,21 @@ export function TaskItem({
                                 toggleTask(ctx, index),
                             ),
                             child: Container({
-                                width: 22,
-                                height: 22,
+                                width: 20,
+                                height: 20,
                                 borderRadius: 6,
                                 color: task.completed ? COLORS.success : null,
                                 borderColor: task.completed
                                     ? COLORS.successBorder
                                     : COLORS.inputBorder,
-                                borderWidth: 2,
+                                borderWidth: task.completed ? 0 : 1.5,
                                 alignment: Alignment.Center,
                                 children: [
                                     task.completed
                                         ? ImageEdgy({
                                               resourceId: getIcon("check"),
-                                              width: 14,
-                                              height: 14,
+                                              width: 13,
+                                              height: 13,
                                               queryKey: ["check-icon"],
                                           })
                                         : SizedBox({ width: 0, height: 0 }),
@@ -104,21 +111,22 @@ export function TaskItem({
                             }),
                         }),
                     }),
-                    SizedBox({ width: 14 }),
+                    SizedBox({ width: 12 }),
                     // Title + description.
                     Expanded({
                         child: Column({
                             crossAlignment: CrossAxisAlignment.Start,
+                            mainAxisSize: MainAxisSize.Min,
                             children: [
                                 Text({
                                     text: task.title,
-                                    fontSize: 15,
+                                    fontSize: 14,
                                     color: task.completed
                                         ? COLORS.textStrike
                                         : COLORS.text,
                                 }),
                                 task.description
-                                    ? SizedBox({ height: 4 })
+                                    ? SizedBox({ height: 3 })
                                     : SizedBox({ width: 0, height: 0 }),
                                 task.description
                                     ? Text({
@@ -139,15 +147,16 @@ export function TaskItem({
                                 requestRemove(ctx, index),
                             ),
                             child: Container({
-                                width: 28,
-                                height: 28,
+                                width: 26,
+                                height: 26,
                                 borderRadius: 6,
+                                color: COLORS.subtleButton,
                                 alignment: Alignment.Center,
                                 children: [
                                     ImageEdgy({
                                         resourceId: getIcon("close"),
-                                        width: 14,
-                                        height: 14,
+                                        width: 13,
+                                        height: 13,
                                         queryKey: ["close-icon"],
                                     }),
                                 ],
@@ -207,7 +216,7 @@ function Button({
             onClick: mutate((ctx, _ev) => onClick(ctx)),
             child: Container({
                 padding: 9,
-                borderRadius: 6,
+                borderRadius: 7,
                 color: bg,
                 children: [
                     Text({
@@ -221,25 +230,29 @@ function Button({
     });
 }
 
-// --- AddTaskModal ----------------------------------------------------------
+// --- AddTaskModal ---------------------------------------------------------
 
 export function AddTaskModal(): EdgyElement {
     return ModalShell({
         onBackdropClick: closeAddModal,
         card: Container({
             width: 380,
-            borderRadius: 12,
-            padding: 20,
+            borderRadius: 14,
+            padding: 22,
             color: COLORS.cardBg,
             borderColor: COLORS.cardBorder,
             borderWidth: 1,
+            shadowColor: COLORS.cardShadowLg,
+            shadowBlur: 30,
+            shadowOffset: [0, 12],
             children: [
                 Column({
                     crossAlignment: CrossAxisAlignment.Stretch,
+                    mainAxisSize: MainAxisSize.Min,
                     children: [
                         Text({
                             text: "New Task",
-                            fontSize: 18,
+                            fontSize: 17,
                             color: COLORS.text,
                         }),
                         SizedBox({ height: 16 }),
@@ -250,7 +263,7 @@ export function AddTaskModal(): EdgyElement {
                         }),
                         SizedBox({ height: 6 }),
                         Container({
-                            borderRadius: 6,
+                            borderRadius: 7,
                             padding: 9,
                             color: COLORS.inputBg,
                             borderColor: COLORS.inputBorder,
@@ -262,7 +275,7 @@ export function AddTaskModal(): EdgyElement {
                                     fontSize: 14,
                                     color: COLORS.text,
                                     placeholderColor: COLORS.textMuted,
-                                    cursorColor: COLORS.accentHover,
+                                    cursorColor: COLORS.accent,
                                     queryKey: ["add-title"],
                                 }),
                             ],
@@ -275,7 +288,7 @@ export function AddTaskModal(): EdgyElement {
                         }),
                         SizedBox({ height: 6 }),
                         Container({
-                            borderRadius: 6,
+                            borderRadius: 7,
                             padding: 9,
                             color: COLORS.inputBg,
                             borderColor: COLORS.inputBorder,
@@ -287,7 +300,7 @@ export function AddTaskModal(): EdgyElement {
                                     fontSize: 14,
                                     color: COLORS.text,
                                     placeholderColor: COLORS.textMuted,
-                                    cursorColor: COLORS.accentHover,
+                                    cursorColor: COLORS.accent,
                                     queryKey: ["add-desc"],
                                 }),
                             ],
@@ -295,18 +308,19 @@ export function AddTaskModal(): EdgyElement {
                         SizedBox({ height: 20 }),
                         Row({
                             mainAlignment: MainAxisAlignment.End,
+                            mainAxisSize: MainAxisSize.Min,
                             children: [
                                 Button({
                                     label: "Cancel",
                                     bg: COLORS.subtleButton,
-                                    fg: COLORS.text,
+                                    fg: COLORS.subtleButtonFg,
                                     onClick: closeAddModal,
                                 }),
                                 SizedBox({ width: 8 }),
                                 Button({
                                     label: "Add Task",
                                     bg: COLORS.accent,
-                                    fg: Color.hex("#ffffff"),
+                                    fg: COLORS.accentFg,
                                     onClick: submitAdd,
                                 }),
                             ],
@@ -318,21 +332,25 @@ export function AddTaskModal(): EdgyElement {
     });
 }
 
-// --- ConfirmRemoveModal ----------------------------------------------------
+// --- ConfirmRemoveModal ---------------------------------------------------
 
 export function ConfirmRemoveModal(): EdgyElement {
     return ModalShell({
         onBackdropClick: closeRemoveModal,
         card: Container({
             width: 340,
-            borderRadius: 12,
-            padding: 20,
+            borderRadius: 14,
+            padding: 22,
             color: COLORS.cardBg,
             borderColor: COLORS.cardBorder,
             borderWidth: 1,
+            shadowColor: COLORS.cardShadowLg,
+            shadowBlur: 30,
+            shadowOffset: [0, 12],
             children: [
                 Column({
                     crossAlignment: CrossAxisAlignment.Stretch,
+                    mainAxisSize: MainAxisSize.Min,
                     children: [
                         Text({
                             text: "Remove task?",
@@ -355,18 +373,19 @@ export function ConfirmRemoveModal(): EdgyElement {
                         SizedBox({ height: 18 }),
                         Row({
                             mainAlignment: MainAxisAlignment.End,
+                            mainAxisSize: MainAxisSize.Min,
                             children: [
                                 Button({
                                     label: "Cancel",
                                     bg: COLORS.subtleButton,
-                                    fg: COLORS.text,
+                                    fg: COLORS.subtleButtonFg,
                                     onClick: closeRemoveModal,
                                 }),
                                 SizedBox({ width: 8 }),
                                 Button({
                                     label: "Remove",
                                     bg: COLORS.danger,
-                                    fg: Color.hex("#ffffff"),
+                                    fg: COLORS.dangerFg,
                                     onClick: confirmRemove,
                                 }),
                             ],

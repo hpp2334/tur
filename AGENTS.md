@@ -205,3 +205,13 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 
 Once visual verification is done, **kill the dev server** — free port 8080 with `lsof -ti:8080 | xargs kill` (or `pkill -f "rspack dev"`). Do not leave it running — it holds port 8080 and rebuilds wasm on every watch cycle.
 
+### Clean up screenshots after verification
+
+If a browser-operate screenshot was saved with a bare `filename`, it lands at the workspace root and shows up as an untracked file. After every visual-verification round, remove stray workspace-root PNGs so the working tree stays clean:
+
+```sh
+rm -f *.png  # only stray workspace-root screenshots; safe since no PNGs are tracked at root
+```
+
+Verify with `git status` — only the intended source changes should remain. Never commit a screenshot.
+
