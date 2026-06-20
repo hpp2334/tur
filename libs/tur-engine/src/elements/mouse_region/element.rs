@@ -6,35 +6,30 @@ use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// PointerInteractComponent — the user's declaration. Pure Rust, no JsValues.
+// MouseRegionComponent — the user's declaration. Pure Rust, no JsValues.
 //
-// Callbacks are mutation atoms typed as `EdgyMutation<E>`. The JS bridge
-// wraps user callbacks as mutation atoms and passes the `AtomHandle` as the
-// prop value. At event time the gesture handler resolves these and pushes
-// invocations onto the pending-mutation queue.
-//
-// Enter/exit hover callbacks live on `MouseRegion` (which also manages the
-// OS cursor). PointerInteract is gesture-only: click + drag.
+// `cursor` is reactive (`Val<String>`); the resolved value is read on every
+// pointer-region hit-path change. `on_enter` / `on_exit` are mutation atoms
+// invoked by the pointer-region handler when this region enters or leaves
+// the hit-path.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct PointerInteractComponent {
+pub struct MouseRegionComponent {
     pub behavior: Option<Val<HitTestBehavior>>,
-    pub on_click: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_down: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_move: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_up: Option<EdgyMutation<PointerInteractEvent>>,
+    pub cursor: Option<Val<String>>,
+    pub on_enter: Option<EdgyMutation<PointerRegionEvent>>,
+    pub on_exit: Option<EdgyMutation<PointerRegionEvent>>,
     pub child: Option<Rc<dyn Component>>,
 }
 
-impl Component for PointerInteractComponent {
+impl Component for MouseRegionComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let behavior = self
             .behavior
@@ -45,7 +40,7 @@ impl Component for PointerInteractComponent {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::with_gesture(PointerInteractElement {
+            AnyElement::new(MouseRegionElement {
                 component: self.clone(),
                 behavior,
             })
@@ -61,64 +56,33 @@ impl Component for PointerInteractComponent {
 }
 
 // ---------------------------------------------------------------------------
-// PointerInteractElement — the built element. Stores spec + eagerly-resolved
-// behavior (read by the gesture handler at event time where no store/Context
-// is available).
+// MouseRegionElement — the built element. Stores spec + eagerly-resolved
+// behavior (read by the pointer-region handler at event time where no
+// store/Context is available).
 // ---------------------------------------------------------------------------
 
-pub struct PointerInteractElement {
-    pub component: PointerInteractComponent,
+pub struct MouseRegionElement {
+    pub component: MouseRegionComponent,
     behavior: HitTestBehavior,
 }
 
-impl PointerInteractElement {
-    pub fn has_on_click(&self) -> bool {
-        self.component.on_click.is_some()
+impl MouseRegionElement {
+    pub fn has_region_callbacks(&self) -> bool {
+        self.component.on_enter.is_some() || self.component.on_exit.is_some()
     }
 
-    pub fn has_gesture_callbacks(&self) -> bool {
-        self.component.on_pointer_down.is_some()
-            || self.component.on_pointer_move.is_some()
-            || self.component.on_pointer_up.is_some()
+    pub fn has_cursor(&self) -> bool {
+        self.component.cursor.is_some()
     }
 
-    pub fn is_click_opaque(&self) -> bool {
-        self.behavior == HitTestBehavior::Opaque && self.component.on_click.is_some()
+    pub fn is_region_opaque(&self) -> bool {
+        self.behavior == HitTestBehavior::Opaque && self.has_region_callbacks()
     }
 }
 
-impl Effect for PointerInteractElement {}
+impl Effect for MouseRegionElement {}
 
-impl ElementTrace for PointerInteractElement {}
-
-impl ElementOnGesture for PointerInteractElement {
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
-        let (mutation, payload) = match event {
-            ComposedGestureEvent::PointerDown { local, global } => {
-                let m = self.component.on_pointer_down;
-                let ev = PointerInteractEvent { local: *local, global: *global };
-                (m, ev)
-            }
-            ComposedGestureEvent::PointerMove { local, global } => {
-                let m = self.component.on_pointer_move;
-                let ev = PointerInteractEvent { local: *local, global: *global };
-                (m, ev)
-            }
-            ComposedGestureEvent::PointerUp { local, global } => {
-                let m = self.component.on_pointer_up;
-                let ev = PointerInteractEvent { local: *local, global: *global };
-                (m, ev)
-            }
-        };
-        if let Some(m) = mutation {
-            cx.push_event(m, payload);
-        }
-    }
-}
+impl ElementTrace for MouseRegionElement {}
 
 // ---------------------------------------------------------------------------
 // Factory — called from the JS bridge to parse props into a spec.
@@ -146,32 +110,30 @@ fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn C
     extract_component(&v)
 }
 
-impl PointerInteractComponent {
+impl MouseRegionComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        PointerInteractComponent {
+        MouseRegionComponent {
             behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
-            on_click: prop_mutation::<PointerInteractEvent>(props, "onClick", ctx),
-            on_pointer_down: prop_mutation::<PointerInteractEvent>(props, "onPointerDown", ctx),
-            on_pointer_move: prop_mutation::<PointerInteractEvent>(props, "onPointerMove", ctx),
-            on_pointer_up: prop_mutation::<PointerInteractEvent>(props, "onPointerUp", ctx),
+            cursor: prop_val::<String>(props, "cursor", ctx),
+            on_enter: prop_mutation::<PointerRegionEvent>(props, "onEnter", ctx),
+            on_exit: prop_mutation::<PointerRegionEvent>(props, "onExit", ctx),
             child: prop_child(props, "child", ctx),
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// PointerInteractEvent — JS callback argument for click / drag events.
-// Carries both local (element-relative) and global (canvas-relative) coords.
+// PointerRegionEvent — JS callback argument for `onEnter` / `onExit`.
 // Serialises to a single JS object `{ local: {x, y}, global: {x, y} }`.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct PointerInteractEvent {
+pub struct PointerRegionEvent {
     pub local: Offset,
     pub global: Offset,
 }
 
-impl EventArg for PointerInteractEvent {
+impl EventArg for PointerRegionEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;
         use boa_engine::object::JsObject;

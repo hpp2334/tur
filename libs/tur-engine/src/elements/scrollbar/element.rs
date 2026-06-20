@@ -132,24 +132,28 @@ impl ElementOnGesture for ScrollbarElement {
         }
 
         match event {
-            ComposedGestureEvent::PointerDown { local_position } => {
+            ComposedGestureEvent::PointerDown { local, .. } => {
                 cx.request_own_focus();
                 // Jump so the thumb's center sits under the pointer, then drag
                 // relative to that position.
-                let target = ((local_position.y - thumb / 2.0) / thumb_range * max_extent)
+                let target = ((local.y - thumb / 2.0) / thumb_range * max_extent)
                     .clamp(0.0, max_extent);
                 cx.request_scroll_to(node, target);
                 self.drag = Some(DragState {
-                    start_y: local_position.y,
+                    start_y: local.y,
                     start_offset: target,
                 });
             }
-            ComposedGestureEvent::PointerMove { local_position } => {
+            ComposedGestureEvent::PointerMove { local, .. } => {
                 let Some(d) = self.drag else { return; };
-                let delta = local_position.y - d.start_y;
+                let delta = local.y - d.start_y;
                 let new_offset =
                     (d.start_offset + delta * max_extent / thumb_range).clamp(0.0, max_extent);
                 cx.request_scroll_to(node, new_offset);
+            }
+            ComposedGestureEvent::PointerUp { .. } => {
+                // Drag ends — clear drag state so the next drag starts fresh.
+                self.drag = None;
             }
         }
     }

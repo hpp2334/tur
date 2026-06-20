@@ -29,6 +29,9 @@ pub struct TurAppContext {
     pub(crate) gesture_composer: GestureEventComposer,
     pub(crate) event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
+    /// The most recent cursor name set by a handler (e.g. "col-resize").
+    /// Embedders poll this each frame to update the host canvas cursor.
+    pub(crate) current_cursor: Rc<RefCell<Option<String>>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -61,6 +64,7 @@ impl TurAppContext {
             gesture_composer: GestureEventComposer::new(),
             event_queue: AppEventQueue::new(),
             handlers: vec![],
+            current_cursor: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -81,6 +85,7 @@ impl TurAppContext {
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,
+            current_cursor: self.current_cursor.clone(),
         };
         for handler in &mut self.handlers {
             handler.handle_event(&mut cx, event);

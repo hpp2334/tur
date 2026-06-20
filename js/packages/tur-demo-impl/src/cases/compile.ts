@@ -32,49 +32,177 @@ export interface CaseCompileResult {
     component?: unknown;
 }
 
-/**
- * Transpile a case source (TSX → JS via the swc bridge), rewrite its
- * `@tur/edgy` import to the in-scope `globalThis.TurEdgy`, capture the
- * `export default`, and eval it. Returns the case's component handle.
- */
-export function compileCase(source: string): CaseCompileResult {
-    let js: string;
-    try {
-        js = host().transpileTsx(source);
-    } catch (e) {
-        return {
-            error: `transpile: ${e instanceof Error ? e.message : String(e)}`,
-        };
-    }
+/** Regex that matches `import { ... } from "./foo"` or `from "./foo.ts"`. */
+const RELATIVE_IMPORT_RE =
+    /import\s*(?:\{([\s\S]*?)\}|(\w+))\s*from\s*["']\.\/([^"']+)["'];?/g;
 
-    // `import { A, B } from "@tur/edgy"` → `const { A, B } = globalThis.TurEdgy`
-    js = js.replace(
-        /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/edgy["'];?/g,
-        (_m, specs: string) => `const {${specs}} = globalThis.TurEdgy;`,
-    );
-    // Local relative imports aren't supported (single-file MVP).
-    js = js.replace(/import\s+[^;]*from\s*["'][./][^"']*["'];?/g, "");
-    // `export default <expr>` → `globalThis.__tur_case = <expr>`
-    js = js.replace(/export\s+default\s+/g, "globalThis.__tur_case = ");
-    // Strip any remaining named exports.
-    js = js.replace(
-        /export\s+(?:const|let|var|function|class)\s/g,
-        "var __unused_ = ",
-    );
-    js = js.replace(/export\s*\{[^}]*\}\s*;?/g, "");
+/**
+ * Compile a case from its file map. Handles both single-file and multi-file
+ * cases.
+ *
+ * - Single-file: `{ "index.ts": "..." }` — compiled as before.
+ * - Multi-file: `{ "index.ts": "...", "utils.ts": "..." }` — non-entry files
+ *   are registered as virtual modules on `globalThis.__tur_modules`, then the
+ *   entry file is eval'd.
+ */
+export function compileCase(files: Record<string, string>): CaseCompileResult {
+    const entryFile = files["index.ts"] ?? Object.values(files)[0];
+    if (!entryFile) {
+        return { error: "case has no files" };
+    }
 
     const g = globalThis as unknown as {
         __tur_case?: unknown;
+        __tur_modules?: Record<string, unknown>;
         eval: (s: string) => void;
     };
+    const evalInGlobal = g.eval;
+
+    // Reset module registry for this compilation.
+    g.__tur_modules = {};
     g.__tur_case = undefined;
+
+    // Process non-entry files first (register as virtual modules).
+    const nonEntryFiles = Object.entries(files).filter(
+        ([name]) => name !== "index.ts",
+    );
+    for (const [filename, src] of nonEntryFiles) {
+        let js: string;
+        try {
+            js = host().transpileTsx(src);
+        } catch (e) {
+            return {
+                error: `transpile ${filename}: ${e instanceof Error ? e.message : String(e)}`,
+            };
+        }
+
+        // Rewrite @tur/edgy imports.
+        js = js.replace(
+            /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/edgy["'];?/g,
+            (_m, specs: string) => `const {${specs}} = globalThis.TurEdgy;`,
+        );
+
+        // Rewrite relative imports.
+        js = js.replace(
+            RELATIVE_IMPORT_RE,
+            (_m, namedSpecs: string, defaultSpec: string, modulePath: string) => {
+                const moduleName = modulePath.replace(/\.ts$/, "");
+                if (namedSpecs) {
+                    return `const {${namedSpecs}} = globalThis.__tur_modules["${moduleName}"];`;
+                }
+                if (defaultSpec) {
+                    return `const ${defaultSpec} = globalThis.__tur_modules["${moduleName}"];`;
+                }
+                return "";
+            },
+        );
+
+        // Rewrite exports to build an exports object.
+        // `export const X = ...` → `var X = ...` + `exports.X = X` at end
+        // Simple approach: strip export keyword, track exported names, assign at end.
+        const exportedNames: string[] = [];
+        js = js.replace(
+            /export\s+(?:const|let|var)\s+(\w+)/g,
+            (_m, name: string) => {
+                exportedNames.push(name);
+                return `var ${name}`;
+            },
+        );
+        js = js.replace(
+            /export\s+function\s+(\w+)/g,
+            (_m, name: string) => {
+                exportedNames.push(name);
+                return `function ${name}`;
+            },
+        );
+        js = js.replace(
+            /export\s+class\s+(\w+)/g,
+            (_m, name: string) => {
+                exportedNames.push(name);
+                return `var ${name} = class ${name}`;
+            },
+        );
+        // Strip re-exports like `export { X, Y }`.
+        js = js.replace(/export\s*\{([^}]*)\}\s*;?/g, (_m, names: string) => {
+            for (const n of names.split(",")) {
+                const trimmed = n.trim().split(/\s+as\s+/)[0]?.trim();
+                if (trimmed) exportedNames.push(trimmed);
+            }
+            return "";
+        });
+
+        // Handle `export default` — assign to exports.default.
+        js = js.replace(/export\s+default\s+/g, "exports.default = ");
+
+        const moduleName = filename.replace(/\.ts$/, "");
+        const wrappedJs = [
+            `globalThis.__tur_modules["${moduleName}"] = (function() {`,
+            `var exports = {};`,
+            js,
+            ...exportedNames.map((n) => `exports.${n} = ${n};`),
+            `return exports;`,
+            `})();`,
+        ].join("\n");
+
+        try {
+            evalInGlobal(wrappedJs);
+        } catch (e) {
+            return {
+                error: `eval ${filename}: ${e instanceof Error ? e.message : String(e)}`,
+            };
+        }
+    }
+
+    // Process entry file (index.ts).
+    let entryJs: string;
     try {
-        // Indirect eval (global scope). The local binding avoids the comma
-        // operator and keeps biome's noCommaOperator rule happy.
-        const evalInGlobal = g.eval;
-        evalInGlobal(js);
+        entryJs = host().transpileTsx(entryFile);
     } catch (e) {
-        return { error: `eval: ${e instanceof Error ? e.message : String(e)}` };
+        return {
+            error: `transpile index.ts: ${e instanceof Error ? e.message : String(e)}`,
+        };
+    }
+
+    // Rewrite @tur/edgy imports.
+    entryJs = entryJs.replace(
+        /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/edgy["'];?/g,
+        (_m, specs: string) => `const {${specs}} = globalThis.TurEdgy;`,
+    );
+
+    // Rewrite relative imports.
+    entryJs = entryJs.replace(
+        RELATIVE_IMPORT_RE,
+        (_m, namedSpecs: string, defaultSpec: string, modulePath: string) => {
+            const moduleName = modulePath.replace(/\.ts$/, "");
+            if (namedSpecs) {
+                return `const {${namedSpecs}} = globalThis.__tur_modules["${moduleName}"];`;
+            }
+            if (defaultSpec) {
+                return `const ${defaultSpec} = globalThis.__tur_modules["${moduleName}"];`;
+            }
+            return "";
+        },
+    );
+
+    // `export default <expr>` → `globalThis.__tur_case = <expr>`
+    entryJs = entryJs.replace(
+        /export\s+default\s+/g,
+        "globalThis.__tur_case = ",
+    );
+
+    // Strip remaining named exports.
+    entryJs = entryJs.replace(
+        /export\s+(?:const|let|var|function|class)\s/g,
+        "var __unused_export_ = ",
+    );
+    entryJs = entryJs.replace(/export\s*\{[^}]*\}\s*;?/g, "");
+
+    try {
+        evalInGlobal(entryJs);
+    } catch (e) {
+        return {
+            error: `eval index.ts: ${e instanceof Error ? e.message : String(e)}`,
+        };
     }
 
     const comp = g.__tur_case;

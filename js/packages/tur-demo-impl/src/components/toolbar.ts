@@ -5,6 +5,7 @@ import {
     Expanded,
     get,
     MainAxisSize,
+    MouseRegion,
     mutate,
     PointerInteract,
     Positioned,
@@ -30,36 +31,39 @@ import { tokens } from "../theme/tokens";
 // --- Run button ------------------------------------------------------------
 
 function RunButton(): EdgyElement {
-    return PointerInteract({
-        onClick: mutate(recompile),
-        onPointerEnter: mutate(() => set(runHovered$, true)),
-        onPointerExit: mutate(() => set(runHovered$, false)),
-        child: Container({
-            padding: 6,
-            borderRadius: 6,
-            color: derive(() =>
-                get(runHovered$)
-                    ? tokens.bg.button.primaryHover
-                    : tokens.bg.button.primary,
-            ),
-            children: [
-                Row({
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        Text({
-                            text: "\u25B6", // ▶
-                            fontSize: 9,
-                            color: tokens.text.onAccent,
-                        }),
-                        SizedBox({ width: 4 }),
-                        Text({
-                            text: "Run",
-                            fontSize: 12,
-                            color: tokens.text.onAccent,
-                        }),
-                    ],
-                }),
-            ],
+    return MouseRegion({
+        cursor: "pointer",
+        onEnter: mutate((_ctx, _ev) => set(runHovered$, true)),
+        onExit: mutate((_ctx, _ev) => set(runHovered$, false)),
+        child: PointerInteract({
+            onClick: mutate((_ctx, _ev) => recompile()),
+            child: Container({
+                padding: 6,
+                borderRadius: 6,
+                color: derive(() =>
+                    get(runHovered$)
+                        ? tokens.bg.button.primaryHover
+                        : tokens.bg.button.primary,
+                ),
+                children: [
+                    Row({
+                        mainAxisSize: MainAxisSize.Min,
+                        children: [
+                            Text({
+                                text: "\u25B6", // ▶
+                                fontSize: 9,
+                                color: tokens.text.onAccent,
+                            }),
+                            SizedBox({ width: 4 }),
+                            Text({
+                                text: "Run",
+                                fontSize: 12,
+                                color: tokens.text.onAccent,
+                            }),
+                        ],
+                    }),
+                ],
+            }),
         }),
     });
 }
@@ -67,34 +71,37 @@ function RunButton(): EdgyElement {
 // --- Reset button ----------------------------------------------------------
 
 function ResetButton(): EdgyElement {
-    return PointerInteract({
-        onClick: mutate(resetCase),
-        onPointerEnter: mutate(() => set(resetHovered$, true)),
-        onPointerExit: mutate(() => set(resetHovered$, false)),
-        child: Container({
-            padding: 6,
-            borderRadius: 6,
-            color: derive(() =>
-                get(resetHovered$) ? tokens.bg.hover : tokens.bg.button.ghost,
-            ),
-            children: [
-                Row({
-                    mainAxisSize: MainAxisSize.Min,
-                    children: [
-                        Text({
-                            text: "\u21BA", // ↺
-                            fontSize: 12,
-                            color: tokens.text.secondary,
-                        }),
-                        SizedBox({ width: 4 }),
-                        Text({
-                            text: "Reset",
-                            fontSize: 12,
-                            color: tokens.text.secondary,
-                        }),
-                    ],
-                }),
-            ],
+    return MouseRegion({
+        cursor: "pointer",
+        onEnter: mutate((_ctx, _ev) => set(resetHovered$, true)),
+        onExit: mutate((_ctx, _ev) => set(resetHovered$, false)),
+        child: PointerInteract({
+            onClick: mutate((_ctx, _ev) => resetCase()),
+            child: Container({
+                padding: 6,
+                borderRadius: 6,
+                color: derive(() =>
+                    get(resetHovered$) ? tokens.bg.hover : tokens.bg.button.ghost,
+                ),
+                children: [
+                    Row({
+                        mainAxisSize: MainAxisSize.Min,
+                        children: [
+                            Text({
+                                text: "\u21BA", // ↺
+                                fontSize: 12,
+                                color: tokens.text.secondary,
+                            }),
+                            SizedBox({ width: 4 }),
+                            Text({
+                                text: "Reset",
+                                fontSize: 12,
+                                color: tokens.text.secondary,
+                            }),
+                        ],
+                    }),
+                ],
+            }),
         }),
     });
 }
@@ -111,35 +118,40 @@ function AutoRunToggle(): EdgyElement {
                 color: tokens.text.secondary,
             }),
             SizedBox({ width: 6 }),
-            PointerInteract({
-                onClick: mutate(() => set(autoRun$, !get(autoRun$))),
-                child: Container({
-                    width: 28,
-                    height: 16,
-                    borderRadius: 999,
-                    color: derive(() =>
-                        get(autoRun$)
-                            ? tokens.bg.button.primary
-                            : tokens.bg.hover,
+            MouseRegion({
+                cursor: "pointer",
+                child: PointerInteract({
+                    onClick: mutate((_ctx, _ev) =>
+                        set(autoRun$, !get(autoRun$)),
                     ),
-                    children: [
-                        Stack({
-                            children: [
-                                Positioned({
-                                    top: 2,
-                                    left: derive(() =>
-                                        get(autoRun$) ? 14 : 2,
-                                    ),
-                                    child: Container({
-                                        width: 12,
-                                        height: 12,
-                                        borderRadius: 999,
-                                        color: tokens.text.inverse,
+                    child: Container({
+                        width: 28,
+                        height: 16,
+                        borderRadius: 999,
+                        color: derive(() =>
+                            get(autoRun$)
+                                ? tokens.bg.button.primary
+                                : tokens.bg.hover,
+                        ),
+                        children: [
+                            Stack({
+                                children: [
+                                    Positioned({
+                                        top: 2,
+                                        left: derive(() =>
+                                            get(autoRun$) ? 14 : 2,
+                                        ),
+                                        child: Container({
+                                            width: 12,
+                                            height: 12,
+                                            borderRadius: 999,
+                                            color: tokens.text.inverse,
+                                        }),
                                     }),
-                                }),
-                            ],
-                        }),
-                    ],
+                                ],
+                            }),
+                        ],
+                    }),
                 }),
             }),
         ],
@@ -149,30 +161,33 @@ function AutoRunToggle(): EdgyElement {
 // --- Layout mode segmented control -----------------------------------------
 
 function LayoutButton(mode: LayoutMode, label: string): EdgyElement {
-    return PointerInteract({
-        onClick: mutate(() => set(layoutMode$, mode)),
-        onPointerEnter: mutate(() => set(layoutHovered$, mode)),
-        onPointerExit: mutate(() => set(layoutHovered$, null)),
-        child: Container({
-            padding: 6,
-            color: derive(() => {
-                const selected = get(layoutMode$) === mode;
-                const hovered = get(layoutHovered$) === mode;
-                if (selected) return tokens.bg.controlSelected;
-                if (hovered) return tokens.bg.controlTrayHover;
-                return tokens.bg.controlTray;
-            }),
-            children: [
-                Text({
-                    text: label,
-                    fontSize: 11,
-                    color: derive(() =>
-                        get(layoutMode$) === mode
-                            ? tokens.text.primary
-                            : tokens.text.secondary,
-                    ),
+    return MouseRegion({
+        cursor: "pointer",
+        onEnter: mutate((_ctx, _ev) => set(layoutHovered$, mode)),
+        onExit: mutate((_ctx, _ev) => set(layoutHovered$, null)),
+        child: PointerInteract({
+            onClick: mutate((_ctx, _ev) => set(layoutMode$, mode)),
+            child: Container({
+                padding: 6,
+                color: derive(() => {
+                    const selected = get(layoutMode$) === mode;
+                    const hovered = get(layoutHovered$) === mode;
+                    if (selected) return tokens.bg.controlSelected;
+                    if (hovered) return tokens.bg.controlTrayHover;
+                    return tokens.bg.controlTray;
                 }),
-            ],
+                children: [
+                    Text({
+                        text: label,
+                        fontSize: 11,
+                        color: derive(() =>
+                            get(layoutMode$) === mode
+                                ? tokens.text.primary
+                                : tokens.text.secondary,
+                        ),
+                    }),
+                ],
+            }),
         }),
     });
 }

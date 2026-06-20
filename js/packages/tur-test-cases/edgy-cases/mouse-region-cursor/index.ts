@@ -5,11 +5,11 @@ import {
     Container,
     CrossAxisAlignment,
     component,
-    derive,
     MouseRegion,
-    mutate,
-    source,
     Text,
+    derive,
+    source,
+    mutate,
 } from "@tur/edgy";
 
 const state$ = source("idle");
@@ -19,6 +19,7 @@ export default component(() =>
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             MouseRegion({
+                cursor: "col-resize",
                 onEnter: mutate(({ set }) => set(state$, "entered")),
                 onExit: mutate(({ set }) => set(state$, "exited")),
                 child: Container({
@@ -29,7 +30,7 @@ export default component(() =>
                     children: [
                         Text({
                             text: derive((g) => g(state$)),
-                            queryKey: ["region-text"],
+                            queryKey: ["mr-state"],
                         }),
                     ],
                 }),

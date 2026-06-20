@@ -6,6 +6,7 @@ use crate::core::elements::ElementTree;
 use crate::core::fonts::FontManager;
 use crate::core::resource::{ResourceId, ResourceMap};
 use crate::core::widget::{PropValue, Val};
+use crate::elements::ExpandedElement;
 
 pub struct LayoutContext<'a> {
     pub(crate) tree: &'a mut ElementTree,
@@ -87,6 +88,19 @@ impl<'a> LayoutContext<'a> {
             .get(&child_id)
             .and_then(|n| n.element.as_ref())
             .and_then(|e| e.cast::<T>())
+    }
+
+    /// Resolve the `flex` weight of a flex-item child (`Expanded({ flex })`).
+    /// Returns 0.0 if the child is not an `Expanded` element. If it is an
+    /// `Expanded` but the `flex` prop is absent, returns 1.0 (Flutter default).
+    pub fn child_flex(&mut self, child_id: ElementNodeId) -> f64 {
+        let Some(expanded) = self.child_element::<ExpandedElement>(child_id) else {
+            return 0.0;
+        };
+        let Some(flex_val) = expanded.component.flex.clone() else {
+            return 1.0;
+        };
+        self.read_val(&flex_val).unwrap_or(1.0).max(0.0)
     }
 
     pub fn text_layout_contexts(

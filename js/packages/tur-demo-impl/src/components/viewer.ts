@@ -4,13 +4,14 @@ import {
     CrossAxisAlignment,
     derive,
     type EdgyElement,
+    Each,
     get,
     SizedBox,
     Switch,
     Text,
 } from "@tur/edgy";
 import {
-    CASE_NAMES,
+    compileVersion$,
     errorMsg$,
     getCaseComponent,
     selectedCase$,
@@ -37,13 +38,19 @@ function ReadyViewer(): EdgyElement {
         color: tokens.bg.viewer,
         padding: 12,
         children: [
-            Switch({
-                value: selectedCase$,
-                cases: CASE_NAMES.map((name) => ({
-                    key: name,
-                    child: () => getCaseComponent(name) ?? Placeholder(),
-                })),
-                fallback: () => Placeholder(),
+            // Rebuild the rendered case component whenever the selected case
+            // changes OR a fresh compile lands (compileVersion$ bumps on each
+            // successful recompile). Each rebuilds its children when the items
+            // array identity changes — Switch can't do this because its case
+            // keys are static.
+            Each({
+                items: derive(() => [
+                    {
+                        name: get(selectedCase$),
+                        v: get(compileVersion$),
+                    },
+                ]),
+                build: (item) => getCaseComponent(item.name) ?? Placeholder(),
             }),
         ],
     });

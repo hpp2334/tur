@@ -158,6 +158,19 @@ impl TurApp {
             .push(event);
     }
 
+    /// Returns the most recent cursor name set by a handler (e.g. "col-resize"),
+    /// or `None` if no cursor change is pending since the last call. Embedders
+    /// poll this once per frame and apply the value to the host canvas, then
+    /// call again next frame.
+    pub fn take_current_cursor(&self) -> Option<String> {
+        self.internal
+            .app_context
+            .borrow()
+            .current_cursor
+            .borrow_mut()
+            .take()
+    }
+
     pub fn debug_layout(&self) -> String {
         self.internal.js_context.element_tree.borrow().debug_layout()
     }

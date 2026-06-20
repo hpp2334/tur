@@ -59,6 +59,7 @@ spec_factory!(tur_pointer_interact, PointerInteractComponent);
 spec_factory!(tur_svg_edgy, SvgComponent);
 spec_factory!(tur_focusable, FocusableComponent);
 spec_factory!(tur_scrollbar, ScrollbarComponent);
+spec_factory!(tur_mouse_region, MouseRegionComponent);
 
 macro_rules! spec_factory_opt {
     ($fn_name:ident, $spec_ty:ident) => {

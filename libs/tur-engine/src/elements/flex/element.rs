@@ -11,6 +11,7 @@ pub(crate) struct ChildData {
     pub id: ElementNodeId,
     pub size: Size,
     pub is_flex: bool,
+    pub flex: f64,
 }
 
 // ---------------------------------------------------------------------------

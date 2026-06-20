@@ -17,7 +17,7 @@ use crate::core::bridge::utils::{
 };
 use crate::core::bridge::widget_bridge::{
     tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
-    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_switch, tur_pointer_interact,    tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_svg_edgy, tur_text,
+    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_mouse_region, tur_switch, tur_pointer_interact,    tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_svg_edgy, tur_text,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -102,7 +102,7 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 29] = [
+    ); 30] = [
         // --- reactive primitives ---
         ("source", 2, tur_source),
         ("derive", 2, tur_derive),
@@ -119,6 +119,7 @@ pub fn init_bridge(
         ("Positioned", 2, tur_positioned),
         ("Text", 2, tur_text),
         ("PointerInteract", 2, tur_pointer_interact),
+        ("MouseRegion", 2, tur_mouse_region),
         ("Condition", 2, tur_condition),
         ("Switch", 2, tur_switch),
         ("Each", 2, tur_each),

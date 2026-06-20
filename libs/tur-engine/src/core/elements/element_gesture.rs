@@ -7,8 +7,9 @@ use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
 
 pub enum ComposedGestureEvent {
-    PointerDown { local_position: Offset },
-    PointerMove { local_position: Offset },
+    PointerDown { local: Offset, global: Offset },
+    PointerMove { local: Offset, global: Offset },
+    PointerUp { local: Offset, global: Offset },
 }
 
 pub struct ElementOnGestureContext<'a> {

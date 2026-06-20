@@ -653,6 +653,12 @@ impl TurWasmApp {
                     tracing::error!("frame loop spawn_loop_once error: {e}");
                 }
 
+                // Apply any pending cursor change requested by a handler
+                // (e.g. MouseRegion setting "col-resize" on hover).
+                if let Some(name) = s.app.take_current_cursor() {
+                    let _ = s._canvas.style().set_property("cursor", &name);
+                }
+
                 let is_editable = s.app.focused_is_editable();
                 if is_editable {
                     let _ = s.textarea.focus();

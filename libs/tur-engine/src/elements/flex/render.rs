@@ -29,17 +29,19 @@ impl ElementLayout for FlexElement {
 
         let mut total_main: f64 = 0.0;
         let mut max_cross: f64 = 0.0;
-        let mut flex_count = 0u32;
+        let mut total_flex: f64 = 0.0;
 
         for &child_id in children {
             let is_flex = cx.child_type_name(child_id) == "tur_flex_item";
 
             if is_flex {
-                flex_count += 1;
+                let flex = cx.child_flex(child_id).max(0.0);
+                total_flex += flex;
                 self.child_data.push(ChildData {
                     id: child_id,
                     size: Size::ZERO,
                     is_flex: true,
+                    flex,
                 });
             } else {
                 let child_constraints = match direction {
@@ -71,6 +73,7 @@ impl ElementLayout for FlexElement {
                     id: child_id,
                     size,
                     is_flex: false,
+                    flex: 0.0,
                 });
             }
         }
@@ -79,14 +82,15 @@ impl ElementLayout for FlexElement {
             constraints.constrain(Size::new(constraints.max_width, constraints.max_height)),
         );
         let remaining_main = (available_main - total_main).max(0.0);
-        let flex_space = if flex_count > 0 {
-            remaining_main / flex_count as f64
+        let space_per_unit = if total_flex > 0.0 {
+            remaining_main / total_flex
         } else {
             0.0
         };
 
         for entry in &mut self.child_data {
             if entry.is_flex {
+                let slot = space_per_unit * entry.flex;
                 let child_constraints = match direction {
                     Axis::Vertical => Constraints {
                         min_width: if cross_alignment == CrossAxisAlignment::Stretch {
@@ -95,12 +99,12 @@ impl ElementLayout for FlexElement {
                             0.0
                         },
                         max_width: constraints.max_width,
-                        min_height: flex_space,
-                        max_height: flex_space,
+                        min_height: slot,
+                        max_height: slot,
                     },
                     Axis::Horizontal => Constraints {
-                        min_width: flex_space,
-                        max_width: flex_space,
+                        min_width: slot,
+                        max_width: slot,
                         min_height: if cross_alignment == CrossAxisAlignment::Stretch {
                             constraints.max_height
                         } else {

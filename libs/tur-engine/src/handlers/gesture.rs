@@ -3,7 +3,7 @@ use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
-use crate::elements::pointer_interact::ClickEvent;
+use crate::elements::pointer_interact::PointerInteractEvent;
 use crate::elements::PointerInteractElement;
 use tur_shared::Offset;
 
@@ -27,30 +27,58 @@ impl AppHandler for GestureAppHandler {
 }
 
 fn handle_pointer_down(cx: &mut HandlerContext, position: Offset) {
-    let target = HitTest::new(&*cx.element_tree).deepest(position);
-    cx.gesture_composer.on_pointer_down(target);
+    let path = HitTest::new(&*cx.element_tree).path(position);
+    // Path is ordered [deepest, ..., outermost]; the deepest hit is the
+    // primary gesture target.
+    let target = path.first().copied();
+    cx.gesture_composer.on_pointer_down(target, path.clone());
 
-    if let Some(id) = target {
-        let local = local_position(cx, id, position);
-        dispatch_gesture_event(cx, id, &ComposedGestureEvent::PointerDown { local_position: local });
+    // Dispatch PointerDown to every element in the hit-path. Elements without
+    // a real on_gesture_event impl (the blanket default) ignore it.
+    for id in &path {
+        let local = local_position(cx, *id, position);
+        dispatch_gesture_event(
+            cx,
+            *id,
+            &ComposedGestureEvent::PointerDown { local, global: position },
+        );
     }
 }
 
 fn handle_pointer_move(cx: &mut HandlerContext, position: Offset) {
-    let is_dragging = cx.gesture_composer.is_tracking_drag();
-    if !is_dragging {
+    if !cx.gesture_composer.is_tracking_drag() {
         return;
     }
 
-    let Some(id) = cx.focus_manager.focused() else {
-        return;
-    };
-    let local = local_position(cx, id, position);
-    dispatch_gesture_event(cx, id, &ComposedGestureEvent::PointerMove { local_position: local });
+    // Route move events to the elements that received the original pointer-down
+    // (gesture capture): even if the pointer has moved off them, they continue
+    // to receive moves until the drag ends.
+    let path: Vec<ElementNodeId> = cx.gesture_composer.pointer_down_path().to_vec();
+    for id in &path {
+        let local = local_position(cx, *id, position);
+        dispatch_gesture_event(
+            cx,
+            *id,
+            &ComposedGestureEvent::PointerMove { local, global: position },
+        );
+    }
 }
 
 fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
     let down_target = cx.gesture_composer.pointer_down_target();
+    let down_path: Vec<ElementNodeId> = cx.gesture_composer.pointer_down_path().to_vec();
+
+    // Dispatch PointerUp to every element that received the pointer-down
+    // (gesture capture) before click resolution.
+    for id in &down_path {
+        let local = local_position(cx, *id, position);
+        dispatch_gesture_event(
+            cx,
+            *id,
+            &ComposedGestureEvent::PointerUp { local, global: position },
+        );
+    }
+
     let click_eligible = match down_target {
         Some(id) => HitTest::new(&*cx.element_tree).contains(position, id),
         None => false,
@@ -64,8 +92,11 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
                 if let Some(ref element) = node.element {
                     if let Some(p) = element.cast::<PointerInteractElement>() {
                         if let Some(m) = p.component.on_click {
-                            cx.mutation_queue
-                                .push(m, ClickEvent { x: position.x, y: position.y });
+                            let local = local_position(cx, *node_id, position);
+                            cx.mutation_queue.push(
+                                m,
+                                PointerInteractEvent { local, global: position },
+                            );
                         }
                     }
                 }
