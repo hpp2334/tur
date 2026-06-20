@@ -6,10 +6,7 @@ import type { LayoutMode } from "./types";
 // Whitelist & case ordering
 // ---------------------------------------------------------------------------
 
-const WHITELIST = new Set([
-    "counter",
-    "todolist",
-]);
+const WHITELIST = new Set(["counter", "todolist"]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)
     .filter((name) => WHITELIST.has(name))
