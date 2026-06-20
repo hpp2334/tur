@@ -36,7 +36,7 @@ export default component(() =>
                             mainAlignment: MainAxisAlignment.Center,
                             children: [
                                 PointerInteract({
-                                    onClick: mutate(({ get, set }) =>
+                                    onClick: mutate(({ get, set }, _ev) =>
                                         set(count$, get(count$) + 1),
                                     ),
                                     child: Container({

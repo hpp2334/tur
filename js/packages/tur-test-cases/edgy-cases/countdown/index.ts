@@ -1,4 +1,5 @@
 import {
+    type PointerInteractEvent,
     Column,
     Condition,
     Container,
@@ -25,7 +26,7 @@ const editController$ = source<unknown>(null);
 
 let timerId: ReturnType<typeof setInterval> | null = null;
 
-const start$ = mutate(({ get, set }) => {
+const start$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (get(running$)) return;
     set(running$, true);
     timerId = setInterval(() => {
@@ -43,7 +44,7 @@ const start$ = mutate(({ get, set }) => {
     }, 1000);
 });
 
-const pause$ = mutate(({ get, set }) => {
+const pause$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (!get(running$)) return;
     if (timerId !== null) {
         clearInterval(timerId);
@@ -52,7 +53,7 @@ const pause$ = mutate(({ get, set }) => {
     set(running$, false);
 });
 
-const reset$ = mutate(({ get, set }) => {
+const reset$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (timerId !== null) {
         clearInterval(timerId);
         timerId = null;
@@ -61,7 +62,7 @@ const reset$ = mutate(({ get, set }) => {
     set(remaining$, get(initial$));
 });
 
-const openEdit$ = mutate(({ get, set }) => {
+const openEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (timerId !== null) {
         clearInterval(timerId);
         timerId = null;
@@ -77,7 +78,7 @@ const openEdit$ = mutate(({ get, set }) => {
     set(editing$, true);
 });
 
-const confirmEdit$ = mutate(({ get, set }) => {
+const confirmEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     const parsed = parseInt(get(editText$), 10);
     if (!Number.isNaN(parsed) && parsed > 0) {
         set(initial$, parsed);

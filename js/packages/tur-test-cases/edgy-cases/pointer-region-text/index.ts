@@ -19,8 +19,8 @@ export default component(() =>
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             MouseRegion({
-                onEnter: mutate(({ set }) => set(state$, "entered")),
-                onExit: mutate(({ set }) => set(state$, "exited")),
+                onEnter: mutate(({ set }, _ev) => set(state$, "entered")),
+                onExit: mutate(({ set }, _ev) => set(state$, "exited")),
                 child: Container({
                     width: 100,
                     height: 50,

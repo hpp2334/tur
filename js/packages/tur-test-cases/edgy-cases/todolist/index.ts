@@ -39,7 +39,7 @@ function TaskItem({ task, index }: { task: Task; index: number }) {
                 mainAxisSize: MainAxisSize.Min,
                 children: [
                     PointerInteract({
-                        onClick: mutate(({ get, set }) => {
+                        onClick: mutate(({ get, set }, _ev) => {
                             const tasks = get(tasks$);
                             set(
                                 tasks$,
@@ -77,7 +77,7 @@ function TaskItem({ task, index }: { task: Task; index: number }) {
                 ],
             }),
             PointerInteract({
-                onClick: mutate(({ get, set }) => {
+                onClick: mutate(({ get, set }, _ev) => {
                     const tasks = get(tasks$);
                     set(
                         tasks$,
@@ -158,7 +158,7 @@ export default component(() =>
                                                     }),
                                                     PointerInteract({
                                                         onClick: mutate(
-                                                            ({ get, set }) => {
+                                                            ({ get, set }, _ev) => {
                                                                 const tasks =
                                                                     get(tasks$);
                                                                 set(tasks$, [

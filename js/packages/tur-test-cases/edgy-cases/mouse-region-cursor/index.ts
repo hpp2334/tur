@@ -20,8 +20,8 @@ export default component(() =>
         children: [
             MouseRegion({
                 cursor: "col-resize",
-                onEnter: mutate(({ set }) => set(state$, "entered")),
-                onExit: mutate(({ set }) => set(state$, "exited")),
+                onEnter: mutate(({ set }, _ev) => set(state$, "entered")),
+                onExit: mutate(({ set }, _ev) => set(state$, "exited")),
                 child: Container({
                     width: 100,
                     height: 50,
