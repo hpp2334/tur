@@ -3499,6 +3499,7 @@ name = "tur-integration-tests"
 version = "0.1.0"
 dependencies = [
  "boa_engine",
+ "libc",
  "minifb",
  "pollster",
  "raw-window-handle",

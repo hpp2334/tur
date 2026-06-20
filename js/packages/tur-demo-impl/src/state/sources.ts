@@ -8,11 +8,7 @@ import type { LayoutMode } from "./types";
 
 const WHITELIST = new Set([
     "counter",
-    "clickable-text",
-    "container-basic",
-    "column-basic",
     "todolist",
-    "multi-file-demo",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)
