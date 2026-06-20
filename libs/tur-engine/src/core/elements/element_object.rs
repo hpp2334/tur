@@ -1,7 +1,7 @@
 use std::fmt;
 
 use boa_engine::Context;
-use tur_shared::ComputedLayout;
+use tur_shared::{ComputedLayout, Constraints};
 
 use crate::core::bridge::{BoaOpaque, TurNodeHandle};
 use crate::core::element::ElementNodeId;
@@ -17,6 +17,7 @@ pub struct ElementObject {
     pub handle: BoaOpaque<TurNodeHandle>,
     pub dirty_layout: bool,
     pub dirty_paint: bool,
+    pub last_constraints: Option<Constraints>,
 }
 
 impl fmt::Debug for ElementObject {
@@ -42,6 +43,7 @@ impl ElementObject {
             query_key: None,
             dirty_layout: true,
             dirty_paint: true,
+            last_constraints: None,
         }
     }
 }

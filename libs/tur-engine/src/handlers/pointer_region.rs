@@ -43,8 +43,8 @@ impl AppHandler for PointerRegionAppHandler {
             has_region_callbacks(&*cx.element_tree, id)
         });
 
-        for id in &diff.entered {
-            let Some(m) = mouse_region_enter_mutation(&*cx.element_tree, *id) else {
+        for id in &diff.exited {
+            let Some(m) = mouse_region_exit_mutation(&*cx.element_tree, *id) else {
                 continue;
             };
             let local = local_position(&*cx.element_tree, *id, position);
@@ -52,8 +52,8 @@ impl AppHandler for PointerRegionAppHandler {
                 .push(m, PointerRegionEvent { local, global: position });
         }
 
-        for id in &diff.exited {
-            let Some(m) = mouse_region_exit_mutation(&*cx.element_tree, *id) else {
+        for id in &diff.entered {
+            let Some(m) = mouse_region_enter_mutation(&*cx.element_tree, *id) else {
                 continue;
             };
             let local = local_position(&*cx.element_tree, *id, position);

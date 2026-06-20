@@ -321,8 +321,12 @@ impl ElementTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
     ) -> Size {
-        let is_dirty = self.nodes.get(&id).map(|n| n.dirty_layout).unwrap_or(false);
-        if !is_dirty {
+        let (is_dirty, constraints_changed) = self
+            .nodes
+            .get(&id)
+            .map(|n| (n.dirty_layout, n.last_constraints != Some(*constraints)))
+            .unwrap_or((false, true));
+        if !is_dirty && !constraints_changed {
             return self.nodes.get(&id)
                 .map(|n| n.computed_layout.size)
                 .unwrap_or(Size::ZERO);
@@ -351,6 +355,7 @@ impl ElementTree {
         let node = cx.tree.nodes.get_mut(&id).unwrap();
         node.element = Some(element);
         node.computed_layout.size = constrained;
+        node.last_constraints = Some(*constraints);
         node.dirty_layout = false;
         constrained
     }
