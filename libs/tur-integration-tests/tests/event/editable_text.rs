@@ -1,7 +1,47 @@
 use tur_engine::core::element::ElementKind;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::EditableTextElement;
+use tur_engine::elements::{EditableTextElement, ScrollViewElement};
 use tur_integration_tests::TurTestApp;
+
+/// Locate the `EditableTextElement` nested under the element tagged with the
+/// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
+/// editable text is that container's first child).
+fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
+    let container_id = app.query_element(key).expect("queryKey not found");
+    let tree = app.element_tree();
+    let container = tree.get(container_id).unwrap();
+    for &cid in &container.children {
+        let node = tree.get(cid).unwrap();
+        if node
+            .element
+            .as_ref()
+            .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
+            .unwrap_or(false)
+        {
+            return cid;
+        }
+    }
+    panic!("no tur_editable_text under queryKey {:?}", key);
+}
+
+/// Walk ancestors from `id` to find the enclosing `ScrollViewElement`, if any.
+fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<ElementNodeId> {
+    let tree = app.element_tree();
+    let mut current = tree.get(id).unwrap().parent;
+    while let Some(cid) = current {
+        let node = tree.get(cid).unwrap();
+        if node
+            .element
+            .as_ref()
+            .map(|e| e.cast::<ScrollViewElement>().is_some())
+            .unwrap_or(false)
+        {
+            return Some(cid);
+        }
+        current = node.parent;
+    }
+    None
+}
 
 fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
@@ -506,5 +546,489 @@ fn set_spans_preserve_cursor_keeps_caret() {
         get_cursor_pos(&app, input_id),
         5,
         "setSpans resets caret to end of text",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Click → caret → Backspace regression tests.
+//
+// The reported playground bug: click to move the caret, then press Backspace,
+// and a *different* character is removed (not the one immediately left of the
+// caret). To assert precisely without hard-coding a font's pixel advance, each
+// test first *calibrates* the monospace char width and line height from the
+// focused element's caret rect, then clicks at an exact byte boundary.
+// ---------------------------------------------------------------------------
+
+/// Absolute `(x, y_top, height)` of the focused element's caret.
+fn caret_rect(app: &TurTestApp) -> (f64, f64, f64) {
+    let (x, y, _w, h) = app.focused_cursor_rect().expect("focused caret rect");
+    (x, y, h)
+}
+
+/// Calibrate the monospace char width for the currently-focused editable text.
+/// Requires the caret to be at byte 0 on entry; leaves the caret at byte 1.
+fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
+    let (x0, _, _) = caret_rect(app);
+    app.send_key("ArrowRight");
+    app.render();
+    let (x1, _, _) = caret_rect(app);
+    let cw = x1 - x0;
+    assert!(cw > 3.0, "char width implausibly small: {cw}");
+    cw
+}
+
+const CLICK_SINGLE_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{ content: "hello" }]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    fontFamily: "monospace",
+    fontSize: 20,
+    width: 400,
+    height: 44,
+}));
+"#;
+
+// Mirrors the playground code editor: syntax-highlighted spans with different
+// colors, which forces parley to emit MULTIPLE glyph runs on a single line.
+// This is the one configuration difference vs. the single-span tests above.
+const CLICK_SPANS_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([
+    { content: "import", color: { r: 200, g: 120, b: 50, a: 255 } },
+    { content: " {", color: { r: 80, g: 80, b: 80, a: 255 } },
+]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    fontFamily: "monospace",
+    fontSize: 20,
+    width: 400,
+    height: 44,
+}));
+"#;
+
+const CLICK_MULTI_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{ content: "abc\ndef\nghi" }]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    multiline: true,
+    fontFamily: "monospace",
+    fontSize: 20,
+    width: 400,
+    height: 200,
+}));
+"#;
+
+/// Click in the middle of a single-line field should place the caret at the
+/// clicked boundary, and Backspace must then delete the character immediately
+/// to its left (not some other character).
+#[test]
+fn click_places_caret_then_backspace_deletes_left_char() {
+    let mut app = TurTestApp::new(500.0, 200.0).unwrap();
+    app.load_bundle_source(CLICK_SINGLE_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_text_id(&app);
+    focus_editable(&mut app, id);
+    app.render();
+    app.send_key("Home");
+    app.render();
+    assert_eq!(get_cursor_pos(&app, id), 0);
+
+    let cw = calibrate_char_width(&mut app);
+    let (_, y_top, h) = caret_rect(&app);
+    // After calibration the caret sits at byte 1; recover the line-0 caret x.
+    app.send_key("Home");
+    app.render();
+    let (x0, _, _) = caret_rect(&app);
+    eprintln!("single-line: x0={x0} cw={cw}");
+
+    // Click at the left edge of char 3 → caret at byte 3 ("he|llo").
+    let target = 3usize;
+    let cy = y_top + h / 2.0;
+    app.click(x0 + cw * target as f64, cy);
+    app.render();
+
+    let caret = get_cursor_pos(&app, id);
+    eprintln!("after click for byte {target}: caret={caret}");
+    assert_eq!(caret, target, "click should place caret at byte {target}");
+
+    // Backspace deletes byte 2 (the 'l' immediately left of the caret).
+    app.send_key("Backspace");
+    app.render();
+    eprintln!(
+        "after backspace: text='{}' caret={}",
+        get_text(&app, id),
+        get_cursor_pos(&app, id)
+    );
+    assert_eq!(
+        get_text(&app, id),
+        "helo",
+        "backspace must delete the char immediately left of the caret"
+    );
+    assert_eq!(get_cursor_pos(&app, id), 2);
+}
+
+/// Multiline variant: click on the *second* line and Backspace must delete the
+/// char left of the caret on that line. Exercises the `byte_index_at_xy`
+/// (y-based line selection) path, which the single-line test does not.
+#[test]
+fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
+    let mut app = TurTestApp::new(500.0, 300.0).unwrap();
+    app.load_bundle_source(CLICK_MULTI_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_text_id(&app);
+    let bounds = app.get_element_absolute_bounds(id).unwrap();
+
+    // Position the caret at line 0, col 0 by clicking the top-left of the
+    // field. (focus_editable clicks the element center, which on a 3-line
+    // field lands on line 2 — so click explicitly.)
+    app.click(bounds.left + 1.0, bounds.top + 1.0);
+    app.render();
+
+    let (x0, y0, h) = caret_rect(&app);
+    let cw = calibrate_char_width(&mut app);
+    // Caret is now at byte 1 on line 0. Move onto line 1 to read its top y.
+    app.send_key("ArrowDown");
+    app.render();
+    let (_, y1, _) = caret_rect(&app);
+    let line_h = y1 - y0;
+    eprintln!("multi: x0={x0} cw={cw} y0={y0} y1={y1} line_h={line_h}");
+    assert!(line_h > 5.0, "line height implausibly small: {line_h}");
+
+    // Line 1 is "def" and starts at byte 4 ("abc\n" = 4 bytes). Click col 1
+    // ("d|ef") → caret at byte 5.
+    let column = 1usize;
+    let target = 4usize + column;
+    let cy = y1 + h / 2.0;
+    app.click(x0 + cw * column as f64, cy);
+    app.render();
+
+    let caret = get_cursor_pos(&app, id);
+    eprintln!("after click line1 col{column}: caret={caret} (expected {target})");
+    assert_eq!(
+        caret, target,
+        "click on line 1 col {column} should place caret at byte {target}"
+    );
+
+    // Backspace deletes byte 4 ('d'), the char immediately left of the caret.
+    app.send_key("Backspace");
+    app.render();
+    eprintln!(
+        "after backspace: text='{}'",
+        get_text(&app, id).replace('\n', "\\n")
+    );
+    assert_eq!(
+        get_text(&app, id),
+        "abc\nef\nghi",
+        "backspace must delete 'd' (the char left of the caret on line 1)"
+    );
+    assert_eq!(get_cursor_pos(&app, id), 4);
+}
+
+/// The playground editor renders syntax-highlighted code: many adjacent spans
+/// with *different colors*, which makes parley emit multiple glyph runs on a
+/// single line. This must not corrupt click hit-testing: clicking at a given
+/// byte boundary must still place the caret there, and Backspace must still
+/// delete the char immediately left of it.
+#[test]
+fn click_with_multi_color_spans_places_caret_correctly() {
+    let mut app = TurTestApp::new(500.0, 200.0).unwrap();
+    app.load_bundle_source(CLICK_SPANS_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_text_id(&app);
+    let bounds = app.get_element_absolute_bounds(id).unwrap();
+    // Click top-left → byte 0 ("import" run start).
+    app.click(bounds.left + 1.0, bounds.top + 1.0);
+    app.render();
+
+    let (_, y_top, h) = caret_rect(&app);
+    let cw = calibrate_char_width(&mut app);
+    app.send_key("Home");
+    app.render();
+    let (x0, _, _) = caret_rect(&app);
+    eprintln!("multi-span: x0={x0} cw={cw}");
+
+    // "import {" → click at the left edge of byte 4 ("impo|rt").
+    let target = 4usize;
+    let cy = y_top + h / 2.0;
+    app.click(x0 + cw * target as f64, cy);
+    app.render();
+
+    let caret = get_cursor_pos(&app, id);
+    eprintln!("after click for byte {target}: caret={caret}");
+    assert_eq!(
+        caret, target,
+        "click should place caret at byte {target} even with multi-color spans"
+    );
+
+    // Backspace deletes byte 3 ('o') → "imprt {".
+    app.send_key("Backspace");
+    app.render();
+    eprintln!(
+        "after backspace: text='{}' caret={}",
+        get_text(&app, id),
+        get_cursor_pos(&app, id)
+    );
+    assert_eq!(
+        get_text(&app, id),
+        "imprt {",
+        "backspace must delete the char immediately left of the caret"
+    );
+    assert_eq!(get_cursor_pos(&app, id), 3);
+}
+
+// Four adjacent spans with DIFFERENT colors → parley emits 4 glyph runs on one
+// line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
+// run (not the first) must still place the caret at the clicked byte.
+const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([
+    { content: "AAAA", color: { r: 200, g: 120, b: 50, a: 255 } },
+    { content: "BBBB", color: { r: 80, g: 200, b: 120, a: 255 } },
+    { content: "CCCC", color: { r: 120, g: 80, b: 200, a: 255 } },
+    { content: "DDDD", color: { r: 200, g: 200, b: 80, a: 255 } },
+]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    fontFamily: "monospace",
+    fontSize: 20,
+    width: 400,
+    height: 44,
+}));
+"#;
+
+#[test]
+fn click_in_later_run_places_caret_correctly() {
+    let mut app = TurTestApp::new(500.0, 200.0).unwrap();
+    app.load_bundle_source(CLICK_FOUR_SPAN_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_text_id(&app);
+    focus_editable(&mut app, id);
+    app.render();
+    app.send_key("Home");
+    app.render();
+    assert_eq!(get_cursor_pos(&app, id), 0);
+
+    let cw = calibrate_char_width(&mut app);
+    app.send_key("Home");
+    app.render();
+    let (x0, y_top, h) = caret_rect(&app);
+    let cy = y_top + h / 2.0;
+
+    // Click at each byte boundary across all 4 runs.
+    for target in [0usize, 2, 4, 6, 8, 10, 12, 14, 16] {
+        app.click(x0 + cw * target as f64, cy);
+        app.render();
+        let caret = get_cursor_pos(&app, id);
+        eprintln!("four-span: target={target} caret={caret}");
+        assert_eq!(
+            caret, target,
+            "click at byte {target} should place caret there (4-span line)"
+        );
+    }
+}
+
+// Mirrors the playground editor: a multiline `InputEdgy` INSIDE a `ScrollView`,
+// scrolled down so the clicked line is only reachable after scrolling. This is
+// the exact configuration the reported bug was seen in.
+const CLICK_SCROLLED_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{
+    content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH",
+}]);
+T.render(ctx, T.ScrollView(ctx, {
+    child: T.InputEdgy(ctx, {
+        controller: globalThis.__ctrl,
+        multiline: true,
+        fontFamily: "monospace",
+        fontSize: 16,
+        queryKey: ["scrolled-input"],
+    }),
+}));
+"#;
+
+/// Clicking a line that is only visible AFTER scrolling must place the caret on
+/// that (content-space) line — the scroll offset must be folded into the click
+/// coordinate. A regression here would land the caret on an early line instead.
+#[test]
+fn click_on_scrolled_line_places_caret_on_that_line() {
+    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    app.load_bundle_source(CLICK_SCROLLED_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_under(&app, &["scrolled-input"]);
+    let sv_id = find_ancestor_scroll_view(&app, id).expect("editable inside a ScrollView");
+
+    // At scroll 0, click the top-left to focus + place caret at byte 0.
+    let bounds = app.get_element_absolute_bounds(id).unwrap();
+    app.click(bounds.left + 1.0, bounds.top + 1.0);
+    app.render();
+
+    // Calibrate char width and line height from the caret rect.
+    let (x0, y0, _) = caret_rect(&app);
+    app.send_key("ArrowRight");
+    app.render();
+    let (x1, _, _) = caret_rect(&app);
+    let cw = x1 - x0;
+    app.send_key("ArrowDown");
+    app.render();
+    let (_, y1, _) = caret_rect(&app);
+    let line_h = y1 - y0;
+    eprintln!("scrolled: x0={x0} cw={cw} y0={y0} line_h={line_h}");
+    assert!(cw > 3.0 && line_h > 5.0);
+
+    // Scroll down exactly two line heights → line 2 ("L2CCCC") sits at the
+    // viewport top (its content y == scroll offset, so it renders at y0).
+    let scroll_amount = 2.0 * line_h;
+    let (cx, cy) = app.get_element_absolute_bounds(sv_id).unwrap().center();
+    app.wheel(0.0, scroll_amount, cx, cy);
+    app.render();
+    app.with_element(sv_id, |e| {
+        let sv = e.cast::<ScrollViewElement>().unwrap();
+        assert!((sv.scroll_offset() - scroll_amount).abs() < 0.5, "scrolled to {}", sv.scroll_offset());
+    }).unwrap();
+
+    // Line 2 starts at byte 14 ("L0AAAA\nL1BBBB\n" = 14 bytes). Click col 2
+    // ("L2|CCCC") on the line now at the viewport top (screen y = y0).
+    let line2_start = 14usize;
+    let column = 2usize;
+    let target = line2_start + column;
+    app.click(x0 + cw * column as f64, y0 + line_h / 2.0);
+    app.render();
+
+    let caret = get_cursor_pos(&app, id);
+    eprintln!("after scrolled click: caret={caret} (expected {target})");
+    assert_eq!(
+        caret, target,
+        "click on the scrolled-into-view line 2 must place caret at byte {target}, \
+         not on an early line (scroll offset must be applied)"
+    );
+
+    // Backspace deletes byte 15 ('2') → "L2CCCC" becomes "LCCCC".
+    app.send_key("Backspace");
+    app.render();
+    eprintln!(
+        "after backspace: text='{}'",
+        get_text(&app, id).replace('\n', "\\n")
+    );
+    assert_eq!(
+        get_text(&app, id),
+        "L0AAAA\nL1BBBB\nLCCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH",
+        "backspace must delete the char left of the caret on the scrolled line"
+    );
+    assert_eq!(get_cursor_pos(&app, id), 15);
+}
+
+// A long line that soft-wraps across multiple VISUAL lines (no `\n`, just soft
+// wraps at word boundaries). The playground editor wraps long statements (e.g.
+// todolist's `{ title: "Walk the dog", completed: true },`) and clicking a wrap
+// continuation was reported to land the caret on the wrong character. parley
+// only wraps at break opportunities, so the text MUST contain spaces (a bare
+// digit string has none and overflows instead of wrapping). Bare `InputEdgy`
+// root so the app's tight width bounds the editable.
+const CLICK_SOFTWRAP_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([{
+    content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
+}]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    multiline: true,
+    fontFamily: "monospace",
+    fontSize: 16,
+    queryKey: ["softwrap-input"],
+}));
+"#;
+
+#[test]
+fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
+    let mut app = TurTestApp::new(120.0, 300.0).unwrap();
+    app.load_bundle_source(CLICK_SOFTWRAP_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable_under(&app, &["softwrap-input"]);
+    let bounds = app.get_element_absolute_bounds(id).unwrap();
+    let (left, top) = (bounds.left, bounds.top);
+
+    // Focus + read layout state (number of visual lines + true content height).
+    app.click(left + 2.0, top + 2.0);
+    app.render();
+    let (x0, y0, _) = caret_rect(&app);
+    let (_len, _cur, _a, _e, num_lines, lw, lh) = app.focused_editable_state().unwrap();
+    eprintln!("softwrap: num_lines={num_lines} layout_w={lw:.1} layout_h={lh:.1} x0={x0} y0={y0}");
+    assert!(num_lines > 1, "spaced line should wrap (num_lines={num_lines})");
+    let line_h = lh / num_lines as f32;
+    app.send_key("ArrowRight");
+    app.render();
+    let (x1, _, _) = caret_rect(&app);
+    let cw = x1 - x0;
+
+    // Sweep x across visual line 0 (fixed y at its center). The caret must
+    // increase monotonically with x.
+    let mut prev = 0usize;
+    let mut v0_bytes = Vec::new();
+    for col in [0usize, 2, 4, 6, 8, 10] {
+        let cx = x0 + cw * col as f64;
+        app.click(cx, y0 + line_h as f64 * 0.5);
+        app.render();
+        let c = get_cursor_pos(&app, id);
+        v0_bytes.push((col, c));
+        assert!(
+            c as isize >= prev as isize,
+            "visual-0 click x monotonic broken: col {col} → caret {c} (prev {prev})"
+        );
+        prev = c;
+    }
+    eprintln!("softwrap: visual-0 x-sweep (col, caret) = {v0_bytes:?}");
+
+    // Sweep y down the visual lines (fixed x at column 2). The caret must
+    // strictly increase — each visual line is further into the text.
+    let mut prev = 0usize;
+    for ln in 0..num_lines.min(5) {
+        app.click(x0 + cw * 2.0, y0 + line_h as f64 * (ln as f64 + 0.5));
+        app.render();
+        let c = get_cursor_pos(&app, id);
+        eprintln!("softwrap: visual line {ln} (y={:.1}) → caret {c}", y0 + line_h as f64 * (ln as f64 + 0.5));
+        assert!(
+            c > prev,
+            "y-sweep broken: visual line {ln} caret {c} not > prev {prev} — \
+             wrap continuations must be separately hit-testable"
+        );
+        prev = c;
+    }
+
+    // Backspace on a wrap-continuation visual line deletes the char left of it.
+    // Re-click visual line 2 at col 2 and backspace.
+    let target_line = 2usize.min(num_lines - 1);
+    app.click(x0 + cw * 2.0, y0 + line_h as f64 * (target_line as f64 + 0.5));
+    app.render();
+    let caret = get_cursor_pos(&app, id);
+    let original = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega";
+    let mut expected: String = original[..caret - 1].to_string();
+    expected.push_str(&original[caret..]);
+    app.send_key("Backspace");
+    app.render();
+    eprintln!("softwrap: after backspace at caret {caret} text='{}'", get_text(&app, id));
+    assert_eq!(
+        get_text(&app, id),
+        expected,
+        "backspace on a wrap continuation must delete the char left of the caret"
     );
 }

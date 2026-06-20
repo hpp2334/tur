@@ -201,6 +201,20 @@ pub(crate) fn extract_layout_data(
         let mut stops: Vec<LineGlyphStop> = Vec::new();
         let mut right_x = 0.0f32;
 
+        // The glyph→source-byte mapping is tracked with a single per-LINE
+        // char cursor, advanced once per glyph across all glyph runs. In
+        // parley 0.9 a `Run` exposes the *line's* `text_range`/`clusters` (via
+        // `line_data`), so every glyph run in the line reports the same
+        // whole-line range; the previous per-run `char_indices()` restarted at
+        // byte 0 for each run and mis-tagged every glyph past the first style
+        // run. That made clicks on later spans (e.g. a highlighted string in
+        // the code editor) land on the wrong byte, so Backspace deleted the
+        // wrong character. `line.items()` yields glyph runs in visual order
+        // and tiles the line's glyphs without gaps, so walking one char cursor
+        // in lockstep yields the correct byte for each glyph (for the
+        // monospace, 1-char-per-glyph editor this is exact).
+        let mut line_chars = full_text[line_range.clone()].char_indices();
+
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
                 continue;
@@ -220,19 +234,14 @@ pub(crate) fn extract_layout_data(
             let mut x = glyph_run.offset();
             let y = glyph_run.baseline();
 
-            // Pair each glyph with the next source char in the run's byte
-            // range. For monospace code (1 char = 1 glyph) this is exact; for
-            // ligatures / combining marks the last glyph absorbs the trailing
-            // chars, which is an acceptable approximation for a code editor.
-            let mut char_offsets = full_text[run_range.clone()].char_indices();
             for glyph in glyph_run.glyphs() {
                 let gx = x + glyph.x;
                 let gy = y - glyph.y;
                 x += glyph.advance;
-                let byte = char_offsets
+                let byte = line_chars
                     .next()
-                    .map(|(off, _)| run_range.start + off)
-                    .unwrap_or(run_range.end);
+                    .map(|(off, _)| line_range.start + off)
+                    .unwrap_or(line_range.end);
                 right_x = right_x.max(gx + glyph.advance);
                 stops.push(LineGlyphStop {
                     byte,

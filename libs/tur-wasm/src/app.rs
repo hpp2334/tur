@@ -626,6 +626,21 @@ impl TurWasmApp {
             None => "app not initialized".to_string(),
         }
     }
+
+    /// Debug: `(text_len, cursor, anchor, end, num_lines, w, h)` for the
+    /// focused editable text, or empty string.
+    pub fn debug_focused_editable(&self) -> String {
+        let guard = self.state.borrow();
+        let Some(s) = guard.as_ref() else {
+            return String::new();
+        };
+        match s.app.focused_editable_state() {
+            Some((len, cursor, anchor, end, lines, w, h)) => {
+                format!("{len}|{cursor}|{anchor}|{end}|{lines}|{w:.1}|{h:.1}")
+            }
+            None => String::new(),
+        }
+    }
 }
 
 impl TurWasmApp {

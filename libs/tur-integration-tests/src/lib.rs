@@ -245,6 +245,12 @@ impl TurTestApp {
         self.inner.focused_cursor_rect()
     }
 
+    /// Debug: `(text_len, cursor, anchor, end, num_layout_lines, w, h)` for
+    /// the focused editable text, if any.
+    pub fn focused_editable_state(&self) -> Option<(usize, usize, usize, usize, usize, f32, f32)> {
+        self.inner.focused_editable_state()
+    }
+
     pub fn focused_is_editable(&self) -> bool {
         self.inner.focused_is_editable()
     }
