@@ -45,9 +45,11 @@ impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
 }
 
 /// Register the swc-backed compiler services as `globalThis.__turHost`.
-/// `transpileTsx(src: string): string` (throws on parse error) and
-/// `tokenizeTsx(src: string): Array<{ start, end, kind }>` (coarse token
-/// categories for syntax highlighting).
+/// `transpileTsx(src: string): string` (throws on parse error),
+/// `tokenizeTsx(src: string): Array<{ start, end, kind }>` (lexical token
+/// categories refined by AST-derived semantic categories — declaration names,
+/// JSX tags/attributes, type names, comments — for syntax highlighting), and
+/// `generateAst(src: string): AstNode[]`.
 fn register_host_services(app: &mut TurApp) {
     use boa_engine::native_function::NativeFunction;
     use boa_engine::object::builtins::JsArray;
@@ -79,7 +81,7 @@ fn register_host_services(app: &mut TurApp) {
                 JsError::from(JsNativeError::typ().with_message("tokenizeTsx: expected a string"))
             })?
             .to_std_string_escaped();
-        let spans = crate::compiler::tokenize_tsx(&src);
+        let spans = crate::compiler::highlight_tsx(&src);
         let arr = JsArray::new(ctx)?;
         for sp in spans {
             let obj = JsObject::with_object_proto(ctx.intrinsics());

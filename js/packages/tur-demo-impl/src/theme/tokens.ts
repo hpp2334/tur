@@ -62,6 +62,12 @@ export const code = {
     comment: ink[500],
     operator: ink[600],
     literal: Color.hex("#92400e"),
+    // AST-derived semantic categories (see tur-wasm `highlight_tsx`).
+    decl: Color.hex("#1e6fb8"), // 7 — fn/component/const/import/call-callee name
+    jsxTag: coral[700], // 8 — JSX element tag name
+    jsxAttr: Color.hex("#7c3aed"), // 9 — JSX attribute name
+    type: teal[800], // 10 — interface/type name
+    property: Color.hex("#c2185b"), // 11 — object-literal key / member `.prop`
 } as const;
 
 // ---------------------------------------------------------------------------
