@@ -93,7 +93,10 @@ export const Shell: EdgyComponent = component(() =>
                                     onDrag: (dx) => {
                                         const next = Math.max(
                                             120,
-                                            Math.min(480, get(sidebarWidth$) + dx),
+                                            Math.min(
+                                                480,
+                                                get(sidebarWidth$) + dx,
+                                            ),
                                         );
                                         set(sidebarWidth$, next);
                                     },

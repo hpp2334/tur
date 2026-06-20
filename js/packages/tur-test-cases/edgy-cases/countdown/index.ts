@@ -1,5 +1,4 @@
 import {
-    type PointerInteractEvent,
     Column,
     Condition,
     Container,
@@ -10,6 +9,7 @@ import {
     MainAxisAlignment,
     mutate,
     PointerInteract,
+    type PointerInteractEvent,
     Row,
     source,
     Text,

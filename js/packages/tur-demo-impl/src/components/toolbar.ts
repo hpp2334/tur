@@ -81,7 +81,9 @@ function ResetButton(): EdgyElement {
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(resetHovered$) ? tokens.bg.hover : tokens.bg.button.ghost,
+                    get(resetHovered$)
+                        ? tokens.bg.hover
+                        : tokens.bg.button.ghost,
                 ),
                 children: [
                     Row({

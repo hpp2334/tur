@@ -158,7 +158,10 @@ export default component(() =>
                                                     }),
                                                     PointerInteract({
                                                         onClick: mutate(
-                                                            ({ get, set }, _ev) => {
+                                                            (
+                                                                { get, set },
+                                                                _ev,
+                                                            ) => {
                                                                 const tasks =
                                                                     get(tasks$);
                                                                 set(tasks$, [

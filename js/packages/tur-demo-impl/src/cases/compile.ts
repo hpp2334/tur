@@ -85,7 +85,12 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
         // Rewrite relative imports.
         js = js.replace(
             RELATIVE_IMPORT_RE,
-            (_m, namedSpecs: string, defaultSpec: string, modulePath: string) => {
+            (
+                _m,
+                namedSpecs: string,
+                defaultSpec: string,
+                modulePath: string,
+            ) => {
                 const moduleName = modulePath.replace(/\.ts$/, "");
                 if (namedSpecs) {
                     return `const {${namedSpecs}} = globalThis.__tur_modules["${moduleName}"];`;
@@ -108,24 +113,21 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
                 return `var ${name}`;
             },
         );
-        js = js.replace(
-            /export\s+function\s+(\w+)/g,
-            (_m, name: string) => {
-                exportedNames.push(name);
-                return `function ${name}`;
-            },
-        );
-        js = js.replace(
-            /export\s+class\s+(\w+)/g,
-            (_m, name: string) => {
-                exportedNames.push(name);
-                return `var ${name} = class ${name}`;
-            },
-        );
+        js = js.replace(/export\s+function\s+(\w+)/g, (_m, name: string) => {
+            exportedNames.push(name);
+            return `function ${name}`;
+        });
+        js = js.replace(/export\s+class\s+(\w+)/g, (_m, name: string) => {
+            exportedNames.push(name);
+            return `var ${name} = class ${name}`;
+        });
         // Strip re-exports like `export { X, Y }`.
         js = js.replace(/export\s*\{([^}]*)\}\s*;?/g, (_m, names: string) => {
             for (const n of names.split(",")) {
-                const trimmed = n.trim().split(/\s+as\s+/)[0]?.trim();
+                const trimmed = n
+                    .trim()
+                    .split(/\s+as\s+/)[0]
+                    ?.trim();
                 if (trimmed) exportedNames.push(trimmed);
             }
             return "";

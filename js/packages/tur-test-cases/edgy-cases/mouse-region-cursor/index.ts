@@ -5,11 +5,11 @@ import {
     Container,
     CrossAxisAlignment,
     component,
-    MouseRegion,
-    Text,
     derive,
-    source,
+    MouseRegion,
     mutate,
+    source,
+    Text,
 } from "@tur/edgy";
 
 const state$ = source("idle");

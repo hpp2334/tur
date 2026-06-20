@@ -4,8 +4,8 @@ import {
     Container,
     CrossAxisAlignment,
     derive,
-    type EdgyElement,
     Each,
+    type EdgyElement,
     Expanded,
     get,
     MouseRegion,
@@ -24,9 +24,9 @@ import {
     hoveredCase$,
     hoveredFile$,
     loadCase,
-    selectFile,
     selectedCase$,
     selectedFile$,
+    selectFile,
     sidebarWidth$,
 } from "../state";
 import { tokens } from "../theme/tokens";
@@ -78,7 +78,8 @@ function NavItem(name: string): EdgyElement {
                                         borderRadius: 999,
                                         color: tokens.accent.complement,
                                     }),
-                                elseChild: () => SizedBox({ width: 0, height: 0 }),
+                                elseChild: () =>
+                                    SizedBox({ width: 0, height: 0 }),
                             }),
                         ],
                     }),

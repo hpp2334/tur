@@ -34,9 +34,7 @@ function resetDrag(): void {
  *
  * The grab target is 8px wide (easy to hit); the visible bar is 1px.
  */
-export function VDivider(opts: {
-    onDrag: (dx: number) => void;
-}): EdgyElement {
+export function VDivider(opts: { onDrag: (dx: number) => void }): EdgyElement {
     return MouseRegion({
         cursor: "col-resize",
         child: PointerInteract({
