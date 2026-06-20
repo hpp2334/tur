@@ -32,8 +32,8 @@ impl ImageResource {
         if width == 0 || height == 0 {
             return None;
         }
-        let mut pixmap = tiny_skia::Pixmap::new(width, height)?;
-        resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+        let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)?;
+        resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
         Self::from_rgba(pixmap.data(), width, height)
     }
 

@@ -3487,7 +3487,6 @@ dependencies = [
  "parley",
  "resvg",
  "thiserror",
- "tiny-skia",
  "tracing",
  "tur-shared",
  "unicode-segmentation",
