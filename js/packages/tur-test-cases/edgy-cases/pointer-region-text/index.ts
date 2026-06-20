@@ -6,8 +6,8 @@ import {
     CrossAxisAlignment,
     component,
     derive,
+    MouseRegion,
     mutate,
-    PointerInteract,
     source,
     Text,
 } from "@tur/edgy";
@@ -18,9 +18,9 @@ export default component(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [
-            PointerInteract({
-                onPointerEnter: mutate(({ set }) => set(state$, "entered")),
-                onPointerExit: mutate(({ set }) => set(state$, "exited")),
+            MouseRegion({
+                onEnter: mutate(({ set }, _ev) => set(state$, "entered")),
+                onExit: mutate(({ set }, _ev) => set(state$, "exited")),
                 child: Container({
                     width: 100,
                     height: 50,

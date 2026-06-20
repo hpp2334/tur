@@ -93,6 +93,67 @@ fn register_host_services(app: &mut TurApp) {
     if let Err(e) = app.register_host_fn("tokenizeTsx", 1, tokenize) {
         tracing::error!("failed to register tokenizeTsx: {e}");
     }
+
+    let generate_ast = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        let src = args
+            .get_or_undefined(0)
+            .as_string()
+            .ok_or_else(|| {
+                JsError::from(JsNativeError::typ().with_message("generateAst: expected a string"))
+            })?
+            .to_std_string_escaped();
+        let nodes = crate::compiler::generate_ast(&src)
+            .map_err(|e| JsError::from(JsNativeError::typ().with_message(e)))?;
+
+        let arr = JsArray::new(ctx)?;
+        for node in nodes {
+            let obj = JsObject::with_object_proto(ctx.intrinsics());
+            let kind_str = match &node.kind {
+                crate::compiler::AstNodeKind::Import { .. } => "import",
+                crate::compiler::AstNodeKind::ExportDecl { .. } => "exportDecl",
+                crate::compiler::AstNodeKind::ExportDefault => "exportDefault",
+                crate::compiler::AstNodeKind::ExportNamed { .. } => "exportNamed",
+                crate::compiler::AstNodeKind::ExportAll => "exportAll",
+                crate::compiler::AstNodeKind::ExportType { .. } => "exportType",
+                crate::compiler::AstNodeKind::Statement => "statement",
+            };
+            obj.create_data_property(js_string!("kind"), JsValue::from(js_string!(kind_str)), ctx)?;
+            obj.create_data_property(js_string!("text"), JsValue::from(js_string!(node.text.as_str())), ctx)?;
+            if let Some(body) = &node.body {
+                obj.create_data_property(js_string!("body"), JsValue::from(js_string!(body.as_str())), ctx)?;
+            }
+
+            match &node.kind {
+                crate::compiler::AstNodeKind::Import { source, specifiers } => {
+                    obj.create_data_property(js_string!("source"), JsValue::from(js_string!(source.as_str())), ctx)?;
+                    let spec_arr = JsArray::new(ctx)?;
+                    for spec in specifiers {
+                        let spec_obj = JsObject::with_object_proto(ctx.intrinsics());
+                        spec_obj.create_data_property(js_string!("local"), JsValue::from(js_string!(spec.local.as_str())), ctx)?;
+                        spec_obj.create_data_property(js_string!("imported"), JsValue::from(js_string!(spec.imported.as_str())), ctx)?;
+                        spec_arr.push(spec_obj, ctx)?;
+                    }
+                    obj.create_data_property(js_string!("specifiers"), JsValue::from(spec_arr), ctx)?;
+                }
+                crate::compiler::AstNodeKind::ExportDecl { names }
+                | crate::compiler::AstNodeKind::ExportNamed { names }
+                | crate::compiler::AstNodeKind::ExportType { names } => {
+                    let name_arr = JsArray::new(ctx)?;
+                    for n in names {
+                        name_arr.push(JsValue::from(js_string!(n.as_str())), ctx)?;
+                    }
+                    obj.create_data_property(js_string!("names"), JsValue::from(name_arr), ctx)?;
+                }
+                _ => {}
+            }
+
+            arr.push(obj, ctx)?;
+        }
+        Ok(arr.into())
+    });
+    if let Err(e) = app.register_host_fn("generateAst", 1, generate_ast) {
+        tracing::error!("failed to register generateAst: {e}");
+    }
 }
 
 #[wasm_bindgen]
@@ -651,6 +712,12 @@ impl TurWasmApp {
             if let Some(s) = guard.as_mut() {
                 if let Err(e) = s.app.spawn_loop_once(std::time::Duration::from_millis(16)) {
                     tracing::error!("frame loop spawn_loop_once error: {e}");
+                }
+
+                // Apply any pending cursor change requested by a handler
+                // (e.g. MouseRegion setting "col-resize" on hover).
+                if let Some(name) = s.app.take_current_cursor() {
+                    let _ = s._canvas.style().set_property("cursor", &name);
                 }
 
                 let is_editable = s.app.focused_is_editable();

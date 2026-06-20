@@ -11,14 +11,16 @@ import { buildHighlightSpans } from "../cases/compile";
 import {
     autoRun$,
     CASE_NAMES,
+    compileVersion$,
     edited$,
     errorMsg$,
     INITIAL_CASE,
     lastCompiledAtMs$,
     selectedCase$,
+    selectedFile$,
     status$,
 } from "./sources";
-import type { EditorController } from "./types";
+import type { CaseFileMap, EditorController } from "./types";
 
 // ---------------------------------------------------------------------------
 // Case cache & last-compiled-source tracking
@@ -26,8 +28,14 @@ import type { EditorController } from "./types";
 
 const caseComponents = new Map<string, EdgyElement>();
 
+/** Per-case file cache: case name → { filename → current editor text }.
+ *  Populated from CASE_SOURCES on first load; updated on each recompile. */
+const caseFileCache = new Map<string, CaseFileMap>();
+
 function compileIntoCache(name: string): void {
-    const result = compileCase(CASE_SOURCES[name] ?? "");
+    const files = CASE_SOURCES[name];
+    if (!files) return;
+    const result = compileCase(files);
     if (result.component) {
         caseComponents.set(name, result.component as EdgyElement);
     }
@@ -36,13 +44,14 @@ function compileIntoCache(name: string): void {
 // Prime the cache synchronously so the first paint has something to render.
 for (const name of CASE_NAMES) {
     compileIntoCache(name);
+    caseFileCache.set(name, { ...CASE_SOURCES[name] });
 }
 
-// The last successfully-compiled source per case — drives the `edited$`
+// The last successfully-compiled file source per case — drives the `edited$`
 // indicator (true when current editor text differs from this).
-const lastCompiledText = new Map<string, string>();
+const lastCompiledFiles = new Map<string, CaseFileMap>();
 for (const name of CASE_NAMES) {
-    lastCompiledText.set(name, CASE_SOURCES[name] ?? "");
+    lastCompiledFiles.set(name, { ...CASE_SOURCES[name] });
 }
 
 let autoRunTimer: ReturnType<typeof setTimeout> | null = null;
@@ -55,6 +64,7 @@ let autoRunTimer: ReturnType<typeof setTimeout> | null = null;
 export const editorCtrl = createTextEditingController({
     onInput: mutate((_ctx, _text: string, _enter: boolean) => {
         editorCtrl.setSpansPreserveCursor(buildHighlightSpans(editorCtrl.text));
+        saveCurrentFileText();
         refreshEditedState();
         if (get(autoRun$)) {
             if (autoRunTimer) clearTimeout(autoRunTimer);
@@ -68,9 +78,22 @@ export const editorCtrl = createTextEditingController({
     }),
 }) as unknown as EditorController;
 
+/** Save the current editor text back to the per-case file cache. */
+function saveCurrentFileText(): void {
+    const name = get(selectedCase$);
+    const filename = get(selectedFile$);
+    let cache = caseFileCache.get(name);
+    if (!cache) {
+        cache = {};
+        caseFileCache.set(name, cache);
+    }
+    cache[filename] = editorCtrl.text;
+}
+
 function refreshEditedState(): void {
     const name = get(selectedCase$);
-    const baseline = lastCompiledText.get(name) ?? "";
+    const filename = get(selectedFile$);
+    const baseline = lastCompiledFiles.get(name)?.[filename] ?? "";
     set(edited$, editorCtrl.text !== baseline);
 }
 
@@ -81,9 +104,30 @@ function refreshEditedState(): void {
 export function loadCase(name: string): void {
     if (!CASE_SOURCES[name]) return;
     set(selectedCase$, name);
-    editorCtrl.setSpans(buildHighlightSpans(CASE_SOURCES[name]));
+    set(selectedFile$, "index.ts");
+
+    // Ensure file cache is populated.
+    if (!caseFileCache.has(name)) {
+        caseFileCache.set(name, { ...CASE_SOURCES[name] });
+    }
+
+    const files = caseFileCache.get(name) ?? {};
+    const entryText = files["index.ts"] ?? "";
+    editorCtrl.setSpans(buildHighlightSpans(entryText));
     set(status$, "ready");
     set(errorMsg$, "");
+    refreshEditedState();
+}
+
+/** Switch to a different file within the current case. Saves the current
+ *  editor text, loads the new file. */
+export function selectFile(filename: string): void {
+    saveCurrentFileText();
+    const name = get(selectedCase$);
+    const files = caseFileCache.get(name) ?? {};
+    const text = files[filename] ?? "";
+    set(selectedFile$, filename);
+    editorCtrl.setSpans(buildHighlightSpans(text));
     refreshEditedState();
 }
 
@@ -93,24 +137,33 @@ export function recompile(): void {
         autoRunTimer = null;
     }
     const name = get(selectedCase$);
-    const result = compileCase(editorCtrl.text);
+
+    // Save current editor text to the file cache before compiling.
+    saveCurrentFileText();
+    const files = caseFileCache.get(name) ?? {};
+
+    const result = compileCase(files);
     if (result.error || !result.component) {
         set(status$, "error");
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
     caseComponents.set(name, result.component as EdgyElement);
-    lastCompiledText.set(name, editorCtrl.text);
+    lastCompiledFiles.set(name, { ...files });
     set(lastCompiledAtMs$, Date.now());
     set(status$, "ready");
     set(errorMsg$, "");
     set(edited$, false);
+    set(compileVersion$, get(compileVersion$) + 1);
 }
 
 export function resetCase(): void {
     const name = get(selectedCase$);
-    const original = CASE_SOURCES[name] ?? "";
-    editorCtrl.setSpans(buildHighlightSpans(original));
+    const original = CASE_SOURCES[name] ?? {};
+    caseFileCache.set(name, { ...original });
+    lastCompiledFiles.set(name, { ...original });
+    const filename = get(selectedFile$);
+    editorCtrl.setSpans(buildHighlightSpans(original[filename] ?? ""));
     recompile();
 }
 
@@ -120,5 +173,11 @@ export function getCaseComponent(name: string): EdgyElement | undefined {
     return caseComponents.get(name);
 }
 
+/** Get the file names for a case (e.g. ["index.ts", "utils.ts"]). */
+export function getCaseFileNames(name: string): string[] {
+    return Object.keys(CASE_SOURCES[name] ?? {}).sort();
+}
+
 // Initialise editor with the first case. Must run after `editorCtrl` is bound.
-editorCtrl.setSpans(buildHighlightSpans(CASE_SOURCES[INITIAL_CASE] ?? ""));
+const entryFiles = CASE_SOURCES[INITIAL_CASE] ?? {};
+editorCtrl.setSpans(buildHighlightSpans(entryFiles["index.ts"] ?? ""));

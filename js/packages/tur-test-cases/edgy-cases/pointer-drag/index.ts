@@ -1,0 +1,58 @@
+import {
+    Alignment,
+    Color,
+    Column,
+    Container,
+    CrossAxisAlignment,
+    component,
+    derive,
+    mutate,
+    PointerInteract,
+    source,
+    Text,
+} from "@tur/edgy";
+
+const lastX$ = source(0);
+const lastY$ = source(0);
+const phase$ = source("idle");
+
+export default component(() =>
+    Column({
+        crossAlignment: CrossAxisAlignment.Start,
+        children: [
+            PointerInteract({
+                onPointerDown: mutate(({ set }, ev) => {
+                    set(lastX$, Math.round(ev.global.x));
+                    set(lastY$, Math.round(ev.global.y));
+                    set(phase$, "down");
+                }),
+                onPointerMove: mutate(({ set }, ev) => {
+                    set(lastX$, Math.round(ev.global.x));
+                    set(lastY$, Math.round(ev.global.y));
+                    set(phase$, "move");
+                }),
+                onPointerUp: mutate(({ set }, ev) => {
+                    set(lastX$, Math.round(ev.global.x));
+                    set(lastY$, Math.round(ev.global.y));
+                    set(phase$, "up");
+                }),
+                child: Container({
+                    width: 100,
+                    height: 50,
+                    color: Color.hex("#cccccc"),
+                    alignment: Alignment.Center,
+                    children: [
+                        Text({
+                            text: derive((g) => g(phase$)),
+                            queryKey: ["drag-phase"],
+                        }),
+                    ],
+                }),
+            }),
+            Text({
+                text: derive((g) => `${g(lastX$)},${g(lastY$)}`),
+                queryKey: ["drag-pos"],
+            }),
+        ],
+    }),
+);

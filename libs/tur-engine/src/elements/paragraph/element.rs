@@ -127,9 +127,9 @@ impl ElementOnGesture for TextElement {
         event: &ComposedGestureEvent,
     ) {
         match event {
-            ComposedGestureEvent::PointerDown { local_position } => {
+            ComposedGestureEvent::PointerDown { local, .. } => {
                 cx.request_own_focus();
-                let char_idx = self.char_index_at(local_position.x, local_position.y);
+                let char_idx = self.char_index_at(local.x, local.y);
                 self.selection_anchor = char_idx;
                 self.selection_end = char_idx;
                 let anchor = self.selection_anchor;
@@ -139,8 +139,8 @@ impl ElementOnGesture for TextElement {
                 }
                 cx.request_redraw();
             }
-            ComposedGestureEvent::PointerMove { local_position } => {
-                let char_idx = self.char_index_at(local_position.x, local_position.y);
+            ComposedGestureEvent::PointerMove { local, .. } => {
+                let char_idx = self.char_index_at(local.x, local.y);
                 if char_idx != self.selection_end {
                     self.selection_end = char_idx;
                     let anchor = self.selection_anchor;
@@ -151,6 +151,7 @@ impl ElementOnGesture for TextElement {
                     cx.request_redraw();
                 }
             }
+            ComposedGestureEvent::PointerUp { .. } => {}
         }
     }
 }

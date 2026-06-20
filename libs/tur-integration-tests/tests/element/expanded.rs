@@ -81,3 +81,41 @@ fn expanded_multiple_share_evenly() {
     assert_eq!(exp2_node.computed_layout.size.height, 300.0);
     assert_eq!(exp2_node.computed_layout.offset.y, 300.0);
 }
+
+#[test]
+fn expanded_flex_weights_proportional() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("expanded-flex-weights").unwrap();
+
+    let (exp1_id, exp2_id) = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        let col = tree.get(root.children[0]).unwrap();
+        assert_eq!(col.children.len(), 2);
+
+        let exp1 = tree.get(col.children[0]).unwrap();
+        let exp2 = tree.get(col.children[1]).unwrap();
+        assert_eq!(
+            exp1.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_flex_item")
+        );
+        assert_eq!(
+            exp2.element.as_ref().unwrap().kind(),
+            ElementKind::new("tur_flex_item")
+        );
+
+        (exp1.id, exp2.id)
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    // Two Expanded children with flex 2 and 1 should split 600px as 400 + 200.
+    let exp1_node = rt.get(exp1_id).unwrap();
+    assert_eq!(exp1_node.computed_layout.size.height, 400.0);
+    assert_eq!(exp1_node.computed_layout.offset.y, 0.0);
+
+    let exp2_node = rt.get(exp2_id).unwrap();
+    assert_eq!(exp2_node.computed_layout.size.height, 200.0);
+    assert_eq!(exp2_node.computed_layout.offset.y, 400.0);
+}

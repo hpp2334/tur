@@ -1,205 +1,169 @@
 import {
-    Alignment,
     Color,
     Column,
+    Condition,
     Container,
     CrossAxisAlignment,
     component,
+    derive,
     Each,
+    type EdgyElement,
     Expanded,
     get,
+    ImageEdgy,
     MainAxisAlignment,
     MainAxisSize,
+    MouseRegion,
     mutate,
     PointerInteract,
+    Positioned,
     Row,
+    ScrollView,
     SizedBox,
-    set,
-    source,
+    Stack,
     Text,
 } from "@tur/edgy";
+import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./components";
+import {
+    addOpen$,
+    getIcon,
+    openAddModal,
+    removeTarget$,
+    tasks$,
+} from "./state";
 
-interface Task {
-    title: string;
-    completed: boolean;
-}
+const COLORS = {
+    pageBg: Color.hex("#0f172a"),
+    text: Color.hex("#f8fafc"),
+    textMuted: Color.hex("#94a3b8"),
+    accent: Color.hex("#4f46e5"),
+};
 
-const tasks$ = source<Task[]>([
-    { title: "Buy groceries", completed: false },
-    { title: "Walk the dog", completed: true },
-    { title: "Finish report", completed: false },
-    { title: "Call mom", completed: false },
-]);
-
-function TaskItem({ task, index }: { task: Task; index: number }) {
+function Header(): EdgyElement {
     return Row({
         mainAlignment: MainAxisAlignment.SpaceBetween,
+        crossAlignment: CrossAxisAlignment.Center,
         children: [
-            Row({
-                mainAxisSize: MainAxisSize.Min,
+            Column({
+                crossAlignment: CrossAxisAlignment.Start,
                 children: [
-                    PointerInteract({
-                        onClick: mutate(({ get, set }) => {
-                            const tasks = get(tasks$);
-                            set(
-                                tasks$,
-                                tasks.map((t, i) =>
-                                    i === index
-                                        ? { ...t, completed: !t.completed }
-                                        : t,
-                                ),
-                            );
-                        }),
-                        child: Container({
-                            width: 24,
-                            height: 24,
-                            alignment: Alignment.Center,
-                            color: task.completed
-                                ? Color.hex("#22c55e")
-                                : Color.hex("#334155"),
-                            children: [
-                                Text({
-                                    text: task.completed ? "x" : "",
-                                    fontSize: 12,
-                                    color: Color.hex("#ffffff"),
-                                }),
-                            ],
-                        }),
-                    }),
-                    SizedBox({ width: 12 }),
                     Text({
-                        text: task.title,
-                        fontSize: 16,
-                        color: task.completed
-                            ? Color.hex("#64748b")
-                            : Color.hex("#e2e8f0"),
+                        text: "Tasks",
+                        fontSize: 28,
+                        color: COLORS.text,
+                    }),
+                    SizedBox({ height: 4 }),
+                    Text({
+                        text: derive(() => {
+                            const tasks = get(tasks$);
+                            const done = tasks.filter(
+                                (t) => t.completed,
+                            ).length;
+                            return `${tasks.length} items · ${done} completed`;
+                        }),
+                        fontSize: 13,
+                        color: COLORS.textMuted,
                     }),
                 ],
             }),
-            PointerInteract({
-                onClick: mutate(({ get, set }) => {
-                    const tasks = get(tasks$);
-                    set(
-                        tasks$,
-                        tasks.filter((_, i) => i !== index),
-                    );
-                }),
-                child: Container({
-                    width: 32,
-                    height: 32,
-                    alignment: Alignment.Center,
-                    color: Color.hex("#dc2626"),
-                    children: [
-                        Text({
-                            text: "x",
-                            fontSize: 14,
-                            color: Color.hex("#ffffff"),
-                        }),
-                    ],
+            MouseRegion({
+                cursor: "pointer",
+                child: PointerInteract({
+                    onClick: mutate((ctx, _ev) => openAddModal(ctx)),
+                    child: Container({
+                        padding: 11,
+                        borderRadius: 8,
+                        color: COLORS.accent,
+                        children: [
+                            Row({
+                                mainAxisSize: MainAxisSize.Min,
+                                children: [
+                                    ImageEdgy({
+                                        resourceId: getIcon("plus"),
+                                        width: 14,
+                                        height: 14,
+                                        queryKey: ["plus-icon"],
+                                    }),
+                                    SizedBox({ width: 8 }),
+                                    Text({
+                                        text: "New Task",
+                                        fontSize: 13,
+                                        color: Color.hex("#ffffff"),
+                                    }),
+                                ],
+                            }),
+                        ],
+                    }),
                 }),
             }),
         ],
     });
 }
 
-export default component(() =>
-    Expanded({
-        child: Container({
-            color: Color.hex("#0f172a"),
-            children: [
-                Row({
-                    children: [
-                        Container({
-                            color: Color.hex("#1e293b"),
-                            width: 200,
-                            children: [
-                                Column({
-                                    children: [
-                                        Container({
-                                            padding: 16,
-                                            children: [
-                                                Text({
-                                                    text: "Tur Todo",
-                                                    fontSize: 20,
-                                                    color: Color.hex("#f8fafc"),
-                                                }),
-                                            ],
-                                        }),
-                                        Container({
-                                            padding: 12,
-                                            children: [
-                                                Text({
-                                                    text: "My Tasks",
-                                                    fontSize: 14,
-                                                    color: Color.hex("#94a3b8"),
-                                                }),
-                                            ],
-                                        }),
-                                    ],
-                                }),
-                            ],
-                        }),
-                        Expanded({
-                            child: Container({
-                                padding: 16,
+function TaskList(): EdgyElement {
+    return Expanded({
+        child: ScrollView({
+            child: Column({
+                crossAlignment: CrossAxisAlignment.Stretch,
+                children: [
+                    Each({
+                        items: tasks$,
+                        build: (task, index) =>
+                            Column({
+                                crossAlignment: CrossAxisAlignment.Stretch,
                                 children: [
-                                    Column({
-                                        children: [
-                                            Row({
-                                                mainAlignment:
-                                                    MainAxisAlignment.SpaceBetween,
-                                                children: [
-                                                    Text({
-                                                        text: "TodoList",
-                                                        fontSize: 24,
-                                                        color: Color.hex(
-                                                            "#f8fafc",
-                                                        ),
-                                                    }),
-                                                    PointerInteract({
-                                                        onClick: mutate(
-                                                            ({ get, set }) => {
-                                                                const tasks =
-                                                                    get(tasks$);
-                                                                set(tasks$, [
-                                                                    ...tasks,
-                                                                    {
-                                                                        title: "New task",
-                                                                        completed: false,
-                                                                    },
-                                                                ]);
-                                                            },
-                                                        ),
-                                                        child: Container({
-                                                            color: Color.hex(
-                                                                "#4f46e5",
-                                                            ),
-                                                            padding: 8,
-                                                            children: [
-                                                                Text({
-                                                                    text: "+ New Task",
-                                                                    fontSize: 14,
-                                                                    color: Color.hex(
-                                                                        "#ffffff",
-                                                                    ),
-                                                                }),
-                                                            ],
-                                                        }),
-                                                    }),
-                                                ],
-                                            }),
-                                            SizedBox({ height: 16 }),
-                                            Each<Task>({
-                                                items: tasks$,
-                                                build: (task, index) =>
-                                                    TaskItem({ task, index }),
-                                            }),
-                                        ],
-                                    }),
+                                    index === 0
+                                        ? SizedBox({ width: 0, height: 0 })
+                                        : SizedBox({ height: 8 }),
+                                    TaskItem({ task, index }),
                                 ],
                             }),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
+export default component(() =>
+    Expanded({
+        child: Stack({
+            children: [
+                Container({
+                    color: COLORS.pageBg,
+                    padding: 24,
+                    children: [
+                        Column({
+                            crossAlignment: CrossAxisAlignment.Stretch,
+                            children: [
+                                Header(),
+                                SizedBox({ height: 20 }),
+                                TaskList(),
+                            ],
                         }),
                     ],
+                }),
+                Condition({
+                    condition: addOpen$,
+                    child: () =>
+                        Positioned({
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: AddTaskModal(),
+                        }),
+                }),
+                Condition({
+                    condition: derive(() => get(removeTarget$) !== null),
+                    child: () =>
+                        Positioned({
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: ConfirmRemoveModal(),
+                        }),
                 }),
             ],
         }),

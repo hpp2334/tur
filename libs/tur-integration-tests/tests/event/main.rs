@@ -3,6 +3,8 @@ mod click_propagation;
 mod countdown;
 mod counter;
 mod editable_text;
+mod mouse_region;
+mod pointer_drag;
 mod pointer_region;
 mod resize;
 mod scroll;

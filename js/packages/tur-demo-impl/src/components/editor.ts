@@ -1,15 +1,17 @@
 import {
     Container,
     createScrollController,
+    derive,
+    Each,
     type EdgyElement,
     Expanded,
+    get,
     InputEdgy,
     Row,
     Scrollbar,
     ScrollView,
-    Switch,
 } from "@tur/edgy";
-import { CASE_NAMES, editorCtrl, selectedCase$ } from "../state";
+import { editorCtrl, selectedCase$, selectedFile$ } from "../state";
 import { tokens } from "../theme/tokens";
 
 const editorInput: EdgyElement = InputEdgy({
@@ -52,15 +54,14 @@ export function Editor(): EdgyElement {
         color: tokens.bg.code,
         padding: 12,
         children: [
-            // Rebuild the editor element whenever the selected case changes
-            // so it re-reads the controller spans (reset by loadCase).
-            Switch({
-                value: selectedCase$,
-                cases: CASE_NAMES.map((name) => ({
-                    key: name,
-                    child: () => scrollableEditor(),
-                })),
-                fallback: () => scrollableEditor(),
+            // Rebuild the editor element whenever the selected case OR file
+            // changes so it re-reads the controller spans (reset by
+            // loadCase / selectFile).
+            Each({
+                items: derive(() => [
+                    { case: get(selectedCase$), file: get(selectedFile$) },
+                ]),
+                build: () => scrollableEditor(),
             }),
         ],
     });

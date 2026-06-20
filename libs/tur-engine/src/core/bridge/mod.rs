@@ -13,11 +13,12 @@ use crate::core::bridge::reactive_bridge::{
 };
 use crate::core::bridge::utils::{
     tur_create_animation_controller, tur_create_image_resource, tur_create_lazy_list_controller,
-    tur_create_scroll_controller, tur_create_text_editing_controller, tur_request_focus,
+    tur_create_scroll_controller, tur_create_svg_resource, tur_create_text_editing_controller,
+    tur_request_focus,
 };
 use crate::core::bridge::widget_bridge::{
     tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
-    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_switch, tur_pointer_interact,    tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_svg_edgy, tur_text,
+    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_mouse_region, tur_switch, tur_pointer_interact,    tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -119,6 +120,7 @@ pub fn init_bridge(
         ("Positioned", 2, tur_positioned),
         ("Text", 2, tur_text),
         ("PointerInteract", 2, tur_pointer_interact),
+        ("MouseRegion", 2, tur_mouse_region),
         ("Condition", 2, tur_condition),
         ("Switch", 2, tur_switch),
         ("Each", 2, tur_each),
@@ -128,7 +130,6 @@ pub fn init_bridge(
         ("ImageEdgy", 2, tur_image_edgy),
         ("InputEdgy", 2, tur_input_edgy),
         ("Fragment", 2, tur_fragment),
-        ("SvgEdgy", 2, tur_svg_edgy),
         ("Focusable", 2, tur_focusable),
         ("render", 2, tur_render),
         // --- utility functions ---
@@ -159,6 +160,12 @@ pub fn init_bridge(
         &tur_obj,
         js_name.clone(),
         build_fn(context, &js_name, 2, tur_create_image_resource),
+    );
+    let js_name = js_string!("createSvgResource");
+    set_prop(
+        &tur_obj,
+        js_name.clone(),
+        build_fn(context, &js_name, 2, tur_create_svg_resource),
     );
     let js_name = js_string!("requestFocus");
     set_prop(

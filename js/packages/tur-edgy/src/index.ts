@@ -172,16 +172,62 @@ export function Text(props: TextProps): EdgyElement {
     return __tur.Text(__ctx, props);
 }
 
+export interface Point {
+    x: number;
+    y: number;
+}
+
+export interface PointerInteractEvent {
+    /** Position relative to the element's top-left. */
+    local: Point;
+    /** Position relative to the canvas. */
+    global: Point;
+}
+
 export interface PointerInteractProps {
-    onClick?: Mutation;
-    onPointerEnter?: Mutation;
-    onPointerExit?: Mutation;
+    /** Click handler. Always receives a `PointerInteractEvent` with local
+     *  and global positions. Callers that don't need the event can ignore it
+     *  (`mutate((_ctx, _ev) => ...)`) — TS backward-infers `_ev`'s type from
+     *  this prop. */
+    onClick?: Mutation<[PointerInteractEvent]>;
+    onPointerDown?: Mutation<[PointerInteractEvent]>;
+    /** Fires on every pointer move while a drag is in progress (pointer is
+     *  down). Hover moves (no button held) do NOT fire this — use
+     *  `MouseRegion` for hover. */
+    onPointerMove?: Mutation<[PointerInteractEvent]>;
+    onPointerUp?: Mutation<[PointerInteractEvent]>;
     behavior?: Val<number>;
     child?: EdgyElement;
 }
 
 export function PointerInteract(props: PointerInteractProps): EdgyElement {
     return __tur.PointerInteract(__ctx, props);
+}
+
+// ---------------------------------------------------------------------------
+// MouseRegion — declarative cursor + hover (enter/exit) callbacks. Mirrors
+// Flutter's `MouseRegion`. Use this (NOT PointerInteract) when you need to
+// change the OS cursor or detect pointer enter/exit. Use PointerInteract for
+// click + drag.
+// ---------------------------------------------------------------------------
+
+export interface PointerRegionEvent {
+    local: Point;
+    global: Point;
+}
+
+export interface MouseRegionProps {
+    /** CSS cursor keyword: "default" | "pointer" | "col-resize" | "ew-resize"
+     *  | "grab" | "grabbing" | "text" | "not-allowed" | ... */
+    cursor?: Val<string>;
+    onEnter?: Mutation<[PointerRegionEvent]>;
+    onExit?: Mutation<[PointerRegionEvent]>;
+    behavior?: Val<number>;
+    child?: EdgyElement;
+}
+
+export function MouseRegion(props: MouseRegionProps): EdgyElement {
+    return __tur.MouseRegion(__ctx, props);
 }
 
 export interface ConditionProps {
@@ -376,6 +422,14 @@ export function createImageResource(bytes: Uint8Array | ArrayBuffer): number {
     return __tur.createImageResource(__ctx, bytes);
 }
 
+/** Parse and rasterise an inline SVG string into an image resource. Returns
+ *  a resource id compatible with `ImageEdgy` — SVGs are just another kind of
+ *  image at runtime, rendered to pixels up front at the document's declared
+ *  size. */
+export function createSvgResource(svg: string): number {
+    return __tur.createSvgResource(__ctx, svg);
+}
+
 // ---------------------------------------------------------------------------
 // Render — mount a component tree.
 // ---------------------------------------------------------------------------
@@ -462,6 +516,7 @@ interface TurGlobal {
     Positioned(ctx: unknown, props: unknown): EdgyElement;
     Text(ctx: unknown, props: unknown): EdgyElement;
     PointerInteract(ctx: unknown, props: unknown): EdgyElement;
+    MouseRegion(ctx: unknown, props: unknown): EdgyElement;
     Condition(ctx: unknown, props: unknown): EdgyElement;
     Switch(ctx: unknown, props: unknown): EdgyElement;
     ScrollView(ctx: unknown, props: unknown): EdgyElement;
@@ -479,4 +534,5 @@ interface TurGlobal {
     createLazyListController(ctx: unknown, opts: unknown): unknown;
     createAnimationController(ctx: unknown, opts: unknown): unknown;
     createImageResource(ctx: unknown, bytes: Uint8Array | ArrayBuffer): number;
+    createSvgResource(ctx: unknown, svg: string): number;
 }

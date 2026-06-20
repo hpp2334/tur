@@ -24,7 +24,7 @@ export default component(() =>
         mainAxisSize: MainAxisSize.Min,
         children: [
             PointerInteract({
-                onClick: mutate(({ get, set }) =>
+                onClick: mutate(({ get, set }, _ev) =>
                     set(outerClicks$, get(outerClicks$) + 1),
                 ),
                 child: Container({
@@ -35,7 +35,7 @@ export default component(() =>
                         Row({
                             children: [
                                 PointerInteract({
-                                    onClick: mutate(({ get, set }) =>
+                                    onClick: mutate(({ get, set }, _ev) =>
                                         set(
                                             innerClicks$,
                                             get(innerClicks$) + 1,
@@ -53,7 +53,7 @@ export default component(() =>
                 }),
             }),
             PointerInteract({
-                onClick: mutate(({ get, set }) =>
+                onClick: mutate(({ get, set }, _ev) =>
                     set(
                         translucentOuterClicks$,
                         get(translucentOuterClicks$) + 1,
@@ -68,7 +68,7 @@ export default component(() =>
                             children: [
                                 PointerInteract({
                                     behavior: HitTestBehavior.Translucent,
-                                    onClick: mutate(({ get, set }) =>
+                                    onClick: mutate(({ get, set }, _ev) =>
                                         set(
                                             translucentInnerClicks$,
                                             get(translucentInnerClicks$) + 1,

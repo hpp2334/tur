@@ -93,6 +93,21 @@ pub(crate) fn tur_create_image_resource(
     Ok(JsValue::from(id.as_u64() as f64))
 }
 
+pub(crate) fn tur_create_svg_resource(
+    _this: &JsValue, args: &[JsValue], _context: &mut Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let svg = args.get_or_undefined(1).as_string().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected SVG string"))
+    })?;
+    let svg_str = svg.to_std_string_escaped();
+    let image = ImageResource::from_svg_str(&svg_str).ok_or_else(|| {
+        JsError::from(JsNativeError::range().with_message("failed to parse/render SVG"))
+    })?;
+    let id = js_ctx.resource_map.borrow_mut().insert_image(image);
+    Ok(JsValue::from(id.as_u64() as f64))
+}
+
 pub(crate) fn tur_request_focus(
     _this: &JsValue, args: &[JsValue], _context: &mut Context,
 ) -> JsResult<JsValue> {

@@ -36,11 +36,11 @@ fn pointer_region_callbacks_registered() {
     let pi_id = find_pointer_interact(&app);
 
     assert!(
-        app.has_pointer_region_callbacks(pi_id),
-        "PointerInteract should have pointer region callbacks"
+        app.has_mouse_region_callbacks(pi_id),
+        "MouseRegion should have pointer region callbacks"
     );
     assert!(
-        !app.has_pointer_region_callbacks(text_id),
+        !app.has_mouse_region_callbacks(text_id),
         "Text node should not have pointer region callbacks"
     );
 }

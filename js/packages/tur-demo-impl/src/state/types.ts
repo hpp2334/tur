@@ -9,3 +9,6 @@ export interface EditorController {
 }
 
 export type LayoutMode = "split" | "editor" | "viewer";
+
+/** A per-case file cache: filename → current editor text. */
+export type CaseFileMap = Record<string, string>;

@@ -54,7 +54,9 @@ export default component(() =>
                             mainAlignment: MainAxisAlignment.Center,
                             children: TABS.map((c) =>
                                 PointerInteract({
-                                    onClick: mutate(({ set }) => set(tab$, c)),
+                                    onClick: mutate(({ set }, _ev) =>
+                                        set(tab$, c),
+                                    ),
                                     child: Container({
                                         color: Color.hex(HEX[c]),
                                         padding: 12,

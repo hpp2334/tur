@@ -202,10 +202,11 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
-    pub fn has_pointer_region_callbacks(&self, id: ElementNodeId) -> bool {
+    pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
+        use tur_engine::elements::MouseRegionElement;
         self.inner.with_element(id, |e| {
-            e.cast::<PointerInteractElement>()
-                .map(|p| p.has_pointer_region_callbacks())
+            e.cast::<MouseRegionElement>()
+                .map(|m| m.has_region_callbacks())
                 .unwrap_or(false)
         }).unwrap_or(false)
     }
@@ -261,6 +262,12 @@ impl TurTestApp {
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         self.inner.with_element(id, cb)
+    }
+
+    /// Returns the most recent cursor name set by a handler since the last
+    /// call. Mirrors the embedder's per-frame cursor poll.
+    pub fn take_current_cursor(&self) -> Option<String> {
+        self.inner.take_current_cursor()
     }
 
     pub fn eval_js(&mut self, source: &str) -> String {

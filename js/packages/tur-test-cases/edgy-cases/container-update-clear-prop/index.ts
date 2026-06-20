@@ -22,7 +22,7 @@ export default component(() =>
         padding: 20,
         children: [
             PointerInteract({
-                onClick: mutate(({ set }) => set(checked$, false)),
+                onClick: mutate(({ set }, _ev) => set(checked$, false)),
                 child: Container({
                     width: 40,
                     height: 40,

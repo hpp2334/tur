@@ -497,17 +497,17 @@ impl ElementOnGesture for EditableTextElement {
         event: &ComposedGestureEvent,
     ) {
         match event {
-            ComposedGestureEvent::PointerDown { local_position } => {
+            ComposedGestureEvent::PointerDown { local, .. } => {
                 cx.request_own_focus();
-                let byte_pos = self.char_index_at(local_position);
+                let byte_pos = self.char_index_at(local);
                 let mut c = self.controller_mut();
                 c.set_cursor_position(byte_pos);
                 c.set_selection(byte_pos, byte_pos);
                 drop(c);
                 cx.request_redraw();
             }
-            ComposedGestureEvent::PointerMove { local_position } => {
-                let byte_pos = self.char_index_at(local_position);
+            ComposedGestureEvent::PointerMove { local, .. } => {
+                let byte_pos = self.char_index_at(local);
                 let mut c = self.controller_mut();
                 let anchor = c.selection_anchor();
                 let sel_end = c.selection_end();
@@ -518,6 +518,7 @@ impl ElementOnGesture for EditableTextElement {
                     cx.request_redraw();
                 }
             }
+            ComposedGestureEvent::PointerUp { .. } => {}
         }
     }
 }
