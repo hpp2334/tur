@@ -316,10 +316,15 @@ export function buildHighlightSpans(
         if (t.start > pos) {
             spans.push({ content: source.slice(pos, t.start), color: code.fg });
         }
-        spans.push({
-            content: source.slice(t.start, t.end),
-            color: KIND_COLOR[t.kind] ?? KIND_COLOR[0],
-        });
+        const content = source.slice(t.start, t.end);
+        // Skip zero-width tokens — an empty-content span would create an empty
+        // parley style range (`start == end`) and crash text layout.
+        if (content.length > 0) {
+            spans.push({
+                content,
+                color: KIND_COLOR[t.kind] ?? KIND_COLOR[0],
+            });
+        }
         pos = t.end;
     }
     if (pos < source.length) {

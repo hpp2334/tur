@@ -92,24 +92,31 @@ impl ElementLayout for EditableTextElement {
         builder.push_default(StyleProperty::FontSize(font_size as f32));
         builder.push_default(StyleProperty::from(generic_family_for(font_family.as_deref())));
         // Base color over the whole text; per-span colors override below.
-        builder.push(StyleProperty::Brush(brush_arr(text_color)), 0..full_text.len());
+        // An empty range (`start == end`) makes parley panic with
+        // `style_run.range.start < style_run.range.end`, so guard it.
+        if !full_text.is_empty() {
+            builder.push(StyleProperty::Brush(brush_arr(text_color)), 0..full_text.len());
+        }
 
         if build_from_spans {
             let mut byte_offset = 0usize;
             for span in &base_spans {
                 let span_byte_len = span.text.len();
                 let range = byte_offset..byte_offset + span_byte_len;
-                if let Some(c) = &span.color {
-                    builder.push(StyleProperty::Brush(brush_arr(*c)), range.clone());
-                }
-                if span.bold {
-                    builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
-                }
-                if span.italic {
-                    builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
-                }
-                if let Some(fs) = span.font_size {
-                    builder.push(StyleProperty::FontSize(fs as f32), range.clone());
+                // Skip zero-width spans: an empty style range panics in parley.
+                if !range.is_empty() {
+                    if let Some(c) = &span.color {
+                        builder.push(StyleProperty::Brush(brush_arr(*c)), range.clone());
+                    }
+                    if span.bold {
+                        builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+                    }
+                    if span.italic {
+                        builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+                    }
+                    if let Some(fs) = span.font_size {
+                        builder.push(StyleProperty::FontSize(fs as f32), range.clone());
+                    }
                 }
                 if span.underline {
                     underline_ranges.push((byte_offset, byte_offset + span_byte_len));
