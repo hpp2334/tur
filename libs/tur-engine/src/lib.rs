@@ -218,6 +218,27 @@ impl TurApp {
         ))
     }
 
+    /// Debug accessor: `(text_len, cursor, anchor, end, num_layout_lines,
+    /// layout_width, layout_height)` for the focused editable text, if any.
+    pub fn focused_editable_state(&self) -> Option<(usize, usize, usize, usize, usize, f32, f32)> {
+        let focused_id = self.focused_element()?;
+        let tree = self.internal.js_context.element_tree.borrow();
+        let node = tree.get(focused_id)?;
+        let element = node.element.as_ref()?;
+        let editable_el = element.cast::<EditableTextElement>()?;
+        let layout_data = editable_el.cached_layout.as_ref()?;
+        let c = editable_el.controller();
+        Some((
+            c.full_len(),
+            c.cursor_position(),
+            c.selection_anchor(),
+            c.selection_end(),
+            layout_data.line_infos.len(),
+            layout_data._width,
+            layout_data._height,
+        ))
+    }
+
     pub fn focused_is_editable(&self) -> bool {
         let Some(focused_id) = self.focused_element() else {
             return false;

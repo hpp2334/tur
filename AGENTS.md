@@ -176,9 +176,9 @@ pub trait Renderer {
 
 Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
-## Debugging the playground (Playwright MCP + image-reader)
+## Debugging the playground (browser-operate agent)
 
-The `playground-for-agent` package has been removed. Playground interaction and visual verification are now done directly with the **Playwright MCP** tools and the **image-reader** subagent against the running dev server — there is no separate Playwright harness anymore.
+The `playground-for-agent` package has been removed. Playground interaction and visual verification are now done via the **browser-operate** subagent (Task tool, `browser-operate` type), which drives the Playwright MCP tools against the running dev server — there is no separate Playwright harness anymore.
 
 ### Start the dev server
 
@@ -197,7 +197,7 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: `new KeyboardEvent('keydown', { key, metaKey })` — events route to the focused element. The editor's `EditableText` supports select-all (`Meta+a`), typing, `Backspace`, arrows, `Enter`, and `Cmd-S` (recompile).
 4. Re-read `debug_layout()` or take a screenshot to confirm the result.
 
-### Always verify visually with image-reader
+### Always verify visually with browser-operate
 
-`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot with `playwright_browser_take_screenshot` and inspect it with the **image-reader** subagent (Task tool, `image-reader` type). Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements.
+`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements.
 
