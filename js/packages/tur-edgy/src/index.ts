@@ -422,6 +422,14 @@ export function createImageResource(bytes: Uint8Array | ArrayBuffer): number {
     return __tur.createImageResource(__ctx, bytes);
 }
 
+/** Parse and rasterise an inline SVG string into an image resource. Returns
+ *  a resource id compatible with `ImageEdgy` — SVGs are just another kind of
+ *  image at runtime, rendered to pixels up front at the document's declared
+ *  size. */
+export function createSvgResource(svg: string): number {
+    return __tur.createSvgResource(__ctx, svg);
+}
+
 // ---------------------------------------------------------------------------
 // Render — mount a component tree.
 // ---------------------------------------------------------------------------
@@ -526,4 +534,5 @@ interface TurGlobal {
     createLazyListController(ctx: unknown, opts: unknown): unknown;
     createAnimationController(ctx: unknown, opts: unknown): unknown;
     createImageResource(ctx: unknown, bytes: Uint8Array | ArrayBuffer): number;
+    createSvgResource(ctx: unknown, svg: string): number;
 }

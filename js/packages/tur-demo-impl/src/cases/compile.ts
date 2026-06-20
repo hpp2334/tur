@@ -4,11 +4,34 @@ import { code } from "../theme/tokens";
 interface TurHost {
     transpileTsx(src: string): string;
     tokenizeTsx(src: string): TokenSpan[];
+    generateAst(src: string): AstNode[];
 }
 interface TokenSpan {
     start: number;
     end: number;
     kind: number;
+}
+
+/** AST node returned by `generateAst`. Each node includes the exact source
+ *  text (`text`) for that declaration, extracted by Rust — so no fragile
+ *  position arithmetic on the JS side.  For export nodes, `body` contains
+ *  the declaration text WITHOUT the `export`/`export default` keyword,
+ *  also extracted by Rust from the inner declaration's span. */
+interface AstNode {
+    kind:
+        | "import"
+        | "exportDecl"
+        | "exportDefault"
+        | "exportNamed"
+        | "exportAll"
+        | "exportType"
+        | "statement";
+    text: string;
+    /** For export nodes: text without the `export` keyword. */
+    body?: string;
+    source?: string;
+    specifiers?: Array<{ local: string; imported: string }>;
+    names?: string[];
 }
 
 const host = (): TurHost =>
@@ -32,19 +55,156 @@ export interface CaseCompileResult {
     component?: unknown;
 }
 
-/** Regex that matches `import { ... } from "./foo"` or `from "./foo.ts"`. */
-const RELATIVE_IMPORT_RE =
-    /import\s*(?:\{([\s\S]*?)\}|(\w+))\s*from\s*["']\.\/([^"']+)["'];?/g;
+// ---------------------------------------------------------------------------
+// AST-based module rewriting
+// ---------------------------------------------------------------------------
 
-/**
- * Compile a case from its file map. Handles both single-file and multi-file
- * cases.
+/** Build the destructuring names string from import specifiers.
+ *  `[{local:"X", imported:"X"}]` → `"X"`
+ *  `[{local:"Y", imported:"X"}]` → `"X: Y"` */
+function specNames(specs: Array<{ local: string; imported: string }>): string {
+    return specs
+        .map((s) =>
+            s.imported === s.local ? s.local : `${s.imported}: ${s.local}`,
+        )
+        .join(", ");
+}
+
+/** Normalize a relative import path to a module name key.
+ *  `"./foo.ts"` → `"foo"`, `"./foo"` → `"foo"`.
+ *  No regex — pure string manipulation. */
+function moduleKey(source: string): string {
+    let name = source;
+    if (name.startsWith("./")) name = name.slice(2);
+    if (name.endsWith(".ts")) name = name.slice(0, name.length - 3);
+    return name;
+}
+
+/** Normalize a relative import path to a file name key.
+ *  `"./foo"` → `"foo.ts"`, `"./foo.ts"` → `"foo.ts"`.
+ *  No regex — pure string manipulation. */
+function fileKey(source: string): string {
+    let name = source;
+    if (name.startsWith("./")) name = name.slice(2);
+    if (!name.endsWith(".ts")) name = `${name}.ts`;
+    return name;
+}
+
+/** Rewrite a transpiled JS string using AST metadata from `generateAst`.
+ *  Returns the rewritten source and the list of exported names.
  *
- * - Single-file: `{ "index.ts": "..." }` — compiled as before.
- * - Multi-file: `{ "index.ts": "...", "utils.ts": "..." }` — non-entry files
- *   are registered as virtual modules on `globalThis.__tur_modules`, then the
- *   entry file is eval'd.
- */
+ *  Each AST node carries its own `text` (full node text) and `body` (export
+ *  nodes only — text without the `export` keyword), both extracted safely by
+ *  Rust. No regex or position arithmetic on the JS side. */
+function rewriteModule(transpiled: string): {
+    source: string;
+    exportedNames: string[];
+} {
+    const ast = host().generateAst(transpiled);
+    const parts: string[] = [];
+    const exportedNames: string[] = [];
+
+    for (const node of ast) {
+        switch (node.kind) {
+            case "import": {
+                const src = node.source ?? "";
+                const names = specNames(node.specifiers ?? []);
+                if (src === "@tur/edgy") {
+                    parts.push(`const {${names}} = globalThis.TurEdgy;`);
+                } else {
+                    parts.push(
+                        `const {${names}} = globalThis.__tur_modules["${moduleKey(src)}"];`,
+                    );
+                }
+                break;
+            }
+
+            case "exportDecl": {
+                parts.push(node.body ?? node.text);
+                if (node.names) exportedNames.push(...node.names);
+                break;
+            }
+
+            case "exportDefault": {
+                parts.push(`exports.default = ${node.body ?? node.text};`);
+                exportedNames.push("default");
+                break;
+            }
+
+            case "exportNamed": {
+                if (node.names) exportedNames.push(...node.names);
+                break;
+            }
+
+            case "exportAll":
+            case "exportType": {
+                break;
+            }
+
+            case "statement": {
+                parts.push(node.text);
+                break;
+            }
+        }
+    }
+
+    return { source: parts.join("\n"), exportedNames };
+}
+
+/** Rewrite the entry file. Like `rewriteModule` but converts
+ *  `export default X` → `globalThis.__tur_case = X` instead of
+ *  `exports.default = X`, and drops other exports without tracking. */
+function rewriteEntry(transpiled: string): string {
+    const ast = host().generateAst(transpiled);
+    const parts: string[] = [];
+
+    for (const node of ast) {
+        switch (node.kind) {
+            case "import": {
+                const src = node.source ?? "";
+                const names = specNames(node.specifiers ?? []);
+                if (src === "@tur/edgy") {
+                    parts.push(`const {${names}} = globalThis.TurEdgy;`);
+                } else {
+                    parts.push(
+                        `const {${names}} = globalThis.__tur_modules["${moduleKey(src)}"];`,
+                    );
+                }
+                break;
+            }
+
+            case "exportDecl": {
+                parts.push(node.body ?? node.text);
+                break;
+            }
+
+            case "exportDefault": {
+                parts.push(
+                    `globalThis.__tur_case = ${node.body ?? node.text};`,
+                );
+                break;
+            }
+
+            case "exportNamed":
+            case "exportAll":
+            case "exportType": {
+                break;
+            }
+
+            case "statement": {
+                parts.push(node.text);
+                break;
+            }
+        }
+    }
+
+    return parts.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Compile
+// ---------------------------------------------------------------------------
+
 export function compileCase(files: Record<string, string>): CaseCompileResult {
     const entryFile = files["index.ts"] ?? Object.values(files)[0];
     if (!entryFile) {
@@ -58,90 +218,40 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
     };
     const evalInGlobal = g.eval;
 
-    // Reset module registry for this compilation.
     g.__tur_modules = {};
     g.__tur_case = undefined;
 
-    // Process non-entry files first (register as virtual modules).
-    const nonEntryFiles = Object.entries(files).filter(
-        ([name]) => name !== "index.ts",
+    // Process non-entry files first, topologically sorted.
+    const nonEntryFiles = Object.keys(files).filter(
+        (name) => name !== "index.ts",
     );
-    for (const [filename, src] of nonEntryFiles) {
-        let js: string;
+    const sorted = topoSort(nonEntryFiles, files);
+    for (const filename of sorted) {
+        const src = files[filename];
+        let transpiled: string;
         try {
-            js = host().transpileTsx(src);
+            transpiled = host().transpileTsx(src);
         } catch (e) {
             return {
                 error: `transpile ${filename}: ${e instanceof Error ? e.message : String(e)}`,
             };
         }
 
-        // Rewrite @tur/edgy imports.
-        js = js.replace(
-            /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/edgy["'];?/g,
-            (_m, specs: string) => `const {${specs}} = globalThis.TurEdgy;`,
-        );
+        let rewritten: { source: string; exportedNames: string[] };
+        try {
+            rewritten = rewriteModule(transpiled);
+        } catch (e) {
+            return {
+                error: `rewrite ${filename}: ${e instanceof Error ? e.message : String(e)}`,
+            };
+        }
 
-        // Rewrite relative imports.
-        js = js.replace(
-            RELATIVE_IMPORT_RE,
-            (
-                _m,
-                namedSpecs: string,
-                defaultSpec: string,
-                modulePath: string,
-            ) => {
-                const moduleName = modulePath.replace(/\.ts$/, "");
-                if (namedSpecs) {
-                    return `const {${namedSpecs}} = globalThis.__tur_modules["${moduleName}"];`;
-                }
-                if (defaultSpec) {
-                    return `const ${defaultSpec} = globalThis.__tur_modules["${moduleName}"];`;
-                }
-                return "";
-            },
-        );
-
-        // Rewrite exports to build an exports object.
-        // `export const X = ...` → `var X = ...` + `exports.X = X` at end
-        // Simple approach: strip export keyword, track exported names, assign at end.
-        const exportedNames: string[] = [];
-        js = js.replace(
-            /export\s+(?:const|let|var)\s+(\w+)/g,
-            (_m, name: string) => {
-                exportedNames.push(name);
-                return `var ${name}`;
-            },
-        );
-        js = js.replace(/export\s+function\s+(\w+)/g, (_m, name: string) => {
-            exportedNames.push(name);
-            return `function ${name}`;
-        });
-        js = js.replace(/export\s+class\s+(\w+)/g, (_m, name: string) => {
-            exportedNames.push(name);
-            return `var ${name} = class ${name}`;
-        });
-        // Strip re-exports like `export { X, Y }`.
-        js = js.replace(/export\s*\{([^}]*)\}\s*;?/g, (_m, names: string) => {
-            for (const n of names.split(",")) {
-                const trimmed = n
-                    .trim()
-                    .split(/\s+as\s+/)[0]
-                    ?.trim();
-                if (trimmed) exportedNames.push(trimmed);
-            }
-            return "";
-        });
-
-        // Handle `export default` — assign to exports.default.
-        js = js.replace(/export\s+default\s+/g, "exports.default = ");
-
-        const moduleName = filename.replace(/\.ts$/, "");
+        const moduleName = moduleKey(filename);
         const wrappedJs = [
             `globalThis.__tur_modules["${moduleName}"] = (function() {`,
             `var exports = {};`,
-            js,
-            ...exportedNames.map((n) => `exports.${n} = ${n};`),
+            rewritten.source,
+            ...rewritten.exportedNames.map((n) => `exports.${n} = ${n};`),
             `return exports;`,
             `})();`,
         ].join("\n");
@@ -156,48 +266,23 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
     }
 
     // Process entry file (index.ts).
-    let entryJs: string;
+    let transpiled: string;
     try {
-        entryJs = host().transpileTsx(entryFile);
+        transpiled = host().transpileTsx(entryFile);
     } catch (e) {
         return {
             error: `transpile index.ts: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 
-    // Rewrite @tur/edgy imports.
-    entryJs = entryJs.replace(
-        /import\s*\{([\s\S]*?)\}\s*from\s*["']@tur\/edgy["'];?/g,
-        (_m, specs: string) => `const {${specs}} = globalThis.TurEdgy;`,
-    );
-
-    // Rewrite relative imports.
-    entryJs = entryJs.replace(
-        RELATIVE_IMPORT_RE,
-        (_m, namedSpecs: string, defaultSpec: string, modulePath: string) => {
-            const moduleName = modulePath.replace(/\.ts$/, "");
-            if (namedSpecs) {
-                return `const {${namedSpecs}} = globalThis.__tur_modules["${moduleName}"];`;
-            }
-            if (defaultSpec) {
-                return `const ${defaultSpec} = globalThis.__tur_modules["${moduleName}"];`;
-            }
-            return "";
-        },
-    );
-
-    // `export default <expr>` → `globalThis.__tur_case = <expr>`
-    entryJs = entryJs.replace(
-        /export\s+default\s+/g,
-        "globalThis.__tur_case = ",
-    );
-
-    // Strip remaining named exports.
-    entryJs = entryJs.replace(
-        /export\s+(?:const|let|var|function|class)\s/g,
-        "var __unused_export_ = ",
-    );
-    entryJs = entryJs.replace(/export\s*\{[^}]*\}\s*;?/g, "");
+    let entryJs: string;
+    try {
+        entryJs = rewriteEntry(transpiled);
+    } catch (e) {
+        return {
+            error: `rewrite index.ts: ${e instanceof Error ? e.message : String(e)}`,
+        };
+    }
 
     try {
         evalInGlobal(entryJs);
@@ -229,10 +314,7 @@ export function buildHighlightSpans(
     let pos = 0;
     for (const t of tokens) {
         if (t.start > pos) {
-            spans.push({
-                content: source.slice(pos, t.start),
-                color: code.fg,
-            });
+            spans.push({ content: source.slice(pos, t.start), color: code.fg });
         }
         spans.push({
             content: source.slice(t.start, t.end),
@@ -241,10 +323,48 @@ export function buildHighlightSpans(
         pos = t.end;
     }
     if (pos < source.length) {
-        spans.push({
-            content: source.slice(pos),
-            color: code.fg,
-        });
+        spans.push({ content: source.slice(pos), color: code.fg });
     }
     return spans;
+}
+
+/** Topologically sort file names so that dependencies come before dependents.
+ *  Uses `generateAst` to find import sources — no regex. */
+function topoSort(
+    filenames: string[],
+    allFiles: Record<string, string>,
+): string[] {
+    const deps = new Map<string, Set<string>>();
+    for (const name of filenames) {
+        const src = allFiles[name] ?? "";
+        const d = new Set<string>();
+        try {
+            const ast = host().generateAst(src);
+            for (const node of ast) {
+                if (node.kind === "import" && node.source) {
+                    const dep = fileKey(node.source);
+                    if (dep !== name && filenames.includes(dep)) {
+                        d.add(dep);
+                    }
+                }
+            }
+        } catch {
+            // If AST parsing fails, treat as no dependencies.
+        }
+        deps.set(name, d);
+    }
+    const result: string[] = [];
+    const done = new Set<string>();
+    function visit(name: string): void {
+        if (done.has(name)) return;
+        done.add(name);
+        for (const dep of deps.get(name) ?? []) {
+            visit(dep);
+        }
+        result.push(name);
+    }
+    for (const name of [...filenames].sort()) {
+        visit(name);
+    }
+    return result;
 }

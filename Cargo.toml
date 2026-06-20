@@ -27,6 +27,9 @@ vello = "0.9"
 boa_engine = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
 boa_gc = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+resvg = "0.47"
+usvg = "0.47"
+tiny-skia = "0.12"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-wasm = "0.2"

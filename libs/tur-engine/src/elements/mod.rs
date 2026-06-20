@@ -15,7 +15,6 @@ pub mod positioned;
 pub mod scrollbar;
 pub mod scroll_view;
 pub mod stack;
-pub mod svg;
 pub mod switch;
 pub mod text;
 
@@ -37,5 +36,4 @@ pub use positioned::{PositionedElement, PositionedComponent};
 pub use scrollbar::{ScrollbarComponent, ScrollbarElement};
 pub use scroll_view::{ScrollViewElement, ScrollViewComponent};
 pub use stack::{StackElement, StackComponent};
-pub use svg::{SvgElement, SvgComponent};
 pub use switch::{SwitchElement, SwitchKey, SwitchComponent};
