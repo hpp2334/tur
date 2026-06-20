@@ -11,13 +11,13 @@ export {
     resetCase,
     selectFile,
 } from "./case-store";
-export { layoutFlex, relativeTime } from "./helpers";
+export { relativeTime } from "./helpers";
 export {
     autoRun$,
     CASE_NAMES,
     compileVersion$,
     edited$,
-    editorFlex$,
+    editorWidth$,
     errorMsg$,
     hoveredCase$,
     hoveredFile$,
@@ -32,6 +32,5 @@ export {
     selectedFile$,
     sidebarWidth$,
     status$,
-    viewerFlex$,
 } from "./sources";
 export type { EditorController, LayoutMode } from "./types";

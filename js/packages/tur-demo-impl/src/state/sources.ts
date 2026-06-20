@@ -48,13 +48,13 @@ export const layoutHovered$ = source<string | null>(null);
 export const autoRun$ = source(true);
 export const layoutMode$ = source<LayoutMode>("split");
 
-// Draggable divider widths. `sidebarWidth$` is the sidebar's pixel width;
-// `editorFlex$` and `viewerFlex$` are the relative weights of the editor and
-// viewer panes (default 1:1). Updated by the divider drag handlers in
+// Draggable divider widths (pixel-based for 1:1 mouse tracking).
+// `sidebarWidth$` is the sidebar's pixel width; `editorWidth$` is the editor
+// pane's pixel width in split mode (the viewer pane is `Expanded` and fills
+// the remaining space). Updated by the divider drag handlers in
 // `components/divider.ts`.
 export const sidebarWidth$ = source(200);
-export const editorFlex$ = source(1);
-export const viewerFlex$ = source(1);
+export const editorWidth$ = source(600);
 
 // "Compiled Xs ago" — `now$` ticks every 5s so the relative timestamp in the
 // status bar stays fresh without manual refresh.

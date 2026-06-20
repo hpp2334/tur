@@ -1,5 +1,6 @@
 import {
     Column,
+    Condition,
     Container,
     CrossAxisAlignment,
     component,
@@ -9,15 +10,10 @@ import {
     Expanded,
     get,
     Row,
+    Switch,
     set,
 } from "@tur/edgy";
-import {
-    editorFlex$,
-    layoutFlex,
-    layoutMode$,
-    sidebarWidth$,
-    viewerFlex$,
-} from "../state";
+import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
 import { VDivider } from "./divider";
 import { Editor } from "./editor";
@@ -26,52 +22,64 @@ import { StatusBar } from "./status-bar";
 import { Toolbar } from "./toolbar";
 import { Viewer } from "./viewer";
 
-/** Editor + viewer panes. The effective flex of each pane is the product of
- *  the layout-mode factor (`split`/`editor`/`viewer`) and the user-set drag
- *  weight. So when `layoutMode$` hides a pane (factor 0), it stays hidden
- *  regardless of the drag weight. */
-function paneFlex(who: "editor" | "viewer"): EdgyElement {
-    const baseFlex = who === "editor" ? editorFlex$ : viewerFlex$;
-    return Expanded({
-        flex: derive(() => {
-            const modeFactor = layoutFlex(who, get(layoutMode$));
-            return modeFactor * Math.max(0.0001, get(baseFlex));
-        }),
-        child: who === "editor" ? Editor() : Viewer(),
-    });
-}
-
+/** Editor + viewer panes. The editor uses a fixed pixel width (dragged 1:1
+ *  with the mouse); the viewer is `Expanded` and fills the rest. Layout modes
+ *  swap which pane is visible:
+ *  - `split`: editor = fixed `editorWidth$`, viewer = Expanded.
+ *  - `editor`: editor = Expanded (fills all), viewer hidden.
+ *  - `viewer`: editor hidden, viewer = Expanded. */
 function EditorAndViewer(): EdgyElement {
     return Row({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
-            paneFlex("editor"),
-            VDivider({
-                onDrag: (dx) => {
-                    const cur = get(editorFlex$);
-                    const other = get(viewerFlex$);
-                    // Move the split proportionally to the drag delta: a full
-                    // pane-width of drag shifts the split by ~50%. Clamp to
-                    // keep both panes visible.
-                    const total = cur + other;
-                    if (total <= 0) return;
-                    const sensitivity = 200;
-                    const delta = dx / sensitivity;
-                    let nextEditor = cur + delta * total;
-                    let nextViewer = other - delta * total;
-                    if (nextEditor < 0.1) {
-                        nextEditor = 0.1;
-                        nextViewer = total - 0.1;
-                    }
-                    if (nextViewer < 0.1) {
-                        nextViewer = 0.1;
-                        nextEditor = total - 0.1;
-                    }
-                    set(editorFlex$, nextEditor);
-                    set(viewerFlex$, nextViewer);
-                },
+            // Editor pane
+            Switch({
+                value: derive(() => get(layoutMode$)),
+                cases: [
+                    {
+                        key: "split",
+                        child: () =>
+                            Container({
+                                width: derive(() => get(editorWidth$)),
+                                children: [Editor()],
+                            }),
+                    },
+                    {
+                        key: "editor",
+                        child: () => Expanded({ child: Editor() }),
+                    },
+                ],
+                fallback: () => Container({ width: 0, children: [Editor()] }),
             }),
-            paneFlex("viewer"),
+            // Divider — only in split mode
+            Condition({
+                condition: derive(() => get(layoutMode$) === "split"),
+                child: () =>
+                    VDivider({
+                        onDrag: (ev) => {
+                            const next = Math.max(
+                                100,
+                                get(editorWidth$) + ev.deltaFromLast.x,
+                            );
+                            set(editorWidth$, next);
+                        },
+                    }),
+            }),
+            // Viewer pane
+            Switch({
+                value: derive(() => get(layoutMode$)),
+                cases: [
+                    {
+                        key: "split",
+                        child: () => Expanded({ child: Viewer() }),
+                    },
+                    {
+                        key: "viewer",
+                        child: () => Expanded({ child: Viewer() }),
+                    },
+                ],
+                fallback: () => Container({ width: 0, children: [Viewer()] }),
+            }),
         ],
     });
 }
@@ -90,12 +98,13 @@ export const Shell: EdgyComponent = component(() =>
                             children: [
                                 Sidebar(),
                                 VDivider({
-                                    onDrag: (dx) => {
+                                    onDrag: (ev) => {
                                         const next = Math.max(
                                             120,
                                             Math.min(
                                                 480,
-                                                get(sidebarWidth$) + dx,
+                                                get(sidebarWidth$) +
+                                                    ev.deltaFromLast.x,
                                             ),
                                         );
                                         set(sidebarWidth$, next);
