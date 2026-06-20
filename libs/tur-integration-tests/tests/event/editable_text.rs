@@ -841,6 +841,42 @@ fn click_in_later_run_places_caret_correctly() {
     }
 }
 
+// A zero-length span carrying a color (the playground's `buildHighlightSpans`
+// can emit these from adjacent/zero-width lexer tokens) must NOT crash parley.
+// Regression for the "click todolist state.ts → panic" bug: an empty style
+// range (`start == end`) triggered
+// `assertion failed: style_run.range.start < style_run.range.end`.
+const EMPTY_SPAN_BUNDLE: &str = r#"
+const T = globalThis.__tur;
+const ctx = T.__ctx;
+globalThis.__ctrl = new globalThis.TextEditingController();
+globalThis.__ctrl.setSpans([
+    { content: "ab", color: { r: 200, g: 120, b: 50, a: 255 } },
+    { content: "", color: { r: 80, g: 200, b: 120, a: 255 } },
+    { content: "cd", color: { r: 120, g: 80, b: 200, a: 255 } },
+]);
+T.render(ctx, T.InputEdgy(ctx, {
+    controller: globalThis.__ctrl,
+    fontFamily: "monospace",
+    fontSize: 20,
+    width: 400,
+    height: 44,
+}));
+"#;
+
+#[test]
+fn empty_colored_span_does_not_panic() {
+    let mut app = TurTestApp::new(500.0, 200.0).unwrap();
+    app.load_bundle_source(EMPTY_SPAN_BUNDLE).unwrap();
+    // Rendering must not panic despite the empty-color span producing an
+    // empty (start == end) style range.
+    app.render();
+
+    let id = find_editable_text_id(&app);
+    // The empty span contributes no text; the visible content is "abcd".
+    assert_eq!(get_text(&app, id), "abcd");
+}
+
 // Mirrors the playground editor: a multiline `InputEdgy` INSIDE a `ScrollView`,
 // scrolled down so the clicked line is only reachable after scrolling. This is
 // the exact configuration the reported bug was seen in.

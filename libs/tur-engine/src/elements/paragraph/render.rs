@@ -61,17 +61,21 @@ impl ElementLayout for TextElement {
             let span_byte_len = span.text.len();
             let range = byte_offset..byte_offset + span_byte_len;
 
-            if let Some(ref c) = span.color {
-                builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
-            }
-            if span.bold {
-                builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
-            }
-            if span.italic {
-                builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
-            }
-            if let Some(fs) = span.font_size {
-                builder.push(StyleProperty::FontSize(fs as f32), range.clone());
+            // Skip zero-width spans: an empty style range panics in parley
+            // (`style_run.range.start < style_run.range.end`).
+            if !range.is_empty() {
+                if let Some(ref c) = span.color {
+                    builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
+                }
+                if span.bold {
+                    builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+                }
+                if span.italic {
+                    builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
+                }
+                if let Some(fs) = span.font_size {
+                    builder.push(StyleProperty::FontSize(fs as f32), range.clone());
+                }
             }
             if span.underline {
                 underline_ranges.push((byte_offset, byte_offset + span_byte_len));
