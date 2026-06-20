@@ -37,7 +37,8 @@ interface AstNode {
 const host = (): TurHost =>
     (globalThis as unknown as { __turHost: TurHost }).__turHost;
 
-/** Highlight palette indexed by token kind (see tur-wasm `classify_token`).
+/** Highlight palette indexed by token kind (see tur-wasm `highlight_tsx`).
+ *  0–6 are lexical (lexer); 7–11 are AST-derived semantic categories.
  *  Pulled from `code.*` design tokens — see DESIGN-SYSTEM.md §1.1. */
 const KIND_COLOR: unknown[] = [
     code.fg, // 0 default
@@ -47,6 +48,11 @@ const KIND_COLOR: unknown[] = [
     code.comment, // 4 comment
     code.operator, // 5 operator/punct
     code.literal, // 6 literal (true/false/null)
+    code.decl, // 7 declaration / import / call-callee name
+    code.jsxTag, // 8 JSX tag name
+    code.jsxAttr, // 9 JSX attribute name
+    code.type, // 10 interface/type name
+    code.property, // 11 object-literal key / member `.prop`
 ];
 
 export interface CaseCompileResult {

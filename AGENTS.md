@@ -199,5 +199,9 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 
 ### Always verify visually with browser-operate
 
-`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements.
+`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since the operate agent's color perception is unreliable.
+
+### Stop the dev server after verification
+
+Once visual verification is done, **kill the dev server** — free port 8080 with `lsof -ti:8080 | xargs kill` (or `pkill -f "rspack dev"`). Do not leave it running — it holds port 8080 and rebuilds wasm on every watch cycle.
 
