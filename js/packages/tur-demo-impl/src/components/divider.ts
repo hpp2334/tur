@@ -4,9 +4,9 @@ import {
     derive,
     type EdgyElement,
     get,
-    type Point,
     MouseRegion,
     mutate,
+    type Point,
     PointerInteract,
     set,
     source,
@@ -67,7 +67,10 @@ export function VDivider(opts: {
                     },
                 };
                 dragLast = { x: ev.global.x, y: ev.global.y };
-                if (event.deltaFromLast.x !== 0 || event.deltaFromLast.y !== 0) {
+                if (
+                    event.deltaFromLast.x !== 0 ||
+                    event.deltaFromLast.y !== 0
+                ) {
                     opts.onDrag(event);
                 }
             }),

@@ -4,20 +4,16 @@ import {
     Container,
     CrossAxisAlignment,
     component,
+    derive,
     type EdgyComponent,
     type EdgyElement,
     Expanded,
-    derive,
     get,
     Row,
-    set,
     Switch,
+    set,
 } from "@tur/edgy";
-import {
-    editorWidth$,
-    layoutMode$,
-    sidebarWidth$,
-} from "../state";
+import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
 import { VDivider } from "./divider";
 import { Editor } from "./editor";

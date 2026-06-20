@@ -28,11 +28,17 @@ export default component(() =>
         children: [
             Expanded({
                 flex: derive(() => get(flexA$)),
-                child: Container({ color: Color.hex("#ef4444"), queryKey: ["a"] }),
+                child: Container({
+                    color: Color.hex("#ef4444"),
+                    queryKey: ["a"],
+                }),
             }),
             Expanded({
                 flex: derive(() => get(flexB$)),
-                child: Container({ color: Color.hex("#22c55e"), queryKey: ["b"] }),
+                child: Container({
+                    color: Color.hex("#22c55e"),
+                    queryKey: ["b"],
+                }),
             }),
         ],
     }),
