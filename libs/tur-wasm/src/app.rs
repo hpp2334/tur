@@ -21,11 +21,13 @@ struct WasmState {
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _wheel_closure: Closure<dyn Fn(web_sys::WheelEvent)>,
+    _context_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _compositionstart_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
     _compositionupdate_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
     _compositionend_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
+    _paste_closure: Closure<dyn Fn(web_sys::ClipboardEvent)>,
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
@@ -155,6 +157,28 @@ fn register_host_services(app: &mut TurApp) {
     });
     if let Err(e) = app.register_host_fn("generateAst", 1, generate_ast) {
         tracing::error!("failed to register generateAst: {e}");
+    }
+
+    // Clipboard write bridge — `__turHost.clipboardWriteText(text)`. Used by
+    // the engine's editable text Cmd+C / Cmd+X handling (which extracts the
+    // selected text and pushes AppEvent::ClipboardWrite). The wasm layer
+    // owns the actual browser clipboard interaction. Fire-and-forget — the
+    // returned Promise is discarded.
+    let clipboard_write = NativeFunction::from_copy_closure(|_this, args, _ctx| {
+        let text = args
+            .get_or_undefined(0)
+            .as_string()
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_default();
+        if let Some(window) = web_sys::window() {
+            let clipboard = window.navigator().clipboard();
+            // Fire-and-forget — discard the returned Promise.
+            let _ = clipboard.write_text(&text);
+        }
+        Ok(JsValue::undefined())
+    });
+    if let Err(e) = app.register_host_fn("clipboardWriteText", 1, clipboard_write) {
+        tracing::error!("failed to register clipboardWriteText: {e}");
     }
 }
 
@@ -494,6 +518,34 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            // Context menu (right-click) listener. We prevent the default
+            // browser menu and forward the click position to the engine,
+            // which dispatches a `ContextMenu` gesture to every element in
+            // the hit-path.
+            let context_state = state_clone.clone();
+            let context_closure =
+                Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    event.prevent_default();
+                    let guard = context_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        let rect = s._canvas.get_bounding_client_rect();
+                        let x = event.client_x() as f64 - rect.left();
+                        let y = event.client_y() as f64 - rect.top();
+                        s.app.push_event(AppEvent::Gesture(
+                            AppGestureEvent::ContextMenu {
+                                position: Offset::new(x, y),
+                            },
+                        ));
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "contextmenu",
+                    context_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             canvas
                 .set_attribute("tabindex", "0")
                 .err_to_jsval()?;
@@ -636,6 +688,35 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            // Paste listener — when the user presses Cmd+V (or Ctrl+V) while
+            // the hidden textarea is focused, the browser fires a `paste`
+            // event with `clipboardData`. We forward the text to the engine
+            // via AppEvent::ClipboardPaste, which the engine's
+            // ClipboardPasteHandler inserts into the focused editable.
+            let paste_state = state_clone.clone();
+            let paste_closure =
+                Closure::<dyn Fn(web_sys::ClipboardEvent)>::new(move |event: web_sys::ClipboardEvent| {
+                    event.prevent_default();
+                    let text = event
+                        .clipboard_data()
+                        .and_then(|d| d.get_data("text/plain").ok())
+                        .unwrap_or_default();
+                    if text.is_empty() {
+                        return;
+                    }
+                    let guard = paste_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.app.push_event(AppEvent::ClipboardPaste { text });
+                    }
+                });
+
+            textarea
+                .add_event_listener_with_callback(
+                    "paste",
+                    paste_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             let wasm_state = WasmState {
                 app,
                 _canvas: canvas,
@@ -646,11 +727,13 @@ impl TurWasmApp {
                 _pointer_up_closure: pointer_up_closure,
                 _pointer_move_closure: pointer_move_closure,
                 _wheel_closure: wheel_closure,
+                _context_closure: context_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
                 _compositionstart_closure: compositionstart_closure,
                 _compositionupdate_closure: compositionupdate_closure,
                 _compositionend_closure: compositionend_closure,
+                _paste_closure: paste_closure,
                 _raf_closure: RefCell::new(None),
             };
 

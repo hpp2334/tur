@@ -35,6 +35,10 @@ web-sys = { workspace = true, features = [
     "DomRect",
     "DomRectReadOnly",
     "WheelEvent",
+    "Navigator",
+    "Clipboard",
+    "ClipboardEvent",
+    "DataTransfer",
 ] }
 js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
