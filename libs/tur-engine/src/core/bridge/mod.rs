@@ -8,6 +8,7 @@ use boa_engine::Context;
 
 use crate::core::app::TurAppInternal;
 use crate::core::bridge::color::{tur_create_color, tur_create_linear_gradient};
+use crate::core::bridge::dev_tool::{tur_dev_tool_element_tree, tur_dev_tool_get_element};
 use crate::core::bridge::reactive_bridge::{
     tur_component, tur_derive, tur_get, tur_mutate, tur_set, tur_source,
 };
@@ -25,6 +26,7 @@ use crate::core::render::Renderer;
 
 pub(crate) mod color;
 pub(crate) mod console;
+pub(crate) mod dev_tool;
 pub(crate) mod executor;
 pub(crate) mod reactive_bridge;
 pub(crate) mod utils;
@@ -174,6 +176,21 @@ pub fn init_bridge(
         build_fn(context, &js_name, 2, tur_request_focus),
     );
 
+    // Dev-tool natives: called by the public `turDevTool` global (registered
+    // just below). Underscore-prefixed to mark them as internal bridge fns.
+    let js_name = js_string!("_dev_tool_element_tree");
+    set_prop(
+        &tur_obj,
+        js_name.clone(),
+        build_fn(context, &js_name, 1, tur_dev_tool_element_tree),
+    );
+    let js_name = js_string!("_dev_tool_get_element");
+    set_prop(
+        &tur_obj,
+        js_name.clone(),
+        build_fn(context, &js_name, 2, tur_dev_tool_get_element),
+    );
+
     let internal = TurAppInternal::new(renderer, font_loader, executor.clone());
     {
         let mut ctx = internal.app_context.borrow_mut();
@@ -217,6 +234,20 @@ pub fn init_bridge(
     context
         .register_global_property(js_string!("__tur"), tur_obj, Attribute::all())
         .expect("failed to register __tur global");
+
+    // Register the public `turDevTool` global. It's a tiny JS wrapper that
+    // forwards to `__tur._dev_tool_*(__tur.__ctx)` — keeping the ctx-first
+    // convention every other `__tur.*` API uses while exposing a clean
+    // no-arg surface to dev-tool callers.
+    let dev_tool_src = r#"
+        globalThis.turDevTool = {
+            elementTree() { return __tur._dev_tool_element_tree(__tur.__ctx); },
+            getElement(id) { return __tur._dev_tool_get_element(__tur.__ctx, id); },
+        };
+    "#;
+    if let Err(e) = context.eval(boa_engine::Source::from_bytes(dev_tool_src)) {
+        tracing::error!("failed to register turDevTool global: {e}");
+    }
 
     let schedule_flush = internal.needs_draw.clone();
     let timer_state = std::rc::Rc::new(std::cell::RefCell::new(TimerState::new()));

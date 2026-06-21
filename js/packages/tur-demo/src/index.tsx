@@ -54,6 +54,9 @@ async function main(): Promise<void> {
         if (status) status.textContent = "booting tur…";
         const app = await TurWasmApp.create();
         (globalThis as Record<string, unknown>).turApp = app;
+        (globalThis as Record<string, unknown>).turDevTool = (
+            app as { dev_tool: () => unknown }
+        ).dev_tool();
 
         if (status) status.textContent = "loading playground…";
         const resp = await fetch("./impl.js");

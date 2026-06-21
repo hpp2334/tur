@@ -561,7 +561,7 @@ Row({
 })
 ```
 
-**Symptom of violation**: a Container reports its width as the parent's full width even though its visible content is much narrower. Debug via `globalThis.turApp.debug_layout()`.
+**Symptom of violation**: a Container reports its width as the parent's full width even though its visible content is much narrower. Debug via `JSON.parse(globalThis.turDevTool.elementTree())`.
 
 ### 9.5 Pattern: debounced auto-run via `setTimeout`
 

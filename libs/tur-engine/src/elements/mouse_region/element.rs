@@ -6,7 +6,7 @@ use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
@@ -82,7 +82,15 @@ impl MouseRegionElement {
 
 impl Effect for MouseRegionElement {}
 
-impl ElementTrace for MouseRegionElement {}
+impl ElementTrace for MouseRegionElement {
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let mut p = vec![("behavior", TraceValue::Str(format!("{:?}", self.behavior)))];
+        if let Some(v) = self.component.cursor.as_ref().and_then(Val::as_static) {
+            p.push(("cursor", TraceValue::Str(v.clone())));
+        }
+        p
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Factory — called from the JS bridge to parse props into a spec.

@@ -193,13 +193,13 @@ cd js/packages/tur-demo && TUR_TUNNEL=1 rspack dev
 The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. Typical flow:
 
 1. `playwright_browser_navigate` → `http://localhost:8080/`.
-2. `playwright_browser_evaluate` → read `globalThis.turApp.debug_layout()` for exact element rects. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
+2. `playwright_browser_evaluate` → read `JSON.parse(globalThis.turDevTool.elementTree())` for exact element rects. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `JSON.parse(globalThis.turDevTool.getElement(childId))`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
 3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: `new KeyboardEvent('keydown', { key, metaKey })` — events route to the focused element. The editor's `EditableText` supports select-all (`Meta+a`), typing, `Backspace`, arrows, `Enter`, and `Cmd-S` (recompile).
-4. Re-read `debug_layout()` or take a screenshot to confirm the result.
+4. Re-read `turDevTool.elementTree()` / `getElement(id)` or take a screenshot to confirm the result.
 
 ### Always verify visually with browser-operate
 
-`debug_layout()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since the operate agent's color perception is unreliable.
+`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since the operate agent's color perception is unreliable.
 
 ### Stop the dev server after verification
 

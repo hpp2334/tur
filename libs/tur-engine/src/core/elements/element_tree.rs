@@ -6,7 +6,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::{Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementObject;
+use crate::core::elements::{ElementObject, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
 use crate::core::reactive::{AtomId, Store};
@@ -547,66 +547,49 @@ impl ElementTree {
         true
     }
 
-    pub fn debug_layout(&self) -> String {
-        let root_id = match self.root_id {
-            Some(id) => id,
-            None => return String::new(),
-        };
-        let mut buf = String::new();
-        self.debug_node(root_id, &mut buf, "", Offset::ZERO);
-        buf
-    }
-
-    fn debug_node(
-        &self,
-        id: ElementNodeId,
-        buf: &mut String,
-        prefix: &str,
-        parent_offset: Offset,
-    ) {
-        let node = match self.nodes.get(&id) {
-            Some(n) => n,
-            None => return,
-        };
-        let element = match node.element.as_ref() {
-            Some(e) => e,
-            None => return,
-        };
-
-        let label = element.trace_label();
-        let label_str = if label.is_empty() {
-            String::new()
-        } else {
-            format!(" {label}")
-        };
-        let query_key_str = match &node.query_key {
-            Some(keys) if !keys.is_empty() => format!(" [{}]", keys.join(", ")),
-            _ => String::new(),
-        };
-        let abs = parent_offset + node.computed_layout.offset;
-        buf.push_str(&format!(
-            "{}{}{}{} abs({:.1},{:.1}) {:.1}x{:.1}\n",
-            prefix,
-            element.type_name(),
-            label_str,
-            query_key_str,
-            abs.x,
-            abs.y,
-            node.computed_layout.size.width,
-            node.computed_layout.size.height,
-        ));
-
-        let child_count = node.children.len();
-        for (i, &child_id) in node.children.iter().enumerate() {
-            let last = i == child_count - 1;
-            let child_prefix = if last { "└── " } else { "├── " };
-            let nested_prefix = if last { "    " } else { "│   " };
-            self.debug_node(
-                child_id,
-                buf,
-                &format!("{}{}", prefix.trim_end_matches(child_prefix), nested_prefix),
-                abs,
-            );
+    /// Structured snapshot of one node for the `turDevTool` API.
+    ///
+    /// Returns `None` if the node or its element is missing. `children` are
+    /// bare ids only — callers iterate by invoking `dev_tool_node` per child
+    /// id. Lazy traversal keeps payloads small and avoids deep recursion
+    /// across the JS bridge.
+    pub fn dev_tool_node(&self, id: ElementNodeId) -> Option<DevNodeData> {
+        let node = self.nodes.get(&id)?;
+        let element = node.element.as_ref()?;
+        let relative = node.computed_layout.offset;
+        // Absolute offset = sum of this node's offset plus every ancestor's.
+        let mut absolute = relative;
+        let mut ancestor = node.parent;
+        while let Some(pid) = ancestor {
+            let p = self.nodes.get(&pid)?;
+            absolute = Offset::new(absolute.x + p.computed_layout.offset.x, absolute.y + p.computed_layout.offset.y);
+            ancestor = p.parent;
         }
+        Some(DevNodeData {
+            id: node.id,
+            name: element.type_name(),
+            label: element.trace_label(),
+            props: element.trace_props(),
+            layout_extra: element.trace_layout_extra(),
+            relative: (relative.x, relative.y),
+            absolute: (absolute.x, absolute.y),
+            size: (node.computed_layout.size.width, node.computed_layout.size.height),
+            query_key: node.query_key.clone(),
+            children: node.children.clone(),
+        })
     }
+}
+
+/// Structured snapshot of a single node for the `turDevTool` API.
+pub struct DevNodeData {
+    pub id: ElementNodeId,
+    pub name: &'static str,
+    pub label: String,
+    pub props: Vec<(&'static str, TraceValue)>,
+    pub layout_extra: Vec<(&'static str, TraceValue)>,
+    pub relative: (f64, f64),
+    pub absolute: (f64, f64),
+    pub size: (f64, f64),
+    pub query_key: Option<Vec<String>>,
+    pub children: Vec<ElementNodeId>,
 }

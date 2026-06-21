@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     val_from_js, Component, ComponentFactory, Effect, JsComponentFactory, PropValue, Val, WidgetCx,
 };
@@ -197,6 +197,15 @@ impl ElementTrace for SwitchElement {
             Mounted::Case(k) => format!("branch=case({:?})", k),
             Mounted::Fallback => "branch=fallback".to_string(),
         }
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let branch = match &self.mounted {
+            Mounted::None => "none".to_string(),
+            Mounted::Case(k) => format!("case({:?})", k),
+            Mounted::Fallback => "fallback".to_string(),
+        };
+        vec![("mountedBranch", TraceValue::Str(branch))]
     }
 }
 

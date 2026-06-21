@@ -5,7 +5,7 @@ use boa_engine::Context;
 use tur_shared::{Alignment, Size, StackFit};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 // ---------------------------------------------------------------------------
@@ -65,6 +65,18 @@ impl ElementTrace for StackElement {
             parts.push(format!("alignment={a:?}"));
         }
         parts.join(" ")
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        if let Some(v) = c.fit.as_ref().and_then(Val::as_static) {
+            p.push(("fit", TraceValue::Str(format!("{v:?}"))));
+        }
+        if let Some(v) = c.alignment.as_ref().and_then(Val::as_static) {
+            p.push(("alignment", TraceValue::Str(format!("{v:?}"))));
+        }
+        p
     }
 }
 

@@ -171,8 +171,21 @@ impl TurApp {
             .take()
     }
 
-    pub fn debug_layout(&self) -> String {
-        self.internal.js_context.element_tree.borrow().debug_layout()
+    /// Structured dev-tool snapshot of the root node. Returns `None` if no
+    /// tree is mounted. Children are returned as bare ids; iterate with
+    /// `dev_tool_get_element`.
+    pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
+        let tree = self.internal.js_context.element_tree.borrow();
+        let root_id = tree.root_id()?;
+        tree.dev_tool_node(root_id)
+    }
+
+    /// Structured dev-tool snapshot of an arbitrary node by id.
+    pub fn dev_tool_get_element(
+        &self,
+        id: core::element::ElementNodeId,
+    ) -> Option<core::elements::DevNodeData> {
+        self.internal.js_context.element_tree.borrow().dev_tool_node(id)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
@@ -228,27 +241,6 @@ impl TurApp {
             abs_y + line_info.top as f64,
             2.0,
             line_info.height as f64,
-        ))
-    }
-
-    /// Debug accessor: `(text_len, cursor, anchor, end, num_layout_lines,
-    /// layout_width, layout_height)` for the focused editable text, if any.
-    pub fn focused_editable_state(&self) -> Option<(usize, usize, usize, usize, usize, f32, f32)> {
-        let focused_id = self.focused_element()?;
-        let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get(focused_id)?;
-        let element = node.element.as_ref()?;
-        let editable_el = element.cast::<EditableTextElement>()?;
-        let layout_data = editable_el.cached_layout.as_ref()?;
-        let c = editable_el.controller();
-        Some((
-            c.full_len(),
-            c.cursor_position(),
-            c.selection_anchor(),
-            c.selection_end(),
-            layout_data.line_infos.len(),
-            layout_data._width,
-            layout_data._height,
         ))
     }
 

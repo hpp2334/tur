@@ -6,7 +6,7 @@ use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext};
+use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
@@ -89,7 +89,11 @@ impl PointerInteractElement {
 
 impl Effect for PointerInteractElement {}
 
-impl ElementTrace for PointerInteractElement {}
+impl ElementTrace for PointerInteractElement {
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        vec![("behavior", TraceValue::Str(format!("{:?}", self.behavior)))]
+    }
+}
 
 impl ElementOnGesture for PointerInteractElement {
     fn on_gesture_event(

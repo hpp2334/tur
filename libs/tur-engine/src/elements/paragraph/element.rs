@@ -5,7 +5,7 @@ use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementTrace,
+    ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::core::text::SelectionChangeEvent;
 use crate::core::widget::{
@@ -115,6 +115,21 @@ impl ElementTrace for TextElement {
             let head: String = text.chars().take(20).collect();
             format!("\"{head}\"")
         }
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        if let Some(spans) = &c.spans {
+            let text: String = spans.iter().map(|s| s.text.as_str()).collect();
+            p.push(("text", TraceValue::Str(text)));
+        } else if let Some(v) = c.text.as_ref().and_then(Val::as_static) {
+            p.push(("text", TraceValue::Str(v.clone())));
+        }
+        if let Some(v) = c.font_size.as_ref().and_then(Val::as_static) {
+            p.push(("fontSize", TraceValue::Num(*v)));
+        }
+        p
     }
 }
 

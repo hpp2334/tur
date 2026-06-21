@@ -7,7 +7,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{CrossAxisAlignment, MainAxisSize, MainAxisAlignment};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::reactive::{extract_atom, AtomId};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 use crate::elements::flex::FlexElement;
@@ -168,6 +168,10 @@ impl Effect for EachElement {
 impl ElementTrace for EachElement {
     fn trace_label(&self) -> String {
         format!("items={}", self.mounted.len())
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        vec![("itemCount", TraceValue::Num(self.mounted.len() as f64))]
     }
 }
 

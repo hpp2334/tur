@@ -7,7 +7,7 @@ use tur_shared::{Axis, Brush, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
-    WheelEvent,
+    TraceValue, WheelEvent,
 };
 use crate::core::scroll::{ScrollController, ScrollEvent};
 use crate::core::widget::{
@@ -153,6 +153,23 @@ impl ElementTrace for ScrollViewElement {
             ct.width,
             ct.height,
         )
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        vec![("axis", TraceValue::Str(format!("{:?}", self.axis)))]
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        let vp = self.viewport_size();
+        let ct = self.content_size();
+        vec![
+            ("offset", TraceValue::Num(self.position.pixels())),
+            ("maxScrollExtent", TraceValue::Num(self.position.max_scroll_extent())),
+            ("viewportWidth", TraceValue::Num(vp.width)),
+            ("viewportHeight", TraceValue::Num(vp.height)),
+            ("contentWidth", TraceValue::Num(ct.width)),
+            ("contentHeight", TraceValue::Num(ct.height)),
+        ]
     }
 }
 

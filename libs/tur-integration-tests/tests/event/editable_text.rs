@@ -1007,7 +1007,23 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     app.click(left + 2.0, top + 2.0);
     app.render();
     let (x0, y0, _) = caret_rect(&app);
-    let (_len, _cur, _a, _e, num_lines, lw, lh) = app.focused_editable_state().unwrap();
+    let dev = app.dev_tool_get_element(id).expect("editable dev node");
+    let extra = |name: &str| -> f64 {
+        dev.layout_extra
+            .iter()
+            .find(|(k, _)| *k == name)
+            .and_then(|(_, v)| {
+                if let tur_engine::core::elements::TraceValue::Num(n) = v {
+                    Some(*n)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0.0)
+    };
+    let num_lines = extra("numLines") as usize;
+    let lw = extra("layoutWidth") as f32;
+    let lh = extra("layoutHeight") as f32;
     eprintln!("softwrap: num_lines={num_lines} layout_w={lw:.1} layout_h={lh:.1} x0={x0} y0={y0}");
     assert!(num_lines > 1, "spaced line should wrap (num_lines={num_lines})");
     let line_h = lh / num_lines as f32;

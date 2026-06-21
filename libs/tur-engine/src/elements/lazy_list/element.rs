@@ -9,7 +9,7 @@ use crate::core::edgy_event::EventArg;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
-    WheelEvent,
+    TraceValue, WheelEvent,
 };
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
@@ -266,6 +266,24 @@ impl ElementTrace for LazyListElement {
             self.reported_start,
             self.reported_end,
         )
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        vec![
+            ("axis", TraceValue::Str(format!("{:?}", self.axis))),
+            ("itemCount", TraceValue::Num(self.item_count() as f64)),
+            ("builtCount", TraceValue::Num(self.visible.len() as f64)),
+            ("overscan", TraceValue::Num(self.overscan as f64)),
+        ]
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        vec![
+            ("offset", TraceValue::Num(self.position.pixels())),
+            ("maxScrollExtent", TraceValue::Num(self.position.max_scroll_extent())),
+            ("rangeStart", TraceValue::Num(self.reported_start as f64)),
+            ("rangeEnd", TraceValue::Num(self.reported_end as f64)),
+        ]
     }
 }
 
