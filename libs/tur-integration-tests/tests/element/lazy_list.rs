@@ -180,3 +180,60 @@ fn lazy_list_scroll_clamps_at_content_end() {
         );
     });
 }
+
+#[test]
+fn lazy_list_virtualizes_large_item_count() {
+    // Build a LazyList inline with 10,000 fixed-extent items and verify
+    // that only a small subset is actually mounted after layout + scroll.
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle_source(r#"
+        const ctx = globalThis.__tur.__ctx;
+        globalThis.__tur.render(ctx, globalThis.__tur.LazyList(ctx, {
+            axis: 0,
+            itemCount: 10000,
+            itemExtent: 50,
+            overscan: 2,
+            builder: (i) => globalThis.__tur.Container(ctx, {
+                height: 50,
+                color: globalThis.__tur.createColor(ctx, 200, 200, 200, 255),
+                children: [globalThis.__tur.Text(ctx, { text: "Item " + i })],
+            }),
+        }));
+    "#).unwrap();
+    app.render();
+
+    let ll_id = {
+        let tree = app.element_tree();
+        let root = tree.root().unwrap();
+        root.children[0]
+    };
+
+    // After layout, the visible range should be roughly (viewport / extent)
+    // + 2x overscan = 12 + 4 = 16 items — NOT 10,000.
+    app.with_element(ll_id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        let built = ll.built_count();
+        assert!(built < 50,
+            "virtualized list should mount < 50 items, got {built}");
+        assert!(built >= 12,
+            "virtualized list should mount at least viewport/extent items, got {built}");
+        assert_eq!(ll.item_count(), 10000,
+            "declared item count should still be 10000");
+    });
+
+    // Scroll by 5000px = 100 items. The mounted set should shift to the
+    // [~100, ~112] range but still be small.
+    app.wheel(0.0, 5000.0, 200.0, 300.0);
+    app.render();
+
+    app.with_element(ll_id, |e| {
+        let ll = e.cast::<LazyListElement>().unwrap();
+        let built = ll.built_count();
+        assert!(built < 50,
+            "after scroll, virtualized list should still mount < 50 items, got {built}");
+        // The first mounted index should be near 100.
+        let first_idx = ll.first_mounted_index().unwrap_or(0);
+        assert!(first_idx >= 95 && first_idx <= 105,
+            "first mounted index should be near 100, got {first_idx}");
+    });
+}

@@ -19,7 +19,7 @@ use crate::core::bridge::utils::{
 };
 use crate::core::bridge::widget_bridge::{
     tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
-    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_mouse_region, tur_switch, tur_pointer_interact,    tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text,
+    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_mouse_region, tur_switch, tur_opacity, tur_pointer_interact, tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text, tur_transform,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -105,7 +105,7 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 29] = [
+    ); 31] = [
         // --- reactive primitives ---
         ("source", 2, tur_source),
         ("derive", 2, tur_derive),
@@ -133,6 +133,8 @@ pub fn init_bridge(
         ("InputEdgy", 2, tur_input_edgy),
         ("Fragment", 2, tur_fragment),
         ("Focusable", 2, tur_focusable),
+        ("Opacity", 2, tur_opacity),
+        ("Transform", 2, tur_transform),
         ("render", 2, tur_render),
         // --- utility functions ---
         ("createTextEditingController", 2, tur_create_text_editing_controller),
@@ -220,6 +222,9 @@ pub fn init_bridge(
         ));
         ctx.register_handler(Box::new(
             crate::handlers::scroll_to::ScrollToHandler,
+        ));
+        ctx.register_handler(Box::new(
+            crate::handlers::clipboard::ClipboardPasteHandler,
         ));
     }
 

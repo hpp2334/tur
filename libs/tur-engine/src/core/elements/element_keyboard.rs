@@ -26,6 +26,13 @@ impl<'a> ElementOnKeyboardContext<'a> {
     pub fn request_redraw(&mut self) {
         self.app_event_queue.push(AppEvent::RequestDraw);
     }
+
+    /// Request that the embedder write `text` to the system clipboard.
+    /// The embedder (e.g. tur-wasm) processes this via a host bridge; in
+    /// test harnesses without a clipboard, it's a no-op.
+    pub fn push_clipboard_write(&mut self, text: String) {
+        self.app_event_queue.push(AppEvent::ClipboardWrite { text });
+    }
 }
 
 pub trait ElementOnKeyboard: 'static {

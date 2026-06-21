@@ -233,6 +233,42 @@ impl Canvas for VelloPaintContext<'_> {
     fn pop_clip(&mut self) {
         self.scene.pop_layer();
     }
+
+    fn push_opacity(&mut self, opacity: f32) {
+        // Push a layer with a near-infinite clip and reduced alpha. Vello
+        // composites the layer contents with the given opacity when
+        // pop_layer is called.
+        let opacity = opacity.clamp(0.0, 1.0);
+        let huge_clip = Rect::new(-1e6, -1e6, 1e6, 1e6);
+        self.scene.push_layer(
+            Fill::NonZero,
+            BlendMode::default(),
+            opacity,
+            Affine::IDENTITY,
+            &huge_clip,
+        );
+    }
+
+    fn pop_opacity(&mut self) {
+        self.scene.pop_layer();
+    }
+
+    fn push_transform(&mut self, transform: Affine) {
+        // A transform layer with full opacity and a near-infinite clip just
+        // changes the coordinate system for subsequent draws.
+        let huge_clip = Rect::new(-1e6, -1e6, 1e6, 1e6);
+        self.scene.push_layer(
+            Fill::NonZero,
+            BlendMode::default(),
+            1.0,
+            transform,
+            &huge_clip,
+        );
+    }
+
+    fn pop_transform(&mut self) {
+        self.scene.pop_layer();
+    }
 }
 
 fn to_peniko_color(color: &Color) -> vello::peniko::Color {

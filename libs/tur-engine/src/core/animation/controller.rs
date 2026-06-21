@@ -4,13 +4,14 @@ use std::rc::Rc;
 use boa_engine::class::{Class, ClassBuilder};
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 use tur_shared::AnimationCurve;
 
+use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::core::animation::AnimationManager;
+use crate::core::edgy_event::{EdgyMutation, PendingMutationInvocationQueue, extract_mutation_from_opts};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationStatus {
@@ -18,6 +19,7 @@ pub enum AnimationStatus {
     Forward,
     Reverse,
     Completed,
+    Paused,
 }
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -29,23 +31,31 @@ pub struct AnimationController {
     pub(crate) status: AnimationStatus,
     pub(crate) repeat_count: Option<u64>,
     pub(crate) current_iteration: u64,
-    on_tick: Option<JsFunction>,
-    on_end: Option<JsFunction>,
+    /// The `value` captured when this animation segment started (set by
+    /// `forward`/`reverse`/`resume`/`seek`). Used by `tick` to compute the
+    /// current value relative to the start, which makes `speed`, `seek`,
+    /// and `pause`/`resume` work correctly.
+    pub(crate) value_at_start: f64,
+    /// Time multiplier (default 1.0). Mutated by `set_speed`. Higher values
+    /// play faster; 0.5 = half speed, 2.0 = double speed.
+    pub(crate) speed: f64,
+    /// The direction the controller was traveling before `pause()` — used
+    /// by `resume()` to pick up where it left off.
+    pub(crate) paused_direction: Option<AnimationStatus>,
+    /// Atom-backed callback handle for `onTick`. Resolved via the reactive
+    /// store at flush time (just like every other event handler), so the
+    /// callback runs after all `RefMut` borrows are released.
+    on_tick: Option<EdgyMutation<AnimationTickEvent>>,
+    /// Atom-backed callback handle for `onEnd`. Same dispatch path as
+    /// `on_tick`.
+    on_end: Option<EdgyMutation<AnimationEndEvent>>,
     start_time_ms: Option<u64>,
     animation_manager: Option<Rc<RefCell<AnimationManager>>>,
-}
-
-fn extract_callable(value: &JsValue) -> Option<JsFunction> {
-    value.as_object().and_then(JsFunction::from_object)
-}
-
-fn extract_callable_from_opts(
-    opts: &boa_engine::object::JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsFunction> {
-    let val = opts.get(js_string!(key), ctx).ok()?;
-    extract_callable(&val)
+    /// The engine-wide mutation queue. Set by `tur_create_animation_controller`
+    /// at construction time. Used to defer `onTick` / `onEnd` invocations to
+    /// the next flush — never invoke these callbacks synchronously while
+    /// holding a `RefMut` on the controller.
+    mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
 }
 
 impl AnimationController {
@@ -57,10 +67,14 @@ impl AnimationController {
             status: AnimationStatus::Stopped,
             repeat_count: None,
             current_iteration: 0,
+            value_at_start: 0.0,
+            speed: 1.0,
+            paused_direction: None,
             on_tick: None,
             on_end: None,
             start_time_ms: None,
             animation_manager: None,
+            mutation_queue: None,
         }
     }
 
@@ -75,7 +89,69 @@ impl AnimationController {
         self.animation_manager = Some(mgr);
     }
 
-    pub fn tick(&mut self, now_ms: u64, ctx: &mut Context) -> bool {
+    /// Set the engine-wide mutation queue. Called once at construction by
+    /// `tur_create_animation_controller`. Required for `onTick` / `onEnd`
+    /// dispatch — if `None`, callbacks are silently dropped.
+    pub fn set_mutation_queue(&mut self, queue: Rc<RefCell<PendingMutationInvocationQueue>>) {
+        self.mutation_queue = Some(queue);
+    }
+
+    /// Enqueue an `onTick(eased_t)` invocation on the mutation queue. The
+    /// callback fires during the next `flush_pending_mutations` pass, after
+    /// any active `RefMut` borrow on this controller (or any other) is
+    /// released. Safe to call while holding a `RefMut` — this only clones
+    /// an `AtomId` and pushes a `Box<dyn EventArg>` onto a separate `RefCell`.
+    fn enqueue_tick(&self, eased_t: f64) {
+        if let (Some(queue), Some(m)) = (&self.mutation_queue, self.on_tick) {
+            queue.borrow_mut().push(m, AnimationTickEvent(eased_t));
+        }
+    }
+
+    /// Enqueue an `onEnd()` invocation. See `enqueue_tick` for the dispatch
+    /// rationale.
+    fn enqueue_end(&self) {
+        if let (Some(queue), Some(m)) = (&self.mutation_queue, self.on_end) {
+            queue.borrow_mut().push(m, AnimationEndEvent);
+        }
+    }
+
+    /// Recompute `start_time_ms` so the next `tick` continues from the
+    /// current `value`. Used after `seek` and `set_speed` to keep the math
+    /// consistent.
+    fn rebase_start_to_current_value(&mut self, now_ms: u64) {
+        if self.duration_ms == 0 {
+            self.start_time_ms = Some(now_ms);
+            return;
+        }
+        // We have value = value_at_start + direction * (elapsed * speed / duration).
+        // Solve for elapsed: elapsed = (value - value_at_start) * duration / (direction * speed).
+        let direction: f64 = if self.status == AnimationStatus::Forward {
+            1.0
+        } else {
+            -1.0
+        };
+        let delta = self.value - self.value_at_start;
+        let elapsed_ms = if (direction * self.speed).abs() < 1e-9 {
+            0.0
+        } else {
+            (delta * self.duration_ms as f64) / (direction * self.speed)
+        };
+        // elapsed_ms may be negative if value moved backwards — clamp to >=0
+        // to keep start_time in the past.
+        let elapsed_ms = elapsed_ms.max(0.0);
+        self.start_time_ms = Some(now_ms.saturating_sub(elapsed_ms as u64));
+    }
+
+    /// Compute one tick of the animation: update `value` and `status` based
+    /// on the elapsed time, and **enqueue** (not fire) the `onTick` / `onEnd`
+    /// callbacks on the mutation queue. The callbacks fire during the next
+    /// `flush_pending_mutations` pass, after all `RefMut` borrows are
+    /// released — this avoids the boa `BorrowError` that would otherwise
+    /// occur if a JS callback accessed the controller (e.g. `ctrl.status`).
+    ///
+    /// Returns `true` if the controller ticked (active and had a start time),
+    /// `false` if it was idle.
+    pub(crate) fn tick_compute(&mut self, now_ms: u64) -> bool {
         if !self.is_active() {
             return false;
         }
@@ -89,44 +165,51 @@ impl AnimationController {
             -1.0
         };
 
-        let elapsed = now_ms.saturating_sub(start);
-        let raw_progress = elapsed as f64 / self.duration_ms as f64;
+        let elapsed_ms = now_ms.saturating_sub(start) as f64;
+        let scaled_elapsed_ms = elapsed_ms * self.speed;
+        let progress_delta = scaled_elapsed_ms / self.duration_ms.max(1) as f64;
+
+        let new_value = self.value_at_start + direction * progress_delta;
 
         let max_iterations = self.repeat_count.unwrap_or(1);
-        let (iteration, frac) = if raw_progress >= max_iterations as f64 {
-            (max_iterations, 1.0)
+        let completed = if direction > 0.0 {
+            new_value >= max_iterations as f64
         } else {
-            let iter = (raw_progress as u64).min(max_iterations - 1);
-            let frac = raw_progress - iter as f64;
-            (iter + 1, frac)
+            // Reverse starts at value_at_start (typically 1.0) and decreases.
+            new_value <= (1.0 - max_iterations as f64)
         };
 
-        let completed = frac >= 1.0 && iteration >= max_iterations;
         let t = if completed {
-            1.0f64
+            if direction > 0.0 { 1.0 } else { 0.0 }
+        } else if max_iterations > 1 {
+            let frac = new_value.rem_euclid(1.0);
+            if direction > 0.0 { frac } else { 1.0 - frac }
         } else {
-            frac.min(1.0)
+            new_value.clamp(0.0, 1.0)
         };
 
-        let t = if direction > 0.0 { t } else { 1.0 - t };
-        self.value = t.clamp(0.0, 1.0);
-        let eased_t = self.curve.apply(self.value);
+        self.value = t;
+        self.current_iteration = if completed {
+            max_iterations
+        } else if max_iterations > 1 {
+            (new_value.max(0.0).floor() as u64).min(max_iterations)
+        } else {
+            0
+        };
 
-        if let Some(ref callback) = self.on_tick {
-            let _ = callback.call(&JsValue::undefined(), &[JsValue::from(eased_t)], ctx);
-        }
+        let eased_t = self.curve.apply(t);
 
         if completed {
-            self.current_iteration = max_iterations;
             self.status = AnimationStatus::Completed;
             self.value = if direction > 0.0 { 1.0 } else { 0.0 };
-            if let Some(ref callback) = self.on_end {
-                let _ = callback.call(&JsValue::undefined(), &[], ctx);
-            }
-        } else {
-            self.current_iteration = iteration;
+            self.paused_direction = None;
         }
 
+        // Enqueue callbacks — they fire later, outside the RefMut borrow.
+        self.enqueue_tick(eased_t);
+        if completed {
+            self.enqueue_end();
+        }
         true
     }
 }
@@ -142,8 +225,8 @@ impl Class for AnimationController {
     ) -> JsResult<Self> {
         let mut duration_ms = 300u64;
         let mut curve = AnimationCurve::Linear;
-        let mut on_tick = None;
-        let mut on_end = None;
+        let mut on_tick: Option<EdgyMutation<AnimationTickEvent>> = None;
+        let mut on_end: Option<EdgyMutation<AnimationEndEvent>> = None;
 
         if let Some(opts) = args.get_or_undefined(0).as_object() {
             if let Ok(val) = opts.get(js_string!("duration"), ctx) {
@@ -159,8 +242,8 @@ impl Class for AnimationController {
                         .unwrap_or(AnimationCurve::Linear);
                 }
             }
-            on_tick = extract_callable_from_opts(&opts, "onTick", ctx);
-            on_end = extract_callable_from_opts(&opts, "onEnd", ctx);
+            on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
+            on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
         }
 
         let mut ctrl = Self::new(duration_ms, curve);
@@ -205,6 +288,7 @@ impl Class for AnimationController {
                 AnimationStatus::Forward => "forward",
                 AnimationStatus::Reverse => "reverse",
                 AnimationStatus::Completed => "completed",
+                AnimationStatus::Paused => "paused",
             };
             Ok(JsValue::from(js_string!(s)))
         });
@@ -217,6 +301,16 @@ impl Class for AnimationController {
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.duration_ms as f64))
+        });
+
+        controller_getter!("speed", |this, _, _| {
+            let obj = this.as_object().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            let ctrl = obj
+                .downcast_ref::<AnimationController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            Ok(JsValue::from(ctrl.speed))
         });
 
         class.method(
@@ -234,11 +328,12 @@ impl Class for AnimationController {
                 ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
                 ctrl.current_iteration = 0;
                 ctrl.value = 0.0;
+                ctrl.value_at_start = 0.0;
+                ctrl.paused_direction = None;
 
-                let eased_0 = ctrl.curve.apply(0.0);
-                if let Some(ref callback) = ctrl.on_tick {
-                    let _ = callback.call(&JsValue::undefined(), &[JsValue::from(eased_0)], ctx);
-                }
+                // Enqueue (not fire) so the callback runs in the next flush,
+                // outside the active `RefMut` borrow on `ctrl`.
+                ctrl.enqueue_tick(0.0);
 
                 if let Some(mgr_rc) = &ctrl.animation_manager {
                     mgr_rc.borrow_mut().register_controller(obj.clone());
@@ -263,11 +358,10 @@ impl Class for AnimationController {
                 ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
                 ctrl.current_iteration = 0;
                 ctrl.value = 1.0;
+                ctrl.value_at_start = 1.0;
+                ctrl.paused_direction = None;
 
-                let eased_1 = ctrl.curve.apply(1.0);
-                if let Some(ref callback) = ctrl.on_tick {
-                    let _ = callback.call(&JsValue::undefined(), &[JsValue::from(eased_1)], ctx);
-                }
+                ctrl.enqueue_tick(1.0);
 
                 if let Some(mgr_rc) = &ctrl.animation_manager {
                     mgr_rc.borrow_mut().register_controller(obj.clone());
@@ -290,6 +384,127 @@ impl Class for AnimationController {
 
                 ctrl.status = AnimationStatus::Stopped;
                 ctrl.start_time_ms = None;
+                ctrl.paused_direction = None;
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("pause"),
+            0,
+            NativeFunction::from_fn_ptr(|this, _args, ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<AnimationController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                // Only pause if currently running. Capture the direction so
+                // `resume()` knows which way to continue.
+                if ctrl.is_active() {
+                    // Tick once with the current time so `value` reflects the
+                    // moment of pause before we freeze the start time. The
+                    // tick enqueues any callbacks on the mutation queue
+                    // (fired later, outside this borrow).
+                    let now = ctx.clock().now().millis_since_epoch();
+                    let _ = ctrl.tick_compute(now);
+                    ctrl.paused_direction = Some(ctrl.status);
+                    ctrl.status = AnimationStatus::Paused;
+                    ctrl.start_time_ms = None;
+                }
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("resume"),
+            0,
+            NativeFunction::from_fn_ptr(|this, _args, ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<AnimationController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                if ctrl.status != AnimationStatus::Paused {
+                    return Ok(JsValue::undefined());
+                }
+                let direction = ctrl
+                    .paused_direction
+                    .unwrap_or(AnimationStatus::Forward);
+                ctrl.status = direction;
+                ctrl.value_at_start = ctrl.value;
+                ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
+                ctrl.paused_direction = None;
+
+                if let Some(mgr_rc) = &ctrl.animation_manager {
+                    mgr_rc.borrow_mut().register_controller(obj.clone());
+                }
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("seek"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<AnimationController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                let t = args.get_or_undefined(0).as_number().unwrap_or(0.0).clamp(0.0, 1.0);
+                ctrl.value = t;
+                ctrl.value_at_start = t;
+
+                if ctrl.is_active() {
+                    // Re-base start_time so the next tick continues from t.
+                    let now = ctx.clock().now().millis_since_epoch();
+                    ctrl.rebase_start_to_current_value(now);
+                }
+
+                ctrl.enqueue_tick(t);
+
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("setSpeed"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj
+                    .downcast_mut::<AnimationController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+
+                let s = args.get_or_undefined(0).as_number().unwrap_or(1.0);
+                if s <= 0.0 {
+                    return Err(boa_engine::JsError::from(JsNativeError::range()
+                        .with_message("setSpeed: speed must be positive")));
+                }
+
+                if ctrl.is_active() {
+                    // Tick once at the old speed to align `value` (enqueues
+                    // any pending callbacks), then apply the new speed and
+                    // re-base the start time.
+                    let now = ctx.clock().now().millis_since_epoch();
+                    let _ = ctrl.tick_compute(now);
+                    ctrl.speed = s;
+                    ctrl.value_at_start = ctrl.value;
+                    ctrl.start_time_ms = Some(now);
+                } else {
+                    ctrl.speed = s;
+                }
 
                 Ok(JsValue::undefined())
             }),

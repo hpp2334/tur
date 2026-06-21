@@ -49,20 +49,39 @@ impl ElementLayout for LazyListElement {
         self.child_extents.clear();
         self.child_extents.reserve(children.len());
 
-        let mut total_main = 0.0f64;
+        let mut measured_main = 0.0f64;
         for &child_id in children {
             let size = cx.layout_child(child_id, &child_cs);
             let extent = self.axis.main(size);
             self.child_extents.push(extent);
-            total_main += extent;
+            measured_main += extent;
         }
+
+        // Total content length is computed from the declared item count,
+        // not just the mounted children — so the scrollbar reflects all N
+        // items even though only K are mounted. For fixed `itemExtent`,
+        // this is exact; for variable heights, we extrapolate from the
+        // average of measured children.
+        let avg = self.average_extent();
+        let total_main = if children.len() as u64 >= self.item_count() {
+            // All items are mounted — use the exact sum.
+            measured_main
+        } else if self.child_extents.is_empty() {
+            self.item_count() as f64 * avg
+        } else {
+            // Average over measured children, scaled to declared count.
+            // Use the item_extent directly when provided so the math is exact.
+            self.item_count() as f64 * avg
+        };
 
         let content = match self.axis {
             tur_shared::Axis::Vertical => Size::new(viewport.width, total_main),
             tur_shared::Axis::Horizontal => Size::new(total_main, viewport.height),
         };
         self.position.apply_dimensions(viewport, content);
-        let max_scroll = (total_main - self.axis.main(viewport)).max(0.0);
+        let viewport_main = self.axis.main(viewport);
+        self.last_viewport_main = viewport_main;
+        let max_scroll = (total_main - viewport_main).max(0.0);
         self.position.set_extents(0.0, max_scroll);
 
         viewport

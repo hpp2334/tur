@@ -21,8 +21,28 @@ impl AppHandler for GestureAppHandler {
             AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
                 handle_pointer_up(cx, *position);
             }
+            AppEvent::Gesture(AppGestureEvent::ContextMenu { position }) => {
+                handle_context_menu(cx, *position);
+            }
             _ => {}
         }
+    }
+}
+
+fn handle_context_menu(cx: &mut HandlerContext, position: Offset) {
+    let path = HitTest::new(&*cx.element_tree).path(position);
+    // Dispatch ContextMenu to every element in the hit-path. The deepest
+    // element gets first crack; outer elements receive it too so a wrapping
+    // widget can show the menu on behalf of an inner one. Each element's
+    // `onContextMenu` mutation (if any) is invoked with the local + global
+    // positions.
+    for id in &path {
+        let local = local_position(cx, *id, position);
+        dispatch_gesture_event(
+            cx,
+            *id,
+            &ComposedGestureEvent::ContextMenu { local, global: position },
+        );
     }
 }
 

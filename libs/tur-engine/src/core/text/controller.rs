@@ -406,6 +406,22 @@ impl Class for TextEditingController {
             Ok(JsValue::from(ctrl.selection_end as f64))
         });
 
+        controller_getter!(class, "selectedText", |this, _, _ctx| {
+            let obj = this.as_object().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
+                JsNativeError::typ().with_message("invalid this")
+            })?;
+            if !ctrl.has_selection() {
+                return Ok(JsValue::from(js_string!("")));
+            }
+            let full = ctrl.text();
+            let (start, end) = ctrl.selection_range();
+            let slice = &full[start..end];
+            Ok(JsValue::from(js_string!(slice)))
+        });
+
         class.method(
             js_string!("setSpans"),
             1,
@@ -472,6 +488,55 @@ impl Class for TextEditingController {
                 let anchor = args.get_or_undefined(0).to_number(ctx)? as usize;
                 let end = args.get_or_undefined(1).to_number(ctx)? as usize;
                 ctrl.set_selection(anchor, end);
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("insertText"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, _ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let text = args
+                    .get_or_undefined(0)
+                    .as_string()
+                    .map(|s| s.to_std_string_escaped())
+                    .unwrap_or_default();
+                // Replace any existing selection, otherwise insert at the cursor.
+                if ctrl.has_selection() {
+                    let (start, _end) = ctrl.selection_range();
+                    ctrl.delete_selection();
+                    ctrl.insert_str_at(start, &text);
+                    let new_cursor = start + text.len();
+                    ctrl.set_cursor_position(new_cursor);
+                    ctrl.set_selection(new_cursor, new_cursor);
+                } else {
+                    let pos = ctrl.cursor_position();
+                    ctrl.insert_str_at(pos, &text);
+                    let new_cursor = pos + text.len();
+                    ctrl.set_cursor_position(new_cursor);
+                    ctrl.set_selection(new_cursor, new_cursor);
+                }
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        class.method(
+            js_string!("deleteSelection"),
+            0,
+            NativeFunction::from_fn_ptr(|this, _args, _ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                ctrl.delete_selection();
                 Ok(JsValue::undefined())
             }),
         );

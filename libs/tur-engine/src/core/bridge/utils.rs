@@ -58,6 +58,7 @@ pub(crate) fn tur_create_animation_controller(
     let obj = AnimationController::from_data(data, context)?;
     if let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() {
         ctrl.set_animation_manager(js_ctx.animation_manager.clone());
+        ctrl.set_mutation_queue(js_ctx.mutation_queue.clone());
     }
     Ok(obj.upcast().clone().into())
 }

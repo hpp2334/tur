@@ -10,6 +10,10 @@ pub enum ComposedGestureEvent {
     PointerDown { local: Offset, global: Offset },
     PointerMove { local: Offset, global: Offset },
     PointerUp { local: Offset, global: Offset },
+    /// Right-click. `local` is relative to the element; `global` is canvas-
+    /// relative. Dispatched to every element in the hit-path (deepest first)
+    /// so layered widgets can each inspect the event.
+    ContextMenu { local: Offset, global: Offset },
 }
 
 pub struct ElementOnGestureContext<'a> {
