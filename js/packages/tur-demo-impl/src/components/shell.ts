@@ -10,11 +10,13 @@ import {
     Expanded,
     get,
     Row,
+    Stack,
     Switch,
     set,
 } from "@tur/edgy";
 import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
+import { ContextMenuOverlay } from "./context-menu";
 import { VDivider } from "./divider";
 import { Editor } from "./editor";
 import { Sidebar } from "./sidebar";
@@ -88,33 +90,41 @@ export const Shell: EdgyComponent = component(() =>
     Container({
         color: tokens.bg.app,
         children: [
-            Column({
-                crossAlignment: CrossAxisAlignment.Stretch,
+            Stack({
                 children: [
-                    Toolbar(),
-                    Expanded({
-                        child: Row({
-                            crossAlignment: CrossAxisAlignment.Stretch,
-                            children: [
-                                Sidebar(),
-                                VDivider({
-                                    onDrag: (ev) => {
-                                        const next = Math.max(
-                                            120,
-                                            Math.min(
-                                                480,
-                                                get(sidebarWidth$) +
-                                                    ev.deltaFromLast.x,
-                                            ),
-                                        );
-                                        set(sidebarWidth$, next);
-                                    },
+                    Column({
+                        crossAlignment: CrossAxisAlignment.Stretch,
+                        children: [
+                            Toolbar(),
+                            Expanded({
+                                child: Row({
+                                    crossAlignment: CrossAxisAlignment.Stretch,
+                                    children: [
+                                        Sidebar(),
+                                        VDivider({
+                                            onDrag: (ev) => {
+                                                const next = Math.max(
+                                                    120,
+                                                    Math.min(
+                                                        480,
+                                                        get(sidebarWidth$) +
+                                                            ev.deltaFromLast.x,
+                                                    ),
+                                                );
+                                                set(sidebarWidth$, next);
+                                            },
+                                        }),
+                                        Expanded({ child: EditorAndViewer() }),
+                                    ],
                                 }),
-                                Expanded({ child: EditorAndViewer() }),
-                            ],
-                        }),
+                            }),
+                            StatusBar(),
+                        ],
                     }),
-                    StatusBar(),
+                    // Context-menu overlay — paints on top of everything
+                    // when open. Lives at the canvas root so it can be
+                    // positioned at any canvas-relative coord.
+                    ContextMenuOverlay(),
                 ],
             }),
         ],

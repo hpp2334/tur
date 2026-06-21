@@ -12,7 +12,7 @@ use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
-use tur_shared::Offset;
+use tur_shared::{MouseButton, Offset};
 
 pub struct Rect {
     pub left: f64,
@@ -92,11 +92,13 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
         self.ensure_flushed();
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
         self.ensure_flushed();
     }
@@ -117,12 +119,19 @@ impl TurTestApp {
     }
 
     pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
+        self.send_key_with_modifiers_full(key, shift, ctrl, false);
+    }
+
+    /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
+    /// Use this for Cmd+C / Cmd+V / Cmd+S tests.
+    pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
         self.inner.push_event(AppEvent::Key(AppKeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers {
                 shift,
                 ctrl,
+                meta,
                 ..Default::default()
             },
             event_type: KeyEventType::Down,
@@ -134,6 +143,7 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -150,8 +160,41 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
+    }
+
+    /// Same as `pointer_down` but with an explicit mouse button. Used to
+    /// simulate right-click (button 2) without an enclosing `click` gesture.
+    pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+                position: Offset::new(x, y),
+                button,
+            }));
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+    }
+
+    pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+                position: Offset::new(x, y),
+                button,
+            }));
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+    }
+
+    /// Push a right-click sequence: pointer-down(button=Right), context-menu,
+    /// pointer-up(button=Right). Mirrors the DOM event order.
+    pub fn right_click(&mut self, x: f64, y: f64) {
+        self.pointer_down_with_button(x, y, MouseButton::Right);
+        self.inner
+            .push_event(AppEvent::Gesture(AppGestureEvent::ContextMenu {
+                position: Offset::new(x, y),
+            }));
+        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.pointer_up_with_button(x, y, MouseButton::Right);
     }
 
     /// Queue a pointer-down without flushing — used to simulate the browser's
@@ -161,6 +204,7 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
     }
 
@@ -175,6 +219,7 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
+                button: MouseButton::Left,
             }));
     }
 
@@ -262,6 +307,22 @@ impl TurTestApp {
     /// call. Mirrors the embedder's per-frame cursor poll.
     pub fn take_current_cursor(&self) -> Option<String> {
         self.inner.take_current_cursor()
+    }
+
+    /// Drain any text written to the clipboard via `AppEvent::ClipboardWrite`
+    /// (e.g. EditableText's Cmd+C / Cmd+X handling) since the last call.
+    /// Mirrors the embedder's per-frame clipboard-write poll.
+    pub fn take_clipboard_write(&self) -> Option<String> {
+        self.inner.take_clipboard_write()
+    }
+
+    /// Push a synthetic paste event — equivalent to the embedder firing
+    /// `paste` on the hidden textarea. The engine's `ClipboardPasteHandler`
+    /// then inserts `text` into the focused editable.
+    pub fn push_paste_event(&mut self, text: &str) {
+        self.inner
+            .push_event(AppEvent::ClipboardPaste { text: text.to_string() });
+        self.ensure_flushed();
     }
 
     pub fn eval_js(&mut self, source: &str) -> String {

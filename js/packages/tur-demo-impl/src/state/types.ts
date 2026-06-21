@@ -6,6 +6,13 @@ export interface EditorController {
         spans: Array<{ content: string; color?: unknown }>,
     ): void;
     readonly text: string;
+    readonly cursorPosition: number;
+    readonly selectionAnchor: number;
+    readonly selectionEnd: number;
+    readonly selectedText: string;
+    insertText(text: string): void;
+    deleteSelection(): void;
+    setSelection(anchor: number, end: number): void;
 }
 
 export type LayoutMode = "split" | "editor" | "viewer";

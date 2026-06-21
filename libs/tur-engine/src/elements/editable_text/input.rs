@@ -9,7 +9,7 @@ use crate::core::text::TextEditingController;
 use crate::core::widget::{ReadableAtom, Component, Val, WidgetCx};
 use crate::elements::ContainerComponent;
 
-use super::element::{prop_controller, prop_controller_atom, prop_query_key, prop_val, EditableTextComponent};
+use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_val, ContextMenuEvent, EditableTextComponent};
 
 // ---------------------------------------------------------------------------
 // InputComponent — composes a ContainerElement (sizing/border wrapper) with a single
@@ -30,6 +30,7 @@ pub struct InputComponent {
     pub font_size: Option<Val<f64>>,
     pub font_family: Option<Val<String>>,
     pub multiline: Option<Val<bool>>,
+    pub on_context_menu: Option<crate::core::edgy_event::EdgyMutation<ContextMenuEvent>>,
     pub query_key: Option<Vec<String>>,
 }
 
@@ -45,6 +46,7 @@ impl Component for InputComponent {
             font_size: self.font_size.clone(),
             font_family: self.font_family.clone(),
             multiline: self.multiline.clone(),
+            on_context_menu: self.on_context_menu,
             query_key: None,
         });
         let container_spec = ContainerComponent {
@@ -73,6 +75,7 @@ impl InputComponent {
             font_size: prop_val::<f64>(props, "fontSize", ctx),
             font_family: prop_val::<String>(props, "fontFamily", ctx),
             multiline: prop_val::<bool>(props, "multiline", ctx),
+            on_context_menu: prop_mutation::<ContextMenuEvent>(props, "onContextMenu", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }
     }

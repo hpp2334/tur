@@ -1,5 +1,6 @@
 mod click;
 mod click_propagation;
+mod clipboard;
 mod countdown;
 mod counter;
 mod drag_delta;
@@ -9,6 +10,7 @@ mod pointer_drag;
 mod pointer_region;
 mod pointer_region_enter_exit;
 mod resize;
+mod right_click_selection;
 mod scroll;
 mod scrollbar;
 mod caret_into_view;

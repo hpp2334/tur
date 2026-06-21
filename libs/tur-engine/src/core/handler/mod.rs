@@ -23,6 +23,10 @@ pub struct HandlerContext<'a> {
     pub size: &'a mut (f64, f64),
     pub needs_draw: &'a Cell<bool>,
     pub current_cursor: Rc<RefCell<Option<String>>>,
+    /// Slot for `AppEvent::ClipboardWrite` payloads — `ClipboardWriteHandler`
+    /// pushes the text here, and the embedder drains it via
+    /// `TurApp::take_clipboard_write()` once per frame.
+    pub pending_clipboard_write: Rc<RefCell<Option<String>>>,
 }
 
 impl<'a> HandlerContext<'a> {
@@ -39,5 +43,12 @@ impl<'a> HandlerContext<'a> {
         if changed {
             *slot = Some(name.to_string());
         }
+    }
+
+    /// Capture an `AppEvent::ClipboardWrite` payload so the embedder can
+    /// drain it on the next frame poll. Multiple writes between polls keep
+    /// the latest (matches typical clipboard semantics).
+    pub fn push_clipboard_write(&self, text: String) {
+        *self.pending_clipboard_write.borrow_mut() = Some(text);
     }
 }

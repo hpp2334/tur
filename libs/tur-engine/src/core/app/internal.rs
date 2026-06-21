@@ -75,6 +75,11 @@ impl TurAppInternal {
         loop {
             let handled_events = self.flush_app_events();
 
+            // Process any pending LazyList remounts (set by wheel handlers
+            // when the visible range shifts). Must run before layout so the
+            // newly-mounted children get measured in this pass.
+            let remounted = self.process_lazy_remounts(boa_context);
+
             let animation_did_update = if !animation_ticked {
                 animation_ticked = true;
                 self.tick_animations(boa_context)
@@ -89,7 +94,7 @@ impl TurAppInternal {
             let reactive_changed = self.flush_reactive(boa_context);
 
             let dirty =
-                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
+                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed || remounted;
             if dirty {
                 needs_render = true;
                 self.app_context.borrow_mut().layout();
@@ -199,6 +204,79 @@ impl TurAppInternal {
         let has_active = mgr.has_active();
         drop(mgr);
         has_active
+    }
+
+    /// Walk the tree and process any `LazyListElement`s whose
+    /// `remount_requested` flag is set (typically by `on_wheel` after a
+    /// scroll). For each, recompute the visible range based on the current
+    /// scroll position + viewport size, mount newly-visible items via the JS
+    /// builder, and unmount off-screen ones.
+    ///
+    /// Returns `true` if any remount happened (so the caller knows to
+    /// trigger another layout pass).
+    fn process_lazy_remounts(&self, boa_context: &mut boa_engine::Context) -> bool {
+        use crate::elements::LazyListElement;
+
+        // Collect candidate node ids first to avoid holding the tree borrow
+        // while we mutate. We only need to consider nodes that currently have
+        // a LazyListElement with the flag set.
+        let candidates: Vec<crate::core::element::ElementNodeId> = {
+            let tree = self.js_context.element_tree.borrow();
+            tree.nodes
+                .iter()
+                .filter_map(|(id, node)| {
+                    let el = node.element.as_ref()?;
+                    let ll = el.cast::<LazyListElement>()?;
+                    if ll.remount_requested { Some(*id) } else { None }
+                })
+                .collect()
+        };
+        if candidates.is_empty() {
+            return false;
+        }
+
+        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
+        let mut any_changed = false;
+        for id in candidates {
+            // Take the element out of the tree so we can mutate it with
+            // exclusive access while still being able to call into the tree
+            // (mount/unmount) via `cx`.
+            let mut element_opt = {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                tree.get_mut(id).and_then(|n| n.element.take())
+            };
+            let Some(mut element) = element_opt.take() else { continue };
+
+            // Read the current viewport size from the node's computed layout.
+            let viewport_main = {
+                let tree = self.js_context.element_tree.borrow();
+                let axis = element
+                    .cast::<LazyListElement>()
+                    .map(|ll| ll.axis())
+                    .unwrap_or(tur_shared::Axis::Vertical);
+                tree.get(id)
+                    .map(|n| match axis {
+                        tur_shared::Axis::Vertical => n.computed_layout.size.height,
+                        tur_shared::Axis::Horizontal => n.computed_layout.size.width,
+                    })
+                    .unwrap_or(0.0)
+            };
+
+            if let Some(ll) = element.cast_mut::<LazyListElement>() {
+                let prev_count = ll.built_count();
+                ll.process_remount(&mut cx, boa_context, viewport_main);
+                if ll.built_count() != prev_count {
+                    any_changed = true;
+                }
+            }
+
+            // Put the element back.
+            let mut tree = self.js_context.element_tree.borrow_mut();
+            if let Some(node) = tree.get_mut(id) {
+                node.element = Some(element);
+            }
+        }
+        any_changed
     }
 
     fn flush_app_events(&self) -> bool {

@@ -167,6 +167,7 @@ impl ElementOnGesture for TextElement {
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}
+            ComposedGestureEvent::ContextMenu { .. } => {}
         }
     }
 }

@@ -167,6 +167,7 @@ impl ElementOnGesture for ScrollbarElement {
                 // Drag ends — clear drag state so the next drag starts fresh.
                 self.drag = None;
             }
+            ComposedGestureEvent::ContextMenu { .. } => {}
         }
     }
 }

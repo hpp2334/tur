@@ -2,6 +2,7 @@ use boa_engine::object::JsObject;
 
 pub mod controller;
 pub use controller::AnimationController;
+pub mod event;
 
 #[derive(Debug, Default)]
 pub struct AnimationManager {
@@ -21,16 +22,18 @@ impl AnimationManager {
         }
     }
 
-    pub fn tick_controllers(&mut self, now_ms: u64, ctx: &mut boa_engine::Context) {
+    /// Tick all active controllers. Each tick updates `value` / `status` and
+    /// **enqueues** (does not fire) any `onTick` / `onEnd` callbacks on the
+    /// mutation queue. The callbacks fire later in `flush_pending_mutations`,
+    /// after the `RefMut` on each controller is released.
+    pub fn tick_controllers(&mut self, now_ms: u64, _ctx: &mut boa_engine::Context) {
         let mut active = Vec::new();
         for obj in self.controllers.drain(..) {
             let keep = {
                 let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() else {
                     continue;
                 };
-                if ctrl.is_active() {
-                    ctrl.tick(now_ms, ctx);
-                }
+                let _ = ctrl.tick_compute(now_ms);
                 ctrl.is_active()
             };
             if keep {

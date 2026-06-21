@@ -4,6 +4,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
@@ -84,6 +85,7 @@ pub struct EditableTextComponent {
     pub font_size: Option<Val<f64>>,
     pub font_family: Option<Val<String>>,
     pub multiline: Option<Val<bool>>,
+    pub on_context_menu: Option<EdgyMutation<ContextMenuEvent>>,
     pub query_key: Option<Vec<String>>,
 }
 
@@ -184,7 +186,7 @@ impl EditableTextElement {
         meta: bool,
         shift: bool,
         nav_info: Option<&LineNavInfo>,
-    ) -> bool {
+    ) -> (bool, Option<String>) {
         let multiline = self.resolved_multiline;
         let mut c = self.controller_mut();
         let full = c.text();
@@ -198,6 +200,7 @@ impl EditableTextElement {
         let mut new_cursor = cursor;
         let mut new_anchor = anchor;
         let mut new_end = end;
+        let mut new_clipboard_write: Option<String> = None;
 
         let handled = match key {
             "Backspace" => {
@@ -311,7 +314,7 @@ impl EditableTextElement {
                     if let Some(info) = nav_info {
                         info.line_start_bytes[info.current_line]
                     } else {
-                        return false;
+                        return (false, None);
                     }
                 } else {
                     0
@@ -332,7 +335,7 @@ impl EditableTextElement {
                     if let Some(info) = nav_info {
                         info.line_end_bytes[info.current_line]
                     } else {
-                        return false;
+                        return (false, None);
                     }
                 } else {
                     len
@@ -352,6 +355,35 @@ impl EditableTextElement {
                 new_anchor = 0;
                 new_end = len;
                 new_cursor = len;
+                true
+            }
+            "c" if ctrl || meta => {
+                // Copy: fire the host clipboard bridge with the selected text.
+                // The buffer is unchanged; only the system clipboard is written.
+                if has_sel {
+                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    new_clipboard_write = Some(full[s..e].to_string());
+                }
+                true
+            }
+            "x" if ctrl || meta => {
+                // Cut: write selection to clipboard then delete it.
+                if has_sel {
+                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    new_clipboard_write = Some(full[s..e].to_string());
+                    c.delete_range(s, e);
+                    new_cursor = s;
+                    new_anchor = s;
+                    new_end = s;
+                }
+                true
+            }
+            "v" if ctrl || meta => {
+                // Paste: the browser fires a `paste` event on the hidden
+                // textarea when the user presses Cmd+V; the wasm layer
+                // forwards the clipboard text via AppEvent::ClipboardPaste,
+                // which is processed by ClipboardPasteHandler. Here we just
+                // mark the key as handled so no fallback runs.
                 true
             }
             "Enter" => {
@@ -396,7 +428,7 @@ impl EditableTextElement {
             c.set_selection(new_anchor, new_end);
         }
 
-        handled
+        (handled, new_clipboard_write)
     }
 
     fn char_index_at(&self, local_position: &tur_shared::Offset) -> usize {
@@ -474,6 +506,42 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
     s.len()
 }
 
+// ---------------------------------------------------------------------------
+// ContextMenuEvent — JS callback argument for the right-click menu trigger.
+// Carries both local (element-relative) and global (canvas-relative) coords.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct ContextMenuEvent {
+    pub local: tur_shared::Offset,
+    pub global: tur_shared::Offset,
+}
+
+impl EventArg for ContextMenuEvent {
+    fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
+        use boa_engine::js_string;
+        use boa_engine::object::JsObject;
+
+        fn make_point(ctx: &mut Context, x: f64, y: f64) -> JsObject {
+            let obj = JsObject::with_object_proto(ctx.intrinsics());
+            let _ = obj.create_data_property(js_string!("x"), JsValue::from(x), ctx);
+            let _ = obj.create_data_property(js_string!("y"), JsValue::from(y), ctx);
+            obj
+        }
+        fn make_event(ctx: &mut Context, local: JsObject, global: JsObject) -> JsObject {
+            let obj = JsObject::with_object_proto(ctx.intrinsics());
+            let _ = obj.create_data_property(js_string!("local"), JsValue::from(local), ctx);
+            let _ = obj.create_data_property(js_string!("global"), JsValue::from(global), ctx);
+            obj
+        }
+
+        let local = make_point(ctx, self.local.x, self.local.y);
+        let global = make_point(ctx, self.global.x, self.global.y);
+        let event = make_event(ctx, local, global);
+        vec![JsValue::from(event)]
+    }
+}
+
 impl Effect for EditableTextElement {}
 
 impl ElementTrace for EditableTextElement {
@@ -520,14 +588,31 @@ impl ElementOnGesture for EditableTextElement {
         event: &ComposedGestureEvent,
     ) {
         match event {
-            ComposedGestureEvent::PointerDown { local, .. } => {
+            ComposedGestureEvent::PointerDown { local, button, .. } => {
                 cx.request_own_focus();
+                // Native-OS selection semantics on right-click:
+                //   - If there is an active selection AND the click lands
+                //     inside it (inclusive), preserve the selection so the
+                //     context-menu's Cut/Copy operate on it (matches native
+                //     text fields, browsers, etc.).
+                //   - Otherwise (left click, middle click, or right-click
+                //     outside the selection), move the caret to the click
+                //     position and collapse the selection.
                 let byte_pos = self.char_index_at(local);
-                let mut c = self.controller_mut();
-                c.set_cursor_position(byte_pos);
-                c.set_selection(byte_pos, byte_pos);
-                drop(c);
-                cx.request_redraw();
+                let preserve = *button == tur_shared::MouseButton::Right
+                    && self.controller().has_selection()
+                    && {
+                        let (a, b) = self.controller().selection_range();
+                        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                        byte_pos >= lo && byte_pos <= hi
+                    };
+                if !preserve {
+                    let mut c = self.controller_mut();
+                    c.set_cursor_position(byte_pos);
+                    c.set_selection(byte_pos, byte_pos);
+                    drop(c);
+                    cx.request_redraw();
+                }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
                 let byte_pos = self.char_index_at(local);
@@ -542,6 +627,14 @@ impl ElementOnGesture for EditableTextElement {
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}
+            ComposedGestureEvent::ContextMenu { local, global } => {
+                if let Some(m) = self.component.on_context_menu {
+                    cx.push_event(
+                        m,
+                        ContextMenuEvent { local: *local, global: *global },
+                    );
+                }
+            }
         }
     }
 }
@@ -580,13 +673,17 @@ impl ElementOnKeyboard for EditableTextElement {
             LineNavInfo::extract(ld, cursor_byte)
         });
 
-        let changed = self.handle_key_event(
+        let (changed, clipboard_write) = self.handle_key_event(
             &event.key,
             event.modifiers.ctrl,
             event.modifiers.meta,
             event.modifiers.shift,
             nav_info.as_ref(),
         );
+
+        if let Some(text) = clipboard_write {
+            cx.push_clipboard_write(text);
+        }
 
         if changed {
             cx.request_redraw();
@@ -735,6 +832,16 @@ pub(super) fn prop_controller_atom(
     extract_atom(&v).map(ReadableAtom::new)
 }
 
+pub(crate) fn prop_mutation<E: EventArg>(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<EdgyMutation<E>> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    edgy_mutation_from_js(&v)
+}
+
 impl EditableTextComponent {
     /// Build an `EditableTextComponent` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
@@ -748,6 +855,7 @@ impl EditableTextComponent {
             font_size: prop_val::<f64>(props, "fontSize", ctx),
             font_family: prop_val::<String>(props, "fontFamily", ctx),
             multiline: prop_val::<bool>(props, "multiline", ctx),
+            on_context_menu: prop_mutation::<ContextMenuEvent>(props, "onContextMenu", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }
     }

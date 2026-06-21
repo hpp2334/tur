@@ -359,3 +359,28 @@ pub enum HitTestBehavior {
     Opaque,
     Translucent,
 }
+
+/// Mouse button that produced a pointer event. Mirrors the DOM
+/// `MouseEvent.button` value (0 = primary/left, 1 = middle, 2 = secondary/
+/// right). Used by `AppGestureEvent::PointerDown` / `PointerUp` so handlers
+/// can distinguish left and right clicks without inspecting raw DOM events.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MouseButton {
+    #[default]
+    Left,
+    Middle,
+    Right,
+    Other(u16),
+}
+
+impl MouseButton {
+    /// Build a `MouseButton` from a DOM `MouseEvent.button` value.
+    pub fn from_dom(button: u16) -> Self {
+        match button {
+            0 => MouseButton::Left,
+            1 => MouseButton::Middle,
+            2 => MouseButton::Right,
+            other => MouseButton::Other(other),
+        }
+    }
+}

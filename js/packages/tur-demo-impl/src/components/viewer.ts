@@ -17,6 +17,7 @@ import {
     selectedCase$,
     status$,
 } from "../state";
+import { FadeIn } from "../state/transitions";
 import { tokens } from "../theme/tokens";
 
 function Placeholder(): EdgyElement {
@@ -50,7 +51,10 @@ function ReadyViewer(): EdgyElement {
                         v: get(compileVersion$),
                     },
                 ]),
-                build: (item) => getCaseComponent(item.name) ?? Placeholder(),
+                build: (item) =>
+                    FadeIn({
+                        child: getCaseComponent(item.name) ?? Placeholder(),
+                    }),
             }),
         ],
     });

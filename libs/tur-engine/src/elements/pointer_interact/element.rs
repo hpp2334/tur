@@ -31,6 +31,7 @@ pub struct PointerInteractComponent {
     pub on_pointer_down: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_pointer_move: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_pointer_up: Option<EdgyMutation<PointerInteractEvent>>,
+    pub on_context_menu: Option<EdgyMutation<PointerInteractEvent>>,
     pub child: Option<Rc<dyn Component>>,
 }
 
@@ -102,7 +103,7 @@ impl ElementOnGesture for PointerInteractElement {
         event: &ComposedGestureEvent,
     ) {
         let (mutation, payload) = match event {
-            ComposedGestureEvent::PointerDown { local, global } => {
+            ComposedGestureEvent::PointerDown { local, global, .. } => {
                 let m = self.component.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
@@ -112,8 +113,13 @@ impl ElementOnGesture for PointerInteractElement {
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            ComposedGestureEvent::PointerUp { local, global } => {
+            ComposedGestureEvent::PointerUp { local, global, .. } => {
                 let m = self.component.on_pointer_up;
+                let ev = PointerInteractEvent { local: *local, global: *global };
+                (m, ev)
+            }
+            ComposedGestureEvent::ContextMenu { local, global } => {
+                let m = self.component.on_context_menu;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
@@ -158,6 +164,7 @@ impl PointerInteractComponent {
             on_pointer_down: prop_mutation::<PointerInteractEvent>(props, "onPointerDown", ctx),
             on_pointer_move: prop_mutation::<PointerInteractEvent>(props, "onPointerMove", ctx),
             on_pointer_up: prop_mutation::<PointerInteractEvent>(props, "onPointerUp", ctx),
+            on_context_menu: prop_mutation::<PointerInteractEvent>(props, "onContextMenu", ctx),
             child: prop_child(props, "child", ctx),
         }
     }

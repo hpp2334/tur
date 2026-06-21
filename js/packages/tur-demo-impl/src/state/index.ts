@@ -11,6 +11,17 @@ export {
     resetCase,
     selectFile,
 } from "./case-store";
+export {
+    closeContextMenu,
+    contextMenuOpen$,
+    contextMenuX$,
+    contextMenuY$,
+    copySelection,
+    cutSelection,
+    openContextMenu,
+    pasteFromClipboard,
+    selectAll,
+} from "./context-menu";
 export { relativeTime } from "./helpers";
 export {
     autoRun$,

@@ -32,6 +32,10 @@ pub struct TurAppContext {
     /// The most recent cursor name set by a handler (e.g. "col-resize").
     /// Embedders poll this each frame to update the host canvas cursor.
     pub(crate) current_cursor: Rc<RefCell<Option<String>>>,
+    /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
+    /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
+    /// `TurApp::take_clipboard_write()` once per frame.
+    pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -65,6 +69,7 @@ impl TurAppContext {
             event_queue: AppEventQueue::new(),
             handlers: vec![],
             current_cursor: Rc::new(RefCell::new(None)),
+            pending_clipboard_write: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -86,6 +91,7 @@ impl TurAppContext {
             size: &mut self.size,
             needs_draw,
             current_cursor: self.current_cursor.clone(),
+            pending_clipboard_write: self.pending_clipboard_write.clone(),
         };
         for handler in &mut self.handlers {
             handler.handle_event(&mut cx, event);

@@ -4,6 +4,7 @@ import {
     type EdgyElement,
     Expanded,
     get,
+    ImageEdgy,
     MainAxisSize,
     MouseRegion,
     mutate,
@@ -27,6 +28,7 @@ import {
     selectedCase$,
 } from "../state";
 import { tokens } from "../theme/tokens";
+import { resetIconId, runIconId } from "./icons";
 
 // --- Run button ------------------------------------------------------------
 
@@ -49,10 +51,10 @@ function RunButton(): EdgyElement {
                     Row({
                         mainAxisSize: MainAxisSize.Min,
                         children: [
-                            Text({
-                                text: "\u25B6", // ▶
-                                fontSize: 9,
-                                color: tokens.text.onAccent,
+                            ImageEdgy({
+                                resourceId: runIconId,
+                                width: 10,
+                                height: 10,
                             }),
                             SizedBox({ width: 4 }),
                             Text({
@@ -89,10 +91,10 @@ function ResetButton(): EdgyElement {
                     Row({
                         mainAxisSize: MainAxisSize.Min,
                         children: [
-                            Text({
-                                text: "\u21BA", // ↺
-                                fontSize: 12,
-                                color: tokens.text.secondary,
+                            ImageEdgy({
+                                resourceId: resetIconId,
+                                width: 12,
+                                height: 12,
                             }),
                             SizedBox({ width: 4 }),
                             Text({

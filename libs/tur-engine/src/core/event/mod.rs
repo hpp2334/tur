@@ -2,7 +2,7 @@ pub mod queue;
 
 use crate::core::element::ElementNodeId;
 use crate::core::keyboard::AppKeyEvent;
-use tur_shared::Offset;
+use tur_shared::{MouseButton, Offset};
 
 pub enum AppEvent {
     Resize {
@@ -30,12 +30,30 @@ pub enum AppEvent {
     Key(AppKeyEvent),
     Ime(AppImeEvent),
     RequestDraw,
+    /// Engine → embedder: write `text` to the system clipboard (copy/cut).
+    /// The embedder owns the actual clipboard interaction (e.g.
+    /// `navigator.clipboard.writeText` in tur-wasm).
+    ClipboardWrite {
+        text: String,
+    },
+    /// Embedder → engine: a paste occurred (the user pressed Cmd+V, the
+    /// embedder captured the paste event on its hidden input, and is
+    /// forwarding the clipboard text). Handled by ClipboardPasteHandler,
+    /// which inserts the text into the focused editable.
+    ClipboardPaste {
+        text: String,
+    },
 }
 
 pub enum AppGestureEvent {
-    PointerDown { position: Offset },
-    PointerUp { position: Offset },
+    PointerDown { position: Offset, button: MouseButton },
+    PointerUp { position: Offset, button: MouseButton },
     PointerMove { position: Offset },
+    /// Right-click / context-menu request from the host. Carries the canvas
+    /// position of the click. Dispatched to the deepest element under the
+    /// cursor that has an `onContextMenu` mutation, mirroring how the web
+    /// `contextmenu` event works.
+    ContextMenu { position: Offset },
 }
 
 #[derive(Clone, Debug)]

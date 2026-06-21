@@ -196,6 +196,9 @@ export interface PointerInteractProps {
      *  `MouseRegion` for hover. */
     onPointerMove?: Mutation<[PointerInteractEvent]>;
     onPointerUp?: Mutation<[PointerInteractEvent]>;
+    /** Right-click / context-menu. Fires with the local + global position
+     *  of the click. Use this to show a context menu. */
+    onContextMenu?: Mutation<[PointerInteractEvent]>;
     behavior?: Val<number>;
     child?: EdgyElement;
 }
@@ -294,6 +297,11 @@ export interface LazyListProps {
     axis?: Val<number>;
     itemCount: Val<number>;
     overscan?: Val<number>;
+    /** Fixed size (along the main axis) for every item. When provided, the
+     *  visible-range math is exact and the list can virtualize at very large
+     *  `itemCount`s (e.g. 10,000+). Omit for variable-height items — the
+     *  average of measured children is used as a fallback. */
+    itemExtent?: Val<number>;
     builder: (index: number) => EdgyElement;
     queryKey?: Val<string[]>;
 }
@@ -339,6 +347,7 @@ export function InputEdgy(props: {
     width?: Val<number>;
     height?: Val<number>;
     multiline?: Val<boolean>;
+    onContextMenu?: Mutation<[PointerInteractEvent]>;
     queryKey?: Val<string[]>;
 }): EdgyElement {
     return __tur.InputEdgy(__ctx, props);
@@ -346,6 +355,42 @@ export function InputEdgy(props: {
 
 export function Fragment(props: { children: EdgyElement[] }): EdgyElement {
     return __tur.Fragment(__ctx, props);
+}
+
+// ---------------------------------------------------------------------------
+// Opacity / Transform — apply visual effects to a subtree.
+//
+// `Opacity({ value, child })` multiplies the child's alpha by `value` (0..1).
+// `Transform({ scale, rotate, translateX, translateY, child })` applies a 2D
+// affine transform. Both are reactive and integrate with `createAnimationController`
+// — animate the `value` / `scale` / etc. via `onTick` for fade/scale/rotate
+// transitions.
+// ---------------------------------------------------------------------------
+
+export function Opacity(props: {
+    value: Val<number>;
+    child?: EdgyElement;
+    queryKey?: Val<string[]>;
+}): EdgyElement {
+    return __tur.Opacity(__ctx, props);
+}
+
+export interface TransformProps {
+    /** Uniform scale (multiplies both X and Y). */
+    scale?: Val<number>;
+    /** Per-axis scale. Overrides `scale` for that axis when present. */
+    scaleX?: Val<number>;
+    scaleY?: Val<number>;
+    /** Rotation in radians (clockwise). */
+    rotate?: Val<number>;
+    translateX?: Val<number>;
+    translateY?: Val<number>;
+    child?: EdgyElement;
+    queryKey?: Val<string[]>;
+}
+
+export function Transform(props: TransformProps): EdgyElement {
+    return __tur.Transform(__ctx, props);
 }
 
 // ---------------------------------------------------------------------------
@@ -412,10 +457,68 @@ export function createLazyListController(
     return __tur.createLazyListController(__ctx, opts);
 }
 
+export type AnimationStatus =
+    | "stopped"
+    | "forward"
+    | "reverse"
+    | "completed"
+    | "paused";
+
+export interface AnimationController {
+    /** Current raw (un-eased) progress 0..1. */
+    readonly value: number;
+    /** Current status. */
+    readonly status: AnimationStatus;
+    /** Duration in milliseconds. */
+    readonly duration: number;
+    /** Current speed multiplier (default 1.0). */
+    readonly speed: number;
+    /** Play forward from 0 to 1. Resets value to 0. */
+    forward(): void;
+    /** Play reverse from 1 to 0. Resets value to 1. */
+    reverse(): void;
+    /** Stop and freeze the current value. Status becomes "stopped". */
+    stop(): void;
+    /** Pause if currently playing. Status becomes "paused". `resume()`
+     *  continues from the frozen value. */
+    pause(): void;
+    /** Resume from a paused state, continuing in the original direction. */
+    resume(): void;
+    /** Jump to a specific progress value (0..1). If playing, continues from
+     *  there; otherwise freezes at the new value. Fires `onTick`. */
+    seek(t: number): void;
+    /** Set the speed multiplier (e.g. 0.5 = half speed, 2.0 = double).
+     *  Must be positive. If currently playing, the value is aligned before
+     *  the new speed takes effect. */
+    setSpeed(factor: number): void;
+    /** Set the repeat count. Pass a positive integer for finite iterations
+     *  (the animation transitions to status "completed" after the count),
+     *  or the string `"infinite"` to loop forever. Default is 1. */
+    repeat(count: number | "infinite"): void;
+}
+
+export interface AnimationControllerOpts {
+    duration?: number;
+    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    /** Repeat policy. A positive integer plays exactly that many iterations
+     *  then completes; the string `"infinite"` loops forever (status stays
+     *  "forward"/"reverse", `onEnd` never fires). Default is 1. */
+    repeat?: number | "infinite";
+    /** Fired each frame with the eased progress (0..1). The callback is a
+     *  `Mutation<[number], void>` — dispatched via the engine's mutation
+     *  queue, so it fires after any active `RefMut` borrow on the
+     *  controller is released. This lets the callback safely read
+     *  `ctrl.status` / `ctrl.value` without a boa `BorrowError`. */
+    onTick?: Mutation<[number], void>;
+    /** Fired once when the animation completes. Same dispatch contract as
+     *  `onTick`. Never fires when `repeat: "infinite"`. */
+    onEnd?: Mutation<[], void>;
+}
+
 export function createAnimationController(
-    opts: Record<string, unknown> = {},
-): unknown {
-    return __tur.createAnimationController(__ctx, opts);
+    opts: AnimationControllerOpts = {},
+): AnimationController {
+    return __tur.createAnimationController(__ctx, opts) as AnimationController;
 }
 
 export function createImageResource(bytes: Uint8Array | ArrayBuffer): number {
@@ -526,6 +629,8 @@ interface TurGlobal {
     ImageEdgy(ctx: unknown, props: unknown): EdgyElement;
     InputEdgy(ctx: unknown, props: unknown): EdgyElement;
     Fragment(ctx: unknown, props: unknown): EdgyElement;
+    Opacity(ctx: unknown, props: unknown): EdgyElement;
+    Transform(ctx: unknown, props: unknown): EdgyElement;
 
     render(ctx: unknown, root: EdgyElement): void;
 

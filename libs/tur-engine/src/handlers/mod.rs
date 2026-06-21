@@ -1,4 +1,5 @@
 pub mod gesture;
+pub mod clipboard;
 pub mod ensure_visible;
 pub mod ime;
 pub mod keyboard;

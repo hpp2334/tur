@@ -97,8 +97,17 @@ pub(crate) fn tur_set(
     let store = js_ctx.store.borrow();
     match store.kind_of(id) {
         Some(crate::core::reactive::AtomKind::Mutation) => {
-            let extra: Vec<JsValue> = args.get(2..).map(|s| s.to_vec()).unwrap_or_default();
-            store.invoke_mutation(id, &extra, context)
+            // Prepend the store ctx object so mutation closures invoked via
+            // `set(mutation, ...args)` receive `(ctx, ...args)` — matching
+            // the contract used by the event-flush dispatch path
+            // (`internal.rs::flush_pending_mutations`).
+            let ctx_obj = build_store_context_object(context, js_ctx.store.clone())?;
+            let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
+            invoke_args.push(ctx_obj.into());
+            if let Some(extra) = args.get(2..) {
+                invoke_args.extend_from_slice(extra);
+            }
+            store.invoke_mutation(id, &invoke_args, context)
         }
         _ => {
             let value = args.get_or_undefined(2).clone();
