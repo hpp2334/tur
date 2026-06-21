@@ -28,6 +28,20 @@ pub struct TextEditingController {
     composing_text: Option<String>,
     composing_start: usize,
     handle: Option<JsObject>,
+    /// Back-reference to the `UndoController` attached via `InputEdgy`'s
+    /// `undoController` prop. When `Some`, every text-mutating method pushes
+    /// a snapshot of the *current* state to the recorder BEFORE mutating —
+    /// mirroring Flutter's `UndoHistory` listener model where recording is a
+    /// side effect of the controller's value setter, not a per-call-site
+    /// concern. Note: a controller shared across multiple `InputEdgy`
+    /// elements will have its recorder overwritten by whichever element
+    /// attaches last (the demo uses a single editor, so this is fine).
+    undo_recorder: Option<JsObject>,
+    /// Transient flag set by the undo/redo keystroke arms while they apply a
+    /// restored value via `set_spans_preserve_cursor`. Prevents the
+    /// restoration from pushing the current state and clearing the redo
+    /// stack. Single-threaded (boa), no re-entrancy across the JS boundary.
+    suppress_undo: bool,
     on_input: Option<EdgyMutation<InputEvent>>,
     on_cursor_change: Option<EdgyMutation<CursorChangeEvent>>,
     on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
@@ -51,6 +65,8 @@ impl TextEditingController {
             composing_text: None,
             composing_start: 0,
             handle: None,
+            undo_recorder: None,
+            suppress_undo: false,
             on_input: None,
             on_cursor_change: None,
             on_selection_change: None,
@@ -64,6 +80,46 @@ impl TextEditingController {
         }
     }
 
+    /// Attach an `UndoController` recorder. Called by `InputEdgy`'s element
+    /// builder when the `undoController` prop is present, so the controller's
+    /// text-mutating methods can snapshot to the history stack uniformly —
+    /// regardless of whether the mutation originated from a keystroke, IME,
+    /// JS bridge, or programmatic `setSpans`.
+    pub fn set_undo_recorder(&mut self, recorder: Option<JsObject>) {
+        self.undo_recorder = recorder;
+    }
+
+    /// Temporarily suppress undo recording. Used by the Cmd+Z / Cmd+Shift+Z /
+    /// Ctrl+Y arms while they apply a restored value: the restoration must
+    /// not itself push a snapshot (it would clear the redo stack).
+    pub fn set_suppress_undo(&mut self, suppress: bool) {
+        self.suppress_undo = suppress;
+    }
+
+    /// Snapshot the current state to the attached recorder (if any). Must be
+    /// called BEFORE the mutation so the snapshot captures the prior value.
+    /// Mirrors Flutter's `UndoHistory` listener: every value change records,
+    /// uniformly. No-op when no recorder is attached or while `suppress_undo`
+    /// is set.
+    fn maybe_push_undo(&mut self) {
+        if self.suppress_undo {
+            return;
+        }
+        let recorder = match self.undo_recorder.clone() {
+            Some(r) => r,
+            None => return,
+        };
+        let snapshot = crate::core::text::TextEditingValue {
+            text: self.text(),
+            cursor_position: self.cursor_position,
+            selection_anchor: self.selection_anchor,
+            selection_end: self.selection_end,
+        };
+        if let Some(mut undo) = recorder.downcast_mut::<crate::core::text::UndoController>() {
+            undo.push(snapshot);
+        }
+    }
+
     pub fn text(&self) -> String {
         self.spans.iter().map(|s| s.text.as_str()).collect()
     }
@@ -73,6 +129,13 @@ impl TextEditingController {
     }
 
     pub fn set_spans(&mut self, spans: Vec<SpanData>) {
+        // Push undo only when the text actually changes — re-tokenization
+        // (e.g. live syntax highlighting) passes the same text with new span
+        // colors and must NOT create an undo entry.
+        let new_text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        if new_text != self.text() {
+            self.maybe_push_undo();
+        }
         self.spans = spans;
         self.cursor_position = self.full_len();
         self.selection_anchor = self.cursor_position;
@@ -87,6 +150,10 @@ impl TextEditingController {
     /// where selection is part of the `TextEditingValue` and is preserved
     /// across value updates.
     pub fn set_spans_preserve_cursor(&mut self, spans: Vec<SpanData>) {
+        let new_text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        if new_text != self.text() {
+            self.maybe_push_undo();
+        }
         let len = spans.iter().map(|s| s.text.len()).sum();
         self.spans = spans;
         self.cursor_position = self.cursor_position.min(len);
@@ -97,6 +164,9 @@ impl TextEditingController {
     }
 
     pub fn clear(&mut self) {
+        if !self.spans.is_empty() {
+            self.maybe_push_undo();
+        }
         self.spans.clear();
         self.cursor_position = 0;
         self.selection_anchor = 0;
@@ -257,6 +327,7 @@ impl TextEditingController {
         if text.is_empty() {
             return;
         }
+        self.maybe_push_undo();
         if self.spans.is_empty() {
             self.spans.push(SpanData {
                 text: text.to_string(),
@@ -282,6 +353,8 @@ impl TextEditingController {
         if start >= end {
             return;
         }
+
+        self.maybe_push_undo();
 
         let (start_idx, start_local) = self.span_index_at(start);
         let (end_idx, end_local) = self.span_index_at(end);
@@ -576,6 +649,30 @@ impl Class for TextEditingController {
                         ctrl.handle = Some(handle_obj.clone());
                     }
                 }
+                Ok(JsValue::undefined())
+            }),
+        );
+
+        // Explicit JS-side recorder attachment. `InputEdgy` attaches
+        // automatically from the `undoController` prop, so this is only needed
+        // when a controller is mutated outside an InputEdgy binding.
+        class.method(
+            js_string!("setUndoController"),
+            1,
+            NativeFunction::from_fn_ptr(|this, args, _ctx| {
+                let obj = this.as_object().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
+                    JsNativeError::typ().with_message("invalid this")
+                })?;
+                let recorder = match args.get_or_undefined(0).as_object() {
+                    Some(o) if o.downcast_ref::<crate::core::text::UndoController>().is_some() => {
+                        Some(o.clone())
+                    }
+                    _ => None,
+                };
+                ctrl.set_undo_recorder(recorder);
                 Ok(JsValue::undefined())
             }),
         );

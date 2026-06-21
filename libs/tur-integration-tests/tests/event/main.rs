@@ -14,3 +14,4 @@ mod right_click_selection;
 mod scroll;
 mod scrollbar;
 mod caret_into_view;
+mod undo;
