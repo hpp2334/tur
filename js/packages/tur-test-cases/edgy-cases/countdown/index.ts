@@ -9,6 +9,7 @@ import {
     Expanded,
     HitTestBehavior,
     InputEdgy,
+    type Mutation,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -164,7 +165,7 @@ function PrimaryButton({
     label: string;
     bg: Color;
     shadowColor: Color;
-    onClick: ReturnType<typeof mutate>;
+    onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
 }): EdgyElement {
     return MouseRegion({
@@ -199,7 +200,7 @@ function GhostButton({
     queryKey,
 }: {
     label: string;
-    onClick: ReturnType<typeof mutate>;
+    onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
 }): EdgyElement {
     return MouseRegion({
@@ -348,7 +349,7 @@ function EditModal(): EdgyElement {
                 children: [
                     PointerInteract({
                         behavior: HitTestBehavior.Opaque,
-                        onClick: mutate(() => {
+                        onClick: mutate((_ctx, _ev: PointerInteractEvent) => {
                             /* swallow click inside card */
                         }),
                         child: Container({
