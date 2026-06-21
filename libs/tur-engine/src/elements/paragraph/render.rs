@@ -116,13 +116,13 @@ impl ElementRender for TextElement {
         offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
-        _paint_ctx: &PaintContext,
+        paint_ctx: &PaintContext,
     ) {
         let Some(ref layout_data) = self.cached_layout else {
             return;
         };
 
-        if self.selection_anchor != self.selection_end {
+        if paint_ctx.is_focused() && self.selection_anchor != self.selection_end {
             let (s, e) = if self.selection_anchor < self.selection_end {
                 (self.selection_anchor, self.selection_end)
             } else {

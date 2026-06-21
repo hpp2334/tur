@@ -8,7 +8,9 @@ use crate::core::elements::{
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::core::scroll::ScrollController;
-use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::core::widget::{
+    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+};
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
 pub(crate) const MIN_THUMB: f64 = 24.0;
@@ -18,7 +20,8 @@ pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 // ---------------------------------------------------------------------------
 // ScrollbarComponent — the user's declaration. Pure Rust except for the
 // opaque `controller` (a `ScrollController` class instance shared with a
-// `ScrollView`). `color` and `thumbRadius` are reactive (`Val<T>`).
+// `ScrollView`). `color`, `thumbRadius`, `trackColor` and `thickness` are
+// reactive (`Val<T>`).
 //
 // Vertical only (the editor use case). Horizontal support can be added later.
 // ---------------------------------------------------------------------------
@@ -29,6 +32,7 @@ pub struct ScrollbarComponent {
     /// bound scroll-view node id (for `ScrollTo` requests during drag).
     pub controller: Option<JsObject>,
     pub color: Option<Val<Brush>>,
+    pub track_color: Option<Val<Brush>>,
     pub thumb_radius: Option<Val<f64>>,
     /// Track thickness (width for a vertical scrollbar). Defaults to 10.
     pub thickness: Option<Val<f64>>,
@@ -39,7 +43,8 @@ pub struct ScrollbarComponent {
 struct DragState {
     /// Pointer y (local) at drag start.
     start_y: f64,
-    /// Scroll offset the drag started from (after the initial click-jump).
+    /// Scroll offset the drag started from (after the initial click-jump, or
+    /// the live offset if the click landed on the thumb).
     start_offset: f64,
 }
 
@@ -47,7 +52,7 @@ pub struct ScrollbarElement {
     pub component: ScrollbarComponent,
     /// Last computed track size — used by the drag handler for offset math.
     pub(crate) cached_track: Size,
-    /// `Some` while a drag is in progress; cleared on the next pointer-down.
+    /// `Some` while a drag is in progress; cleared on the next pointer-up.
     drag: Option<DragState>,
 }
 
@@ -146,15 +151,31 @@ impl ElementOnGesture for ScrollbarElement {
         match event {
             ComposedGestureEvent::PointerDown { local, .. } => {
                 cx.request_own_focus();
-                // Jump so the thumb's center sits under the pointer, then drag
-                // relative to that position.
-                let target = ((local.y - thumb / 2.0) / thumb_range * max_extent)
-                    .clamp(0.0, max_extent);
-                cx.request_scroll_to(node, target);
-                self.drag = Some(DragState {
-                    start_y: local.y,
-                    start_offset: target,
-                });
+                let (_, current_offset, _, _) = self.metrics().unwrap();
+
+                // Compute the thumb's current top edge in track-local pixels.
+                let thumb_top = (current_offset / max_extent) * thumb_range;
+                let on_thumb = local.y >= thumb_top && local.y <= thumb_top + thumb;
+
+                if on_thumb {
+                    // Click landed on the thumb: do NOT jump. Drag the thumb
+                    // 1:1 with pointer movement from its current position.
+                    self.drag = Some(DragState {
+                        start_y: local.y,
+                        start_offset: current_offset,
+                    });
+                } else {
+                    // Click landed on the track (above or below the thumb):
+                    // jump so the thumb's center sits under the pointer, then
+                    // drag relative to that post-jump position.
+                    let target = ((local.y - thumb / 2.0) / thumb_range * max_extent)
+                        .clamp(0.0, max_extent);
+                    cx.request_scroll_to(node, target);
+                    self.drag = Some(DragState {
+                        start_y: local.y,
+                        start_offset: target,
+                    });
+                }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
                 let Some(d) = self.drag else { return; };
@@ -167,6 +188,8 @@ impl ElementOnGesture for ScrollbarElement {
                 // Drag ends — clear drag state so the next drag starts fresh.
                 self.drag = None;
             }
+            ComposedGestureEvent::PointerDoubleDown { .. } => {}
+            ComposedGestureEvent::PointerTripleDown { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
     }
@@ -226,6 +249,7 @@ impl ScrollbarComponent {
         ScrollbarComponent {
             controller: prop_controller(props, "controller", ctx),
             color: prop_val::<Brush>(props, "color", ctx),
+            track_color: prop_val::<Brush>(props, "trackColor", ctx),
             thumb_radius: prop_val::<f64>(props, "thumbRadius", ctx),
             thickness: prop_val::<f64>(props, "thickness", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),

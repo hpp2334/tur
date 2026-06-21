@@ -173,9 +173,12 @@ impl ElementRender for EditableTextElement {
         let has_selection = c.has_selection();
         let composing_text = c.composing_text().cloned();
         let composing_start = c.composing_start();
+        let text_is_empty = c.text().is_empty();
         drop(c);
 
-        if has_selection {
+        let is_focused = paint_ctx.is_focused();
+
+        if is_focused && has_selection {
             let (a, b) = if sel_anchor < sel_end {
                 (sel_anchor, sel_end)
             } else {
@@ -184,7 +187,14 @@ impl ElementRender for EditableTextElement {
             paint_helpers::paint_selection(canvas, offset, layout_data, a, b);
         }
 
-        canvas.fill_text_layout(offset, layout_data);
+        // Hide the placeholder text when the input is focused and empty —
+        // matches browser/Flutter input convention. The box keeps its
+        // size (the placeholder still drives layout) so the cursor stays
+        // anchored at the right position.
+        let suppress_text_fill = is_focused && text_is_empty;
+        if !suppress_text_fill {
+            canvas.fill_text_layout(offset, layout_data);
+        }
 
         if let Some(ref comp) = composing_text {
             let comp_start_byte = composing_start;
@@ -194,11 +204,19 @@ impl ElementRender for EditableTextElement {
             }
         }
 
-        if paint_ctx.is_focused() && !has_selection {
-            paint_cursor(
-                canvas, offset, layout_data, cursor_pos,
-                cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
-            );
+        if is_focused && !has_selection {
+            // Blink the caret at a 530ms half-cycle (the conventional
+            // editor caret blink rate). Visible on even half-cycles.
+            let blink_visible = (paint_ctx.now_ms() / 530) % 2 == 0;
+            if blink_visible {
+                paint_cursor(
+                    canvas,
+                    offset,
+                    layout_data,
+                    cursor_pos,
+                    cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
+                );
+            }
         }
     }
 }

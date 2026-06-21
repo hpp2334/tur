@@ -1,4 +1,5 @@
 import {
+    Color,
     Container,
     createScrollController,
     derive,
@@ -7,13 +8,19 @@ import {
     Expanded,
     get,
     InputEdgy,
+    MouseRegion,
+    type Mutation,
+    mutate,
     Row,
     Scrollbar,
     ScrollView,
     set,
+    source,
+    type PointerRegionEvent,
 } from "@tur/edgy";
 import {
     editorCtrl,
+    editorUndo,
     openContextMenu,
     selectedCase$,
     selectedFile$,
@@ -22,6 +29,7 @@ import { tokens } from "../theme/tokens";
 
 const editorInput: EdgyElement = InputEdgy({
     controller: editorCtrl,
+    undoController: editorUndo,
     multiline: true,
     fontFamily: "monospace",
     fontSize: 13,
@@ -32,25 +40,41 @@ const editorInput: EdgyElement = InputEdgy({
     queryKey: ["editor-input"],
 });
 
-/** A scrollable editor pane: a `ScrollView` next to a draggable `Scrollbar`
- *  that shares the same controller. (A Row column rather than an overlay,
- *  because `Positioned` doesn't honor `right`/`bottom` for placement.) */
+/** Per-instance hover state for the scrollbar — recreated every time the
+ *  editor subtree rebuilds (so the source lives inside the factory). */
 function scrollableEditor(): EdgyElement {
     // A fresh controller per build so it binds to the right scroll-view node
     // whenever the case (and thus the subtree) is rebuilt.
     const controller = createScrollController();
+    // Light-gray track shows only while hovered.
+    const trackHovered$ = source(false);
     return Row({
         children: [
             Expanded({
                 child: ScrollView({ controller, child: editorInput }),
             }),
             // Dedicated 10px scrollbar column.
-            Scrollbar({
-                controller,
-                color: tokens.text.placeholder,
-                thickness: 10,
-                thumbRadius: 5,
-                queryKey: ["editor-scrollbar"],
+            MouseRegion({
+                onEnter: mutate(() => set(trackHovered$, true)) as unknown as Mutation<
+                    [PointerRegionEvent],
+                    void
+                >,
+                onExit: mutate(() => set(trackHovered$, false)) as unknown as Mutation<
+                    [PointerRegionEvent],
+                    void
+                >,
+                child: Scrollbar({
+                    controller,
+                    color: tokens.text.placeholder,
+                    trackColor: derive(() =>
+                        get(trackHovered$)
+                            ? tokens.bg.strongHover
+                            : Color.rgba(0, 0, 0, 0),
+                    ),
+                    thickness: 10,
+                    thumbRadius: 5,
+                    queryKey: ["editor-scrollbar"],
+                }),
             }),
         ],
     });

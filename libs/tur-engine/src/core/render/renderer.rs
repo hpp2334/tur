@@ -3,7 +3,7 @@ use crate::core::elements::ElementTree;
 use crate::core::resource::ResourceMap;
 
 pub trait Renderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap);
+    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64);
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())

@@ -165,6 +165,12 @@ export interface TextProps {
     fontSize?: Val<number>;
     color?: Val<unknown>;
     spans?: Val<unknown>;
+    /**
+     * When `true`, the text can be drag-selected with the pointer. Defaults
+     * to `false` (matches the browser convention for `<span>`/`<div>` text).
+     * Non-reactive — toggle by rebuilding the element.
+     */
+    selectable?: boolean;
     queryKey?: Val<string[]>;
 }
 
@@ -282,6 +288,8 @@ export interface ScrollbarProps {
     controller?: unknown;
     /** Thumb brush (color). Defaults to a semi-transparent gray. */
     color?: Val<unknown>;
+    /** Track background brush (painted behind the thumb). Omit for no track. */
+    trackColor?: Val<unknown>;
     /** Track thickness (width for a vertical scrollbar). Defaults to 10. */
     thickness?: Val<number>;
     /** Thumb corner radius. Defaults to half the track width. */
@@ -338,6 +346,10 @@ export function ImageEdgy(props: {
 
 export function InputEdgy(props: {
     controller?: unknown;
+    /** Optional `UndoController` (created via `createUndoController()`) that
+     *  enables Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z (and Ctrl+Y) keyboard shortcuts.
+     *  The controller is shared across rebuilds — pass the same instance. */
+    undoController?: unknown;
     placeholder?: Val<string>;
     color?: Val<unknown>;
     placeholderColor?: Val<unknown>;
@@ -443,6 +455,26 @@ export function createTextEditingController(
     opts: TextEditingControllerOpts = {},
 ): unknown {
     return __tur.createTextEditingController(__ctx, opts);
+}
+
+/**
+ * `UndoController` — Flutter-style undo/redo history stack. Pair with a
+ * `TextEditingController` via the `InputEdgy({ undoController })` prop to
+ * enable Cmd/Ctrl+Z and Cmd/Ctrl+Shift+Z (plus Ctrl+Y on Windows). The
+ * controller's `canUndo` / `canRedo` getters are reactive-friendly — read
+ * them whenever a menu needs to enable/disable its Undo/Redo items.
+ */
+export interface UndoController {
+    /** True when at least one earlier state can be restored. */
+    readonly canUndo: boolean;
+    /** True when at least one later state can be re-applied. */
+    readonly canRedo: boolean;
+    /** Reset both stacks. */
+    clear(): void;
+}
+
+export function createUndoController(): UndoController {
+    return __tur.createUndoController(__ctx) as UndoController;
 }
 
 export function createScrollController(
@@ -635,6 +667,7 @@ interface TurGlobal {
     render(ctx: unknown, root: EdgyElement): void;
 
     createTextEditingController(ctx: unknown, opts: unknown): unknown;
+    createUndoController(ctx: unknown): unknown;
     createScrollController(ctx: unknown, opts: unknown): unknown;
     createLazyListController(ctx: unknown, opts: unknown): unknown;
     createAnimationController(ctx: unknown, opts: unknown): unknown;

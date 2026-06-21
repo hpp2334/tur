@@ -11,6 +11,7 @@ import {
     mutate,
     PointerInteract,
     Row,
+    SizedBox,
     source,
     Text,
 } from "@tur/edgy";
@@ -35,6 +36,26 @@ export default component(() =>
                         Row({
                             mainAlignment: MainAxisAlignment.Center,
                             children: [
+                                PointerInteract({
+                                    onClick: mutate(({ get, set }, _ev) =>
+                                        set(count$, get(count$) - 1),
+                                    ),
+                                    child: Container({
+                                        width: 100,
+                                        height: 44,
+                                        borderRadius: 8,
+                                        color: Color.hex("#6366f1"),
+                                        alignment: Alignment.Center,
+                                        children: [
+                                            Text({
+                                                text: "-1",
+                                                fontSize: 18,
+                                                color: Color.hex("#ffffff"),
+                                            }),
+                                        ],
+                                    }),
+                                }),
+                                SizedBox({ width: 12 }),
                                 PointerInteract({
                                     onClick: mutate(({ get, set }, _ev) =>
                                         set(count$, get(count$) + 1),

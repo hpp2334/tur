@@ -484,10 +484,15 @@ impl TurWasmApp {
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
                         let button = tur_shared::MouseButton::from_dom(event.button() as u16);
+                        // DOM `MouseEvent.timeStamp` is ms since epoch — used by
+                        // the engine's gesture composer for multi-click
+                        // (double/triple) classification.
+                        let time_ms = event.time_stamp() as u64;
                         s.app.push_event(AppEvent::Gesture(
                             AppGestureEvent::PointerDown {
                                 position: Offset::new(x, y),
                                 button,
+                                time_ms,
                             },
                         ));
                     }

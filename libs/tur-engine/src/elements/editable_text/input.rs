@@ -9,7 +9,7 @@ use crate::core::text::TextEditingController;
 use crate::core::widget::{ReadableAtom, Component, Val, WidgetCx};
 use crate::elements::ContainerComponent;
 
-use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_val, ContextMenuEvent, EditableTextComponent};
+use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_undo_controller, prop_val, ContextMenuEvent, EditableTextComponent};
 
 // ---------------------------------------------------------------------------
 // InputComponent — composes a ContainerElement (sizing/border wrapper) with a single
@@ -23,6 +23,7 @@ pub struct InputComponent {
     pub height: Option<Val<f64>>,
     pub controller: Option<JsObject>,
     pub controller_atom: Option<ReadableAtom<TextEditingController>>,
+    pub undo_controller: Option<JsObject>,
     pub placeholder: Option<Val<String>>,
     pub color: Option<Val<Color>>,
     pub placeholder_color: Option<Val<Color>>,
@@ -39,6 +40,7 @@ impl Component for InputComponent {
         let editable = Rc::new(EditableTextComponent {
             controller: self.controller.clone(),
             controller_atom: self.controller_atom,
+            undo_controller: self.undo_controller.clone(),
             placeholder: self.placeholder.clone(),
             color: self.color.clone(),
             placeholder_color: self.placeholder_color.clone(),
@@ -68,6 +70,7 @@ impl InputComponent {
             height: prop_val::<f64>(props, "height", ctx),
             controller: prop_controller(props, "controller", ctx),
             controller_atom: prop_controller_atom(props, "controller", ctx),
+            undo_controller: prop_undo_controller(props, "undoController", ctx),
             placeholder: prop_val::<String>(props, "placeholder", ctx),
             color: prop_val::<Color>(props, "color", ctx),
             placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),

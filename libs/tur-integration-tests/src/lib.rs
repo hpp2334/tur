@@ -29,6 +29,12 @@ impl Rect {
 
 pub struct TurTestApp {
     inner: TurApp,
+    /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
+    /// events for engine-side multi-click classification. Advanced in small
+    /// steps (well under the 500 ms threshold) on each pointer-down so
+    /// consecutive `double_click` / `triple_click` calls register as a
+    /// multi-click streak.
+    synthetic_time_ms: u64,
 }
 
 impl TurTestApp {
@@ -43,7 +49,26 @@ impl TurTestApp {
             dpr: 1.0,
         });
         let _ = inner.spawn_loop_once(Duration::ZERO);
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
+        })
+    }
+
+    /// Bump the synthetic time source so the next pointer-down stamps a
+    /// fresh `time_ms`. Default step is small enough to stay inside the
+    /// engine's 500 ms multi-click window.
+    fn bump_time(&mut self, step_ms: u64) -> u64 {
+        self.synthetic_time_ms = self.synthetic_time_ms.saturating_add(step_ms);
+        self.synthetic_time_ms
+    }
+
+    /// Test-only hook to advance the synthetic wall-clock without sending
+    /// any event. Useful for pushing past the engine's multi-click
+    /// classification window (e.g. to simulate a single click that
+    /// follows a double-click after a long pause).
+    pub fn bump_synthetic_time_ms_for_test(&mut self, step_ms: u64) {
+        let _ = self.bump_time(step_ms);
     }
 
     pub fn load_bundle(&mut self, name: &str) -> Result<(), TurError> {
@@ -89,10 +114,12 @@ impl TurTestApp {
     }
 
     pub fn click(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                time_ms,
             }));
         self.ensure_flushed();
         self.inner
@@ -140,12 +167,31 @@ impl TurTestApp {
     }
 
     pub fn pointer_down(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                time_ms,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
+    }
+
+    /// Simulate a double-click at `(x, y)`. Two `pointer_down`s are pushed in
+    /// quick succession (40 ms apart, well inside the engine's 500 ms window)
+    /// at the same position, so the gesture composer classifies the second
+    /// one as `PointerDoubleDown`.
+    pub fn double_click(&mut self, x: f64, y: f64) {
+        self.pointer_down(x, y);
+        self.pointer_down(x, y);
+    }
+
+    /// Simulate a triple-click at `(x, y)`. Three `pointer_down`s in quick
+    /// succession — the third one is classified as `PointerTripleDown`.
+    pub fn triple_click(&mut self, x: f64, y: f64) {
+        self.pointer_down(x, y);
+        self.pointer_down(x, y);
+        self.pointer_down(x, y);
     }
 
     pub fn pointer_move(&mut self, x: f64, y: f64) {
@@ -168,10 +214,12 @@ impl TurTestApp {
     /// Same as `pointer_down` but with an explicit mouse button. Used to
     /// simulate right-click (button 2) without an enclosing `click` gesture.
     pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
+        let time_ms = self.bump_time(40);
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
                 button,
+                time_ms,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -201,10 +249,12 @@ impl TurTestApp {
     /// batching of multiple input events between animation frames. Pair with
     /// `pointer_move_no_flush` / `pointer_up_no_flush` and a single `tick()`.
     pub fn pointer_down_no_flush(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                time_ms,
             }));
     }
 

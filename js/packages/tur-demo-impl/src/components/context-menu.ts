@@ -29,7 +29,7 @@ import {
     pasteFromClipboard,
     selectAll,
 } from "../state";
-import { ink, tokens } from "../theme/tokens";
+import { tokens } from "../theme/tokens";
 import { copyIconId, cutIconId, pasteIconId } from "./icons";
 
 // Context menu — overlaid via a Stack at the canvas root. Anchored with
@@ -121,7 +121,7 @@ function menuItems(): EdgyElement {
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,
         borderWidth: 1,
-        shadowColor: ink[900],
+        shadowColor: tokens.shadow.sm,
         shadowBlur: 12,
         shadowOffset: [0, 4],
         children: [

@@ -139,11 +139,11 @@ impl VelloRenderer {
         );
     }
 
-    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
+    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
         self.scene.reset();
         let mut fragment = Scene::new();
         let mut ctx = VelloPaintContext::new(&mut fragment);
-        tree.paint(&mut ctx, focused_node_id, resource_map);
+        tree.paint(&mut ctx, focused_node_id, resource_map, now_ms);
         self.scene.append(&fragment, Some(Affine::scale(self.dpr)));
     }
 
@@ -281,8 +281,8 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap) {
-        self.render_to_scene(tree, focused_node_id, resource_map);
+    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
+        self.render_to_scene(tree, focused_node_id, resource_map, now_ms);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

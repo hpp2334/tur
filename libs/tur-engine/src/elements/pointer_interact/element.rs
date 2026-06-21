@@ -108,6 +108,17 @@ impl ElementOnGesture for PointerInteractElement {
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
+            // Multi-click variants also fire `on_pointer_down` — matches
+            // the DOM convention where `mousedown` is dispatched on every
+            // click of a multi-click sequence. (`dblclick` is a separate
+            // event there; elements that care about double-click as a
+            // distinct gesture implement `ElementOnGesture` directly.)
+            ComposedGestureEvent::PointerDoubleDown { local, global, .. }
+            | ComposedGestureEvent::PointerTripleDown { local, global, .. } => {
+                let m = self.component.on_pointer_down;
+                let ev = PointerInteractEvent { local: *local, global: *global };
+                (m, ev)
+            }
             ComposedGestureEvent::PointerMove { local, global } => {
                 let m = self.component.on_pointer_move;
                 let ev = PointerInteractEvent { local: *local, global: *global };

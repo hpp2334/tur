@@ -8,6 +8,13 @@ use crate::core::focus::FocusManager;
 
 pub enum ComposedGestureEvent {
     PointerDown { local: Offset, global: Offset, button: MouseButton },
+    /// Double-click — engine-computed from two `AppGestureEvent::PointerDown`s
+    /// within ≤500 ms and ≤5 px (see `GestureEventComposer::classify_click`).
+    /// Used by EditableText for word selection.
+    PointerDoubleDown { local: Offset, global: Offset, button: MouseButton },
+    /// Triple-click — engine-computed from three consecutive clicks in the
+    /// same time/position window. Used by EditableText for line selection.
+    PointerTripleDown { local: Offset, global: Offset, button: MouseButton },
     PointerMove { local: Offset, global: Offset },
     PointerUp { local: Offset, global: Offset, button: MouseButton },
     /// Right-click. `local` is relative to the element; `global` is canvas-

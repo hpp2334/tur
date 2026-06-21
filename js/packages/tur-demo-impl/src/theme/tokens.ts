@@ -130,4 +130,10 @@ export const tokens = {
         error: status.error,
         info: status.info,
     },
+    shadow: {
+        // Soft elevation — alpha is 0–255 (a≈80 ≈ 31% opacity).
+        sm: Color.rgba(15, 23, 42, 80),
+        md: Color.rgba(15, 23, 42, 120),
+        lg: Color.rgba(15, 23, 42, 160),
+    },
 } as const;

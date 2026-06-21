@@ -46,7 +46,7 @@ pub enum AppEvent {
 }
 
 pub enum AppGestureEvent {
-    PointerDown { position: Offset, button: MouseButton },
+    PointerDown { position: Offset, button: MouseButton, time_ms: u64 },
     PointerUp { position: Offset, button: MouseButton },
     PointerMove { position: Offset },
     /// Right-click / context-menu request from the host. Carries the canvas

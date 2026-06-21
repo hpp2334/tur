@@ -34,6 +34,11 @@ pub struct TextComponent {
     pub spans: Option<Vec<SpanData>>,
     pub query_key: Option<Vec<String>>,
     pub on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
+    /// When `true`, the text can be drag-selected. Defaults to `false`
+    /// (read-only, non-selectable) — matches the browser convention for
+    /// `<span>`/`<div>` text. Read directly from the spec by the gesture
+    /// handler (no reactivity — toggle by rebuilding the element).
+    pub selectable: bool,
 }
 
 impl Component for TextComponent {
@@ -141,6 +146,11 @@ impl ElementOnGesture for TextElement {
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
     ) {
+        // Plain Text is non-selectable by default (browser-like). Selection
+        // gestures only run when the `selectable` prop was truthy.
+        if !self.component.selectable {
+            return;
+        }
         match event {
             ComposedGestureEvent::PointerDown { local, .. } => {
                 cx.request_own_focus();
@@ -167,6 +177,8 @@ impl ElementOnGesture for TextElement {
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}
+            ComposedGestureEvent::PointerDoubleDown { .. } => {}
+            ComposedGestureEvent::PointerTripleDown { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
     }
@@ -221,6 +233,11 @@ impl TextComponent {
             .get(js_string!("onSelectionChange"), ctx)
             .ok()
             .and_then(|v| edgy_mutation_from_js(&v));
+        let selectable = props
+            .get(js_string!("selectable"), ctx)
+            .ok()
+            .and_then(|v| v.as_boolean())
+            .unwrap_or(false);
         TextComponent {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
@@ -228,6 +245,7 @@ impl TextComponent {
             spans: prop_spans(props, "spans", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
             on_selection_change,
+            selectable,
         }
     }
 }
