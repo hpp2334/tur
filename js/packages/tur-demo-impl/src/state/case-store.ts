@@ -1,5 +1,6 @@
 import {
     createTextEditingController,
+    createUndoController,
     type EdgyElement,
     get,
     type KeyEvent,
@@ -78,6 +79,10 @@ export const editorCtrl = createTextEditingController({
         }
     }),
 }) as unknown as EditorController;
+
+/** Undo/redo history stack for the code editor. Passed to `InputEdgy` via
+ *  the `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
+export const editorUndo = createUndoController();
 
 /** Save the current editor text back to the per-case file cache. */
 function saveCurrentFileText(): void {

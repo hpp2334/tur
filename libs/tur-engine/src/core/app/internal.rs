@@ -117,14 +117,40 @@ impl TurAppInternal {
             self.needs_draw.set(true);
         }
 
+        // Cursor blink: when an EditableText holds focus, keep redrawing on
+        // every idle frame so the caret's 530ms blink phase is honoured even
+        // when no other state is changing.
+        if self.focused_is_editable() {
+            needs_render = true;
+        }
+
         if needs_render {
-            self.app_context.borrow_mut().render();
+            let now_ms = boa_context.clock().now().millis_since_epoch();
+            self.app_context.borrow_mut().render(now_ms);
             if let Err(e) = self.app_context.borrow_mut().renderer.present() {
                 tracing::error!("present failed: {e}");
                 return Err(TurError::Render(e.to_string()));
             }
         }
         Ok(needs_render)
+    }
+
+    /// True if the currently-focused element is an `EditableTextElement`.
+    /// Used by `flush` to keep redrawing on idle frames so the caret blink
+    /// animates without an explicit animation controller.
+    fn focused_is_editable(&self) -> bool {
+        use crate::elements::EditableTextElement;
+        let Some(focused_id) = self.js_context.focus_manager.borrow().focused() else {
+            return false;
+        };
+        let tree = self.js_context.element_tree.borrow();
+        let Some(node) = tree.get(focused_id) else {
+            return false;
+        };
+        let Some(ref element) = node.element else {
+            return false;
+        };
+        element.cast::<EditableTextElement>().is_some()
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the

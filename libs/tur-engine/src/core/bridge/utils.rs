@@ -34,6 +34,14 @@ pub(crate) fn tur_create_text_editing_controller(
     Ok(TextEditingController::from_data(data, context)?.upcast().clone().into())
 }
 
+pub(crate) fn tur_create_undo_controller(
+    _this: &JsValue, args: &[JsValue], context: &mut Context,
+) -> JsResult<JsValue> {
+    let _ = extract_ctx(args)?;
+    let data = crate::core::text::UndoController::data_constructor(&JsValue::undefined(), &args[1..], context)?;
+    Ok(crate::core::text::UndoController::from_data(data, context)?.upcast().clone().into())
+}
+
 pub(crate) fn tur_create_scroll_controller(
     _this: &JsValue, args: &[JsValue], context: &mut Context,
 ) -> JsResult<JsValue> {

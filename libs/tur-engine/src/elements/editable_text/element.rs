@@ -20,6 +20,7 @@ use crate::core::text::{
     InputEvent, SelectionChangeEvent,
 };
 use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Component, Val, WidgetCx};
+use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 
 #[derive(Clone)]
@@ -78,6 +79,11 @@ impl LineNavInfo {
 pub struct EditableTextComponent {
     pub controller: Option<JsObject>,
     pub controller_atom: Option<ReadableAtom<TextEditingController>>,
+    /// Optional `UndoController` for Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z support.
+    /// When `Some`, text-mutating keystrokes push a prior-state snapshot
+    /// onto the undo stack, and `handle_key_event` intercepts `"z"` / `"y"`
+    /// with the appropriate modifiers.
+    pub undo_controller: Option<JsObject>,
     pub placeholder: Option<Val<String>>,
     pub color: Option<Val<Color>>,
     pub placeholder_color: Option<Val<Color>>,
@@ -160,6 +166,13 @@ impl EditableTextElement {
             .expect("controller is always present")
             .downcast_mut::<TextEditingController>()
             .expect("controller is always a valid TextEditingController")
+    }
+
+    pub(crate) fn undo_controller_mut(&self) -> Option<boa_engine::object::RefMut<'_, crate::core::text::UndoController>> {
+        self.component
+            .undo_controller
+            .as_ref()?
+            .downcast_mut::<crate::core::text::UndoController>()
     }
 
     pub fn text(&self) -> String {
@@ -386,6 +399,65 @@ impl EditableTextElement {
                 // mark the key as handled so no fallback runs.
                 true
             }
+            "z" if (ctrl || meta) && self.component.undo_controller.is_some() => {
+                // Undo (no shift) / Redo (with shift). The undo controller
+                // owns the history stacks; we feed it the controller's
+                // current value (already captured above as `full`/`cursor`/
+                // `anchor`/`end`) and apply the restored value in-place.
+                use crate::core::text::TextEditingValue;
+                let current = TextEditingValue {
+                    text: full.clone(),
+                    cursor_position: cursor,
+                    selection_anchor: anchor,
+                    selection_end: end,
+                };
+                let restored = if shift {
+                    self.undo_controller_mut().and_then(|mut u| u.redo(current))
+                } else {
+                    self.undo_controller_mut().and_then(|mut u| u.undo(current))
+                };
+                if let Some(value) = restored {
+                    c.set_spans_preserve_cursor(vec![SpanData {
+                        text: value.text,
+                        bold: false,
+                        italic: false,
+                        underline: false,
+                        font_size: None,
+                        color: None,
+                    }]);
+                    new_cursor = value.cursor_position;
+                    new_anchor = value.selection_anchor;
+                    new_end = value.selection_end;
+                }
+                true
+            }
+            "y" if ctrl && self.component.undo_controller.is_some() => {
+                // Ctrl+Y redo (Windows convention) — mirror of Cmd+Shift+Z.
+                use crate::core::text::TextEditingValue;
+                let current = TextEditingValue {
+                    text: full.clone(),
+                    cursor_position: cursor,
+                    selection_anchor: anchor,
+                    selection_end: end,
+                };
+                let restored = self
+                    .undo_controller_mut()
+                    .and_then(|mut u| u.redo(current));
+                if let Some(value) = restored {
+                    c.set_spans_preserve_cursor(vec![SpanData {
+                        text: value.text,
+                        bold: false,
+                        italic: false,
+                        underline: false,
+                        font_size: None,
+                        color: None,
+                    }]);
+                    new_cursor = value.cursor_position;
+                    new_anchor = value.selection_anchor;
+                    new_end = value.selection_end;
+                }
+                true
+            }
             "Enter" => {
                 if multiline {
                     if has_sel {
@@ -432,6 +504,15 @@ impl EditableTextElement {
     }
 
     fn char_index_at(&self, local_position: &tur_shared::Offset) -> usize {
+        // When the buffer is empty and no IME composition is active, the
+        // cached layout was built from the placeholder text — clicking
+        // anywhere inside it must still map to byte 0 so the caret lands
+        // at the first position and the placeholder cannot be selected.
+        let c = self.controller();
+        if c.text().is_empty() && !c.is_composing() {
+            return 0;
+        }
+        drop(c);
         self.cached_layout
             .as_ref()
             .map(|ld| {
@@ -588,8 +669,49 @@ impl ElementOnGesture for EditableTextElement {
         event: &ComposedGestureEvent,
     ) {
         match event {
+            ComposedGestureEvent::PointerDoubleDown { local, .. } => {
+                cx.request_own_focus();
+                let byte_pos = self.char_index_at(local);
+                // Word selection: expand left + right to the nearest word
+                // boundary (sequence of word chars: alphanumerics or
+                // underscore, matching most editors' Ctrl+Arrow behaviour).
+                // Clicking past end-of-text selects the final word.
+                let text = self.controller().text();
+                let anchor = word_start(&text, byte_pos);
+                let end = word_end(&text, byte_pos);
+                let mut c = self.controller_mut();
+                c.set_cursor_position(end);
+                c.set_selection(anchor, end);
+                drop(c);
+                cx.request_redraw();
+            }
+            ComposedGestureEvent::PointerTripleDown { local, .. } => {
+                cx.request_own_focus();
+                let byte_pos = self.char_index_at(local);
+                // Line selection: look up the visual line containing the
+                // click and select from its start to its end byte. If the
+                // layout isn't ready yet, fall back to a caret.
+                if let Some(layout) = self.cached_layout.as_ref() {
+                    let line = layout.line_index_for_byte(byte_pos);
+                    let start = layout.line_start_byte(line);
+                    let end = layout.line_end_byte(line);
+                    let mut c = self.controller_mut();
+                    c.set_cursor_position(end);
+                    c.set_selection(start, end);
+                    drop(c);
+                    cx.request_redraw();
+                } else {
+                    let mut c = self.controller_mut();
+                    c.set_cursor_position(byte_pos);
+                    c.set_selection(byte_pos, byte_pos);
+                    drop(c);
+                    cx.request_redraw();
+                }
+            }
             ComposedGestureEvent::PointerDown { local, button, .. } => {
                 cx.request_own_focus();
+                let byte_pos = self.char_index_at(local);
+
                 // Native-OS selection semantics on right-click:
                 //   - If there is an active selection AND the click lands
                 //     inside it (inclusive), preserve the selection so the
@@ -598,7 +720,6 @@ impl ElementOnGesture for EditableTextElement {
                 //   - Otherwise (left click, middle click, or right-click
                 //     outside the selection), move the caret to the click
                 //     position and collapse the selection.
-                let byte_pos = self.char_index_at(local);
                 let preserve = *button == tur_shared::MouseButton::Right
                     && self.controller().has_selection()
                     && {
@@ -673,6 +794,13 @@ impl ElementOnKeyboard for EditableTextElement {
             LineNavInfo::extract(ld, cursor_byte)
         });
 
+        // Detect undo/redo keystrokes up-front so the post-change logic can
+        // skip pushing a redundant history entry (the stacks already swap
+        // inside `handle_key_event`'s `"z"` / `"y"` arms).
+        let is_undo_redo_keystroke = (event.key == "z" || event.key == "y")
+            && (event.modifiers.ctrl || event.modifiers.meta)
+            && self.component.undo_controller.is_some();
+
         let (changed, clipboard_write) = self.handle_key_event(
             &event.key,
             event.modifiers.ctrl,
@@ -691,6 +819,19 @@ impl ElementOnKeyboard for EditableTextElement {
             let c = self.controller();
             let new_text = c.text();
             if new_text != prev_text {
+                // Push the prior state onto the undo stack — but only for
+                // ordinary text mutations, not for the undo/redo keystrokes
+                // themselves (those swap the stacks inside handle_key_event).
+                if !is_undo_redo_keystroke {
+                    if let Some(mut undo) = self.undo_controller_mut() {
+                        undo.push(crate::core::text::TextEditingValue {
+                            text: prev_text.clone(),
+                            cursor_position: prev_cursor,
+                            selection_anchor: prev_anchor,
+                            selection_end: prev_end,
+                        });
+                    }
+                }
                 let enter = event.key == "Enter" && !self.resolved_multiline;
                 if let Some(m) = c.on_input() {
                     cx.push_event(m, InputEvent { value: new_text, enter });
@@ -820,6 +961,23 @@ pub(super) fn prop_controller(
     }
 }
 
+/// Extract the `undoController` prop. Typed separately from
+/// `prop_controller` because the JsObject filter is controller-specific.
+pub(super) fn prop_undo_controller(
+    props: &JsObject,
+    key: &str,
+    ctx: &mut Context,
+) -> Option<JsObject> {
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    if obj.downcast_ref::<crate::core::text::UndoController>().is_some() {
+        Some(obj.clone())
+    } else {
+        None
+    }
+}
+
 /// Extract the controller atom from the controller prop (if it was passed
 /// reactively).  Returns a typed handle to the reactive atom.
 pub(super) fn prop_controller_atom(
@@ -848,6 +1006,7 @@ impl EditableTextComponent {
         EditableTextComponent {
             controller: prop_controller(props, "controller", ctx),
             controller_atom: prop_controller_atom(props, "controller", ctx),
+            undo_controller: prop_undo_controller(props, "undoController", ctx),
             placeholder: prop_val::<String>(props, "placeholder", ctx),
             color: prop_val::<Color>(props, "color", ctx),
             placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
@@ -859,4 +1018,46 @@ impl EditableTextComponent {
             query_key: prop_query_key(props, "queryKey", ctx),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Word-boundary helpers for double-click selection. Operate on UTF-8 byte
+// offsets to match the controller's `set_selection(anchor, end)` convention.
+// Use `unicode_segmentation::UnicodeSegmentation` (already a workspace dep)
+// for UAX#29-correct word boundaries — this handles punctuation, digits,
+// and non-ASCII letters the same way most editors do.
+// ---------------------------------------------------------------------------
+
+/// Return the `(start, end)` byte offsets of the word containing `byte_pos`.
+/// "Word" follows UAX#29 word boundaries: a maximal run of alphanumeric
+/// (Unicode) chars or `_`. If `byte_pos` lands on a non-word char (space,
+/// punctuation), the previous word is returned; if `byte_pos` is past
+/// end-of-text, the last word is returned. Returns `(byte_pos, byte_pos)`
+/// when no word exists in the text.
+fn word_range_at(text: &str, byte_pos: usize) -> (usize, usize) {
+    use unicode_segmentation::UnicodeSegmentation;
+    let safe_pos = byte_pos.min(text.len());
+    let mut last_word: Option<(usize, usize)> = None;
+    for (start, segment) in text.split_word_bound_indices() {
+        let end = start + segment.len();
+        let is_word = segment.chars().any(|c| c.is_alphanumeric() || c == '_');
+        if !is_word {
+            continue;
+        }
+        // Position inside this segment (inclusive of the end boundary so a
+        // click just past the last word char still selects the word).
+        if safe_pos >= start && safe_pos <= end {
+            return (start, end);
+        }
+        last_word = Some((start, end));
+    }
+    last_word.unwrap_or((safe_pos, safe_pos))
+}
+
+fn word_start(text: &str, byte_pos: usize) -> usize {
+    word_range_at(text, byte_pos).0
+}
+
+fn word_end(text: &str, byte_pos: usize) -> usize {
+    word_range_at(text, byte_pos).1
 }

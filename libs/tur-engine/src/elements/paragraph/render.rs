@@ -64,9 +64,10 @@ impl ElementLayout for TextElement {
             // Skip zero-width spans: an empty style range panics in parley
             // (`style_run.range.start < style_run.range.end`).
             if !range.is_empty() {
-                if let Some(ref c) = span.color {
-                    builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
-                }
+                // Fall back to opaque black when no color is set — without an
+                // explicit brush, parley/vello render text invisibly.
+                let c = span.color.unwrap_or(tur_shared::Color::rgb(0, 0, 0));
+                builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
                 if span.bold {
                     builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
                 }
@@ -116,13 +117,13 @@ impl ElementRender for TextElement {
         offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
-        _paint_ctx: &PaintContext,
+        paint_ctx: &PaintContext,
     ) {
         let Some(ref layout_data) = self.cached_layout else {
             return;
         };
 
-        if self.selection_anchor != self.selection_end {
+        if paint_ctx.is_focused() && self.selection_anchor != self.selection_end {
             let (s, e) = if self.selection_anchor < self.selection_end {
                 (self.selection_anchor, self.selection_end)
             } else {

@@ -176,9 +176,9 @@ pub trait Renderer {
 
 Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
 
-## Debugging the playground (browser-operate agent)
+## Debugging the playground (main agent + image-reader)
 
-The `playground-for-agent` package has been removed. Playground interaction and visual verification are now done via the **browser-operate** subagent (Task tool, `browser-operate` type), which drives the Playwright MCP tools against the running dev server — there is no separate Playwright harness anymore.
+The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. The main agent drives the browser directly via Playwright MCP tools and reads screenshots with the **image-reader** subagent (Task tool, `image-reader` type).
 
 ### Start the dev server
 
@@ -188,18 +188,16 @@ cd js/packages/tur-demo && TUR_TUNNEL=1 rspack dev
 # → http://localhost:8080/ (must be HTTP: Playwright MCP rejects the self-signed HTTPS cert)
 ```
 
-### Drive the canvas via Playwright MCP
-
-The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` — tur renders its own UI. Typical flow:
+### Drive the canvas
 
 1. `playwright_browser_navigate` → `http://localhost:8080/`.
 2. `playwright_browser_evaluate` → read `JSON.parse(globalThis.turDevTool.elementTree())` for exact element rects. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `JSON.parse(globalThis.turDevTool.getElement(childId))`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
-3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: `new KeyboardEvent('keydown', { key, metaKey })` — events route to the focused element. The editor's `EditableText` supports select-all (`Meta+a`), typing, `Backspace`, arrows, `Enter`, and `Cmd-S` (recompile).
+3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: dispatch `KeyboardEvent` on the focused element (canvas or the hidden `<textarea>` when an `EditableText` has focus).
 4. Re-read `turDevTool.elementTree()` / `getElement(id)` or take a screenshot to confirm the result.
 
-### Always verify visually with browser-operate
+### Verify visually with image-reader
 
-`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, dispatch the **browser-operate** subagent (Task tool, `browser-operate` type) to capture a screenshot with `playwright_browser_take_screenshot` and inspect it. Pass one or more screenshot paths to a single task with a focused PASS/FAIL question per column. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since the operate agent's color perception is unreliable.
+`turDevTool.elementTree()` can report a correct tree while the canvas is visually blank or wrong (e.g. zero-width / transparent elements). After any rendering change, capture a screenshot with `playwright_browser_take_screenshot` and pass the file path to the **image-reader** subagent (Task tool, `image-reader` type) with a focused PASS/FAIL question. Only visual verification catches blank canvases, wrong colors, missing text, or stretched elements. For color checks, prefer ground truth — sample actual canvas pixels via `getImageData` rather than eyeballing, since color perception is unreliable.
 
 ### Stop the dev server after verification
 
@@ -207,7 +205,7 @@ Once visual verification is done, **kill the dev server** — free port 8080 wit
 
 ### Clean up screenshots after verification
 
-If a browser-operate screenshot was saved with a bare `filename`, it lands at the workspace root and shows up as an untracked file. After every visual-verification round, remove stray workspace-root PNGs so the working tree stays clean:
+If a screenshot was saved with a bare `filename`, it lands at the workspace root and shows up as an untracked file. After every visual-verification round, remove stray workspace-root PNGs so the working tree stays clean:
 
 ```sh
 rm -f *.png  # only stray workspace-root screenshots; safe since no PNGs are tracked at root

@@ -213,7 +213,7 @@ pub(crate) fn extract_layout_data(
         // and tiles the line's glyphs without gaps, so walking one char cursor
         // in lockstep yields the correct byte for each glyph (for the
         // monospace, 1-char-per-glyph editor this is exact).
-        let mut line_chars = full_text[line_range.clone()].char_indices();
+        let mut line_chars = full_text[start_byte..end_byte].char_indices();
 
         for item in line.items() {
             let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
@@ -240,8 +240,8 @@ pub(crate) fn extract_layout_data(
                 x += glyph.advance;
                 let byte = line_chars
                     .next()
-                    .map(|(off, _)| line_range.start + off)
-                    .unwrap_or(line_range.end);
+                    .map(|(off, _)| start_byte + off)
+                    .unwrap_or(end_byte);
                 right_x = right_x.max(gx + glyph.advance);
                 stops.push(LineGlyphStop {
                     byte,

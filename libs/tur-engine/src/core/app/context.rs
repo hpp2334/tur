@@ -117,11 +117,11 @@ impl TurAppContext {
         );
     }
 
-    pub fn render(&mut self) {
+    pub fn render(&mut self, now_ms: u64) {
         let focused_node_id = self.focus_manager.borrow().focused();
         let resource_map = self.resource_map.borrow();
         let tree = self.element_tree.borrow();
-        self.renderer.render(&tree, focused_node_id, &resource_map);
+        self.renderer.render(&tree, focused_node_id, &resource_map, now_ms);
     }
 
     pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {

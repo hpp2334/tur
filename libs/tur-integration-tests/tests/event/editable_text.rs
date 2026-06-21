@@ -1084,3 +1084,84 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
         "backspace on a wrap continuation must delete the char left of the caret"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Multi-click classification (engine-side): PointerDoubleDown selects the
+// word under the cursor, PointerTripleDown selects the whole line.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn double_click_selects_word() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("input-typing").unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    focus_editable(&mut app, input_id);
+
+    // Type a single word so the click position is forgiving — anywhere
+    // over the glyphs selects the whole word.
+    for ch in "hello".chars() {
+        app.send_key(&ch.to_string());
+    }
+    app.render();
+    assert_eq!(get_text(&app, input_id), "hello");
+
+    // The focus click already bumped the synthetic time. Push past the
+    // 500ms multi-click window so the double_click's first pointer_down
+    // is a fresh Single (its second pointer-down becomes the Double).
+    for _ in 0..15 {
+        app.bump_synthetic_time_ms_for_test(50);
+    }
+
+    // Click on the middle of the input — definitely over "hello".
+    let bounds = app.get_element_absolute_bounds(input_id).unwrap();
+    let click_x = (bounds.left + bounds.right) * 0.5;
+    let click_y = (bounds.top + bounds.bottom) * 0.5;
+    app.double_click(click_x, click_y);
+    app.render();
+
+    let (anchor, end) = get_selection(&app, input_id);
+    let (lo, hi) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+    let selected = &get_text(&app, input_id)[lo..hi];
+    assert_eq!(selected, "hello", "double-click should select the word under the cursor");
+}
+
+#[test]
+fn single_click_after_double_click_collapses_selection() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("input-typing").unwrap();
+    app.render();
+
+    let input_id = find_editable_text_id(&app);
+    focus_editable(&mut app, input_id);
+    for ch in "hello".chars() {
+        app.send_key(&ch.to_string());
+    }
+    app.render();
+
+    // Push past the focus click's window so the double_click is fresh.
+    for _ in 0..15 {
+        app.bump_synthetic_time_ms_for_test(50);
+    }
+
+    let bounds = app.get_element_absolute_bounds(input_id).unwrap();
+    let click_x = (bounds.left + bounds.right) * 0.5;
+    let click_y = (bounds.top + bounds.bottom) * 0.5;
+
+    app.double_click(click_x, click_y);
+    app.render();
+    // Selection should be non-empty after double-click.
+    let (a, e) = get_selection(&app, input_id);
+    assert_ne!(a, e, "double-click should produce a selection");
+
+    // Wait long enough that the next click is outside the multi-click
+    // window — bump synthetic time past the 500ms threshold.
+    for _ in 0..15 {
+        app.bump_synthetic_time_ms_for_test(50);
+    }
+    app.pointer_down(click_x, click_y);
+    app.render();
+    let (a, e) = get_selection(&app, input_id);
+    assert_eq!(a, e, "single click after the window must collapse the selection");
+}

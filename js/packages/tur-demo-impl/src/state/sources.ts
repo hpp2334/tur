@@ -11,6 +11,7 @@ const WHITELIST = new Set([
     "todolist",
     "complex-animation",
     "lazy-list-virtualized",
+    "countdown",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)

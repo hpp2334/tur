@@ -46,12 +46,9 @@ impl ElementLayout for EditableTextElement {
 
         let display_text = self.composition_display_text();
 
-        if display_text.is_empty() && placeholder.is_none() {
-            self.cached_layout = None;
-            let height = font_size * 1.2;
-            return constraints.constrain(Size::new(0.0, height));
-        }
-
+        // Always build a layout (even for empty text with no placeholder) so
+        // the caret can be painted at byte 0 with the correct line metrics
+        // when the editor is focused + empty.
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
         // Flutter-aligned: render the controller's span tree (so per-range
@@ -159,10 +156,6 @@ impl ElementRender for EditableTextElement {
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let Some(ref layout_data) = self.cached_layout else {
-            return;
-        };
-
         let color = paint_ctx.read_val_opt(self.component.color.as_ref());
         let cursor_color = paint_ctx.read_val_opt(self.component.cursor_color.as_ref());
 
@@ -173,9 +166,16 @@ impl ElementRender for EditableTextElement {
         let has_selection = c.has_selection();
         let composing_text = c.composing_text().cloned();
         let composing_start = c.composing_start();
+        let text_is_empty = c.text().is_empty();
         drop(c);
 
-        if has_selection {
+        let is_focused = paint_ctx.is_focused();
+
+        let Some(layout_data) = self.cached_layout.as_ref() else {
+            return;
+        };
+
+        if is_focused && has_selection {
             let (a, b) = if sel_anchor < sel_end {
                 (sel_anchor, sel_end)
             } else {
@@ -184,7 +184,14 @@ impl ElementRender for EditableTextElement {
             paint_helpers::paint_selection(canvas, offset, layout_data, a, b);
         }
 
-        canvas.fill_text_layout(offset, layout_data);
+        // Hide the placeholder text when the input is focused and empty —
+        // matches browser/Flutter input convention. The box keeps its
+        // size (the placeholder still drives layout) so the cursor stays
+        // anchored at the right position.
+        let suppress_text_fill = is_focused && text_is_empty;
+        if !suppress_text_fill {
+            canvas.fill_text_layout(offset, layout_data);
+        }
 
         if let Some(ref comp) = composing_text {
             let comp_start_byte = composing_start;
@@ -194,11 +201,19 @@ impl ElementRender for EditableTextElement {
             }
         }
 
-        if paint_ctx.is_focused() && !has_selection {
-            paint_cursor(
-                canvas, offset, layout_data, cursor_pos,
-                cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
-            );
+        if is_focused && !has_selection {
+            // Blink the caret at a 530ms half-cycle (the conventional
+            // editor caret blink rate). Visible on even half-cycles.
+            let blink_visible = (paint_ctx.now_ms() / 530) % 2 == 0;
+            if blink_visible {
+                paint_cursor(
+                    canvas,
+                    offset,
+                    layout_data,
+                    cursor_pos,
+                    cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
+                );
+            }
         }
     }
 }

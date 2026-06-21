@@ -8,7 +8,6 @@ use super::element::{ScrollbarElement, DEFAULT_THICKNESS, MIN_THUMB};
 
 /// Default thumb color — a semi-transparent neutral gray.
 const DEFAULT_THUMB_COLOR: Color = Color::rgba(130, 130, 130, 160);
-
 impl ElementLayout for ScrollbarElement {
     fn perform_layout_size(
         &mut self,
@@ -67,6 +66,14 @@ impl ElementRender for ScrollbarElement {
         } else {
             0.0
         };
+
+        // Optional track background — painted behind the thumb. Typically
+        // wired reactively to a hover state from the JS side (transparent
+        // when idle, light-gray when hovered).
+        if let Some(track_brush) = paint_ctx.read_val_opt(self.component.track_color.as_ref()) {
+            let track_geometry = Geometry::Rect(Size::new(track_w, track_h));
+            canvas.fill_geometry(offset, &track_geometry, &track_brush);
+        }
 
         let brush = paint_ctx
             .read_val_opt(self.component.color.as_ref())

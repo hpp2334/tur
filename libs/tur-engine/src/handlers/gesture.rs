@@ -12,8 +12,8 @@ pub struct GestureAppHandler;
 impl AppHandler for GestureAppHandler {
     fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
         match event {
-            AppEvent::Gesture(AppGestureEvent::PointerDown { position, button }) => {
-                handle_pointer_down(cx, *position, *button);
+            AppEvent::Gesture(AppGestureEvent::PointerDown { position, button, time_ms }) => {
+                handle_pointer_down(cx, *position, *button, *time_ms);
             }
             AppEvent::Gesture(AppGestureEvent::PointerMove { position }) => {
                 handle_pointer_move(cx, *position);
@@ -46,22 +46,31 @@ fn handle_context_menu(cx: &mut HandlerContext, position: Offset) {
     }
 }
 
-fn handle_pointer_down(cx: &mut HandlerContext, position: Offset, button: MouseButton) {
+fn handle_pointer_down(cx: &mut HandlerContext, position: Offset, button: MouseButton, time_ms: u64) {
     let path = HitTest::new(&*cx.element_tree).path(position);
     // Path is ordered [deepest, ..., outermost]; the deepest hit is the
     // primary gesture target.
     let target = path.first().copied();
     cx.gesture_composer.on_pointer_down(target, path.clone());
 
-    // Dispatch PointerDown to every element in the hit-path. Elements without
-    // a real on_gesture_event impl (the blanket default) ignore it.
+    // Engine-side multi-click classification: compare this click against
+    // recent history to decide whether to dispatch PointerDown (single),
+    // PointerDoubleDown, or PointerTripleDown.
+    let kind = cx.gesture_composer.classify_click(position, time_ms);
     for id in &path {
         let local = local_position(cx, *id, position);
-        dispatch_gesture_event(
-            cx,
-            *id,
-            &ComposedGestureEvent::PointerDown { local, global: position, button },
-        );
+        let event = match kind {
+            crate::core::gesture::ClickKind::Single => {
+                ComposedGestureEvent::PointerDown { local, global: position, button }
+            }
+            crate::core::gesture::ClickKind::Double => {
+                ComposedGestureEvent::PointerDoubleDown { local, global: position, button }
+            }
+            crate::core::gesture::ClickKind::Triple => {
+                ComposedGestureEvent::PointerTripleDown { local, global: position, button }
+            }
+        };
+        dispatch_gesture_event(cx, *id, &event);
     }
 }
 

@@ -15,7 +15,7 @@ use crate::core::bridge::reactive_bridge::{
 use crate::core::bridge::utils::{
     tur_create_animation_controller, tur_create_image_resource, tur_create_lazy_list_controller,
     tur_create_scroll_controller, tur_create_svg_resource, tur_create_text_editing_controller,
-    tur_request_focus,
+    tur_create_undo_controller, tur_request_focus,
 };
 use crate::core::bridge::widget_bridge::{
     tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
@@ -90,6 +90,10 @@ pub fn init_bridge(
         .expect("failed to register TextEditingController class");
 
     context
+        .register_global_class::<crate::core::text::UndoController>()
+        .expect("failed to register UndoController class");
+
+    context
         .register_global_class::<crate::core::scroll::ScrollController>()
         .expect("failed to register ScrollController class");
 
@@ -101,11 +105,11 @@ pub fn init_bridge(
         .register_global_class::<crate::core::animation::AnimationController>()
         .expect("failed to register AnimationController class");
 
-    let fns: [(
-        &str,
-        usize,
-        boa_engine::native_function::NativeFunctionPointer,
-    ); 31] = [
+       let fns: [(
+           &str,
+           usize,
+           boa_engine::native_function::NativeFunctionPointer,
+       ); 32] = [
         // --- reactive primitives ---
         ("source", 2, tur_source),
         ("derive", 2, tur_derive),
@@ -138,6 +142,7 @@ pub fn init_bridge(
         ("render", 2, tur_render),
         // --- utility functions ---
         ("createTextEditingController", 2, tur_create_text_editing_controller),
+        ("createUndoController", 2, tur_create_undo_controller),
         ("createScrollController", 2, tur_create_scroll_controller),
         ("createLazyListController", 2, tur_create_lazy_list_controller),
     ];

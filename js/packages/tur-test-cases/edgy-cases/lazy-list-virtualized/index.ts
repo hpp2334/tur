@@ -6,15 +6,12 @@ import {
     Container,
     CrossAxisAlignment,
     component,
-    derive,
     Expanded,
-    get,
     LazyList,
     MainAxisAlignment,
     MainAxisSize,
     Row,
     SizedBox,
-    source,
     Text,
 } from "@tur/edgy";
 
@@ -28,10 +25,6 @@ import {
 
 const ITEM_COUNT = 10000;
 const ITEM_HEIGHT = 56;
-
-// Track scroll progress to show a "you are here" indicator. The percent
-// updates as the user scrolls.
-const scrollPct$ = source(0);
 
 // Deterministic name generator — keeps the bundle tiny and the demo stable.
 const FIRST_NAMES = [
@@ -197,53 +190,17 @@ function buildRow(index: number): unknown {
     });
 }
 
-function Header(): unknown {
-    return Container({
-        height: 56,
-        padding: 12,
-        color: Color.hex("#1e293b"),
-        children: [
-            Row({
-                crossAlignment: CrossAxisAlignment.Center,
-                children: [
-                    Text({
-                        text: "Contacts (10,000 items, ~16 mounted)",
-                        fontSize: 14,
-                        color: Color.hex("#ffffff"),
-                    }),
-                    Expanded({ child: SizedBox({ height: 1 }) }),
-                    Text({
-                        text: derive(
-                            () => `Scroll: ${Math.round(get(scrollPct$))}%`,
-                        ),
-                        fontSize: 11,
-                        color: Color.hex("#94a3b8"),
-                    }),
-                ],
-            }),
-        ],
-    });
-}
-
 export default component(() =>
     Expanded({
         child: Container({
             color: Color.hex("#ffffff"),
             children: [
-                Column({
-                    crossAlignment: CrossAxisAlignment.Stretch,
-                    children: [
-                        Header(),
-                        Expanded({
-                            child: LazyList({
-                                axis: Axis.Vertical,
-                                itemCount: ITEM_COUNT,
-                                itemExtent: ITEM_HEIGHT,
-                                overscan: 4,
-                                builder: buildRow,
-                            }),
-                        }),
-                    ],
+                LazyList({
+                    axis: Axis.Vertical,
+                    itemCount: ITEM_COUNT,
+                    itemExtent: ITEM_HEIGHT,
+                    overscan: 4,
+                    builder: buildRow,
                 }),
             ],
         }),

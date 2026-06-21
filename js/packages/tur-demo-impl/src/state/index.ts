@@ -4,6 +4,7 @@
 
 export {
     editorCtrl,
+    editorUndo,
     getCaseComponent,
     getCaseFileNames,
     loadCase,
