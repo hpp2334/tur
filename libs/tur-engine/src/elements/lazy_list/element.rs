@@ -306,14 +306,18 @@ impl LazyListElement {
             if let Some(spec) = build_item_spec(&builder, index, boa) {
                 let item_id = spec.build(cx, boa, node_id);
                 // Ensure the tree children vector stays ordered by logical
-                // index. `spec.build` appended the new child to the end of
-                // `node.children`; if there's an existing mounted item with
-                // a larger index, splice the new child in before it. The
-                // cheap path (new index > all existing) leaves the append
-                // in place.
+                // index. `spec.build` already appended the new child to the
+                // end of `node.children`; if there's an existing mounted
+                // item with a larger index, *move* (not re-add) the new
+                // child before it. The cheap path (new index > all
+                // existing) leaves the append in place.
+                //
+                // Using `link_child_before` here would double-add the id
+                // and crash layout; `move_child_before` removes the
+                // existing slot first, then re-inserts.
                 let next_higher = self.visible.iter().find(|(i, _)| *i > index).map(|(_, id)| *id);
                 if let Some(ref_id) = next_higher {
-                    cx.link_child_before(node_id, item_id, ref_id);
+                    cx.move_child_before(node_id, item_id, ref_id);
                 }
                 newly_mounted.push((index, item_id));
             }

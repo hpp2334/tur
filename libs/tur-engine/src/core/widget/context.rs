@@ -97,6 +97,38 @@ impl WidgetCx {
         self.js_ctx.dirty.set(true);
     }
 
+    /// Reorder an already-linked `child` under `parent` so that it sits
+    /// immediately before `ref_child` in the parent's children vector.
+    /// Equivalent to `remove_child` + `insert_before` but keeps the child's
+    /// `parent` pointer intact. Used by `LazyListElement::process_remount`
+    /// after `spec.build` (which already appends the new child) to splice
+    /// it into the correct slot when scrolling up mounts lower-index items.
+    pub fn move_child_before(
+        &self,
+        parent: ElementNodeId,
+        child: ElementNodeId,
+        ref_child: ElementNodeId,
+    ) {
+        let mut tree = self.js_ctx.element_tree.borrow_mut();
+        // Remove the child from its current slot (if present) without
+        // clearing its parent pointer, then re-insert at the right place.
+        if let Some(node) = tree.get_mut(parent) {
+            if let Some(pos) = node.children.iter().position(|&id| id == child) {
+                node.children.remove(pos);
+            }
+        }
+        if let Some(node) = tree.get_mut(parent) {
+            if let Some(pos) = node.children.iter().position(|&id| id == ref_child) {
+                node.children.insert(pos, child);
+            } else {
+                node.children.push(child);
+            }
+        }
+        tree.mark_dirty(parent);
+        drop(tree);
+        self.js_ctx.dirty.set(true);
+    }
+
     /// Remove `child` from its parent (does not delete the node).
     pub fn unlink_child(&self, parent: ElementNodeId, child: ElementNodeId) {
         self.js_ctx

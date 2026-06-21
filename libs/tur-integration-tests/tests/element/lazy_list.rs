@@ -565,3 +565,96 @@ fn virtualized_scroll_back_to_zero_resets_cleanly() {
             "after scroll-back-to-0, child at slot {i} should be at y={expected}, got y={y}");
     }
 }
+
+// ===========================================================================
+// Regression: scroll-up must not duplicate children in the parent's children
+// vector. `spec.build()` already calls `link_child` (append); calling
+// `link_child_before` afterwards would insert the same id a second time,
+// producing duplicates that crash layout / paint.
+// ===========================================================================
+
+/// Each entry in the parent's children vector must be unique — no duplicates.
+#[test]
+fn virtualized_no_duplicate_children_after_scroll_up() {
+    let (mut app, id) = setup_virtualized();
+
+    // Scroll down, then scroll back up — the upward leg mounts items at
+    // lower indices than the existing ones, exercising the
+    // `link_child_before` path.
+    app.wheel(0.0, 2000.0, 200.0, 300.0);
+    app.render();
+    app.wheel(0.0, -1000.0, 200.0, 300.0);
+    app.render();
+
+    let child_ids: Vec<_> = {
+        let tree = app.element_tree();
+        tree.get(id).unwrap().children.clone()
+    };
+    let mut seen = std::collections::HashSet::new();
+    for child_id in &child_ids {
+        assert!(seen.insert(*child_id),
+            "duplicate child id {:?} in parent's children vector (total len = {})",
+            child_id, child_ids.len());
+    }
+}
+
+/// The parent's children count must equal the LazyList's `built_count()` —
+/// they should never diverge (which would indicate a bookkeeping bug like
+/// double-add).
+#[test]
+fn virtualized_parent_children_count_matches_built_count() {
+    let (mut app, id) = setup_virtualized();
+
+    // Multiple scroll-up / scroll-down cycles to stress the remount path.
+    for _ in 0..3 {
+        app.wheel(0.0, 1500.0, 200.0, 300.0);
+        app.render();
+        app.wheel(0.0, -800.0, 200.0, 300.0);
+        app.render();
+
+        let parent_count = {
+            let tree = app.element_tree();
+            tree.get(id).unwrap().children.len()
+        };
+        let built = with_ll(&app, id, |ll| ll.built_count());
+        assert_eq!(parent_count, built,
+            "parent.children.len() ({parent_count}) should equal built_count ({built}) \
+             — divergence indicates a mount/unmount bookkeeping bug");
+    }
+}
+
+/// Repeated scroll-up that mounts lower-index items should not crash and
+/// should leave every child in the children vector accessible (no orphan
+/// ids that aren't in the tree). Catches the case where double-add creates
+/// a stale entry that points to a since-destroyed node.
+#[test]
+fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
+    let (mut app, id) = setup_virtualized();
+
+    // Cycle through many scroll-up/down sequences. Without the duplicate-
+    // children fix this crashes within a few iterations because layout
+    // dereferences a stale child id.
+    for i in 0..10 {
+        app.wheel(0.0, 1200.0, 200.0, 300.0);
+        app.render();
+        app.wheel(0.0, -600.0, 200.0, 300.0);
+        app.render();
+
+        // Walk the parent's children vector and dereference each id. With
+        // the duplicate-add bug, this panics on a stale node lookup.
+        let child_ids: Vec<_> = {
+            let tree = app.element_tree();
+            tree.get(id).unwrap().children.clone()
+        };
+        let tree = app.element_tree();
+        for &child_id in &child_ids {
+            let node = tree.get(child_id).unwrap_or_else(|| panic!(
+                "iteration {i}: child id {child_id:?} in parent.children but not in tree \
+                 (stale entry from double-add)"
+            ));
+            // Touch the computed layout to force the dereference all the
+            // way through the node struct.
+            let _ = node.computed_layout.offset.y;
+        }
+    }
+}
