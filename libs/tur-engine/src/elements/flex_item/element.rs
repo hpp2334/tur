@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,15 @@ impl ElementTrace for ExpandedElement {
             Some(Val::Static(f)) => format!("flex={f}"),
             _ => String::from("flex"),
         }
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        self.component
+            .flex
+            .as_ref()
+            .and_then(Val::as_static)
+            .map(|f| vec![("flex", TraceValue::Num(*f))])
+            .unwrap_or_default()
     }
 }
 

@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 // ---------------------------------------------------------------------------
@@ -64,6 +64,24 @@ impl ElementTrace for PositionedElement {
             }
         }
         parts.join(" ")
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        for (key, val) in [
+            ("left", &c.left),
+            ("top", &c.top),
+            ("right", &c.right),
+            ("bottom", &c.bottom),
+            ("width", &c.width),
+            ("height", &c.height),
+        ] {
+            if let Some(v) = val.as_ref().and_then(Val::as_static) {
+                p.push((key, TraceValue::Num(*v)));
+            }
+        }
+        p
     }
 }
 

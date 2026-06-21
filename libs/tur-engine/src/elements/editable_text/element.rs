@@ -8,7 +8,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
-    ElementOnKeyboardContext, ElementTrace,
+    ElementOnKeyboardContext, ElementTrace, TraceValue,
 };
 use crate::core::event::AppImeEvent;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType, KeydownEvent};
@@ -485,6 +485,29 @@ impl ElementTrace for EditableTextElement {
             let t: String = text.chars().take(20).collect();
             format!("\"{}\"", t)
         }
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = self.controller();
+        vec![
+            ("textLength", TraceValue::Num(c.full_len() as f64)),
+            ("cursor", TraceValue::Num(c.cursor_position() as f64)),
+            ("anchor", TraceValue::Num(c.selection_anchor() as f64)),
+            ("selectionEnd", TraceValue::Num(c.selection_end() as f64)),
+        ]
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        self.cached_layout
+            .as_ref()
+            .map(|ld| {
+                vec![
+                    ("numLines", TraceValue::Num(ld.line_infos.len() as f64)),
+                    ("layoutWidth", TraceValue::Num(ld._width as f64)),
+                    ("layoutHeight", TraceValue::Num(ld._height as f64)),
+                ]
+            })
+            .unwrap_or_default()
     }
 }
 

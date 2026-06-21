@@ -5,7 +5,7 @@ use boa_engine::Context;
 use tur_shared::BoxFit;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
@@ -70,6 +70,24 @@ impl ElementTrace for ImageElement {
             parts.push(format!("fit={f:?}"));
         }
         parts.join(" ")
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        if let Some(v) = c.resource_id.as_ref().and_then(Val::as_static) {
+            p.push(("resourceId", TraceValue::Num(*v as f64)));
+        }
+        if let Some(v) = c.width.as_ref().and_then(Val::as_static) {
+            p.push(("width", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.height.as_ref().and_then(Val::as_static) {
+            p.push(("height", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.fit.as_ref().and_then(Val::as_static) {
+            p.push(("fit", TraceValue::Str(format!("{v:?}"))));
+        }
+        p
     }
 }
 

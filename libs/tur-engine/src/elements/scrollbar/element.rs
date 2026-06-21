@@ -5,7 +5,7 @@ use tur_shared::{Brush, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementTrace,
+    ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::core::scroll::ScrollController;
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
@@ -100,6 +100,18 @@ impl ElementTrace for ScrollbarElement {
         self.metrics()
             .map(|(_, offset, max, vp)| {
                 format!("offset={offset:.1} max={max:.1} vp={vp:.1}")
+            })
+            .unwrap_or_default()
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        self.metrics()
+            .map(|(_, offset, max, vp)| {
+                vec![
+                    ("offset", TraceValue::Num(offset)),
+                    ("maxScrollExtent", TraceValue::Num(max)),
+                    ("viewportDimension", TraceValue::Num(vp)),
+                ]
             })
             .unwrap_or_default()
     }

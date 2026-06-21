@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     val_from_js, Component, ComponentFactory, Effect, JsComponentFactory, PropValue, Val, WidgetCx,
 };
@@ -160,6 +160,15 @@ impl ElementTrace for ConditionElement {
             MountedBranch::None => "none",
         };
         format!("branch={branch}")
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let branch = match self.mounted {
+            MountedBranch::Then => "then",
+            MountedBranch::Else => "else",
+            MountedBranch::None => "none",
+        };
+        vec![("mountedBranch", TraceValue::Str(branch.to_string()))]
     }
 }
 

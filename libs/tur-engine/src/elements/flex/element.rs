@@ -4,7 +4,7 @@ use boa_engine::Context;
 use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAlignment, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
 pub(crate) struct ChildData {
@@ -73,6 +73,24 @@ impl Effect for FlexElement {}
 impl ElementTrace for FlexElement {
     fn trace_label(&self) -> String {
         format!("{:?}", self.component.direction.unwrap_or(Axis::Vertical))
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        if let Some(d) = c.direction {
+            p.push(("direction", TraceValue::Str(format!("{d:?}"))));
+        }
+        if let Some(v) = c.main_alignment.as_ref().and_then(Val::as_static) {
+            p.push(("mainAlignment", TraceValue::Str(format!("{v:?}"))));
+        }
+        if let Some(v) = c.cross_alignment.as_ref().and_then(Val::as_static) {
+            p.push(("crossAlignment", TraceValue::Str(format!("{v:?}"))));
+        }
+        if let Some(v) = c.main_axis_size.as_ref().and_then(Val::as_static) {
+            p.push(("mainAxisSize", TraceValue::Str(format!("{v:?}"))));
+        }
+        p
     }
 }
 

@@ -15,7 +15,7 @@ Behave like a real human tester. A real user **sees the page, then acts, then se
 
 - You perceive the page through `playwright_browser_take_screenshot`. Look at it the way a user would: text, colors, layout, what is clickable, what changed.
 - You decide what to do based on what is visible, not on what you know about the framework internals.
-- You verify outcomes by what changed visually, not by querying `globalThis`, debug hooks, computed styles, or `debug_layout()`.
+- You verify outcomes by what changed visually, not by querying `globalThis`, debug hooks, computed styles, or `turDevTool`.
 - Avoid `playwright_browser_evaluate` and other internal-state inspection in the common case. Only reach for them as a **last resort** when (a) the screenshot alone is genuinely ambiguous AND (b) no user-visible action could disambiguate it. Internal state can report success while the canvas is blank or broken — never trust it over pixels.
 - Treat the task as a user journey: a sequence of "see → act → see" steps. After each action, re-screenshot and confirm the visible result before moving on.
 

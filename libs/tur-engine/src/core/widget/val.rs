@@ -159,6 +159,14 @@ impl<T: PropValue> Val<T> {
         }
     }
 
+    /// Returns the static value if this is a `Val::Static`.
+    pub fn as_static(&self) -> Option<&T> {
+        match self {
+            Val::Static(v) => Some(v),
+            _ => None,
+        }
+    }
+
     /// Returns `true` if this is a reactive val whose atom is in `dirties`.
     pub fn is_dirty(&self, dirties: &HashSet<AtomId>) -> bool {
         match self {

@@ -682,27 +682,47 @@ impl TurWasmApp {
         Ok(())
     }
 
-    pub fn debug_layout(&self) -> String {
-        let guard = self.state.borrow();
-        match guard.as_ref() {
-            Some(s) => s.app.debug_layout(),
-            None => "app not initialized".to_string(),
+    /// Return a host-side dev-tool handle. Methods on `TurDevTool` eval the
+    /// in-engine `turDevTool` global (which itself delegates to
+    /// `__tur._dev_tool_*`), returning JSON strings for the host to parse.
+    pub fn dev_tool(&self) -> TurDevTool {
+        TurDevTool {
+            state: self.state.clone(),
         }
     }
+}
 
-    /// Debug: `(text_len, cursor, anchor, end, num_lines, w, h)` for the
-    /// focused editable text, or empty string.
-    pub fn debug_focused_editable(&self) -> String {
-        let guard = self.state.borrow();
-        let Some(s) = guard.as_ref() else {
-            return String::new();
-        };
-        match s.app.focused_editable_state() {
-            Some((len, cursor, anchor, end, lines, w, h)) => {
-                format!("{len}|{cursor}|{anchor}|{end}|{lines}|{w:.1}|{h:.1}")
-            }
-            None => String::new(),
-        }
+/// Host-side dev-tool handle, exposed as `globalThis.turDevTool` by the
+/// playground bootstrap. Methods return JSON strings (the data originates
+/// inside the boa engine, a separate JS realm, so JSON is the simplest
+/// cross-realm transport).
+#[wasm_bindgen]
+pub struct TurDevTool {
+    state: Rc<RefCell<Option<WasmState>>>,
+}
+
+#[wasm_bindgen]
+impl TurDevTool {
+    /// JSON snapshot of the root node, or `""` if no tree is mounted.
+    /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
+    #[allow(non_snake_case)]
+    pub fn elementTree(&self) -> String {
+        let mut guard = self.state.borrow_mut();
+        let Some(s) = guard.as_mut() else { return String::new() };
+        s.app
+            .eval_js("JSON.stringify(turDevTool.elementTree())")
+            .unwrap_or_default()
+    }
+
+    /// JSON snapshot of a single node by id (full subtree metadata; children
+    /// are returned as bare `{id}` handles). Returns `""` if not found.
+    #[allow(non_snake_case)]
+    pub fn getElement(&self, id: u32) -> String {
+        let mut guard = self.state.borrow_mut();
+        let Some(s) = guard.as_mut() else { return String::new() };
+        s.app
+            .eval_js(&format!("JSON.stringify(turDevTool.getElement({id}))"))
+            .unwrap_or_default()
     }
 }
 

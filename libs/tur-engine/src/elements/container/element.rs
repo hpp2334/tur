@@ -4,7 +4,7 @@ use boa_engine::Context;
 use tur_shared::{Alignment, BorderPosition, Brush, Color};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
@@ -118,6 +118,36 @@ impl ElementTrace for ContainerElement {
             parts.push(format!("height={h}"));
         }
         parts.join(" ")
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        let c = &self.component;
+        let mut p = Vec::new();
+        if let Some(v) = c.width.as_ref().and_then(Val::as_static) {
+            p.push(("width", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.height.as_ref().and_then(Val::as_static) {
+            p.push(("height", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.padding.as_ref().and_then(Val::as_static) {
+            p.push(("padding", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.border_width.as_ref().and_then(Val::as_static) {
+            p.push(("borderWidth", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.border_radius.as_ref().and_then(Val::as_static) {
+            p.push(("borderRadius", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.shadow_blur.as_ref().and_then(Val::as_static) {
+            p.push(("shadowBlur", TraceValue::Num(*v)));
+        }
+        if let Some(v) = c.alignment.as_ref().and_then(Val::as_static) {
+            p.push(("alignment", TraceValue::Str(format!("{v:?}"))));
+        }
+        if let Some(v) = c.border_position.as_ref().and_then(Val::as_static) {
+            p.push(("borderPosition", TraceValue::Str(format!("{v:?}"))));
+        }
+        p
     }
 }
 

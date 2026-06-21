@@ -246,12 +246,6 @@ impl TurTestApp {
         self.inner.focused_cursor_rect()
     }
 
-    /// Debug: `(text_len, cursor, anchor, end, num_layout_lines, w, h)` for
-    /// the focused editable text, if any.
-    pub fn focused_editable_state(&self) -> Option<(usize, usize, usize, usize, usize, f32, f32)> {
-        self.inner.focused_editable_state()
-    }
-
     pub fn focused_is_editable(&self) -> bool {
         self.inner.focused_is_editable()
     }
@@ -278,7 +272,17 @@ impl TurTestApp {
         self.inner.load_js(source)
     }
 
-    pub fn debug_layout(&self) -> String {
-        self.inner.debug_layout()
+    /// Structured dev-tool snapshot of the root node, or `None` if no tree
+    /// is mounted. Children are bare ids; iterate with `dev_tool_get_element`.
+    pub fn dev_tool_element_tree(&self) -> Option<tur_engine::core::elements::DevNodeData> {
+        self.inner.dev_tool_element_tree()
+    }
+
+    /// Structured dev-tool snapshot of an arbitrary node by id.
+    pub fn dev_tool_get_element(
+        &self,
+        id: ElementNodeId,
+    ) -> Option<tur_engine::core::elements::DevNodeData> {
+        self.inner.dev_tool_get_element(id)
     }
 }

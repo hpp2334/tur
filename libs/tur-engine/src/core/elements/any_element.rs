@@ -4,7 +4,7 @@ use boa_engine::Context;
 use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
-use crate::core::elements::ElementTrace;
+use crate::core::elements::{ElementTrace, TraceValue};
 use crate::core::widget::Effect;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, LayoutContext};
@@ -32,6 +32,8 @@ trait Erased: 'static {
     fn as_any(&self) -> &dyn Any;
     fn as_any_mut(&mut self) -> &mut dyn Any;
     fn trace_label(&self) -> String;
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)>;
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)>;
 
     fn perform_layout_size(
         &mut self,
@@ -121,6 +123,14 @@ where
         } else {
             label
         }
+    }
+
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        <Self as ElementTrace>::trace_props(self)
+    }
+
+    fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        <Self as ElementTrace>::trace_layout_extra(self)
     }
 
     fn perform_layout_size(
@@ -323,6 +333,14 @@ impl AnyElement {
 
     pub fn trace_label(&self) -> String {
         self.inner.trace_label()
+    }
+
+    pub fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        self.inner.trace_props()
+    }
+
+    pub fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
+        self.inner.trace_layout_extra()
     }
 
     pub fn perform_layout_size(
