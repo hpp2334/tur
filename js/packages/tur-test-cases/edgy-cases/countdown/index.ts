@@ -1,19 +1,49 @@
 import {
+    Alignment,
+    Color,
     Column,
     Condition,
     Container,
-    component,
-    createTextEditingController,
-    derive,
+    CrossAxisAlignment,
+    type EdgyElement,
+    Expanded,
+    HitTestBehavior,
     InputEdgy,
     MainAxisAlignment,
+    MainAxisSize,
+    MouseRegion,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
+    Positioned,
     Row,
-    source,
+    SizedBox,
+    Stack,
     Text,
+    component,
+    createTextEditingController,
+    derive,
+    get,
+    source,
 } from "@tur/edgy";
+
+// --- Light theme palette (slate + emerald accents) -----------------------
+
+const COLORS = {
+    pageBg: Color.hex("#f8fafc"), // slate-50
+    cardBg: Color.hex("#ffffff"),
+    cardBorder: Color.hex("#e2e8f0"), // slate-200
+    text: Color.hex("#0f172a"), // slate-900
+    textMuted: Color.hex("#64748b"), // slate-500
+    textFaint: Color.hex("#94a3b8"), // slate-400
+    divider: Color.hex("#e2e8f0"),
+    start: Color.hex("#10b981"), // emerald-500
+    startShadow: Color.rgba(16, 185, 129, 90),
+    pause: Color.hex("#f59e0b"), // amber-500
+    pauseShadow: Color.rgba(245, 158, 11, 90),
+    urgent: Color.hex("#ef4444"), // red-500
+    backdrop: Color.rgba(15, 23, 42, 110), // ~45% slate scrim
+};
 
 const DEFAULT_TIME = 60;
 
@@ -26,16 +56,20 @@ const editController$ = source<unknown>(null);
 
 let timerId: ReturnType<typeof setInterval> | null = null;
 
+function clearTimer() {
+    if (timerId !== null) {
+        clearInterval(timerId);
+        timerId = null;
+    }
+}
+
 const start$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (get(running$)) return;
     set(running$, true);
     timerId = setInterval(() => {
         const r = get(remaining$);
         if (r <= 1) {
-            if (timerId !== null) {
-                clearInterval(timerId);
-                timerId = null;
-            }
+            clearTimer();
             set(running$, false);
             set(remaining$, 0);
             return;
@@ -46,36 +80,37 @@ const start$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
 
 const pause$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (!get(running$)) return;
-    if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-    }
+    clearTimer();
     set(running$, false);
 });
 
 const reset$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-    }
+    clearTimer();
     set(running$, false);
     set(remaining$, get(initial$));
 });
 
 const openEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-    }
+    clearTimer();
     set(running$, false);
     set(editText$, String(get(initial$)));
+    // Pre-fill the field with the current initial value so the user can
+    // edit it in place rather than retyping. `initialText` is honoured at
+    // controller construction time and shows up as soon as the InputEdgy
+    // mounts the new controller.
     const ctrl = createTextEditingController({
+        initialText: String(get(initial$)),
         onInput: mutate(({ set }, text: string, _enter: boolean) =>
             set(editText$, text),
         ),
     });
     set(editController$, ctrl);
     set(editing$, true);
+});
+
+const cancelEdit$ = mutate(({ set }, _ev: PointerInteractEvent) => {
+    set(editing$, false);
+    set(editController$, null);
 });
 
 const confirmEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
@@ -88,101 +123,336 @@ const confirmEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     set(editController$, null);
 });
 
-export default component(() =>
-    Container({
-        padding: 16,
-        queryKey: ["root"],
-        children: [
-            Column({
+// Format a remaining seconds count as `m:ss` (e.g. 65 -> "1:05", 5 -> "0:05").
+function formatTime(totalSeconds: number): string {
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+const isUrgent$ = derive(
+    () => get(running$) && get(remaining$) <= 10 && get(remaining$) > 0,
+);
+
+const displayColor$ = derive(() =>
+    get(isUrgent$) ? COLORS.urgent : COLORS.text,
+);
+
+const statusLabel$ = derive(() => {
+    if (get(running$)) return "Running";
+    if (get(remaining$) === 0) return "Done";
+    if (get(remaining$) === get(initial$)) return "Ready";
+    return "Paused";
+});
+
+const statusColor$ = derive(() => {
+    if (get(running$)) return COLORS.start;
+    if (get(remaining$) === 0) return COLORS.textFaint;
+    if (get(remaining$) === get(initial$)) return COLORS.textMuted;
+    return COLORS.pause;
+});
+
+// --- Reusable button helpers ---------------------------------------------
+
+function PrimaryButton({
+    label,
+    bg,
+    shadowColor,
+    onClick,
+    queryKey,
+}: {
+    label: string;
+    bg: Color;
+    shadowColor: Color;
+    onClick: ReturnType<typeof mutate>;
+    queryKey?: string[];
+}): EdgyElement {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick,
+            queryKey,
+            child: Container({
+                width: 220,
+                height: 48,
+                borderRadius: 12,
+                color: bg,
+                shadowColor,
+                shadowBlur: 14,
+                shadowOffset: [0, 6],
+                alignment: Alignment.Center,
                 children: [
                     Text({
-                        text: derive((g) => `Countdown: ${g(remaining$)}`),
-                        queryKey: ["display"],
+                        text: label,
+                        fontSize: 15,
+                        color: Color.hex("#ffffff"),
                     }),
-                    Row({
-                        mainAlignment: MainAxisAlignment.Start,
-                        children: [
-                            PointerInteract({
-                                onClick: openEdit$,
-                                child: Container({
-                                    padding: 8,
-                                    queryKey: ["btn-edit"],
-                                    children: [Text({ text: "Edit" })],
-                                }),
-                            }),
-                            PointerInteract({
-                                onClick: start$,
-                                child: Container({
-                                    padding: 8,
-                                    queryKey: ["btn-start"],
-                                    children: [Text({ text: "Start" })],
-                                }),
-                            }),
-                            PointerInteract({
-                                onClick: pause$,
-                                child: Container({
-                                    padding: 8,
-                                    queryKey: ["btn-pause"],
-                                    children: [Text({ text: "Pause" })],
-                                }),
-                            }),
-                            PointerInteract({
-                                onClick: reset$,
-                                child: Container({
-                                    padding: 8,
-                                    queryKey: ["btn-reset"],
-                                    children: [Text({ text: "Reset" })],
-                                }),
-                            }),
-                        ],
+                ],
+            }),
+        }),
+    });
+}
+
+function GhostButton({
+    label,
+    onClick,
+    queryKey,
+}: {
+    label: string;
+    onClick: ReturnType<typeof mutate>;
+    queryKey?: string[];
+}): EdgyElement {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick,
+            queryKey,
+            child: Container({
+                padding: 10,
+                borderRadius: 10,
+                borderColor: COLORS.divider,
+                borderWidth: 1,
+                color: Color.hex("#ffffff"),
+                children: [
+                    Text({
+                        text: label,
+                        fontSize: 13,
+                        color: COLORS.textMuted,
                     }),
-                    Condition({
-                        condition: derive((g) => !!g(editing$)),
-                        child: () =>
-                            Container({
-                                padding: 16,
-                                queryKey: ["modal"],
-                                children: [
-                                    Column({
-                                        children: [
-                                            Text({ text: "Set time:" }),
-                                            Container({
-                                                queryKey: ["edit-input"],
-                                                children: [
-                                                    InputEdgy({
-                                                        controller: derive(
-                                                            (g) =>
-                                                                g(
-                                                                    editController$,
-                                                                ),
-                                                        ),
-                                                        placeholder:
-                                                            "Positive integer",
-                                                        fontSize: 14,
-                                                        width: 200,
-                                                        height: 30,
-                                                    }),
-                                                ],
-                                            }),
-                                            PointerInteract({
-                                                onClick: confirmEdit$,
-                                                child: Container({
-                                                    padding: 8,
-                                                    queryKey: ["btn-confirm"],
-                                                    children: [
-                                                        Text({
-                                                            text: "Confirm",
-                                                        }),
-                                                    ],
-                                                }),
-                                            }),
-                                        ],
-                                    }),
-                                ],
-                            }),
+                ],
+            }),
+        }),
+    });
+}
+
+// --- Status pill ---------------------------------------------------------
+
+function StatusPill(): EdgyElement {
+    return Container({
+        padding: 6,
+        borderRadius: 999,
+        borderColor: COLORS.divider,
+        borderWidth: 1,
+        color: Color.hex("#ffffff"),
+        children: [
+            Row({
+                mainAxisSize: MainAxisSize.Min,
+                crossAlignment: CrossAxisAlignment.Center,
+                children: [
+                    Container({
+                        width: 7,
+                        height: 7,
+                        borderRadius: 999,
+                        color: statusColor$,
+                    }),
+                    SizedBox({ width: 6 }),
+                    Text({
+                        text: statusLabel$,
+                        fontSize: 11,
+                        color: COLORS.textMuted,
                     }),
                 ],
             }),
         ],
+    });
+}
+
+// --- Main display --------------------------------------------------------
+
+function TimerView(): EdgyElement {
+    return Column({
+        mainAxisSize: MainAxisSize.Min,
+        crossAlignment: CrossAxisAlignment.Center,
+        children: [
+            Text({
+                text: "COUNTDOWN",
+                fontSize: 11,
+                color: COLORS.textFaint,
+            }),
+            SizedBox({ height: 10 }),
+            Text({
+                text: derive(() => formatTime(get(remaining$))),
+                fontSize: 72,
+                color: displayColor$,
+                queryKey: ["display"],
+            }),
+            SizedBox({ height: 12 }),
+            StatusPill(),
+        ],
+    });
+}
+
+function Controls(): EdgyElement {
+    return Column({
+        mainAxisSize: MainAxisSize.Min,
+        crossAlignment: CrossAxisAlignment.Center,
+        children: [
+            // Primary action toggles between Start and Pause.
+            Condition({
+                condition: running$,
+                child: () =>
+                    PrimaryButton({
+                        label: "Pause",
+                        bg: COLORS.pause,
+                        shadowColor: COLORS.pauseShadow,
+                        onClick: pause$,
+                        queryKey: ["btn-pause"],
+                    }),
+                elseChild: () =>
+                    PrimaryButton({
+                        label: get(remaining$) === 0 ? "Restart" : "Start",
+                        bg: COLORS.start,
+                        shadowColor: COLORS.startShadow,
+                        onClick: start$,
+                        queryKey: ["btn-start"],
+                    }),
+            }),
+            SizedBox({ height: 12 }),
+            Row({
+                mainAxisSize: MainAxisSize.Min,
+                crossAlignment: CrossAxisAlignment.Center,
+                children: [
+                    GhostButton({
+                        label: "Edit",
+                        onClick: openEdit$,
+                        queryKey: ["btn-edit"],
+                    }),
+                    SizedBox({ width: 10 }),
+                    GhostButton({
+                        label: "Reset",
+                        onClick: reset$,
+                        queryKey: ["btn-reset"],
+                    }),
+                ],
+            }),
+        ],
+    });
+}
+
+// --- Edit modal ----------------------------------------------------------
+
+function EditModal(): EdgyElement {
+    // Click-anywhere-on-backdrop dismisses the modal. The inner card stops
+    // propagation by being an opaque hit-test target itself.
+    return Positioned({
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        child: PointerInteract({
+            behavior: HitTestBehavior.Opaque,
+            onClick: cancelEdit$,
+            child: Container({
+                color: COLORS.backdrop,
+                alignment: Alignment.Center,
+                children: [
+                    PointerInteract({
+                        behavior: HitTestBehavior.Opaque,
+                        onClick: mutate(() => {
+                            /* swallow click inside card */
+                        }),
+                        child: Container({
+                            width: 380,
+                            borderRadius: 14,
+                            padding: 22,
+                            color: COLORS.cardBg,
+                            borderColor: COLORS.cardBorder,
+                            borderWidth: 1,
+                            children: [
+                                Column({
+                                    mainAxisSize: MainAxisSize.Min,
+                                    crossAlignment: CrossAxisAlignment.Stretch,
+                                    children: [
+                                        Text({
+                                            text: "Set duration",
+                                            fontSize: 18,
+                                            color: COLORS.text,
+                                        }),
+                                        SizedBox({ height: 6 }),
+                                        Text({
+                                            text: "Enter a positive integer (seconds).",
+                                            fontSize: 13,
+                                            color: COLORS.textMuted,
+                                        }),
+                                        SizedBox({ height: 16 }),
+                                        Container({
+                                            padding: 4,
+                                            borderRadius: 8,
+                                            borderColor: COLORS.divider,
+                                            borderWidth: 1,
+                                            queryKey: ["edit-input"],
+                                            children: [
+                                                InputEdgy({
+                                                    controller: derive(
+                                                        () => get(editController$),
+                                                    ),
+                                                    placeholder:
+                                                        "Positive integer",
+                                                    fontSize: 14,
+                                                    width: 332,
+                                                    height: 32,
+                                                }),
+                                            ],
+                                        }),
+                                        SizedBox({ height: 18 }),
+                                        Row({
+                                            mainAlignment:
+                                                MainAxisAlignment.End,
+                                            mainAxisSize: MainAxisSize.Min,
+                                            children: [
+                                                GhostButton({
+                                                    label: "Cancel",
+                                                    onClick: cancelEdit$,
+                                                }),
+                                                SizedBox({ width: 8 }),
+                                                PrimaryButton({
+                                                    label: "Save",
+                                                    bg: COLORS.start,
+                                                    shadowColor:
+                                                        COLORS.startShadow,
+                                                    onClick: confirmEdit$,
+                                                    queryKey: ["btn-confirm"],
+                                                }),
+                                            ],
+                                        }),
+                                    ],
+                                }),
+                            ],
+                        }),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
+// --- Page ----------------------------------------------------------------
+
+export default component(() =>
+    Expanded({
+        child: Stack({
+            children: [
+                Container({
+                    color: COLORS.pageBg,
+                    alignment: Alignment.Center,
+                    children: [
+                        Column({
+                            mainAlignment: MainAxisAlignment.Center,
+                            crossAlignment: CrossAxisAlignment.Center,
+                            mainAxisSize: MainAxisSize.Min,
+                            children: [
+                                TimerView(),
+                                SizedBox({ height: 36 }),
+                                Controls(),
+                            ],
+                        }),
+                    ],
+                }),
+                Condition({
+                    condition: editing$,
+                    child: () => EditModal(),
+                }),
+            ],
+        }),
     }),
 );

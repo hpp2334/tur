@@ -430,6 +430,11 @@ export interface ScrollEvent {
 }
 
 export interface TextEditingControllerOpts {
+    /** Initial text shown when an input first mounts this controller. The
+     *  value is set at construction time and replaces the default empty
+     *  buffer — useful for modals that pre-fill an editable field with
+     *  the current value of whatever is being edited. */
+    initialText?: string;
     onInput?: Mutation<[string, boolean], void>;
     onCursorChange?: Mutation<[number], void>;
     onSelectionChange?: Mutation<[number, number], void>;

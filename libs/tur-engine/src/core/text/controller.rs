@@ -361,6 +361,26 @@ impl Class for TextEditingController {
             ctrl.on_composition_start = extract_mutation_from_opts(&opts, "onCompositionStart", ctx);
             ctrl.on_composition_update = extract_mutation_from_opts(&opts, "onCompositionUpdate", ctx);
             ctrl.on_composition_end = extract_mutation_from_opts(&opts, "onCompositionEnd", ctx);
+
+            // Optional initial text — pre-fills the controller so an input
+            // that mounts it shows a value other than empty without needing
+            // a separate `setSpans` call after mount.
+            if let Some(initial) = opts
+                .get(js_string!("initialText"), ctx)
+                .ok()
+                .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
+            {
+                if !initial.is_empty() {
+                    ctrl.set_spans(vec![crate::elements::text::span_data::SpanData {
+                        text: initial,
+                        bold: false,
+                        italic: false,
+                        underline: false,
+                        font_size: None,
+                        color: None,
+                    }]);
+                }
+            }
         }
         Ok(ctrl)
     }
