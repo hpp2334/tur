@@ -118,6 +118,19 @@ impl Component for EditableTextComponent {
                 .expect("failed to wrap default TextEditingController");
             spec.controller = Some(obj.upcast().clone());
         }
+
+        // Attach the undo recorder to the controller so every text mutation
+        // (keyboard, IME, JS bridge, programmatic setSpans) records to the
+        // history stack uniformly — mirroring Flutter's `UndoHistory` listener
+        // model. See `TextEditingController::maybe_push_undo`.
+        if let Some(undo_obj) = spec.undo_controller.clone() {
+            if let Some(ctrl_obj) = spec.controller.as_ref() {
+                if let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>() {
+                    ctrl.set_undo_recorder(Some(undo_obj));
+                }
+            }
+        }
+
         cx.insert_node(
             id,
             AnyElement::with_full_interactivity(EditableTextElement {
@@ -417,6 +430,10 @@ impl EditableTextElement {
                     self.undo_controller_mut().and_then(|mut u| u.undo(current))
                 };
                 if let Some(value) = restored {
+                    // Suppress the recorder while applying the restored
+                    // value — otherwise `set_spans_preserve_cursor` would
+                    // push the current state and clear the redo stack.
+                    c.set_suppress_undo(true);
                     c.set_spans_preserve_cursor(vec![SpanData {
                         text: value.text,
                         bold: false,
@@ -425,6 +442,7 @@ impl EditableTextElement {
                         font_size: None,
                         color: None,
                     }]);
+                    c.set_suppress_undo(false);
                     new_cursor = value.cursor_position;
                     new_anchor = value.selection_anchor;
                     new_end = value.selection_end;
@@ -444,6 +462,7 @@ impl EditableTextElement {
                     .undo_controller_mut()
                     .and_then(|mut u| u.redo(current));
                 if let Some(value) = restored {
+                    c.set_suppress_undo(true);
                     c.set_spans_preserve_cursor(vec![SpanData {
                         text: value.text,
                         bold: false,
@@ -452,6 +471,7 @@ impl EditableTextElement {
                         font_size: None,
                         color: None,
                     }]);
+                    c.set_suppress_undo(false);
                     new_cursor = value.cursor_position;
                     new_anchor = value.selection_anchor;
                     new_end = value.selection_end;
@@ -794,13 +814,6 @@ impl ElementOnKeyboard for EditableTextElement {
             LineNavInfo::extract(ld, cursor_byte)
         });
 
-        // Detect undo/redo keystrokes up-front so the post-change logic can
-        // skip pushing a redundant history entry (the stacks already swap
-        // inside `handle_key_event`'s `"z"` / `"y"` arms).
-        let is_undo_redo_keystroke = (event.key == "z" || event.key == "y")
-            && (event.modifiers.ctrl || event.modifiers.meta)
-            && self.component.undo_controller.is_some();
-
         let (changed, clipboard_write) = self.handle_key_event(
             &event.key,
             event.modifiers.ctrl,
@@ -819,19 +832,10 @@ impl ElementOnKeyboard for EditableTextElement {
             let c = self.controller();
             let new_text = c.text();
             if new_text != prev_text {
-                // Push the prior state onto the undo stack — but only for
-                // ordinary text mutations, not for the undo/redo keystrokes
-                // themselves (those swap the stacks inside handle_key_event).
-                if !is_undo_redo_keystroke {
-                    if let Some(mut undo) = self.undo_controller_mut() {
-                        undo.push(crate::core::text::TextEditingValue {
-                            text: prev_text.clone(),
-                            cursor_position: prev_cursor,
-                            selection_anchor: prev_anchor,
-                            selection_end: prev_end,
-                        });
-                    }
-                }
+                // Undo history is recorded inside the controller's mutating
+                // methods now (see `TextEditingController::maybe_push_undo`),
+                // so there's nothing to push here — every mutation path
+                // (keyboard, IME, JS bridge, programmatic) records uniformly.
                 let enter = event.key == "Enter" && !self.resolved_multiline;
                 if let Some(m) = c.on_input() {
                     cx.push_event(m, InputEvent { value: new_text, enter });
