@@ -64,9 +64,10 @@ impl ElementLayout for TextElement {
             // Skip zero-width spans: an empty style range panics in parley
             // (`style_run.range.start < style_run.range.end`).
             if !range.is_empty() {
-                if let Some(ref c) = span.color {
-                    builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
-                }
+                // Fall back to opaque black when no color is set — without an
+                // explicit brush, parley/vello render text invisibly.
+                let c = span.color.unwrap_or(tur_shared::Color::rgb(0, 0, 0));
+                builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
                 if span.bold {
                     builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
                 }
