@@ -10,11 +10,32 @@ use crate::elements::text::text_layout::TextLayoutData;
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
+    /// Accumulated affine transform applied to every draw call.
+    ///
+    /// Vello's `push_layer` transform only applies to the clip shape, not to
+    /// the content drawn within the layer (see vello docs: "the transforms
+    /// are _not_ saved or modified by the layer stack"). So to actually
+    /// transform a subtree, we must bake the affine into each draw call's own
+    /// transform. This stack holds the running product; `push_transform`
+    /// composes onto it, and every draw/clip/opacity op premultiplies by it.
+    transform_stack: Vec<Affine>,
 }
 
 impl<'a> VelloPaintContext<'a> {
     pub fn new(scene: &'a mut Scene) -> Self {
-        VelloPaintContext { scene }
+        VelloPaintContext {
+            scene,
+            transform_stack: Vec::new(),
+        }
+    }
+
+    /// The current accumulated transform (IDENTITY when no transform layer is
+    /// active). Draw calls premultiply their own translate/transform by this.
+    fn current_transform(&self) -> Affine {
+        self.transform_stack
+            .last()
+            .copied()
+            .unwrap_or(Affine::IDENTITY)
     }
 }
 
@@ -105,7 +126,7 @@ fn geometry_size(geometry: &Geometry) -> Size {
 
 impl Canvas for VelloPaintContext<'_> {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush) {
-        let transform = Affine::translate((offset.x, offset.y));
+        let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         match brush {
             Brush::SolidColor(color) => {
                 let peniko_color = to_peniko_color(color);
@@ -136,7 +157,7 @@ impl Canvas for VelloPaintContext<'_> {
 
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData) {
-        let transform = Affine::translate((offset.x, offset.y));
+        let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         for run in &layout.runs {
             let brush_color = vello::peniko::Color::from_rgba8(
                 run.brush[0],
@@ -184,6 +205,7 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn draw_image(&mut self, image: &ImageData, transform: Affine) {
+        let transform = self.current_transform() * transform;
         self.scene.draw_image(image, transform);
     }
 
@@ -195,7 +217,7 @@ impl Canvas for VelloPaintContext<'_> {
         stroke_width: f64,
     ) {
         let peniko_color = to_peniko_color(color);
-        let transform = Affine::translate((offset.x, offset.y));
+        let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         let brush = PenikoBrush::Solid(peniko_color);
         stroke_shape(self.scene, transform, geometry, &brush, stroke_width);
     }
@@ -210,10 +232,11 @@ impl Canvas for VelloPaintContext<'_> {
         shadow_offset: (f64, f64),
     ) {
         let peniko_color = to_peniko_color(color);
-        let transform = Affine::translate((
-            offset.x + shadow_offset.0,
-            offset.y + shadow_offset.1,
-        ));
+        let transform = self.current_transform()
+            * Affine::translate((
+                offset.x + shadow_offset.0,
+                offset.y + shadow_offset.1,
+            ));
         let rect = vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height);
         self.scene.draw_blurred_rounded_rect(
             transform,
@@ -225,7 +248,7 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn push_clip(&mut self, offset: Offset, size: Size) {
-        let transform = Affine::translate((offset.x, offset.y));
+        let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         let clip = Rect::new(0.0, 0.0, size.width, size.height);
         self.scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, transform, &clip);
     }
@@ -237,14 +260,17 @@ impl Canvas for VelloPaintContext<'_> {
     fn push_opacity(&mut self, opacity: f32) {
         // Push a layer with a near-infinite clip and reduced alpha. Vello
         // composites the layer contents with the given opacity when
-        // pop_layer is called.
+        // pop_layer is called. The clip transform carries the current
+        // transform so the (near-infinite) clip stays aligned with content
+        // drawn inside a transform subtree.
         let opacity = opacity.clamp(0.0, 1.0);
+        let transform = self.current_transform();
         let huge_clip = Rect::new(-1e6, -1e6, 1e6, 1e6);
         self.scene.push_layer(
             Fill::NonZero,
             BlendMode::default(),
             opacity,
-            Affine::IDENTITY,
+            transform,
             &huge_clip,
         );
     }
@@ -254,20 +280,16 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn push_transform(&mut self, transform: Affine) {
-        // A transform layer with full opacity and a near-infinite clip just
-        // changes the coordinate system for subsequent draws.
-        let huge_clip = Rect::new(-1e6, -1e6, 1e6, 1e6);
-        self.scene.push_layer(
-            Fill::NonZero,
-            BlendMode::default(),
-            1.0,
-            transform,
-            &huge_clip,
-        );
+        // Vello layers do not transform their content (only their clip), so
+        // we compose the affine onto an internal stack and bake it into each
+        // subsequent draw call's own transform. No push_layer is needed for a
+        // pure affine — vector content renders correctly per-draw.
+        let next = self.current_transform() * transform;
+        self.transform_stack.push(next);
     }
 
     fn pop_transform(&mut self) {
-        self.scene.pop_layer();
+        self.transform_stack.pop();
     }
 }
 
