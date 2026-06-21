@@ -206,6 +206,7 @@ export interface PointerInteractProps {
      *  of the click. Use this to show a context menu. */
     onContextMenu?: Mutation<[PointerInteractEvent]>;
     behavior?: Val<number>;
+    queryKey?: Val<string[]>;
     child?: EdgyElement;
 }
 

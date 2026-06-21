@@ -504,6 +504,15 @@ impl EditableTextElement {
     }
 
     fn char_index_at(&self, local_position: &tur_shared::Offset) -> usize {
+        // When the buffer is empty and no IME composition is active, the
+        // cached layout was built from the placeholder text — clicking
+        // anywhere inside it must still map to byte 0 so the caret lands
+        // at the first position and the placeholder cannot be selected.
+        let c = self.controller();
+        if c.text().is_empty() && !c.is_composing() {
+            return 0;
+        }
+        drop(c);
         self.cached_layout
             .as_ref()
             .map(|ld| {

@@ -32,6 +32,7 @@ pub struct PointerInteractComponent {
     pub on_pointer_move: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_pointer_up: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_context_menu: Option<EdgyMutation<PointerInteractEvent>>,
+    pub query_key: Option<Vec<String>>,
     pub child: Option<Rc<dyn Component>>,
 }
 
@@ -53,6 +54,9 @@ impl Component for PointerInteractComponent {
             .with_callbacks(),
             boa,
         );
+        if let Some(qk) = &self.query_key {
+            cx.set_query_key(id, qk.clone());
+        }
         if let Some(child) = &self.child {
             child.build(cx, boa, id);
         }
@@ -167,6 +171,23 @@ fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn C
     extract_component(&v)
 }
 
+fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
+    use boa_engine::object::builtins::JsArray;
+    use boa_engine::js_string;
+    let v = props.get(js_string!(key), ctx).ok()?;
+    let obj = v.as_object()?;
+    let arr = JsArray::from_object(obj.clone()).ok()?;
+    let len = arr.length(ctx).ok()? as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        let s = arr.get(i, ctx).ok()?;
+        if let Some(s) = s.as_string() {
+            out.push(s.to_std_string_escaped());
+        }
+    }
+    Some(out)
+}
+
 impl PointerInteractComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         PointerInteractComponent {
@@ -176,6 +197,7 @@ impl PointerInteractComponent {
             on_pointer_move: prop_mutation::<PointerInteractEvent>(props, "onPointerMove", ctx),
             on_pointer_up: prop_mutation::<PointerInteractEvent>(props, "onPointerUp", ctx),
             on_context_menu: prop_mutation::<PointerInteractEvent>(props, "onContextMenu", ctx),
+            query_key: prop_query_key(props, "queryKey", ctx),
             child: prop_child(props, "child", ctx),
         }
     }

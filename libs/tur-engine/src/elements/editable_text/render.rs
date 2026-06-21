@@ -46,12 +46,9 @@ impl ElementLayout for EditableTextElement {
 
         let display_text = self.composition_display_text();
 
-        if display_text.is_empty() && placeholder.is_none() {
-            self.cached_layout = None;
-            let height = font_size * 1.2;
-            return constraints.constrain(Size::new(0.0, height));
-        }
-
+        // Always build a layout (even for empty text with no placeholder) so
+        // the caret can be painted at byte 0 with the correct line metrics
+        // when the editor is focused + empty.
         let (font_cx, text_layout_cx) = cx.text_layout_contexts();
 
         // Flutter-aligned: render the controller's span tree (so per-range
@@ -159,10 +156,6 @@ impl ElementRender for EditableTextElement {
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let Some(ref layout_data) = self.cached_layout else {
-            return;
-        };
-
         let color = paint_ctx.read_val_opt(self.component.color.as_ref());
         let cursor_color = paint_ctx.read_val_opt(self.component.cursor_color.as_ref());
 
@@ -177,6 +170,10 @@ impl ElementRender for EditableTextElement {
         drop(c);
 
         let is_focused = paint_ctx.is_focused();
+
+        let Some(layout_data) = self.cached_layout.as_ref() else {
+            return;
+        };
 
         if is_focused && has_selection {
             let (a, b) = if sel_anchor < sel_end {

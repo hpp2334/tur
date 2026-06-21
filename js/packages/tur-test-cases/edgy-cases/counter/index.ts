@@ -57,6 +57,7 @@ export default component(() =>
                                 }),
                                 SizedBox({ width: 12 }),
                                 PointerInteract({
+                                    queryKey: ["inc"],
                                     onClick: mutate(({ get, set }, _ev) =>
                                         set(count$, get(count$) + 1),
                                     ),
