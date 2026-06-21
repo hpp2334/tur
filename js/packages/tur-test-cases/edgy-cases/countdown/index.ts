@@ -5,14 +5,18 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    component,
+    createTextEditingController,
+    derive,
     type EdgyElement,
     Expanded,
+    get,
     HitTestBehavior,
     InputEdgy,
-    type Mutation,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
+    type Mutation,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
@@ -20,12 +24,8 @@ import {
     Row,
     SizedBox,
     Stack,
-    Text,
-    component,
-    createTextEditingController,
-    derive,
-    get,
     source,
+    Text,
 } from "@tur/edgy";
 
 // --- Light theme palette (slate + emerald accents) -----------------------
@@ -384,8 +384,8 @@ function EditModal(): EdgyElement {
                                             queryKey: ["edit-input"],
                                             children: [
                                                 InputEdgy({
-                                                    controller: derive(
-                                                        () => get(editController$),
+                                                    controller: derive(() =>
+                                                        get(editController$),
                                                     ),
                                                     placeholder:
                                                         "Positive integer",

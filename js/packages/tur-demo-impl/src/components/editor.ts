@@ -11,12 +11,12 @@ import {
     MouseRegion,
     type Mutation,
     mutate,
+    type PointerRegionEvent,
     Row,
     Scrollbar,
     ScrollView,
     set,
     source,
-    type PointerRegionEvent,
 } from "@tur/edgy";
 import {
     editorCtrl,
@@ -55,14 +55,12 @@ function scrollableEditor(): EdgyElement {
             }),
             // Dedicated 10px scrollbar column.
             MouseRegion({
-                onEnter: mutate(() => set(trackHovered$, true)) as unknown as Mutation<
-                    [PointerRegionEvent],
-                    void
-                >,
-                onExit: mutate(() => set(trackHovered$, false)) as unknown as Mutation<
-                    [PointerRegionEvent],
-                    void
-                >,
+                onEnter: mutate(() =>
+                    set(trackHovered$, true),
+                ) as unknown as Mutation<[PointerRegionEvent], void>,
+                onExit: mutate(() =>
+                    set(trackHovered$, false),
+                ) as unknown as Mutation<[PointerRegionEvent], void>,
                 child: Scrollbar({
                     controller,
                     color: tokens.text.placeholder,
