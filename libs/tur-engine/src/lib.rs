@@ -150,6 +150,13 @@ impl TurApp {
         Ok(())
     }
 
+    /// Briefly expose the boa context so embedder-side callbacks (e.g. the
+    /// resolved `clipboardReadText` callbacks) can be invoked. Used by
+    /// tur-wasm's frame loop after each `spawn_loop_once`.
+    pub fn with_boa_context<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
+        f(&mut self.boa_context)
+    }
+
     pub fn push_event(&self, event: core::event::AppEvent) {
         self.internal
             .app_context
@@ -186,6 +193,20 @@ impl TurApp {
         id: core::element::ElementNodeId,
     ) -> Option<core::elements::DevNodeData> {
         self.internal.js_context.element_tree.borrow().dev_tool_node(id)
+    }
+
+    /// Returns any text written to the clipboard via `AppEvent::ClipboardWrite`
+    /// since the last call. Embedders (tur-wasm) drain this each frame and
+    /// forward the text to the real system clipboard (e.g.
+    /// `navigator.clipboard.writeText`). `None` means no clipboard write is
+    /// pending.
+    pub fn take_clipboard_write(&self) -> Option<String> {
+        self.internal
+            .app_context
+            .borrow()
+            .pending_clipboard_write
+            .borrow_mut()
+            .take()
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {

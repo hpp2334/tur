@@ -2,7 +2,7 @@ pub mod queue;
 
 use crate::core::element::ElementNodeId;
 use crate::core::keyboard::AppKeyEvent;
-use tur_shared::Offset;
+use tur_shared::{MouseButton, Offset};
 
 pub enum AppEvent {
     Resize {
@@ -46,8 +46,8 @@ pub enum AppEvent {
 }
 
 pub enum AppGestureEvent {
-    PointerDown { position: Offset },
-    PointerUp { position: Offset },
+    PointerDown { position: Offset, button: MouseButton },
+    PointerUp { position: Offset, button: MouseButton },
     PointerMove { position: Offset },
     /// Right-click / context-menu request from the host. Carries the canvas
     /// position of the click. Dispatched to the deepest element under the

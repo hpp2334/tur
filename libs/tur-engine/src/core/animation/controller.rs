@@ -22,6 +22,26 @@ pub enum AnimationStatus {
     Paused,
 }
 
+/// Repeat policy for an [`AnimationController`]. Mirrors the user-facing
+/// JS API: `repeat(count)` accepts a positive integer or the string
+/// `"infinite"`. Internally we model both as a single enum so the tick
+/// math has a single point that gates completion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RepeatMode {
+    /// Play exactly `n` iterations, then transition to `Completed`.
+    Finite(u64),
+    /// Loop forever. `tick_compute` never sets status to `Completed`;
+    /// `onEnd` never fires. The value cycles through `[0, 1]` via the
+    /// existing `rem_euclid(1.0)` wrap math.
+    Infinite,
+}
+
+impl Default for RepeatMode {
+    fn default() -> Self {
+        RepeatMode::Finite(1)
+    }
+}
+
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct AnimationController {
@@ -29,7 +49,7 @@ pub struct AnimationController {
     pub(crate) curve: AnimationCurve,
     pub(crate) value: f64,
     pub(crate) status: AnimationStatus,
-    pub(crate) repeat_count: Option<u64>,
+    pub(crate) repeat_mode: RepeatMode,
     pub(crate) current_iteration: u64,
     /// The `value` captured when this animation segment started (set by
     /// `forward`/`reverse`/`resume`/`seek`). Used by `tick` to compute the
@@ -65,7 +85,7 @@ impl AnimationController {
             curve,
             value: 0.0,
             status: AnimationStatus::Stopped,
-            repeat_count: None,
+            repeat_mode: RepeatMode::default(),
             current_iteration: 0,
             value_at_start: 0.0,
             speed: 1.0,
@@ -171,17 +191,21 @@ impl AnimationController {
 
         let new_value = self.value_at_start + direction * progress_delta;
 
-        let max_iterations = self.repeat_count.unwrap_or(1);
-        let completed = if direction > 0.0 {
-            new_value >= max_iterations as f64
-        } else {
-            // Reverse starts at value_at_start (typically 1.0) and decreases.
-            new_value <= (1.0 - max_iterations as f64)
+        let (max_iterations, infinite) = match self.repeat_mode {
+            RepeatMode::Finite(n) => (n, false),
+            RepeatMode::Infinite => (u64::MAX, true),
         };
+        let completed = !infinite
+            && if direction > 0.0 {
+                new_value >= max_iterations as f64
+            } else {
+                // Reverse starts at value_at_start (typically 1.0) and decreases.
+                new_value <= (1.0 - max_iterations as f64)
+            };
 
         let t = if completed {
             if direction > 0.0 { 1.0 } else { 0.0 }
-        } else if max_iterations > 1 {
+        } else if infinite || max_iterations > 1 {
             let frac = new_value.rem_euclid(1.0);
             if direction > 0.0 { frac } else { 1.0 - frac }
         } else {
@@ -191,6 +215,11 @@ impl AnimationController {
         self.value = t;
         self.current_iteration = if completed {
             max_iterations
+        } else if infinite {
+            // For infinite mode, current_iteration grows unboundedly; cap
+            // at u64::MAX to avoid overflow. Useful only for diagnostics —
+            // the user reads `value`, not `current_iteration`.
+            (new_value.max(0.0).floor() as u64).saturating_add(0)
         } else if max_iterations > 1 {
             (new_value.max(0.0).floor() as u64).min(max_iterations)
         } else {
@@ -227,6 +256,7 @@ impl Class for AnimationController {
         let mut curve = AnimationCurve::Linear;
         let mut on_tick: Option<EdgyMutation<AnimationTickEvent>> = None;
         let mut on_end: Option<EdgyMutation<AnimationEndEvent>> = None;
+        let mut repeat_mode = RepeatMode::default();
 
         if let Some(opts) = args.get_or_undefined(0).as_object() {
             if let Ok(val) = opts.get(js_string!("duration"), ctx) {
@@ -242,6 +272,9 @@ impl Class for AnimationController {
                         .unwrap_or(AnimationCurve::Linear);
                 }
             }
+            if let Ok(val) = opts.get(js_string!("repeat"), ctx) {
+                repeat_mode = parse_repeat_value(&val);
+            }
             on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
             on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
         }
@@ -249,6 +282,7 @@ impl Class for AnimationController {
         let mut ctrl = Self::new(duration_ms, curve);
         ctrl.on_tick = on_tick;
         ctrl.on_end = on_end;
+        ctrl.repeat_mode = repeat_mode;
         Ok(ctrl)
     }
 
@@ -521,8 +555,7 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                let count = args.get_or_undefined(0).as_number().map(|n| n as u64);
-                ctrl.repeat_count = count;
+                ctrl.repeat_mode = parse_repeat_value(args.get_or_undefined(0));
                 ctrl.current_iteration = 0;
 
                 Ok(JsValue::undefined())
@@ -531,4 +564,24 @@ impl Class for AnimationController {
 
         Ok(())
     }
+}
+
+/// Parse a JS value into a `RepeatMode`. Accepts:
+///   - A positive number → `Finite(n)` (0 / negative clamped to 1)
+///   - The string `"infinite"` → `Infinite`
+///   - `undefined` / `null` / unrecognized → `Finite(1)` (default)
+fn parse_repeat_value(val: &JsValue) -> RepeatMode {
+    if let Some(s) = val.as_string() {
+        if s.to_std_string_escaped() == "infinite" {
+            return RepeatMode::Infinite;
+        }
+        return RepeatMode::default();
+    }
+    if let Some(n) = val.as_number() {
+        if n <= 0.0 || !n.is_finite() {
+            return RepeatMode::Finite(1);
+        }
+        return RepeatMode::Finite(n as u64);
+    }
+    RepeatMode::default()
 }

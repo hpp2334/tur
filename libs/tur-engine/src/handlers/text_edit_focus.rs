@@ -7,7 +7,7 @@ pub struct TextEditFocusAppHandler;
 
 impl AppHandler for TextEditFocusAppHandler {
     fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Gesture(AppGestureEvent::PointerUp { position }) = event else {
+        let AppEvent::Gesture(AppGestureEvent::PointerUp { position, .. }) = event else {
             return;
         };
 

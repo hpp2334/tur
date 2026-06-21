@@ -5,21 +5,21 @@ use crate::core::hit_test::HitTest;
 use crate::core::element::ElementNodeId;
 use crate::elements::pointer_interact::PointerInteractEvent;
 use crate::elements::PointerInteractElement;
-use tur_shared::Offset;
+use tur_shared::{MouseButton, Offset};
 
 pub struct GestureAppHandler;
 
 impl AppHandler for GestureAppHandler {
     fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
         match event {
-            AppEvent::Gesture(AppGestureEvent::PointerDown { position }) => {
-                handle_pointer_down(cx, *position);
+            AppEvent::Gesture(AppGestureEvent::PointerDown { position, button }) => {
+                handle_pointer_down(cx, *position, *button);
             }
             AppEvent::Gesture(AppGestureEvent::PointerMove { position }) => {
                 handle_pointer_move(cx, *position);
             }
-            AppEvent::Gesture(AppGestureEvent::PointerUp { position }) => {
-                handle_pointer_up(cx, *position);
+            AppEvent::Gesture(AppGestureEvent::PointerUp { position, button }) => {
+                handle_pointer_up(cx, *position, *button);
             }
             AppEvent::Gesture(AppGestureEvent::ContextMenu { position }) => {
                 handle_context_menu(cx, *position);
@@ -46,7 +46,7 @@ fn handle_context_menu(cx: &mut HandlerContext, position: Offset) {
     }
 }
 
-fn handle_pointer_down(cx: &mut HandlerContext, position: Offset) {
+fn handle_pointer_down(cx: &mut HandlerContext, position: Offset, button: MouseButton) {
     let path = HitTest::new(&*cx.element_tree).path(position);
     // Path is ordered [deepest, ..., outermost]; the deepest hit is the
     // primary gesture target.
@@ -60,7 +60,7 @@ fn handle_pointer_down(cx: &mut HandlerContext, position: Offset) {
         dispatch_gesture_event(
             cx,
             *id,
-            &ComposedGestureEvent::PointerDown { local, global: position },
+            &ComposedGestureEvent::PointerDown { local, global: position, button },
         );
     }
 }
@@ -84,7 +84,7 @@ fn handle_pointer_move(cx: &mut HandlerContext, position: Offset) {
     }
 }
 
-fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
+fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseButton) {
     let down_target = cx.gesture_composer.pointer_down_target();
     let down_path: Vec<ElementNodeId> = cx.gesture_composer.pointer_down_path().to_vec();
 
@@ -95,7 +95,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset) {
         dispatch_gesture_event(
             cx,
             *id,
-            &ComposedGestureEvent::PointerUp { local, global: position },
+            &ComposedGestureEvent::PointerUp { local, global: position, button },
         );
     }
 

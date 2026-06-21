@@ -96,9 +96,17 @@ pub fn build_store_context_object(
             let id = require_atom(args, 0)?;
             match store.kind_of(id) {
                 Some(AtomKind::Mutation) => {
-                    let extra: Vec<JsValue> =
-                        args.get(1..).map(|s| s.to_vec()).unwrap_or_default();
-                    store.invoke_mutation(id, &extra, ctx)
+                    // Prepend the store ctx object so mutation closures
+                    // invoked via the per-store `set(mutation, ...args)`
+                    // helper receive `(ctx, ...args)` — matching the
+                    // event-flush dispatch contract.
+                    let ctx_obj = build_store_context_object(ctx, store_for_set.clone())?;
+                    let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
+                    invoke_args.push(ctx_obj.into());
+                    if let Some(extra) = args.get(1..) {
+                        invoke_args.extend_from_slice(extra);
+                    }
+                    store.invoke_mutation(id, &invoke_args, ctx)
                 }
                 _ => {
                     let value = args.get_or_undefined(1).clone();

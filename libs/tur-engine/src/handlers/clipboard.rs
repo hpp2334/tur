@@ -60,3 +60,20 @@ impl AppHandler for ClipboardPasteHandler {
         }
     }
 }
+
+/// Handles `AppEvent::ClipboardWrite` (produced by EditableText on Cmd+C /
+/// Cmd+X) by stashing the text into a poll slot. The embedder drains the
+/// slot via `TurApp::take_clipboard_write()` once per frame and performs the
+/// real system-clipboard write (e.g. `navigator.clipboard.writeText` in
+/// tur-wasm). This split mirrors the existing `current_cursor` pattern and
+/// keeps the engine free of any direct embedder dependency.
+pub struct ClipboardWriteHandler;
+
+impl AppHandler for ClipboardWriteHandler {
+    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+        let AppEvent::ClipboardWrite { text } = event else {
+            return;
+        };
+        cx.push_clipboard_write(text.clone());
+    }
+}

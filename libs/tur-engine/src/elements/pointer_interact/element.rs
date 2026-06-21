@@ -103,7 +103,7 @@ impl ElementOnGesture for PointerInteractElement {
         event: &ComposedGestureEvent,
     ) {
         let (mutation, payload) = match event {
-            ComposedGestureEvent::PointerDown { local, global } => {
+            ComposedGestureEvent::PointerDown { local, global, .. } => {
                 let m = self.component.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
@@ -113,7 +113,7 @@ impl ElementOnGesture for PointerInteractElement {
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            ComposedGestureEvent::PointerUp { local, global } => {
+            ComposedGestureEvent::PointerUp { local, global, .. } => {
                 let m = self.component.on_pointer_up;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)

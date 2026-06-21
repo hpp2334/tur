@@ -78,6 +78,25 @@ impl WidgetCx {
         self.js_ctx.dirty.set(true);
     }
 
+    /// Insert `child` into `parent` immediately before the existing node
+    /// `ref_child`. Used by `LazyListElement::process_remount` to keep tree
+    /// children ordered by logical item index when scrolling up (otherwise
+    /// newly-built lower-index items would land at the end of the children
+    /// vector and break layout / hit-testing).
+    pub fn link_child_before(
+        &self,
+        parent: ElementNodeId,
+        child: ElementNodeId,
+        ref_child: ElementNodeId,
+    ) {
+        self.js_ctx
+            .element_tree
+            .borrow_mut()
+            .insert_before(parent, child, ref_child);
+        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
+        self.js_ctx.dirty.set(true);
+    }
+
     /// Remove `child` from its parent (does not delete the node).
     pub fn unlink_child(&self, parent: ElementNodeId, child: ElementNodeId) {
         self.js_ctx

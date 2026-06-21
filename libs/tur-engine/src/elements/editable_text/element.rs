@@ -588,14 +588,31 @@ impl ElementOnGesture for EditableTextElement {
         event: &ComposedGestureEvent,
     ) {
         match event {
-            ComposedGestureEvent::PointerDown { local, .. } => {
+            ComposedGestureEvent::PointerDown { local, button, .. } => {
                 cx.request_own_focus();
+                // Native-OS selection semantics on right-click:
+                //   - If there is an active selection AND the click lands
+                //     inside it (inclusive), preserve the selection so the
+                //     context-menu's Cut/Copy operate on it (matches native
+                //     text fields, browsers, etc.).
+                //   - Otherwise (left click, middle click, or right-click
+                //     outside the selection), move the caret to the click
+                //     position and collapse the selection.
                 let byte_pos = self.char_index_at(local);
-                let mut c = self.controller_mut();
-                c.set_cursor_position(byte_pos);
-                c.set_selection(byte_pos, byte_pos);
-                drop(c);
-                cx.request_redraw();
+                let preserve = *button == tur_shared::MouseButton::Right
+                    && self.controller().has_selection()
+                    && {
+                        let (a, b) = self.controller().selection_range();
+                        let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                        byte_pos >= lo && byte_pos <= hi
+                    };
+                if !preserve {
+                    let mut c = self.controller_mut();
+                    c.set_cursor_position(byte_pos);
+                    c.set_selection(byte_pos, byte_pos);
+                    drop(c);
+                    cx.request_redraw();
+                }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
                 let byte_pos = self.char_index_at(local);

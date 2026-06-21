@@ -226,6 +226,9 @@ pub fn init_bridge(
         ctx.register_handler(Box::new(
             crate::handlers::clipboard::ClipboardPasteHandler,
         ));
+        ctx.register_handler(Box::new(
+            crate::handlers::clipboard::ClipboardWriteHandler,
+        ));
     }
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), context);

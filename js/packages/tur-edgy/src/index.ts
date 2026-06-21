@@ -491,13 +491,19 @@ export interface AnimationController {
      *  Must be positive. If currently playing, the value is aligned before
      *  the new speed takes effect. */
     setSpeed(factor: number): void;
-    /** Set the repeat count. Call before `forward()` / `reverse()`. */
-    repeat(count: number): void;
+    /** Set the repeat count. Pass a positive integer for finite iterations
+     *  (the animation transitions to status "completed" after the count),
+     *  or the string `"infinite"` to loop forever. Default is 1. */
+    repeat(count: number | "infinite"): void;
 }
 
 export interface AnimationControllerOpts {
     duration?: number;
     curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    /** Repeat policy. A positive integer plays exactly that many iterations
+     *  then completes; the string `"infinite"` loops forever (status stays
+     *  "forward"/"reverse", `onEnd` never fires). Default is 1. */
+    repeat?: number | "infinite";
     /** Fired each frame with the eased progress (0..1). The callback is a
      *  `Mutation<[number], void>` — dispatched via the engine's mutation
      *  queue, so it fires after any active `RefMut` borrow on the
@@ -505,7 +511,7 @@ export interface AnimationControllerOpts {
      *  `ctrl.status` / `ctrl.value` without a boa `BorrowError`. */
     onTick?: Mutation<[number], void>;
     /** Fired once when the animation completes. Same dispatch contract as
-     *  `onTick`. */
+     *  `onTick`. Never fires when `repeat: "infinite"`. */
     onEnd?: Mutation<[], void>;
 }
 

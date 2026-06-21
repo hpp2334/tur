@@ -583,3 +583,141 @@ fn controller_on_tick_can_read_value_during_forward() {
         assert_eq!(parts.len(), 2, "expected 'eased_value' format, got {entry:?}");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Infinite-repeat mode (regression test for the user-requested feature).
+// ---------------------------------------------------------------------------
+
+#[test]
+fn controller_infinite_does_not_complete_after_many_iterations() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_js(r#"
+        var ctx = globalThis.__tur.__ctx;
+        globalThis.__tick_count = 0;
+        globalThis.__end_count = 0;
+        globalThis.__last_tick_value = -1;
+        var container = globalThis.__tur.Container(ctx, {});
+        globalThis.__tur.render(ctx, container);
+
+        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+            duration: 100,
+            curve: "linear",
+            repeat: "infinite",
+            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
+                globalThis.__tick_count++;
+                globalThis.__last_tick_value = v;
+            }),
+            onEnd: globalThis.__tur.mutate(ctx, function(_sctx) {
+                globalThis.__end_count++;
+            })
+        });
+        globalThis.__ctrl.forward();
+    "#);
+
+    // Advance well beyond a single iteration — call advance multiple times
+    // so the flush loop fires `onTick` each time. 5 calls of 100ms each =
+    // 5 iterations worth of animation time.
+    for _ in 0..5 {
+        app.advance(Duration::from_millis(100)).unwrap();
+        app.render();
+    }
+
+    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
+    assert_eq!(status, "forward",
+        "infinite animation should still be running after 5 iterations, status = {status:?}");
+
+    let end_count: i64 = app.eval_js(r#"Number(globalThis.__end_count)"#).parse().unwrap_or(0);
+    assert_eq!(end_count, 0,
+        "onEnd should never fire for an infinite animation, got {end_count}");
+
+    let tick_count: i64 = app.eval_js(r#"Number(globalThis.__tick_count)"#).parse().unwrap_or(0);
+    assert!(tick_count >= 5,
+        "onTick should fire at least once per flush, got {tick_count}");
+
+    let last: f64 = app.eval_js(r#"Number(globalThis.__last_tick_value)"#).parse().unwrap_or(-1.0);
+    assert!(last >= 0.0 && last <= 1.0,
+        "value should always be within [0, 1], got {last}");
+
+    // The tick count should be > 1 (we ran multiple flushes), proving the
+    // animation is still ticking and not frozen.
+}
+
+#[test]
+fn controller_infinite_reverse_cycles_back_to_zero() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_js(r#"
+        var ctx = globalThis.__tur.__ctx;
+        globalThis.__tick_values = [];
+        var container = globalThis.__tur.Container(ctx, {});
+        globalThis.__tur.render(ctx, container);
+
+        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+            duration: 100,
+            curve: "linear",
+            repeat: "infinite",
+            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
+                globalThis.__tick_values.push(v);
+            })
+        });
+        globalThis.__ctrl.reverse();
+    "#);
+
+    // Reverse: value goes 1.0 → 0.0, then loops back to 1.0 → 0.0...
+    app.advance(Duration::from_millis(250)).unwrap();
+    app.render();
+
+    let values: String = app.eval_js(r#"globalThis.__tick_values.join("|")"#);
+    let parsed: Vec<f64> = values
+        .split('|')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse::<f64>().unwrap_or(-1.0))
+        .collect();
+    assert!(parsed.len() >= 3,
+        "should have at least 3 ticks across multiple iterations, got {parsed:?}");
+
+    // Reverse mode starts at 1.0. The first tick should be close to 1.0.
+    assert!(parsed[0] > 0.8,
+        "reverse mode should start near 1.0, got {}", parsed[0]);
+
+    // After many iterations, the value should still be in [0, 1].
+    let last = parsed[parsed.len() - 1];
+    assert!(last >= 0.0 && last <= 1.0,
+        "value should stay in [0, 1] across iterations, got {last}");
+
+    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
+    assert_eq!(status, "reverse",
+        "infinite reverse should still be running, status = {status:?}");
+}
+
+#[test]
+fn controller_repeat_three_then_completes() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_js(r#"
+        var ctx = globalThis.__tur.__ctx;
+        globalThis.__end_count = 0;
+        var container = globalThis.__tur.Container(ctx, {});
+        globalThis.__tur.render(ctx, container);
+
+        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+            duration: 100,
+            curve: "linear",
+            repeat: 3,
+            onEnd: globalThis.__tur.mutate(ctx, function(_sctx) {
+                globalThis.__end_count++;
+            })
+        });
+        globalThis.__ctrl.forward();
+    "#);
+
+    // 3 iterations of 100ms = 300ms total. Advance just past.
+    app.advance(Duration::from_millis(320)).unwrap();
+    app.render();
+
+    let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
+    assert_eq!(status, "completed",
+        "after 3 iterations, finite animation should be completed, status = {status:?}");
+
+    let end_count: i64 = app.eval_js(r#"Number(globalThis.__end_count)"#).parse().unwrap_or(0);
+    assert_eq!(end_count, 1,
+        "onEnd should fire exactly once when the finite repeat count is reached, got {end_count}");
+}

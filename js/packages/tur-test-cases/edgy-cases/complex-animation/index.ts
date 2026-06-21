@@ -50,17 +50,20 @@ const speedLabel$ = source("1x");
 const curveLabel$ = source<"linear" | "easeIn" | "easeOut" | "easeInOut">(
     "easeInOut",
 );
+const looping$ = source(false);
 
-// Mutable controller holder. Recreated when the curve changes; in-place
-// mutated for speed/seek.
-let ctrl: AnimationController = createController("easeInOut");
+// Mutable controller holder. Recreated when the curve changes or when
+// looping is toggled; in-place mutated for speed/seek.
+let ctrl: AnimationController = createController("easeInOut", false);
 
 function createController(
     curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
+    looping: boolean,
 ): AnimationController {
     return createAnimationController({
         duration: 2400,
         curve,
+        repeat: looping ? "infinite" : 1,
         onTick: mutate((_ctx, v: number) => {
             set(progress$, v);
         }),
@@ -116,12 +119,20 @@ const setSpeed = mutate((_ctx, factor: number, label: string) => {
 const setCurve = mutate(
     (_ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
         const t = get(progress$);
-        ctrl = createController(curve);
+        ctrl = createController(curve, get(looping$));
         ctrl.seek(t);
         set(curveLabel$, curve);
         set(status$, ctrl.status);
     },
 );
+const toggleLooping = mutate(() => {
+    const next = !get(looping$);
+    const t = get(progress$);
+    ctrl = createController(get(curveLabel$), next);
+    ctrl.seek(t);
+    set(looping$, next);
+    set(status$, ctrl.status);
+});
 
 // ---------------------------------------------------------------------------
 // UI
@@ -296,6 +307,35 @@ function CurveButton(
     });
 }
 
+function LoopButton(): unknown {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick: mutate(() => {
+                set(toggleLooping);
+            }) as unknown as Mutation<[PointerInteractEvent], void>,
+            child: Container({
+                padding: 6,
+                borderRadius: 6,
+                color: derive(() =>
+                    get(looping$) ? Color.hex("#db2777") : Color.hex("#e2e8f0"),
+                ),
+                children: [
+                    Text({
+                        text: derive(() => (get(looping$) ? "Loop ✓" : "Loop")),
+                        fontSize: 10,
+                        color: derive(() =>
+                            get(looping$)
+                                ? Color.hex("#ffffff")
+                                : Color.hex("#475569"),
+                        ),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
 export default component(() =>
     Expanded({
         child: Container({
@@ -397,6 +437,8 @@ export default component(() =>
                                 CurveButton("easeOut", "easeOut"),
                                 SizedBox({ width: 4 }),
                                 CurveButton("easeInOut", "easeInOut"),
+                                SizedBox({ width: 12 }),
+                                LoopButton(),
                             ],
                         }),
 

@@ -1,4 +1,4 @@
-use tur_shared::Offset;
+use tur_shared::{MouseButton, Offset};
 
 use crate::core::element::ElementNodeId;
 use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
@@ -7,9 +7,9 @@ use crate::core::event::AppEvent;
 use crate::core::focus::FocusManager;
 
 pub enum ComposedGestureEvent {
-    PointerDown { local: Offset, global: Offset },
+    PointerDown { local: Offset, global: Offset, button: MouseButton },
     PointerMove { local: Offset, global: Offset },
-    PointerUp { local: Offset, global: Offset },
+    PointerUp { local: Offset, global: Offset, button: MouseButton },
     /// Right-click. `local` is relative to the element; `global` is canvas-
     /// relative. Dispatched to every element in the hit-path (deepest first)
     /// so layered widgets can each inspect the event.

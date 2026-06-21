@@ -5,6 +5,7 @@ mod debug;
 mod expanded;
 mod image;
 mod lazy_list;
+mod reactive;
 mod switch_widget;
 mod positioned;
 mod rich_text;

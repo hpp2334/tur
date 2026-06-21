@@ -89,16 +89,28 @@ impl ElementLayout for LazyListElement {
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         let scroll_offset = self.position.pixels();
-        let mut cum = 0.0;
-        for (i, &child_id) in children.iter().enumerate() {
-            let extent = self.child_extents.get(i).copied().unwrap_or(0.0);
-            let main_pos = cum - scroll_offset;
+        // Position each child by its logical item index, not its position
+        // in the children slice. This makes layout robust against the
+        // parent's children vector being scrambled when items mount out of
+        // order during scroll-up, and correctly offsets the first mounted
+        // item when the user has scrolled past item 0.
+        //
+        // For fixed `itemExtent`, content_pos = index * extent is exact.
+        // For variable heights, we approximate using the running average
+        // (Bug 7 in the design doc — proper fix is a per-index extent
+        // cache, deferred).
+        let extent = self.average_extent();
+        for &child_id in children {
+            let Some(logical) = self.visible_index_of(child_id) else {
+                continue;
+            };
+            let content_pos = logical as f64 * extent;
+            let main_pos = content_pos - scroll_offset;
             let offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
             cx.set_child_offset(child_id, offset);
-            cum += extent;
         }
     }
 }

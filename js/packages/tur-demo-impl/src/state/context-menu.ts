@@ -74,23 +74,21 @@ export const copySelection = mutate(() => {
 });
 
 export const pasteFromClipboard = mutate(() => {
-    // Paste via the browser's async clipboard API. The engine handles
-    // Cmd+V natively via the paste event on the hidden textarea, but the
-    // context-menu action needs an explicit call.
-    const navigator = (
+    // Paste via the host's clipboard-read bridge. The engine handles Cmd+V
+    // natively via the paste event on the hidden textarea, but the
+    // context-menu action needs an explicit call. `clipboardReadText` is
+    // callback-based (the host resolves it on the next frame from within
+    // the boa context, where a &mut Context is available).
+    const host = (
         globalThis as unknown as {
-            navigator?: { clipboard?: { readText?: () => Promise<string> } };
+            __turHost?: {
+                clipboardReadText?: (cb: (text: string) => void) => void;
+            };
         }
-    ).navigator;
-    navigator?.clipboard
-        ?.readText?.()
-        ?.then((text) => {
-            if (text.length > 0) editorCtrl.insertText(text);
-        })
-        ?.catch(() => {
-            // Clipboard read can fail if the page doesn't have focus or
-            // permission. Silently ignore.
-        });
+    ).__turHost;
+    host?.clipboardReadText?.((text) => {
+        if (text.length > 0) editorCtrl.insertText(text);
+    });
     set(contextMenuOpen$, false);
 });
 

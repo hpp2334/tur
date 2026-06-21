@@ -180,6 +180,56 @@ fn register_host_services(app: &mut TurApp) {
     if let Err(e) = app.register_host_fn("clipboardWriteText", 1, clipboard_write) {
         tracing::error!("failed to register clipboardWriteText: {e}");
     }
+
+    // Clipboard read bridge — `__turHost.clipboardReadText(callback)`. The
+    // host fn captures the JS callback, kicks off a browser-side
+    // `navigator.clipboard.read_text()` future, and on completion pushes
+    // (callback, text) into a wasm-side slot. The frame loop drains that
+    // slot once per frame, invoking each callback from within the boa
+    // context (the only place we have a `&mut Context`). Resolves with an
+    // empty string if the browser denies the read.
+    //
+    // We can't return a Promise directly because resolving one from
+    // outside a `&mut Context` is impossible — the callback-based API is
+    // equivalent and avoids the borrow issue.
+    let clipboard_read = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
+        use boa_engine::object::builtins::JsFunction;
+        let Some(cb_obj) = args.get_or_undefined(0).as_object() else {
+            return Ok(JsValue::undefined());
+        };
+        let Some(cb) = JsFunction::from_object(cb_obj.clone()) else {
+            return Ok(JsValue::undefined());
+        };
+        wasm_bindgen_futures::spawn_local(async move {
+            let text = match web_sys::window() {
+                Some(window) => {
+                    let promise = window.navigator().clipboard().read_text();
+                    match wasm_bindgen_futures::JsFuture::from(promise).await {
+                        Ok(v) => v.as_string().unwrap_or_default(),
+                        Err(_) => String::new(),
+                    }
+                }
+                None => String::new(),
+            };
+            // Stash (callback, text) on a thread-local queue. The frame
+            // loop drains it next tick with a Context available.
+            CLIPBOARD_READ_QUEUE.with(|q| {
+                q.borrow_mut().push((cb, text));
+            });
+        });
+        Ok(JsValue::undefined())
+    });
+    if let Err(e) = app.register_host_fn("clipboardReadText", 1, clipboard_read) {
+        tracing::error!("failed to register clipboardReadText: {e}");
+    }
+}
+
+thread_local! {
+    /// Pending (callback, resolved text) pairs queued by `clipboardReadText`.
+    /// Drained by `TurWasmApp::drain_clipboard_reads` from within the frame
+    /// loop, where a `&mut Context` is available.
+    static CLIPBOARD_READ_QUEUE: std::cell::RefCell<Vec<(boa_engine::object::builtins::JsFunction, String)>>
+        = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[wasm_bindgen]
@@ -433,9 +483,11 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
+                        let button = tur_shared::MouseButton::from_dom(event.button() as u16);
                         s.app.push_event(AppEvent::Gesture(
                             AppGestureEvent::PointerDown {
                                 position: Offset::new(x, y),
+                                button,
                             },
                         ));
                     }
@@ -456,9 +508,11 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
+                        let button = tur_shared::MouseButton::from_dom(event.button() as u16);
                         s.app.push_event(AppEvent::Gesture(
                             AppGestureEvent::PointerUp {
                                 position: Offset::new(x, y),
+                                button,
                             },
                         ));
                     }
@@ -817,6 +871,25 @@ impl TurWasmApp {
             if let Some(s) = guard.as_mut() {
                 if let Err(e) = s.app.spawn_loop_once(std::time::Duration::from_millis(16)) {
                     tracing::error!("frame loop spawn_loop_once error: {e}");
+                }
+
+                // Drain any pending clipboard-read resolutions. Each entry
+                // is a (JS callback, text) pair queued by the
+                // `__turHost.clipboardReadText(cb)` host fn when the
+                // browser's `navigator.clipboard.read_text()` future
+                // completed. We invoke the callback from here because a
+                // `&mut Context` is available via `with_boa_context`.
+                let pending: Vec<(boa_engine::object::builtins::JsFunction, String)> =
+                    CLIPBOARD_READ_QUEUE.with(|q| q.borrow_mut().drain(..).collect());
+                if !pending.is_empty() {
+                    s.app.with_boa_context(|ctx| {
+                        for (cb, text) in pending {
+                            let text_val = boa_engine::JsValue::from(boa_engine::js_string!(text.as_str()));
+                            if let Err(e) = cb.call(&boa_engine::JsValue::undefined(), &[text_val], ctx) {
+                                tracing::error!("clipboardReadText callback error: {e}");
+                            }
+                        }
+                    });
                 }
 
                 // Apply any pending cursor change requested by a handler

@@ -219,6 +219,19 @@ impl LazyListElement {
         (start, end)
     }
 
+    /// Reverse-map a built node id back to its logical item index. Returns
+    /// `None` if the child isn't currently mounted. Used by layout to
+    /// position children by their logical index (which is stable across
+    /// scroll-driven mount/unmount) rather than by their position in the
+    /// parent's children vector (which can be scrambled when items mount
+    /// out of order — see `process_remount`).
+    pub fn visible_index_of(&self, child_id: ElementNodeId) -> Option<u64> {
+        self.visible
+            .iter()
+            .find(|(_, id)| *id == child_id)
+            .map(|(i, _)| *i)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn update_controller_metrics(&mut self, ctrl: &mut LazyListController) {
         let vp = self.position.viewport_size();
@@ -292,6 +305,16 @@ impl LazyListElement {
             }
             if let Some(spec) = build_item_spec(&builder, index, boa) {
                 let item_id = spec.build(cx, boa, node_id);
+                // Ensure the tree children vector stays ordered by logical
+                // index. `spec.build` appended the new child to the end of
+                // `node.children`; if there's an existing mounted item with
+                // a larger index, splice the new child in before it. The
+                // cheap path (new index > all existing) leaves the append
+                // in place.
+                let next_higher = self.visible.iter().find(|(i, _)| *i > index).map(|(_, id)| *id);
+                if let Some(ref_id) = next_higher {
+                    cx.link_child_before(node_id, item_id, ref_id);
+                }
                 newly_mounted.push((index, item_id));
             }
         }
