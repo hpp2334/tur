@@ -10,8 +10,14 @@ import {
     Row,
     Scrollbar,
     ScrollView,
+    set,
 } from "@tur/edgy";
-import { editorCtrl, selectedCase$, selectedFile$ } from "../state";
+import {
+    editorCtrl,
+    openContextMenu,
+    selectedCase$,
+    selectedFile$,
+} from "../state";
 import { tokens } from "../theme/tokens";
 
 const editorInput: EdgyElement = InputEdgy({
@@ -22,6 +28,7 @@ const editorInput: EdgyElement = InputEdgy({
     color: tokens.text.code,
     cursorColor: tokens.accent.cursor,
     placeholderColor: tokens.text.placeholder,
+    onContextMenu: openContextMenu,
     queryKey: ["editor-input"],
 });
 

@@ -20,6 +20,7 @@ import {
     selectedFile$,
     status$,
 } from "./sources";
+import { triggerFadeIn } from "./transitions";
 import type { CaseFileMap, EditorController } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,7 @@ export function loadCase(name: string): void {
     set(status$, "ready");
     set(errorMsg$, "");
     refreshEditedState();
+    triggerFadeIn();
 }
 
 /** Switch to a different file within the current case. Saves the current
@@ -155,6 +157,7 @@ export function recompile(): void {
     set(errorMsg$, "");
     set(edited$, false);
     set(compileVersion$, get(compileVersion$) + 1);
+    triggerFadeIn();
 }
 
 export function resetCase(): void {

@@ -1,0 +1,415 @@
+import {
+    Alignment,
+    type AnimationController,
+    Color,
+    Column,
+    Container,
+    CrossAxisAlignment,
+    component,
+    createAnimationController,
+    derive,
+    Expanded,
+    get,
+    MainAxisAlignment,
+    MainAxisSize,
+    MouseRegion,
+    type Mutation,
+    mutate,
+    PointerInteract,
+    type PointerInteractEvent,
+    Positioned,
+    Row,
+    SizedBox,
+    Stack,
+    set,
+    source,
+    Text,
+    Transform,
+} from "@tur/edgy";
+
+// ---------------------------------------------------------------------------
+// "Animated Card Studio" — a demo of tur's animation API.
+//
+// A centered card animates:
+//   - width: 120 → 280
+//   - borderRadius: 8 → 40
+//   - hue: indigo → coral (via per-tick Color.rgb)
+//   - rotation: 0 → 2π (looping)
+//
+// Controls:
+//   - Play / Pause / Resume / Reverse / Stop
+//   - Speed selector (0.5x / 1x / 2x / 4x)
+//   - Curve dropdown (linear / easeIn / easeOut / easeInOut) — recreates controller
+// ---------------------------------------------------------------------------
+
+const progress$ = source(0); // 0..1 raw progress
+const status$ = source<
+    "stopped" | "forward" | "reverse" | "completed" | "paused"
+>("stopped");
+const speedLabel$ = source("1x");
+const curveLabel$ = source<"linear" | "easeIn" | "easeOut" | "easeInOut">(
+    "easeInOut",
+);
+
+// Mutable controller holder. Recreated when the curve changes; in-place
+// mutated for speed/seek.
+let ctrl: AnimationController = createController("easeInOut");
+
+function createController(
+    curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
+): AnimationController {
+    return createAnimationController({
+        duration: 2400,
+        curve,
+        onTick: mutate((_ctx, v: number) => {
+            set(progress$, v);
+        }),
+        onEnd: mutate(() => {
+            set(status$, ctrl.status);
+        }),
+    });
+}
+
+// Color interpolation: indigo (99,102,241) → coral (232,93,68).
+function lerp(a: number, b: number, t: number): number {
+    return Math.round(a + (b - a) * t);
+}
+
+function interpolatedColor(t: number): unknown {
+    return Color.rgba(
+        lerp(99, 232, t),
+        lerp(102, 93, t),
+        lerp(241, 68, t),
+        255,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
+
+const playForward = mutate(() => {
+    ctrl.forward();
+    set(status$, ctrl.status);
+});
+const playReverse = mutate(() => {
+    ctrl.reverse();
+    set(status$, ctrl.status);
+});
+const pause = mutate(() => {
+    ctrl.pause();
+    set(status$, ctrl.status);
+});
+const resume = mutate(() => {
+    ctrl.resume();
+    set(status$, ctrl.status);
+});
+const stop = mutate(() => {
+    ctrl.stop();
+    set(status$, ctrl.status);
+    set(progress$, ctrl.value);
+});
+const setSpeed = mutate((_ctx, factor: number, label: string) => {
+    ctrl.setSpeed(factor);
+    set(speedLabel$, label);
+});
+const setCurve = mutate(
+    (_ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
+        const t = get(progress$);
+        ctrl = createController(curve);
+        ctrl.seek(t);
+        set(curveLabel$, curve);
+        set(status$, ctrl.status);
+    },
+);
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+
+function Card(): unknown {
+    // Card animates width, borderRadius, hue based on progress$.
+    return Container({
+        // Width: 120 → 280
+        width: derive(() => 120 + 160 * get(progress$)),
+        height: 160,
+        borderRadius: derive(() => 8 + 32 * get(progress$)),
+        color: derive(() => interpolatedColor(get(progress$))),
+        shadowColor: Color.rgba(15, 23, 42, 80),
+        shadowBlur: 24,
+        shadowOffset: [0, 8],
+        alignment: Alignment.Center,
+        children: [
+            // Rotating inner shape — demonstrates the Transform element.
+            Transform({
+                rotate: derive(() => get(progress$) * 2 * Math.PI),
+                child: Container({
+                    width: 60,
+                    height: 60,
+                    borderRadius: 12,
+                    color: Color.rgba(255, 255, 255, 255),
+                }),
+            }),
+        ],
+    });
+}
+
+function OrbitingDot(): unknown {
+    // A dot that orbits around the card center.
+    return Positioned({
+        left: derive(() => 140 + 80 * Math.cos(2 * Math.PI * get(progress$))),
+        top: derive(() => 80 + 80 * Math.sin(2 * Math.PI * get(progress$))),
+        child: Container({
+            width: 20,
+            height: 20,
+            borderRadius: 999,
+            color: Color.rgba(34, 197, 94, 255),
+            shadowColor: Color.rgba(34, 197, 94, 120),
+            shadowBlur: 16,
+            shadowOffset: [0, 0],
+        }),
+    });
+}
+
+function ProgressReadout(): unknown {
+    return Text({
+        text: derive(() => `${Math.round(get(progress$) * 100)}%`),
+        fontSize: 12,
+        color: Color.rgba(71, 85, 105, 255),
+    });
+}
+
+function StatusBadge(): unknown {
+    return Container({
+        padding: 6,
+        borderRadius: 999,
+        color: derive(() => {
+            const s = get(status$);
+            if (s === "forward" || s === "reverse") {
+                return Color.rgba(34, 197, 94, 255);
+            }
+            if (s === "paused") return Color.rgba(245, 158, 11, 255);
+            if (s === "completed") return Color.rgba(99, 102, 241, 255);
+            return Color.rgba(148, 163, 184, 255);
+        }),
+        children: [
+            Text({
+                text: derive(() => get(status$).toUpperCase()),
+                fontSize: 10,
+                color: Color.rgba(255, 255, 255, 255),
+            }),
+        ],
+    });
+}
+
+function Button(
+    label: string,
+    onClick: Mutation<[], void>,
+    color = "#4f46e5",
+): unknown {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick: onClick as unknown as Mutation<
+                [PointerInteractEvent],
+                void
+            >,
+            child: Container({
+                padding: 8,
+                borderRadius: 6,
+                color: Color.hex(color),
+                children: [
+                    Text({
+                        text: label,
+                        fontSize: 11,
+                        color: Color.hex("#ffffff"),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
+function SpeedButton(factor: number, label: string): unknown {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick: mutate(() =>
+                set(setSpeed, factor, label),
+            ) as unknown as Mutation<[PointerInteractEvent], void>,
+            child: Container({
+                padding: 6,
+                borderRadius: 6,
+                color: derive(() =>
+                    get(speedLabel$) === label
+                        ? Color.hex("#1e293b")
+                        : Color.hex("#e2e8f0"),
+                ),
+                children: [
+                    Text({
+                        text: label,
+                        fontSize: 10,
+                        color: derive(() =>
+                            get(speedLabel$) === label
+                                ? Color.hex("#ffffff")
+                                : Color.hex("#475569"),
+                        ),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
+function CurveButton(
+    curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
+    label: string,
+): unknown {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick: mutate(() => set(setCurve, curve)) as unknown as Mutation<
+                [PointerInteractEvent],
+                void
+            >,
+            child: Container({
+                padding: 6,
+                borderRadius: 6,
+                color: derive(() =>
+                    get(curveLabel$) === curve
+                        ? Color.hex("#0d9488")
+                        : Color.hex("#e2e8f0"),
+                ),
+                children: [
+                    Text({
+                        text: label,
+                        fontSize: 10,
+                        color: derive(() =>
+                            get(curveLabel$) === curve
+                                ? Color.hex("#ffffff")
+                                : Color.hex("#475569"),
+                        ),
+                    }),
+                ],
+            }),
+        }),
+    });
+}
+
+export default component(() =>
+    Expanded({
+        child: Container({
+            color: Color.hex("#f8fafc"),
+            children: [
+                Column({
+                    mainAlignment: MainAxisAlignment.Center,
+                    crossAlignment: CrossAxisAlignment.Center,
+                    mainAxisSize: MainAxisSize.Min,
+                    children: [
+                        Text({
+                            text: "Animated Card Studio",
+                            fontSize: 16,
+                            color: Color.hex("#0f172a"),
+                        }),
+                        SizedBox({ height: 4 }),
+                        Row({
+                            mainAxisSize: MainAxisSize.Min,
+                            children: [
+                                StatusBadge(),
+                                SizedBox({ width: 12 }),
+                                ProgressReadout(),
+                            ],
+                        }),
+                        SizedBox({ height: 32 }),
+
+                        // Animated card + orbiting dot
+                        Stack({
+                            children: [
+                                Container({
+                                    width: 360,
+                                    height: 200,
+                                }),
+                                Positioned({
+                                    left: 100,
+                                    top: 20,
+                                    child: Card(),
+                                }),
+                                OrbitingDot(),
+                            ],
+                        }),
+
+                        SizedBox({ height: 32 }),
+
+                        // Transport controls
+                        Row({
+                            mainAxisSize: MainAxisSize.Min,
+                            children: [
+                                Button("Play", playForward, "#22c55e"),
+                                SizedBox({ width: 6 }),
+                                Button("Pause", pause, "#f59e0b"),
+                                SizedBox({ width: 6 }),
+                                Button("Resume", resume, "#0ea5e9"),
+                                SizedBox({ width: 6 }),
+                                Button("Reverse", playReverse, "#8b5cf6"),
+                                SizedBox({ width: 6 }),
+                                Button("Stop", stop, "#ef4444"),
+                            ],
+                        }),
+
+                        SizedBox({ height: 16 }),
+
+                        // Speed selector
+                        Row({
+                            mainAxisSize: MainAxisSize.Min,
+                            children: [
+                                Text({
+                                    text: "Speed:",
+                                    fontSize: 11,
+                                    color: Color.hex("#64748b"),
+                                }),
+                                SizedBox({ width: 8 }),
+                                SpeedButton(0.5, "0.5x"),
+                                SizedBox({ width: 4 }),
+                                SpeedButton(1, "1x"),
+                                SizedBox({ width: 4 }),
+                                SpeedButton(2, "2x"),
+                                SizedBox({ width: 4 }),
+                                SpeedButton(4, "4x"),
+                            ],
+                        }),
+
+                        SizedBox({ height: 12 }),
+
+                        // Curve selector
+                        Row({
+                            mainAxisSize: MainAxisSize.Min,
+                            children: [
+                                Text({
+                                    text: "Curve:",
+                                    fontSize: 11,
+                                    color: Color.hex("#64748b"),
+                                }),
+                                SizedBox({ width: 8 }),
+                                CurveButton("linear", "linear"),
+                                SizedBox({ width: 4 }),
+                                CurveButton("easeIn", "easeIn"),
+                                SizedBox({ width: 4 }),
+                                CurveButton("easeOut", "easeOut"),
+                                SizedBox({ width: 4 }),
+                                CurveButton("easeInOut", "easeInOut"),
+                            ],
+                        }),
+
+                        SizedBox({ height: 16 }),
+
+                        Text({
+                            text: "Controls: pause mid-play, change speed/curve, resume",
+                            fontSize: 10,
+                            color: Color.hex("#94a3b8"),
+                        }),
+                    ],
+                }),
+            ],
+        }),
+    }),
+);
