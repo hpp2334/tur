@@ -44,18 +44,17 @@ import {
 
 const ITEM_COUNT = 30;
 
-// Deterministic main-axis sizes — a TIGHT cycle centered on its own average.
-// The LazyList positions each item at `index * averageExtent` (an engine
-// approximation when `itemExtent` is omitted — see
-// libs/tur-engine/src/elements/lazy_list/render.rs:96-107). Any item taller
-// than the running average therefore OVERLAPS the next. Keeping the cycle
-// balanced (sum of one period = period * mean) and the variance tight
-// (±10px around the mean) keeps overlaps to a few pixels — visually
-// acceptable. A wider variance (the original 40..130 range) produced 45px+
-// overlaps that looked like duplicated rows on scroll.
-const MAIN_SIZES = [70, 90, 75, 85];
+// Deterministic main-axis size via a sine-based hash → integer in [1, 150].
+// Every index maps to a pseudo-random but stable extent, so consecutive
+// rows/cols look visibly different and there's no short cycle to spot.
+// The engine maintains a persistent per-index extent cache (see
+// libs/tur-engine/src/elements/lazy_list/element.rs:`extent_cache`) and
+// positions each item at the cumulative offset of its logical index — so
+// even a wide [1, 150] variance produces a tight, non-overlapping column
+// as the user scrolls.
 function mainSizeFor(i: number): number {
-    return MAIN_SIZES[i % MAIN_SIZES.length];
+    const frac = Math.sin(i * 12.9898) * 43758.5453;
+    return 1 + Math.floor((frac - Math.floor(frac)) * 150);
 }
 
 // Inner content cross-axis size — proves "different widths" (vertical) or

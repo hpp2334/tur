@@ -55,6 +55,12 @@ impl ElementLayout for LazyListElement {
             let extent = self.axis.main(size);
             self.child_extents.push(extent);
             measured_main += extent;
+            // Persist the measurement in the per-index cache. Keyed by
+            // logical index (stable across scroll-driven mount/unmount) so
+            // unmounted-then-remounted items recall their previous extent.
+            if let Some(logical) = self.visible_index_of(child_id) {
+                self.extent_cache.insert(logical, extent);
+            }
         }
 
         // Total content length is computed from the declared item count,
@@ -87,30 +93,46 @@ impl ElementLayout for LazyListElement {
         viewport
     }
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+    fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
         let scroll_offset = self.position.pixels();
+        let avg = self.average_extent();
+
         // Position each child by its logical item index, not its position
         // in the children slice. This makes layout robust against the
         // parent's children vector being scrambled when items mount out of
-        // order during scroll-up, and correctly offsets the first mounted
-        // item when the user has scrolled past item 0.
+        // order during scroll-up.
         //
-        // For fixed `itemExtent`, content_pos = index * extent is exact.
-        // For variable heights, we approximate using the running average
-        // (Bug 7 in the design doc — proper fix is a per-index extent
-        // cache, deferred).
-        let extent = self.average_extent();
-        for &child_id in children {
-            let Some(logical) = self.visible_index_of(child_id) else {
-                continue;
-            };
-            let content_pos = logical as f64 * extent;
-            let main_pos = content_pos - scroll_offset;
-            let offset = match self.axis {
+        // For BOTH fixed `itemExtent` and variable heights, position each
+        // mounted child at the cumulative offset of its logical index
+        // (sum of extents of all previous items). The cache makes this
+        // exact for previously-measured items; the avg fallback covers
+        // the (typically pre-scroll) region before the first mounted item.
+        //
+        // Fast path when items 0..first_mounted are all unmeasured: skip
+        // the walk and use `first_mounted * avg`. This keeps deep-scroll
+        // layouts O(visible_count) instead of O(first_mounted).
+        let visible: Vec<(u64, ElementNodeId)> = self.visible.clone();
+        let first_mounted_idx = visible.first().map(|(i, _)| *i).unwrap_or(0);
+
+        let mut offset = {
+            let all_unmeasured = (0..first_mounted_idx)
+                .all(|i| !self.extent_cache.contains_key(&i));
+            if all_unmeasured {
+                first_mounted_idx as f64 * avg
+            } else {
+                self.cumulative_offset(first_mounted_idx)
+            }
+        };
+
+        for (i, child_id) in visible {
+            let main_pos = offset - scroll_offset;
+            let off = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
-            cx.set_child_offset(child_id, offset);
+            cx.set_child_offset(child_id, off);
+            // Advance by this item's extent (cached measurement or avg).
+            offset += self.extent_cache.get(&i).copied().unwrap_or(avg);
         }
     }
 }

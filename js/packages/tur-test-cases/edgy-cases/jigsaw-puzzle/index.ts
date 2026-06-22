@@ -1,12 +1,14 @@
 import {
     Alignment,
     Color,
+    Column,
     Condition,
     Container,
     CrossAxisAlignment,
     component,
     derive,
     type EdgyElement,
+    Expanded,
     get,
     MainAxisAlignment,
     MouseRegion,
@@ -383,16 +385,16 @@ function WinBanner(): EdgyElement {
             alignment: Alignment.Center,
             children: [
                 Container({
-                    padding: 14,
-                    borderRadius: 10,
+                    padding: 24,
+                    borderRadius: 14,
                     color: Color.hex("#4f46e5"),
                     shadowColor: Color.rgba(0, 0, 0, 120),
-                    shadowOffset: [0, 4],
-                    shadowBlur: 10,
+                    shadowOffset: [0, 6],
+                    shadowBlur: 18,
                     children: [
                         Text({
                             text: "Solved!",
-                            fontSize: 22,
+                            fontSize: 36,
                             color: Color.hex("#ffffff"),
                         }),
                     ],
@@ -403,24 +405,62 @@ function WinBanner(): EdgyElement {
 }
 
 export default component(() =>
-    Stack({
-        children: [
-            // Non-positioned sizer — gives the Stack a finite size so the
-            // Positioned children resolve against it.
-            Container({
-                width: PLAY_W,
-                height: PLAY_H,
-                color: Color.hex("#020617"),
-            }),
-            BoardBackground(),
-            ...Array.from({ length: GRID * GRID }, (_, i) => slotGhost(i)),
-            TrayBackground(),
-            ...Array.from({ length: GRID * GRID }, (_, id) => makePiece(id)),
-            TopBar(),
-            Condition({
-                condition: done$,
-                child: () => WinBanner(),
-            }),
-        ],
+    // Fill the entire viewer pane: an outer Stack provides the full-bleed
+    // dark background + a centered puzzle play area + the win banner overlay.
+    // The puzzle itself is a fixed-size Stack (PLAY_W × PLAY_H) so the
+    // Positioned piece/slot coordinates remain case-local; the surrounding
+    // Column centers it within whatever size the viewer pane happens to be.
+    Expanded({
+        child: Stack({
+            children: [
+                // Full-bleed background — fills the viewer regardless of
+                // puzzle dimensions.
+                Container({
+                    color: Color.hex("#020617"),
+                }),
+                // Centered puzzle. Column with MainAxisSize.Max fills the
+                // parent Container so the centering has the full viewer to
+                // center against; cross-axis Center handles horizontal.
+                Container({
+                    children: [
+                        Column({
+                            mainAlignment: MainAxisAlignment.Center,
+                            crossAlignment: CrossAxisAlignment.Center,
+                            children: [
+                                Stack({
+                                    children: [
+                                        // Sizer — gives the inner Stack a
+                                        // finite size so Positioned children
+                                        // resolve against it.
+                                        Container({
+                                            width: PLAY_W,
+                                            height: PLAY_H,
+                                        }),
+                                        BoardBackground(),
+                                        ...Array.from(
+                                            { length: GRID * GRID },
+                                            (_, i) => slotGhost(i),
+                                        ),
+                                        TrayBackground(),
+                                        ...Array.from(
+                                            { length: GRID * GRID },
+                                            (_, id) => makePiece(id),
+                                        ),
+                                        TopBar(),
+                                    ],
+                                }),
+                            ],
+                        }),
+                    ],
+                }),
+                // Win banner overlays the FULL viewer (not just the puzzle
+                // area), so it can stay at its natural size without
+                // obscuring just one corner.
+                Condition({
+                    condition: done$,
+                    child: () => WinBanner(),
+                }),
+            ],
+        }),
     }),
 );
