@@ -11,12 +11,12 @@ import {
     MainAxisAlignment,
     MouseRegion,
     mutate,
-    PointerInteract,
     type PointerInteractEvent,
+    PointerInteract,
     Positioned,
     Row,
-    Stack,
     source,
+    Stack,
     Text,
 } from "@tur/edgy";
 
@@ -383,16 +383,16 @@ function WinBanner(): EdgyElement {
             alignment: Alignment.Center,
             children: [
                 Container({
-                    padding: 24,
-                    borderRadius: 14,
+                    padding: 14,
+                    borderRadius: 10,
                     color: Color.hex("#4f46e5"),
                     shadowColor: Color.rgba(0, 0, 0, 120),
-                    shadowOffset: [0, 6],
-                    shadowBlur: 18,
+                    shadowOffset: [0, 4],
+                    shadowBlur: 10,
                     children: [
                         Text({
                             text: "Solved!",
-                            fontSize: 36,
+                            fontSize: 22,
                             color: Color.hex("#ffffff"),
                         }),
                     ],
