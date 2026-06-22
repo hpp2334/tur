@@ -15,8 +15,8 @@ import {
     MainAxisSize,
     MouseRegion,
     mutate,
-    type PointerInteractEvent,
     PointerInteract,
+    type PointerInteractEvent,
     Row,
     SizedBox,
     source,
@@ -179,7 +179,10 @@ function ToggleButton(): EdgyElement {
         child: PointerInteract({
             onClick: mutate((ctx, _ev: PointerInteractEvent) => {
                 const cur = ctx.get(axis$);
-                ctx.set(axis$, cur === Axis.Vertical ? Axis.Horizontal : Axis.Vertical);
+                ctx.set(
+                    axis$,
+                    cur === Axis.Vertical ? Axis.Horizontal : Axis.Vertical,
+                );
             }),
             child: Container({
                 padding: 10,
@@ -230,9 +233,12 @@ export default component(() =>
                                                 overscan: 2,
                                                 queryKey: [
                                                     "lazy-list-var-sizes",
-                                                    axis === Axis.Vertical ? "v" : "h",
+                                                    axis === Axis.Vertical
+                                                        ? "v"
+                                                        : "h",
                                                 ],
-                                                builder: (i: number) => buildItem(i, axis),
+                                                builder: (i: number) =>
+                                                    buildItem(i, axis),
                                             }),
                                     }),
                                 ],

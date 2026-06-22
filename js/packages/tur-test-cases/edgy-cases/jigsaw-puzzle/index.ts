@@ -11,12 +11,12 @@ import {
     MainAxisAlignment,
     MouseRegion,
     mutate,
-    type PointerInteractEvent,
     PointerInteract,
+    type PointerInteractEvent,
     Positioned,
     Row,
-    source,
     Stack,
+    source,
     Text,
 } from "@tur/edgy";
 
@@ -359,7 +359,9 @@ function TopBar(): EdgyElement {
                     borderWidth: 1,
                     children: [
                         Text({
-                            text: derive(() => `${get(placedCount$)} / 9 placed`),
+                            text: derive(
+                                () => `${get(placedCount$)} / 9 placed`,
+                            ),
                             fontSize: 14,
                             color: Color.hex("#e2e8f0"),
                         }),
