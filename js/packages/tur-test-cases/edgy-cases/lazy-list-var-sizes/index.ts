@@ -31,18 +31,20 @@ import {
 // js/packages/tur-demo-impl/src/components/viewer.ts.
 //
 // Engine notes:
-//   * When `itemExtent` is OMITTED, LazyList positions each item at
-//     `index * averageExtent` (running mean of measured children) — see
-//     libs/tur-engine/src/elements/lazy_list/element.rs:190-201 and
-//     lazy_list/render.rs:96-107. It's an approximation: wildly varying sizes
-//     can drift slightly during fast scroll. `overscan: 2` absorbs that.
+//   * When `itemExtent` is OMITTED, LazyList measures each visible item,
+//     caches its main-axis extent per logical index, and positions items
+//     via an anchor-and-walk from a persistent `first_mounted_offset`
+//     (delta-maintained in `process_remount`). Layout is O(visible_count)
+//     regardless of scroll depth — see
+//     libs/tur-engine/src/elements/lazy_list/element.rs and
+//     lazy_list/render.rs. `overscan: 2` absorbs measurement timing.
 //   * Cross-axis sizes are CLAMPED to the viewport (lazy_list/render.rs:
 //     34-47): a vertical list cannot have rows of different widths. We
 //     therefore show "different widths" via the inner colored bar, whose
 //     width varies per item inside the (full-width) row.
 // ---------------------------------------------------------------------------
 
-const ITEM_COUNT = 30;
+const ITEM_COUNT = 2000;
 
 // Deterministic main-axis size via a sine-based hash → integer in [1, 150].
 // Every index maps to a pseudo-random but stable extent, so consecutive

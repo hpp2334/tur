@@ -1,4 +1,5 @@
 import {
+    type AnimationController,
     Alignment,
     Color,
     Column,
@@ -6,6 +7,7 @@ import {
     Container,
     CrossAxisAlignment,
     component,
+    createAnimationController,
     derive,
     type EdgyElement,
     Expanded,
@@ -17,9 +19,11 @@ import {
     PointerInteract,
     Positioned,
     Row,
+    set,
     source,
     Stack,
     Text,
+    Transform,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------
@@ -147,6 +151,58 @@ function pieceColor(slot: number, placed: boolean): unknown {
     return Color.hex(hslToHex(hue, placed ? 35 : 60, placed ? 42 : 55));
 }
 
+// Raw RGB triple for `slot`, reused for colored glows/shadows (Container's
+// `shadowColor` wants an explicit Color value, not a derive of a hex string).
+function pieceRgb(slot: number): { r: number; g: number; b: number } {
+    const hue = (slot * 47) % 360;
+    const hex = hslToHex(hue, 60, 55);
+    return {
+        r: Number.parseInt(hex.slice(1, 3), 16),
+        g: Number.parseInt(hex.slice(3, 5), 16),
+        b: Number.parseInt(hex.slice(5, 7), 16),
+    };
+}
+
+// --- Idle animation --------------------------------------------------------
+//
+// A single looping AnimationController drives ALL per-piece motion — bobbing
+// for tray pieces (unplaced) and a subtle breathing scale for placed pieces.
+// Each piece reads `tick$` (0..1, looping every `IDLE_PERIOD` ms) and offsets
+// its animation phase by `id` so the pieces don't all bounce in lockstep.
+
+const IDLE_PERIOD = 2200;
+const tick$ = source(0);
+const idleCtrl: AnimationController = createAnimationController({
+    duration: IDLE_PERIOD,
+    curve: "linear",
+    repeat: "infinite",
+    onTick: mutate((_ctx, v: number) => {
+        set(tick$, v);
+    }),
+});
+idleCtrl.forward();
+
+// Vertical bob for unplaced, non-dragged pieces. ±BOB_AMP px, staggered
+// phase per piece so the tray ripples. Suppressed during drag so the piece
+// tracks the pointer exactly (no wobble fighting the drag handler).
+const BOB_AMP = 3.5;
+function bobOffset(id: number): number {
+    if (dragId === id) return 0;
+    const me = get(pieces$)[id];
+    if (me.placed) return 0;
+    const t = get(tick$);
+    return Math.sin(t * Math.PI * 2 + id * 0.8) * BOB_AMP;
+}
+
+// Subtle breathing scale on placed pieces — gives the board a settled,
+// "alive" hum. Amplitude kept tiny so it never looks jittery.
+function placedScale(id: number): number {
+    const me = get(pieces$)[id];
+    if (!me.placed) return 1;
+    const t = get(tick$);
+    return 1 + Math.sin(t * Math.PI * 2 + id * 0.5) * 0.015;
+}
+
 // --- Reactive state --------------------------------------------------------
 
 const pieces$ = source<Piece[]>(initialPieces());
@@ -229,34 +285,47 @@ function pieceById(id: number): Piece {
 function makePiece(id: number): EdgyElement {
     return Positioned({
         left: derive(() => pieceById(id).x),
-        top: derive(() => pieceById(id).y),
+        // Bob is folded into the Positioned top so the whole piece (including
+        // its hit region) moves — pointer tracking stays accurate.
+        top: derive(() => pieceById(id).y + bobOffset(id)),
         width: PIECE,
         height: PIECE,
-        child: PointerInteract({
-            onPointerDown: onPieceDown(id),
-            onPointerMove: onPieceMove(id),
-            onPointerUp: onPieceUp(id),
-            child: Container({
-                width: PIECE,
-                height: PIECE,
-                color: derive(() => {
-                    const me = pieceById(id);
-                    return pieceColor(me.slot, me.placed);
-                }),
-                borderRadius: 10,
-                borderColor: Color.hex("#ffffff"),
-                borderWidth: 2,
-                shadowColor: Color.rgba(0, 0, 0, 90),
-                shadowOffset: [0, 3],
-                shadowBlur: 6,
-                alignment: Alignment.Center,
-                children: [
-                    Text({
-                        text: derive(() => `${pieceById(id).slot + 1}`),
-                        fontSize: 30,
-                        color: Color.hex("#ffffff"),
+        child: Transform({
+            // Breathing scale on placed pieces; identity otherwise.
+            scale: derive(() => placedScale(id)),
+            child: PointerInteract({
+                onPointerDown: onPieceDown(id),
+                onPointerMove: onPieceMove(id),
+                onPointerUp: onPieceUp(id),
+                child: Container({
+                    width: PIECE,
+                    height: PIECE,
+                    color: derive(() => {
+                        const me = pieceById(id);
+                        return pieceColor(me.slot, me.placed);
                     }),
-                ],
+                    borderRadius: 14,
+                    borderColor: Color.hex("#ffffff"),
+                    borderWidth: 2,
+                    // Placed pieces glow in their own hue; unplaced pieces
+                    // cast a soft neutral shadow so they read as "lifted".
+                    shadowColor: derive(() => {
+                        const me = pieceById(id);
+                        if (!me.placed) return Color.rgba(0, 0, 0, 110);
+                        const c = pieceRgb(me.slot);
+                        return Color.rgba(c.r, c.g, c.b, 140);
+                    }),
+                    shadowOffset: [0, 4],
+                    shadowBlur: derive(() => (pieceById(id).placed ? 18 : 10)),
+                    alignment: Alignment.Center,
+                    children: [
+                        Text({
+                            text: derive(() => `${pieceById(id).slot + 1}`),
+                            fontSize: 28,
+                            color: Color.hex("#ffffff"),
+                        }),
+                    ],
+                }),
             }),
         }),
     });
@@ -273,15 +342,15 @@ function slotGhost(slot: number): EdgyElement {
             width: PIECE,
             height: PIECE,
             color: Color.hex("#1e293b"),
-            borderColor: Color.hex("#334155"),
+            borderColor: Color.hex("#475569"),
             borderWidth: 1,
-            borderRadius: 10,
+            borderRadius: 12,
             alignment: Alignment.Center,
             children: [
                 Text({
                     text: `${slot + 1}`,
-                    fontSize: 16,
-                    color: Color.hex("#475569"),
+                    fontSize: 18,
+                    color: Color.hex("#64748b"),
                 }),
             ],
         }),
@@ -298,9 +367,12 @@ function BoardBackground(): EdgyElement {
             width: BOARD_W,
             height: BOARD_W,
             color: Color.hex("#0f172a"),
-            borderColor: Color.hex("#334155"),
+            borderColor: Color.hex("#3b82f6"),
             borderWidth: 2,
-            borderRadius: 14,
+            borderRadius: 16,
+            shadowColor: Color.rgba(59, 130, 246, 40),
+            shadowOffset: [0, 0],
+            shadowBlur: 18,
         }),
     });
 }
@@ -315,9 +387,9 @@ function TrayBackground(): EdgyElement {
             width: BOARD_W,
             height: BOARD_W,
             color: Color.hex("#0a0f1d"),
-            borderColor: Color.hex("#1e293b"),
+            borderColor: Color.hex("#334155"),
             borderWidth: 1,
-            borderRadius: 14,
+            borderRadius: 16,
         }),
     });
 }
@@ -341,8 +413,13 @@ function TopBar(): EdgyElement {
                         onClick: resetPuzzle,
                         child: Container({
                             padding: 10,
-                            borderRadius: 8,
+                            borderRadius: 20,
                             color: Color.hex("#4f46e5"),
+                            borderColor: Color.hex("#818cf8"),
+                            borderWidth: 1,
+                            shadowColor: Color.rgba(79, 70, 229, 120),
+                            shadowOffset: [0, 4],
+                            shadowBlur: 12,
                             children: [
                                 Text({
                                     text: "Shuffle",
@@ -384,20 +461,29 @@ function WinBanner(): EdgyElement {
             color: Color.rgba(2, 6, 23, 200),
             alignment: Alignment.Center,
             children: [
-                Container({
-                    padding: 24,
-                    borderRadius: 14,
-                    color: Color.hex("#4f46e5"),
-                    shadowColor: Color.rgba(0, 0, 0, 120),
-                    shadowOffset: [0, 6],
-                    shadowBlur: 18,
-                    children: [
-                        Text({
-                            text: "Solved!",
-                            fontSize: 36,
-                            color: Color.hex("#ffffff"),
-                        }),
-                    ],
+                Transform({
+                    // Gentle pulse so the win state feels celebratory, not static.
+                    scale: derive(() => {
+                        const t = get(tick$);
+                        return 1 + Math.sin(t * Math.PI * 2) * 0.03;
+                    }),
+                    child: Container({
+                        padding: 24,
+                        borderRadius: 18,
+                        color: Color.hex("#4f46e5"),
+                        borderColor: Color.hex("#818cf8"),
+                        borderWidth: 2,
+                        shadowColor: Color.rgba(79, 70, 229, 180),
+                        shadowOffset: [0, 8],
+                        shadowBlur: 32,
+                        children: [
+                            Text({
+                                text: "Solved!",
+                                fontSize: 36,
+                                color: Color.hex("#ffffff"),
+                            }),
+                        ],
+                    }),
                 }),
             ],
         }),
