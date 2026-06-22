@@ -52,11 +52,11 @@ const ITEM_COUNT = 2000;
 // The engine maintains a persistent per-index extent cache (see
 // libs/tur-engine/src/elements/lazy_list/element.rs:`extent_cache`) and
 // positions each item at the cumulative offset of its logical index — so
-// even a wide [1, 150] variance produces a tight, non-overlapping column
+// even a wide [30, 180] variance produces a tight, non-overlapping column
 // as the user scrolls.
 function mainSizeFor(i: number): number {
     const frac = Math.sin(i * 12.9898) * 43758.5453;
-    return 1 + Math.floor((frac - Math.floor(frac)) * 150);
+    return 30 + Math.floor((frac - Math.floor(frac)) * 151);
 }
 
 // Inner content cross-axis size — proves "different widths" (vertical) or
