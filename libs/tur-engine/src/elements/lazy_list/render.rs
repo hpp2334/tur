@@ -97,33 +97,19 @@ impl ElementLayout for LazyListElement {
         let scroll_offset = self.position.pixels();
         let avg = self.average_extent();
 
-        // Position each child by its logical item index, not its position
-        // in the children slice. This makes layout robust against the
-        // parent's children vector being scrambled when items mount out of
-        // order during scroll-up.
+        // Anchor-and-walk positioning: start from the persistent
+        // `first_mounted_offset` (content-space y of the first mounted
+        // item's top edge) and walk forward, setting each child's offset to
+        // the running sum and advancing by the child's cached (or
+        // avg-fallback) extent. O(visible_count) per layout, regardless of
+        // how deep the user has scrolled — the old `cumulative_offset(N)`
+        // walk from index 0 is gone.
         //
-        // For BOTH fixed `itemExtent` and variable heights, position each
-        // mounted child at the cumulative offset of its logical index
-        // (sum of extents of all previous items). The cache makes this
-        // exact for previously-measured items; the avg fallback covers
-        // the (typically pre-scroll) region before the first mounted item.
-        //
-        // Fast path when items 0..first_mounted are all unmeasured: skip
-        // the walk and use `first_mounted * avg`. This keeps deep-scroll
-        // layouts O(visible_count) instead of O(first_mounted).
+        // The anchor is maintained in `process_remount` (delta-updated as
+        // the leading visible index shifts) and reset on axis/itemExtent/
+        // itemCount changes in the Effect handler.
         let visible: Vec<(u64, ElementNodeId)> = self.visible.clone();
-        let first_mounted_idx = visible.first().map(|(i, _)| *i).unwrap_or(0);
-
-        let mut offset = {
-            let all_unmeasured = (0..first_mounted_idx)
-                .all(|i| !self.extent_cache.contains_key(&i));
-            if all_unmeasured {
-                first_mounted_idx as f64 * avg
-            } else {
-                self.cumulative_offset(first_mounted_idx)
-            }
-        };
-
+        let mut offset = self.first_mounted_offset;
         for (i, child_id) in visible {
             let main_pos = offset - scroll_offset;
             let off = match self.axis {
@@ -131,7 +117,6 @@ impl ElementLayout for LazyListElement {
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
             cx.set_child_offset(child_id, off);
-            // Advance by this item's extent (cached measurement or avg).
             offset += self.extent_cache.get(&i).copied().unwrap_or(avg);
         }
     }

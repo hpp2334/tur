@@ -16,7 +16,13 @@ pub struct ElementObject {
     pub query_key: Option<Vec<String>>,
     pub handle: BoaOpaque<TurNodeHandle>,
     pub dirty_layout: bool,
-    pub dirty_paint: bool,
+    /// "Position-only dirty" — the node's `perform_layout_position` needs to
+    /// re-run, but its `perform_layout_size` can be cached. Used by scroll
+    /// handlers (wheel events) to skip re-measuring children whose sizes
+    /// haven't changed, only whose positions have. Set by
+    /// `mark_dirty_position`; checked at the top of `layout_position` to
+    /// short-circuit clean subtrees. (`mark_dirty` sets BOTH flags.)
+    pub dirty_position: bool,
     pub last_constraints: Option<Constraints>,
 }
 
@@ -42,7 +48,7 @@ impl ElementObject {
             computed_layout: ComputedLayout::ZERO,
             query_key: None,
             dirty_layout: true,
-            dirty_paint: true,
+            dirty_position: true,
             last_constraints: None,
         }
     }
