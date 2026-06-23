@@ -361,6 +361,15 @@ impl ElementTree {
         node.computed_layout.size = constrained;
         node.last_constraints = Some(*constraints);
         node.dirty_layout = false;
+        // A node whose `perform_layout_size` re-ran may have produced new
+        // child sizes, so its `perform_layout_position` (which assigns child
+        // offsets) must re-run too. `layout_position` only descends into
+        // subtrees flagged `dirty_position`, and a constraint-driven relayout
+        // (e.g. a divider drag) reaches descendants through the
+        // `constraints_changed` check below — not through `mark_dirty`, which
+        // only walks *up*. Without this, descendants get re-measured but keep
+        // stale offsets (e.g. a scrollbar left painted at its old position).
+        node.dirty_position = true;
         constrained
     }
 
