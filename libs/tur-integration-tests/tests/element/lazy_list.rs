@@ -658,3 +658,64 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
         }
     }
 }
+
+// ===========================================================================
+// Position-only dirty: scroll within the currently-mounted range must not
+// trigger `perform_layout_size` (no child re-measurement), only
+// `perform_layout_position`. The user-facing observation is that child
+// SIZES are stable across small scrolls — only their positions change.
+// ===========================================================================
+
+/// Scrolling does not re-measure children that stay mounted: their SIZES
+/// are stable, only their offsets shift. This is the user-visible property
+/// behind the "position-only dirty" optimization — `perform_layout_size`
+/// is cached on scroll, so child measurement never re-runs.
+#[test]
+fn scroll_does_not_remeasure_mounted_children() {
+    let (mut app, id) = setup_virtualized();
+
+    // Snapshot each currently-mounted child's (id, size, offset.y).
+    let before: Vec<(tur_engine::core::element::ElementNodeId, tur_shared::Size, f64)> = {
+        let tree = app.element_tree();
+        let ll_node = tree.get(id).unwrap();
+        ll_node
+            .children
+            .iter()
+            .map(|&cid| {
+                let n = tree.get(cid).unwrap();
+                (cid, n.computed_layout.size, n.computed_layout.offset.y)
+            })
+            .collect()
+    };
+
+    // Scroll by an amount small enough to keep at least the first few items
+    // mounted (overscan = 2 extents = 112px of leading slack).
+    app.wheel(0.0, 30.0, 200.0, 300.0);
+    app.render();
+
+    // For every child that was mounted before AND is still mounted after,
+    // verify size is byte-identical (no re-measurement) and offset.y moved
+    // by exactly -30 (scroll delta).
+    let tree = app.element_tree();
+    let ll_node = tree.get(id).unwrap();
+    let live_ids: std::collections::HashSet<tur_engine::core::element::ElementNodeId> =
+        ll_node.children.iter().copied().collect();
+
+    let mut checked = 0;
+    for (cid, size_before, y_before) in &before {
+        if !live_ids.contains(cid) {
+            continue; // unmounted by scroll — out of scope for this check
+        }
+        let n = tree.get(*cid).unwrap();
+        assert_eq!(n.computed_layout.size, *size_before,
+            "child {:?} was re-measured on scroll — size was {size_before:?}, now {:?} \
+             (perform_layout_size should have been cached)",
+            cid, n.computed_layout.size);
+        let dy = n.computed_layout.offset.y - y_before;
+        assert!((dy - (-30.0)).abs() < 0.5,
+            "child {:?} offset.y shifted by {dy}, expected -30 (scroll delta)", cid);
+        checked += 1;
+    }
+    assert!(checked >= 5,
+        "expected at least 5 children to survive the 30px scroll for a meaningful check, got {checked}");
+}

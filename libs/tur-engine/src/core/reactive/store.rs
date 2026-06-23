@@ -164,31 +164,61 @@ impl Store {
             }
         }
 
-        // Step 2: recompute dirty deriveds (those reachable from a changed
-        // source) with a tracker active, and update their dep sets.
-        let dirty_deriveds: Vec<AtomId> = expanded
+        // Step 2: recompute dirty deriveds in topological order
+        // (dependencies before dependents). Without this, a chained derive
+        // (e.g. `done$ = derive(() => get(placedCount$) === 9)`) may be
+        // recomputed before its dependency `placedCount$`, reading a stale
+        // value and never flipping — so Condition widgets keyed on chained
+        // derives would never re-branch.
+        let dirty_deriveds: HashSet<AtomId> = expanded
             .iter()
             .copied()
             .filter(|id| self.kinds.borrow().get(id) == Some(&AtomKind::Derived))
             .collect();
 
         let mut changed: HashSet<AtomId> = initial;
-        for d_id in dirty_deriveds {
-            let Some(closure) = self.closures.borrow().get(&d_id).cloned() else {
-                continue;
-            };
-            self.tracker_stack.borrow_mut().push(HashSet::new());
-            let result = closure
-                .call(&JsValue::undefined(), std::slice::from_ref(store_ctx_obj), ctx)
-                .unwrap_or_else(|_| JsValue::undefined());
-            let new_deps = self.tracker_stack.borrow_mut().pop().unwrap();
+        let mut done: HashSet<AtomId> = HashSet::new();
 
-            let prev = self.values.borrow().get(&d_id).cloned();
-            let same = prev.as_ref() == Some(&result);
-            self.values.borrow_mut().insert(d_id, result);
-            self.derived_deps.borrow_mut().insert(d_id, new_deps);
-            if !same {
-                changed.insert(d_id);
+        while done.len() < dirty_deriveds.len() {
+            // Find dirty deriveds whose dirty dependencies are all processed.
+            let ready: Vec<AtomId> = {
+                let deps_map = self.derived_deps.borrow();
+                dirty_deriveds
+                    .iter()
+                    .filter(|id| !done.contains(*id))
+                    .filter(|id| {
+                        deps_map.get(*id).is_none_or(|deps| {
+                            deps.iter()
+                                .all(|dep| !dirty_deriveds.contains(dep) || done.contains(dep))
+                        })
+                    })
+                    .copied()
+                    .collect()
+            };
+
+            if ready.is_empty() {
+                break;
+            }
+
+            for d_id in ready {
+                let Some(closure) = self.closures.borrow().get(&d_id).cloned() else {
+                    done.insert(d_id);
+                    continue;
+                };
+                self.tracker_stack.borrow_mut().push(HashSet::new());
+                let result = closure
+                    .call(&JsValue::undefined(), std::slice::from_ref(store_ctx_obj), ctx)
+                    .unwrap_or_else(|_| JsValue::undefined());
+                let new_deps = self.tracker_stack.borrow_mut().pop().unwrap();
+
+                let prev = self.values.borrow().get(&d_id).cloned();
+                let same = prev.as_ref() == Some(&result);
+                self.values.borrow_mut().insert(d_id, result);
+                self.derived_deps.borrow_mut().insert(d_id, new_deps);
+                if !same {
+                    changed.insert(d_id);
+                }
+                done.insert(d_id);
             }
         }
 

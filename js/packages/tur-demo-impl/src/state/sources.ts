@@ -11,6 +11,8 @@ const WHITELIST = new Set([
     "todolist",
     "complex-animation",
     "lazy-list-virtualized",
+    "lazy-list-var-sizes",
+    "jigsaw-puzzle",
     "countdown",
 ]);
 

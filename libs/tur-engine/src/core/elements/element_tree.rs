@@ -251,12 +251,16 @@ impl ElementTree {
         for cid in path {
             if let Some(node) = self.nodes.get_mut(&cid) {
                 node.dirty_layout = true;
-                node.dirty_paint = true;
+                node.dirty_position = true;
             }
         }
     }
 
-    pub fn mark_dirty_paint(&mut self, id: ElementNodeId) {
+    /// Mark `id` and all its ancestors as position-only dirty: their
+    /// `perform_layout_position` re-runs but `perform_layout_size` is cached.
+    /// Used by scroll handlers (wheel events) so scrolling doesn't re-measure
+    /// children whose sizes haven't changed — only whose positions have.
+    pub fn mark_dirty_position(&mut self, id: ElementNodeId) {
         let mut path = Vec::new();
         {
             let mut current = Some(id);
@@ -265,7 +269,7 @@ impl ElementTree {
                     Some(n) => n,
                     None => break,
                 };
-                if node.dirty_paint {
+                if node.dirty_position {
                     break;
                 }
                 path.push(cid);
@@ -274,7 +278,7 @@ impl ElementTree {
         }
         for cid in path {
             if let Some(node) = self.nodes.get_mut(&cid) {
-                node.dirty_paint = true;
+                node.dirty_position = true;
             }
         }
     }
@@ -287,7 +291,7 @@ impl ElementTree {
         // only invoked on resize.
         for node in self.nodes.values_mut() {
             node.dirty_layout = true;
-            node.dirty_paint = true;
+            node.dirty_position = true;
         }
     }
 
@@ -367,6 +371,20 @@ impl ElementTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
     ) {
+        // Position-only dirty short-circuit. `mark_dirty_position` (used by
+        // scroll handlers) marks only this flag, leaving `dirty_layout=false`
+        // so `perform_layout_size` is cached. We skip clean subtrees here —
+        // if no ancestor of `id` was marked position-dirty, the previously
+        // computed offsets are still valid.
+        let is_position_dirty = self
+            .nodes
+            .get(&id)
+            .map(|n| n.dirty_position)
+            .unwrap_or(false);
+        if !is_position_dirty {
+            return;
+        }
+
         let children = self
             .nodes
             .get(&id)
@@ -383,7 +401,9 @@ impl ElementTree {
             let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map);
             element.perform_layout_position(&children, &mut cx);
 
-            cx.tree.nodes.get_mut(&id).unwrap().element = Some(element);
+            let node = cx.tree.nodes.get_mut(&id).unwrap();
+            node.element = Some(element);
+            node.dirty_position = false;
         }
 
         for child_id in children {

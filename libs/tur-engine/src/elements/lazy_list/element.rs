@@ -93,7 +93,10 @@ impl Component for LazyListComponent {
                 item_extent,
                 position: ScrollPosition::new(),
                 child_extents: Vec::new(),
+                extent_cache: std::collections::BTreeMap::new(),
                 visible,
+                first_mounted_index: 0,
+                first_mounted_offset: 0.0,
                 reported_start: 0,
                 reported_end: 0,
                 remount_requested: true,
@@ -145,9 +148,31 @@ pub struct LazyListElement {
     pub(crate) item_extent: Option<f64>,
     pub(crate) position: ScrollPosition,
     pub(crate) child_extents: Vec<f64>,
+    /// Per-index persistent cache of measured main-axis extents. Survives
+    /// across layouts (unlike `child_extents`, which is cleared and refilled
+    /// every layout). Used to compute cumulative offsets so variable-height
+    /// items are positioned at the actual running sum of previous heights
+    /// rather than `index * averageExtent` — which caused overlaps when
+    /// items had different sizes. Cleared on axis/itemExtent/itemCount
+    /// changes via the Effect handler.
+    pub(crate) extent_cache: std::collections::BTreeMap<u64, f64>,
     /// (index, built node id) for every item currently in the tree. Kept
     /// sorted by index.
     pub(crate) visible: Vec<(u64, ElementNodeId)>,
+    /// Logical index of the first mounted item (`visible[0].0`, cached for
+    /// O(1) access). Together with `first_mounted_offset`, forms the
+    /// persistent anchor for layout positioning: each mounted child's
+    /// content-space offset is `first_mounted_offset` + sum of extents
+    /// between it and the first mounted. Maintained incrementally in
+    /// `process_remount` so positioning is O(visible_count) regardless of
+    /// scroll depth (no `cumulative_offset` walk from 0).
+    pub(crate) first_mounted_index: u64,
+    /// Content-space offset of the first mounted item's top edge.
+    /// `perform_layout_position` walks forward from this anchor, setting
+    /// each child's offset to the running sum. Synced in `process_remount`
+    /// as the leading edge shifts (delta-update: O(items added/removed at
+    /// the leading edge), not O(first_mounted_index)).
+    pub(crate) first_mounted_offset: f64,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
     /// Set by `on_wheel` when the scroll offset shifts enough to possibly
@@ -200,6 +225,22 @@ impl LazyListElement {
         if avg <= 0.0 { FALLBACK_EXTENT } else { avg }
     }
 
+    /// The cumulative main-axis offset of item `index`'s top edge (i.e. the
+    /// sum of extents of items `0..index`). Uses cached measurements for
+    /// items that have been mounted; falls back to `average_extent()` for
+    /// items that haven't. This is what `perform_layout_position` uses to
+    /// place each child at its true running-sum offset rather than
+    /// `index * averageExtent`, which produced overlaps for variable-height
+    /// lists.
+    pub fn cumulative_offset(&self, index: u64) -> f64 {
+        let avg = self.average_extent();
+        let mut sum = 0.0;
+        for i in 0..index {
+            sum += self.extent_cache.get(&i).copied().unwrap_or(avg);
+        }
+        sum
+    }
+
     pub fn compute_visible_range(&self, viewport_main: f64) -> (u64, u64) {
         let count = self.item_count();
         if count == 0 {
@@ -210,12 +251,33 @@ impl LazyListElement {
             return (0, count.saturating_sub(1));
         }
         let scroll = self.position.pixels();
-        let start = ((scroll / extent).floor() as i64).max(0) as u64;
-        let end = (((scroll + viewport_main) / extent).ceil() as i64).max(0) as u64;
-        let start = start.min(count.saturating_sub(1));
-        let end = end.min(count.saturating_sub(1));
-        let start = start.saturating_sub(self.overscan);
-        let end = (end + self.overscan).min(count.saturating_sub(1));
+        let target_bottom = scroll + viewport_main;
+        let count_m1 = count.saturating_sub(1);
+
+        // Walk item-by-item, accumulating offsets. The first item whose
+        // bottom (`offset + extent`) exceeds `scroll` is the visible range
+        // start; the last item whose top (`offset`) is below `target_bottom`
+        // is the end. Using cached extents for measured items makes this
+        // exact for the mounted region; the avg fallback approximates the
+        // rest. Bug 7 in the design doc is now properly fixed.
+        let mut offset = 0.0;
+        let mut start: Option<u64> = None;
+        let mut end: u64 = 0;
+        for i in 0..count {
+            let ext = self.extent_cache.get(&i).copied().unwrap_or(extent);
+            if start.is_none() && offset + ext > scroll {
+                start = Some(i);
+            }
+            if offset < target_bottom {
+                end = i;
+            } else {
+                break;
+            }
+            offset += ext;
+        }
+        let start = start.unwrap_or(0);
+        let start = start.saturating_sub(self.overscan).min(count_m1);
+        let end = (end + self.overscan).min(count_m1);
         (start, end)
     }
 
@@ -328,8 +390,43 @@ impl LazyListElement {
             self.visible.sort_by_key(|(i, _)| *i);
         }
 
+        // Sync the positioning anchor (`first_mounted_index` +
+        // `first_mounted_offset`) to the new leading edge. As items are
+        // unmounted from the top, advance the offset by their (cached)
+        // extents; as new items mount at the top, retreat the offset. This
+        // keeps `perform_layout_position` O(visible_count) regardless of
+        // scroll depth — no `cumulative_offset` walk from 0 needed.
+        let avg = self.average_extent();
+        let new_first = self.visible.first().map(|(i, _)| *i).unwrap_or(0);
+        // Leading edge moved DOWN (items unmounted from top): advance offset.
+        while self.first_mounted_index < new_first {
+            let ext = self
+                .extent_cache
+                .get(&self.first_mounted_index)
+                .copied()
+                .unwrap_or(avg);
+            self.first_mounted_offset += ext;
+            self.first_mounted_index += 1;
+        }
+        // Leading edge moved UP (items mounted at top): retreat offset.
+        while self.first_mounted_index > new_first {
+            self.first_mounted_index -= 1;
+            let ext = self
+                .extent_cache
+                .get(&self.first_mounted_index)
+                .copied()
+                .unwrap_or(avg);
+            self.first_mounted_offset -= ext;
+        }
+
         if did_change {
             cx.mark_dirty(self.node_id);
+        } else {
+            // No structural change (scroll within the currently-mounted
+            // range): the wheel handler already marked position-only dirty.
+            // No additional dirty signal needed — `perform_layout_position`
+            // will pick up the new `position.pixels` and re-offset children
+            // using the persistent anchor above.
         }
 
         // Report visible-range change.
@@ -364,6 +461,15 @@ impl Effect for LazyListElement {
                 .as_ref()
                 .and_then(|v| cx.read_val(v, boa))
                 .unwrap_or(self.axis);
+            // Cached extents are axis-specific — invalidate. Also reset the
+            // positioning anchor: extents along the new axis differ, so the
+            // old `first_mounted_offset` is meaningless.
+            self.extent_cache.clear();
+            self.first_mounted_index = 0;
+            self.first_mounted_offset = 0.0;
+            // Also reset scroll — different axis means old scroll offset
+            // doesn't apply. (The scroll position is preserved across
+            // non-axis changes, just not axis flips.)
         }
 
         if extent_dirty {
@@ -372,6 +478,11 @@ impl Effect for LazyListElement {
                 .item_extent
                 .as_ref()
                 .and_then(|v| cx.read_val(v, boa));
+            // New fixed extent invalidates cached measurements and the
+            // positioning anchor (which was computed from old extents).
+            self.extent_cache.clear();
+            self.first_mounted_index = 0;
+            self.first_mounted_offset = 0.0;
         }
 
         if count_dirty {
@@ -390,6 +501,16 @@ impl Effect for LazyListElement {
                     cx.destroy_subtree(id);
                 }
                 self.visible.retain(|(i, _)| *i < new_count);
+                // Drop cached entries beyond the new count.
+                self.extent_cache.retain(|i, _| *i < new_count);
+                // If the leading edge got chopped off (rare: itemCount
+                // dropped below first_mounted_index), recompute the anchor
+                // from the current visible set.
+                let new_first = self.visible.first().map(|(i, _)| *i).unwrap_or(0);
+                if new_first != self.first_mounted_index {
+                    self.first_mounted_index = new_first;
+                    self.first_mounted_offset = self.cumulative_offset(new_first);
+                }
             } else if new_count > current_max {
                 // Only build the items that fall inside the current visible
                 // range. Items beyond it will be built lazily by the remount
