@@ -37,7 +37,7 @@ impl Component for ContainerComponent {
         let id = cx.alloc_node();
         cx.insert_node(
             id,
-            AnyElement::new(ContainerElement { component: self.clone(), cached_color: None, cached_border_color: None }),
+            AnyElement::new(ContainerElement { component: self.clone(), painting: ContainerPainting::default() }),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -52,14 +52,26 @@ impl Component for ContainerComponent {
 }
 
 // ---------------------------------------------------------------------------
-// ContainerElement — the built element. Holds its spec; layout/paint read Val<T>
-// on demand via `cx.read_val`.
+// ContainerElement — the built element. Holds its spec; layout resolves all
+// reactive paint props into `painting` (no store access at paint time).
 // ---------------------------------------------------------------------------
+
+/// Resolved (concrete) values needed by paint, filled during layout. Paint
+/// reads these fields directly and never touches the reactive store.
+#[derive(Default, Clone)]
+pub struct ContainerPainting {
+    pub shadow_blur: Option<f64>,
+    pub shadow_color: Option<Color>,
+    pub color: Option<Brush>,
+    pub border_color: Option<Color>,
+    pub border_width: Option<f64>,
+    pub border_radius: Option<f64>,
+    pub border_position: BorderPosition,
+}
 
 pub struct ContainerElement {
     pub component: ContainerComponent,
-    pub cached_color: Option<Brush>,
-    pub cached_border_color: Option<Color>,
+    pub painting: ContainerPainting,
 }
 
 fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
@@ -79,13 +91,13 @@ impl ContainerElement {
     pub fn color(&self) -> Option<Brush> {
         match &self.component.color {
             Some(Val::Static(v)) => Some(v.clone()),
-            _ => self.cached_color.clone(),
+            _ => self.painting.color.clone(),
         }
     }
     pub fn border_color(&self) -> Option<Color> {
         match &self.component.border_color {
             Some(Val::Static(v)) => Some(*v),
-            _ => self.cached_border_color,
+            _ => self.painting.border_color,
         }
     }
     pub fn shadow_color(&self) -> Option<Color> {

@@ -17,6 +17,14 @@ impl ElementLayout for ImageElement {
         let resource_id = cx
             .read_val_opt(self.component.resource_id.as_ref())
             .map(ResourceId::new);
+
+        // Resolve paint props here (layout holds the store); paint reads
+        // `self.painting` and never touches the store.
+        self.painting = super::element::ImagePainting {
+            resource_id: cx.read_val_opt(self.component.resource_id.as_ref()),
+            fit: cx.read_val_opt(self.component.fit.as_ref()),
+        };
+
         let width = cx.read_val_opt(self.component.width.as_ref());
         let height = cx.read_val_opt(self.component.height.as_ref());
 
@@ -58,10 +66,7 @@ impl ElementRender for ImageElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let rid = match paint_ctx
-            .read_val_opt(self.component.resource_id.as_ref())
-            .map(ResourceId::new)
-        {
+        let rid = match self.painting.resource_id.map(ResourceId::new) {
             Some(id) => id,
             None => {
                 for &child_id in children {
@@ -84,9 +89,7 @@ impl ElementRender for ImageElement {
         let natural_w = img_res.natural_size.width;
         let natural_h = img_res.natural_size.height;
         if natural_w > 0.0 && natural_h > 0.0 {
-            let fit = paint_ctx
-                .read_val_opt(self.component.fit.as_ref())
-                .unwrap_or_default();
+            let fit = self.painting.fit.unwrap_or_default();
 
             let layout_w = layout.size.width;
             let layout_h = layout.size.height;

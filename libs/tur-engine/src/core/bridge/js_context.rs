@@ -20,7 +20,7 @@ pub struct TurJsContext {
     pub(crate) dirty: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub(crate) animation_manager: Rc<RefCell<AnimationManager>>,
-    pub(crate) store: Rc<RefCell<Store>>,
+    pub(crate) store: Store,
 }
 
 impl TurJsContext {
@@ -31,7 +31,7 @@ impl TurJsContext {
         dirty: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
     ) -> Self {
-        let store = Rc::new(RefCell::new(Store::new(dirty.clone())));
+        let store = Store::new(dirty.clone());
         Self {
             element_tree,
             mutation_queue,

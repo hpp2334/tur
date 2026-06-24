@@ -10,7 +10,7 @@ pub mod context;
 pub mod val;
 
 pub use context::WidgetCx;
-pub use val::{val_from_js, PropValue, ReadableAtom, Val};
+pub use val::{val_from_js, PropValue, Val};
 
 // ---------------------------------------------------------------------------
 // Component — the user's declaration of a widget.

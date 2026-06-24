@@ -1,9 +1,11 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
+use crate::core::element::ElementNodeId;
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
 use crate::core::fonts::FontLoader;
@@ -97,7 +99,7 @@ impl TurAppInternal {
                 self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed || remounted;
             if dirty {
                 needs_render = true;
-                self.app_context.borrow_mut().layout();
+                self.app_context.borrow_mut().layout(boa_context);
             }
             self.flush_focus_notifications();
             let handled_mutations = self.flush_pending_mutations(boa_context);
@@ -157,31 +159,18 @@ impl TurAppInternal {
     /// dep tracker. Returns `true` if any nodes were dirtied.
     fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> bool {
         let store = self.js_context.store.clone();
-        if !store.borrow().has_pending() {
+        if !store.has_pending() {
             return false;
         }
-        let store_ctx_obj = match crate::core::bridge::reactive_bridge::build_ctx_object_for(
-            store.clone(),
-            boa_context,
-        ) {
-            Ok(v) => v,
-            Err(e) => {
-                tracing::error!("reactive store-ctx build failed: {e}");
-                return false;
-            }
-        };
-        let dirties = store.borrow().flush(boa_context, &store_ctx_obj);
+        let dirties = store.flush();
         if dirties.is_empty() {
             return false;
         }
-        // Mark nodes whose atoms are dirty, so the next layout pass
-        // re-reads fresh values via `LayoutContext::read_val`.
-        let dirty_nodes = self
-            .js_context
-            .element_tree
-            .borrow()
-            .dep_tracker()
-            .dirty_nodes(&dirties);
+        let dirty_nodes = store
+            .dirty_subscribers(&dirties)
+            .into_iter()
+            .map(|s| ElementNodeId::new(s.as_u64()))
+            .collect::<HashSet<_>>();
         let mut tree = self.js_context.element_tree.borrow_mut();
         for node_id in &dirty_nodes {
             tree.mark_dirty(*node_id);
@@ -370,7 +359,7 @@ impl TurAppInternal {
                 args.push(o.clone());
             }
             args.extend(inv.args.to_js_args(boa_context));
-            let _ = store.borrow().invoke_mutation(inv.atom_id, &args, boa_context);
+            let _ = store.invoke_mutation(inv.mutation, &args, boa_context);
         }
         true
     }

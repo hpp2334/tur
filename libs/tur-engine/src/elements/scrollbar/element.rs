@@ -48,10 +48,20 @@ struct DragState {
     start_offset: f64,
 }
 
+/// Resolved paint props (filled during layout). Paint reads these directly.
+#[derive(Default, Clone)]
+pub struct ScrollbarPainting {
+    pub track_color: Option<Brush>,
+    pub color: Option<Brush>,
+    pub thumb_radius: Option<f64>,
+}
+
 pub struct ScrollbarElement {
     pub component: ScrollbarComponent,
     /// Last computed track size — used by the drag handler for offset math.
     pub(crate) cached_track: Size,
+    /// Resolved paint props — filled in `perform_layout_size`.
+    pub(crate) painting: ScrollbarPainting,
     /// `Some` while a drag is in progress; cleared on the next pointer-up.
     drag: Option<DragState>,
 }
@@ -64,6 +74,7 @@ impl Component for ScrollbarComponent {
             AnyElement::with_gesture_and_focus(ScrollbarElement {
                 component: self.clone(),
                 cached_track: Size::ZERO,
+                painting: ScrollbarPainting::default(),
                 drag: None,
             })
             .with_callbacks(),

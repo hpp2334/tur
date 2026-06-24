@@ -126,8 +126,8 @@ fn cursor_for(tree: &ElementTree, id: ElementNodeId) -> Option<String> {
     let store = tree.store.as_ref()?;
     match cursor_val {
         Val::Static(s) => Some(s),
-        Val::Reactive(atom) => {
-            let js = store.borrow().get_raw(atom.id());
+        Val::Reactive(readable) => {
+            let js = store.get_cached(readable);
             js.as_string()
                 .map(|s| s.to_std_string_escaped())
                 .or_else(|| Some(js.display().to_string()))

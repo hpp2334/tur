@@ -44,6 +44,14 @@ impl ElementLayout for EditableTextElement {
         let color = cx.read_val_opt(self.component.color.as_ref());
         let placeholder_color = cx.read_val_opt(self.component.placeholder_color.as_ref());
 
+        // Resolve paint props here (layout holds the store); paint reads
+        // `self.painting` and never touches the store.
+        self.painting = super::element::EditableTextPainting {
+            color,
+            cursor_color: cx.read_val_opt(self.component.cursor_color.as_ref()),
+        };
+        let color = self.painting.color;
+
         let display_text = self.composition_display_text();
 
         // Always build a layout (even for empty text with no placeholder) so
@@ -156,8 +164,8 @@ impl ElementRender for EditableTextElement {
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let color = paint_ctx.read_val_opt(self.component.color.as_ref());
-        let cursor_color = paint_ctx.read_val_opt(self.component.cursor_color.as_ref());
+        let color = self.painting.color;
+        let cursor_color = self.painting.cursor_color;
 
         let c = self.controller();
         let cursor_pos = c.cursor_position();

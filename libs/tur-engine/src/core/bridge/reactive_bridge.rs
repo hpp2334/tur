@@ -1,11 +1,12 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsArgs, JsResult, JsValue};
 
 use crate::core::bridge::{BoaOpaque, TurJsContext};
-use crate::core::reactive::{build_store_context_object, AtomHandle, Store};
+use crate::core::reactive::{
+    build_store_context_object, extract_handle, AtomHandle, AtomKind, Mutation, Source,
+};
 
 fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
     let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
@@ -44,8 +45,8 @@ pub(crate) fn tur_source(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let value = args.get_or_undefined(1).clone();
-    let id = js_ctx.store.borrow().source(value);
-    let opaque = BoaOpaque::new(AtomHandle::new(id), context);
+    let source = js_ctx.store.source::<JsValue>(value);
+    let opaque = BoaOpaque::new(AtomHandle::new(source.id(), AtomKind::Source), context);
     Ok(opaque.object().clone().into())
 }
 
@@ -56,12 +57,8 @@ pub(crate) fn tur_derive(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let closure = require_callable(args, 1)?;
-    let store_ctx_obj = ensure_store_ctx_object(&js_ctx, context)?;
-    let id = js_ctx
-        .store
-        .borrow()
-        .derive(closure, context, &store_ctx_obj);
-    let opaque = BoaOpaque::new(AtomHandle::new(id), context);
+    let derived = js_ctx.store.derive::<JsValue>(closure);
+    let opaque = BoaOpaque::new(AtomHandle::new(derived.id(), AtomKind::Derived), context);
     Ok(opaque.object().clone().into())
 }
 
@@ -72,8 +69,8 @@ pub(crate) fn tur_mutate(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let closure = require_callable(args, 1)?;
-    let id = js_ctx.store.borrow().mutate(closure);
-    let opaque = BoaOpaque::new(AtomHandle::new(id), context);
+    let mutation = js_ctx.store.mutate(closure);
+    let opaque = BoaOpaque::new(AtomHandle::new(mutation.0, AtomKind::Mutation), context);
     Ok(opaque.object().clone().into())
 }
 
@@ -83,8 +80,8 @@ pub(crate) fn tur_get(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let id = crate::core::reactive::require_atom(args, 1)?;
-    Ok(js_ctx.store.borrow().get_tracked(id, context))
+    let readable = crate::core::reactive::require_readable::<JsValue>(args, 1)?;
+    Ok(js_ctx.store.read(readable, context))
 }
 
 pub(crate) fn tur_set(
@@ -93,27 +90,29 @@ pub(crate) fn tur_set(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let id = crate::core::reactive::require_atom(args, 1)?;
-    let store = js_ctx.store.borrow();
-    match store.kind_of(id) {
-        Some(crate::core::reactive::AtomKind::Mutation) => {
-            // Prepend the store ctx object so mutation closures invoked via
-            // `set(mutation, ...args)` receive `(ctx, ...args)` — matching
-            // the contract used by the event-flush dispatch path
-            // (`internal.rs::flush_pending_mutations`).
+    let handle = extract_handle(args.get_or_undefined(1)).ok_or_else(|| {
+        boa_engine::JsError::from(
+            boa_engine::JsNativeError::typ().with_message("expected an atom handle"),
+        )
+    })?;
+    match handle.kind {
+        AtomKind::Mutation => {
             let ctx_obj = build_store_context_object(context, js_ctx.store.clone())?;
             let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
             invoke_args.push(ctx_obj.into());
             if let Some(extra) = args.get(2..) {
                 invoke_args.extend_from_slice(extra);
             }
-            store.invoke_mutation(id, &invoke_args, context)
+            js_ctx.store.invoke_mutation(Mutation(handle.id), &invoke_args, context)
         }
-        _ => {
+        AtomKind::Source => {
             let value = args.get_or_undefined(2).clone();
-            store.set_source(id, value);
+            js_ctx.store.set_source(Source::<JsValue>::from_id(handle.id), value);
             Ok(JsValue::undefined())
         }
+        AtomKind::Derived => Err(boa_engine::JsError::from(
+            boa_engine::JsNativeError::typ().with_message("cannot set a derived atom"),
+        )),
     }
 }
 
@@ -131,27 +130,4 @@ pub(crate) fn tur_component(
     let handle = crate::core::widget::ComponentHandle::new(component);
     let opaque = BoaOpaque::new(handle, context);
     Ok(opaque.object().clone().into())
-}
-
-/// Build (or fetch the cached) per-store `{ get, set }` JS context object.
-/// Stored as a boa `JsData` on a sentinel opaque so we don't rebuild per
-/// invocation.
-pub fn ensure_store_ctx_object(
-    js_ctx: &TurJsContext,
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    // Rebuild on every call — the closure capture pattern is cheap enough.
-    // (Could be cached, but doing so requires GC rooting; deferred.)
-    let obj = build_store_context_object(context, js_ctx.store.clone())?;
-    Ok(obj.into())
-}
-
-/// Convenience used internally to construct the store ctx object given a raw
-/// `Rc<RefCell<Store>>`. Used by the flush loop.
-pub fn build_ctx_object_for(
-    store: Rc<RefCell<Store>>,
-    context: &mut Context,
-) -> JsResult<JsValue> {
-    let obj = build_store_context_object(context, store)?;
-    Ok(obj.into())
 }

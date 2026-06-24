@@ -1,4 +1,4 @@
-use crate::core::reactive::AtomId;
+use crate::core::reactive::Mutation;
 
 use super::event_arg::EventArg;
 use super::mutation::EdgyMutation;
@@ -25,7 +25,7 @@ impl std::fmt::Debug for PendingMutationInvocationQueue {
 }
 
 pub(crate) struct PendingMutationInvocation {
-    pub(crate) atom_id: AtomId,
+    pub(crate) mutation: Mutation,
     pub(crate) args: Box<dyn EventArg>,
 }
 
@@ -46,7 +46,7 @@ impl PendingMutationInvocationQueue {
 
     pub fn push<E: EventArg>(&mut self, mutation: EdgyMutation<E>, event: E) {
         self.0.push(PendingMutationInvocation {
-            atom_id: mutation.id(),
+            mutation: mutation.mutation(),
             args: Box::new(event),
         });
     }

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::marker::PhantomData;
 
 use boa_engine::JsValue;
 use num_traits::FromPrimitive;
@@ -8,7 +7,7 @@ use tur_shared::{
     HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
 };
 
-use crate::core::reactive::{extract_atom, AtomId};
+use crate::core::reactive::{extract_readable, AtomId, Readable};
 
 // ---------------------------------------------------------------------------
 // PropValue — trait for types that can be decoded from a JsValue WITHOUT a
@@ -99,44 +98,17 @@ impl_prop_value_enum!(
 );
 
 // ---------------------------------------------------------------------------
-// ReadableAtom<T> — typed read-only handle to a reactive atom.
+// Readable — typed read-only handle to a reactive atom (Source or Derived).
 //
-// Only a phantom marker for `T`; the `PropValue` requirement is enforced
-// where the atom is actually decoded (`Val<T>` / `WidgetCx::read_val`).  This
-// lets object-valued atoms (e.g. `ReadableAtom<TextEditingController>`) be
-// carried as typed handles even though their value is resolved via a raw
+// Carries no phantom type parameter; the `T` of `Val<T>` provides type safety
+// at the decode boundary (`PropValue::from_js`).  Object-valued atoms (e.g. a
+// `Readable` holding a `TextEditingController`) are resolved via a raw
 // `JsValue` read + downcast rather than `PropValue::from_js`.
 // ---------------------------------------------------------------------------
 
-pub struct ReadableAtom<T: 'static> {
-    pub(crate) id: AtomId,
-    _marker: PhantomData<T>,
-}
-
-// Manual Clone/Copy — PhantomData is always Copy regardless of T, so no
-// T: Clone/Copy bounds are needed.
-impl<T: 'static> Clone for ReadableAtom<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: 'static> Copy for ReadableAtom<T> {}
-
-impl<T: 'static> ReadableAtom<T> {
-    pub fn new(id: AtomId) -> Self {
-        ReadableAtom {
-            id,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn id(&self) -> AtomId {
-        self.id
-    }
-
+impl<T> Readable<T> {
     pub fn is_dirty(&self, dirties: &HashSet<AtomId>) -> bool {
-        dirties.contains(&self.id)
+        dirties.contains(&self.id())
     }
 }
 
@@ -147,14 +119,14 @@ impl<T: 'static> ReadableAtom<T> {
 #[derive(Clone)]
 pub enum Val<T: PropValue> {
     Static(T),
-    Reactive(ReadableAtom<T>),
+    Reactive(Readable<T>),
 }
 
 impl<T: PropValue> Val<T> {
     /// Returns the atom id if this is a reactive val.
     pub fn atom(&self) -> Option<AtomId> {
         match self {
-            Val::Reactive(a) => Some(a.id),
+            Val::Reactive(r) => Some(r.id()),
             _ => None,
         }
     }
@@ -170,7 +142,7 @@ impl<T: PropValue> Val<T> {
     /// Returns `true` if this is a reactive val whose atom is in `dirties`.
     pub fn is_dirty(&self, dirties: &HashSet<AtomId>) -> bool {
         match self {
-            Val::Reactive(a) => dirties.contains(&a.id),
+            Val::Reactive(r) => dirties.contains(&r.id()),
             _ => false,
         }
     }
@@ -184,8 +156,8 @@ pub fn val_from_js<T: PropValue>(v: &JsValue) -> Option<Val<T>> {
     if v.is_undefined() || v.is_null() {
         return None;
     }
-    match extract_atom(v) {
-        Some(id) => Some(Val::Reactive(ReadableAtom::new(id))),
+    match extract_readable::<T>(v) {
+        Some(readable) => Some(Val::Reactive(readable)),
         None => T::from_js(v).map(Val::Static),
     }
 }

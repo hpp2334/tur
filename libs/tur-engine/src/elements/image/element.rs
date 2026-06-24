@@ -32,7 +32,7 @@ pub struct ImageComponent {
 impl Component for ImageComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
-        cx.insert_node(id, AnyElement::new(ImageElement { component: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(ImageElement { component: self.clone(), painting: ImagePainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -48,8 +48,16 @@ impl Component for ImageComponent {
 // ImageElement — the built element. Layout and paint read `Val<T>` props on demand.
 // ---------------------------------------------------------------------------
 
+/// Resolved paint props (filled during layout). Paint reads these directly.
+#[derive(Default, Clone)]
+pub struct ImagePainting {
+    pub resource_id: Option<u64>,
+    pub fit: Option<tur_shared::BoxFit>,
+}
+
 pub struct ImageElement {
     pub component: ImageComponent,
+    pub painting: ImagePainting,
 }
 
 impl Effect for ImageElement {}

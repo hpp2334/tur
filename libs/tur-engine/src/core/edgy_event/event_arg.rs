@@ -1,7 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
-use crate::core::reactive::extract_atom;
+use crate::core::reactive::extract_mutation;
 
 use super::mutation::EdgyMutation;
 
@@ -25,7 +25,7 @@ pub trait EventArg: 'static {
 // ---------------------------------------------------------------------------
 
 pub fn edgy_mutation_from_js<E: EventArg>(v: &JsValue) -> Option<EdgyMutation<E>> {
-    extract_atom(v).map(EdgyMutation::new)
+    extract_mutation(v).map(EdgyMutation::new)
 }
 
 pub fn extract_mutation_from_opts<E: EventArg>(

@@ -15,6 +15,10 @@ impl ElementLayout for ScrollViewElement {
     ) -> Size {
         let padding = cx.read_val_opt(self.component.padding.as_ref());
 
+        // Resolve the paint-time color here (layout holds the store); paint
+        // reads `self.painting` and never touches the store.
+        self.painting.color = cx.read_val_opt(self.component.color.as_ref());
+
         let viewport_w = if constraints.max_width.is_finite() {
             constraints.max_width
         } else {
@@ -89,7 +93,7 @@ impl ElementRender for ScrollViewElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        if let Some(ref brush) = paint_ctx.read_val_opt(self.component.color.as_ref()) {
+        if let Some(ref brush) = self.painting.color {
             canvas.fill_geometry(offset, &Geometry::Rect(layout.size), brush);
         }
 
