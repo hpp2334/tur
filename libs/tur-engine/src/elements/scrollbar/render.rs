@@ -20,6 +20,15 @@ impl ElementLayout for ScrollbarElement {
         let thickness = cx
             .read_val_opt(self.component.thickness.as_ref())
             .unwrap_or(DEFAULT_THICKNESS);
+
+        // Resolve paint props here (layout holds the store); paint reads
+        // `self.painting` and never touches the store.
+        self.painting = super::element::ScrollbarPainting {
+            track_color: cx.read_val_opt(self.component.track_color.as_ref()),
+            color: cx.read_val_opt(self.component.color.as_ref()),
+            thumb_radius: cx.read_val_opt(self.component.thumb_radius.as_ref()),
+        };
+
         let h = if constraints.max_height.is_finite() && constraints.max_height > 0.0 {
             constraints.max_height
         } else {
@@ -44,7 +53,7 @@ impl ElementRender for ScrollbarElement {
         offset: Offset,
         layout: &ComputedLayout,
         _children: &[ElementNodeId],
-        paint_ctx: &PaintContext,
+        _paint_ctx: &PaintContext,
     ) {
         let (_, scroll_offset, max_extent, viewport) = match self.metrics() {
             Some(v) => v,
@@ -67,20 +76,22 @@ impl ElementRender for ScrollbarElement {
             0.0
         };
 
+        let p = &self.painting;
         // Optional track background — painted behind the thumb. Typically
         // wired reactively to a hover state from the JS side (transparent
         // when idle, light-gray when hovered).
-        if let Some(track_brush) = paint_ctx.read_val_opt(self.component.track_color.as_ref()) {
+        if let Some(track_brush) = p.track_color.as_ref() {
             let track_geometry = Geometry::Rect(Size::new(track_w, track_h));
-            canvas.fill_geometry(offset, &track_geometry, &track_brush);
+            canvas.fill_geometry(offset, &track_geometry, track_brush);
         }
 
-        let brush = paint_ctx
-            .read_val_opt(self.component.color.as_ref())
+        let brush = p
+            .color
+            .clone()
             .unwrap_or(Brush::SolidColor(DEFAULT_THUMB_COLOR));
 
-        let radius = paint_ctx
-            .read_val_opt(self.component.thumb_radius.as_ref())
+        let radius = p
+            .thumb_radius
             .map(|r| r.min(track_w / 2.0).min(thumb_h / 2.0))
             .unwrap_or((track_w / 2.0).min(thumb_h / 2.0));
 

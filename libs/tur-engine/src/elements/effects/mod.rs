@@ -29,7 +29,7 @@ pub struct OpacityComponent {
 impl Component for OpacityComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
-        cx.insert_node(id, AnyElement::new(OpacityElement { component: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(OpacityElement { component: self.clone(), painting: OpacityPainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -43,6 +43,18 @@ impl Component for OpacityComponent {
 
 pub struct OpacityElement {
     pub component: OpacityComponent,
+    pub painting: OpacityPainting,
+}
+
+/// Resolved paint prop (filled during layout). Paint reads it directly.
+#[derive(Clone)]
+pub struct OpacityPainting {
+    pub value: f32,
+}
+impl Default for OpacityPainting {
+    fn default() -> Self {
+        Self { value: 1.0 }
+    }
 }
 
 impl Effect for OpacityElement {}
@@ -64,6 +76,9 @@ impl ElementLayout for OpacityElement {
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
+        // Resolve the paint-time opacity here (layout holds the store); paint
+        // reads `self.painting` and never touches the store.
+        self.painting.value = cx.read_val_opt(self.component.value.as_ref()).unwrap_or(1.0);
         if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
@@ -91,9 +106,7 @@ impl ElementRender for OpacityElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let opacity: f32 = paint_ctx
-            .read_val_opt(self.component.value.as_ref())
-            .unwrap_or(1.0);
+        let opacity: f32 = self.painting.value;
         canvas.push_opacity(opacity);
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas, offset);
@@ -168,7 +181,7 @@ pub struct TransformComponent {
 impl Component for TransformComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
         let id = cx.alloc_node();
-        cx.insert_node(id, AnyElement::new(TransformElement { component: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(TransformElement { component: self.clone(), painting: TransformPainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -182,30 +195,29 @@ impl Component for TransformComponent {
 
 pub struct TransformElement {
     pub component: TransformComponent,
+    pub painting: TransformPainting,
+}
+
+/// Resolved paint props (filled during layout). Paint reads them directly.
+#[derive(Default, Clone)]
+pub struct TransformPainting {
+    pub scale: Option<f64>,
+    pub scale_x: Option<f64>,
+    pub scale_y: Option<f64>,
+    pub rotate: Option<f64>,
+    pub translate_x: Option<f64>,
+    pub translate_y: Option<f64>,
 }
 
 impl TransformElement {
-    /// Resolve the transform during paint using PaintContext (no dep
-    /// tracking — paint is a read-only pass).
-    fn resolve_transform_paint(&self, paint_ctx: &PaintContext) -> Affine {
-        let scale = paint_ctx.read_val_opt(self.component.scale.as_ref());
-        let sx = paint_ctx
-            .read_val_opt(self.component.scale_x.as_ref())
-            .or(scale)
-            .unwrap_or(1.0);
-        let sy = paint_ctx
-            .read_val_opt(self.component.scale_y.as_ref())
-            .or(scale)
-            .unwrap_or(1.0);
-        let angle = paint_ctx
-            .read_val_opt(self.component.rotate.as_ref())
-            .unwrap_or(0.0);
-        let tx = paint_ctx
-            .read_val_opt(self.component.translate_x.as_ref())
-            .unwrap_or(0.0);
-        let ty = paint_ctx
-            .read_val_opt(self.component.translate_y.as_ref())
-            .unwrap_or(0.0);
+    /// Resolve the transform from painting props (filled during layout).
+    fn resolve_transform(&self) -> Affine {
+        let p = &self.painting;
+        let sx = p.scale_x.or(p.scale).unwrap_or(1.0);
+        let sy = p.scale_y.or(p.scale).unwrap_or(1.0);
+        let angle = p.rotate.unwrap_or(0.0);
+        let tx = p.translate_x.unwrap_or(0.0);
+        let ty = p.translate_y.unwrap_or(0.0);
 
         Affine::translate((tx, ty))
             * Affine::rotate(angle)
@@ -244,15 +256,17 @@ impl ElementLayout for TransformElement {
     }
 
     fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // Resolve transform paint props here (layout holds the store); paint
+        // reads `self.painting` and never touches the store.
+        self.painting = TransformPainting {
+            scale: cx.read_val_opt(self.component.scale.as_ref()),
+            scale_x: cx.read_val_opt(self.component.scale_x.as_ref()),
+            scale_y: cx.read_val_opt(self.component.scale_y.as_ref()),
+            rotate: cx.read_val_opt(self.component.rotate.as_ref()),
+            translate_x: cx.read_val_opt(self.component.translate_x.as_ref()),
+            translate_y: cx.read_val_opt(self.component.translate_y.as_ref()),
+        };
         if let Some(child_id) = children.first() {
-            // Touch reactive vals so dep tracking registers this node and
-            // the layout re-runs when transform props change.
-            let _ = cx.read_val_opt(self.component.scale.as_ref());
-            let _ = cx.read_val_opt(self.component.scale_x.as_ref());
-            let _ = cx.read_val_opt(self.component.scale_y.as_ref());
-            let _ = cx.read_val_opt(self.component.rotate.as_ref());
-            let _ = cx.read_val_opt(self.component.translate_x.as_ref());
-            let _ = cx.read_val_opt(self.component.translate_y.as_ref());
             cx.set_child_offset(*child_id, Offset::ZERO);
         }
     }
@@ -271,7 +285,7 @@ impl ElementRender for TransformElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let local = self.resolve_transform_paint(paint_ctx);
+        let local = self.resolve_transform();
         // Combine the canvas offset (parent-relative origin) with the local
         // transform so the child paints in the right place.
         let combined = Affine::translate((offset.x, offset.y)) * local;

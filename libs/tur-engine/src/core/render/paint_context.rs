@@ -4,7 +4,6 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Canvas;
 use crate::core::resource::{ImageResource, ResourceId, ResourceMap};
-use crate::core::widget::{PropValue, Val};
 
 pub struct PaintContext<'a> {
     tree: &'a ElementTree,
@@ -55,24 +54,5 @@ impl<'a> PaintContext<'a> {
 
     pub fn get_image_resource(&self, id: ResourceId) -> Option<&ImageResource> {
         self.resource_map.get_image(id)
-    }
-
-    /// Resolve a `Val<T>` for painting.  Same as `LayoutContext::read_val`
-    /// but without dep tracking (paint is a read-only pass that follows
-    /// the already-computed layout).
-    pub fn read_val<T: PropValue>(&self, val: &Val<T>) -> Option<T> {
-        match val {
-            Val::Static(t) => Some(t.clone()),
-            Val::Reactive(atom) => {
-                let store = self.tree.store.as_ref()?;
-                let js = store.borrow().get_raw(atom.id());
-                T::from_js(&js)
-            }
-        }
-    }
-
-    /// Convenience: resolve an `Option<Val<T>>`.
-    pub fn read_val_opt<T: PropValue>(&self, val: Option<&Val<T>>) -> Option<T> {
-        val.and_then(|v| self.read_val(v))
     }
 }

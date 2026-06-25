@@ -1,3 +1,4 @@
+use boa_engine::Context;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use tur_shared::{Constraints, Offset, Size};
 
@@ -14,6 +15,10 @@ pub struct LayoutContext<'a> {
     font_manager: &'a mut FontManager,
     text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
     resource_map: &'a ResourceMap,
+    /// The boa JS runtime. Held so `read_val` can (in later phases) recompute
+    /// stale derived atoms lazily; layout is the only rendering phase with JS
+    /// access. Paint never touches this.
+    pub(crate) boa: &'a mut Context,
 }
 
 impl<'a> LayoutContext<'a> {
@@ -23,6 +28,7 @@ impl<'a> LayoutContext<'a> {
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &'a ResourceMap,
+        boa: &'a mut Context,
     ) -> Self {
         LayoutContext {
             tree,
@@ -30,6 +36,7 @@ impl<'a> LayoutContext<'a> {
             font_manager,
             text_layout_cx,
             resource_map,
+            boa,
         }
     }
 
@@ -40,6 +47,7 @@ impl<'a> LayoutContext<'a> {
             self.font_manager,
             self.text_layout_cx,
             self.resource_map,
+            self.boa,
         )
     }
 
@@ -115,7 +123,7 @@ impl<'a> LayoutContext<'a> {
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
     /// atom is read from the store (no boa `Context` needed) and the
-    /// dependency `(atom, node)` is recorded so a future flush can mark
+    /// dependency `(atom, subscriber)` is recorded so a future flush can mark
     /// this node dirty.
     ///
     /// Returns `None` if the prop is absent (`Option<Val<T>>::None`) or the
@@ -123,11 +131,11 @@ impl<'a> LayoutContext<'a> {
     pub fn read_val<T: PropValue>(&mut self, val: &Val<T>) -> Option<T> {
         match val {
             Val::Static(t) => Some(t.clone()),
-            Val::Reactive(atom) => {
-                let id = atom.id();
-                self.tree.dep_tracker.track(id, self.node_id);
+            Val::Reactive(readable) => {
                 let store = self.tree.store.as_ref()?;
-                let js = store.borrow().get_raw(id);
+                let sub = crate::core::reactive::SubscriberId::new(self.node_id.as_u64());
+                let _guard = store.subscribe_scope(sub);
+                let js = store.read(*readable, self.boa);
                 T::from_js(&js)
             }
         }

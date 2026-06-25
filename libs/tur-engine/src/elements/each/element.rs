@@ -8,7 +8,7 @@ use tur_shared::{CrossAxisAlignment, MainAxisSize, MainAxisAlignment};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::reactive::{extract_atom, AtomId};
+use crate::core::reactive::{extract_readable, AtomId, AnyReadable};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 use crate::elements::flex::FlexElement;
 use crate::elements::FlexComponent;
@@ -30,7 +30,7 @@ use crate::elements::FlexComponent;
 
 #[derive(Clone)]
 pub struct EachComponent {
-    pub items: AtomId,
+    pub items: AnyReadable,
     pub build: JsFunction,
     pub main_alignment: Option<Val<MainAxisAlignment>>,
     pub cross_alignment: Option<Val<CrossAxisAlignment>>,
@@ -149,7 +149,7 @@ impl Effect for EachElement {
         boa: &mut Context,
         dirties: &std::collections::HashSet<AtomId>,
     ) {
-        if !dirties.contains(&self.component.items) {
+        if !self.component.items.is_dirty(dirties) {
             return;
         }
 
@@ -207,10 +207,10 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     }
 }
 
-fn prop_items(props: &JsObject, key: &str, ctx: &mut Context) -> Option<AtomId> {
+fn prop_items(props: &JsObject, key: &str, ctx: &mut Context) -> Option<AnyReadable> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_atom(&v)
+    extract_readable::<JsValue>(&v)
 }
 
 fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {

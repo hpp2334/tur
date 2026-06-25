@@ -98,7 +98,7 @@ impl TurAppContext {
         }
     }
 
-    pub fn layout(&mut self) {
+    pub fn layout(&mut self, boa: &mut boa_engine::Context) {
         let (width, height) = self.size;
         let constraints = Constraints {
             min_width: width,
@@ -114,6 +114,7 @@ impl TurAppContext {
             &mut self.font_manager,
             &mut self.text_layout_cx,
             &resource_map,
+            boa,
         );
     }
 

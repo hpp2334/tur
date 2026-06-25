@@ -52,6 +52,7 @@ impl Component for ScrollViewComponent {
                 component: self.clone(),
                 axis,
                 position: ScrollPosition::new(),
+                painting: ScrollViewPainting::default(),
             })
             .with_callbacks(),
             boa,
@@ -80,10 +81,17 @@ impl Component for ScrollViewComponent {
 // and the mutable scroll position.
 // ---------------------------------------------------------------------------
 
+/// Resolved paint props (filled during layout). Paint reads these directly.
+#[derive(Default, Clone)]
+pub struct ScrollViewPainting {
+    pub color: Option<Brush>,
+}
+
 pub struct ScrollViewElement {
     pub component: ScrollViewComponent,
     pub(crate) axis: Axis,
     pub(crate) position: ScrollPosition,
+    pub(crate) painting: ScrollViewPainting,
 }
 
 impl ScrollViewElement {

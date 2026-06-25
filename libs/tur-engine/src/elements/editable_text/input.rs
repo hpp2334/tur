@@ -5,8 +5,8 @@ use boa_engine::Context;
 use tur_shared::Color;
 
 use crate::core::element::ElementNodeId;
-use crate::core::text::TextEditingController;
-use crate::core::widget::{ReadableAtom, Component, Val, WidgetCx};
+use crate::core::widget::{Component, Val, WidgetCx};
+use crate::core::reactive::AnyReadable;
 use crate::elements::ContainerComponent;
 
 use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_undo_controller, prop_val, ContextMenuEvent, EditableTextComponent};
@@ -22,7 +22,7 @@ pub struct InputComponent {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub controller: Option<JsObject>,
-    pub controller_atom: Option<ReadableAtom<TextEditingController>>,
+    pub controller_atom: Option<AnyReadable>,
     pub undo_controller: Option<JsObject>,
     pub placeholder: Option<Val<String>>,
     pub color: Option<Val<Color>>,

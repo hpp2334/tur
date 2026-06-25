@@ -13,13 +13,13 @@ use crate::core::elements::{
 };
 use crate::core::event::AppImeEvent;
 use crate::core::keyboard::{AppKeyEvent, KeyEventType, KeydownEvent};
-use crate::core::reactive::extract_atom;
 use crate::core::text::TextEditingController;
 use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::widget::{val_from_js, Effect, PropValue, ReadableAtom, Component, Val, WidgetCx};
+use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 
@@ -78,7 +78,7 @@ impl LineNavInfo {
 #[derive(Clone)]
 pub struct EditableTextComponent {
     pub controller: Option<JsObject>,
-    pub controller_atom: Option<ReadableAtom<TextEditingController>>,
+    pub controller_atom: Option<AnyReadable>,
     /// Optional `UndoController` for Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z support.
     /// When `Some`, text-mutating keystrokes push a prior-state snapshot
     /// onto the undo stack, and `handle_key_event` intercepts `"z"` / `"y"`
@@ -101,8 +101,8 @@ impl Component for EditableTextComponent {
         let mut spec = self.clone();
 
         if spec.controller.is_none() {
-            if let Some(atom) = spec.controller_atom {
-                let js_val = cx.read_atom_raw(atom.id(), boa);
+            if let Some(readable) = spec.controller_atom {
+                let js_val = cx.read_atom_raw(readable, boa);
                 if let Some(obj) = js_val.as_object() {
                     if obj.downcast_ref::<TextEditingController>().is_some() {
                         spec.controller = Some(obj.clone());
@@ -137,6 +137,7 @@ impl Component for EditableTextComponent {
                 component: spec,
                 cached_layout: None,
                 resolved_multiline: false,
+                painting: EditableTextPainting::default(),
             })
             .with_callbacks(),
             boa,
@@ -156,10 +157,18 @@ impl Component for EditableTextComponent {
 // refreshed during layout via `LayoutContext::read_val`).
 // ---------------------------------------------------------------------------
 
+/// Resolved paint props (filled during layout). Paint reads these directly.
+#[derive(Default, Clone)]
+pub struct EditableTextPainting {
+    pub color: Option<Color>,
+    pub cursor_color: Option<Color>,
+}
+
 pub struct EditableTextElement {
     pub component: EditableTextComponent,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) resolved_multiline: bool,
+    pub(crate) painting: EditableTextPainting,
 }
 
 impl EditableTextElement {
@@ -988,10 +997,10 @@ pub(super) fn prop_controller_atom(
     props: &JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Option<ReadableAtom<TextEditingController>> {
+) -> Option<AnyReadable> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_atom(&v).map(ReadableAtom::new)
+    crate::core::reactive::extract_readable::<JsValue>(&v)
 }
 
 pub(crate) fn prop_mutation<E: EventArg>(

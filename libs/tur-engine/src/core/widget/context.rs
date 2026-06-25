@@ -1,12 +1,10 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use boa_engine::{Context, JsValue};
 
 use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
-use crate::core::reactive::{AtomId, Store};
+use crate::core::reactive::{Readable, Store};
 
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
@@ -28,18 +26,18 @@ impl WidgetCx {
 
     // ----- reactive store -----------------------------------------------------
 
-    pub fn store(&self) -> Rc<RefCell<Store>> {
+    pub fn store(&self) -> Store {
         self.js_ctx.store.clone()
     }
 
     /// Read an atom's current value as a raw `JsValue` (untracked).
-    pub fn read_atom_raw(&self, id: AtomId, boa: &mut Context) -> JsValue {
-        self.js_ctx.store.borrow().get_untracked(id, boa)
+    pub fn read_atom_raw<T>(&self, readable: Readable<T>, boa: &mut Context) -> JsValue {
+        self.js_ctx.store.read(readable, boa)
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
-    /// atom is read from the store (untracked).  Used during the effect
-    /// phase; layout uses `LayoutContext::read_val` (with dep tracking).
+    /// atom is lazily read from the store (untracked).  Used during the effect
+    /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
     pub fn read_val<T: crate::core::widget::PropValue>(
         &self,
         val: &crate::core::widget::Val<T>,
@@ -48,8 +46,8 @@ impl WidgetCx {
         use crate::core::widget::Val;
         match val {
             Val::Static(t) => Some(t.clone()),
-            Val::Reactive(atom) => {
-                let js = self.js_ctx.store.borrow().get_untracked(atom.id, boa);
+            Val::Reactive(readable) => {
+                let js = self.js_ctx.store.read(*readable, boa);
                 T::from_js(&js)
             }
         }

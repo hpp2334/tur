@@ -1,6 +1,4 @@
-use std::collections::{HashMap, HashSet};
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::HashMap;
 
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::{Constraints, Offset, Size};
@@ -9,67 +7,9 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::{ElementObject, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::layout::LayoutContext;
-use crate::core::reactive::{AtomId, Store};
+use crate::core::reactive::{Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::resource::ResourceMap;
-
-/// Atom→node dependency tracker.  Populated automatically during layout
-/// when `LayoutContext::read_val` resolves a reactive `Val<T>`.  After a
-/// reactive flush, `dirty_nodes` returns the set of nodes that read any
-/// of the dirty atoms and therefore need re-layout.
-#[derive(Default)]
-pub struct DepTracker {
-    atom_to_nodes: RefCell<HashMap<AtomId, HashSet<ElementNodeId>>>,
-    node_to_atoms: RefCell<HashMap<ElementNodeId, HashSet<AtomId>>>,
-}
-
-impl std::fmt::Debug for DepTracker {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("DepTracker")
-            .field("atoms", &self.atom_to_nodes.borrow().len())
-            .field("nodes", &self.node_to_atoms.borrow().len())
-            .finish()
-    }
-}
-
-impl DepTracker {
-    pub fn track(&self, atom: AtomId, node: ElementNodeId) {
-        self.atom_to_nodes.borrow_mut().entry(atom).or_default().insert(node);
-        self.node_to_atoms.borrow_mut().entry(node).or_default().insert(atom);
-    }
-
-    /// Clear all outgoing deps for `node` (called before re-layout so stale
-    /// entries from the previous pass don't linger).
-    pub fn clear_node(&self, node: ElementNodeId) {
-        if let Some(atoms) = self.node_to_atoms.borrow_mut().remove(&node) {
-            for atom in atoms {
-                let should_remove = {
-                    let mut map = self.atom_to_nodes.borrow_mut();
-                    if let Some(nodes) = map.get_mut(&atom) {
-                        nodes.remove(&node);
-                        nodes.is_empty()
-                    } else {
-                        false
-                    }
-                };
-                if should_remove {
-                    self.atom_to_nodes.borrow_mut().remove(&atom);
-                }
-            }
-        }
-    }
-
-    /// Return nodes that depend on any of the given dirty atoms.
-    pub fn dirty_nodes(&self, dirty: &HashSet<AtomId>) -> HashSet<ElementNodeId> {
-        let mut out = HashSet::new();
-        for atom in dirty {
-            if let Some(nodes) = self.atom_to_nodes.borrow().get(atom) {
-                out.extend(nodes);
-            }
-        }
-        out
-    }
-}
 
 #[derive(Debug)]
 pub struct ElementTree {
@@ -78,9 +18,7 @@ pub struct ElementTree {
     next_id: u64,
     /// Reactive store (set via `set_store`).  Enables `LayoutContext` and
     /// `PaintContext` to resolve `Val<T>` values on demand.
-    pub(crate) store: Option<Rc<RefCell<Store>>>,
-    /// Atom→node dependency map for fine-grained dirty propagation.
-    pub(crate) dep_tracker: DepTracker,
+    pub(crate) store: Option<Store>,
 }
 
 impl Default for ElementTree {
@@ -96,17 +34,12 @@ impl ElementTree {
             root_id: None,
             next_id: 1,
             store: None,
-            dep_tracker: DepTracker::default(),
         }
     }
 
     /// Attach the reactive store so layout/paint can resolve `Val<T>`.
-    pub fn set_store(&mut self, store: Rc<RefCell<Store>>) {
+    pub fn set_store(&mut self, store: Store) {
         self.store = Some(store);
-    }
-
-    pub fn dep_tracker(&self) -> &DepTracker {
-        &self.dep_tracker
     }
 
     pub fn alloc_id(&mut self) -> ElementNodeId {
@@ -305,14 +238,15 @@ impl ElementTree {
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
+        boa: &mut boa_engine::Context,
     ) -> Size {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return constraints.constrain(Size::ZERO),
         };
 
-        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx, resource_map);
-        self.layout_position(root_id, font_manager, text_layout_cx, resource_map);
+        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx, resource_map, boa);
+        self.layout_position(root_id, font_manager, text_layout_cx, resource_map, boa);
 
         size
     }
@@ -324,6 +258,7 @@ impl ElementTree {
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
+        boa: &mut boa_engine::Context,
     ) -> Size {
         let (is_dirty, constraints_changed) = self
             .nodes
@@ -338,7 +273,9 @@ impl ElementTree {
 
         // Clear stale atom deps for this node — they'll be re-registered
         // during layout as the element calls `cx.read_val`.
-        self.dep_tracker.clear_node(id);
+        if let Some(store) = self.store.as_ref() {
+            store.clear_subscriber(SubscriberId::new(id.as_u64()));
+        }
 
         let children = self
             .nodes
@@ -352,7 +289,7 @@ impl ElementTree {
             .and_then(|n| n.element.take())
             .expect("element missing during layout_size");
 
-        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map);
+        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, boa);
         let size = element.perform_layout_size(constraints, &children, &mut cx);
 
         let constrained = constraints.constrain(size);
@@ -379,6 +316,7 @@ impl ElementTree {
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
+        boa: &mut boa_engine::Context,
     ) {
         // Position-only dirty short-circuit. `mark_dirty_position` (used by
         // scroll handlers) marks only this flag, leaving `dirty_layout=false`
@@ -407,7 +345,7 @@ impl ElementTree {
                 .and_then(|n| n.element.take())
                 .expect("element missing during layout_position");
 
-            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map);
+            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, boa);
             element.perform_layout_position(&children, &mut cx);
 
             let node = cx.tree.nodes.get_mut(&id).unwrap();
@@ -416,7 +354,7 @@ impl ElementTree {
         }
 
         for child_id in children {
-            self.layout_position(child_id, font_manager, text_layout_cx, resource_map);
+            self.layout_position(child_id, font_manager, text_layout_cx, resource_map, boa);
         }
     }
 

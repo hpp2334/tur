@@ -20,8 +20,19 @@ impl ElementLayout for ContainerElement {
         let padding = cx.read_val_opt(self.component.padding.as_ref());
         let alignment = cx.read_val_opt(self.component.alignment.as_ref());
 
-        self.cached_color = cx.read_val_opt(self.component.color.as_ref());
-        self.cached_border_color = cx.read_val_opt(self.component.border_color.as_ref());
+        // Resolve all reactive paint props here (layout holds the store +
+        // Context); paint reads `self.painting` and never touches the store.
+        self.painting = super::element::ContainerPainting {
+            color: cx.read_val_opt(self.component.color.as_ref()),
+            border_color: cx.read_val_opt(self.component.border_color.as_ref()),
+            border_width: cx.read_val_opt(self.component.border_width.as_ref()),
+            border_radius: cx.read_val_opt(self.component.border_radius.as_ref()),
+            border_position: cx
+                .read_val_opt(self.component.border_position.as_ref())
+                .unwrap_or_default(),
+            shadow_color: cx.read_val_opt(self.component.shadow_color.as_ref()),
+            shadow_blur: cx.read_val_opt(self.component.shadow_blur.as_ref()),
+        };
 
         let sized_constraints = Constraints {
             min_width: width.unwrap_or(constraints.min_width),
@@ -94,17 +105,16 @@ impl ElementRender for ContainerElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let shadow_blur = paint_ctx.read_val_opt(self.component.shadow_blur.as_ref());
-        let shadow_color = paint_ctx.read_val_opt(self.component.shadow_color.as_ref());
-        let color = paint_ctx.read_val_opt(self.component.color.as_ref());
-        let border_color = paint_ctx.read_val_opt(self.component.border_color.as_ref());
-        let border_width = paint_ctx.read_val_opt(self.component.border_width.as_ref());
-        let border_radius = paint_ctx.read_val_opt(self.component.border_radius.as_ref());
-        let border_position = paint_ctx
-            .read_val_opt(self.component.border_position.as_ref())
-            .unwrap_or_default();
+        let p = &self.painting;
+        let shadow_blur = p.shadow_blur;
+        let shadow_color = p.shadow_color.as_ref();
+        let color = p.color.as_ref();
+        let border_color = p.border_color.as_ref();
+        let border_width = p.border_width;
+        let border_radius = p.border_radius;
+        let border_position = p.border_position;
 
-        if let (Some(sc), Some(sb)) = (shadow_color.as_ref(), shadow_blur) {
+        if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur) {
             if sb > 0.0 {
                 let shadow_offset = self.component.shadow_offset.unwrap_or((0.0, 0.0));
                 let radius = border_radius.unwrap_or(0.0);
@@ -112,7 +122,7 @@ impl ElementRender for ContainerElement {
             }
         }
 
-        if let Some(ref brush) = color {
+        if let Some(brush) = color {
             let geometry = match border_radius {
                 Some(r) if r > 0.0 => Geometry::RoundedRect {
                     size: layout.size,
@@ -123,7 +133,7 @@ impl ElementRender for ContainerElement {
             canvas.fill_geometry(offset, &geometry, brush);
         }
 
-        if let (Some(bc), Some(bw)) = (border_color.as_ref(), border_width) {
+        if let (Some(bc), Some(bw)) = (border_color, border_width) {
             if bw > 0.0 {
                 let half = bw / 2.0;
                 let s = layout.size;

@@ -313,7 +313,9 @@ function makePiece(id: number): EdgyElement {
                         const c = pieceRgb(me.slot);
                         return Color.rgba(c.r, c.g, c.b, 140);
                     }),
-                    shadowOffset: derive(() => pieceDragging(id) ? [0, 12] : [0, 4]),
+                    shadowOffset: derive(() =>
+                        pieceDragging(id) ? [0, 12] : [0, 4],
+                    ),
                     shadowBlur: derive(() => {
                         const me = pieceById(id);
                         if (pieceDragging(id)) return 28;
