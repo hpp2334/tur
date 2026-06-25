@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::ContainerElement;
 
 impl ElementLayout for ContainerElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -64,19 +64,17 @@ impl ElementLayout for ContainerElement {
             None => child_size,
         };
 
-        sized_constraints.constrain(inflated)
-    }
+        let size = sized_constraints.constrain(inflated);
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (assign child offset) ---
         if let Some(&child_id) = children.first() {
             let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
             let alignment = cx.read_val_opt(self.component.alignment.as_ref());
-            let container_size = cx.self_computed_size();
             let offset = match alignment {
                 Some(ref align) => {
                     let inner_size = Size::new(
-                        (container_size.width - padding * 2.0).max(0.0),
-                        (container_size.height - padding * 2.0).max(0.0),
+                        (size.width - padding * 2.0).max(0.0),
+                        (size.height - padding * 2.0).max(0.0),
                     );
                     let child_size = cx.child_computed_size(child_id);
                     let inner_offset = align.align_offset(inner_size, child_size);
@@ -86,5 +84,7 @@ impl ElementLayout for ContainerElement {
             };
             cx.set_child_offset(child_id, offset);
         }
+
+        size
     }
 }

@@ -60,7 +60,7 @@ pub struct ScrollbarElement {
     pub component: ScrollbarComponent,
     /// Last computed track size — used by the drag handler for offset math.
     pub(crate) cached_track: Size,
-    /// Resolved paint props — filled in `perform_layout_size`.
+    /// Resolved paint props — filled in `perform_layout`.
     pub(crate) painting: ScrollbarPainting,
     /// `Some` while a drag is in progress; cleared on the next pointer-up.
     drag: Option<DragState>,

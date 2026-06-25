@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::ScrollViewElement;
 
 impl ElementLayout for ScrollViewElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -56,16 +56,13 @@ impl ElementLayout for ScrollViewElement {
             self.update_controller_metrics();
             self.apply_pending_initial_offset();
         } else {
-            self.position.apply_dimensions(viewport, tur_shared::Size::ZERO);
+            self.position.apply_dimensions(viewport, Size::ZERO);
             self.position.set_extents(0.0, 0.0);
             self.update_controller_metrics();
             self.apply_pending_initial_offset();
         }
 
-        viewport
-    }
-
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (assign child offset) ---
         if let Some(&child_id) = children.first() {
             let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
             let scroll_offset = match self.axis {
@@ -76,5 +73,7 @@ impl ElementLayout for ScrollViewElement {
             };
             cx.set_child_offset(child_id, scroll_offset);
         }
+
+        viewport
     }
 }

@@ -2,7 +2,7 @@ use tur_integration_tests::TurTestApp;
 
 /// Reproduces the layout-invalidation gap: when a reactive flex weight changes,
 /// only the flex parent (Row) is marked dirty, not its Expanded children.
-/// `layout_size` short-circuits on `dirty_layout` and ignores the new
+/// `layout` short-circuits on `dirty_layout` and ignores the new
 /// constraints passed by the parent, so the children keep stale cached sizes
 /// until some unrelated event marks them dirty.
 ///

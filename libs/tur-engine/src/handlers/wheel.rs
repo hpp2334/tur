@@ -66,10 +66,11 @@ pub fn dispatch_wheel(
     let overscroll = element.on_wheel_event(&mut el_cx, &WheelEvent { delta_x, delta_y });
     // Wheel scroll only changes a scroll-position scalar (e.g. LazyList's
     // `position.pixels` or ScrollView's equivalent) — child sizes don't
-    // change. Mark position-only dirty so `perform_layout_size` is skipped
-    // (cache-hit) and only `perform_layout_position` re-runs. If a scroll
-    // handler later mounts/unmounts children (LazyList's `process_remount`),
-    // that path explicitly calls full `mark_dirty` for the size pass.
-    cx.element_tree.mark_dirty_position(id);
+    // change, so the per-node `dirty_layout` cache keeps re-measurement of
+    // already-mounted descendants cheap (each `layout` call short-circuits
+    // on the cached size). If a scroll handler later mounts/unmounts children
+    // (LazyList's `process_remount`), that path explicitly calls full
+    // `mark_dirty` for the affected subtree.
+    cx.element_tree.mark_dirty(id);
     overscroll
 }

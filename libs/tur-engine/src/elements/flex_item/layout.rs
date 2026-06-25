@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::ExpandedElement;
 
 impl ElementLayout for ExpandedElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -18,6 +18,4 @@ impl ElementLayout for ExpandedElement {
             constraints.constrain(Size::ZERO)
         }
     }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }

@@ -7,7 +7,7 @@ use crate::core::resource::ResourceId;
 use super::element::ImageElement;
 
 impl ElementLayout for ImageElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
@@ -48,6 +48,4 @@ impl ElementLayout for ImageElement {
 
         constraints.constrain(Size::new(w, h))
     }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }

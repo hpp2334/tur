@@ -57,8 +57,8 @@ impl Component for FlexComponent {
 }
 
 // ---------------------------------------------------------------------------
-// FlexElement — the built element. Holds its spec plus transient layout state that
-// must flow from `perform_layout_size` to `perform_layout_position`.
+// FlexElement — the built element. Holds its spec plus transient layout state
+// used within `perform_layout` (measuring children, then assigning offsets).
 // ---------------------------------------------------------------------------
 
 pub struct FlexElement {

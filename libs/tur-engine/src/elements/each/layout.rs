@@ -11,16 +11,12 @@ use super::element::EachElement;
 // nothing itself.
 
 impl ElementLayout for EachElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        self.flex.perform_layout_size(constraints, children, cx)
-    }
-
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
-        self.flex.perform_layout_position(children, cx);
+        self.flex.perform_layout(constraints, children, cx)
     }
 }

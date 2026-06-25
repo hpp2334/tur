@@ -660,16 +660,17 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
 }
 
 // ===========================================================================
-// Position-only dirty: scroll within the currently-mounted range must not
-// trigger `perform_layout_size` (no child re-measurement), only
-// `perform_layout_position`. The user-facing observation is that child
-// SIZES are stable across small scrolls — only their positions change.
+// Scroll within the currently-mounted range must not re-measure children
+// that stay mounted. The per-node `dirty_layout` cache short-circuits each
+// descendant's `layout` call (constraints unchanged, not dirty), so the
+// user-facing observation is that child SIZES are stable across small
+// scrolls — only their positions change.
 // ===========================================================================
 
 /// Scrolling does not re-measure children that stay mounted: their SIZES
-/// are stable, only their offsets shift. This is the user-visible property
-/// behind the "position-only dirty" optimization — `perform_layout_size`
-/// is cached on scroll, so child measurement never re-runs.
+/// are stable, only their offsets shift. The per-node `dirty_layout` cache
+/// keeps each descendant's `perform_layout` short-circuited on scroll
+/// (constraints unchanged), so child measurement never re-runs.
 #[test]
 fn scroll_does_not_remeasure_mounted_children() {
     let (mut app, id) = setup_virtualized();
@@ -709,7 +710,7 @@ fn scroll_does_not_remeasure_mounted_children() {
         let n = tree.get(*cid).unwrap();
         assert_eq!(n.computed_layout.size, *size_before,
             "child {:?} was re-measured on scroll — size was {size_before:?}, now {:?} \
-             (perform_layout_size should have been cached)",
+             (the per-node layout cache should have short-circuited it)",
             cid, n.computed_layout.size);
         let dy = n.computed_layout.offset.y - y_before;
         assert!((dy - (-30.0)).abs() < 0.5,

@@ -9,7 +9,7 @@ use crate::elements::text::text_layout;
 use super::element::TextElement;
 
 impl ElementLayout for TextElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
@@ -100,6 +100,4 @@ impl ElementLayout for TextElement {
 
         constraints.constrain(Size::new(width as f64, height as f64))
     }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }

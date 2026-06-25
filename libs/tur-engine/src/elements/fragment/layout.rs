@@ -11,7 +11,7 @@ use super::element::FragmentElement;
 // nothing itself — it only forwards to children.
 
 impl ElementLayout for FragmentElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -28,12 +28,13 @@ impl ElementLayout for FragmentElement {
                 max_h = s.height;
             }
         }
-        constraints.constrain(Size::new(max_w, max_h))
-    }
+        let size = constraints.constrain(Size::new(max_w, max_h));
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (all children at origin) ---
         for &child_id in children {
             cx.set_child_offset(child_id, Offset::ZERO);
         }
+
+        size
     }
 }

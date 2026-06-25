@@ -60,7 +60,7 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 Each element implements three focused traits:
 
 - `ElementOnUpdate` — JS property mutation (`set_prop`)
-- `ElementLayout` — two-phase layout (`perform_layout_size`, `perform_layout_position`)
+- `ElementLayout` — layout (`perform_layout`: measure children, compute own size, assign child offsets in one pass)
 - `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
 
 Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits).
