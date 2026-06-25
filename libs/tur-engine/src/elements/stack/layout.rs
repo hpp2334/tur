@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::StackElement;
 
 impl ElementLayout for StackElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -37,10 +37,8 @@ impl ElementLayout for StackElement {
 
         let final_size = constraints.constrain(max_size);
         self.computed_size = Some(final_size);
-        final_size
-    }
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (assign non-positioned child offsets) ---
         let stack_size = self.computed_size.unwrap_or(Size::ZERO);
         let alignment = cx
             .read_val_opt(self.component.alignment.as_ref())
@@ -54,5 +52,7 @@ impl ElementLayout for StackElement {
                 cx.set_child_offset(child_id, offset);
             }
         }
+
+        final_size
     }
 }

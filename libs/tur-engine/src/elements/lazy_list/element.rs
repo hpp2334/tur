@@ -168,7 +168,7 @@ pub struct LazyListElement {
     /// scroll depth (no `cumulative_offset` walk from 0).
     pub(crate) first_mounted_index: u64,
     /// Content-space offset of the first mounted item's top edge.
-    /// `perform_layout_position` walks forward from this anchor, setting
+    /// `perform_layout`'s position step walks forward from this anchor, setting
     /// each child's offset to the running sum. Synced in `process_remount`
     /// as the leading edge shifts (delta-update: O(items added/removed at
     /// the leading edge), not O(first_mounted_index)).
@@ -228,7 +228,7 @@ impl LazyListElement {
     /// The cumulative main-axis offset of item `index`'s top edge (i.e. the
     /// sum of extents of items `0..index`). Uses cached measurements for
     /// items that have been mounted; falls back to `average_extent()` for
-    /// items that haven't. This is what `perform_layout_position` uses to
+    /// items that haven't. This is what `perform_layout`'s position step uses to
     /// place each child at its true running-sum offset rather than
     /// `index * averageExtent`, which produced overlaps for variable-height
     /// lists.
@@ -394,7 +394,7 @@ impl LazyListElement {
         // `first_mounted_offset`) to the new leading edge. As items are
         // unmounted from the top, advance the offset by their (cached)
         // extents; as new items mount at the top, retreat the offset. This
-        // keeps `perform_layout_position` O(visible_count) regardless of
+        // keeps the position step O(visible_count) regardless of
         // scroll depth — no `cumulative_offset` walk from 0 needed.
         let avg = self.average_extent();
         let new_first = self.visible.first().map(|(i, _)| *i).unwrap_or(0);
@@ -423,10 +423,9 @@ impl LazyListElement {
             cx.mark_dirty(self.node_id);
         } else {
             // No structural change (scroll within the currently-mounted
-            // range): the wheel handler already marked position-only dirty.
-            // No additional dirty signal needed — `perform_layout_position`
-            // will pick up the new `position.pixels` and re-offset children
-            // using the persistent anchor above.
+            // range): the wheel handler already marked this node dirty, so
+            // `perform_layout` will re-run, pick up the new `position.pixels`,
+            // and re-offset children using the persistent anchor above.
         }
 
         // Report visible-range change.

@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::{OpacityElement, TransformElement};
 
 impl ElementLayout for OpacityElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -15,22 +15,23 @@ impl ElementLayout for OpacityElement {
         // Resolve the paint-time opacity here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
         self.painting.value = cx.read_val_opt(self.component.value.as_ref()).unwrap_or(1.0);
-        if let Some(child_id) = children.first() {
+        let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
             constraints.constrain(Size::ZERO)
-        }
-    }
+        };
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position ---
         if let Some(child_id) = children.first() {
             cx.set_child_offset(*child_id, Offset::ZERO);
         }
+
+        size
     }
 }
 
 impl ElementLayout for TransformElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -40,14 +41,12 @@ impl ElementLayout for TransformElement {
         // time only. (For non-uniform scale this means layout uses the
         // untransformed size, which is correct for hit-testing but not for
         // visual bounds. Acceptable for animation effects.)
-        if let Some(child_id) = children.first() {
+        let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
             constraints.constrain(Size::ZERO)
-        }
-    }
+        };
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
         // Resolve transform paint props here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
         self.painting = super::element::TransformPainting {
@@ -58,8 +57,12 @@ impl ElementLayout for TransformElement {
             translate_x: cx.read_val_opt(self.component.translate_x.as_ref()),
             translate_y: cx.read_val_opt(self.component.translate_y.as_ref()),
         };
+
+        // --- position ---
         if let Some(child_id) = children.first() {
             cx.set_child_offset(*child_id, Offset::ZERO);
         }
+
+        size
     }
 }

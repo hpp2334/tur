@@ -35,13 +35,12 @@ trait Erased: 'static {
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)>;
     fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)>;
 
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size;
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext);
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
@@ -133,17 +132,13 @@ where
         <Self as ElementTrace>::trace_layout_extra(self)
     }
 
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        <Self as ElementLayout>::perform_layout_size(self, constraints, children, cx)
-    }
-
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
-        <Self as ElementLayout>::perform_layout_position(self, children, cx);
+        <Self as ElementLayout>::perform_layout(self, constraints, children, cx)
     }
 
     fn paint(
@@ -343,17 +338,13 @@ impl AnyElement {
         self.inner.trace_layout_extra()
     }
 
-    pub fn perform_layout_size(
+    pub fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        self.inner.perform_layout_size(constraints, children, cx)
-    }
-
-    pub fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
-        self.inner.perform_layout_position(children, cx);
+        self.inner.perform_layout(constraints, children, cx)
     }
 
     pub fn paint(

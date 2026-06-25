@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::PositionedElement;
 
 impl ElementLayout for PositionedElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -49,16 +49,17 @@ impl ElementLayout for PositionedElement {
             ),
         };
 
-        if let Some(&child_id) = children.first() {
+        let size = if let Some(&child_id) = children.first() {
             cx.layout_child(child_id, &child_constraints)
         } else {
             child_constraints.constrain(Size::ZERO)
-        }
-    }
+        };
 
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (set own offset within the parent Stack) ---
         let offset_x = cx.read_val_opt(self.component.left.as_ref()).unwrap_or(0.0);
         let offset_y = cx.read_val_opt(self.component.top.as_ref()).unwrap_or(0.0);
         cx.set_child_offset_self(Offset::new(offset_x, offset_y));
+
+        size
     }
 }

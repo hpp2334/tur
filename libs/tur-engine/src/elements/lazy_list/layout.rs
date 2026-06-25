@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::LazyListElement;
 
 impl ElementLayout for LazyListElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -89,10 +89,15 @@ impl ElementLayout for LazyListElement {
         let max_scroll = (total_main - viewport_main).max(0.0);
         self.position.set_extents(0.0, max_scroll);
 
+        // --- position (assign child offsets) ---
+        self.assign_offsets(cx);
+
         viewport
     }
+}
 
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
+impl LazyListElement {
+    fn assign_offsets(&mut self, cx: &mut LayoutContext) {
         let scroll_offset = self.position.pixels();
         let avg = self.average_extent();
 

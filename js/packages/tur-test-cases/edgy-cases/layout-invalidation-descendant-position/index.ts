@@ -27,19 +27,20 @@ Object.assign(globalThis, {
 //     └ Row(mainAlignment=End)    <- intermediate descendant: NOT marked dirty,
 //                                    but re-measured via `constraints_changed`
 //                                    (its width tracks `width$`). Its
-//                                    perform_layout_position pushes the child
-//                                    to the trailing edge, so the child's X
-//                                    offset = width$ - 20.
+//                                    `perform_layout` pushes the child to the
+//                                    trailing edge, so the child's X offset
+//                                    = width$ - 20.
 //       └ Container(width=20)     <- "tracker": position depends on the Row's
 //                                    width, hence on `width$`.
 //
 // When `width$` changes, only the outer container (and its ancestors) are
-// marked dirty (`mark_dirty` walks up only). The Row re-runs its size phase
-// because its constraints changed, but — without also flagging
-// `dirty_position` — the position phase skips it, leaving the tracker at its
-// stale X offset. Symptom in the playground: the editor scrollbar stays
-// painted at its old position (hidden under the viewer pane) after a divider
-// drag.
+// marked dirty (`mark_dirty` walks up only). The Row re-runs its layout
+// pass because its constraints changed. Under the current merged single-pass
+// `perform_layout` this repositions correctly by construction — but it once
+// regressed under a split size/position design where the position phase could
+// skip a constraint-driven descendant, leaving the tracker at a stale X offset
+// (playground symptom: the editor scrollbar stayed painted at its old
+// position after a divider drag).
 export default component(() =>
     Container({
         width: derive(() => get(width$)),

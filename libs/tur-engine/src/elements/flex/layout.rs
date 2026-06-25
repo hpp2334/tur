@@ -8,7 +8,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::{ChildData, FlexElement};
 
 impl ElementLayout for FlexElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
@@ -143,10 +143,16 @@ impl ElementLayout for FlexElement {
 
         let final_size = constraints.constrain(size);
         self.computed_size = Some(final_size);
+
+        // Assign child offsets now that all sizes are known.
+        self.assign_positions(cx);
+
         final_size
     }
+}
 
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], cx: &mut LayoutContext) {
+impl FlexElement {
+    fn assign_positions(&mut self, cx: &mut LayoutContext) {
         if self.child_data.is_empty() {
             return;
         }

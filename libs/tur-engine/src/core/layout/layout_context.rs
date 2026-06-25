@@ -41,7 +41,7 @@ impl<'a> LayoutContext<'a> {
     }
 
     pub fn layout_child(&mut self, child_id: ElementNodeId, constraints: &Constraints) -> Size {
-        self.tree.layout_size(
+        self.tree.layout(
             child_id,
             constraints,
             self.font_manager,
@@ -80,8 +80,11 @@ impl<'a> LayoutContext<'a> {
             .unwrap_or(Size::ZERO)
     }
 
-    /// The current node's own computed size (set by `perform_layout_size`
-    /// and available during `perform_layout_position`).
+    /// The current node's own computed size (set by the driver after a
+    /// `perform_layout` call returns, and readable by later phases / parents
+    /// via `child_computed_size`). Reading this from inside an element's own
+    /// `perform_layout` returns a stale value — use the locally-computed size
+    /// instead.
     pub fn self_computed_size(&self) -> Size {
         self.tree
             .nodes

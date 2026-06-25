@@ -177,17 +177,6 @@ impl WidgetCx {
         self.js_ctx.dirty.set(true);
     }
 
-    /// Mark a node position-only dirty: `perform_layout_position` re-runs but
-    /// `perform_layout_size` is cached. Used by scroll handlers (wheel) so
-    /// scrolling doesn't re-measure children whose sizes haven't changed.
-    pub fn mark_dirty_position(&self, id: ElementNodeId) {
-        self.js_ctx
-            .element_tree
-            .borrow_mut()
-            .mark_dirty_position(id);
-        self.js_ctx.dirty.set(true);
-    }
-
     /// Set the query-key on a tree node (for test selectors).
     pub fn set_query_key(&self, id: ElementNodeId, keys: Vec<String>) {
         let mut tree = self.js_ctx.element_tree.borrow_mut();

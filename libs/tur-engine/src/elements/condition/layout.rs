@@ -6,22 +6,23 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::ConditionElement;
 
 impl ElementLayout for ConditionElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        if let Some(&child_id) = children.first() {
+        let size = if let Some(&child_id) = children.first() {
             cx.layout_child(child_id, constraints)
         } else {
             constraints.constrain(Size::ZERO)
-        }
-    }
+        };
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position ---
         if let Some(&child_id) = children.first() {
             cx.set_child_offset(child_id, Offset::ZERO);
         }
+
+        size
     }
 }

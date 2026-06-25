@@ -24,7 +24,7 @@ fn brush_arr(c: Color) -> [u8; 4] {
 }
 
 impl ElementLayout for EditableTextElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
@@ -142,6 +142,4 @@ impl ElementLayout for EditableTextElement {
 
         constraints.constrain(Size::new(width as f64, height as f64))
     }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }

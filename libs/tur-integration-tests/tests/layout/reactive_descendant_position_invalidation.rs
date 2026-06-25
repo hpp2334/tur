@@ -12,11 +12,13 @@ use tur_integration_tests::TurTestApp;
 ///                                 edge, so its X offset is `width$ - 20`.
 ///
 /// When `width$` changes, `mark_dirty` walks *up* from the outer container
-/// only; the Row re-runs its size phase (constraints changed) but, without
-/// also flagging `dirty_position`, the position phase skips it — so the
-/// tracker keeps a stale X offset. Symptom in the playground: the editor
-/// scrollbar stays painted at its old position (hidden under the viewer pane)
-/// after a divider drag.
+/// only; the Row re-runs its layout pass because its constraints changed
+/// (even though it wasn't directly marked dirty). In a merged single-pass
+/// `perform_layout` this repositions correctly by construction — but it
+/// once regressed under a split size/position design where the position
+/// phase could skip a constraint-driven descendant. Symptom in the
+/// playground: the editor scrollbar stayed painted at its old position
+/// (hidden under the viewer pane) after a divider drag.
 #[test]
 fn reactive_resize_repositions_descendant() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
@@ -42,17 +44,16 @@ fn reactive_resize_repositions_descendant() {
     app.render();
 
     // width$ = 300:
-    //   WITH fix    -> root-centered outer (50) + End-aligned tracker (280) = 330.
-    //   WITHOUT fix -> the Row re-measures (width 300) but skips its position
-    //                  phase, leaving the tracker at its stale offset (80):
-    //                  root-centered outer (50) + 80 = 130.
+    //   correct  -> root-centered outer (50) + End-aligned tracker (280) = 330.
+    //   bug      -> the Row re-measures (width 300) but its descendant keeps a
+    //               stale offset (80): root-centered outer (50) + 80 = 130.
     let after = app
         .get_element_absolute_bounds(tracker_id)
         .expect("tracker bounds (after)");
     assert_eq!(
         after.left, 330.0,
         "after __setWidth(300): tracker should re-center to x=330 — got x={}. \
-         The intermediate Row re-measured but did not re-run its position phase, \
+         The intermediate Row re-measured but its descendant was left at a stale offset. \
          leaving the descendant at a stale offset.",
         after.left
     );

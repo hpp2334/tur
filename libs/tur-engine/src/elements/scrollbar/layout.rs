@@ -6,7 +6,7 @@ use crate::core::layout::{ElementLayout, LayoutContext};
 use super::element::{ScrollbarElement, DEFAULT_THICKNESS};
 
 impl ElementLayout for ScrollbarElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         _children: &[ElementNodeId],
@@ -35,6 +35,4 @@ impl ElementLayout for ScrollbarElement {
         self.cached_track = size;
         size
     }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
 }

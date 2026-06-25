@@ -10,22 +10,23 @@ use super::element::MouseRegionElement;
 // origin. It paints nothing itself.
 
 impl ElementLayout for MouseRegionElement {
-    fn perform_layout_size(
+    fn perform_layout(
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        if let Some(&child_id) = children.first() {
+        let size = if let Some(&child_id) = children.first() {
             cx.layout_child(child_id, constraints)
         } else {
             constraints.constrain(Size::ZERO)
-        }
-    }
+        };
 
-    fn perform_layout_position(&mut self, children: &[ElementNodeId], cx: &mut LayoutContext) {
+        // --- position (child at origin) ---
         if let Some(&child_id) = children.first() {
             cx.set_child_offset(child_id, Offset::ZERO);
         }
+
+        size
     }
 }

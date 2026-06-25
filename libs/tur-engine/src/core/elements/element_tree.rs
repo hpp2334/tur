@@ -184,47 +184,18 @@ impl ElementTree {
         for cid in path {
             if let Some(node) = self.nodes.get_mut(&cid) {
                 node.dirty_layout = true;
-                node.dirty_position = true;
-            }
-        }
-    }
-
-    /// Mark `id` and all its ancestors as position-only dirty: their
-    /// `perform_layout_position` re-runs but `perform_layout_size` is cached.
-    /// Used by scroll handlers (wheel events) so scrolling doesn't re-measure
-    /// children whose sizes haven't changed — only whose positions have.
-    pub fn mark_dirty_position(&mut self, id: ElementNodeId) {
-        let mut path = Vec::new();
-        {
-            let mut current = Some(id);
-            while let Some(cid) = current {
-                let node = match self.nodes.get(&cid) {
-                    Some(n) => n,
-                    None => break,
-                };
-                if node.dirty_position {
-                    break;
-                }
-                path.push(cid);
-                current = node.parent;
-            }
-        }
-        for cid in path {
-            if let Some(node) = self.nodes.get_mut(&cid) {
-                node.dirty_position = true;
             }
         }
     }
 
     pub fn mark_root_dirty(&mut self) {
         // A change to the viewport size can alter the constraints of every
-        // node, so the whole tree must be re-laid-out. (`layout_size`
+        // node, so the whole tree must be re-laid-out. (`layout`
         // short-circuits on the per-node `dirty_layout` flag, so marking only
         // the root would leave the rest of the tree with stale sizes.) This is
         // only invoked on resize.
         for node in self.nodes.values_mut() {
             node.dirty_layout = true;
-            node.dirty_position = true;
         }
     }
 
@@ -245,13 +216,10 @@ impl ElementTree {
             None => return constraints.constrain(Size::ZERO),
         };
 
-        let size = self.layout_size(root_id, constraints, font_manager, text_layout_cx, resource_map, boa);
-        self.layout_position(root_id, font_manager, text_layout_cx, resource_map, boa);
-
-        size
+        self.layout(root_id, constraints, font_manager, text_layout_cx, resource_map, boa)
     }
 
-    pub(crate) fn layout_size(
+    pub(crate) fn layout(
         &mut self,
         id: ElementNodeId,
         constraints: &Constraints,
@@ -287,10 +255,13 @@ impl ElementTree {
             .nodes
             .get_mut(&id)
             .and_then(|n| n.element.take())
-            .expect("element missing during layout_size");
+            .expect("element missing during layout");
 
         let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, boa);
-        let size = element.perform_layout_size(constraints, &children, &mut cx);
+        // `perform_layout` measures the children (recursively laying each out
+        // via `cx.layout_child`), computes this node's size, and assigns each
+        // child's offset — all in one pass.
+        let size = element.perform_layout(constraints, &children, &mut cx);
 
         let constrained = constraints.constrain(size);
         let node = cx.tree.nodes.get_mut(&id).unwrap();
@@ -298,64 +269,7 @@ impl ElementTree {
         node.computed_layout.size = constrained;
         node.last_constraints = Some(*constraints);
         node.dirty_layout = false;
-        // A node whose `perform_layout_size` re-ran may have produced new
-        // child sizes, so its `perform_layout_position` (which assigns child
-        // offsets) must re-run too. `layout_position` only descends into
-        // subtrees flagged `dirty_position`, and a constraint-driven relayout
-        // (e.g. a divider drag) reaches descendants through the
-        // `constraints_changed` check below — not through `mark_dirty`, which
-        // only walks *up*. Without this, descendants get re-measured but keep
-        // stale offsets (e.g. a scrollbar left painted at its old position).
-        node.dirty_position = true;
         constrained
-    }
-
-    fn layout_position(
-        &mut self,
-        id: ElementNodeId,
-        font_manager: &mut FontManager,
-        text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        resource_map: &ResourceMap,
-        boa: &mut boa_engine::Context,
-    ) {
-        // Position-only dirty short-circuit. `mark_dirty_position` (used by
-        // scroll handlers) marks only this flag, leaving `dirty_layout=false`
-        // so `perform_layout_size` is cached. We skip clean subtrees here —
-        // if no ancestor of `id` was marked position-dirty, the previously
-        // computed offsets are still valid.
-        let is_position_dirty = self
-            .nodes
-            .get(&id)
-            .map(|n| n.dirty_position)
-            .unwrap_or(false);
-        if !is_position_dirty {
-            return;
-        }
-
-        let children = self
-            .nodes
-            .get(&id)
-            .map(|n| n.children.clone())
-            .unwrap_or_default();
-
-        {
-            let mut element = self
-                .nodes
-                .get_mut(&id)
-                .and_then(|n| n.element.take())
-                .expect("element missing during layout_position");
-
-            let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, boa);
-            element.perform_layout_position(&children, &mut cx);
-
-            let node = cx.tree.nodes.get_mut(&id).unwrap();
-            node.element = Some(element);
-            node.dirty_position = false;
-        }
-
-        for child_id in children {
-            self.layout_position(child_id, font_manager, text_layout_cx, resource_map, boa);
-        }
     }
 
     pub fn paint(&self, canvas: &mut dyn Canvas, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
