@@ -1,57 +1,10 @@
-use tur_shared::{BoxFit, ComputedLayout, Constraints, Offset, Size};
+use tur_shared::{BoxFit, ComputedLayout, Offset};
 
 use crate::core::element::ElementNodeId;
-use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::resource::ResourceId;
 
 use super::element::ImageElement;
-
-impl ElementLayout for ImageElement {
-    fn perform_layout_size(
-        &mut self,
-        constraints: &Constraints,
-        _children: &[ElementNodeId],
-        cx: &mut LayoutContext,
-    ) -> Size {
-        let resource_id = cx
-            .read_val_opt(self.component.resource_id.as_ref())
-            .map(ResourceId::new);
-
-        // Resolve paint props here (layout holds the store); paint reads
-        // `self.painting` and never touches the store.
-        self.painting = super::element::ImagePainting {
-            resource_id: cx.read_val_opt(self.component.resource_id.as_ref()),
-            fit: cx.read_val_opt(self.component.fit.as_ref()),
-        };
-
-        let width = cx.read_val_opt(self.component.width.as_ref());
-        let height = cx.read_val_opt(self.component.height.as_ref());
-
-        let natural = resource_id
-            .and_then(|rid| cx.get_image_natural_size(rid))
-            .unwrap_or(Size::ZERO);
-
-        let w = width.unwrap_or_else(|| {
-            if constraints.max_width.is_finite() {
-                constraints.max_width
-            } else {
-                natural.width
-            }
-        });
-        let h = height.unwrap_or_else(|| {
-            if constraints.max_height.is_finite() {
-                constraints.max_height
-            } else {
-                natural.height
-            }
-        });
-
-        constraints.constrain(Size::new(w, h))
-    }
-
-    fn perform_layout_position(&mut self, _children: &[ElementNodeId], _cx: &mut LayoutContext) {}
-}
 
 impl ElementRender for ImageElement {
     fn type_name(&self) -> &'static str {

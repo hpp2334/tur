@@ -23,6 +23,10 @@ use crate::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 
+/// Default text color (opaque black) shared by the layout (text fall-back)
+/// and render (cursor fall-back) modules.
+pub(super) const DEFAULT_TEXT_COLOR: Color = Color::rgb(0, 0, 0);
+
 #[derive(Clone)]
 pub(crate) struct LineNavInfo {
     line_start_bytes: Vec<usize>,
