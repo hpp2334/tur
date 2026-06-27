@@ -142,6 +142,8 @@ pub struct EachElement {
     pub(crate) mounted: Vec<ElementNodeId>,
 }
 
+impl crate::core::layout::ElementSubscribe for EachElement {}
+
 impl Effect for EachElement {
     fn effect(
         &mut self,

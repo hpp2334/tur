@@ -92,6 +92,8 @@ impl PointerInteractElement {
     }
 }
 
+impl crate::core::layout::ElementSubscribe for PointerInteractElement {}
+
 impl Effect for PointerInteractElement {}
 
 impl ElementTrace for PointerInteractElement {

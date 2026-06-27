@@ -125,9 +125,9 @@ impl<'a> LayoutContext<'a> {
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
-    /// atom is read from the store (no boa `Context` needed) and the
-    /// dependency `(atom, subscriber)` is recorded so a future flush can mark
-    /// this node dirty.
+    /// atom is read from the store (no boa `Context` needed). Subscription is
+    /// **not** established here — it is declared explicitly in the element's
+    /// `subscribe` phase (see [`crate::core::layout::ElementSubscribe`]).
     ///
     /// Returns `None` if the prop is absent (`Option<Val<T>>::None`) or the
     /// atom value can't be decoded as `T`.
@@ -135,9 +135,7 @@ impl<'a> LayoutContext<'a> {
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let store = self.tree.store.as_ref()?;
-                let sub = crate::core::reactive::SubscriberId::new(self.node_id.as_u64());
-                let _guard = store.subscribe_scope(sub);
+                let store = self.tree.store_read_only()?;
                 let js = store.read(*readable, self.boa);
                 T::from_js(&js)
             }

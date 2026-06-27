@@ -3,6 +3,7 @@ use boa_engine::Context;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementTrace, TraceValue,
@@ -100,6 +101,15 @@ impl TextElement {
 }
 
 impl Effect for TextElement {}
+
+impl ElementSubscribe for TextElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.text.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for TextElement {
     fn trace_label(&self) -> String {

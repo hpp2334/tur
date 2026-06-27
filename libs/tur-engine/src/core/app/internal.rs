@@ -159,14 +159,16 @@ impl TurAppInternal {
     /// dep tracker. Returns `true` if any nodes were dirtied.
     fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> bool {
         let store = self.js_context.store.clone();
-        if !store.has_pending() {
+        let flush_engine = store.flush_engine();
+        if !flush_engine.has_pending() {
             return false;
         }
-        let dirties = store.flush();
+        let dirties = flush_engine.flush();
         if dirties.is_empty() {
             return false;
         }
         let dirty_nodes = store
+            .subscriber_index()
             .dirty_subscribers(&dirties)
             .into_iter()
             .map(|s| ElementNodeId::new(s.as_u64()))
@@ -350,7 +352,8 @@ impl TurAppInternal {
             return false;
         }
         let store = self.js_context.store.clone();
-        let ctx_obj = crate::core::reactive::build_store_context_object(boa_context, store.clone())
+        let ctx_obj = store
+            .ctx_object(boa_context)
             .ok()
             .map(boa_engine::JsValue::from);
         for inv in invs {

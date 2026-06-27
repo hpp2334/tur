@@ -51,6 +51,8 @@ pub struct FocusableElement {
     pub component: FocusableComponent,
 }
 
+impl crate::core::layout::ElementSubscribe for FocusableElement {}
+
 impl Effect for FocusableElement {}
 
 impl ElementTrace for FocusableElement {}

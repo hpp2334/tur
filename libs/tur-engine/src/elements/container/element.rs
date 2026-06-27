@@ -8,6 +8,7 @@ use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 
 // ---------------------------------------------------------------------------
 // ContainerComponent — the user's declaration. Pure Rust, no JsValues.
@@ -113,6 +114,23 @@ impl ContainerElement {
 }
 
 impl Effect for ContainerElement {}
+
+impl ElementSubscribe for ContainerElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.padding.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.border_color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.border_width.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.border_radius.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.border_position.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.shadow_color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.shadow_blur.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for ContainerElement {
     fn trace_label(&self) -> String {

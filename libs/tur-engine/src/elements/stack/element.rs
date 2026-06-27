@@ -5,6 +5,7 @@ use boa_engine::Context;
 use tur_shared::{Alignment, Size, StackFit};
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
@@ -54,6 +55,14 @@ pub struct StackElement {
 }
 
 impl Effect for StackElement {}
+
+impl ElementSubscribe for StackElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for StackElement {
     fn trace_label(&self) -> String {

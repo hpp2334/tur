@@ -5,6 +5,7 @@ use boa_engine::Context;
 use tur_shared::{Axis, Brush, Size};
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
@@ -147,6 +148,14 @@ impl ScrollViewElement {
 }
 
 impl Effect for ScrollViewElement {}
+
+impl ElementSubscribe for ScrollViewElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.padding.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for ScrollViewElement {
     fn trace_label(&self) -> String {

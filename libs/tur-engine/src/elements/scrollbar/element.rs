@@ -3,6 +3,7 @@ use boa_engine::Context;
 use tur_shared::{Brush, Size};
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementTrace, TraceValue,
@@ -110,6 +111,16 @@ impl ScrollbarElement {
 }
 
 impl Effect for ScrollbarElement {}
+
+impl ElementSubscribe for ScrollbarElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.thickness.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.track_color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.thumb_radius.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for ScrollbarElement {
     fn trace_label(&self) -> String {

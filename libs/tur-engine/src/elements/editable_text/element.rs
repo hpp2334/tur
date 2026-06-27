@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
@@ -657,6 +658,19 @@ impl EventArg for ContextMenuEvent {
 }
 
 impl Effect for EditableTextElement {}
+
+impl ElementSubscribe for EditableTextElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.multiline.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.font_family.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.placeholder.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.placeholder_color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.cursor_color.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for EditableTextElement {
     fn trace_label(&self) -> String {

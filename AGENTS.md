@@ -28,7 +28,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
 │  libs/tur-engine (unified engine crate)               │
 │  ├── core/trait_   (ElementKind, ElementNodeId,       │
 │  │                   ElementLayout, ElementRender,     │
-│  │                   ElementOnUpdate)                  │
+│  │                   ElementOnUpdate, ElementSubscribe)│
 │  ├── core/elements (AnyElement, ElementNode,           │
 │  │                   ElementTree with layout+paint)    │
 │  ├── core/render   (PaintContext, Renderer,            │
@@ -57,20 +57,22 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 
 ### Domain traits
 
-Each element implements three focused traits:
+Each element implements these focused traits:
 
 - `ElementOnUpdate` — JS property mutation (`set_prop`)
 - `ElementLayout` — layout (`perform_layout`: measure children, compute own size, assign child offsets in one pass)
 - `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
+- `ElementSubscribe` — declares which reactive atoms the node depends on (`subscribe`), so a reactive flush can mark it dirty for re-layout. Runs as an explicit phase after `perform_layout` for dirty nodes.
 
 Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits).
 
 ### Data flow
 
 1. JS calls `globalThis.__tur.*` → bridge creates `AnyElement` in `ElementTree`
-2. `ElementTree::compute_layout()` runs two-phase layout directly on elements
-3. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
-4. `Renderer::render(&mut self, tree: &ElementTree)` drives the frame
+2. `ElementTree::compute_layout()` lays out dirty nodes: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the store's atom→subscriber index)
+3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
+4. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
+5. `Renderer::render(&mut self, tree: &ElementTree)` drives the frame
 
 ## Directory structure
 
@@ -79,7 +81,7 @@ libs/
   tur-engine/                # Unified engine crate
     src/
       core/
-        trait_/              # Domain traits (ElementLayout, ElementRender, ElementOnUpdate)
+        trait_/              # Domain traits (ElementLayout, ElementRender, ElementOnUpdate, ElementSubscribe)
         elements/            # AnyElement, ElementNode, ElementTree
         render/              # PaintContext, Renderer, ChildLayout, ChildPaint
         bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)

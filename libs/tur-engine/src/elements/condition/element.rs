@@ -103,6 +103,8 @@ pub struct ConditionElement {
     pub(crate) mounted_child: Option<ElementNodeId>,
 }
 
+impl crate::core::layout::ElementSubscribe for ConditionElement {}
+
 impl Effect for ConditionElement {
     fn effect(
         &mut self,

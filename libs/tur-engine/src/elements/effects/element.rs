@@ -5,6 +5,7 @@ use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
@@ -54,6 +55,14 @@ impl Default for OpacityPainting {
 }
 
 impl Effect for OpacityElement {}
+
+impl ElementSubscribe for OpacityElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        if let Some(v) = self.component.value.as_ref() {
+            cx.subscribe_val(v);
+        }
+    }
+}
 
 impl ElementTrace for OpacityElement {
     fn trace_label(&self) -> String {
@@ -160,6 +169,18 @@ pub struct TransformPainting {
 }
 
 impl Effect for TransformElement {}
+
+impl ElementSubscribe for TransformElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.scale.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.scale_x.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.scale_y.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.rotate.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.translate_x.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.translate_y.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for TransformElement {
     fn trace_label(&self) -> String {

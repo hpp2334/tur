@@ -123,7 +123,7 @@ fn cursor_for(tree: &ElementTree, id: ElementNodeId) -> Option<String> {
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())?;
     let cursor_val = element.component.cursor.clone()?;
-    let store = tree.store.as_ref()?;
+    let store = tree.store_read_only()?;
     match cursor_val {
         Val::Static(s) => Some(s),
         Val::Reactive(readable) => {

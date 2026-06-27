@@ -150,6 +150,8 @@ pub struct SwitchElement {
     pub(crate) mounted_child: Option<ElementNodeId>,
 }
 
+impl crate::core::layout::ElementSubscribe for SwitchElement {}
+
 impl Effect for SwitchElement {
     fn effect(
         &mut self,

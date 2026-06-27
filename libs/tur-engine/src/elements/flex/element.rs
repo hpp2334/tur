@@ -4,6 +4,7 @@ use boa_engine::Context;
 use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAlignment, Size};
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
@@ -69,6 +70,15 @@ pub struct FlexElement {
 }
 
 impl Effect for FlexElement {}
+
+impl ElementSubscribe for FlexElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.main_alignment.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.cross_alignment.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.main_axis_size.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for FlexElement {
     fn trace_label(&self) -> String {
