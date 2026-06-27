@@ -97,6 +97,13 @@ impl TurTestApp {
         Ok(())
     }
 
+    /// Direct mutable access to the underlying `TurApp` — lets a test register
+    /// extra `__tur.*` / `__turHost.*` fns (e.g. a fake `__tur.request` backed
+    /// by an in-process WebDAV server) before loading a bundle.
+    pub fn with_app_mut<R>(&mut self, f: impl FnOnce(&mut TurApp) -> R) -> R {
+        f(&mut self.inner)
+    }
+
     pub fn render(&mut self) {
         self.inner.push_event(AppEvent::RequestDraw);
         let _ = self.inner.spawn_loop_once(Duration::ZERO);

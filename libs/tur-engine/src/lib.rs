@@ -142,7 +142,64 @@ impl TurApp {
 
         tracing::info!("registered host function __turHost.{name}");
         Ok(())
-}
+    }
+
+    /// Register a function on `globalThis.__tur.<name>` — the core widget
+    /// namespace, set up by `init_bridge`. Lets an embedder (e.g. tur-wasm)
+    /// add capability functions that JS calls as `__tur.<name>(...)`, alongside
+    /// the built-in widget factories. The embedder owns any heavy dependencies
+    /// (e.g. reqwest_wasm); tur-engine only provides this hook.
+    pub fn register_tur_fn(
+        &mut self,
+        name: &str,
+        length: usize,
+        f: boa_engine::native_function::NativeFunction,
+    ) -> Result<(), boa_engine::JsError> {
+        use boa_engine::js_string;
+        use boa_engine::object::FunctionObjectBuilder;
+        use boa_engine::property::PropertyDescriptor;
+
+        let tur_key = js_string!("__tur");
+
+        let global = self.boa_context.global_object();
+        let tur_obj = match global.get(tur_key.clone(), &mut self.boa_context) {
+            Ok(v) if v.as_object().is_some() => v.as_object().unwrap().clone(),
+            _ => {
+                // `__tur` should always exist after init_bridge; create a
+                // bare fallback so a misordered call doesn't panic.
+                let proto = self
+                    .boa_context
+                    .intrinsics()
+                    .constructors()
+                    .object()
+                    .prototype();
+                let obj = boa_engine::object::JsObject::from_proto_and_data(proto, ());
+                let desc = PropertyDescriptor::builder()
+                    .value(obj.clone())
+                    .writable(true)
+                    .enumerable(false)
+                    .configurable(true)
+                    .build();
+                global.insert_property(tur_key.clone(), desc);
+                obj
+            }
+        };
+
+        let fn_obj = FunctionObjectBuilder::new(self.boa_context.realm(), f)
+            .name(js_string!(name))
+            .length(length)
+            .build();
+        let desc = PropertyDescriptor::builder()
+            .value(fn_obj)
+            .writable(true)
+            .enumerable(false)
+            .configurable(true)
+            .build();
+        tur_obj.insert_property(js_string!(name), desc);
+
+        tracing::info!("registered tur function __tur.{name}");
+        Ok(())
+    }
 
     pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
         self.internal
