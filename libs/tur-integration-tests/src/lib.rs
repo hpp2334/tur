@@ -12,7 +12,7 @@ use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::TurApp;
-use tur_shared::{MouseButton, Offset};
+use tur_shared::{Cursor, MouseButton, Offset};
 
 pub struct Rect {
     pub left: f64,
@@ -353,9 +353,9 @@ impl TurTestApp {
         self.inner.with_element(id, cb)
     }
 
-    /// Returns the most recent cursor name set by a handler since the last
-    /// call. Mirrors the embedder's per-frame cursor poll.
-    pub fn take_current_cursor(&self) -> Option<String> {
+    /// Returns the most recent cursor set by a handler since the last call.
+    /// Mirrors the embedder's per-frame cursor poll.
+    pub fn take_current_cursor(&self) -> Option<Cursor> {
         self.inner.take_current_cursor()
     }
 

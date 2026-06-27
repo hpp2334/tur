@@ -2,6 +2,8 @@ use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use tur_shared::Cursor;
+
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::ElementTree;
 use crate::core::event::queue::AppEventQueue;
@@ -22,7 +24,7 @@ pub struct HandlerContext<'a> {
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
     pub needs_draw: &'a Cell<bool>,
-    pub current_cursor: Rc<RefCell<Option<String>>>,
+    pub current_cursor: Rc<RefCell<Option<Cursor>>>,
     /// Slot for `AppEvent::ClipboardWrite` payloads — `ClipboardWriteHandler`
     /// pushes the text here, and the embedder drains it via
     /// `TurApp::take_clipboard_write()` once per frame.
@@ -34,14 +36,14 @@ impl<'a> HandlerContext<'a> {
         self.needs_draw.set(true);
     }
 
-    /// Set the desired host cursor (e.g. "col-resize", "default"). The
-    /// embedder polls `TurApp::take_current_cursor` each frame and applies
-    /// the value to the canvas. Only writes when the value actually changes.
-    pub fn set_cursor(&self, name: &str) {
+    /// Set the desired host cursor. The embedder polls
+    /// `TurApp::take_current_cursor` each frame and applies the value to the
+    /// canvas. Only writes when the value actually changes.
+    pub fn set_cursor(&self, cursor: Cursor) {
         let mut slot = self.current_cursor.borrow_mut();
-        let changed = slot.as_deref() != Some(name);
+        let changed = *slot != Some(cursor);
         if changed {
-            *slot = Some(name.to_string());
+            *slot = Some(cursor);
         }
     }
 

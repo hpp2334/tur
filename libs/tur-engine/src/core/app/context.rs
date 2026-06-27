@@ -4,7 +4,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use parley::LayoutContext as ParleyLayoutContext;
-use tur_shared::Constraints;
+use tur_shared::{Constraints, Cursor};
 
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::ElementTree;
@@ -29,9 +29,9 @@ pub struct TurAppContext {
     pub(crate) gesture_composer: GestureEventComposer,
     pub(crate) event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
-    /// The most recent cursor name set by a handler (e.g. "col-resize").
-    /// Embedders poll this each frame to update the host canvas cursor.
-    pub(crate) current_cursor: Rc<RefCell<Option<String>>>,
+    /// The most recent cursor set by a handler. Embedders poll this each
+    /// frame to update the host canvas cursor.
+    pub(crate) current_cursor: Rc<RefCell<Option<Cursor>>>,
     /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
     /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
     /// `TurApp::take_clipboard_write()` once per frame.

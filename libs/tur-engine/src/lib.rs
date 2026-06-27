@@ -12,6 +12,7 @@ use boa_engine::context::time::FixedClock;
 use boa_engine::Context;
 use boa_engine::Source;
 use std::path::Path;
+use tur_shared::Cursor;
 use error::TurError;
 
 use core::app::TurAppInternal;
@@ -165,11 +166,10 @@ impl TurApp {
             .push(event);
     }
 
-    /// Returns the most recent cursor name set by a handler (e.g. "col-resize"),
-    /// or `None` if no cursor change is pending since the last call. Embedders
-    /// poll this once per frame and apply the value to the host canvas, then
-    /// call again next frame.
-    pub fn take_current_cursor(&self) -> Option<String> {
+    /// Returns the most recent cursor set by a handler, or `None` if no cursor
+    /// change is pending since the last call. Embedders poll this once per
+    /// frame and apply the value to the host canvas, then call again next frame.
+    pub fn take_current_cursor(&self) -> Option<Cursor> {
         self.internal
             .app_context
             .borrow()

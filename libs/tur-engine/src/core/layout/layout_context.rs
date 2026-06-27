@@ -1,4 +1,4 @@
-use boa_engine::Context;
+use crate::core::reactive::ReactiveReadJsContext;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use tur_shared::{Constraints, Offset, Size};
 
@@ -9,26 +9,28 @@ use crate::core::resource::{ResourceId, ResourceMap};
 use crate::core::widget::{PropValue, Val};
 use crate::elements::ExpandedElement;
 
-pub struct LayoutContext<'a> {
+pub struct LayoutContext<'a, 'js> {
     pub(crate) tree: &'a mut ElementTree,
     node_id: ElementNodeId,
     font_manager: &'a mut FontManager,
     text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
     resource_map: &'a ResourceMap,
-    /// The boa JS runtime. Held so `read_val` can (in later phases) recompute
-    /// stale derived atoms lazily; layout is the only rendering phase with JS
-    /// access. Paint never touches this.
-    pub(crate) boa: &'a mut Context,
+    /// Read-only JS engine face. Held so `read_val` can (lazily) recompute
+    /// stale derived atoms; this is the only JS access layout has, and the face
+    /// exposes **only** `read` — no `set` / mutation is reachable from layout.
+    /// `'js` is the lifetime of the borrowed JS `Context` (independent of the
+    /// tree/manager borrow `'a` so the face can be re-borrowed recursively).
+    pub(crate) js: &'a mut ReactiveReadJsContext<'js>,
 }
 
-impl<'a> LayoutContext<'a> {
+impl<'a, 'js> LayoutContext<'a, 'js> {
     pub(crate) fn new(
         tree: &'a mut ElementTree,
         node_id: ElementNodeId,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &'a ResourceMap,
-        boa: &'a mut Context,
+        js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Self {
         LayoutContext {
             tree,
@@ -36,7 +38,7 @@ impl<'a> LayoutContext<'a> {
             font_manager,
             text_layout_cx,
             resource_map,
-            boa,
+            js,
         }
     }
 
@@ -47,7 +49,7 @@ impl<'a> LayoutContext<'a> {
             self.font_manager,
             self.text_layout_cx,
             self.resource_map,
-            self.boa,
+            self.js,
         )
     }
 
@@ -124,9 +126,9 @@ impl<'a> LayoutContext<'a> {
         self.resource_map.get_image(resource_id).map(|r| r.natural_size)
     }
 
-    /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
-    /// atom is read from the store (no boa `Context` needed). Subscription is
-    /// **not** established here — it is declared explicitly in the element's
+    /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom
+    /// is read through the read-only JS face. Subscription is **not**
+    /// established here — it is declared explicitly in the element's
     /// `subscribe` phase (see [`crate::core::layout::ElementSubscribe`]).
     ///
     /// Returns `None` if the prop is absent (`Option<Val<T>>::None`) or the
@@ -135,8 +137,7 @@ impl<'a> LayoutContext<'a> {
         match val {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
-                let store = self.tree.store_read_only()?;
-                let js = store.read(*readable, self.boa);
+                let js = self.js.read(*readable);
                 T::from_js(&js)
             }
         }

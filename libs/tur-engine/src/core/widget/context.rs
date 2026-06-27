@@ -4,7 +4,7 @@ use boa_engine::{Context, JsValue};
 use crate::core::bridge::TurJsContext;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementObject};
-use crate::core::reactive::{Readable, ReactiveRead};
+use crate::core::reactive::{Readable, ReactiveReadStore};
 
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
@@ -27,7 +27,7 @@ impl WidgetCx {
     // ----- reactive store -----------------------------------------------------
 
     /// Read-only view of the reactive store for resolving atom values.
-    pub fn store_read_only(&self) -> ReactiveRead {
+    pub fn store_read_only(&self) -> ReactiveReadStore {
         self.js_ctx.store.read_only()
     }
 

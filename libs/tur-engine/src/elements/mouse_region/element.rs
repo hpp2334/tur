@@ -2,11 +2,12 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use tur_shared::{HitTestBehavior, Offset};
+use tur_shared::{Cursor, HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::layout::SubscribeCx;
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
 };
@@ -14,8 +15,9 @@ use crate::core::widget::{
 // ---------------------------------------------------------------------------
 // MouseRegionComponent — the user's declaration. Pure Rust, no JsValues.
 //
-// `cursor` is reactive (`Val<String>`); the resolved value is read on every
-// pointer-region hit-path change. `on_enter` / `on_exit` are mutation atoms
+// `cursor` is reactive (`Val<Cursor>`); it is resolved to a concrete `Cursor`
+// during layout (where the JS engine is available) and read by the pointer-
+// region handler at event time. `on_enter` / `on_exit` are mutation atoms
 // invoked by the pointer-region handler when this region enters or leaves
 // the hit-path.
 // ---------------------------------------------------------------------------
@@ -23,7 +25,7 @@ use crate::core::widget::{
 #[derive(Clone)]
 pub struct MouseRegionComponent {
     pub behavior: Option<Val<HitTestBehavior>>,
-    pub cursor: Option<Val<String>>,
+    pub cursor: Option<Val<Cursor>>,
     pub on_enter: Option<EdgyMutation<PointerRegionEvent>>,
     pub on_exit: Option<EdgyMutation<PointerRegionEvent>>,
     pub child: Option<Rc<dyn Component>>,
@@ -43,6 +45,7 @@ impl Component for MouseRegionComponent {
             AnyElement::new(MouseRegionElement {
                 component: self.clone(),
                 behavior,
+                cursor: None,
             })
             .with_callbacks(),
             boa,
@@ -57,13 +60,15 @@ impl Component for MouseRegionComponent {
 
 // ---------------------------------------------------------------------------
 // MouseRegionElement — the built element. Stores spec + eagerly-resolved
-// behavior (read by the pointer-region handler at event time where no
-// store/Context is available).
+// behavior (resolved at build) and the layout-resolved `cursor`. Both are
+// read by the pointer-region handler at event time, where no store/Context is
+// available.
 // ---------------------------------------------------------------------------
 
 pub struct MouseRegionElement {
     pub component: MouseRegionComponent,
     behavior: HitTestBehavior,
+    pub(crate) cursor: Option<Cursor>,
 }
 
 impl MouseRegionElement {
@@ -75,20 +80,31 @@ impl MouseRegionElement {
         self.component.cursor.is_some()
     }
 
+    /// The layout-resolved cursor for this region, if any.
+    pub fn resolved_cursor(&self) -> Option<Cursor> {
+        self.cursor
+    }
+
     pub fn is_region_opaque(&self) -> bool {
         self.behavior == HitTestBehavior::Opaque && self.has_region_callbacks()
     }
 }
 
-impl crate::core::layout::ElementSubscribe for MouseRegionElement {}
+impl crate::core::layout::ElementSubscribe for MouseRegionElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        if let Some(v) = self.component.cursor.as_ref() {
+            cx.subscribe_val(v);
+        }
+    }
+}
 
 impl Effect for MouseRegionElement {}
 
 impl ElementTrace for MouseRegionElement {
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
         let mut p = vec![("behavior", TraceValue::Str(format!("{:?}", self.behavior)))];
-        if let Some(v) = self.component.cursor.as_ref().and_then(Val::as_static) {
-            p.push(("cursor", TraceValue::Str(v.clone())));
+        if let Some(c) = self.component.cursor.as_ref().and_then(Val::as_static) {
+            p.push(("cursor", TraceValue::Str(c.as_str().to_string())));
         }
         p
     }
@@ -124,7 +140,7 @@ impl MouseRegionComponent {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         MouseRegionComponent {
             behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
-            cursor: prop_val::<String>(props, "cursor", ctx),
+            cursor: prop_val::<Cursor>(props, "cursor", ctx),
             on_enter: prop_mutation::<PointerRegionEvent>(props, "onEnter", ctx),
             on_exit: prop_mutation::<PointerRegionEvent>(props, "onExit", ctx),
             child: prop_child(props, "child", ctx),

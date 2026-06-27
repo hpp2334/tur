@@ -7,7 +7,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::{ElementObject, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
-use crate::core::reactive::{ReactiveRead, Store, SubscriberId};
+use crate::core::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::resource::ResourceMap;
 
@@ -16,39 +16,23 @@ pub struct ElementTree {
     pub(crate) nodes: HashMap<ElementNodeId, ElementObject>,
     root_id: Option<ElementNodeId>,
     next_id: u64,
-    /// Reactive store (set via `set_store`).  Kept as the owner `Store` but
-    /// **private**: business code (element impls, layout) obtains a read-only
-    /// view via [`ElementTree::store_read_only`] and cannot reach the
-    /// subscriber-index / flush-engine capabilities.
-    store: Option<Store>,
-}
-
-impl Default for ElementTree {
-    fn default() -> Self {
-        Self::new()
-    }
+    store: Store,
+    /// Cached read-only reactive face; the layout driver wraps this in a
+    /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
+    /// read atoms, never `set` / mutate.
+    read_face: ReactiveReadStore,
 }
 
 impl ElementTree {
-    pub fn new() -> Self {
+    pub fn new(store: Store) -> Self {
+        let read_face = store.read_only();
         ElementTree {
             nodes: HashMap::new(),
             root_id: None,
             next_id: 1,
-            store: None,
+            store,
+            read_face,
         }
-    }
-
-    /// Attach the reactive store so layout/paint can resolve `Val<T>`.
-    pub fn set_store(&mut self, store: Store) {
-        self.store = Some(store);
-    }
-
-    /// Read-only view over the reactive store, for business code that needs to
-    /// resolve `Val<T>` / atom values. Returns `None` until `set_store` is
-    /// called.
-    pub(crate) fn store_read_only(&self) -> Option<ReactiveRead> {
-        self.store.as_ref().map(|s| s.read_only())
     }
 
     pub fn alloc_id(&mut self) -> ElementNodeId {
@@ -225,17 +209,18 @@ impl ElementTree {
             None => return constraints.constrain(Size::ZERO),
         };
 
-        self.layout(root_id, constraints, font_manager, text_layout_cx, resource_map, boa)
+        let mut js = ReactiveReadJsContext::new(self.read_face.clone(), boa);
+        self.layout(root_id, constraints, font_manager, text_layout_cx, resource_map, &mut js)
     }
 
-    pub(crate) fn layout(
-        &mut self,
+    pub(crate) fn layout<'a, 'js>(
+        &'a mut self,
         id: ElementNodeId,
         constraints: &Constraints,
-        font_manager: &mut FontManager,
-        text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        resource_map: &ResourceMap,
-        boa: &mut boa_engine::Context,
+        font_manager: &'a mut FontManager,
+        text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
+        resource_map: &'a ResourceMap,
+        js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Size {
         let (is_dirty, constraints_changed) = self
             .nodes
@@ -260,7 +245,7 @@ impl ElementTree {
             .and_then(|n| n.element.take())
             .expect("element missing during layout");
 
-        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, boa);
+        let mut cx = LayoutContext::new(self, id, font_manager, text_layout_cx, resource_map, js);
         // `perform_layout` measures the children (recursively laying each out
         // via `cx.layout_child`), computes this node's size, and assigns each
         // child's offset — all in one pass.
@@ -269,10 +254,9 @@ impl ElementTree {
         // Explicit subscribe phase: re-declare this node's reactive deps so a
         // future reactive flush can mark it dirty. The `SubscribeCx` swap
         // (on drop) replaces the node's prior subscriptions.
-        if let Some(sub_index) = cx.tree.store.as_ref().map(|s| s.subscriber_index()) {
-            let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.as_u64()));
-            element.subscribe(&mut sub_cx);
-        }
+        let sub_index = cx.tree.store.subscriber_index();
+        let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.as_u64()));
+        element.subscribe(&mut sub_cx);
 
         let constrained = constraints.constrain(size);
         let node = cx.tree.nodes.get_mut(&id).unwrap();

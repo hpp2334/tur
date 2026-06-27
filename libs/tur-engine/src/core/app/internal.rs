@@ -28,13 +28,16 @@ impl TurAppInternal {
         use crate::core::elements::ElementTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
+        use crate::core::reactive::Store;
         use crate::core::resource::ResourceMap;
 
-        let element_tree = Rc::new(RefCell::new(ElementTree::new()));
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
+
+        let store = Store::new(dirty.clone());
+        let element_tree = Rc::new(RefCell::new(ElementTree::new(store.clone())));
 
         let js_context = TurJsContext::new(
             element_tree.clone(),
@@ -42,11 +45,8 @@ impl TurAppInternal {
             focus_manager.clone(),
             dirty,
             resource_map.clone(),
+            store,
         );
-
-        // Give the tree access to the reactive store so layout/paint can
-        // resolve `Val<T>` values on demand.
-        element_tree.borrow_mut().set_store(js_context.store.clone());
 
         let app_context = TurAppContext::new(
             element_tree,

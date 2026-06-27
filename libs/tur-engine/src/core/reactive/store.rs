@@ -84,7 +84,7 @@ impl FlushState {
 // ---------------------------------------------------------------------------
 // SubscriberGraph — the ONE cleanly-separable concern.  Owns the
 // atom↔subscriber edge index in its own `Rc<RefCell<..>>`, fully independent
-// of the reactive core.  `SubscriberIndex` wraps this directly, so the write
+// of the reactive core.  `SubscriberIndexStore` wraps this directly, so the write
 // entry point (`set_subscriber_deps`) and the dirty query (`dirty_subscribers`)
 // operate on genuinely separate data — not a view over the core blob.
 // ---------------------------------------------------------------------------
@@ -289,15 +289,6 @@ impl ReactiveCore {
             .unwrap_or(JsValue::undefined())
     }
 
-    pub(crate) fn get_cached<T>(&self, readable: Readable<T>) -> JsValue {
-        self.atoms
-            .values
-            .borrow()
-            .get(&readable.id())
-            .cloned()
-            .unwrap_or(JsValue::undefined())
-    }
-
     pub(crate) fn set_source<T>(&self, source: Source<T>, value: JsValue) {
         let id = source.0;
         let prev = self.atoms.values.borrow().get(&id).cloned();
@@ -413,8 +404,8 @@ impl Store {
 
     /// Read-only view for business code: resolve atom values without the
     /// ability to create atoms, write, or touch the subscriber index / engine.
-    pub(crate) fn read_only(&self) -> ReactiveRead {
-        ReactiveRead {
+    pub(crate) fn read_only(&self) -> ReactiveReadStore {
+        ReactiveReadStore {
             core: self.core.clone(),
         }
     }
@@ -422,16 +413,16 @@ impl Store {
     /// View over the atom↔subscriber index (the independent `SubscriberGraph`):
     /// declare a subscriber's deps and query which subscribers depend on a set
     /// of atoms. Held by `SubscribeCx` (write) and the layout driver (read).
-    pub(crate) fn subscriber_index(&self) -> SubscriberIndex {
-        SubscriberIndex {
+    pub(crate) fn subscriber_index(&self) -> SubscriberIndexStore {
+        SubscriberIndexStore {
             graph: self.graph.clone(),
         }
     }
 
     /// View over the stale/dirty engine: drain pending source changes and
     /// report whether any are pending. Held by the layout driver.
-    pub(crate) fn flush_engine(&self) -> FlushEngine {
-        FlushEngine {
+    pub(crate) fn flush_engine(&self) -> FlushEngineStore {
+        FlushEngineStore {
             core: self.core.clone(),
         }
     }
@@ -447,7 +438,7 @@ impl Store {
     /// The JS-bridge capability face: atom creation (`source`/`derive`/
     /// `mutate`), read, write (`set_source`/`invoke_mutation`), and ctx-object
     /// building. This is the **only** way to mint atoms — `Store` itself no
-    /// longer exposes creation, mirroring how `SubscriberIndex` is the only
+    /// longer exposes creation, mirroring how `SubscriberIndexStore` is the only
     /// way to reach `set_subscriber_deps`.
     pub(crate) fn bridge(&self) -> ReactiveBridgeStore {
         ReactiveBridgeStore {
@@ -463,38 +454,66 @@ impl std::fmt::Debug for Store {
 }
 
 // ---------------------------------------------------------------------------
-// ReactiveRead — read-only capability face for business code (element impls,
+// ReactiveReadStore — read-only capability face for business code (element impls,
 // layout, widgets, handlers). Wraps the core but exposes only value reads.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ReactiveRead {
+pub struct ReactiveReadStore {
     core: Rc<RefCell<ReactiveCore>>,
 }
 
-impl ReactiveRead {
+impl ReactiveReadStore {
     pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
         self.core.borrow().read(readable, ctx)
     }
+}
 
-    pub fn get_cached<T>(&self, readable: Readable<T>) -> JsValue {
-        self.core.borrow().get_cached(readable)
+impl std::fmt::Debug for ReactiveReadStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReactiveReadStore").finish_non_exhaustive()
     }
 }
 
 // ---------------------------------------------------------------------------
-// SubscriberIndex — capability face over the **independent** subscriber graph.
+// ReactiveReadJsContext — the layout-only engine face. Holds a `ReactiveReadStore`
+// (the read-only reactive face) plus a borrow of the JS engine, and exposes
+// **only** `read`. Layout code — which holds `&mut ReactiveReadJsContext` via
+// `LayoutContext` — therefore cannot reach `set` / `invoke_mutation` / global
+// registration; the raw `Context` lives only at the trusted app/bridge boundary.
+// ---------------------------------------------------------------------------
+
+pub struct ReactiveReadJsContext<'a> {
+    read: ReactiveReadStore,
+    boa: &'a mut Context,
+}
+
+impl<'a> ReactiveReadJsContext<'a> {
+    pub(crate) fn new(read: ReactiveReadStore, boa: &'a mut Context) -> Self {
+        ReactiveReadJsContext { read, boa }
+    }
+
+    /// Resolve a `Readable<T>` to its current JS value, lazily recomputing a
+    /// stale `Derived` if necessary. This is the only operation exposed to the
+    /// layout phase — there is no `set`, no mutation, no engine mutation here.
+    pub fn read<T>(&mut self, readable: Readable<T>) -> JsValue {
+        self.read.read(readable, self.boa)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SubscriberIndexStore — capability face over the **independent** subscriber graph.
 // `set_subscriber_deps` (used by `SubscribeCx`) and `dirty_subscribers` (used
 // by the layout driver) operate on `SubscriberGraph`'s own data, fully
 // decoupled from the reactive core.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct SubscriberIndex {
+pub struct SubscriberIndexStore {
     graph: Rc<RefCell<SubscriberGraph>>,
 }
 
-impl SubscriberIndex {
+impl SubscriberIndexStore {
     pub fn set_subscriber_deps(&self, sub: SubscriberId, deps: HashSet<AtomId>) {
         self.graph.borrow().set_subscriber_deps(sub, deps);
     }
@@ -505,17 +524,17 @@ impl SubscriberIndex {
 }
 
 // ---------------------------------------------------------------------------
-// FlushEngine — capability face over the stale/dirty engine. Drains pending
+// FlushEngineStore — capability face over the stale/dirty engine. Drains pending
 // source changes (`flush`) and reports whether any are pending (`has_pending`).
 // Held by the layout driver.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct FlushEngine {
+pub struct FlushEngineStore {
     core: Rc<RefCell<ReactiveCore>>,
 }
 
-impl FlushEngine {
+impl FlushEngineStore {
     pub fn flush(&self) -> HashSet<AtomId> {
         self.core.borrow().flush()
     }

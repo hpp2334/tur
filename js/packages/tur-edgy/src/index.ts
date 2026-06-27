@@ -215,6 +215,47 @@ export function PointerInteract(props: PointerInteractProps): EdgyElement {
 }
 
 // ---------------------------------------------------------------------------
+// Cursor — the set of OS cursor styles (standard CSS cursor keywords). Mirrors
+// the `tur_shared::Cursor` enum; the bridge decodes the keyword string.
+export type Cursor =
+    | "auto"
+    | "default"
+    | "none"
+    | "context-menu"
+    | "help"
+    | "pointer"
+    | "progress"
+    | "wait"
+    | "cell"
+    | "crosshair"
+    | "text"
+    | "vertical-text"
+    | "alias"
+    | "copy"
+    | "move"
+    | "no-drop"
+    | "not-allowed"
+    | "grab"
+    | "grabbing"
+    | "e-resize"
+    | "n-resize"
+    | "ne-resize"
+    | "nw-resize"
+    | "s-resize"
+    | "se-resize"
+    | "sw-resize"
+    | "w-resize"
+    | "ew-resize"
+    | "ns-resize"
+    | "nesw-resize"
+    | "nwse-resize"
+    | "col-resize"
+    | "row-resize"
+    | "all-scroll"
+    | "zoom-in"
+    | "zoom-out";
+
+// ---------------------------------------------------------------------------
 // MouseRegion — declarative cursor + hover (enter/exit) callbacks. Mirrors
 // Flutter's `MouseRegion`. Use this (NOT PointerInteract) when you need to
 // change the OS cursor or detect pointer enter/exit. Use PointerInteract for
@@ -227,9 +268,8 @@ export interface PointerRegionEvent {
 }
 
 export interface MouseRegionProps {
-    /** CSS cursor keyword: "default" | "pointer" | "col-resize" | "ew-resize"
-     *  | "grab" | "grabbing" | "text" | "not-allowed" | ... */
-    cursor?: Val<string>;
+    /** OS cursor style. See {@link Cursor}. */
+    cursor?: Val<Cursor>;
     onEnter?: Mutation<[PointerRegionEvent]>;
     onExit?: Mutation<[PointerRegionEvent]>;
     behavior?: Val<number>;

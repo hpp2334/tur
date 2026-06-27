@@ -11,7 +11,7 @@ use boa_gc::{Finalize, Trace};
 mod store;
 
 pub use store::Store;
-pub(crate) use store::{ReactiveCore, ReactiveRead, SubscriberIndex};
+pub(crate) use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, SubscriberIndexStore};
 
 /// Unique identifier for a reactive atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
