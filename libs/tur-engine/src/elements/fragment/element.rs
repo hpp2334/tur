@@ -42,6 +42,8 @@ pub struct FragmentElement {
     pub component: FragmentComponent,
 }
 
+impl crate::core::layout::ElementSubscribe for FragmentElement {}
+
 impl Effect for FragmentElement {}
 
 impl ElementTrace for FragmentElement {}

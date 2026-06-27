@@ -7,7 +7,7 @@ use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};
 use crate::core::widget::Effect;
 use crate::core::keyboard::AppKeyEvent;
-use crate::core::layout::{ElementLayout, LayoutContext};
+use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
 use crate::core::event::AppImeEvent;
@@ -50,6 +50,8 @@ trait Erased: 'static {
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+
+    fn subscribe(&self, cx: &mut SubscribeCx);
 
     fn run_effect(
         &mut self,
@@ -97,7 +99,7 @@ fn ime_dispatch<E: ElementOnIme + 'static>(
 
 impl<E> Erased for E
 where
-    E: ElementLayout + ElementRender + ElementTrace + Effect + 'static,
+    E: ElementLayout + ElementRender + ElementTrace + Effect + ElementSubscribe + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -156,6 +158,10 @@ where
         <Self as ElementRender>::hit_test(self, position, layout)
     }
 
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        <Self as ElementSubscribe>::subscribe(self, cx)
+    }
+
     fn run_effect(
         &mut self,
         cx: &mut crate::core::widget::WidgetCx,
@@ -167,7 +173,7 @@ where
 }
 
 impl AnyElement {
-    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Effect + 'static>(
+    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Effect + ElementSubscribe + 'static>(
         element: E,
     ) -> Self {
         AnyElement {
@@ -185,6 +191,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnKeyboard
             + ElementOnGesture
             + 'static,
@@ -206,6 +213,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnGesture
             + 'static,
     >(
@@ -226,6 +234,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnWheel
             + 'static,
     >(
@@ -246,6 +255,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnFocus
             + 'static,
     >(
@@ -266,6 +276,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnFocus
             + ElementOnGesture
             + 'static,
@@ -287,6 +298,7 @@ impl AnyElement {
             + ElementRender
             + ElementTrace
             + Effect
+            + ElementSubscribe
             + ElementOnKeyboard
             + ElementOnGesture
             + ElementOnFocus
@@ -361,6 +373,12 @@ impl AnyElement {
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
+    }
+
+    /// Declare this element's reactive atom dependencies into `cx` (the
+    /// explicit subscribe phase). No-op for elements without reactive props.
+    pub fn subscribe(&self, cx: &mut SubscribeCx) {
+        self.inner.subscribe(cx)
     }
 
     /// Run the widget's effect hook (Condition branch swap, LazyList range

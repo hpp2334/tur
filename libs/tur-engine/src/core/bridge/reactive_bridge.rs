@@ -5,7 +5,7 @@ use boa_engine::{Context, JsArgs, JsResult, JsValue};
 
 use crate::core::bridge::{BoaOpaque, TurJsContext};
 use crate::core::reactive::{
-    build_store_context_object, extract_handle, AtomHandle, AtomKind, Mutation, Source,
+    extract_handle, AtomHandle, AtomKind, Mutation, Source,
 };
 
 fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
@@ -45,7 +45,7 @@ pub(crate) fn tur_source(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let value = args.get_or_undefined(1).clone();
-    let source = js_ctx.store.source::<JsValue>(value);
+    let source = js_ctx.store.bridge().source::<JsValue>(value);
     let opaque = BoaOpaque::new(AtomHandle::new(source.id(), AtomKind::Source), context);
     Ok(opaque.object().clone().into())
 }
@@ -57,7 +57,7 @@ pub(crate) fn tur_derive(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let closure = require_callable(args, 1)?;
-    let derived = js_ctx.store.derive::<JsValue>(closure);
+    let derived = js_ctx.store.bridge().derive::<JsValue>(closure);
     let opaque = BoaOpaque::new(AtomHandle::new(derived.id(), AtomKind::Derived), context);
     Ok(opaque.object().clone().into())
 }
@@ -69,7 +69,7 @@ pub(crate) fn tur_mutate(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let closure = require_callable(args, 1)?;
-    let mutation = js_ctx.store.mutate(closure);
+    let mutation = js_ctx.store.bridge().mutate(closure);
     let opaque = BoaOpaque::new(AtomHandle::new(mutation.0, AtomKind::Mutation), context);
     Ok(opaque.object().clone().into())
 }
@@ -81,7 +81,7 @@ pub(crate) fn tur_get(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let readable = crate::core::reactive::require_readable::<JsValue>(args, 1)?;
-    Ok(js_ctx.store.read(readable, context))
+    Ok(js_ctx.store.bridge().read(readable, context))
 }
 
 pub(crate) fn tur_set(
@@ -90,6 +90,7 @@ pub(crate) fn tur_set(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
+    let bridge = js_ctx.store.bridge();
     let handle = extract_handle(args.get_or_undefined(1)).ok_or_else(|| {
         boa_engine::JsError::from(
             boa_engine::JsNativeError::typ().with_message("expected an atom handle"),
@@ -97,17 +98,17 @@ pub(crate) fn tur_set(
     })?;
     match handle.kind {
         AtomKind::Mutation => {
-            let ctx_obj = build_store_context_object(context, js_ctx.store.clone())?;
+            let ctx_obj = bridge.ctx_object(context)?;
             let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
             invoke_args.push(ctx_obj.into());
             if let Some(extra) = args.get(2..) {
                 invoke_args.extend_from_slice(extra);
             }
-            js_ctx.store.invoke_mutation(Mutation(handle.id), &invoke_args, context)
+            bridge.invoke_mutation(Mutation(handle.id), &invoke_args, context)
         }
         AtomKind::Source => {
             let value = args.get_or_undefined(2).clone();
-            js_ctx.store.set_source(Source::<JsValue>::from_id(handle.id), value);
+            bridge.set_source(Source::<JsValue>::from_id(handle.id), value);
             Ok(JsValue::undefined())
         }
         AtomKind::Derived => Err(boa_engine::JsError::from(

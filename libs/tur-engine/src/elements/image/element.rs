@@ -5,6 +5,7 @@ use boa_engine::Context;
 use tur_shared::BoxFit;
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
@@ -61,6 +62,16 @@ pub struct ImageElement {
 }
 
 impl Effect for ImageElement {}
+
+impl ElementSubscribe for ImageElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.resource_id.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for ImageElement {
     fn trace_label(&self) -> String {

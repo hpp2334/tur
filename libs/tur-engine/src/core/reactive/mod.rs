@@ -1,5 +1,7 @@
+use std::cell::RefCell;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
@@ -9,6 +11,7 @@ use boa_gc::{Finalize, Trace};
 mod store;
 
 pub use store::Store;
+pub(crate) use store::{ReactiveCore, ReactiveRead, SubscriberIndex};
 
 /// Unique identifier for a reactive atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -282,19 +285,22 @@ pub fn extract_handle(value: &JsValue) -> Option<AtomHandle> {
 }
 
 /// Build the per-store `{ get, set }` JS context object that closures receive
-/// as their first argument.
-pub fn build_store_context_object(
+/// as their first argument. Takes the reactive core directly — `get`/`set`
+/// only ever call `read` / `set_source` / `invoke_mutation` (core-only), never
+/// the subscriber graph, so the independent `SubscriberGraph` need not be
+/// threaded in here.
+pub(crate) fn build_store_context_object(
     context: &mut Context,
-    store: Store,
+    core: Rc<RefCell<ReactiveCore>>,
 ) -> JsResult<JsObject> {
     let proto = context.intrinsics().constructors().object().prototype();
     let obj = JsObject::from_proto_and_data(proto, ());
 
-    let store_for_get = store.clone();
+    let core_for_get = core.clone();
     let get_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let readable = require_readable::<JsValue>(args, 0)?;
-            Ok(store_for_get.read(readable, ctx))
+            Ok(core_for_get.borrow().read(readable, ctx))
         })
     };
     let get_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), get_fn)
@@ -309,7 +315,7 @@ pub fn build_store_context_object(
         .build();
     obj.insert_property(js_string!("get"), get_desc);
 
-    let store_for_set = store.clone();
+    let core_for_set = core.clone();
     let set_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let handle = extract_handle(args.get_or_undefined(0)).ok_or_else(|| {
@@ -320,17 +326,19 @@ pub fn build_store_context_object(
             match handle.kind {
                 AtomKind::Mutation => {
                     let mutation = Mutation(handle.id);
-                    let ctx_obj = build_store_context_object(ctx, store_for_set.clone())?;
+                    let ctx_obj = build_store_context_object(ctx, core_for_set.clone())?;
                     let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
                     invoke_args.push(ctx_obj.into());
                     if let Some(extra) = args.get(1..) {
                         invoke_args.extend_from_slice(extra);
                     }
-                    store_for_set.invoke_mutation(mutation, &invoke_args, ctx)
+                    core_for_set.borrow().invoke_mutation(mutation, &invoke_args, ctx)
                 }
                 AtomKind::Source => {
                     let value = args.get_or_undefined(1).clone();
-                    store_for_set.set_source(Source::<JsValue>::from_id(handle.id), value);
+                    core_for_set
+                        .borrow()
+                        .set_source(Source::<JsValue>::from_id(handle.id), value);
                     Ok(JsValue::undefined())
                 }
                 AtomKind::Derived => Err(JsError::from(

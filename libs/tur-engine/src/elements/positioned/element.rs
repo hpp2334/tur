@@ -4,6 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
@@ -47,6 +48,18 @@ pub struct PositionedElement {
 }
 
 impl Effect for PositionedElement {}
+
+impl ElementSubscribe for PositionedElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        let c = &self.component;
+        if let Some(v) = c.left.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.top.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.right.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.bottom.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
+    }
+}
 
 impl ElementTrace for PositionedElement {
     fn trace_label(&self) -> String {

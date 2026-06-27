@@ -442,6 +442,8 @@ impl LazyListElement {
 // flush loop triggers this effect).
 // ---------------------------------------------------------------------------
 
+impl crate::core::layout::ElementSubscribe for LazyListElement {}
+
 impl Effect for LazyListElement {
     fn effect(
         &mut self,

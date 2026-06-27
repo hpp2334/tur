@@ -80,6 +80,8 @@ impl MouseRegionElement {
     }
 }
 
+impl crate::core::layout::ElementSubscribe for MouseRegionElement {}
+
 impl Effect for MouseRegionElement {}
 
 impl ElementTrace for MouseRegionElement {

@@ -4,6 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
 
@@ -38,6 +39,17 @@ pub struct ExpandedElement {
 }
 
 impl Effect for ExpandedElement {}
+
+impl ElementSubscribe for ExpandedElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        // The flex prop is read by the parent via `child_flex`, but declaring
+        // it here dirties this node — and `mark_dirty` propagates up to the
+        // parent Flex, redistributing flex space.
+        if let Some(v) = self.component.flex.as_ref() {
+            cx.subscribe_val(v);
+        }
+    }
+}
 
 impl ElementTrace for ExpandedElement {
     fn trace_label(&self) -> String {

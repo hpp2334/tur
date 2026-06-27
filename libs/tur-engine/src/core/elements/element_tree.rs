@@ -6,8 +6,8 @@ use tur_shared::{Constraints, Offset, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{ElementObject, TraceValue};
 use crate::core::fonts::FontManager;
-use crate::core::layout::LayoutContext;
-use crate::core::reactive::{Store, SubscriberId};
+use crate::core::layout::{LayoutContext, SubscribeCx};
+use crate::core::reactive::{ReactiveRead, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::resource::ResourceMap;
 
@@ -16,9 +16,11 @@ pub struct ElementTree {
     pub(crate) nodes: HashMap<ElementNodeId, ElementObject>,
     root_id: Option<ElementNodeId>,
     next_id: u64,
-    /// Reactive store (set via `set_store`).  Enables `LayoutContext` and
-    /// `PaintContext` to resolve `Val<T>` values on demand.
-    pub(crate) store: Option<Store>,
+    /// Reactive store (set via `set_store`).  Kept as the owner `Store` but
+    /// **private**: business code (element impls, layout) obtains a read-only
+    /// view via [`ElementTree::store_read_only`] and cannot reach the
+    /// subscriber-index / flush-engine capabilities.
+    store: Option<Store>,
 }
 
 impl Default for ElementTree {
@@ -40,6 +42,13 @@ impl ElementTree {
     /// Attach the reactive store so layout/paint can resolve `Val<T>`.
     pub fn set_store(&mut self, store: Store) {
         self.store = Some(store);
+    }
+
+    /// Read-only view over the reactive store, for business code that needs to
+    /// resolve `Val<T>` / atom values. Returns `None` until `set_store` is
+    /// called.
+    pub(crate) fn store_read_only(&self) -> Option<ReactiveRead> {
+        self.store.as_ref().map(|s| s.read_only())
     }
 
     pub fn alloc_id(&mut self) -> ElementNodeId {
@@ -239,12 +248,6 @@ impl ElementTree {
                 .unwrap_or(Size::ZERO);
         }
 
-        // Clear stale atom deps for this node — they'll be re-registered
-        // during layout as the element calls `cx.read_val`.
-        if let Some(store) = self.store.as_ref() {
-            store.clear_subscriber(SubscriberId::new(id.as_u64()));
-        }
-
         let children = self
             .nodes
             .get(&id)
@@ -262,6 +265,14 @@ impl ElementTree {
         // via `cx.layout_child`), computes this node's size, and assigns each
         // child's offset — all in one pass.
         let size = element.perform_layout(constraints, &children, &mut cx);
+
+        // Explicit subscribe phase: re-declare this node's reactive deps so a
+        // future reactive flush can mark it dirty. The `SubscribeCx` swap
+        // (on drop) replaces the node's prior subscriptions.
+        if let Some(sub_index) = cx.tree.store.as_ref().map(|s| s.subscriber_index()) {
+            let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.as_u64()));
+            element.subscribe(&mut sub_cx);
+        }
 
         let constrained = constraints.constrain(size);
         let node = cx.tree.nodes.get_mut(&id).unwrap();
