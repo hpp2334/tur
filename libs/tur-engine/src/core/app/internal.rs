@@ -2,6 +2,8 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use boa_engine::context::time::FixedClock;
+
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
@@ -24,6 +26,8 @@ impl TurAppInternal {
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
+        clock: std::rc::Rc<FixedClock>,
+        host_api: Box<dyn crate::core::host_api::HostApi>,
     ) -> Self {
         use crate::core::elements::ElementTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
@@ -55,6 +59,8 @@ impl TurAppInternal {
             resource_map,
             renderer,
             font_loader,
+            clock,
+            host_api,
         );
 
         let needs_draw = Rc::new(Cell::new(false));
@@ -127,8 +133,7 @@ impl TurAppInternal {
         }
 
         if needs_render {
-            let now_ms = boa_context.clock().now().millis_since_epoch();
-            self.app_context.borrow_mut().render(now_ms);
+            self.app_context.borrow_mut().render();
             if let Err(e) = self.app_context.borrow_mut().renderer.present() {
                 tracing::error!("present failed: {e}");
                 return Err(TurError::Render(e.to_string()));
@@ -215,7 +220,7 @@ impl TurAppInternal {
     }
 
     fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {
-        let now_ms = boa_context.clock().now().millis_since_epoch();
+        let now_ms = self.app_context.borrow().shell.now().as_millis() as u64;
         let mut mgr = self.js_context.animation_manager.borrow_mut();
         mgr.tick_controllers(now_ms, boa_context);
         let has_active = mgr.has_active();

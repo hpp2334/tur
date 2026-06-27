@@ -4,6 +4,7 @@ use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Renderer as TurRenderer;
 use crate::core::resource::ResourceMap;
+use crate::core::shell::PaintShell;
 use crate::renderer::vello::paint_context::VelloPaintContext;
 use vello::kurbo::Affine;
 use vello::peniko::Color;
@@ -139,11 +140,17 @@ impl VelloRenderer {
         );
     }
 
-    pub fn render_to_scene(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
+    pub fn render_to_scene(
+        &mut self,
+        tree: &ElementTree,
+        focused_node_id: Option<ElementNodeId>,
+        resource_map: &ResourceMap,
+        shell: PaintShell<'_>,
+    ) {
         self.scene.reset();
         let mut fragment = Scene::new();
         let mut ctx = VelloPaintContext::new(&mut fragment);
-        tree.paint(&mut ctx, focused_node_id, resource_map, now_ms);
+        tree.paint(&mut ctx, focused_node_id, resource_map, shell);
         self.scene.append(&fragment, Some(Affine::scale(self.dpr)));
     }
 
@@ -281,8 +288,14 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
-        self.render_to_scene(tree, focused_node_id, resource_map, now_ms);
+    fn render(
+        &mut self,
+        tree: &ElementTree,
+        focused_node_id: Option<ElementNodeId>,
+        resource_map: &ResourceMap,
+        shell: PaintShell<'_>,
+    ) {
+        self.render_to_scene(tree, focused_node_id, resource_map, shell);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

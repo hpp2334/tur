@@ -31,6 +31,19 @@ struct WasmState {
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
+/// Embedder-side `HostApi`: the engine pushes the resolved cursor here during
+/// `apply_changes`, and we apply it straight to the host canvas. This replaces
+/// the old per-frame `take_current_cursor` poll.
+struct WasmHostApi {
+    canvas: web_sys::HtmlCanvasElement,
+}
+
+impl tur_engine::core::host_api::HostApi for WasmHostApi {
+    fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
+        let _ = self.canvas.style().set_property("cursor", cursor.as_str());
+    }
+}
+
 #[wasm_bindgen]
 pub struct TurWasmApp {
     state: Rc<RefCell<Option<WasmState>>>,
@@ -424,6 +437,9 @@ impl TurWasmApp {
             let mut app = TurApp::new(
                 Box::new(renderer),
                 Box::new(PresetFontLoader::new()),
+                Box::new(WasmHostApi {
+                    canvas: canvas.clone(),
+                }),
             )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
@@ -895,12 +911,6 @@ impl TurWasmApp {
                             }
                         }
                     });
-                }
-
-                // Apply any pending cursor change requested by a handler
-                // (e.g. MouseRegion setting ColResize on hover).
-                if let Some(cursor) = s.app.take_current_cursor() {
-                    let _ = s._canvas.style().set_property("cursor", cursor.as_str());
                 }
 
                 let is_editable = s.app.focused_is_editable();

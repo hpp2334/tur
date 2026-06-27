@@ -9,6 +9,7 @@ use crate::core::fonts::FontManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
+use crate::core::shell::PaintShell;
 use crate::core::resource::ResourceMap;
 
 #[derive(Debug)]
@@ -267,14 +268,28 @@ impl ElementTree {
         constrained
     }
 
-    pub fn paint(&self, canvas: &mut dyn Canvas, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64) {
+    pub fn paint(
+        &self,
+        canvas: &mut dyn Canvas,
+        focused_node_id: Option<ElementNodeId>,
+        resource_map: &ResourceMap,
+        shell: PaintShell<'_>,
+    ) {
         let root_id = match self.root_id {
             Some(id) => id,
             None => return,
         };
-        self.paint_node(root_id, canvas, Offset::ZERO, focused_node_id, resource_map, now_ms);
+        self.paint_node(
+            root_id,
+            canvas,
+            Offset::ZERO,
+            focused_node_id,
+            resource_map,
+            shell,
+        );
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn paint_node(
         &self,
         id: ElementNodeId,
@@ -282,7 +297,7 @@ impl ElementTree {
         parent_offset: Offset,
         focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
-        now_ms: u64,
+        shell: PaintShell<'_>,
     ) {
         let node = match self.nodes.get(&id) {
             Some(n) => n,
@@ -296,7 +311,13 @@ impl ElementTree {
 
         let absolute_offset = parent_offset + node.computed_layout.offset;
 
-        let paint_ctx = PaintContext::new(self, focused_node_id, id, resource_map, now_ms);
+        let paint_ctx = PaintContext::new(
+            self,
+            focused_node_id,
+            id,
+            resource_map,
+            shell,
+        );
         element.paint(
             canvas,
             absolute_offset,

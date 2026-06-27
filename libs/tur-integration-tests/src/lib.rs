@@ -1,5 +1,7 @@
+use std::cell::Cell;
 use std::cell::Ref;
 use std::path::Path;
+use std::rc::Rc;
 use std::time::Duration;
 
 use tur_engine::core::element::ElementNodeId;
@@ -29,6 +31,10 @@ impl Rect {
 
 pub struct TurTestApp {
     inner: TurApp,
+    /// Shared with the `RecordingHostApi` installed in the engine. The engine
+    /// pushes cursor changes here (via `HostApi::set_cursor`); the harness
+    /// drains it through `take_current_cursor`.
+    cursor_slot: Rc<Cell<Option<Cursor>>>,
     /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
     /// steps (well under the 500 ms threshold) on each pointer-down so
@@ -39,9 +45,13 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
+        let cursor_slot = Rc::new(Cell::new(None));
         let mut inner = TurApp::new(
             Box::new(NoopRenderer::new()),
             Box::new(PresetFontLoader::new()),
+            Box::new(RecordingHostApi {
+                last: cursor_slot.clone(),
+            }),
         )?;
         inner.push_event(AppEvent::Resize {
             logical_width: width as u32,
@@ -51,6 +61,7 @@ impl TurTestApp {
         let _ = inner.spawn_loop_once(Duration::ZERO);
         Ok(Self {
             inner,
+            cursor_slot,
             synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
         })
     }
@@ -353,10 +364,11 @@ impl TurTestApp {
         self.inner.with_element(id, cb)
     }
 
-    /// Returns the most recent cursor set by a handler since the last call.
-    /// Mirrors the embedder's per-frame cursor poll.
+    /// Returns the most recent cursor pushed by the engine since the last
+    /// call. The engine pushes cursor changes through the `RecordingHostApi`
+    /// during `apply_changes`; this drains that recording.
     pub fn take_current_cursor(&self) -> Option<Cursor> {
-        self.inner.take_current_cursor()
+        self.cursor_slot.take()
     }
 
     /// Drain any text written to the clipboard via `AppEvent::ClipboardWrite`
@@ -395,5 +407,18 @@ impl TurTestApp {
         id: ElementNodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
         self.inner.dev_tool_get_element(id)
+    }
+}
+
+/// Test `HostApi` that records the last cursor the engine pushed. Shares its
+/// slot (via `Rc<Cell>`) with [`TurTestApp`], which drains it through
+/// `take_current_cursor`.
+struct RecordingHostApi {
+    last: Rc<Cell<Option<Cursor>>>,
+}
+
+impl tur_engine::core::host_api::HostApi for RecordingHostApi {
+    fn set_cursor(&mut self, cursor: Cursor) {
+        self.last.set(Some(cursor));
     }
 }

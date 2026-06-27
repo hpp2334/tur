@@ -40,3 +40,40 @@ pub trait Canvas: fmt::Debug {
     fn push_transform(&mut self, transform: Affine);
     fn pop_transform(&mut self);
 }
+
+/// A `Canvas` that discards every draw. Used by `NoopRenderer` to drive the
+/// paint walk (so paint-time outputs like cursor resolution still happen)
+/// without producing any pixels.
+#[derive(Debug, Default)]
+pub struct NullCanvas;
+
+impl Canvas for NullCanvas {
+    fn fill_geometry(&mut self, _offset: Offset, _geometry: &Geometry, _brush: &Brush) {}
+    fn stroke_geometry(
+        &mut self,
+        _offset: Offset,
+        _geometry: &Geometry,
+        _color: &Color,
+        _stroke_width: f64,
+    ) {
+    }
+    #[allow(private_interfaces)]
+    fn fill_text_layout(&mut self, _offset: Offset, _layout: &TextLayoutData) {}
+    fn draw_image(&mut self, _image: &ImageData, _transform: Affine) {}
+    fn draw_shadow(
+        &mut self,
+        _offset: Offset,
+        _size: Size,
+        _color: &Color,
+        _border_radius: f64,
+        _blur: f64,
+        _shadow_offset: (f64, f64),
+    ) {
+    }
+    fn push_clip(&mut self, _offset: Offset, _size: Size) {}
+    fn pop_clip(&mut self) {}
+    fn push_opacity(&mut self, _opacity: f32) {}
+    fn pop_opacity(&mut self) {}
+    fn push_transform(&mut self, _transform: Affine) {}
+    fn pop_transform(&mut self) {}
+}
