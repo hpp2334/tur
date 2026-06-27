@@ -18,7 +18,7 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::host_api::HostApi;
 use crate::core::render::Renderer;
 use crate::core::resource::ResourceMap;
-use crate::core::shell::ShellInternal;
+use crate::core::shell::Shell;
 
 pub struct TurAppContext {
     pub(crate) element_tree: Rc<RefCell<ElementTree>>,
@@ -34,8 +34,8 @@ pub struct TurAppContext {
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via [`HostApi`]). Owns the time source shared with the boa
-    /// `Context`. See [`ShellInternal`].
-    pub(crate) shell: ShellInternal,
+    /// `Context`. See [`Shell`].
+    pub(crate) shell: Shell,
     /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
     /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
     /// `TurApp::take_clipboard_write()` once per frame.
@@ -75,7 +75,7 @@ impl TurAppContext {
             gesture_composer: GestureEventComposer::new(),
             event_queue: AppEventQueue::new(),
             handlers: vec![],
-            shell: ShellInternal::new(clock, host_api),
+            shell: Shell::new(clock, host_api),
             pending_clipboard_write: Rc::new(RefCell::new(None)),
         }
     }

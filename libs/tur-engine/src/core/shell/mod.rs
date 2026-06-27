@@ -17,7 +17,7 @@ use crate::core::host_api::HostApi;
 /// to drop any claims already written by its ancestors (which painted earlier).
 ///
 /// `Cursor` is `Copy`, so the sink is a cheap shared `Cell`. It lives in
-/// [`ShellInternal`] and is reset implicitly each frame by `apply_changes`
+/// [`Shell`] and is reset implicitly each frame by `apply_changes`
 /// (which calls `take`). [`PaintShell::set_cursor`] writes through it.
 #[derive(Clone)]
 pub(crate) struct CursorSink(Rc<Cell<Option<Cursor>>>);
@@ -54,8 +54,8 @@ impl Default for CursorSink {
 /// deepest cursor claim, dedups against the last applied value, and pushes the
 /// result to the embedder through [`HostApi::set_cursor`]. Biz cannot call it.
 ///
-/// [`paint_face`]: ShellInternal::paint_face
-pub(crate) struct ShellInternal {
+/// [`paint_face`]: Shell::paint_face
+pub(crate) struct Shell {
     clock: Rc<FixedClock>,
     host_api: Box<dyn HostApi>,
     pointer_position: Option<Offset>,
@@ -63,9 +63,9 @@ pub(crate) struct ShellInternal {
     applied_cursor: Option<Cursor>,
 }
 
-impl ShellInternal {
+impl Shell {
     pub(crate) fn new(clock: Rc<FixedClock>, host_api: Box<dyn HostApi>) -> Self {
-        ShellInternal {
+        Shell {
             clock,
             host_api,
             pointer_position: None,
@@ -114,19 +114,19 @@ impl ShellInternal {
 
 /// The face the biz (paint / `MouseRegion` / `PaintContext`) sees.
 ///
-/// Constructed only via `ShellInternal::paint_face`. It exposes claiming a
+/// Constructed only via `Shell::paint_face`. It exposes claiming a
 /// cursor plus reading time and pointer position — but **not** the privileged
 /// `apply_changes` / `set_pointer_position` / `forward`, so biz cannot flush
 /// or mutate driver state.
 #[derive(Clone, Copy)]
 pub struct PaintShell<'a> {
-    inner: &'a ShellInternal,
+    inner: &'a Shell,
 }
 
 impl<'a> PaintShell<'a> {
     /// Claim the host cursor for this frame. May be called many times during
     /// one paint pass (deepest painted region wins). Nothing is committed to
-    /// the host until the driver flushes (`ShellInternal::apply_changes`).
+    /// the host until the driver flushes (`Shell::apply_changes`).
     pub fn set_cursor(&self, cursor: Cursor) {
         self.inner.cursor.set(cursor);
     }
