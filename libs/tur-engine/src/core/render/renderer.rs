@@ -1,9 +1,16 @@
 use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::resource::ResourceMap;
+use crate::core::shell::PaintShell;
 
 pub trait Renderer {
-    fn render(&mut self, tree: &ElementTree, focused_node_id: Option<ElementNodeId>, resource_map: &ResourceMap, now_ms: u64);
+    fn render(
+        &mut self,
+        tree: &ElementTree,
+        focused_node_id: Option<ElementNodeId>,
+        resource_map: &ResourceMap,
+        shell: PaintShell<'_>,
+    );
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         Ok(())

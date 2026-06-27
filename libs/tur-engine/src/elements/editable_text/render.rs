@@ -70,7 +70,7 @@ impl ElementRender for EditableTextElement {
         if is_focused && !has_selection {
             // Blink the caret at a 530ms half-cycle (the conventional
             // editor caret blink rate). Visible on even half-cycles.
-            let blink_visible = (paint_ctx.now_ms() / 530) % 2 == 0;
+            let blink_visible = (paint_ctx.now().as_millis() / 530) % 2 == 0;
             if blink_visible {
                 paint_cursor(
                     canvas,

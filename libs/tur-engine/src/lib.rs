@@ -12,7 +12,6 @@ use boa_engine::context::time::FixedClock;
 use boa_engine::Context;
 use boa_engine::Source;
 use std::path::Path;
-use tur_shared::Cursor;
 use error::TurError;
 
 use core::app::TurAppInternal;
@@ -20,6 +19,7 @@ use core::bridge::init_bridge;
 use core::bridge::TurJobExecutor;
 use core::element::ElementNodeId;
 use core::elements::AnyElement;
+use core::host_api::HostApi;
 #[cfg(feature = "trace")]
 use core::elements::ElementTree;
 use elements::editable_text::EditableTextElement;
@@ -27,7 +27,6 @@ use elements::editable_text::EditableTextElement;
 pub struct TurApp {
     boa_context: Context,
     internal: TurAppInternal,
-    clock: Rc<FixedClock>,
     executor: Rc<TurJobExecutor>,
 }
 
@@ -35,6 +34,7 @@ impl TurApp {
     pub fn new(
         renderer: Box<dyn core::render::Renderer>,
         font_loader: Box<dyn core::fonts::FontLoader>,
+        host_api: Box<dyn HostApi>,
     ) -> Result<Self, TurError> {
         let clock = Rc::new(FixedClock::from_millis(0));
         let executor = Rc::new(TurJobExecutor::new());
@@ -44,15 +44,14 @@ impl TurApp {
             .build()
             .expect("failed to build boa context");
 
-        let BridgeResult { internal, clock, executor } =
-            init_bridge(&mut boa_context, renderer, font_loader, clock, executor);
+        let BridgeResult { internal, executor } =
+            init_bridge(&mut boa_context, renderer, font_loader, clock, host_api, executor);
 
         tracing::info!("TurApp initialized");
 
         Ok(TurApp {
             boa_context,
             internal,
-            clock,
             executor,
         })
     }
@@ -146,7 +145,11 @@ impl TurApp {
 }
 
     pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
-        self.clock.forward(advanced_time.as_millis() as u64);
+        self.internal
+            .app_context
+            .borrow()
+            .shell
+            .forward(advanced_time.as_millis() as u64);
         self.internal.flush(&mut self.boa_context)?;
         Ok(())
     }
@@ -164,18 +167,6 @@ impl TurApp {
             .borrow_mut()
             .event_queue
             .push(event);
-    }
-
-    /// Returns the most recent cursor set by a handler, or `None` if no cursor
-    /// change is pending since the last call. Embedders poll this once per
-    /// frame and apply the value to the host canvas, then call again next frame.
-    pub fn take_current_cursor(&self) -> Option<Cursor> {
-        self.internal
-            .app_context
-            .borrow()
-            .current_cursor
-            .borrow_mut()
-            .take()
     }
 
     /// Structured dev-tool snapshot of the root node. Returns `None` if no

@@ -1,4 +1,4 @@
-use tur_shared::{ComputedLayout, Offset};
+use tur_shared::{ComputedLayout, Cursor, Offset};
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -14,10 +14,24 @@ impl ElementRender for MouseRegionElement {
         &self,
         canvas: &mut dyn Canvas,
         offset: Offset,
-        _layout: &ComputedLayout,
+        layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
+        // Resolve the cursor during paint. Paint runs shallow→deep, so the
+        // deepest MouseRegion under the pointer writes last (deepest wins).
+        // An opaque region under the pointer claims `Default` first, dropping
+        // any cursor already written by its ancestors (which painted
+        // earlier) — mirroring `filter_opaque_path`'s ancestor exclusion.
+        if paint_ctx.pointer_inside(offset, &layout.size) {
+            if self.is_region_opaque() {
+                paint_ctx.set_cursor(Cursor::Default);
+            }
+            if let Some(cursor) = self.resolved_cursor() {
+                paint_ctx.set_cursor(cursor);
+            }
+        }
+
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas, offset);
         }
