@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::core::reactive::{AtomId, SubscriberId, SubscriberIndex};
+use crate::core::reactive::{AtomId, SubscriberId, SubscriberIndexStore};
 use crate::core::widget::{PropValue, Val};
 
 // ---------------------------------------------------------------------------
@@ -25,19 +25,19 @@ pub trait ElementSubscribe {
 
 // ---------------------------------------------------------------------------
 // SubscribeCx — accumulator for one node's declared atom deps during a single
-// subscribe pass. Holds a `SubscriberIndex` capability (the write face over the
+// subscribe pass. Holds a `SubscriberIndexStore` capability (the write face over the
 // store's atom→subscriber index) so the `Drop` impl can swap the collected set
 // in without entangling layout borrows.
 // ---------------------------------------------------------------------------
 
 pub struct SubscribeCx {
-    store: SubscriberIndex,
+    store: SubscriberIndexStore,
     node: SubscriberId,
     new_deps: HashSet<AtomId>,
 }
 
 impl SubscribeCx {
-    pub(crate) fn new(store: SubscriberIndex, node: SubscriberId) -> Self {
+    pub(crate) fn new(store: SubscriberIndexStore, node: SubscriberId) -> Self {
         SubscribeCx {
             store,
             node,

@@ -30,8 +30,8 @@ impl TurJsContext {
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
+        store: Store,
     ) -> Self {
-        let store = Store::new(dirty.clone());
         Self {
             element_tree,
             mutation_queue,

@@ -5,14 +5,13 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::core::pointer_region::PointerRegionTracker;
 use crate::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
-use crate::core::widget::Val;
-use tur_shared::Offset;
+use tur_shared::{Cursor, Offset};
 
 pub struct PointerRegionAppHandler {
     tracker: PointerRegionTracker,
-    /// Last cursor name emitted via `set_cursor`. Used to avoid re-emitting
-    /// the same value on every pointer move.
-    last_cursor: Option<String>,
+    /// Last cursor emitted via `set_cursor`. Used to avoid re-emitting the
+    /// same value on every pointer move.
+    last_cursor: Option<Cursor>,
 }
 
 impl Default for PointerRegionAppHandler {
@@ -64,16 +63,16 @@ impl AppHandler for PointerRegionAppHandler {
         // Resolve the active cursor: the inner-most (deepest) MouseRegion
         // with a cursor wins. `filtered` is ordered [deepest, ..., outermost],
         // so iterate normally and return the first match.
-        let mut active_cursor: Option<String> = None;
+        let mut active_cursor: Option<Cursor> = None;
         for id in &filtered {
-            if let Some(name) = cursor_for(&*cx.element_tree, *id) {
-                active_cursor = Some(name);
+            if let Some(cursor) = cursor_for(&*cx.element_tree, *id) {
+                active_cursor = Some(cursor);
                 break;
             }
         }
-        let new_cursor = active_cursor.unwrap_or_else(|| "default".to_string());
-        if self.last_cursor.as_deref() != Some(new_cursor.as_str()) {
-            cx.set_cursor(&new_cursor);
+        let new_cursor = active_cursor.unwrap_or(Cursor::Default);
+        if self.last_cursor != Some(new_cursor) {
+            cx.set_cursor(new_cursor);
             self.last_cursor = Some(new_cursor);
         }
     }
@@ -115,25 +114,14 @@ fn is_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
         .unwrap_or(false)
 }
 
-/// Resolve the cursor value for a MouseRegion element by reading its reactive
-/// `cursor` prop from the store. Returns None for elements without a cursor.
-fn cursor_for(tree: &ElementTree, id: ElementNodeId) -> Option<String> {
-    let element = tree
-        .get(id)
+/// Resolve the cursor for a MouseRegion element from its layout-resolved
+/// `cursor` field. Returns `None` for elements without a cursor. (The value is
+/// materialized during layout; the handler runs without a store/Context.)
+fn cursor_for(tree: &ElementTree, id: ElementNodeId) -> Option<Cursor> {
+    tree.get(id)
         .and_then(|node| node.element.as_ref())
-        .and_then(|e| e.cast::<MouseRegionElement>())?;
-    let cursor_val = element.component.cursor.clone()?;
-    let store = tree.store_read_only()?;
-    match cursor_val {
-        Val::Static(s) => Some(s),
-        Val::Reactive(readable) => {
-            let js = store.get_cached(readable);
-            js.as_string()
-                .map(|s| s.to_std_string_escaped())
-                .or_else(|| Some(js.display().to_string()))
-        }
-    }
-    .filter(|s| !s.is_empty())
+        .and_then(|e| e.cast::<MouseRegionElement>())?
+        .resolved_cursor()
 }
 
 fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<ElementNodeId> {

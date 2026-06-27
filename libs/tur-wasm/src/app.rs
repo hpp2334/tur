@@ -898,9 +898,9 @@ impl TurWasmApp {
                 }
 
                 // Apply any pending cursor change requested by a handler
-                // (e.g. MouseRegion setting "col-resize" on hover).
-                if let Some(name) = s.app.take_current_cursor() {
-                    let _ = s._canvas.style().set_property("cursor", &name);
+                // (e.g. MouseRegion setting ColResize on hover).
+                if let Some(cursor) = s.app.take_current_cursor() {
+                    let _ = s._canvas.style().set_property("cursor", cursor.as_str());
                 }
 
                 let is_editable = s.app.focused_is_editable();

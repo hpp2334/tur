@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use boa_engine::JsValue;
 use num_traits::FromPrimitive;
 use tur_shared::{
-    Alignment, Axis, BorderPosition, BoxFit, CrossAxisAlignment, FlexDirection, FlexFit,
+    Alignment, Axis, BorderPosition, BoxFit, CrossAxisAlignment, Cursor, FlexDirection, FlexFit,
     HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
 };
 
@@ -65,6 +65,15 @@ impl PropValue for String {
     fn from_js(v: &JsValue) -> Option<Self> {
         v.as_string()
             .map(|s| s.to_std_string_escaped())
+    }
+}
+
+// --- Cursor: decoded from a CSS keyword string (unknown keyword → Default) ---
+
+impl PropValue for Cursor {
+    fn from_js(v: &JsValue) -> Option<Self> {
+        v.as_string()
+            .map(|s| Cursor::from_keyword(&s.to_std_string_escaped()).unwrap_or_default())
     }
 }
 

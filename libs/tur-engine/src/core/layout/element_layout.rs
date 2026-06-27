@@ -12,6 +12,6 @@ pub trait ElementLayout: 'static {
         &mut self,
         constraints: &Constraints,
         children: &[ElementNodeId],
-        cx: &mut LayoutContext,
+        cx: &mut LayoutContext<'_, '_>,
     ) -> Size;
 }
