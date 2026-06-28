@@ -1,4 +1,5 @@
 import {
+    createAnimationController,
     createSvgResource,
     createTextEditingController,
     derive,
@@ -86,6 +87,24 @@ export const selectedPath$ = source<string | null>(null);
 // Landing-screen draft + inline validation.
 export const repoDraft$ = source("");
 export const repoError$ = source<string | null>(null);
+
+// Download feedback — decoupled from `loading$` (which is tree-load only).
+// The previous version reused `loading$`, but the list view only surfaces
+// "Loading…" when the list is empty, so an in-flight download showed nothing.
+export type DownloadStatus = "idle" | "loading" | "done" | "error";
+export const downloadStatus$ = source<DownloadStatus>("idle");
+
+// Indeterminate spinner — an infinite animation controller that writes its
+// eased progress (0..1) into `spinProgress$`. Stopped by default; `forward()`
+// on download start, `stop()` on completion. We can't show real byte progress
+// because `__tur.request` resolves the entire body in one shot.
+export const spinProgress$ = source(0);
+const spinCtrl = createAnimationController({
+    duration: 900,
+    curve: "linear",
+    repeat: "infinite",
+    onTick: mutate((_ctx: StoreCtx, v: number) => set(spinProgress$, v)),
+});
 
 // ---------------------------------------------------------------------------
 // Derived
@@ -378,6 +397,11 @@ export function openRepoFromDraft(ctx: StoreCtx): void {
 }
 
 export function backToLanding(): void {
+    spinCtrl.stop();
+    if (statusTimer) {
+        clearTimeout(statusTimer);
+        statusTimer = null;
+    }
     set(view$, "landing");
     set(repo$, null);
     set(version$, null);
@@ -385,6 +409,7 @@ export function backToLanding(): void {
     set(pathSegments$, []);
     set(selectedPath$, null);
     set(error$, null);
+    set(downloadStatus$, "idle");
 }
 
 /** Navigate into a sub-folder (a row click on a directory). Local. */
@@ -423,33 +448,85 @@ export function selectEntry(entry: DirEntry): void {
 
 // ---------------------------------------------------------------------------
 // Download — fetch the file's raw bytes via cdn.jsdelivr.net and hand them
-// to the host file-saver.
+// to the host file-saver. Drives `downloadStatus$` for button feedback.
 // ---------------------------------------------------------------------------
 
+/** Sentinel values written to `error$` to force a reactive flush when the
+ *  download status changes. Fragments (the Switch that drives the button
+ *  morph) don't register subscriber deps, so a `downloadStatus$` change alone
+ *  never triggers layout. Nudging `error$` — which has a regular-element
+ *  subscriber (the error banner Text) — ensures `dirty_nodes` is non-empty so
+ *  layout runs and the Switch's rebuilt branch gets rendered. The banner hides
+ *  any value starting with this prefix. */
+const DL_SENTINEL = "__dl_";
+export { DL_SENTINEL };
+
+/** Revert the button to idle after a short confirmation window so the user
+ *  sees the "Saved" / "Failed" flash before the label resets. */
+const STATUS_FLASH_MS = 1800;
+let statusTimer: ReturnType<typeof setTimeout> | null = null;
+function flashStatus(status: DownloadStatus): void {
+    if (statusTimer) clearTimeout(statusTimer);
+    set(downloadStatus$, status);
+    // Nudge error$ to force a flush (see DL_SENTINEL comment).
+    if (status === "loading") {
+        set(error$, `${DL_SENTINEL}loading`);
+    } else if (status === "done") {
+        set(error$, `${DL_SENTINEL}done`);
+    } else if (status === "idle") {
+        set(error$, null);
+    }
+    if (status !== "loading") {
+        statusTimer = setTimeout(() => {
+            statusTimer = null;
+            set(downloadStatus$, "idle");
+            set(error$, null);
+        }, STATUS_FLASH_MS);
+    }
+}
+
 export function doDownload(): void {
+    // Guard re-entry: ignore clicks while a download or its flash is active.
+    if (get(downloadStatus$) !== "idle") return;
     const save = HOST?.saveFile;
     if (!save) {
         set(error$, "Save not available in this host");
+        flashStatus("error");
         return;
     }
     const entry = get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
-    set(loading$, true);
     set(error$, null);
+    flashStatus("loading");
+    spinCtrl.forward();
     http({
         method: "GET",
         url: entry.downloadUrl,
         responseType: "bytes",
     })
         .then((r) => {
+            spinCtrl.stop();
             if (r.status >= 200 && r.status < 300 && r.bodyBytes) {
-                save(entry.name, r.bodyBytes);
+                // Flip status to "done" first so the button morph renders on
+                // the next frame. Defer `save()` by 500 ms (engine time) so the
+                // "Saved" confirmation is already on screen before the host's
+                // `<a>.click()` fires — that download side-effect can briefly
+                // stall the frame loop, and without the defer the stall would
+                // prevent the done-state flush from rendering.
+                flashStatus("done");
+                const bytes = r.bodyBytes;
+                const name = entry.name;
+                setTimeout(() => save(name, bytes as ArrayBuffer), 500);
             } else {
                 set(error$, `Download failed: HTTP ${r.status}`);
+                flashStatus("error");
             }
         })
-        .catch((e) => set(error$, errMsg(e)))
-        .finally(() => set(loading$, false));
+        .catch((e) => {
+            spinCtrl.stop();
+            set(error$, errMsg(e));
+            flashStatus("error");
+        });
 }
 
 // ---------------------------------------------------------------------------
@@ -463,6 +540,8 @@ const ICON_SVGS: Record<string, string> = {
     back: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
     refresh: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 4 21 10 15 10"/><path d="M3.5 12a8 8 0 0 1 14-4l3.5 2"/><polyline points="3 20 3 14 9 14"/><path d="M20.5 12a8 8 0 0 1-14 4L3 14"/></svg>`,
     download: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    spinner: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2.6" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+    check: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     github: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#4f46e5"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>`,
 };
 
