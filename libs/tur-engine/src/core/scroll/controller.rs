@@ -162,7 +162,7 @@ impl Class for ScrollController {
                 };
 
                 let mut tree = element_tree_rc.borrow_mut();
-                let Some(node) = tree.get_mut(node_id) else {
+                let Some(node) = tree.get_element_mut(node_id) else {
                     return Ok(JsValue::undefined());
                 };
                 let Some(ref mut element) = node.element else {
@@ -182,7 +182,7 @@ impl Class for ScrollController {
                     tur_shared::Axis::Horizontal => vp.width,
                 };
                 let new_offset = sv.position.pixels();
-                tree.mark_dirty(node_id);
+                tree.mark_dirty(node_id.into());
                 drop(tree);
 
                 ctrl.offset = new_offset;

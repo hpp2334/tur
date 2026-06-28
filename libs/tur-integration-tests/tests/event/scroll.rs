@@ -1,15 +1,15 @@
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
-fn setup_basic() -> (TurTestApp, ElementNodeId, ElementNodeId) {
+fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_bundle("scroll-view-basic").unwrap();
 
     let (sv_id, col_id) = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        let sv = tree.get(root.children[0]).unwrap();
+        let root = tree.root_element().unwrap();
+        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
         (sv.id, sv.children[0])
     };
 
@@ -73,7 +73,7 @@ fn wheel_updates_child_position() {
     app.wheel(0.0, 100.0, 200.0, 150.0);
 
     let rt = app.element_tree();
-    let col_node = rt.get(col_id).unwrap();
+    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
     assert_eq!(col_node.computed_layout.offset.y, -100.0);
 }
 
@@ -96,12 +96,12 @@ fn wheel_chains_to_parent_at_boundary() {
 
     let (outer_id, inner_id) = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        let row = tree.get(root.children[0]).unwrap();
-        let outer = tree.get(row.children[1]).unwrap();
-        let col = tree.get(outer.children[0]).unwrap();
-        let wrapper = tree.get(col.children[1]).unwrap();
-        let inner = tree.get(wrapper.children[0]).unwrap();
+        let root = tree.root_element().unwrap();
+        let row = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let outer = tree.get_element(ElementNodeId::new(row.children[1].as_u64())).unwrap();
+        let col = tree.get_element(ElementNodeId::new(outer.children[0].as_u64())).unwrap();
+        let wrapper = tree.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
+        let inner = tree.get_element(ElementNodeId::new(wrapper.children[0].as_u64())).unwrap();
         (outer.id, inner.id)
     };
 

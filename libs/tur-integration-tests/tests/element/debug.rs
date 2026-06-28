@@ -1,12 +1,12 @@
 use std::cell::Ref;
 
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{NodeId, ElementNodeId};
 use tur_engine::core::elements::ElementTree;
 use tur_integration_tests::TurTestApp;
 
 fn print_tree(tree: &Ref<ElementTree>) {
-    fn go(tree: &ElementTree, id: ElementNodeId, depth: usize) {
-        if let Some(node) = tree.get(id) {
+    fn go(tree: &ElementTree, id: NodeId, depth: usize) {
+        if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             eprintln!(
                 "{}{} id={} children={}",
                 "  ".repeat(depth),
@@ -14,14 +14,14 @@ fn print_tree(tree: &Ref<ElementTree>) {
                 node.id,
                 node.children.len(),
             );
-            for &child_id in &node.children {
-                go(tree, child_id, depth + 1);
+            for child in &node.children {
+                go(tree, *child, depth + 1);
             }
         }
     }
 
-    if let Some(root) = tree.root() {
-        go(tree, root.id, 0);
+    if let Some(root) = tree.root_element() {
+        go(tree, root.id.into(), 0);
     }
 }
 
@@ -74,7 +74,7 @@ fn debug_react_minimal() {
      .unwrap();
     let _ = app.load_bundle_source(&source);
     let tree = app.element_tree();
-    let root_id = tree.root_id();
-    let child_count = tree.children_of(root_id.unwrap()).len();
+    let root_id = tree.root_element_id();
+    let child_count = tree.raw_children_of_element(root_id.unwrap()).len();
     assert!(child_count > 0, "root should have children, got {child_count}");
 }

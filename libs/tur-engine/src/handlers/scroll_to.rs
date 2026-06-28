@@ -18,7 +18,7 @@ impl AppHandler for ScrollToHandler {
 
         let current = cx
             .element_tree
-            .get(node_id)
+            .get_element(node_id)
             .and_then(|n| n.element.as_ref())
             .and_then(|e| e.cast::<ScrollViewElement>())
             .map(|sv| sv.scroll_offset())

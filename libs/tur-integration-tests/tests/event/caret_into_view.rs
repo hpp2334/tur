@@ -1,3 +1,4 @@
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
@@ -24,7 +25,7 @@ T.render(ctx, T.ScrollView(ctx, {
 }));
 "#;
 
-fn scroll_offset(app: &TurTestApp, sv_id: tur_engine::core::element::ElementNodeId) -> f64 {
+fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
     app.with_element(sv_id, |e| {
         e.cast::<ScrollViewElement>().unwrap().scroll_offset()
     })
@@ -38,6 +39,7 @@ fn caret_into_view_scrolls_to_caret() {
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
+    let sv_id = ElementNodeId::new(sv_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0, "no scroll before caret moves");
 
     // Focus the editor near its top-left (the editable occupies the top of the

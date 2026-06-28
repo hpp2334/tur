@@ -1,4 +1,4 @@
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::ElementTree;
 use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -66,7 +66,7 @@ fn mouse_region_enter_mutation(
     tree: &ElementTree,
     id: ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
-    tree.get(id)
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .and_then(|m| m.component.on_enter)
@@ -76,14 +76,14 @@ fn mouse_region_exit_mutation(
     tree: &ElementTree,
     id: ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
-    tree.get(id)
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .and_then(|m| m.component.on_exit)
 }
 
 fn has_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
-    tree.get(id)
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .map(|m| m.has_region_callbacks())
@@ -91,7 +91,7 @@ fn has_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
 }
 
 fn is_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
-    tree.get(id)
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .map(|m| m.is_region_opaque())
@@ -110,17 +110,22 @@ fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<Element
 }
 
 /// Compute a position relative to the element's top-left by walking parents
-/// and subtracting each one's layout offset. Mirrors the helper in
-/// `handlers/gesture.rs`; kept local to avoid coupling.
+/// and subtracting each one's layout offset. Hops through fragment ancestors
+/// transparently (fragments have zero offset, so they're skipped without
+/// affecting the sum). Mirrors the helper in `handlers/gesture.rs`; kept
+/// local to avoid coupling.
 fn local_position(tree: &ElementTree, node_id: ElementNodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
     let mut abs_y = 0.0f64;
-    let mut current = Some(node_id);
+    let mut current: Option<NodeId> = Some(node_id.into());
     while let Some(cid) = current {
-        if let Some(n) = tree.get(cid) {
+        if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
             abs_x += n.computed_layout.offset.x;
             abs_y += n.computed_layout.offset.y;
             current = n.parent;
+        } else if let Some(f) = tree.get_fragment(FragmentNodeId::new(cid.as_u64())) {
+            // Fragments have zero offset; hop to their real-ancestor parent.
+            current = Some(f.parent);
         } else {
             break;
         }

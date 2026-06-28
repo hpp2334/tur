@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
@@ -50,19 +50,55 @@ class WasmBuildPlugin implements RspackPluginInstance {
 
 /** Build the self-hosted playground (tur-demo-impl) and emit impl.js. */
 class ImplBundlePlugin implements RspackPluginInstance {
+    /** Timestamp (ms) of the last successful `pnpm build` of tur-demo-impl. */
+    private lastBuilt = 0;
     apply(compiler: Compiler): void {
+        // tur-demo-impl is emitted as a pre-built asset (dist/impl.js), so its
+        // source is NOT part of tur-demo's module graph — rspack's watcher
+        // won't see edits there unless we explicitly register the directory as
+        // a context dependency (done in `afterCompile` below). Without that,
+        // regenerating case sources (gen-cases → src/cases/generated.ts) never
+        // reached the running dev server, requiring a manual restart.
+        const implSrcDir = join(implDir, "src");
+        const generatedCases = join(implSrcDir, "cases", "generated.ts");
+
+        const needsRebuild = (): boolean => {
+            try {
+                return statSync(generatedCases).mtimeMs > this.lastBuilt;
+            } catch {
+                return true;
+            }
+        };
         const buildImpl = () => {
             compiler
                 .getInfrastructureLogger("ImplBundlePlugin")
                 .info("Building tur-demo-impl...");
             execSync("pnpm build", { cwd: implDir, stdio: "inherit" });
+            this.lastBuilt = Date.now();
         };
+
         compiler.hooks.beforeRun.tapPromise("ImplBundlePlugin", async () =>
             buildImpl(),
         );
-        compiler.hooks.watchRun.tapPromise("ImplBundlePlugin", async () =>
-            buildImpl(),
-        );
+        compiler.hooks.watchRun.tapPromise("ImplBundlePlugin", async () => {
+            // `modifiedFiles` is the set of paths that triggered this watch
+            // run. Only rebuild impl when something under tur-demo-impl/src
+            // changed (e.g. a regenerated case manifest); otherwise skip so
+            // unrelated tur-demo edits don't pay the `pnpm build` cost. Fall
+            // back to an mtime check when modifiedFiles is unavailable.
+            const changed = (
+                compiler as unknown as { modifiedFiles?: Set<string> }
+            ).modifiedFiles;
+            const touched = changed
+                ? [...changed].some((f) => f.startsWith(implSrcDir))
+                : needsRebuild();
+            if (touched) buildImpl();
+        });
+        compiler.hooks.afterCompile.tap("ImplBundlePlugin", (compilation) => {
+            // Watch tur-demo-impl/src so edits there (incl. regenerated case
+            // sources) trigger watchRun + an impl rebuild.
+            compilation.contextDependencies.add(implSrcDir);
+        });
         compiler.hooks.emit.tapPromise(
             "ImplBundlePlugin",
             async (compilation) => {

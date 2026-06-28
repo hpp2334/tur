@@ -20,8 +20,8 @@ pub mod switch;
 pub mod text;
 
 pub use container::{ContainerElement, ContainerComponent};
-pub use condition::{ConditionElement, ConditionComponent};
-pub use each::{EachElement, EachComponent};
+pub use condition::{ConditionComponent, ConditionFragment};
+pub use each::{EachComponent, EachFragment};
 pub use editable_text::{EditableTextElement, EditableTextComponent, InputComponent};
 pub use effects::{OpacityComponent, OpacityElement, TransformComponent, TransformElement};
 pub use flex::{FlexElement, FlexComponent};
@@ -38,4 +38,4 @@ pub use positioned::{PositionedElement, PositionedComponent};
 pub use scrollbar::{ScrollbarComponent, ScrollbarElement};
 pub use scroll_view::{ScrollViewElement, ScrollViewComponent};
 pub use stack::{StackElement, StackComponent};
-pub use switch::{SwitchElement, SwitchKey, SwitchComponent};
+pub use switch::{SwitchComponent, SwitchFragment, SwitchKey};

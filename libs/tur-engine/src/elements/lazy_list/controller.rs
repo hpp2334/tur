@@ -152,7 +152,7 @@ impl Class for LazyListController {
                 };
 
                 let mut tree = element_tree_rc.borrow_mut();
-                let Some(node) = tree.get_mut(node_id) else {
+                let Some(node) = tree.get_element_mut(node_id) else {
                     return Ok(JsValue::undefined());
                 };
                 let Some(ref mut element) = node.element else {
@@ -176,7 +176,7 @@ impl Class for LazyListController {
                 let (start, end) = ll.compute_visible_range(viewport_main);
 
                 let new_offset = ll.position.pixels();
-                tree.mark_dirty(node_id);
+                tree.mark_dirty(node_id.into());
                 drop(tree);
 
                 ctrl.offset = new_offset;

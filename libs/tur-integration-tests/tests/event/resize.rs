@@ -1,3 +1,4 @@
+use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// A Column with a single `Expanded` child that fills the viewport's main
@@ -16,6 +17,7 @@ T.render(ctx, T.Column(ctx, {
 
 fn fill_height(app: &TurTestApp) -> f64 {
     let id = app.query_element(&["fill"]).unwrap();
+    let id = ElementNodeId::new(id.as_u64());
     let b = app.get_element_absolute_bounds(id).unwrap();
     b.bottom - b.top
 }

@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::Color;
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::widget::{Component, Val, WidgetCx};
 use crate::core::reactive::AnyReadable;
 use crate::elements::ContainerComponent;
@@ -36,7 +36,7 @@ pub struct InputComponent {
 }
 
 impl Component for InputComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let editable = Rc::new(EditableTextComponent {
             controller: self.controller.clone(),
             controller_atom: self.controller_atom,

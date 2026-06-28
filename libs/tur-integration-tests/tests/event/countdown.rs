@@ -1,12 +1,12 @@
 use std::time::Duration;
 
-use tur_engine::core::element::ElementKind;
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<TextElement>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
@@ -17,20 +17,22 @@ fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
 
 fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
     let id = app.query_element(qk).unwrap_or_else(|| panic!("{qk:?} not found"));
+    let id = ElementNodeId::new(id.as_u64());
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
 }
 
 fn find_input_id(app: &TurTestApp) -> ElementNodeId {
     let wrapper_id = app.query_element(&["edit-input"]).expect("edit-input not found");
+    let wrapper_id = ElementNodeId::new(wrapper_id.as_u64());
     let tree = app.element_tree();
-    let wrapper = tree.get(wrapper_id).unwrap();
-    let inner = tree.get(wrapper.children[0]).unwrap();
+    let wrapper = tree.get_element(wrapper_id).unwrap();
+    let inner = tree.get_element(ElementNodeId::new(wrapper.children[0].as_u64())).unwrap();
     assert_eq!(
         inner.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_container")
     );
-    let input_node = tree.get(inner.children[0]).unwrap();
+    let input_node = tree.get_element(ElementNodeId::new(inner.children[0].as_u64())).unwrap();
     assert_eq!(
         input_node.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_editable_text")

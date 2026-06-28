@@ -1,4 +1,4 @@
-use tur_engine::core::element::ElementKind;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -8,8 +8,8 @@ fn text_content_and_measurement() {
 
     let text_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        let container = tree.get(root.children[0]).unwrap();
+        let root = tree.root_element().unwrap();
+        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_paragraph")
@@ -19,7 +19,7 @@ fn text_content_and_measurement() {
 
     app.render();
     let rt = app.element_tree();
-    let text_node = rt.get(text_id).unwrap();
+    let text_node = rt.get_element(text_id).unwrap();
     let layout = &text_node.computed_layout;
     assert!(layout.size.width > 0.0, "text width should be positive");
     assert!(layout.size.height > 0.0, "text height should be positive");
@@ -32,8 +32,8 @@ fn text_empty_content_zero_size() {
 
     app.render();
     let rt = app.element_tree();
-    let root = rt.root().unwrap();
-    let text_node = rt.get(root.children[0]).unwrap();
+    let root = rt.root_element().unwrap();
+    let text_node = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
     let layout = &text_node.computed_layout;
     assert_eq!(layout.size.width, 0.0);
     assert_eq!(layout.size.height, 0.0);
@@ -46,9 +46,9 @@ fn text_font_size_affects_height() {
 
     app.render();
     let rt = app.element_tree();
-    let root = rt.root().unwrap();
-    let small = rt.get(root.children[0]).unwrap();
-    let large = rt.get(root.children[1]).unwrap();
+    let root = rt.root_element().unwrap();
+    let small = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let large = rt.get_element(ElementNodeId::new(root.children[1].as_u64())).unwrap();
     assert!(
         large.computed_layout.size.height > small.computed_layout.size.height,
         "28px ({}) should be taller than 14px ({})",
@@ -64,8 +64,8 @@ fn text_wrapping_with_narrow_constraints() {
 
     app.render();
     let rt = app.element_tree();
-    let root = rt.root().unwrap();
-    let text_node = rt.get(root.children[0]).unwrap();
+    let root = rt.root_element().unwrap();
+    let text_node = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
     let layout = &text_node.computed_layout;
     assert!(
         layout.size.height > 30.0,
@@ -86,8 +86,8 @@ fn text_wrapping_vs_no_wrapping() {
     app_narrow.render();
     let wrapped_height = {
         let rt = app_narrow.element_tree();
-        let root = rt.root().unwrap();
-        rt.get(root.children[0])
+        let root = rt.root_element().unwrap();
+        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap()
             .computed_layout
             .size
@@ -99,8 +99,8 @@ fn text_wrapping_vs_no_wrapping() {
     app_wide.render();
     let unwrapped_height = {
         let rt = app_wide.element_tree();
-        let root = rt.root().unwrap();
-        rt.get(root.children[0])
+        let root = rt.root_element().unwrap();
+        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap()
             .computed_layout
             .size
@@ -122,10 +122,10 @@ fn text_in_column_vertical_stacking() {
 
     app.render();
     let rt = app.element_tree();
-    let root = rt.root().unwrap();
-    let col = rt.get(root.children[0]).unwrap();
-    let t1 = rt.get(col.children[0]).unwrap();
-    let t2 = rt.get(col.children[1]).unwrap();
+    let root = rt.root_element().unwrap();
+    let col = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let t1 = rt.get_element(ElementNodeId::new(col.children[0].as_u64())).unwrap();
+    let t2 = rt.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
 
     assert_eq!(t1.computed_layout.offset.y, 0.0);
     assert!(

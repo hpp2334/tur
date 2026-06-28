@@ -139,7 +139,7 @@ pub(crate) fn tur_render(
     let mut cx = WidgetCx::new(js_ctx.clone());
     let temp_parent = cx.alloc_node();
     let root_id = root_component.build(&mut cx, context, temp_parent);
-    js_ctx.element_tree.borrow_mut().set_root(root_id);
+    js_ctx.element_tree.borrow_mut().set_root_element(crate::core::element::ElementNodeId::new(root_id.as_u64()));
 
     tracing::info!("render: component tree built");
     Ok(JsValue::undefined())

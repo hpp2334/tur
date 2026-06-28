@@ -35,7 +35,7 @@ fn find_deepest_with_wheel(
     hit_path: &[ElementNodeId],
 ) -> Option<ElementNodeId> {
     for &id in hit_path {
-        if let Some(node) = tree.get(id) {
+        if let Some(node) = tree.get_element(id) {
             if let Some(ref element) = node.element {
                 if element.has_on_wheel() {
                     return Some(id);
@@ -52,7 +52,7 @@ pub fn dispatch_wheel(
     delta_x: f64,
     delta_y: f64,
 ) -> f64 {
-    let Some(node) = cx.element_tree.get_mut(id) else {
+    let Some(node) = cx.element_tree.get_element_mut(id) else {
         return 0.0;
     };
     let Some(ref mut element) = node.element else {
@@ -71,6 +71,6 @@ pub fn dispatch_wheel(
     // on the cached size). If a scroll handler later mounts/unmounts children
     // (LazyList's `process_remount`), that path explicitly calls full
     // `mark_dirty` for the affected subtree.
-    cx.element_tree.mark_dirty(id);
+    cx.element_tree.mark_dirty(id.into());
     overscroll
 }

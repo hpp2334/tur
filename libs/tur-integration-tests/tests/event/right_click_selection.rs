@@ -1,5 +1,4 @@
-use tur_engine::core::element::ElementKind;
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
@@ -21,17 +20,18 @@ const INPUT_BUNDLE: &str = r#"
 
 fn find_editable(app: &TurTestApp) -> ElementNodeId {
     let container_id = app.query_element(&["input"]).expect("queryKey not found");
+    let container_id = ElementNodeId::new(container_id.as_u64());
     let tree = app.element_tree();
-    let container = tree.get(container_id).unwrap();
-    for &cid in &container.children {
-        let node = tree.get(cid).unwrap();
+    let container = tree.get_element(container_id).unwrap();
+    for cid in container.children.iter().copied() {
+        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
             .element
             .as_ref()
             .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
             .unwrap_or(false)
         {
-            return cid;
+            return ElementNodeId::new(cid.as_u64());
         }
     }
     panic!("no tur_editable_text under queryKey input");

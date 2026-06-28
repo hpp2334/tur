@@ -17,7 +17,7 @@ use error::TurError;
 use core::app::TurAppInternal;
 use core::bridge::init_bridge;
 use core::bridge::TurJobExecutor;
-use core::element::ElementNodeId;
+use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::host_api::HostApi;
 #[cfg(feature = "trace")]
@@ -142,7 +142,64 @@ impl TurApp {
 
         tracing::info!("registered host function __turHost.{name}");
         Ok(())
-}
+    }
+
+    /// Register a function on `globalThis.__tur.<name>` — the core widget
+    /// namespace, set up by `init_bridge`. Lets an embedder (e.g. tur-wasm)
+    /// add capability functions that JS calls as `__tur.<name>(...)`, alongside
+    /// the built-in widget factories. The embedder owns any heavy dependencies
+    /// (e.g. reqwest_wasm); tur-engine only provides this hook.
+    pub fn register_tur_fn(
+        &mut self,
+        name: &str,
+        length: usize,
+        f: boa_engine::native_function::NativeFunction,
+    ) -> Result<(), boa_engine::JsError> {
+        use boa_engine::js_string;
+        use boa_engine::object::FunctionObjectBuilder;
+        use boa_engine::property::PropertyDescriptor;
+
+        let tur_key = js_string!("__tur");
+
+        let global = self.boa_context.global_object();
+        let tur_obj = match global.get(tur_key.clone(), &mut self.boa_context) {
+            Ok(v) if v.as_object().is_some() => v.as_object().unwrap().clone(),
+            _ => {
+                // `__tur` should always exist after init_bridge; create a
+                // bare fallback so a misordered call doesn't panic.
+                let proto = self
+                    .boa_context
+                    .intrinsics()
+                    .constructors()
+                    .object()
+                    .prototype();
+                let obj = boa_engine::object::JsObject::from_proto_and_data(proto, ());
+                let desc = PropertyDescriptor::builder()
+                    .value(obj.clone())
+                    .writable(true)
+                    .enumerable(false)
+                    .configurable(true)
+                    .build();
+                global.insert_property(tur_key.clone(), desc);
+                obj
+            }
+        };
+
+        let fn_obj = FunctionObjectBuilder::new(self.boa_context.realm(), f)
+            .name(js_string!(name))
+            .length(length)
+            .build();
+        let desc = PropertyDescriptor::builder()
+            .value(fn_obj)
+            .writable(true)
+            .enumerable(false)
+            .configurable(true)
+            .build();
+        tur_obj.insert_property(js_string!(name), desc);
+
+        tracing::info!("registered tur function __tur.{name}");
+        Ok(())
+    }
 
     pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
         self.internal
@@ -174,14 +231,14 @@ impl TurApp {
     /// `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
         let tree = self.internal.js_context.element_tree.borrow();
-        let root_id = tree.root_id()?;
-        tree.dev_tool_node(root_id)
+        let root_id = tree.root_element_id()?;
+        tree.dev_tool_node(root_id.into())
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.
     pub fn dev_tool_get_element(
         &self,
-        id: core::element::ElementNodeId,
+        id: core::element::NodeId,
     ) -> Option<core::elements::DevNodeData> {
         self.internal.js_context.element_tree.borrow().dev_tool_node(id)
     }
@@ -200,7 +257,7 @@ impl TurApp {
             .take()
     }
 
-    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+    pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.internal
             .js_context
             .element_tree
@@ -218,7 +275,7 @@ impl TurApp {
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get(id)?;
+        let node = tree.get_element(id)?;
         let element = node.element.as_ref()?;
         Some(cb(element))
     }
@@ -229,15 +286,15 @@ impl TurApp {
 
         let mut abs_x = 0.0f64;
         let mut abs_y = 0.0f64;
-        let mut current = Some(focused_id);
+        let mut current: Option<NodeId> = Some(focused_id.into());
         while let Some(id) = current {
-            let node = tree.get(id)?;
+            let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
             abs_x += node.computed_layout.offset.x;
             abs_y += node.computed_layout.offset.y;
             current = node.parent;
         }
 
-        let node = tree.get(focused_id)?;
+        let node = tree.get_element(focused_id)?;
         let element = node.element.as_ref()?;
         let editable_el = element.cast::<EditableTextElement>()?;
         let layout_data = editable_el.cached_layout.as_ref()?;
@@ -261,7 +318,7 @@ impl TurApp {
             return false;
         };
         let tree = self.internal.js_context.element_tree.borrow();
-        let Some(node) = tree.get(focused_id) else {
+        let Some(node) = tree.get_element(focused_id) else {
             return false;
         };
         let Some(ref element) = node.element else {

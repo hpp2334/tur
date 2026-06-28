@@ -41,7 +41,7 @@ impl<'a> PaintContext<'a> {
         canvas: &mut dyn Canvas,
         parent_offset: Offset,
     ) {
-        self.tree.paint_node(
+        self.tree.paint_element(
             child_id,
             canvas,
             parent_offset,

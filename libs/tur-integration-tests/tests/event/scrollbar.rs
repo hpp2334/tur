@@ -45,6 +45,7 @@ fn jump_to_sets_scroll_offset() {
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
+    let sv_id = ElementNodeId::new(sv_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     app.eval_js("globalThis.__ctrl.jumpTo(150)");
@@ -70,7 +71,9 @@ fn dragging_scrollbar_thumb_scrolls() {
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
+    let sv_id = ElementNodeId::new(sv_id.as_u64());
     let bar_id = app.query_element(&["bar"]).unwrap();
+    let bar_id = ElementNodeId::new(bar_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     // The scrollbar column occupies x=[190,200]. Press in the middle of the

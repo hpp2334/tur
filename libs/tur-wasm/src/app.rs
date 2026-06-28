@@ -237,11 +237,340 @@ fn register_host_services(app: &mut TurApp) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// `__tur.request()` — Promise-based HTTP client backed by reqwest-wasm.
+//
+// Lives in tur-wasm (reqwest-wasm is wasm-only); the engine exposes only the
+// generic `register_tur_fn` hook that attaches this onto `globalThis.__tur`.
+//
+// Scheduling: the fn creates a pending `JsPromise`, spawns the reqwest future
+// via `wasm_bindgen_futures::spawn_local`, and on completion pushes
+// `(ResolvingFunctions, outcome)` into `HTTP_RESULTS`. The frame loop drains
+// that queue inside `with_boa_context` (the only place a `&mut Context` is
+// available) and resolves/rejects the promise — which enqueues a PromiseJob
+// that runs on the next `flush`, so `.then`/`await` bodies fire in the same
+// reactive pass as any `set()` they perform.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+enum HttpBody {
+    Text(String),
+    Bytes(Vec<u8>),
+}
+
+#[derive(Debug)]
+enum HttpOutcome {
+    Ok {
+        status: u16,
+        status_text: String,
+        headers: Vec<(String, String)>,
+        body: HttpBody,
+    },
+    Err(String),
+}
+
+/// A pending `__tur.request` result awaiting settlement during the frame loop.
+type PendingHttp = (boa_engine::builtins::promise::ResolvingFunctions, HttpOutcome);
+
+/// A pending `__turHost.pickFile` result: callback + (`None` if cancelled).
+type PendingPick = (
+    boa_engine::object::builtins::JsFunction,
+    Option<(String, Vec<u8>)>,
+);
+
+/// The `change` handler closure type used by the hidden file-picker `<input>`.
+type PickHandler = wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>;
+
+async fn perform_request(
+    url: String,
+    method: String,
+    headers: Vec<(String, String)>,
+    body: Option<HttpBody>,
+    want_bytes: bool,
+    username: Option<String>,
+    password: Option<String>,
+) -> HttpOutcome {
+    let result: Result<HttpOutcome, String> = async {
+        let client = reqwest_wasm::Client::new();
+        let m = reqwest_wasm::Method::from_bytes(method.as_bytes())
+            .map_err(|e| format!("invalid method {method:?}: {e}"))?;
+        let mut rb = client.request(m, &url);
+        if let (Some(u), Some(p)) = (username.as_deref(), password.as_deref()) {
+            rb = rb.basic_auth(u, Some(p));
+        }
+        for (k, v) in &headers {
+            if let (Ok(name), Ok(val)) = (
+                reqwest_wasm::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest_wasm::header::HeaderValue::from_str(v),
+            ) {
+                rb = rb.header(name, val);
+            }
+        }
+        rb = match body {
+            Some(HttpBody::Text(s)) => rb.body(s),
+            Some(HttpBody::Bytes(b)) => rb.body(b),
+            None => rb,
+        };
+        let resp = rb.send().await.map_err(|e| format!("{e}"))?;
+        let status = resp.status().as_u16();
+        let status_text = resp
+            .status()
+            .canonical_reason()
+            .unwrap_or("")
+            .to_string();
+        let hdrs: Vec<(String, String)> = resp
+            .headers()
+            .iter()
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+            .collect();
+        let body = if want_bytes {
+            HttpBody::Bytes(resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec())
+        } else {
+            HttpBody::Text(resp.text().await.map_err(|e| format!("{e}"))?)
+        };
+        Ok(HttpOutcome::Ok {
+            status,
+            status_text,
+            headers: hdrs,
+            body,
+        })
+    }
+    .await;
+    result.unwrap_or_else(HttpOutcome::Err)
+}
+
+fn js_opt_str(
+    obj: &boa_engine::object::JsObject,
+    key: &str,
+    ctx: &mut boa_engine::Context,
+) -> Option<String> {
+    obj.get(boa_engine::js_string!(key), ctx)
+        .ok()
+        .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
+}
+
+fn register_tur_services(app: &mut TurApp) {
+    use boa_engine::native_function::NativeFunction;
+    use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
+    use boa_engine::property::PropertyKey;
+    use boa_engine::{js_string, JsArgs, JsValue};
+
+    // `__tur.request({ url, method?, headers?, body?, responseType?, username?, password? }) -> Promise`
+    //
+    // `body` accepts a string or an ArrayBuffer (from `__turHost.pickFile`).
+    // `responseType` is "text" (default; fills `bodyText`) or "bytes" (fills
+    // `bodyBytes` as an ArrayBuffer). The resolved value is always an object:
+    //   { ok: true, status, statusText, headers: {name:value}, bodyText?|bodyBytes? }
+    // Errors reject with { message }.
+    let request = NativeFunction::from_copy_closure(move |_this, args, ctx| {
+        let (promise, resolvers) = JsPromise::new_pending(ctx);
+        let opts = args.get_or_undefined(0);
+        let Some(obj) = opts.as_object() else {
+            let msg = JsValue::from(js_string!("request: options object required"));
+            let _ = resolvers.reject.call(&JsValue::undefined(), &[msg], ctx);
+            return Ok(promise.into());
+        };
+
+        let url = js_opt_str(&obj, "url", ctx).unwrap_or_default();
+        let method = js_opt_str(&obj, "method", ctx).unwrap_or_else(|| "GET".to_string());
+        let response_type =
+            js_opt_str(&obj, "responseType", ctx).unwrap_or_else(|| "text".to_string());
+        let username = js_opt_str(&obj, "username", ctx);
+        let password = js_opt_str(&obj, "password", ctx);
+
+        let mut headers: Vec<(String, String)> = Vec::new();
+        if let Some(hobj) = obj
+            .get(js_string!("headers"), ctx)
+            .ok()
+            .and_then(|v| v.as_object())
+        {
+            if let Ok(keys) = hobj.own_property_keys(ctx) {
+                for key in keys {
+                    let kstr = match &key {
+                        PropertyKey::String(s) => s.to_std_string_escaped(),
+                        PropertyKey::Index(i) => i.get().to_string(),
+                        PropertyKey::Symbol(_) => continue,
+                    };
+                    if let Ok(v) = hobj.get(key, ctx) {
+                        let vstr = v
+                            .as_string()
+                            .map(|s| s.to_std_string_escaped())
+                            .unwrap_or_default();
+                        headers.push((kstr, vstr));
+                    }
+                }
+            }
+        }
+
+        let body: Option<HttpBody> = match obj.get(js_string!("body"), ctx) {
+            Ok(v) => {
+                if let Some(s) = v.as_string() {
+                    Some(HttpBody::Text(s.to_std_string_escaped()))
+                } else if let Some(o) = v.as_object() {
+                    JsArrayBuffer::from_object(o.clone())
+                        .ok()
+                        .and_then(|ab| ab.to_vec())
+                        .map(HttpBody::Bytes)
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        };
+
+        let want_bytes = response_type == "bytes";
+
+        wasm_bindgen_futures::spawn_local(async move {
+            let outcome =
+                perform_request(url, method, headers, body, want_bytes, username, password).await;
+            HTTP_RESULTS.with(|q| q.borrow_mut().push((resolvers, outcome)));
+        });
+
+        Ok(promise.into())
+    });
+    if let Err(e) = app.register_tur_fn("request", 1, request) {
+        tracing::error!("failed to register __tur.request: {e}");
+    }
+}
+
+// --- File IO host bridges (browser-only; `__turHost` namespace) ------------
+//
+// `pickFile(callback)` opens the native file picker and resolves with
+// `{ name, bytes<ArrayBuffer> }` (or null if cancelled). `saveFile(name, bytes)`
+// triggers a browser download. Bytes round-trip through boa ArrayBuffers; the
+// actual File/Blob live in the browser heap, so we copy through `Vec<u8>`.
+
+fn register_file_io(app: &mut TurApp) {
+    use boa_engine::native_function::NativeFunction;
+    use boa_engine::object::builtins::{JsArrayBuffer, JsFunction};
+    use boa_engine::{JsArgs, JsValue};
+    use wasm_bindgen::JsCast;
+
+    let pick_file = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
+        let Some(cb_obj) = args.get_or_undefined(0).as_object() else {
+            return Ok(JsValue::undefined());
+        };
+        let Some(cb) = JsFunction::from_object(cb_obj.clone()) else {
+            return Ok(JsValue::undefined());
+        };
+        let Some(window) = web_sys::window() else {
+            return Ok(JsValue::undefined());
+        };
+        let Some(document) = window.document() else {
+            return Ok(JsValue::undefined());
+        };
+        let Ok(input_el) = document.create_element("input") else {
+            return Ok(JsValue::undefined());
+        };
+        let Ok(input) = input_el.dyn_into::<web_sys::HtmlInputElement>() else {
+            return Ok(JsValue::undefined());
+        };
+        input.set_type("file");
+
+        let input_for_handler = input.clone();
+        let cb_for_handler = cb.clone();
+        let on_change = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev| {
+            let picked = input_for_handler.files().and_then(|fl| fl.get(0));
+            match picked {
+                Some(file) => {
+                    let name = file.name();
+                    let cb2 = cb_for_handler.clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let bytes = match wasm_bindgen_futures::JsFuture::from(file.array_buffer())
+                            .await
+                        {
+                            Ok(buf) => {
+                                let arr = js_sys::Uint8Array::new(&buf);
+                                let mut v = vec![0u8; arr.length() as usize];
+                                arr.copy_to(&mut v);
+                                Some(v)
+                            }
+                            Err(_) => None,
+                        };
+                        FILE_PICK_RESULTS
+                            .with(|q| q.borrow_mut().push((cb2, bytes.map(|b| (name, b)))));
+                    });
+                }
+                None => {
+                    FILE_PICK_RESULTS
+                        .with(|q| q.borrow_mut().push((cb_for_handler.clone(), None)));
+                }
+            }
+        });
+        input.set_onchange(Some(on_change.as_ref().unchecked_ref()));
+        PICK_CLOSURES.with(|c| c.borrow_mut().push(on_change));
+        input.click();
+        Ok(JsValue::undefined())
+    });
+    if let Err(e) = app.register_host_fn("pickFile", 1, pick_file) {
+        tracing::error!("failed to register pickFile: {e}");
+    }
+
+    let save_file = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
+        let name = args
+            .get_or_undefined(0)
+            .as_string()
+            .map(|s| s.to_std_string_escaped())
+            .unwrap_or_else(|| "download".to_string());
+        let bytes: Option<Vec<u8>> = args
+            .get_or_undefined(1)
+            .as_object()
+            .and_then(|o| JsArrayBuffer::from_object(o.clone()).ok())
+            .and_then(|ab| ab.to_vec());
+        if let (Some(bytes), Some(window)) = (bytes, web_sys::window()) {
+            let document = window.document();
+            let arr = js_sys::Uint8Array::from(&bytes[..]);
+            let parts = js_sys::Array::new();
+            parts.push(&arr);
+            if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence(&parts) {
+                if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                    if let Some(document) = document {
+                        if let Ok(a_el) = document.create_element("a") {
+                            if let Ok(a) = a_el.dyn_into::<web_sys::HtmlAnchorElement>() {
+                                a.set_href(&url);
+                                a.set_download(&name);
+                                if let Some(body) = document.body() {
+                                    let _ = body.append_child(&a);
+                                    a.click();
+                                    let _ = body.remove_child(&a);
+                                }
+                            }
+                        }
+                    }
+                    let _ = web_sys::Url::revoke_object_url(&url);
+                }
+            }
+        }
+        Ok(JsValue::undefined())
+    });
+    if let Err(e) = app.register_host_fn("saveFile", 2, save_file) {
+        tracing::error!("failed to register saveFile: {e}");
+    }
+}
+
 thread_local! {
     /// Pending (callback, resolved text) pairs queued by `clipboardReadText`.
     /// Drained by `TurWasmApp::drain_clipboard_reads` from within the frame
     /// loop, where a `&mut Context` is available.
     static CLIPBOARD_READ_QUEUE: std::cell::RefCell<Vec<(boa_engine::object::builtins::JsFunction, String)>>
+        = const { std::cell::RefCell::new(Vec::new()) };
+
+    /// Pending `(ResolvingFunctions, HttpOutcome)` pairs queued by
+    /// `__tur.request` once the reqwest future resolves. Drained in the frame
+    /// loop, where a `&mut Context` is available to settle the promise.
+    static HTTP_RESULTS: std::cell::RefCell<Vec<PendingHttp>>
+        = const { std::cell::RefCell::new(Vec::new()) };
+
+    /// Pending `(callback, picked-file)` pairs queued by `__turHost.pickFile`
+    /// once the browser File bytes are read. `None` = picker cancelled.
+    static FILE_PICK_RESULTS: std::cell::RefCell<Vec<PendingPick>>
+        = const { std::cell::RefCell::new(Vec::new()) };
+
+    /// Keeps the per-pick `change` closures alive for the lifetime of the
+    /// hidden `<input type=file>` (otherwise they'd be dropped before the user
+    /// selects a file). Accumulates; entries outlive their use but the leak is
+    /// negligible for a playground.
+    static PICK_CLOSURES: std::cell::RefCell<Vec<PickHandler>>
         = const { std::cell::RefCell::new(Vec::new()) };
 }
 
@@ -447,6 +776,8 @@ impl TurWasmApp {
             // so JS (e.g. tur-demo-impl) can call `transpileTsx` / `tokenizeTsx`.
             // swc lives only in tur-wasm; tur-engine provides the generic hook.
             register_host_services(&mut app);
+            register_file_io(&mut app);
+            register_tur_services(&mut app);
 
             app.push_event(AppEvent::Resize {
                 logical_width,
@@ -908,6 +1239,146 @@ impl TurWasmApp {
                             let text_val = boa_engine::JsValue::from(boa_engine::js_string!(text.as_str()));
                             if let Err(e) = cb.call(&boa_engine::JsValue::undefined(), &[text_val], ctx) {
                                 tracing::error!("clipboardReadText callback error: {e}");
+                            }
+                        }
+                    });
+                }
+
+                // Drain pending __turHost.pickFile resolutions: build the
+                // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
+                // callback from here, where a `&mut Context` is available.
+                let pending_picks: Vec<PendingPick> =
+                    FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
+                if !pending_picks.is_empty() {
+                    s.app.with_boa_context(|ctx| {
+                        use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
+                        use boa_engine::object::JsObject;
+                        use boa_engine::{js_string, JsValue};
+                        for (cb, picked) in pending_picks {
+                            let arg = match picked {
+                                Some((name, bytes)) => {
+                                    let o = JsObject::with_object_proto(ctx.intrinsics());
+                                    let _ = o.create_data_property(
+                                        js_string!("name"),
+                                        JsValue::from(js_string!(name.as_str())),
+                                        ctx,
+                                    );
+                                    if let Ok(ab) =
+                                        JsArrayBuffer::from_byte_block(
+                                            AlignedVec::from_iter(0, bytes),
+                                            ctx,
+                                        )
+                                    {
+                                        let _ = o.create_data_property(
+                                            js_string!("bytes"),
+                                            JsValue::from(ab),
+                                            ctx,
+                                        );
+                                    }
+                                    o.into()
+                                }
+                                None => JsValue::null(),
+                            };
+                            if let Err(e) =
+                                cb.call(&boa_engine::JsValue::undefined(), &[arg], ctx)
+                            {
+                                tracing::error!("pickFile callback error: {e}");
+                            }
+                        }
+                    });
+                }
+
+                // Drain pending __tur.request resolutions: settle each
+                // pending promise (resolve/reject), which enqueues a
+                // PromiseJob that runs on the next `flush`.
+                let pending_http: Vec<PendingHttp> =
+                    HTTP_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
+                if !pending_http.is_empty() {
+                    s.app.with_boa_context(|ctx| {
+                        use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
+                        use boa_engine::object::JsObject;
+                        use boa_engine::{js_string, JsValue};
+                        for (resolvers, outcome) in pending_http {
+                            match outcome {
+                                HttpOutcome::Ok {
+                                    status,
+                                    status_text,
+                                    headers,
+                                    body,
+                                } => {
+                                    let o = JsObject::with_object_proto(ctx.intrinsics());
+                                    let _ = o.create_data_property(
+                                        js_string!("ok"),
+                                        JsValue::from(true),
+                                        ctx,
+                                    );
+                                    let _ = o.create_data_property(
+                                        js_string!("status"),
+                                        JsValue::from(status as f64),
+                                        ctx,
+                                    );
+                                    let _ = o.create_data_property(
+                                        js_string!("statusText"),
+                                        JsValue::from(js_string!(status_text.as_str())),
+                                        ctx,
+                                    );
+                                    let hmap = JsObject::with_object_proto(ctx.intrinsics());
+                                    for (k, v) in &headers {
+                                        let _ = hmap.create_data_property(
+                                            js_string!(k.as_str()),
+                                            JsValue::from(js_string!(v.as_str())),
+                                            ctx,
+                                        );
+                                    }
+                                    let _ = o.create_data_property(
+                                        js_string!("headers"),
+                                        JsValue::from(hmap),
+                                        ctx,
+                                    );
+                                    match body {
+                                        HttpBody::Text(t) => {
+                                            let _ = o.create_data_property(
+                                                js_string!("bodyText"),
+                                                JsValue::from(js_string!(t.as_str())),
+                                                ctx,
+                                            );
+                                        }
+                                        HttpBody::Bytes(b) => {
+                                            if let Ok(ab) = JsArrayBuffer::from_byte_block(
+                                                AlignedVec::from_iter(0, b),
+                                                ctx,
+                                            ) {
+                                                let _ = o.create_data_property(
+                                                    js_string!("bodyBytes"),
+                                                    JsValue::from(ab),
+                                                    ctx,
+                                                );
+                                            }
+                                        }
+                                    }
+                                    if let Err(e) = resolvers.resolve.call(
+                                        &boa_engine::JsValue::undefined(),
+                                        &[o.into()],
+                                        ctx,
+                                    ) {
+                                        tracing::error!("request resolve error: {e}");
+                                    }
+                                }
+                                HttpOutcome::Err(msg) => {
+                                    let e = JsObject::with_object_proto(ctx.intrinsics());
+                                    let _ = e.create_data_property(
+                                        js_string!("message"),
+                                        JsValue::from(js_string!(msg.as_str())),
+                                        ctx,
+                                    );
+                                    if let Err(e) = resolvers.reject.call(
+                                        &boa_engine::JsValue::undefined(),
+                                        &[e.into()],
+                                        ctx,
+                                    ) {
+                                        tracing::error!("request reject error: {e}");
+                                    }
+                                }
                             }
                         }
                     });

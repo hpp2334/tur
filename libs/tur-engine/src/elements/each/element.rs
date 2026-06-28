@@ -4,14 +4,11 @@ use boa_engine::object::builtins::JsArray;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use tur_shared::{CrossAxisAlignment, MainAxisSize, MainAxisAlignment};
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::element::{FragmentNodeId, NodeId};
+use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::reactive::{extract_readable, AtomId, AnyReadable};
-use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
-use crate::elements::flex::FlexElement;
-use crate::elements::FlexComponent;
+use crate::core::widget::{extract_component, Component, WidgetCx};
 
 // ---------------------------------------------------------------------------
 // EachComponent — render one child per item of a reactive array.
@@ -19,22 +16,19 @@ use crate::elements::FlexComponent;
 // `items` is an atom (source or derived) holding a JS array. `build` is a JS
 // function `(item, index) => EdgyElement` invoked once per item to produce
 // that item's subtree. Whenever the `items` atom changes, the mounted item
-// subtrees are rebuilt. `EachElement` lays its children out as a vertical flex
-// (Column); the layout is delegated to a `FlexElement` instance, so `mainAlignment`,
-// `crossAlignment`, and `mainAxisSize` behave exactly like `Column`.
+// subtrees are rebuilt.
 //
-// Like `LazyListComponent`, this holds a `JsFunction`; the spec rides on
-// `ComponentHandle`'s `unsafe_empty_trace`, so the build closure must be kept
-// alive by the JS module scope for the lifetime of the app (it always is).
+// EachComponent is a **fragment**: it hosts its item subtrees in the tree, but
+// the enclosing flex lays those items out directly as its own children —
+// inheriting the parent's axis and sizing. So an `Each` inside a `Row` flows
+// horizontally and an `Each` inside a `Column` flows vertically, both
+// content-sized, with no greedy fill.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
 pub struct EachComponent {
     pub items: AnyReadable,
     pub build: JsFunction,
-    pub main_alignment: Option<Val<MainAxisAlignment>>,
-    pub cross_alignment: Option<Val<CrossAxisAlignment>>,
-    pub main_axis_size: Option<Val<MainAxisSize>>,
     pub query_key: Option<Vec<String>>,
 }
 
@@ -57,13 +51,13 @@ fn build_item_spec(
 
 impl EachComponent {
     /// Read the current `items` array from the store and build one child per
-    /// entry under `parent`. Returns the built node ids in array order.
+    /// entry under `fragment_id`. Returns the built children in array order.
     fn build_items(
         &self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        parent: ElementNodeId,
-    ) -> Vec<ElementNodeId> {
+        fragment_id: FragmentNodeId,
+    ) -> Vec<NodeId> {
         let raw = cx.read_atom_raw(self.items, boa);
         let Some(arr) = raw.as_object().and_then(|o| JsArray::from_object(o.clone()).ok()) else {
             return Vec::new();
@@ -78,114 +72,79 @@ impl EachComponent {
             let Some(spec) = build_item_spec(&self.build, &item, i as u64, boa) else {
                 continue;
             };
-            out.push(spec.build(cx, boa, parent));
+            out.push(spec.build(cx, boa, NodeId::from(fragment_id)));
         }
         out
     }
 }
 
 impl Component for EachComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
 
-        // Build items BEFORE inserting this node so each item's self-link to
-        // `id` is a no-op; we then explicitly link them after inserting to
-        // yield a single edge per item (same pattern as `LazyListElement`).
-        let mounted = self.build_items(cx, boa, id);
-        let mounted_ids = mounted.clone();
-
-        cx.insert_node(
-            id,
-            AnyElement::new(EachElement {
-                flex: FlexElement {
-                    component: FlexComponent {
-                        // `EachElement` is a vertical list (Column-like).
-                        direction: Some(tur_shared::Axis::Vertical),
-                        main_alignment: self.main_alignment.clone(),
-                        cross_alignment: self.cross_alignment.clone(),
-                        main_axis_size: self.main_axis_size.clone(),
-                        // Children live directly under the `EachElement` node, not
-                        // inside this delegate — `children` is unused.
-                        children: Vec::new(),
-                        query_key: None,
-                    },
-                    child_data: Vec::new(),
-                    constraints: None,
-                    computed_size: None,
-                },
+        // Insert the empty fragment FIRST so items can auto-link to it
+        // via `append_child` (which pushes to `frag.children`).
+        let host = FragmentHost {
+            id: FragmentNodeId::new(id.as_u64()),
+            parent,
+            children: Vec::new(),
+            kind: Some(Box::new(EachFragment {
                 component: self.clone(),
-                node_id: id,
-                mounted,
-            }),
-            boa,
-        );
+            })),
+            query_key: self.query_key.clone(),
+        };
+        cx.insert_fragment(host);
 
-        for item_id in &mounted_ids {
-            cx.link_child(id, *item_id);
-        }
-        if let Some(qk) = &self.query_key {
-            cx.set_query_key(id, qk.clone());
-        }
+        // Build items under `id` — each auto-links to the fragment.
+        self.build_items(cx, boa, FragmentNodeId::new(id.as_u64()));
+
         cx.link_child(parent, id);
         id
     }
 }
 
 // ---------------------------------------------------------------------------
-// EachElement — the built element.
+// EachFragment — the `FragmentKind` impl. Rebuilds all items when `items`
+// atom changes.
 // ---------------------------------------------------------------------------
 
-pub struct EachElement {
-    pub(crate) flex: FlexElement,
+pub struct EachFragment {
     pub component: EachComponent,
-    pub(crate) node_id: ElementNodeId,
-    pub(crate) mounted: Vec<ElementNodeId>,
 }
 
-impl crate::core::layout::ElementSubscribe for EachElement {}
+impl FragmentKind for EachFragment {
+    fn type_name(&self) -> &'static str {
+        "tur_each"
+    }
 
-impl Effect for EachElement {
-    fn effect(
+    fn trace_label(&self, children: &[NodeId]) -> String {
+        format!("items={}", children.len())
+    }
+
+    fn trace_props(&self, children: &[NodeId]) -> Vec<(&'static str, TraceValue)> {
+        vec![("itemCount", TraceValue::Num(children.len() as f64))]
+    }
+
+    fn try_rebuild(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<AtomId>,
-    ) {
+        fragment_id: FragmentNodeId,
+    ) -> Option<Vec<NodeId>> {
         if !self.component.items.is_dirty(dirties) {
-            return;
+            return None;
         }
-
         // Rebuild-all reconciliation: tear down every previously mounted item
         // and rebuild from the current array. Simple and correct; the item
         // subtrees are stateless widgets so rebuilding them is cheap.
-        let node_id = self.node_id;
-        for old in self.mounted.drain(..) {
-            cx.destroy_subtree(old);
-        }
-        self.mounted = self.component.build_items(cx, boa, node_id);
-        cx.mark_dirty(node_id);
-    }
-}
-
-impl ElementTrace for EachElement {
-    fn trace_label(&self) -> String {
-        format!("items={}", self.mounted.len())
-    }
-
-    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        vec![("itemCount", TraceValue::Num(self.mounted.len() as f64))]
+        Some(self.component.build_items(cx, boa, fragment_id))
     }
 }
 
 // ---------------------------------------------------------------------------
 // Factory — parse props into a spec.
 // ---------------------------------------------------------------------------
-
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
 
 fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
     use boa_engine::object::builtins::JsArray;
@@ -226,9 +185,6 @@ impl EachComponent {
         Some(EachComponent {
             items: prop_items(props, "items", ctx)?,
             build: prop_builder(props, "build", ctx)?,
-            main_alignment: prop_val::<MainAxisAlignment>(props, "mainAlignment", ctx),
-            cross_alignment: prop_val::<CrossAxisAlignment>(props, "crossAlignment", ctx),
-            main_axis_size: prop_val::<MainAxisSize>(props, "mainAxisSize", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         })
     }

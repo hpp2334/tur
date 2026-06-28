@@ -4,14 +4,14 @@ use boa_engine::Context;
 use tur_shared::{ComputedLayout, Constraints};
 
 use crate::core::bridge::{BoaOpaque, TurNodeHandle};
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::AnyElement;
 
 pub struct ElementObject {
     pub id: ElementNodeId,
     pub element: Option<AnyElement>,
-    pub children: Vec<ElementNodeId>,
-    pub parent: Option<ElementNodeId>,
+    pub children: Vec<NodeId>,
+    pub parent: Option<NodeId>,
     pub computed_layout: ComputedLayout,
     pub query_key: Option<Vec<String>>,
     pub handle: BoaOpaque<TurNodeHandle>,

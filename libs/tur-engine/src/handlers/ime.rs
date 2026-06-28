@@ -18,7 +18,7 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
             return;
         };
         {
-            let Some(node) = cx.element_tree.get_mut(focused_id) else {
+            let Some(node) = cx.element_tree.get_element_mut(focused_id) else {
                 return;
             };
             let Some(ref mut element) = node.element else {
@@ -29,7 +29,7 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
                 ElementOnImeContext::new(&mut *cx.mutation_queue, &mut *cx.event_queue);
             element.on_ime_event(&mut el_cx, ime_event);
         }
-        cx.element_tree.mark_dirty(focused_id);
+        cx.element_tree.mark_dirty(focused_id.into());
 
         // A composition end inserts text and moves the caret; keep it visible.
         ensure_caret_visible(cx);

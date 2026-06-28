@@ -30,7 +30,7 @@ impl Renderer for NoopRenderer {
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
     ) {
-        let root_id = match tree.root_id() {
+        let root_id = match tree.root_element_id() {
             Some(id) => id,
             None => {
                 tracing::debug!("noop-renderer: empty element tree");
@@ -63,7 +63,7 @@ fn collect_stats(
     depth: usize,
     counts: &mut HashMap<&str, usize>,
 ) -> usize {
-    let node = match tree.get(id) {
+    let node = match tree.get_element(id) {
         Some(n) => n,
         None => return depth,
     };
@@ -88,7 +88,8 @@ fn collect_stats(
     *counts.entry(type_name).or_insert(0) += 1;
 
     let mut child_max = depth;
-    for &child_id in &node.children {
+    let children = tree.children_of_element(id);
+    for child_id in children {
         let d = collect_stats(tree, child_id, absolute_offset, depth + 1, counts);
         if d > child_max {
             child_max = d;

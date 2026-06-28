@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Axis, Brush, Size};
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
@@ -37,7 +37,7 @@ pub struct ScrollViewComponent {
 }
 
 impl Component for ScrollViewComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         // Resolve axis eagerly — the wheel handler and controller-metric
         // updates need it at event time where no store/Context is available.
         let axis = self
@@ -46,7 +46,7 @@ impl Component for ScrollViewComponent {
             .and_then(|v| cx.read_val(v, boa))
             .unwrap_or(Axis::Vertical);
 
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::with_wheel(ScrollViewElement {
@@ -71,9 +71,9 @@ impl Component for ScrollViewComponent {
                 ctrl.dirty_flag = Some(cx.js_ctx().dirty.clone());
             }
         }
-        let _child_id = self.child.build(cx, boa, id);
-        cx.link_child(parent, id);
-        id
+        let _child_id = self.child.build(cx, boa, id.into());
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

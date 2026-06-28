@@ -4,7 +4,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
@@ -95,6 +95,13 @@ impl TurTestApp {
         self.inner.load_js(&source)?;
         self.ensure_flushed();
         Ok(())
+    }
+
+    /// Direct mutable access to the underlying `TurApp` — lets a test register
+    /// extra `__tur.*` / `__turHost.*` fns (e.g. a fake `__tur.request` backed
+    /// by an in-process WebDAV server) before loading a bundle.
+    pub fn with_app_mut<R>(&mut self, f: impl FnOnce(&mut TurApp) -> R) -> R {
+        f(&mut self.inner)
     }
 
     pub fn render(&mut self) {
@@ -317,21 +324,24 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
-    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+    pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.inner.query_element(key)
     }
 
     pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
         let tree = self.inner.element_tree();
-        let node = tree.get(id)?;
+        let node = tree.get_element(id)?;
         let mut x = node.computed_layout.offset.x;
         let mut y = node.computed_layout.offset.y;
         let mut current = node.parent;
         while let Some(cid) = current {
-            if let Some(n) = tree.get(cid) {
+            if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
                 x += n.computed_layout.offset.x;
                 y += n.computed_layout.offset.y;
                 current = n.parent;
+            } else if let Some(f) = tree.get_fragment(FragmentNodeId::new(cid.as_u64())) {
+                // Fragments have zero offset; hop to their real-ancestor parent.
+                current = Some(f.parent);
             } else {
                 break;
             }
@@ -404,7 +414,7 @@ impl TurTestApp {
     /// Structured dev-tool snapshot of an arbitrary node by id.
     pub fn dev_tool_get_element(
         &self,
-        id: ElementNodeId,
+        id: NodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
         self.inner.dev_tool_get_element(id)
     }

@@ -1,3 +1,4 @@
+use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// Reproduces the layout-invalidation gap: when a reactive flex weight changes,
@@ -15,7 +16,9 @@ fn reactive_flex_change_relays_out_children() {
         .unwrap();
 
     let a_id = app.query_element(&["a"]).expect("query a");
+    let a_id = ElementNodeId::new(a_id.as_u64());
     let b_id = app.query_element(&["b"]).expect("query b");
+    let b_id = ElementNodeId::new(b_id.as_u64());
 
     app.render();
 
@@ -23,12 +26,12 @@ fn reactive_flex_change_relays_out_children() {
     {
         let tree = app.element_tree();
         assert_eq!(
-            tree.get(a_id).unwrap().computed_layout.size.width,
+            tree.get_element(a_id).unwrap().computed_layout.size.width,
             200.0,
             "initial: A should be half"
         );
         assert_eq!(
-            tree.get(b_id).unwrap().computed_layout.size.width,
+            tree.get_element(b_id).unwrap().computed_layout.size.width,
             200.0,
             "initial: B should be half"
         );
@@ -42,12 +45,12 @@ fn reactive_flex_change_relays_out_children() {
     {
         let tree = app.element_tree();
         assert_eq!(
-            tree.get(a_id).unwrap().computed_layout.size.width,
+            tree.get_element(a_id).unwrap().computed_layout.size.width,
             300.0,
             "after setFlex(3,1): A should grow to 300"
         );
         assert_eq!(
-            tree.get(b_id).unwrap().computed_layout.size.width,
+            tree.get_element(b_id).unwrap().computed_layout.size.width,
             100.0,
             "after setFlex(3,1): B should shrink to 100"
         );

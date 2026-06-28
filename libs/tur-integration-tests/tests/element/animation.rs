@@ -1,4 +1,5 @@
 use std::time::Duration;
+use tur_engine::core::element::ElementNodeId;
 
 use tur_integration_tests::TurTestApp;
 
@@ -24,14 +25,14 @@ fn animation_controller_forward_with_on_tick() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         assert_eq!(node.computed_layout.size.width, 100.0,
             "at t=0 width should still be 100");
     }
@@ -40,7 +41,7 @@ fn animation_controller_forward_with_on_tick() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!(w > 110.0 && w < 190.0,
             "at t=100ms (halfway) width should be ~150, got {w}");
@@ -50,7 +51,7 @@ fn animation_controller_forward_with_on_tick() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, 200.0,
             "after duration elapsed width should be 200, got {w}");
@@ -79,15 +80,15 @@ fn animation_controller_reverse_with_on_tick() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     app.advance(Duration::from_millis(100)).unwrap();
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!(w > 110.0 && w < 190.0,
             "reverse halfway: width should be ~150, got {w}");
@@ -97,7 +98,7 @@ fn animation_controller_reverse_with_on_tick() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         assert_eq!(node.computed_layout.size.width, 100.0,
             "reverse complete: width should be 100");
     }
@@ -126,15 +127,15 @@ fn animation_controller_stop_freezes_value() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     app.advance(Duration::from_millis(50)).unwrap();
     app.render();
     let frozen_width = {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         node.computed_layout.size.width
     };
     assert!(frozen_width > 100.0 && frozen_width < 200.0,
@@ -148,7 +149,7 @@ fn animation_controller_stop_freezes_value() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, frozen_width,
             "after stop + advance, width should stay frozen at {frozen_width}, got {w}");
@@ -178,15 +179,15 @@ fn animation_controller_repeats() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     app.advance(Duration::from_millis(250)).unwrap();
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!(w > 140.0 && w < 160.0,
             "after 250ms (2.5x100ms), halfway through 3rd repeat, got {w}");
@@ -196,7 +197,7 @@ fn animation_controller_repeats() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, 200.0,
             "after 350ms (past 3x100ms), width should be 200 (completed), got {w}");
@@ -286,15 +287,15 @@ fn animation_controller_ease_in_curve() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     app.advance(Duration::from_millis(500)).unwrap();
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!(w < 500.0,
             "easeIn at t=0.5: width should be < 500 (slow start), got {w}");
@@ -324,8 +325,8 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     // Halfway through (100ms of 200ms) → ~150, then pause.
@@ -335,7 +336,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 
     let paused_width = {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         node.computed_layout.size.width
     };
     assert!(paused_width > 140.0 && paused_width < 160.0,
@@ -346,7 +347,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!((w - paused_width).abs() < 1.0,
             "during pause width should stay at {paused_width}, got {w}");
@@ -363,7 +364,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, 200.0,
             "after resume + advance, width should be 200 (completed), got {w}");
@@ -393,8 +394,8 @@ fn animation_controller_seek_jumps_value() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     // Jump to 80% immediately.
@@ -402,7 +403,7 @@ fn animation_controller_seek_jumps_value() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert!((w - 180.0).abs() < 1.0,
             "after seek(0.8) width should be ~180, got {w}");
@@ -414,7 +415,7 @@ fn animation_controller_seek_jumps_value() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, 200.0,
             "after seek + advance past remaining duration, width should be 200, got {w}");
@@ -444,8 +445,8 @@ fn animation_controller_set_speed_scales_time() {
 
     let container_id = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        tree.get(root.children[0]).unwrap().id
+        let root = tree.root_element().unwrap();
+        tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap().id
     };
 
     // Double speed: 200ms duration should complete in ~100ms.
@@ -455,7 +456,7 @@ fn animation_controller_set_speed_scales_time() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         assert_eq!(w, 200.0,
             "at 2x speed, 200ms animation should complete after ~110ms, got {w}");
@@ -470,7 +471,7 @@ fn animation_controller_set_speed_scales_time() {
     app.render();
     {
         let tree = app.element_tree();
-        let node = tree.get(container_id).unwrap();
+        let node = tree.get_element(container_id).unwrap();
         let w = node.computed_layout.size.width;
         // 200ms at 0.5x = 100ms effective of 200ms duration = 50% of the way
         // back from 200 → 150.
@@ -635,7 +636,7 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
         "onTick should fire at least once per flush, got {tick_count}");
 
     let last: f64 = app.eval_js(r#"Number(globalThis.__last_tick_value)"#).parse().unwrap_or(-1.0);
-    assert!(last >= 0.0 && last <= 1.0,
+    assert!((0.0..=1.0).contains(&last),
         "value should always be within [0, 1], got {last}");
 
     // The tick count should be > 1 (we ran multiple flushes), proving the
@@ -681,7 +682,7 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
 
     // After many iterations, the value should still be in [0, 1].
     let last = parsed[parsed.len() - 1];
-    assert!(last >= 0.0 && last <= 1.0,
+    assert!((0.0..=1.0).contains(&last),
         "value should stay in [0, 1] across iterations, got {last}");
 
     let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);

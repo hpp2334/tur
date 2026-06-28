@@ -1,8 +1,8 @@
 use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
 use crate::core::event::{AppEvent, AppGestureEvent};
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
-use crate::core::element::ElementNodeId;
 use crate::elements::pointer_interact::PointerInteractEvent;
 use crate::elements::PointerInteractElement;
 use tur_shared::{MouseButton, Offset};
@@ -117,7 +117,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
     if clicked {
         let hit_path = HitTest::new(&*cx.element_tree).path(position);
         for node_id in &hit_path {
-            if let Some(node) = cx.element_tree.get(*node_id) {
+            if let Some(node) = cx.element_tree.get_element(*node_id) {
                 if let Some(ref element) = node.element {
                     if let Some(p) = element.cast::<PointerInteractElement>() {
                         if let Some(m) = p.component.on_click {
@@ -138,7 +138,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
 }
 
 fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId) -> bool {
-    tree.get(id)
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
             e.cast::<PointerInteractElement>()
@@ -148,15 +148,22 @@ fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId)
         .unwrap_or(false)
 }
 
+/// Compute a position relative to the element's top-left by walking parents
+/// and subtracting each one's layout offset. Walks through fragment ancestors
+/// transparently (fragments have zero offset, so they're skipped without
+/// affecting the sum).
 fn local_position(cx: &HandlerContext, node_id: ElementNodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
     let mut abs_y = 0.0f64;
-    let mut current = Some(node_id);
+    let mut current: Option<NodeId> = Some(node_id.into());
     while let Some(cid) = current {
-        if let Some(n) = cx.element_tree.get(cid) {
+        if let Some(n) = cx.element_tree.get_element(ElementNodeId::new(cid.as_u64())) {
             abs_x += n.computed_layout.offset.x;
             abs_y += n.computed_layout.offset.y;
             current = n.parent;
+        } else if let Some(f) = cx.element_tree.get_fragment(crate::core::element::FragmentNodeId::new(cid.as_u64())) {
+            // Fragments have zero offset; hop to their real-ancestor parent.
+            current = Some(f.parent);
         } else {
             break;
         }
@@ -165,7 +172,7 @@ fn local_position(cx: &HandlerContext, node_id: ElementNodeId, global: Offset) -
 }
 
 fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &ComposedGestureEvent) {
-    let Some(node) = cx.element_tree.get_mut(id) else {
+    let Some(node) = cx.element_tree.get_element_mut(id) else {
         return;
     };
     let Some(ref mut element) = node.element else {
@@ -178,5 +185,5 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
         id,
     );
     element.on_gesture_event(&mut el_cx, event);
-    cx.element_tree.mark_dirty(id);
+    cx.element_tree.mark_dirty(id.into());
 }

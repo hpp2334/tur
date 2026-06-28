@@ -5,14 +5,15 @@ use tur_shared::Cursor;
 
 fn build(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("mouse-region-cursor").unwrap();
-    app.query_element(&["mr-state"]).unwrap()
+    let id = app.query_element(&["mr-state"]).unwrap();
+    ElementNodeId::new(id.as_u64())
 }
 
 fn find_region(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let col = tree.get(root.children[0]).unwrap();
-    col.children[0]
+    let root = tree.root_element().unwrap();
+    let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    ElementNodeId::new(col.children[0].as_u64())
 }
 
 fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {

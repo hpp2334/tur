@@ -4,14 +4,15 @@ use tur_integration_tests::TurTestApp;
 
 fn build_pointer_region_text(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("pointer-region-text").unwrap();
-    app.query_element(&["region-text"]).unwrap()
+    let id = app.query_element(&["region-text"]).unwrap();
+    ElementNodeId::new(id.as_u64())
 }
 
 fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let col = tree.get(root.children[0]).unwrap();
-    col.children[0]
+    let root = tree.root_element().unwrap();
+    let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    ElementNodeId::new(col.children[0].as_u64())
 }
 
 fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {

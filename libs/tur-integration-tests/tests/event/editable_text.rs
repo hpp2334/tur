@@ -1,5 +1,4 @@
-use tur_engine::core::element::ElementKind;
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::elements::{EditableTextElement, ScrollViewElement};
 use tur_integration_tests::TurTestApp;
 
@@ -8,17 +7,18 @@ use tur_integration_tests::TurTestApp;
 /// editable text is that container's first child).
 fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
+    let container_id = ElementNodeId::new(container_id.as_u64());
     let tree = app.element_tree();
-    let container = tree.get(container_id).unwrap();
-    for &cid in &container.children {
-        let node = tree.get(cid).unwrap();
+    let container = tree.get_element(container_id).unwrap();
+    for cid in container.children.iter().copied() {
+        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
             .element
             .as_ref()
             .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
             .unwrap_or(false)
         {
-            return cid;
+            return ElementNodeId::new(cid.as_u64());
         }
     }
     panic!("no tur_editable_text under queryKey {:?}", key);
@@ -27,16 +27,16 @@ fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
 /// Walk ancestors from `id` to find the enclosing `ScrollViewElement`, if any.
 fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<ElementNodeId> {
     let tree = app.element_tree();
-    let mut current = tree.get(id).unwrap().parent;
+    let mut current = tree.get_element(id).unwrap().parent;
     while let Some(cid) = current {
-        let node = tree.get(cid).unwrap();
+        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
             .element
             .as_ref()
             .map(|e| e.cast::<ScrollViewElement>().is_some())
             .unwrap_or(false)
         {
-            return Some(cid);
+            return Some(ElementNodeId::new(cid.as_u64()));
         }
         current = node.parent;
     }
@@ -45,14 +45,14 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
 
 fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let child = tree.get(root.children[0]).unwrap();
-    let inner = tree.get(child.children[0]).unwrap();
+    let root = tree.root_element().unwrap();
+    let child = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let inner = tree.get_element(ElementNodeId::new(child.children[0].as_u64())).unwrap();
     let kind = inner.element.as_ref().unwrap().kind();
     if kind == ElementKind::new("tur_editable_text") {
         inner.id
     } else {
-        tree.get(inner.children[0]).unwrap().id
+        tree.get_element(ElementNodeId::new(inner.children[0].as_u64())).unwrap().id
     }
 }
 
@@ -1007,7 +1007,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     app.click(left + 2.0, top + 2.0);
     app.render();
     let (x0, y0, _) = caret_rect(&app);
-    let dev = app.dev_tool_get_element(id).expect("editable dev node");
+    let dev = app.dev_tool_get_element(id.into()).expect("editable dev node");
     let extra = |name: &str| -> f64 {
         dev.layout_extra
             .iter()
