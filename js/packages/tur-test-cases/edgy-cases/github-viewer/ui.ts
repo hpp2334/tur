@@ -5,7 +5,6 @@ import {
     Container,
     CrossAxisAlignment,
     type EdgyElement,
-    HitTestBehavior,
     ImageEdgy,
     InputEdgy,
     MainAxisSize,
@@ -25,12 +24,14 @@ export function Button({
     fg,
     onClick,
     padding = 9,
+    shadow = false,
 }: {
     label: string;
     bg: Color;
     fg: Color;
     onClick: (ctx: StoreCtx) => void;
     padding?: number;
+    shadow?: boolean;
 }): EdgyElement {
     return MouseRegion({
         cursor: "pointer",
@@ -40,6 +41,9 @@ export function Button({
                 padding,
                 borderRadius: 7,
                 color: bg,
+                shadowColor: shadow ? COLORS.shadowSm : undefined,
+                shadowBlur: shadow ? 4 : undefined,
+                shadowOffset: shadow ? [0, 1] : undefined,
                 children: [Text({ text: label, fontSize: 13, color: fg })],
             }),
         }),
@@ -91,7 +95,7 @@ export function Field({
         crossAlignment: CrossAxisAlignment.Stretch,
         mainAxisSize: MainAxisSize.Min,
         children: [
-            Text({ text: label, fontSize: 11, color: COLORS.textMuted }),
+            Text({ text: label, fontSize: 11, color: COLORS.textSubtle }),
             SizedBox({ height: 6 }),
             Container({
                 borderRadius: 7,
@@ -105,40 +109,12 @@ export function Field({
                         placeholder,
                         fontSize: 14,
                         color: COLORS.text,
-                        placeholderColor: COLORS.textMuted,
+                        placeholderColor: COLORS.textSubtle,
                         cursorColor: COLORS.accent,
                         queryKey: ["field"],
                     }),
                 ],
             }),
         ],
-    });
-}
-
-/** Full-screen scrim + centered card that swallows in-card clicks and
- *  dismisses on backdrop click. Mirrors todolist's `ModalShell`. */
-export function ModalShell({
-    onBackdropClick,
-    card,
-}: {
-    onBackdropClick: (ctx: StoreCtx) => void;
-    card: EdgyElement;
-}): EdgyElement {
-    return PointerInteract({
-        behavior: HitTestBehavior.Opaque,
-        onClick: mutate((ctx: StoreCtx, _ev) => onBackdropClick(ctx)),
-        child: Container({
-            color: COLORS.backdrop,
-            alignment: Alignment.Center,
-            children: [
-                PointerInteract({
-                    behavior: HitTestBehavior.Opaque,
-                    onClick: mutate((_ctx: StoreCtx, _ev) => {
-                        /* swallow click inside card */
-                    }),
-                    child: card,
-                }),
-            ],
-        }),
     });
 }
