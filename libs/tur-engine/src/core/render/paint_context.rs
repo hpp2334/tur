@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tur_shared::{Cursor, Offset, Size};
 
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::Canvas;
 use crate::core::resource::{ImageResource, ResourceId, ResourceMap};
@@ -11,7 +11,7 @@ use crate::core::shell::PaintShell;
 pub struct PaintContext<'a> {
     tree: &'a ElementTree,
     resource_map: &'a ResourceMap,
-    focused_node_id: Option<NodeId>,
+    focused_node_id: Option<ElementNodeId>,
     current_node_id: Option<ElementNodeId>,
     /// Shell face for this paint pass: cursor claims, time, pointer position.
     /// See [`PaintShell`] for the (deliberately limited) surface.
@@ -21,7 +21,7 @@ pub struct PaintContext<'a> {
 impl<'a> PaintContext<'a> {
     pub(crate) fn new(
         tree: &'a ElementTree,
-        focused_node_id: Option<NodeId>,
+        focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,
         resource_map: &'a ResourceMap,
         shell: PaintShell<'a>,
@@ -52,7 +52,7 @@ impl<'a> PaintContext<'a> {
     }
 
     pub fn is_focused(&self) -> bool {
-        self.focused_node_id == self.current_node_id.map(NodeId::from)
+        self.focused_node_id == self.current_node_id
     }
 
     /// Current frame time as a `Duration` since the epoch. Used by time-based

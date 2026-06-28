@@ -162,34 +162,32 @@ impl ElementTree {
 
     pub fn insert_before(
         &mut self,
-        parent_id: NodeId,
+        parent_id: ElementNodeId,
         child_id: NodeId,
-        ref_id: NodeId,
+        ref_id: ElementNodeId,
     ) -> bool {
-        if !self.elements.contains_key(&ElementNodeId::new(parent_id.as_u64()))
+        if !self.elements.contains_key(&parent_id)
             || (!self.elements.contains_key(&ElementNodeId::new(child_id.as_u64()))
                 && !self.fragments.contains_key(&FragmentNodeId::new(child_id.as_u64())))
-            || !self.elements.contains_key(&ElementNodeId::new(ref_id.as_u64()))
+            || !self.elements.contains_key(&ref_id)
         {
             return false;
         }
         // Set the child's parent pointer.
         if let Some(c) = self.elements.get_mut(&ElementNodeId::new(child_id.as_u64())) {
-            c.parent = Some(parent_id);
+            c.parent = Some(parent_id.into());
         } else if let Some(f) = self.fragments.get_mut(&FragmentNodeId::new(child_id.as_u64())) {
-            f.parent = parent_id;
+            f.parent = parent_id.into();
         }
         let insert_fn = |children: &mut Vec<NodeId>| {
-            if let Some(pos) = children.iter().position(|c| *c == ref_id) {
+            if let Some(pos) = children.iter().position(|c| *c == ref_id.into()) {
                 children.insert(pos, child_id);
             } else {
                 children.push(child_id);
             }
         };
-        if let Some(node) = self.elements.get_mut(&ElementNodeId::new(parent_id.as_u64())) {
+        if let Some(node) = self.elements.get_mut(&parent_id) {
             insert_fn(&mut node.children);
-        } else if let Some(frag) = self.fragments.get_mut(&FragmentNodeId::new(parent_id.as_u64())) {
-            insert_fn(&mut frag.children);
         }
         true
     }
@@ -230,31 +228,6 @@ impl ElementTree {
 
     pub fn parent_of_element(&self, id: ElementNodeId) -> Option<NodeId> {
         self.elements.get(&id).and_then(|n| n.parent)
-    }
-
-    pub fn first_child_of_element(&self, id: ElementNodeId) -> Option<ElementNodeId> {
-        self.elements
-            .get(&id)
-            .and_then(|n| n.children.first().copied())
-            .map(|c| ElementNodeId::new(c.as_u64()))
-    }
-
-    pub fn next_sibling_of_element(&self, id: ElementNodeId) -> Option<ElementNodeId> {
-        let parent_id = self.elements.get(&id).and_then(|n| n.parent)?;
-        let parent_children: &[NodeId] = self
-            .elements
-            .get(&ElementNodeId::new(parent_id.as_u64()))
-            .map(|n| &n.children[..])
-            .or_else(|| {
-                self.fragments
-                    .get(&FragmentNodeId::new(parent_id.as_u64()))
-                    .map(|f| &f.children[..])
-            })?;
-        let pos = parent_children.iter().position(|c| *c == NodeId::from(id))?;
-        parent_children
-            .get(pos + 1)
-            .copied()
-            .map(|c| ElementNodeId::new(c.as_u64()))
     }
 
     pub fn mark_dirty(&mut self, id: NodeId) {
@@ -364,7 +337,7 @@ impl ElementTree {
         // future reactive flush can mark it dirty. The `SubscribeCx` swap
         // (on drop) replaces the node's prior subscriptions.
         let sub_index = cx.tree.store.subscriber_index();
-        let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.as_u64()));
+        let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.into()));
         element.subscribe(&mut sub_cx);
 
         let constrained = constraints.constrain(size);
@@ -379,7 +352,7 @@ impl ElementTree {
     pub fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        focused_node_id: Option<NodeId>,
+        focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
     ) {
@@ -403,7 +376,7 @@ impl ElementTree {
         id: ElementNodeId,
         canvas: &mut dyn Canvas,
         parent_offset: Offset,
-        focused_node_id: Option<NodeId>,
+        focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
     ) {
@@ -445,7 +418,7 @@ impl ElementTree {
         self.hit_test_element(root_id, position)
     }
 
-    pub fn hit_test_path(&self, position: Offset) -> Vec<NodeId> {
+    pub fn hit_test_path(&self, position: Offset) -> Vec<ElementNodeId> {
         let mut path = Vec::new();
         if let Some(root_id) = self.root_id {
             self.collect_hit_path(root_id, position, &mut path);
@@ -586,7 +559,7 @@ impl ElementTree {
         &self,
         id: ElementNodeId,
         position: Offset,
-        path: &mut Vec<NodeId>,
+        path: &mut Vec<ElementNodeId>,
     ) -> bool {
         let node = match self.elements.get(&id) {
             Some(n) => n,
@@ -614,7 +587,7 @@ impl ElementTree {
             .rev()
             .any(|&child_id| self.collect_hit_path(child_id, local_position, path));
 
-        path.push(NodeId::from(id));
+        path.push(id);
 
         true
     }
@@ -646,7 +619,7 @@ impl ElementTree {
                 }
             }
             return Some(DevNodeData {
-                id: NodeId::new(node.id.as_u64()),
+                id: node.id.into(),
                 name: element.type_name(),
                 label: element.trace_label(),
                 props: element.trace_props(),
@@ -674,7 +647,7 @@ impl ElementTree {
                 }
             }
             return Some(DevNodeData {
-                id: NodeId::new(frag.id.as_u64()),
+                id: frag.id.into(),
                 name: frag.type_name(),
                 label: frag.trace_label(),
                 props: frag.trace_props(),

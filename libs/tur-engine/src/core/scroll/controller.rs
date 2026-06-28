@@ -12,7 +12,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
 use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::ElementNodeId;
 use crate::core::scroll::ScrollEvent;
 use crate::elements::ScrollViewElement;
 
@@ -27,7 +27,7 @@ pub struct ScrollController {
     /// The scroll-view node this controller is bound to. Set at build time by
     /// `ScrollViewComponent::build` (the `_attach` JS path is the legacy
     /// fallback). `jumpTo`/drag use this to locate the scroll element.
-    pub(crate) bound_node: Option<NodeId>,
+    pub(crate) bound_node: Option<ElementNodeId>,
     pub(crate) element_tree:
         Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
@@ -51,7 +51,7 @@ impl ScrollController {
         }
     }
 
-    fn node_id(&self) -> Option<NodeId> {
+    fn node_id(&self) -> Option<ElementNodeId> {
         if let Some(n) = self.bound_node {
             return Some(n);
         }
@@ -162,7 +162,7 @@ impl Class for ScrollController {
                 };
 
                 let mut tree = element_tree_rc.borrow_mut();
-                let Some(node) = tree.get_element_mut(ElementNodeId::new(node_id.as_u64())) else {
+                let Some(node) = tree.get_element_mut(node_id) else {
                     return Ok(JsValue::undefined());
                 };
                 let Some(ref mut element) = node.element else {
@@ -182,7 +182,7 @@ impl Class for ScrollController {
                     tur_shared::Axis::Horizontal => vp.width,
                 };
                 let new_offset = sv.position.pixels();
-                tree.mark_dirty(node_id);
+                tree.mark_dirty(node_id.into());
                 drop(tree);
 
                 ctrl.offset = new_offset;

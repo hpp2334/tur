@@ -1,4 +1,4 @@
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -25,10 +25,11 @@ impl AppHandler for KeyboardAppHandler {
         let key = key_event.key.clone();
         let code = key_event.code.clone();
         let modifiers = key_event.modifiers;
-        let mut current = Some(focused_id);
-        while let Some(id) = current {
-            let eid = ElementNodeId::new(id.as_u64());
-            if let Some(node) = cx.element_tree.get_element(eid) {
+        // Walk from the focused element up to the root, hopping fragment links
+        // transparently (fragments can't host Focusable handlers themselves).
+        let mut current: Option<NodeId> = Some(focused_id.into());
+        while let Some(nid) = current {
+            if let Some(node) = cx.element_tree.get_element(ElementNodeId::new(nid.as_u64())) {
                 if let Some(ref element) = node.element {
                     if let Some(f) = element.cast::<FocusableElement>() {
                         if let Some(m) = f.component.on_key_down {
@@ -43,8 +44,15 @@ impl AppHandler for KeyboardAppHandler {
                         }
                     }
                 }
+                current = node.parent;
+            } else if let Some(frag) = cx
+                .element_tree
+                .get_fragment(FragmentNodeId::new(nid.as_u64()))
+            {
+                current = Some(frag.parent);
+            } else {
+                break;
             }
-            current = cx.element_tree.parent_of_element(eid);
         }
     }
 }
@@ -53,8 +61,7 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &crate::core::keyboard::Ap
     let Some(focused_id) = cx.focus_manager.focused() else {
         return;
     };
-    let eid = ElementNodeId::new(focused_id.as_u64());
-    let Some(node) = cx.element_tree.get_element_mut(eid) else {
+    let Some(node) = cx.element_tree.get_element_mut(focused_id) else {
         return;
     };
     let Some(ref mut element) = node.element else {
@@ -65,5 +72,5 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &crate::core::keyboard::Ap
         &mut *cx.event_queue,
     );
     element.on_keyboard_event(&mut el_cx, event);
-    cx.element_tree.mark_dirty(focused_id);
+    cx.element_tree.mark_dirty(focused_id.into());
 }

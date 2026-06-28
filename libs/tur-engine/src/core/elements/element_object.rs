@@ -33,7 +33,7 @@ impl fmt::Debug for ElementObject {
 impl ElementObject {
     pub fn new(id: ElementNodeId, element: AnyElement, context: &mut Context) -> Self {
         ElementObject {
-            handle: BoaOpaque::new(TurNodeHandle { id: id.into() }, context),
+            handle: BoaOpaque::new(TurNodeHandle { id }, context),
             id,
             element: Some(element),
             children: Vec::new(),

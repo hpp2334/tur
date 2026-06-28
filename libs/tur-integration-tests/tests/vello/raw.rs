@@ -6,7 +6,7 @@ pub fn vello_counter_app() {
 
     app.with_element_tree(|tree| {
         let root = tree.root_element().unwrap();
-        assert!(root.children.len() > 0);
+        assert!(!root.children.is_empty());
     });
 
     app.render();

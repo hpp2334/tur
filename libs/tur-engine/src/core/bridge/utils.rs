@@ -5,7 +5,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::animation::AnimationController;
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
-use crate::core::element::NodeId;
+use crate::core::element::ElementNodeId;
 use crate::core::resource::ImageResource;
 use crate::core::scroll::ScrollController;
 use crate::core::text::TextEditingController;
@@ -14,7 +14,7 @@ use crate::elements::LazyListController;
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurNodeHandle {
-    pub id: NodeId,
+    pub id: ElementNodeId,
 }
 
 pub(crate) fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {

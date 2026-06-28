@@ -1,4 +1,4 @@
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::handlers::wheel::dispatch_wheel;
@@ -26,19 +26,25 @@ impl AppHandler for ScrollChainingHandler {
     }
 }
 
+/// Walk parents from `start` to find the nearest ancestor with an `onWheel`
+/// handler. Hops through fragment ancestors transparently (fragments can't
+/// carry wheel handlers, so they're skipped without inspection).
 fn find_ancestor_with_wheel(
     tree: &crate::core::elements::ElementTree,
-    start: NodeId,
-) -> Option<NodeId> {
-    let mut current = tree.get_element(ElementNodeId::new(start.as_u64())).and_then(|n| n.parent);
+    start: ElementNodeId,
+) -> Option<ElementNodeId> {
+    let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             if let Some(ref element) = node.element {
                 if element.has_on_wheel() {
-                    return Some(id);
+                    return Some(ElementNodeId::new(id.as_u64()));
                 }
             }
             current = node.parent;
+        } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+            // Fragments can't carry wheel handlers; hop to the next ancestor.
+            current = Some(frag.parent);
         } else {
             break;
         }

@@ -15,7 +15,7 @@ fn main() {
 
     for (name, test_fn) in tests {
         print!("test {name} ... ");
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| test_fn())) {
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(test_fn)) {
             Ok(()) => {
                 println!("ok");
                 passed += 1;

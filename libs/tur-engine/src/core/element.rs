@@ -43,15 +43,17 @@ impl ElementNodeId {
     pub fn new(id: u64) -> Self {
         Self(id)
     }
-
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
 }
 
 impl From<ElementNodeId> for NodeId {
     fn from(id: ElementNodeId) -> Self {
         NodeId(id.0)
+    }
+}
+
+impl From<ElementNodeId> for u64 {
+    fn from(id: ElementNodeId) -> u64 {
+        id.0
     }
 }
 
@@ -70,15 +72,17 @@ impl FragmentNodeId {
     pub fn new(id: u64) -> Self {
         Self(id)
     }
-
-    pub fn as_u64(self) -> u64 {
-        self.0
-    }
 }
 
 impl From<FragmentNodeId> for NodeId {
     fn from(id: FragmentNodeId) -> Self {
         NodeId(id.0)
+    }
+}
+
+impl From<FragmentNodeId> for u64 {
+    fn from(id: FragmentNodeId) -> u64 {
+        id.0
     }
 }
 

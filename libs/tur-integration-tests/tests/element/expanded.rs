@@ -40,7 +40,7 @@ fn expanded_fills_remaining() {
 
     app.render();
     let rt = app.element_tree();
-    let expanded_node = rt.get_element(ElementNodeId::new(expanded_id.as_u64())).unwrap();
+    let expanded_node = rt.get_element(expanded_id).unwrap();
     assert_eq!(expanded_node.computed_layout.size.height, 550.0);
     assert_eq!(expanded_node.computed_layout.offset.y, 50.0);
 }
@@ -73,11 +73,11 @@ fn expanded_multiple_share_evenly() {
     app.render();
     let rt = app.element_tree();
 
-    let exp1_node = rt.get_element(ElementNodeId::new(exp1_id.as_u64())).unwrap();
+    let exp1_node = rt.get_element(exp1_id).unwrap();
     assert_eq!(exp1_node.computed_layout.size.height, 300.0);
     assert_eq!(exp1_node.computed_layout.offset.y, 0.0);
 
-    let exp2_node = rt.get_element(ElementNodeId::new(exp2_id.as_u64())).unwrap();
+    let exp2_node = rt.get_element(exp2_id).unwrap();
     assert_eq!(exp2_node.computed_layout.size.height, 300.0);
     assert_eq!(exp2_node.computed_layout.offset.y, 300.0);
 }
@@ -111,11 +111,11 @@ fn expanded_flex_weights_proportional() {
     let rt = app.element_tree();
 
     // Two Expanded children with flex 2 and 1 should split 600px as 400 + 200.
-    let exp1_node = rt.get_element(ElementNodeId::new(exp1_id.as_u64())).unwrap();
+    let exp1_node = rt.get_element(exp1_id).unwrap();
     assert_eq!(exp1_node.computed_layout.size.height, 400.0);
     assert_eq!(exp1_node.computed_layout.offset.y, 0.0);
 
-    let exp2_node = rt.get_element(ElementNodeId::new(exp2_id.as_u64())).unwrap();
+    let exp2_node = rt.get_element(exp2_id).unwrap();
     assert_eq!(exp2_node.computed_layout.size.height, 200.0);
     assert_eq!(exp2_node.computed_layout.offset.y, 400.0);
 }

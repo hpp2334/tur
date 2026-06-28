@@ -35,7 +35,7 @@ pub struct FlexComponent {
 
 impl Component for FlexComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(FlexElement {
@@ -50,10 +50,10 @@ impl Component for FlexComponent {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id);
+            let _child_id = child_spec.build(cx, boa, id.into());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

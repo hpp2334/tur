@@ -1,6 +1,6 @@
 pub mod queue;
 
-use crate::core::element::NodeId;
+use crate::core::element::ElementNodeId;
 use crate::core::keyboard::AppKeyEvent;
 use tur_shared::{MouseButton, Offset};
 
@@ -17,14 +17,14 @@ pub enum AppEvent {
         position: Offset,
     },
     ScrollOverscroll {
-        source_id: NodeId,
+        source_id: ElementNodeId,
         delta: f64,
     },
     /// Programmatic scroll request — set the absolute scroll offset of the
     /// target scroll-view node. Emitted by scrollbar drag (where the gesture
     /// handler can't mutate the tree directly due to an active borrow).
     ScrollTo {
-        node_id: NodeId,
+        node_id: ElementNodeId,
         offset: f64,
     },
     Key(AppKeyEvent),

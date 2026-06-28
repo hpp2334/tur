@@ -265,17 +265,17 @@ impl TurApp {
             .query_element(key)
     }
 
-    pub fn focused_element(&self) -> Option<NodeId> {
+    pub fn focused_element(&self) -> Option<ElementNodeId> {
         self.internal.js_context.focus_manager.borrow().focused()
     }
 
     pub fn with_element<R>(
         &self,
-        id: NodeId,
+        id: ElementNodeId,
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+        let node = tree.get_element(id)?;
         let element = node.element.as_ref()?;
         Some(cb(element))
     }
@@ -286,7 +286,7 @@ impl TurApp {
 
         let mut abs_x = 0.0f64;
         let mut abs_y = 0.0f64;
-        let mut current = Some(focused_id);
+        let mut current: Option<NodeId> = Some(focused_id.into());
         while let Some(id) = current {
             let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
             abs_x += node.computed_layout.offset.x;
@@ -294,7 +294,7 @@ impl TurApp {
             current = node.parent;
         }
 
-        let node = tree.get_element(ElementNodeId::new(focused_id.as_u64()))?;
+        let node = tree.get_element(focused_id)?;
         let element = node.element.as_ref()?;
         let editable_el = element.cast::<EditableTextElement>()?;
         let layout_data = editable_el.cached_layout.as_ref()?;
@@ -318,7 +318,7 @@ impl TurApp {
             return false;
         };
         let tree = self.internal.js_context.element_tree.borrow();
-        let Some(node) = tree.get_element(ElementNodeId::new(focused_id.as_u64())) else {
+        let Some(node) = tree.get_element(focused_id) else {
             return false;
         };
         let Some(ref element) = node.element else {

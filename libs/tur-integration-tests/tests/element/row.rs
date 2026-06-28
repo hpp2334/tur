@@ -39,15 +39,15 @@ fn row_basic_horizontal_stacking() {
     app.render();
     let rt = app.element_tree();
 
-    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1_node = rt.get_element(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.size.width, 50.0);
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 
-    let sb2_node = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2_node = rt.get_element(sb2_id).unwrap();
     assert_eq!(sb2_node.computed_layout.size.width, 30.0);
     assert_eq!(sb2_node.computed_layout.offset.x, 50.0);
 
-    let row_node = rt.get_element(ElementNodeId::new(row_id.as_u64())).unwrap();
+    let row_node = rt.get_element(row_id).unwrap();
     assert_eq!(row_node.computed_layout.size.width, 400.0);
 }
 
@@ -72,11 +72,11 @@ fn row_cross_center_in_tight_container() {
     app.render();
     let rt = app.element_tree();
 
-    let container = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container = rt.get_element(container_id).unwrap();
     assert_eq!(container.computed_layout.size.width, 200.0);
     assert_eq!(container.computed_layout.size.height, 36.0);
 
-    let row = rt.get_element(ElementNodeId::new(row_id.as_u64())).unwrap();
+    let row = rt.get_element(row_id).unwrap();
     assert_eq!(row.computed_layout.size.height, 36.0,
         "Row inside Container(height=36) should be 36px tall (tight constraints)");
 
@@ -113,7 +113,7 @@ fn row_cross_center_in_column_does_not_starve_siblings() {
     app.render();
     let rt = app.element_tree();
 
-    let row = rt.get_element(ElementNodeId::new(row_id.as_u64())).unwrap();
+    let row = rt.get_element(row_id).unwrap();
     assert_eq!(row.computed_layout.size.height, 20.0,
         "Row with MainAxisSize.Min should be tallest child height");
 

@@ -1,14 +1,15 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
 /// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
 /// editable text is that container's first child).
-fn find_editable_under(app: &TurTestApp, key: &[&str]) -> NodeId {
+fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
+    let container_id = ElementNodeId::new(container_id.as_u64());
     let tree = app.element_tree();
-    let container = tree.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
         let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
@@ -17,13 +18,13 @@ fn find_editable_under(app: &TurTestApp, key: &[&str]) -> NodeId {
             .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
             .unwrap_or(false)
         {
-            return cid;
+            return ElementNodeId::new(cid.as_u64());
         }
     }
     panic!("no tur_editable_text under queryKey {:?}", key);
 }
 
-fn get_text(app: &TurTestApp, id: NodeId) -> String {
+fn get_text(app: &TurTestApp, id: ElementNodeId) -> String {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.text())
@@ -32,7 +33,7 @@ fn get_text(app: &TurTestApp, id: NodeId) -> String {
     .unwrap_or_default()
 }
 
-fn get_selection(app: &TurTestApp, id: NodeId) -> (usize, usize) {
+fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.selection())
@@ -41,7 +42,7 @@ fn get_selection(app: &TurTestApp, id: NodeId) -> (usize, usize) {
     .unwrap_or((0, 0))
 }
 
-fn focus_editable(app: &mut TurTestApp, id: NodeId) {
+fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
 }
@@ -100,7 +101,7 @@ const PLAYGROUND_BUNDLE: &str = r#"
     }));
 "#;
 
-fn setup() -> (TurTestApp, NodeId) {
+fn setup() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
     app.load_bundle_source(UNDO_INPUT_BUNDLE).unwrap();
     app.render();
@@ -110,7 +111,7 @@ fn setup() -> (TurTestApp, NodeId) {
     (app, id)
 }
 
-fn setup_playground() -> (TurTestApp, NodeId) {
+fn setup_playground() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
     app.load_bundle_source(PLAYGROUND_BUNDLE).unwrap();
     app.render();

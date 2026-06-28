@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use tur_shared::Offset;
 
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 use crate::core::render::{NullCanvas, Renderer};
 use crate::core::resource::ResourceMap;
@@ -26,7 +26,7 @@ impl Renderer for NoopRenderer {
     fn render(
         &mut self,
         tree: &ElementTree,
-        focused_node_id: Option<NodeId>,
+        focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
     ) {

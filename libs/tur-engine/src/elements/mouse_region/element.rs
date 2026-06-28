@@ -5,7 +5,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{Cursor, HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::layout::SubscribeCx;
 use crate::core::widget::{
@@ -39,7 +39,7 @@ impl Component for MouseRegionComponent {
             .and_then(|v| cx.read_val(v, boa))
             .unwrap_or_default();
 
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(MouseRegionElement {
@@ -51,10 +51,10 @@ impl Component for MouseRegionComponent {
             boa,
         );
         if let Some(child) = &self.child {
-            child.build(cx, boa, id);
+            child.build(cx, boa, id.into());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

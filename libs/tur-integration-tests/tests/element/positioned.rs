@@ -34,7 +34,7 @@ fn positioned_with_left_top() {
 
     app.render();
     let rt = app.element_tree();
-    let pos_node = rt.get_element(ElementNodeId::new(pos_id.as_u64())).unwrap();
+    let pos_node = rt.get_element(pos_id).unwrap();
     assert_eq!(pos_node.computed_layout.offset.x, 10.0);
     assert_eq!(pos_node.computed_layout.offset.y, 20.0);
 }

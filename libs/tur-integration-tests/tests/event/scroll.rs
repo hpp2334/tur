@@ -2,7 +2,7 @@ use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
-fn setup_basic() -> (TurTestApp, NodeId, NodeId) {
+fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_bundle("scroll-view-basic").unwrap();
 
@@ -10,7 +10,7 @@ fn setup_basic() -> (TurTestApp, NodeId, NodeId) {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
         let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        (sv.id.into(), sv.children[0])
+        (sv.id, sv.children[0])
     };
 
     app.render();
@@ -102,7 +102,7 @@ fn wheel_chains_to_parent_at_boundary() {
         let col = tree.get_element(ElementNodeId::new(outer.children[0].as_u64())).unwrap();
         let wrapper = tree.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
         let inner = tree.get_element(ElementNodeId::new(wrapper.children[0].as_u64())).unwrap();
-        (outer.id.into(), inner.id.into())
+        (outer.id, inner.id)
     };
 
     app.render();

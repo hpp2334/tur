@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Alignment, Size, StackFit};
 
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
@@ -23,7 +23,7 @@ pub struct StackComponent {
 
 impl Component for StackComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(StackElement {
@@ -36,10 +36,10 @@ impl Component for StackComponent {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id);
+            let _child_id = child_spec.build(cx, boa, id.into());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

@@ -33,7 +33,7 @@ fn row_with_each_does_not_inflate() {
     app.render();
     let rt = app.element_tree();
 
-    let row = rt.get_element(ElementNodeId::new(row_id.as_u64())).unwrap();
+    let row = rt.get_element(row_id).unwrap();
     let row_h = row.computed_layout.size.height;
     // The Each is a Fragment (no layout box); its Text children are spliced
     // into the Row. Read the first such child's height as a proxy for the
@@ -41,7 +41,6 @@ fn row_with_each_does_not_inflate() {
     let each_h = rt
         .get_fragment(FragmentNodeId::new(each_id.as_u64()))
         .and_then(|f| f.children.first().copied())
-        .map(|c| c)
         .and_then(|cid| rt.get_element(ElementNodeId::new(cid.as_u64())))
         .map(|n| n.computed_layout.size.height)
         .unwrap_or(0.0);
@@ -54,7 +53,7 @@ fn row_with_each_does_not_inflate() {
         "Row containing an Each should size to content (<60px), got {row_h}px (full height = inflation bug)"
     );
 
-    let marker = rt.get_element(ElementNodeId::new(marker_id.as_u64())).unwrap();
+    let marker = rt.get_element(marker_id).unwrap();
     // Marker must sit just below the Row, not be starved to zero or pushed off.
     assert_eq!(
         marker.computed_layout.size.height, 10.0,
@@ -66,7 +65,7 @@ fn row_with_each_does_not_inflate() {
         marker.computed_layout.offset.y
     );
 
-    let expanded = rt.get_element(ElementNodeId::new(expanded_id.as_u64())).unwrap();
+    let expanded = rt.get_element(expanded_id).unwrap();
     assert!(
         expanded.computed_layout.size.height > 400.0,
         "Expanded must fill the remaining Column height, got {} — starved by inflated Row",

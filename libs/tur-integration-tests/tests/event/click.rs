@@ -1,20 +1,21 @@
-use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
-fn build_clickable_text(app: &mut TurTestApp) -> NodeId {
+fn build_clickable_text(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("clickable-text").unwrap();
-    app.query_element(&["click-text"]).unwrap()
+    let id = app.query_element(&["click-text"]).unwrap();
+    ElementNodeId::new(id.as_u64())
 }
 
-fn find_pointer_interact(app: &TurTestApp) -> NodeId {
+fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
     let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-    col.children[0]
+    ElementNodeId::new(col.children[0].as_u64())
 }
 
-fn get_span_content(app: &TurTestApp, container_id: NodeId) -> String {
+fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
     app.with_element(container_id, |e| {
         e.cast::<TextElement>()
             .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())

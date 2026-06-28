@@ -30,11 +30,11 @@ fn scroll_view_viewport_constrained() {
     app.render();
     let rt = app.element_tree();
 
-    let sv_node = rt.get_element(ElementNodeId::new(sv_id.as_u64())).unwrap();
+    let sv_node = rt.get_element(sv_id).unwrap();
     assert_eq!(sv_node.computed_layout.size.width, 400.0);
     assert_eq!(sv_node.computed_layout.size.height, 300.0);
 
-    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
+    let col_node = rt.get_element(col_id).unwrap();
     assert_eq!(col_node.computed_layout.size.height, 600.0);
 }
 
@@ -85,7 +85,7 @@ fn scroll_view_content_and_viewport_size() {
     let sv_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        root.children[0]
+        ElementNodeId::new(root.children[0].as_u64())
     };
 
     app.render();

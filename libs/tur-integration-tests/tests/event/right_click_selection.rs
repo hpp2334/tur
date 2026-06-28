@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
@@ -18,10 +18,11 @@ const INPUT_BUNDLE: &str = r#"
     }));
 "#;
 
-fn find_editable(app: &TurTestApp) -> NodeId {
+fn find_editable(app: &TurTestApp) -> ElementNodeId {
     let container_id = app.query_element(&["input"]).expect("queryKey not found");
+    let container_id = ElementNodeId::new(container_id.as_u64());
     let tree = app.element_tree();
-    let container = tree.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
         let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
@@ -30,13 +31,13 @@ fn find_editable(app: &TurTestApp) -> NodeId {
             .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
             .unwrap_or(false)
         {
-            return cid;
+            return ElementNodeId::new(cid.as_u64());
         }
     }
     panic!("no tur_editable_text under queryKey input");
 }
 
-fn get_selection(app: &TurTestApp, id: NodeId) -> (usize, usize) {
+fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.selection())
@@ -45,7 +46,7 @@ fn get_selection(app: &TurTestApp, id: NodeId) -> (usize, usize) {
     .unwrap_or((0, 0))
 }
 
-fn get_cursor(app: &TurTestApp, id: NodeId) -> usize {
+fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.cursor_position())

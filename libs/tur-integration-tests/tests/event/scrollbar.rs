@@ -1,4 +1,4 @@
-use tur_engine::core::element::NodeId;
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
@@ -29,7 +29,7 @@ T.render(ctx, T.Row(ctx, {
 }));
 "#;
 
-fn scroll_offset(app: &TurTestApp, sv_id: NodeId) -> f64 {
+fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
     app.with_element(sv_id, |e| {
         e.cast::<ScrollViewElement>().unwrap().scroll_offset()
     })
@@ -45,6 +45,7 @@ fn jump_to_sets_scroll_offset() {
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
+    let sv_id = ElementNodeId::new(sv_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     app.eval_js("globalThis.__ctrl.jumpTo(150)");
@@ -70,7 +71,9 @@ fn dragging_scrollbar_thumb_scrolls() {
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
+    let sv_id = ElementNodeId::new(sv_id.as_u64());
     let bar_id = app.query_element(&["bar"]).unwrap();
+    let bar_id = ElementNodeId::new(bar_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     // The scrollbar column occupies x=[190,200]. Press in the middle of the

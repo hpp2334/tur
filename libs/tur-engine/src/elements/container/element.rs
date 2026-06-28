@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::Context;
 use tur_shared::{Alignment, BorderPosition, Brush, Color};
 
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
     val_from_js, Effect, PropValue, Component, Val, WidgetCx,
@@ -35,7 +35,7 @@ pub struct ContainerComponent {
 
 impl Component for ContainerComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(ContainerElement { component: self.clone(), painting: ContainerPainting::default() }),
@@ -45,10 +45,10 @@ impl Component for ContainerComponent {
             cx.set_query_key(id, qk.clone());
         }
         for child_spec in &self.children {
-            let _child_id = child_spec.build(cx, boa, id);
+            let _child_id = child_spec.build(cx, boa, id.into());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

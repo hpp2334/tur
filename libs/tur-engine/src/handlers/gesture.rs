@@ -1,8 +1,8 @@
 use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
 use crate::core::event::{AppEvent, AppGestureEvent};
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
-use crate::core::element::{ElementNodeId, NodeId};
 use crate::elements::pointer_interact::PointerInteractEvent;
 use crate::elements::PointerInteractElement;
 use tur_shared::{MouseButton, Offset};
@@ -82,7 +82,7 @@ fn handle_pointer_move(cx: &mut HandlerContext, position: Offset) {
     // Route move events to the elements that received the original pointer-down
     // (gesture capture): even if the pointer has moved off them, they continue
     // to receive moves until the drag ends.
-    let path: Vec<NodeId> = cx.gesture_composer.pointer_down_path().to_vec();
+    let path: Vec<ElementNodeId> = cx.gesture_composer.pointer_down_path().to_vec();
     for id in &path {
         let local = local_position(cx, *id, position);
         dispatch_gesture_event(
@@ -95,7 +95,7 @@ fn handle_pointer_move(cx: &mut HandlerContext, position: Offset) {
 
 fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseButton) {
     let down_target = cx.gesture_composer.pointer_down_target();
-    let down_path: Vec<NodeId> = cx.gesture_composer.pointer_down_path().to_vec();
+    let down_path: Vec<ElementNodeId> = cx.gesture_composer.pointer_down_path().to_vec();
 
     // Dispatch PointerUp to every element that received the pointer-down
     // (gesture capture) before click resolution.
@@ -117,7 +117,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
     if clicked {
         let hit_path = HitTest::new(&*cx.element_tree).path(position);
         for node_id in &hit_path {
-            if let Some(node) = cx.element_tree.get_element(ElementNodeId::new(node_id.as_u64())) {
+            if let Some(node) = cx.element_tree.get_element(*node_id) {
                 if let Some(ref element) = node.element {
                     if let Some(p) = element.cast::<PointerInteractElement>() {
                         if let Some(m) = p.component.on_click {
@@ -137,8 +137,8 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
     }
 }
 
-fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: NodeId) -> bool {
-    tree.get_element(ElementNodeId::new(id.as_u64()))
+fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId) -> bool {
+    tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {
             e.cast::<PointerInteractElement>()
@@ -148,10 +148,14 @@ fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: NodeId) -> boo
         .unwrap_or(false)
 }
 
-fn local_position(cx: &HandlerContext, node_id: NodeId, global: Offset) -> Offset {
+/// Compute a position relative to the element's top-left by walking parents
+/// and subtracting each one's layout offset. Walks through fragment ancestors
+/// transparently (fragments have zero offset, so they're skipped without
+/// affecting the sum).
+fn local_position(cx: &HandlerContext, node_id: ElementNodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
     let mut abs_y = 0.0f64;
-    let mut current = Some(node_id);
+    let mut current: Option<NodeId> = Some(node_id.into());
     while let Some(cid) = current {
         if let Some(n) = cx.element_tree.get_element(ElementNodeId::new(cid.as_u64())) {
             abs_x += n.computed_layout.offset.x;
@@ -167,8 +171,8 @@ fn local_position(cx: &HandlerContext, node_id: NodeId, global: Offset) -> Offse
     Offset::new(global.x - abs_x, global.y - abs_y)
 }
 
-fn dispatch_gesture_event(cx: &mut HandlerContext, id: NodeId, event: &ComposedGestureEvent) {
-    let Some(node) = cx.element_tree.get_element_mut(ElementNodeId::new(id.as_u64())) else {
+fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &ComposedGestureEvent) {
+    let Some(node) = cx.element_tree.get_element_mut(id) else {
         return;
     };
     let Some(ref mut element) = node.element else {
@@ -181,5 +185,5 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: NodeId, event: &ComposedG
         id,
     );
     element.on_gesture_event(&mut el_cx, event);
-    cx.element_tree.mark_dirty(id);
+    cx.element_tree.mark_dirty(id.into());
 }

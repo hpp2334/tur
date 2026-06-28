@@ -2,7 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Brush, Size};
 
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
@@ -69,7 +69,7 @@ pub struct ScrollbarElement {
 
 impl Component for ScrollbarComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::with_gesture_and_focus(ScrollbarElement {
@@ -84,8 +84,8 @@ impl Component for ScrollbarComponent {
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 
@@ -93,7 +93,7 @@ impl ScrollbarElement {
     /// Read the bound controller's live metrics: `(node_id, offset,
     /// max_extent, viewport)`. `None` if there is no controller or it isn't
     /// bound to a scroll-view yet.
-    pub(crate) fn metrics(&self) -> Option<(NodeId, f64, f64, f64)> {
+    pub(crate) fn metrics(&self) -> Option<(ElementNodeId, f64, f64, f64)> {
         let ctrl = self.component.controller.as_ref()?;
         let ctrl = ctrl.downcast_ref::<ScrollController>()?;
         let node = ctrl.bound_node?;

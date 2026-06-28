@@ -19,7 +19,7 @@ fn text_content_and_measurement() {
 
     app.render();
     let rt = app.element_tree();
-    let text_node = rt.get_element(ElementNodeId::new(text_id.as_u64())).unwrap();
+    let text_node = rt.get_element(text_id).unwrap();
     let layout = &text_node.computed_layout;
     assert!(layout.size.width > 0.0, "text width should be positive");
     assert!(layout.size.height > 0.0, "text height should be positive");

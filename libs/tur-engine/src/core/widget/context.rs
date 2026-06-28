@@ -63,8 +63,8 @@ impl WidgetCx {
     }
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
-    pub fn insert_node(&self, id: NodeId, element: AnyElement, boa: &mut Context) {
-        let node = ElementObject::new(ElementNodeId::new(id.as_u64()), element, boa);
+    pub fn insert_node(&self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
+        let node = ElementObject::new(id, element, boa);
         self.js_ctx.element_tree.borrow_mut().insert_element(node);
     }
 
@@ -91,15 +91,15 @@ impl WidgetCx {
     /// vector and break layout / hit-testing).
     pub fn link_child_before(
         &self,
-        parent: NodeId,
+        parent: ElementNodeId,
         child: NodeId,
-        ref_child: NodeId,
+        ref_child: ElementNodeId,
     ) {
         self.js_ctx
             .element_tree
             .borrow_mut()
             .insert_before(parent, child, ref_child);
-        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
+        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent.into());
         self.js_ctx.dirty.set(true);
     }
 
@@ -111,26 +111,26 @@ impl WidgetCx {
     /// it into the correct slot when scrolling up mounts lower-index items.
     pub fn move_child_before(
         &self,
-        parent: NodeId,
+        parent: ElementNodeId,
         child: NodeId,
         ref_child: NodeId,
     ) {
         let mut tree = self.js_ctx.element_tree.borrow_mut();
         // Remove the child from its current slot (if present) without
         // clearing its parent pointer, then re-insert at the right place.
-        if let Some(node) = tree.get_element_mut(ElementNodeId::new(parent.as_u64())) {
+        if let Some(node) = tree.get_element_mut(parent) {
             if let Some(pos) = node.children.iter().position(|c| *c == child) {
                 node.children.remove(pos);
             }
         }
-        if let Some(node) = tree.get_element_mut(ElementNodeId::new(parent.as_u64())) {
+        if let Some(node) = tree.get_element_mut(parent) {
             if let Some(pos) = node.children.iter().position(|c| *c == ref_child) {
                 node.children.insert(pos, child);
             } else {
                 node.children.push(child);
             }
         }
-        tree.mark_dirty(parent);
+        tree.mark_dirty(parent.into());
         drop(tree);
         self.js_ctx.dirty.set(true);
     }
@@ -146,27 +146,26 @@ impl WidgetCx {
     }
 
     /// Recursively remove a node and all its descendants from the tree.
-    pub fn destroy_subtree(&self, id: NodeId) {
-        let eid = ElementNodeId::new(id.as_u64());
+    pub fn destroy_subtree(&self, id: ElementNodeId) {
         let family = self
             .js_ctx
             .element_tree
             .borrow()
-            .get_element(eid)
+            .get_element(id)
             .map(|n| (n.parent, n.children.clone()));
         if let Some((parent, children)) = family {
             if let Some(p) = parent {
                 self.js_ctx
                     .element_tree
                     .borrow_mut()
-                    .remove_child_entry(p, id);
+                    .remove_child_entry(p, id.into());
                 self.js_ctx.element_tree.borrow_mut().mark_dirty(p);
             }
             for c in children {
                 self.destroy_child(c);
             }
         }
-        let _ = self.js_ctx.element_tree.borrow_mut().remove_element(eid);
+        let _ = self.js_ctx.element_tree.borrow_mut().remove_element(id);
         self.js_ctx.dirty.set(true);
     }
 
@@ -174,27 +173,26 @@ impl WidgetCx {
     /// fragments — dispatches via `is_fragment`).
     pub fn destroy_child(&self, id: NodeId) {
         if self.js_ctx.element_tree.borrow().is_fragment(id) {
-            self.destroy_fragment(id);
+            self.destroy_fragment(crate::core::element::FragmentNodeId::new(id.as_u64()));
         } else {
-            self.destroy_subtree(id);
+            self.destroy_subtree(ElementNodeId::new(id.as_u64()));
         }
     }
 
     /// Recursively remove a fragment and all its descendants from the tree.
-    pub fn destroy_fragment(&self, id: NodeId) {
-        let fid = crate::core::element::FragmentNodeId::new(id.as_u64());
+    pub fn destroy_fragment(&self, id: crate::core::element::FragmentNodeId) {
         let family = self
             .js_ctx
             .element_tree
             .borrow()
-            .get_fragment(fid)
+            .get_fragment(id)
             .map(|f| (Some(f.parent), f.children.clone()));
         if let Some((parent, children)) = family {
             if let Some(p) = parent {
                 self.js_ctx
                     .element_tree
                     .borrow_mut()
-                    .remove_child_entry(p, id);
+                    .remove_child_entry(p, id.into());
                 self.js_ctx.element_tree.borrow_mut().mark_dirty(p);
             }
             for c in children {
@@ -205,7 +203,7 @@ impl WidgetCx {
             .js_ctx
             .element_tree
             .borrow_mut()
-            .remove_fragment(fid);
+            .remove_fragment(id);
         self.js_ctx.dirty.set(true);
     }
 
@@ -226,22 +224,21 @@ impl WidgetCx {
     }
 
     /// Set the query-key on a tree node (for test selectors).
-    pub fn set_query_key(&self, id: NodeId, keys: Vec<String>) {
-        let eid = ElementNodeId::new(id.as_u64());
+    pub fn set_query_key(&self, id: ElementNodeId, keys: Vec<String>) {
         let mut tree = self.js_ctx.element_tree.borrow_mut();
-        if let Some(node) = tree.get_element_mut(eid) {
+        if let Some(node) = tree.get_element_mut(id) {
             node.query_key = if keys.is_empty() { None } else { Some(keys) };
         }
-        tree.mark_dirty(id);
+        tree.mark_dirty(id.into());
         self.js_ctx.dirty.set(true);
     }
 
     /// Read the computed layout of a node (for scroll controllers etc.).
-    pub fn computed_layout(&self, id: NodeId) -> Option<tur_shared::ComputedLayout> {
+    pub fn computed_layout(&self, id: ElementNodeId) -> Option<tur_shared::ComputedLayout> {
         self.js_ctx
             .element_tree
             .borrow()
-            .get_element(ElementNodeId::new(id.as_u64()))
+            .get_element(id)
             .map(|n| n.computed_layout)
     }
 }

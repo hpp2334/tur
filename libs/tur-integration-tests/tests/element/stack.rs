@@ -33,11 +33,11 @@ fn stack_children_overlap() {
     app.render();
     let rt = app.element_tree();
 
-    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1_node = rt.get_element(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
     assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
 
-    let sb2_node = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2_node = rt.get_element(sb2_id).unwrap();
     assert_eq!(sb2_node.computed_layout.offset.x, 0.0);
     assert_eq!(sb2_node.computed_layout.offset.y, 0.0);
 }

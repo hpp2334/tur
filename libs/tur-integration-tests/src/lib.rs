@@ -307,7 +307,7 @@ impl TurTestApp {
         }
     }
 
-    pub fn has_click_handler(&self, id: NodeId) -> bool {
+    pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
         self.inner.with_element(id, |e| {
             e.cast::<PointerInteractElement>()
                 .map(|p| p.has_on_click())
@@ -315,7 +315,7 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
-    pub fn has_mouse_region_callbacks(&self, id: NodeId) -> bool {
+    pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
         use tur_engine::elements::MouseRegionElement;
         self.inner.with_element(id, |e| {
             e.cast::<MouseRegionElement>()
@@ -328,9 +328,9 @@ impl TurTestApp {
         self.inner.query_element(key)
     }
 
-    pub fn get_element_absolute_bounds(&self, id: NodeId) -> Option<Rect> {
+    pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
         let tree = self.inner.element_tree();
-        let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+        let node = tree.get_element(id)?;
         let mut x = node.computed_layout.offset.x;
         let mut y = node.computed_layout.offset.y;
         let mut current = node.parent;
@@ -354,7 +354,7 @@ impl TurTestApp {
         })
     }
 
-    pub fn focused_element(&self) -> Option<NodeId> {
+    pub fn focused_element(&self) -> Option<ElementNodeId> {
         self.inner.focused_element()
     }
 
@@ -368,7 +368,7 @@ impl TurTestApp {
 
     pub fn with_element<R>(
         &self,
-        id: NodeId,
+        id: ElementNodeId,
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         self.inner.with_element(id, cb)

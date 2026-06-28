@@ -2,7 +2,7 @@ pub mod helper;
 
 use boa_engine::{Context, JsValue};
 
-use crate::core::element::NodeId;
+use crate::core::element::ElementNodeId;
 use crate::core::edgy_event::EventArg;
 
 // ---------------------------------------------------------------------------
@@ -38,13 +38,13 @@ impl EventArg for BlurEvent {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum FocusChange {
-    Focus(NodeId),
-    Blur(NodeId),
+    Focus(ElementNodeId),
+    Blur(ElementNodeId),
 }
 
 #[derive(Debug)]
 pub struct FocusManager {
-    focused_id: Option<NodeId>,
+    focused_id: Option<ElementNodeId>,
     pending: Vec<FocusChange>,
 }
 
@@ -59,15 +59,15 @@ impl FocusManager {
         Self { focused_id: None, pending: Vec::new() }
     }
 
-    pub fn focused(&self) -> Option<NodeId> {
+    pub fn focused(&self) -> Option<ElementNodeId> {
         self.focused_id
     }
 
-    pub fn is_focused(&self, id: NodeId) -> bool {
+    pub fn is_focused(&self, id: ElementNodeId) -> bool {
         self.focused_id == Some(id)
     }
 
-    pub fn set_focus(&mut self, new_id: NodeId) {
+    pub fn set_focus(&mut self, new_id: ElementNodeId) {
         let old = self.focused_id.replace(new_id);
         if let Some(old) = old {
             if old != new_id {

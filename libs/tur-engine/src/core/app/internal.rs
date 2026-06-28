@@ -7,7 +7,7 @@ use boa_engine::context::time::FixedClock;
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::ElementNodeId;
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
 use crate::core::fonts::FontLoader;
@@ -151,7 +151,7 @@ impl TurAppInternal {
             return false;
         };
         let tree = self.js_context.element_tree.borrow();
-        let Some(node) = tree.get_element(ElementNodeId::new(focused_id.as_u64())) else {
+        let Some(node) = tree.get_element(focused_id) else {
             return false;
         };
         let Some(ref element) = node.element else {
@@ -176,11 +176,11 @@ impl TurAppInternal {
             .subscriber_index()
             .dirty_subscribers(&dirties)
             .into_iter()
-            .map(|s| NodeId::new(s.as_u64()))
+            .map(|s| ElementNodeId::new(s.as_u64()))
             .collect::<HashSet<_>>();
         let mut tree = self.js_context.element_tree.borrow_mut();
         for node_id in &dirty_nodes {
-            tree.mark_dirty(*node_id);
+            tree.mark_dirty((*node_id).into());
         }
         drop(tree);
 
@@ -428,10 +428,10 @@ impl TurAppInternal {
 
 fn focus_mutation(
     tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::NodeId,
+    id: crate::core::element::ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::FocusEvent>> {
     use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+    let node = tree.get_element(id)?;
     let element = node.element.as_ref()?;
     if let Some(f) = element.cast::<FocusableElement>() {
         return f.component.on_focus;
@@ -444,10 +444,10 @@ fn focus_mutation(
 
 fn blur_mutation(
     tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::NodeId,
+    id: crate::core::element::ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::BlurEvent>> {
     use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+    let node = tree.get_element(id)?;
     let element = node.element.as_ref()?;
     if let Some(f) = element.cast::<FocusableElement>() {
         return f.component.on_blur;

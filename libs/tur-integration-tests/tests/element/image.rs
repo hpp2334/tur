@@ -27,7 +27,7 @@ fn image_with_explicit_size() {
 
     app.render();
     let rt = app.element_tree();
-    let image_node = rt.get_element(ElementNodeId::new(image_id.as_u64())).unwrap();
+    let image_node = rt.get_element(image_id).unwrap();
     assert_eq!(image_node.computed_layout.size.width, 200.0);
     assert_eq!(image_node.computed_layout.size.height, 100.0);
 }

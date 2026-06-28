@@ -5,7 +5,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
@@ -44,7 +44,7 @@ impl Component for PointerInteractComponent {
             .and_then(|v| cx.read_val(v, boa))
             .unwrap_or_default();
 
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::with_gesture(PointerInteractElement {
@@ -58,10 +58,10 @@ impl Component for PointerInteractComponent {
             cx.set_query_key(id, qk.clone());
         }
         if let Some(child) = &self.child {
-            child.build(cx, boa, id);
+            child.build(cx, boa, id.into());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

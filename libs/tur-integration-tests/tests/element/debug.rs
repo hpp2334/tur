@@ -75,6 +75,6 @@ fn debug_react_minimal() {
     let _ = app.load_bundle_source(&source);
     let tree = app.element_tree();
     let root_id = tree.root_element_id();
-    let child_count = tree.raw_children_of_element(ElementNodeId::new(root_id.unwrap().as_u64())).len();
+    let child_count = tree.raw_children_of_element(root_id.unwrap()).len();
     assert!(child_count > 0, "root should have children, got {child_count}");
 }

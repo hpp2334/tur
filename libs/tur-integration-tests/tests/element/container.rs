@@ -29,7 +29,7 @@ fn container_with_padding() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 132.0);
     assert_eq!(container_node.computed_layout.size.height, 132.0);
 }
@@ -53,19 +53,19 @@ fn container_update_clears_removed_props() {
         checkbox.id
     };
 
-    app.with_element(checkbox_id.into(), |el| {
+    app.with_element(checkbox_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();
         eprintln!("[test] before toggle: color={:?}", c.color());
         assert!(c.color().is_some(), "checked state should have color");
     });
 
-    let (cx, cy) = app.get_element_absolute_bounds(checkbox_id.into()).unwrap().center();
+    let (cx, cy) = app.get_element_absolute_bounds(checkbox_id).unwrap().center();
     eprintln!("[test] clicking at ({}, {})", cx, cy);
     app.click(cx, cy);
     app.render();
 
     let tree = app.element_tree();
-    let checkbox_node = tree.get_element(ElementNodeId::new(checkbox_id.as_u64())).unwrap();
+    let checkbox_node = tree.get_element(checkbox_id).unwrap();
     let checkbox_el = checkbox_node.element.as_ref().unwrap();
     let c = checkbox_el.cast::<ContainerElement>().unwrap();
     eprintln!("[test] after toggle: color={:?}, border_color={:?}", c.color(), c.border_color());
@@ -89,7 +89,7 @@ fn container_with_border() {
         container.id
     };
 
-    app.with_element(container_id.into(), |el| {
+    app.with_element(container_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();
         assert_eq!(c.width(), Some(200.0));
         assert_eq!(c.height(), Some(200.0));
@@ -102,7 +102,7 @@ fn container_with_border() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 200.0);
     assert_eq!(container_node.computed_layout.size.height, 200.0);
 }
@@ -124,17 +124,17 @@ fn container_padding_offsets_child() {
     app.render();
     let rt = app.element_tree();
 
-    let container = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container = rt.get_element(container_id).unwrap();
     assert_eq!(container.computed_layout.size.width, 200.0);
     assert_eq!(container.computed_layout.size.height, 100.0);
 
-    let row = rt.get_element(ElementNodeId::new(row_id.as_u64())).unwrap();
+    let row = rt.get_element(row_id).unwrap();
     assert_eq!(row.computed_layout.offset.x, 20.0,
         "Row should be offset by padding=20");
     assert_eq!(row.computed_layout.offset.y, 20.0,
         "Row should be offset by padding=20");
 
-    let sb = rt.get_element(ElementNodeId::new(sb_id.as_u64())).unwrap();
+    let sb = rt.get_element(sb_id).unwrap();
     assert_eq!(sb.computed_layout.offset.x, 0.0);
     assert_eq!(sb.computed_layout.offset.y, 0.0);
 }
@@ -156,7 +156,7 @@ fn container_with_explicit_size_in_flex() {
     app.render();
     let rt = app.element_tree();
 
-    let btn = rt.get_element(ElementNodeId::new(btn_id.as_u64())).unwrap();
+    let btn = rt.get_element(btn_id).unwrap();
     assert_eq!(
         btn.computed_layout.size.width, 100.0,
         "container width should be 100, got {}",
@@ -184,7 +184,7 @@ fn container_with_shadow() {
         container.id
     };
 
-    app.with_element(container_id.into(), |el| {
+    app.with_element(container_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();
         assert_eq!(c.width(), Some(200.0));
         assert_eq!(c.height(), Some(200.0));
@@ -196,7 +196,7 @@ fn container_with_shadow() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 200.0);
     assert_eq!(container_node.computed_layout.size.height, 200.0);
 }

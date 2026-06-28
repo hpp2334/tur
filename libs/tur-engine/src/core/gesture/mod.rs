@@ -1,4 +1,4 @@
-use crate::core::element::NodeId;
+use crate::core::element::ElementNodeId;
 use tur_shared::Offset;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,13 +22,13 @@ const MULTI_CLICK_MAX_INTERVAL_MS: u64 = 500;
 const MULTI_CLICK_MAX_DISTANCE_PX: f64 = 5.0;
 
 pub struct GestureEventComposer {
-    pointer_down_target: Option<NodeId>,
+    pointer_down_target: Option<ElementNodeId>,
     /// The full hit-path captured at pointer-down time. Used to route
     /// subsequent move/up events to the same set of elements regardless of
     /// where the pointer moves during the drag — standard "gesture capture"
     /// semantics so a draggable element keeps receiving events even if the
     /// pointer leaves its bounds.
-    pointer_down_path: Vec<NodeId>,
+    pointer_down_path: Vec<ElementNodeId>,
     is_tracking_drag: bool,
     /// Bounded history of recent pointer-downs (time_ms, position) used by
     /// `classify_click` to detect double / triple clicks. Only the most
@@ -55,19 +55,19 @@ impl GestureEventComposer {
 
     pub fn on_pointer_down(
         &mut self,
-        target: Option<NodeId>,
-        path: Vec<NodeId>,
+        target: Option<ElementNodeId>,
+        path: Vec<ElementNodeId>,
     ) {
         self.pointer_down_target = target;
         self.pointer_down_path = path;
         self.is_tracking_drag = target.is_some();
     }
 
-    pub fn pointer_down_target(&self) -> Option<NodeId> {
+    pub fn pointer_down_target(&self) -> Option<ElementNodeId> {
         self.pointer_down_target
     }
 
-    pub fn pointer_down_path(&self) -> &[NodeId] {
+    pub fn pointer_down_path(&self) -> &[ElementNodeId] {
         &self.pointer_down_path
     }
 

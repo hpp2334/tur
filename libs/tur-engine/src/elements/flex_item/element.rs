@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
@@ -21,11 +21,11 @@ pub struct ExpandedComponent {
 
 impl Component for ExpandedComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(id, AnyElement::new(ExpandedElement { component: self.clone() }), boa);
-        let _child_id = self.child.build(cx, boa, id);
-        cx.link_child(parent, id);
-        id
+        let _child_id = self.child.build(cx, boa, id.into());
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 

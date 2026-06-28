@@ -40,15 +40,15 @@ fn column_basic_vertical_stacking() {
     app.render();
     let rt = app.element_tree();
 
-    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1_node = rt.get_element(sb1_id).unwrap();
     assert_eq!(sb1_node.computed_layout.size.height, 50.0);
     assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
 
-    let sb2_node = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2_node = rt.get_element(sb2_id).unwrap();
     assert_eq!(sb2_node.computed_layout.size.height, 30.0);
     assert_eq!(sb2_node.computed_layout.offset.y, 50.0);
 
-    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
+    let col_node = rt.get_element(col_id).unwrap();
     assert_eq!(col_node.computed_layout.size.height, 600.0);
 }
 
@@ -121,7 +121,7 @@ fn column_nested_children_do_not_overlap() {
     assert_eq!(sb1.computed_layout.size.height, 50.0);
     assert_eq!(sb1.computed_layout.offset.y, 0.0);
 
-    let inner_col = rt.get_element(ElementNodeId::new(inner_col_id.as_u64())).unwrap();
+    let inner_col = rt.get_element(inner_col_id).unwrap();
     assert_eq!(
         inner_col.computed_layout.offset.y, 50.0,
         "inner column should start after first child"

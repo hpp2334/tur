@@ -6,7 +6,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Axis;
 
 use crate::core::edgy_event::EventArg;
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
@@ -49,7 +49,7 @@ pub struct LazyListComponent {
 
 impl Component for LazyListComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id = cx.alloc_node();
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         // Resolve the eager props needed by the element up-front.
         let axis = self
@@ -78,7 +78,7 @@ impl Component for LazyListComponent {
             let Some(spec) = build_item_spec(&builder, index, boa) else {
                 continue;
             };
-            let item_id = spec.build(cx, boa, id);
+            let item_id = spec.build(cx, boa, id.into());
             visible.push((index, item_id));
         }
         let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
@@ -107,13 +107,13 @@ impl Component for LazyListComponent {
         );
 
         for item_id in item_ids {
-            cx.link_child(id, item_id);
+            cx.link_child(id.into(), item_id);
         }
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
-        cx.link_child(parent, id);
-        id
+        cx.link_child(parent, id.into());
+        id.into()
     }
 }
 
@@ -142,7 +142,7 @@ fn build_item_spec(
 
 pub struct LazyListElement {
     pub component: LazyListComponent,
-    pub(crate) node_id: NodeId,
+    pub(crate) node_id: ElementNodeId,
     pub(crate) axis: Axis,
     pub(crate) overscan: u64,
     pub(crate) item_extent: Option<f64>,
@@ -333,10 +333,10 @@ impl LazyListElement {
             let to_destroy: Vec<NodeId> =
                 self.visible.iter().map(|&(_, id)| id).collect();
             for id in to_destroy {
-                cx.destroy_subtree(id);
+                cx.destroy_child(id);
             }
             self.visible.clear();
-            cx.mark_dirty(self.node_id);
+            cx.mark_dirty(self.node_id.into());
             return;
         }
 
@@ -351,7 +351,7 @@ impl LazyListElement {
             .collect();
         let mut did_change = !to_destroy.is_empty();
         for id in to_destroy {
-            cx.destroy_subtree(id);
+            cx.destroy_child(id);
         }
         self.visible.retain(|(i, _)| *i >= new_start && *i <= new_end);
 
@@ -366,7 +366,7 @@ impl LazyListElement {
                 continue;
             }
             if let Some(spec) = build_item_spec(&builder, index, boa) {
-                let item_id = spec.build(cx, boa, node_id);
+                let item_id = spec.build(cx, boa, node_id.into());
                 // Ensure the tree children vector stays ordered by logical
                 // index. `spec.build` already appended the new child to the
                 // end of `node.children`; if there's an existing mounted
@@ -420,7 +420,7 @@ impl LazyListElement {
         }
 
         if did_change {
-            cx.mark_dirty(self.node_id);
+            cx.mark_dirty(self.node_id.into());
         } else {
             // No structural change (scroll within the currently-mounted
             // range): the wheel handler already marked this node dirty, so
@@ -499,7 +499,7 @@ impl Effect for LazyListElement {
                     .map(|&(_, id)| id)
                     .collect();
                 for id in to_destroy {
-                    cx.destroy_subtree(id);
+                    cx.destroy_child(id);
                 }
                 self.visible.retain(|(i, _)| *i < new_count);
                 // Drop cached entries beyond the new count.
@@ -531,13 +531,13 @@ impl Effect for LazyListElement {
                     let Some(spec) = build_item_spec(&builder, index, boa) else {
                         continue;
                     };
-                    let item_id = spec.build(cx, boa, node_id);
+                    let item_id = spec.build(cx, boa, node_id.into());
                     self.visible.push((index, item_id));
                 }
                 self.visible.sort_by_key(|(i, _)| *i);
             }
 
-            cx.mark_dirty(self.node_id);
+            cx.mark_dirty(self.node_id.into());
         }
     }
 }

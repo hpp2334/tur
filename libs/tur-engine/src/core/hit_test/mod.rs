@@ -1,6 +1,6 @@
 use tur_shared::Offset;
 
-use crate::core::element::NodeId;
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementTree;
 
 pub struct HitTest<'a> {
@@ -12,15 +12,15 @@ impl<'a> HitTest<'a> {
         Self { tree }
     }
 
-    pub fn deepest(&self, position: Offset) -> Option<NodeId> {
+    pub fn deepest(&self, position: Offset) -> Option<ElementNodeId> {
         self.tree.hit_test_path(position).first().copied()
     }
 
-    pub fn path(&self, position: Offset) -> Vec<NodeId> {
+    pub fn path(&self, position: Offset) -> Vec<ElementNodeId> {
         self.tree.hit_test_path(position)
     }
 
-    pub fn contains(&self, position: Offset, id: NodeId) -> bool {
+    pub fn contains(&self, position: Offset, id: ElementNodeId) -> bool {
         self.tree.hit_test_path(position).contains(&id)
     }
 }
