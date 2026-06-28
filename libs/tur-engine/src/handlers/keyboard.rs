@@ -1,3 +1,4 @@
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -26,7 +27,8 @@ impl AppHandler for KeyboardAppHandler {
         let modifiers = key_event.modifiers;
         let mut current = Some(focused_id);
         while let Some(id) = current {
-            if let Some(node) = cx.element_tree.get(id) {
+            let eid = ElementNodeId::new(id.as_u64());
+            if let Some(node) = cx.element_tree.get_element(eid) {
                 if let Some(ref element) = node.element {
                     if let Some(f) = element.cast::<FocusableElement>() {
                         if let Some(m) = f.component.on_key_down {
@@ -42,7 +44,7 @@ impl AppHandler for KeyboardAppHandler {
                     }
                 }
             }
-            current = cx.element_tree.parent_of(id);
+            current = cx.element_tree.parent_of_element(eid);
         }
     }
 }
@@ -51,7 +53,8 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &crate::core::keyboard::Ap
     let Some(focused_id) = cx.focus_manager.focused() else {
         return;
     };
-    let Some(node) = cx.element_tree.get_mut(focused_id) else {
+    let eid = ElementNodeId::new(focused_id.as_u64());
+    let Some(node) = cx.element_tree.get_element_mut(eid) else {
         return;
     };
     let Some(ref mut element) = node.element else {

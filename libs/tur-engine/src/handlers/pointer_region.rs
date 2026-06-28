@@ -1,4 +1,4 @@
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::ElementTree;
 use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -64,9 +64,9 @@ impl AppHandler for PointerRegionAppHandler {
 
 fn mouse_region_enter_mutation(
     tree: &ElementTree,
-    id: ElementNodeId,
+    id: NodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
-    tree.get(id)
+    tree.get_element(ElementNodeId::new(id.as_u64()))
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .and_then(|m| m.component.on_enter)
@@ -74,31 +74,31 @@ fn mouse_region_enter_mutation(
 
 fn mouse_region_exit_mutation(
     tree: &ElementTree,
-    id: ElementNodeId,
+    id: NodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
-    tree.get(id)
+    tree.get_element(ElementNodeId::new(id.as_u64()))
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .and_then(|m| m.component.on_exit)
 }
 
-fn has_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
-    tree.get(id)
+fn has_region_callbacks(tree: &ElementTree, id: NodeId) -> bool {
+    tree.get_element(ElementNodeId::new(id.as_u64()))
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .map(|m| m.has_region_callbacks())
         .unwrap_or(false)
 }
 
-fn is_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
-    tree.get(id)
+fn is_region_opaque(tree: &ElementTree, id: NodeId) -> bool {
+    tree.get_element(ElementNodeId::new(id.as_u64()))
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
         .map(|m| m.is_region_opaque())
         .unwrap_or(false)
 }
 
-fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<ElementNodeId> {
+fn filter_opaque_path(path: &[NodeId], tree: &ElementTree) -> Vec<NodeId> {
     let mut result = Vec::new();
     for &id in path {
         result.push(id);
@@ -112,12 +112,12 @@ fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<Element
 /// Compute a position relative to the element's top-left by walking parents
 /// and subtracting each one's layout offset. Mirrors the helper in
 /// `handlers/gesture.rs`; kept local to avoid coupling.
-fn local_position(tree: &ElementTree, node_id: ElementNodeId, global: Offset) -> Offset {
+fn local_position(tree: &ElementTree, node_id: NodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
     let mut abs_y = 0.0f64;
     let mut current = Some(node_id);
     while let Some(cid) = current {
-        if let Some(n) = tree.get(cid) {
+        if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
             abs_x += n.computed_layout.offset.x;
             abs_y += n.computed_layout.offset.y;
             current = n.parent;

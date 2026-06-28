@@ -1,3 +1,4 @@
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
@@ -17,26 +18,26 @@ fn get_text_content(app: &TurTestApp, query_key: &[&str]) -> String {
     .unwrap_or_default()
 }
 
-fn find_inner_opaque(app: &TurTestApp) -> (tur_engine::core::element::ElementNodeId, tur_engine::core::element::ElementNodeId) {
+fn find_inner_opaque(app: &TurTestApp) -> (tur_engine::core::element::NodeId, tur_engine::core::element::NodeId) {
     let outer_id = app.query_element(&["outer-opaque"]).unwrap();
     let inner_id = app.query_element(&["inner-opaque"]).unwrap();
     let tree = app.element_tree();
-    let inner_container = tree.get(inner_id).unwrap();
-    let pi_inner = tree.get(inner_container.parent.unwrap()).unwrap();
-    let outer_container = tree.get(outer_id).unwrap();
-    let pi_outer = tree.get(outer_container.parent.unwrap()).unwrap();
-    (pi_outer.id, pi_inner.id)
+    let inner_container = tree.get_element(ElementNodeId::new(inner_id.as_u64())).unwrap();
+    let pi_inner = tree.get_element(ElementNodeId::new(inner_container.parent.unwrap().as_u64())).unwrap();
+    let outer_container = tree.get_element(ElementNodeId::new(outer_id.as_u64())).unwrap();
+    let pi_outer = tree.get_element(ElementNodeId::new(outer_container.parent.unwrap().as_u64())).unwrap();
+    (pi_outer.id.into(), pi_inner.id.into())
 }
 
-fn find_inner_translucent(app: &TurTestApp) -> (tur_engine::core::element::ElementNodeId, tur_engine::core::element::ElementNodeId) {
+fn find_inner_translucent(app: &TurTestApp) -> (tur_engine::core::element::NodeId, tur_engine::core::element::NodeId) {
     let outer_id = app.query_element(&["outer-translucent"]).unwrap();
     let inner_id = app.query_element(&["inner-translucent"]).unwrap();
     let tree = app.element_tree();
-    let inner_container = tree.get(inner_id).unwrap();
-    let pi_inner = tree.get(inner_container.parent.unwrap()).unwrap();
-    let outer_container = tree.get(outer_id).unwrap();
-    let pi_outer = tree.get(outer_container.parent.unwrap()).unwrap();
-    (pi_outer.id, pi_inner.id)
+    let inner_container = tree.get_element(ElementNodeId::new(inner_id.as_u64())).unwrap();
+    let pi_inner = tree.get_element(ElementNodeId::new(inner_container.parent.unwrap().as_u64())).unwrap();
+    let outer_container = tree.get_element(ElementNodeId::new(outer_id.as_u64())).unwrap();
+    let pi_outer = tree.get_element(ElementNodeId::new(outer_container.parent.unwrap().as_u64())).unwrap();
+    (pi_outer.id.into(), pi_inner.id.into())
 }
 
 #[test]

@@ -2,7 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
@@ -43,7 +43,7 @@ pub struct TextComponent {
 }
 
 impl Component for TextComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         cx.insert_node(
             id,

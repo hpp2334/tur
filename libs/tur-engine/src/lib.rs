@@ -17,7 +17,7 @@ use error::TurError;
 use core::app::TurAppInternal;
 use core::bridge::init_bridge;
 use core::bridge::TurJobExecutor;
-use core::element::ElementNodeId;
+use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::host_api::HostApi;
 #[cfg(feature = "trace")]
@@ -231,14 +231,14 @@ impl TurApp {
     /// `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
         let tree = self.internal.js_context.element_tree.borrow();
-        let root_id = tree.root_id()?;
-        tree.dev_tool_node(root_id)
+        let root_id = tree.root_element_id()?;
+        tree.dev_tool_node(root_id.into())
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.
     pub fn dev_tool_get_element(
         &self,
-        id: core::element::ElementNodeId,
+        id: core::element::NodeId,
     ) -> Option<core::elements::DevNodeData> {
         self.internal.js_context.element_tree.borrow().dev_tool_node(id)
     }
@@ -257,7 +257,7 @@ impl TurApp {
             .take()
     }
 
-    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+    pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.internal
             .js_context
             .element_tree
@@ -265,17 +265,17 @@ impl TurApp {
             .query_element(key)
     }
 
-    pub fn focused_element(&self) -> Option<ElementNodeId> {
+    pub fn focused_element(&self) -> Option<NodeId> {
         self.internal.js_context.focus_manager.borrow().focused()
     }
 
     pub fn with_element<R>(
         &self,
-        id: ElementNodeId,
+        id: NodeId,
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get(id)?;
+        let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
         let element = node.element.as_ref()?;
         Some(cb(element))
     }
@@ -288,13 +288,13 @@ impl TurApp {
         let mut abs_y = 0.0f64;
         let mut current = Some(focused_id);
         while let Some(id) = current {
-            let node = tree.get(id)?;
+            let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
             abs_x += node.computed_layout.offset.x;
             abs_y += node.computed_layout.offset.y;
             current = node.parent;
         }
 
-        let node = tree.get(focused_id)?;
+        let node = tree.get_element(ElementNodeId::new(focused_id.as_u64()))?;
         let element = node.element.as_ref()?;
         let editable_el = element.cast::<EditableTextElement>()?;
         let layout_data = editable_el.cached_layout.as_ref()?;
@@ -318,7 +318,7 @@ impl TurApp {
             return false;
         };
         let tree = self.internal.js_context.element_tree.borrow();
-        let Some(node) = tree.get(focused_id) else {
+        let Some(node) = tree.get_element(ElementNodeId::new(focused_id.as_u64())) else {
             return false;
         };
         let Some(ref element) = node.element else {

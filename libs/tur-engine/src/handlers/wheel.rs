@@ -1,4 +1,4 @@
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ElementOnWheelContext, WheelEvent};
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -32,10 +32,10 @@ impl AppHandler for WheelAppHandler {
 
 fn find_deepest_with_wheel(
     tree: &crate::core::elements::ElementTree,
-    hit_path: &[ElementNodeId],
-) -> Option<ElementNodeId> {
+    hit_path: &[NodeId],
+) -> Option<NodeId> {
     for &id in hit_path {
-        if let Some(node) = tree.get(id) {
+        if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             if let Some(ref element) = node.element {
                 if element.has_on_wheel() {
                     return Some(id);
@@ -48,11 +48,11 @@ fn find_deepest_with_wheel(
 
 pub fn dispatch_wheel(
     cx: &mut HandlerContext,
-    id: ElementNodeId,
+    id: NodeId,
     delta_x: f64,
     delta_y: f64,
 ) -> f64 {
-    let Some(node) = cx.element_tree.get_mut(id) else {
+    let Some(node) = cx.element_tree.get_element_mut(ElementNodeId::new(id.as_u64())) else {
         return 0.0;
     };
     let Some(ref mut element) = node.element else {

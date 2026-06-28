@@ -3,10 +3,10 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::element::{FragmentNodeId, NodeId};
+use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::widget::{
-    val_from_js, Component, ComponentFactory, Effect, JsComponentFactory, PropValue, Val, WidgetCx,
+    val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
@@ -15,8 +15,9 @@ use crate::core::widget::{
 // `condition` is reactive (`Val<bool>`). `then_child` / `else_child` are the
 // branch factories (`Option<ComponentFactory>`): the concrete subtree is only
 // known at runtime, so `create()` is invoked when a branch is selected.
-// ConditionElement is a transparent widget: it mounts exactly one branch and relays
-// layout/paint to it.
+//
+// ConditionComponent is a **fragment**: it mounts exactly one branch and has no
+// layout box of its own — the enclosing flex lays the branch out directly.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -28,53 +29,37 @@ pub struct ConditionComponent {
 }
 
 impl Component for ConditionComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
 
         // Resolve the initial condition value and pick the branch.
         let value = cx.read_val(&self.condition, boa).unwrap_or(false);
-        let branch = if value {
+        let mounted = if value {
             MountedBranch::Then
         } else {
             MountedBranch::Else
         };
-        let branch_factory = match branch {
-            MountedBranch::Then => self.then_child.clone(),
-            MountedBranch::Else => self.else_child.clone(),
-            MountedBranch::None => None,
-        };
 
-        // Build the chosen branch BEFORE inserting this node so the branch's
-        // self-link to `id` is a no-op (parent not yet in the tree). We then
-        // explicitly link the branch after inserting — yielding a single edge.
-        let (mounted, mounted_child) = if let Some(factory) = branch_factory {
-            if let Some(component) = factory.create(boa) {
-                let child_id = component.build(cx, boa, id);
-                (branch, Some(child_id))
-            } else {
-                (MountedBranch::None, None)
-            }
-        } else {
-            (MountedBranch::None, None)
-        };
-
-        cx.insert_node(
-            id,
-            AnyElement::new(ConditionElement {
+        // Insert the empty fragment FIRST so the branch can auto-link to it.
+        let host = FragmentHost {
+            id: FragmentNodeId::new(id.as_u64()),
+            parent,
+            children: Vec::new(),
+            kind: Some(Box::new(ConditionFragment {
                 component: self.clone(),
-                node_id: id,
                 mounted,
-                mounted_child,
-            }),
-            boa,
-        );
+            })),
+            query_key: self.query_key.clone(),
+        };
+        cx.insert_fragment(host);
 
-        if let Some(child_id) = mounted_child {
-            cx.link_child(id, child_id);
-        }
-        if let Some(qk) = &self.query_key {
-            cx.set_query_key(id, qk.clone());
-        }
+        // Build the initial branch — auto-links to the fragment.
+        let kind = ConditionFragment {
+            component: self.clone(),
+            mounted,
+        };
+        kind.build_branch(cx, boa, FragmentNodeId::new(id.as_u64()));
+
         cx.link_child(parent, id);
         id
     }
@@ -92,28 +77,72 @@ pub enum MountedBranch {
 }
 
 // ---------------------------------------------------------------------------
-// ConditionElement — the built element. Holds its spec, its own node id (so the
-// effect can rebuild branches), and which branch is currently mounted.
+// ConditionFragment — the `FragmentKind` impl. Holds the spec + which branch
+// is mounted. `try_rebuild` checks if `condition` is dirty and swaps branches.
 // ---------------------------------------------------------------------------
 
-pub struct ConditionElement {
+pub struct ConditionFragment {
     pub component: ConditionComponent,
-    pub(crate) node_id: ElementNodeId,
-    pub(crate) mounted: MountedBranch,
-    pub(crate) mounted_child: Option<ElementNodeId>,
+    pub mounted: MountedBranch,
 }
 
-impl crate::core::layout::ElementSubscribe for ConditionElement {}
+impl ConditionFragment {
+    fn current_factory(&self) -> Option<Rc<dyn ComponentFactory>> {
+        match self.mounted {
+            MountedBranch::Then => self.component.then_child.clone(),
+            MountedBranch::Else => self.component.else_child.clone(),
+            MountedBranch::None => None,
+        }
+    }
 
-impl Effect for ConditionElement {
-    fn effect(
+    /// Build the currently-mounted branch under `fragment_id`.
+    fn build_branch(
+        &self,
+        cx: &mut WidgetCx,
+        boa: &mut Context,
+        fragment_id: FragmentNodeId,
+    ) -> Vec<NodeId> {
+        if let Some(factory) = self.current_factory() {
+            if let Some(component) = factory.create(boa) {
+                return vec![component.build(cx, boa, NodeId::from(fragment_id))];
+            }
+        }
+        Vec::new()
+    }
+}
+
+impl FragmentKind for ConditionFragment {
+    fn type_name(&self) -> &'static str {
+        "tur_condition"
+    }
+
+    fn trace_label(&self, _children: &[NodeId]) -> String {
+        let branch = match self.mounted {
+            MountedBranch::Then => "then",
+            MountedBranch::Else => "else",
+            MountedBranch::None => "none",
+        };
+        format!("branch={branch}")
+    }
+
+    fn trace_props(&self, _children: &[NodeId]) -> Vec<(&'static str, TraceValue)> {
+        let branch = match self.mounted {
+            MountedBranch::Then => "then",
+            MountedBranch::Else => "else",
+            MountedBranch::None => "none",
+        };
+        vec![("mountedBranch", TraceValue::Str(branch.to_string()))]
+    }
+
+    fn try_rebuild(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
-    ) {
+        fragment_id: FragmentNodeId,
+    ) -> Option<Vec<NodeId>> {
         if !self.component.condition.is_dirty(dirties) {
-            return;
+            return None;
         }
 
         let new_value = cx.read_val(&self.component.condition, boa).unwrap_or(false);
@@ -123,54 +152,10 @@ impl Effect for ConditionElement {
             MountedBranch::Else
         };
         if new_branch == self.mounted {
-            return;
-        }
-
-        // Tear down the previously mounted branch.
-        if let Some(old) = self.mounted_child.take() {
-            cx.destroy_subtree(old);
-        }
-
-        // Build the new branch. ConditionElement's node IS in the tree during the
-        // effect, so the branch's self-link succeeds — no explicit link needed.
-        let new_factory = match new_branch {
-            MountedBranch::Then => self.component.then_child.clone(),
-            MountedBranch::Else => self.component.else_child.clone(),
-            MountedBranch::None => None,
-        };
-        let node_id = self.node_id;
-        if let Some(factory) = new_factory {
-            if let Some(component) = factory.create(boa) {
-                let child_id = component.build(cx, boa, node_id);
-                self.mounted_child = Some(child_id);
-            } else {
-                self.mounted_child = None;
-            }
-        } else {
-            self.mounted_child = None;
+            return None;
         }
         self.mounted = new_branch;
-        cx.mark_dirty(node_id);
-    }
-}
-
-impl ElementTrace for ConditionElement {
-    fn trace_label(&self) -> String {
-        let branch = match self.mounted {
-            MountedBranch::Then => "then",
-            MountedBranch::Else => "else",
-            MountedBranch::None => "none",
-        };
-        format!("branch={branch}")
-    }
-
-    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let branch = match self.mounted {
-            MountedBranch::Then => "then",
-            MountedBranch::Else => "else",
-            MountedBranch::None => "none",
-        };
-        vec![("mountedBranch", TraceValue::Str(branch.to_string()))]
+        Some(self.build_branch(cx, boa, fragment_id))
     }
 }
 

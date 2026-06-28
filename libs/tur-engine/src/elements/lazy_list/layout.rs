@@ -1,6 +1,6 @@
 use tur_shared::{Constraints, Offset, Size};
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementLayout, LayoutContext};
 
 use super::element::LazyListElement;
@@ -57,7 +57,7 @@ impl ElementLayout for LazyListElement {
             // Persist the measurement in the per-index cache. Keyed by
             // logical index (stable across scroll-driven mount/unmount) so
             // unmounted-then-remounted items recall their previous extent.
-            if let Some(logical) = self.visible_index_of(child_id) {
+            if let Some(logical) = self.visible_index_of(NodeId::from(child_id)) {
                 self.extent_cache.insert(logical, extent);
             }
         }
@@ -112,7 +112,7 @@ impl LazyListElement {
         // The anchor is maintained in `process_remount` (delta-updated as
         // the leading visible index shifts) and reset on axis/itemExtent/
         // itemCount changes in the Effect handler.
-        let visible: Vec<(u64, ElementNodeId)> = self.visible.clone();
+        let visible: Vec<(u64, NodeId)> = self.visible.clone();
         let mut offset = self.first_mounted_offset;
         for (i, child_id) in visible {
             let main_pos = offset - scroll_offset;
@@ -120,7 +120,7 @@ impl LazyListElement {
                 tur_shared::Axis::Vertical => Offset::new(0.0, main_pos),
                 tur_shared::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
-            cx.set_child_offset(child_id, off);
+            cx.set_child_offset(ElementNodeId::new(child_id.as_u64()), off);
             offset += self.extent_cache.get(&i).copied().unwrap_or(avg);
         }
     }

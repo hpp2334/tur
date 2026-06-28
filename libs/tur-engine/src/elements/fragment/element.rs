@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
 use crate::core::widget::{extract_component, Effect, Component, WidgetCx};
 
@@ -20,7 +20,7 @@ pub struct FragmentComponent {
 }
 
 impl Component for FragmentComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         // FragmentElement is truly transparent — no node is created. Children are
         // built directly under the parent. This matches React FragmentElement
         // semantics and keeps the tree flat for tests that navigate

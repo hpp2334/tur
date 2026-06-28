@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::widget::{
@@ -24,7 +24,7 @@ pub struct OpacityComponent {
 }
 
 impl Component for OpacityComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         cx.insert_node(id, AnyElement::new(OpacityElement { component: self.clone(), painting: OpacityPainting::default() }), boa);
         if let Some(qk) = &self.query_key {
@@ -138,7 +138,7 @@ pub struct TransformComponent {
 }
 
 impl Component for TransformComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         cx.insert_node(id, AnyElement::new(TransformElement { component: self.clone(), painting: TransformPainting::default() }), boa);
         if let Some(qk) = &self.query_key {

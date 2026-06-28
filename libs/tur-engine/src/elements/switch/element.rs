@@ -3,20 +3,17 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::element::{FragmentNodeId, NodeId};
+use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::widget::{
-    val_from_js, Component, ComponentFactory, Effect, JsComponentFactory, PropValue, Val, WidgetCx,
+    val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
 };
 
 // ---------------------------------------------------------------------------
-// SwitchKey — a raw JS comparison key. It stores the original `JsValue`
-// verbatim (no normalization) so any JS value — string, number, boolean,
-// null, undefined, bigint, even objects — can be a case key. Equality is
-// `JsValue`'s derived `PartialEq` (`same_value_zero`: `===` for primitives,
-// pointer identity for objects), which matches JS `switch` semantics and,
-// crucially, needs no boa `Context` — so `SwitchElement` can resolve branches during
-// layout/paint without touching the JS runtime.
+// SwitchKey — a raw JS comparison key. Stores the original `JsValue` verbatim
+// so any JS value can be a case key. Equality is `JsValue`'s derived
+// `PartialEq` (`same_value_zero`), which matches JS `switch` semantics and
+// needs no boa `Context`.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug, PartialEq)]
@@ -32,11 +29,8 @@ impl PropValue for SwitchKey {
 // SwitchComponent — the user's declaration.
 //
 // `value` is reactive (`Val<SwitchKey>`). `cases` is an ordered list of
-// (key, branch factory) pairs; the first pair whose key equals the current
-// value is mounted. `fallback` is mounted when no case matches. Branches are
-// `ComponentFactory`s because the concrete subtree is only known at runtime.
-// SwitchElement is a transparent widget (like ConditionElement): it relays layout/paint to
-// one branch.
+// (key, branch factory) pairs. SwitchComponent is a **fragment**: it mounts
+// one branch and relays layout to it.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -97,103 +91,68 @@ impl Mounted {
 }
 
 impl Component for SwitchComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
 
         let value = cx.read_val(&self.value, boa);
         let mounted = Mounted::resolve(self, value);
 
-        // Build the chosen branch BEFORE inserting this node so the branch's
-        // self-link to `id` is a no-op (parent not yet in the tree). We then
-        // explicitly link the branch after inserting — yielding a single edge.
-        let mounted_child = self
-            .mounted_factory_for(&mounted)
-            .and_then(|f| f.create(boa))
-            .map(|component| component.build(cx, boa, id));
-
-        cx.insert_node(
-            id,
-            AnyElement::new(SwitchElement {
+        // Insert the empty fragment FIRST so the branch can auto-link to it.
+        let host = FragmentHost {
+            id: FragmentNodeId::new(id.as_u64()),
+            parent,
+            children: Vec::new(),
+            kind: Some(Box::new(SwitchFragment {
                 component: self.clone(),
-                node_id: id,
-                mounted,
-                mounted_child,
-            }),
-            boa,
-        );
+                mounted: mounted.clone(),
+            })),
+            query_key: self.query_key.clone(),
+        };
+        cx.insert_fragment(host);
 
-        if let Some(child_id) = mounted_child {
-            cx.link_child(id, child_id);
-        }
-        if let Some(qk) = &self.query_key {
-            cx.set_query_key(id, qk.clone());
-        }
+        // Build the initial branch — auto-links to the fragment.
+        let kind = SwitchFragment {
+            component: self.clone(),
+            mounted,
+        };
+        kind.build_branch(cx, boa, FragmentNodeId::new(id.as_u64()));
+
         cx.link_child(parent, id);
         id
     }
 }
 
-impl SwitchComponent {
-    fn mounted_factory_for(&self, mounted: &Mounted) -> Option<Rc<dyn ComponentFactory>> {
-        mounted.factory(self)
-    }
-}
-
 // ---------------------------------------------------------------------------
-// SwitchElement — the built element.
+// SwitchFragment — the `FragmentKind` impl.
 // ---------------------------------------------------------------------------
 
-pub struct SwitchElement {
+pub struct SwitchFragment {
     pub component: SwitchComponent,
-    pub(crate) node_id: ElementNodeId,
     pub(crate) mounted: Mounted,
-    pub(crate) mounted_child: Option<ElementNodeId>,
 }
 
-impl crate::core::layout::ElementSubscribe for SwitchElement {}
-
-impl Effect for SwitchElement {
-    fn effect(
-        &mut self,
+impl SwitchFragment {
+    fn build_branch(
+        &self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
-    ) {
-        if !self.component.value.is_dirty(dirties) {
-            return;
-        }
-
-        let new_value = cx.read_val(&self.component.value, boa);
-        let new_mounted = Mounted::resolve(&self.component, new_value);
-        if new_mounted == self.mounted {
-            return;
-        }
-
-        // Tear down the previously mounted branch.
-        if let Some(old) = self.mounted_child.take() {
-            cx.destroy_subtree(old);
-        }
-
-        // Build the new branch. SwitchElement's node IS in the tree during the
-        // effect, so the branch's self-link succeeds — no explicit link needed.
-        let node_id = self.node_id;
-        if let Some(factory) = new_mounted.factory(&self.component) {
+        fragment_id: FragmentNodeId,
+    ) -> Vec<NodeId> {
+        if let Some(factory) = self.mounted.factory(&self.component) {
             if let Some(component) = factory.create(boa) {
-                let child_id = component.build(cx, boa, node_id);
-                self.mounted_child = Some(child_id);
-            } else {
-                self.mounted_child = None;
+                return vec![component.build(cx, boa, NodeId::from(fragment_id))];
             }
-        } else {
-            self.mounted_child = None;
         }
-        self.mounted = new_mounted;
-        cx.mark_dirty(node_id);
+        Vec::new()
     }
 }
 
-impl ElementTrace for SwitchElement {
-    fn trace_label(&self) -> String {
+impl FragmentKind for SwitchFragment {
+    fn type_name(&self) -> &'static str {
+        "tur_switch"
+    }
+
+    fn trace_label(&self, _children: &[NodeId]) -> String {
         match &self.mounted {
             Mounted::None => "branch=none".to_string(),
             Mounted::Case(k) => format!("branch=case({:?})", k),
@@ -201,13 +160,33 @@ impl ElementTrace for SwitchElement {
         }
     }
 
-    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+    fn trace_props(&self, _children: &[NodeId]) -> Vec<(&'static str, TraceValue)> {
         let branch = match &self.mounted {
             Mounted::None => "none".to_string(),
             Mounted::Case(k) => format!("case({:?})", k),
             Mounted::Fallback => "fallback".to_string(),
         };
         vec![("mountedBranch", TraceValue::Str(branch))]
+    }
+
+    fn try_rebuild(
+        &mut self,
+        cx: &mut WidgetCx,
+        boa: &mut Context,
+        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+        fragment_id: FragmentNodeId,
+    ) -> Option<Vec<NodeId>> {
+        if !self.component.value.is_dirty(dirties) {
+            return None;
+        }
+
+        let new_value = cx.read_val(&self.component.value, boa);
+        let new_mounted = Mounted::resolve(&self.component, new_value);
+        if new_mounted == self.mounted {
+            return None;
+        }
+        self.mounted = new_mounted;
+        Some(self.build_branch(cx, boa, fragment_id))
     }
 }
 
@@ -243,8 +222,7 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     }
 }
 
-/// Extract an optional branch factory from a JS props object. The prop value
-/// is a JS thunk `() => EdgyElement`; it is wrapped in a `JsComponentFactory`.
+/// Extract an optional branch factory from a JS props object.
 fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ComponentFactory>> {
     use boa_engine::js_string;
     use boa_engine::object::builtins::JsFunction;
@@ -256,10 +234,7 @@ fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn
     Some(Rc::new(JsComponentFactory(f)))
 }
 
-/// Parse `cases` — a JS array of `{ key, child }` entries — into an ordered
-/// `Vec<(SwitchKey, ComponentFactory)>`. Any `key` value is accepted (stored as
-/// a raw `JsValue`); each `child` is a JS thunk `() => EdgyElement` wrapped in a
-/// `JsComponentFactory`. An entry is skipped only if its `child` is not callable.
+/// Parse `cases` — a JS array of `{ key, child }` entries.
 fn prop_cases(
     props: &JsObject,
     key: &str,
@@ -305,9 +280,6 @@ fn prop_cases(
 }
 
 impl SwitchComponent {
-    /// `value` is the reactive key; `cases` is a list of `{ key, child }`
-    /// entries (each `child` is a thunk `() => EdgyElement`); `fallback` is the
-    /// optional default branch thunk.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         SwitchComponent {
             value: prop_val::<SwitchKey>(props, "value", ctx)

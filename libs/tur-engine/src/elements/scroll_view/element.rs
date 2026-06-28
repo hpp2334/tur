@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Axis, Brush, Size};
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
@@ -37,7 +37,7 @@ pub struct ScrollViewComponent {
 }
 
 impl Component for ScrollViewComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         // Resolve axis eagerly — the wheel handler and controller-metric
         // updates need it at event time where no store/Context is available.
         let axis = self

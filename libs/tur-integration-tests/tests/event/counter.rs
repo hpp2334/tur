@@ -11,7 +11,7 @@ fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     .unwrap_or_default()
 }
 
-fn find_pointer_interact(app: &TurTestApp) -> (tur_engine::core::element::ElementNodeId, f64, f64) {
+fn find_pointer_interact(app: &TurTestApp) -> (tur_engine::core::element::NodeId, f64, f64) {
     let pi_id = app.query_element(&["inc"]).expect("inc button not found");
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     (pi_id, cx, cy)

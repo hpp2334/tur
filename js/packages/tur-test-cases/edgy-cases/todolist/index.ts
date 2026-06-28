@@ -117,20 +117,24 @@ function Header(): EdgyElement {
 function TaskList(): EdgyElement {
     return Expanded({
         child: ScrollView({
-            child: Each({
-                items: tasks$,
+            child: Column({
                 crossAlignment: CrossAxisAlignment.Stretch,
-                build: (task, index) =>
-                    Column({
-                        crossAlignment: CrossAxisAlignment.Stretch,
-                        mainAxisSize: MainAxisSize.Min,
-                        children: [
-                            index === 0
-                                ? SizedBox({ width: 0, height: 0 })
-                                : SizedBox({ height: 10 }),
-                            TaskItem({ task, index }),
-                        ],
+                children: [
+                    Each({
+                        items: tasks$,
+                        build: (task, index) =>
+                            Column({
+                                crossAlignment: CrossAxisAlignment.Stretch,
+                                mainAxisSize: MainAxisSize.Min,
+                                children: [
+                                    index === 0
+                                        ? SizedBox({ width: 0, height: 0 })
+                                        : SizedBox({ height: 10 }),
+                                    TaskItem({ task, index }),
+                                ],
+                            }),
                     }),
+                ],
             }),
         }),
     });

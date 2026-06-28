@@ -1,4 +1,4 @@
-use tur_engine::core::element::ElementKind;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -8,16 +8,16 @@ fn stack_children_overlap() {
 
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
-        let root = tree.root().unwrap();
-        let stack = tree.get(root.children[0]).unwrap();
+        let root = tree.root_element().unwrap();
+        let stack = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
         assert_eq!(
             stack.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_stack")
         );
         assert_eq!(stack.children.len(), 2);
 
-        let sb1 = tree.get(stack.children[0]).unwrap();
-        let sb2 = tree.get(stack.children[1]).unwrap();
+        let sb1 = tree.get_element(ElementNodeId::new(stack.children[0].as_u64())).unwrap();
+        let sb2 = tree.get_element(ElementNodeId::new(stack.children[1].as_u64())).unwrap();
         assert_eq!(
             sb1.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
@@ -33,11 +33,11 @@ fn stack_children_overlap() {
     app.render();
     let rt = app.element_tree();
 
-    let sb1_node = rt.get(sb1_id).unwrap();
+    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
     assert_eq!(sb1_node.computed_layout.offset.y, 0.0);
 
-    let sb2_node = rt.get(sb2_id).unwrap();
+    let sb2_node = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
     assert_eq!(sb2_node.computed_layout.offset.x, 0.0);
     assert_eq!(sb2_node.computed_layout.offset.y, 0.0);
 }

@@ -1,3 +1,4 @@
+use crate::core::element::ElementNodeId;
 use crate::core::elements::ElementOnImeContext;
 use crate::core::event::AppEvent;
 use crate::handlers::ensure_visible::ensure_caret_visible;
@@ -18,7 +19,7 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
             return;
         };
         {
-            let Some(node) = cx.element_tree.get_mut(focused_id) else {
+            let Some(node) = cx.element_tree.get_element_mut(ElementNodeId::new(focused_id.as_u64())) else {
                 return;
             };
             let Some(ref mut element) = node.element else {

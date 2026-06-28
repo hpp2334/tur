@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
@@ -24,7 +24,7 @@ pub struct FocusableComponent {
 }
 
 impl Component for FocusableComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         cx.insert_node(
             id,

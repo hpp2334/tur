@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 
 pub struct PointerRegionDiff {
-    pub entered: Vec<ElementNodeId>,
-    pub exited: Vec<ElementNodeId>,
+    pub entered: Vec<NodeId>,
+    pub exited: Vec<NodeId>,
 }
 
 pub struct PointerRegionTracker {
-    tracked: HashSet<ElementNodeId>,
+    tracked: HashSet<NodeId>,
 }
 
 impl Default for PointerRegionTracker {
@@ -26,22 +26,22 @@ impl PointerRegionTracker {
 
     pub fn update(
         &mut self,
-        hit_path: &[ElementNodeId],
-        has_callbacks: impl Fn(ElementNodeId) -> bool,
+        hit_path: &[NodeId],
+        has_callbacks: impl Fn(NodeId) -> bool,
     ) -> PointerRegionDiff {
-        let new_set: HashSet<ElementNodeId> = hit_path
+        let new_set: HashSet<NodeId> = hit_path
             .iter()
             .copied()
             .filter(|id| has_callbacks(*id))
             .collect();
 
-        let entered: Vec<ElementNodeId> = new_set
+        let entered: Vec<NodeId> = new_set
             .iter()
             .copied()
             .filter(|id| !self.tracked.contains(id))
             .collect();
 
-        let exited: Vec<ElementNodeId> = self
+        let exited: Vec<NodeId> = self
             .tracked
             .iter()
             .copied()

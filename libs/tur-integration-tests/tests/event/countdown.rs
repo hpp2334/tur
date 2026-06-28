@@ -1,7 +1,6 @@
 use std::time::Duration;
 
-use tur_engine::core::element::ElementKind;
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
@@ -21,24 +20,24 @@ fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
     app.click(cx, cy);
 }
 
-fn find_input_id(app: &TurTestApp) -> ElementNodeId {
+fn find_input_id(app: &TurTestApp) -> NodeId {
     let wrapper_id = app.query_element(&["edit-input"]).expect("edit-input not found");
     let tree = app.element_tree();
-    let wrapper = tree.get(wrapper_id).unwrap();
-    let inner = tree.get(wrapper.children[0]).unwrap();
+    let wrapper = tree.get_element(ElementNodeId::new(wrapper_id.as_u64())).unwrap();
+    let inner = tree.get_element(ElementNodeId::new(wrapper.children[0].as_u64())).unwrap();
     assert_eq!(
         inner.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_container")
     );
-    let input_node = tree.get(inner.children[0]).unwrap();
+    let input_node = tree.get_element(ElementNodeId::new(inner.children[0].as_u64())).unwrap();
     assert_eq!(
         input_node.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_editable_text")
     );
-    input_node.id
+    input_node.id.into()
 }
 
-fn focus_input(app: &mut TurTestApp, input_id: ElementNodeId) {
+fn focus_input(app: &mut TurTestApp, input_id: NodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(input_id).unwrap().center();
     app.click(cx, cy);
 }

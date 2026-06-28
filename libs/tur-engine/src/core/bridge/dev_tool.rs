@@ -88,10 +88,10 @@ pub(crate) fn tur_dev_tool_element_tree(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let tree = js_ctx.element_tree.borrow();
-    let Some(root_id) = tree.root_id() else {
+    let Some(root_id) = tree.root_element_id() else {
         return Ok(JsValue::null());
     };
-    match tree.dev_tool_node(root_id) {
+    match tree.dev_tool_node(root_id.into()) {
         Some(node) => dev_node_to_js(node, ctx),
         None => Ok(JsValue::null()),
     }
@@ -112,7 +112,7 @@ pub(crate) fn tur_dev_tool_get_element(
                     .with_message("getElement: expected a numeric id as the second argument"),
             )
         })
-        .map(|n| crate::core::element::ElementNodeId::new(n as u64))?;
+        .map(|n| crate::core::element::NodeId::new(n as u64))?;
     let tree = js_ctx.element_tree.borrow();
     match tree.dev_tool_node(id) {
         Some(node) => dev_node_to_js(node, ctx),

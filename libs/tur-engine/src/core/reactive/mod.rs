@@ -29,11 +29,11 @@ impl AtomId {
     }
 }
 
-/// Opaque identifier for an external subscriber (e.g. an `ElementNodeId`)
+/// Opaque identifier for an external subscriber (e.g. an `NodeId`)
 /// that reads a reactive atom during layout.  The store records atom→subscriber
 /// edges so a reactive flush can mark affected subscribers dirty.  Kept as a
 /// plain `u64` newtype so the reactive module stays decoupled from the element
-/// module — callers convert `ElementNodeId` → `SubscriberId` at the boundary.
+/// module — callers convert `NodeId` → `SubscriberId` at the boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SubscriberId(u64);
 

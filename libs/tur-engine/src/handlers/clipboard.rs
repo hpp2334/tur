@@ -1,3 +1,4 @@
+use crate::core::element::ElementNodeId;
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::elements::EditableTextElement;
@@ -22,7 +23,7 @@ impl AppHandler for ClipboardPasteHandler {
         // Take the element out of the tree so we can mutate it without
         // holding the tree borrow.
         let mut element_opt = {
-            let Some(node) = cx.element_tree.get_mut(focused_id) else {
+            let Some(node) = cx.element_tree.get_element_mut(ElementNodeId::new(focused_id.as_u64())) else {
                 return;
             };
             node.element.take()
@@ -52,7 +53,7 @@ impl AppHandler for ClipboardPasteHandler {
         }
 
         // Put the element back.
-        if let Some(node) = cx.element_tree.get_mut(focused_id) {
+        if let Some(node) = cx.element_tree.get_element_mut(ElementNodeId::new(focused_id.as_u64())) {
             node.element = Some(element);
         }
         if did_change {

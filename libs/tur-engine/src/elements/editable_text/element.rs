@@ -5,7 +5,7 @@ use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
@@ -101,7 +101,7 @@ pub struct EditableTextComponent {
 }
 
 impl Component for EditableTextComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let mut spec = self.clone();
 

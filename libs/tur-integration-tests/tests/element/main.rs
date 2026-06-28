@@ -2,6 +2,7 @@ mod animation;
 mod column;
 mod container;
 mod debug;
+mod each_in_row;
 mod expanded;
 mod image;
 mod lazy_list;

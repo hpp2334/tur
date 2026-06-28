@@ -26,7 +26,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-engine (unified engine crate)               │
-│  ├── core/trait_   (ElementKind, ElementNodeId,       │
+│  ├── core/trait_   (ElementKind, NodeId,             │
 │  │                   ElementLayout, ElementRender,     │
 │  │                   ElementOnUpdate, ElementSubscribe)│
 │  ├── core/elements (AnyElement, ElementNode,           │

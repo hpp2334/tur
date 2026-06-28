@@ -4,7 +4,7 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 
 pub mod context;
 pub mod val;
@@ -25,8 +25,8 @@ pub trait Component: 'static {
         &self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        parent: ElementNodeId,
-    ) -> ElementNodeId;
+        parent: NodeId,
+    ) -> NodeId;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,8 +69,8 @@ impl Component for JsComponent {
         &self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        parent: ElementNodeId,
-    ) -> ElementNodeId {
+        parent: NodeId,
+    ) -> NodeId {
         match invoke_thunk(&self.0, boa) {
             Some(inner) => inner.build(cx, boa, parent),
             None => parent,

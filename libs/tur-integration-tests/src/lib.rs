@@ -4,7 +4,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::ElementTree;
 use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
@@ -307,7 +307,7 @@ impl TurTestApp {
         }
     }
 
-    pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
+    pub fn has_click_handler(&self, id: NodeId) -> bool {
         self.inner.with_element(id, |e| {
             e.cast::<PointerInteractElement>()
                 .map(|p| p.has_on_click())
@@ -315,7 +315,7 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
-    pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
+    pub fn has_mouse_region_callbacks(&self, id: NodeId) -> bool {
         use tur_engine::elements::MouseRegionElement;
         self.inner.with_element(id, |e| {
             e.cast::<MouseRegionElement>()
@@ -324,21 +324,24 @@ impl TurTestApp {
         }).unwrap_or(false)
     }
 
-    pub fn query_element(&self, key: &[&str]) -> Option<ElementNodeId> {
+    pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.inner.query_element(key)
     }
 
-    pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
+    pub fn get_element_absolute_bounds(&self, id: NodeId) -> Option<Rect> {
         let tree = self.inner.element_tree();
-        let node = tree.get(id)?;
+        let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
         let mut x = node.computed_layout.offset.x;
         let mut y = node.computed_layout.offset.y;
         let mut current = node.parent;
         while let Some(cid) = current {
-            if let Some(n) = tree.get(cid) {
+            if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
                 x += n.computed_layout.offset.x;
                 y += n.computed_layout.offset.y;
                 current = n.parent;
+            } else if let Some(f) = tree.get_fragment(FragmentNodeId::new(cid.as_u64())) {
+                // Fragments have zero offset; hop to their real-ancestor parent.
+                current = Some(f.parent);
             } else {
                 break;
             }
@@ -351,7 +354,7 @@ impl TurTestApp {
         })
     }
 
-    pub fn focused_element(&self) -> Option<ElementNodeId> {
+    pub fn focused_element(&self) -> Option<NodeId> {
         self.inner.focused_element()
     }
 
@@ -365,7 +368,7 @@ impl TurTestApp {
 
     pub fn with_element<R>(
         &self,
-        id: ElementNodeId,
+        id: NodeId,
         cb: impl FnOnce(&AnyElement) -> R,
     ) -> Option<R> {
         self.inner.with_element(id, cb)
@@ -411,7 +414,7 @@ impl TurTestApp {
     /// Structured dev-tool snapshot of an arbitrary node by id.
     pub fn dev_tool_get_element(
         &self,
-        id: ElementNodeId,
+        id: NodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
         self.inner.dev_tool_get_element(id)
     }

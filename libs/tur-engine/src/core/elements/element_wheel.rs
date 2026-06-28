@@ -1,5 +1,5 @@
 use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 
@@ -11,14 +11,14 @@ pub struct WheelEvent {
 pub struct ElementOnWheelContext<'a> {
     event_queue: &'a mut AppEventQueue,
     mutation_queue: &'a mut PendingMutationInvocationQueue,
-    node_id: ElementNodeId,
+    node_id: NodeId,
 }
 
 impl<'a> ElementOnWheelContext<'a> {
     pub fn new(
         event_queue: &'a mut AppEventQueue,
         mutation_queue: &'a mut PendingMutationInvocationQueue,
-        node_id: ElementNodeId,
+        node_id: NodeId,
     ) -> Self {
         Self {
             event_queue,
@@ -31,7 +31,7 @@ impl<'a> ElementOnWheelContext<'a> {
         self.event_queue.push(AppEvent::RequestDraw);
     }
 
-    pub fn node_id(&self) -> ElementNodeId {
+    pub fn node_id(&self) -> NodeId {
         self.node_id
     }
 

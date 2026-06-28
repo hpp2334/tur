@@ -1,17 +1,16 @@
-use tur_engine::core::element::ElementKind;
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementKind, ElementNodeId, NodeId};
 use tur_engine::elements::{EditableTextElement, ScrollViewElement};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
 /// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
 /// editable text is that container's first child).
-fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
+fn find_editable_under(app: &TurTestApp, key: &[&str]) -> NodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
     let tree = app.element_tree();
-    let container = tree.get(container_id).unwrap();
-    for &cid in &container.children {
-        let node = tree.get(cid).unwrap();
+    let container = tree.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
+    for cid in container.children.iter().copied() {
+        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
             .element
             .as_ref()
@@ -25,11 +24,11 @@ fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
 }
 
 /// Walk ancestors from `id` to find the enclosing `ScrollViewElement`, if any.
-fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<ElementNodeId> {
+fn find_ancestor_scroll_view(app: &TurTestApp, id: NodeId) -> Option<NodeId> {
     let tree = app.element_tree();
-    let mut current = tree.get(id).unwrap().parent;
+    let mut current = tree.get_element(ElementNodeId::new(id.as_u64())).unwrap().parent;
     while let Some(cid) = current {
-        let node = tree.get(cid).unwrap();
+        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
         if node
             .element
             .as_ref()
@@ -43,25 +42,25 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
     None
 }
 
-fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
+fn find_editable_text_id(app: &TurTestApp) -> NodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let child = tree.get(root.children[0]).unwrap();
-    let inner = tree.get(child.children[0]).unwrap();
+    let root = tree.root_element().unwrap();
+    let child = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let inner = tree.get_element(ElementNodeId::new(child.children[0].as_u64())).unwrap();
     let kind = inner.element.as_ref().unwrap().kind();
     if kind == ElementKind::new("tur_editable_text") {
-        inner.id
+        inner.id.into()
     } else {
-        tree.get(inner.children[0]).unwrap().id
+        tree.get_element(ElementNodeId::new(inner.children[0].as_u64())).unwrap().id.into()
     }
 }
 
-fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
+fn focus_editable(app: &mut TurTestApp, id: NodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
 }
 
-fn get_cursor_pos(app: &TurTestApp, id: ElementNodeId) -> usize {
+fn get_cursor_pos(app: &TurTestApp, id: NodeId) -> usize {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.cursor_position())
@@ -70,7 +69,7 @@ fn get_cursor_pos(app: &TurTestApp, id: ElementNodeId) -> usize {
     .unwrap_or(0)
 }
 
-fn get_text(app: &TurTestApp, id: ElementNodeId) -> String {
+fn get_text(app: &TurTestApp, id: NodeId) -> String {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.text())
@@ -79,7 +78,7 @@ fn get_text(app: &TurTestApp, id: ElementNodeId) -> String {
     .unwrap_or_default()
 }
 
-fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
+fn get_selection(app: &TurTestApp, id: NodeId) -> (usize, usize) {
     app.with_element(id, |e| {
         e.cast::<EditableTextElement>()
             .map(|el| el.selection())

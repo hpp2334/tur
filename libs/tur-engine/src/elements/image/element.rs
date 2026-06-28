@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::BoxFit;
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::widget::{
@@ -31,7 +31,7 @@ pub struct ImageComponent {
 }
 
 impl Component for ImageComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         cx.insert_node(id, AnyElement::new(ImageElement { component: self.clone(), painting: ImagePainting::default() }), boa);
         if let Some(qk) = &self.query_key {

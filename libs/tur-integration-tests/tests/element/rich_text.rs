@@ -1,10 +1,10 @@
-use tur_engine::core::element::ElementKind;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 fn get_container(app: &TurTestApp) -> tur_engine::core::element::ElementNodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let container = tree.get(root.children[0]).unwrap();
+    let root = tree.root_element().unwrap();
+    let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
     assert_eq!(
         container.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_paragraph")
@@ -25,7 +25,7 @@ fn rich_text_single_span_equivalent_to_plain_text() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     let layout = &container_node.computed_layout;
     assert!(layout.size.width > 0.0, "text width should be positive");
     assert!(layout.size.height > 0.0, "text height should be positive");
@@ -40,7 +40,7 @@ fn rich_text_multi_span_concatenates() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     let layout = &container_node.computed_layout;
     assert!(
         layout.size.width > 50.0,
@@ -57,8 +57,8 @@ fn rich_text_bold_wider_than_normal() {
     app.render();
 
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let container = tree.get(root.children[0]).unwrap();
+    let root = tree.root_element().unwrap();
+    let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
     assert_eq!(
         container.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_paragraph")
@@ -76,7 +76,7 @@ fn rich_text_italic_layout_positive() {
     app.render();
 
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     assert!(
         container_node.computed_layout.size.width > 0.0,
         "italic text should have positive width"
@@ -92,7 +92,7 @@ fn rich_text_color_layout_positive() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     assert!(
         container_node.computed_layout.size.width > 0.0,
         "colored text should have positive width"
@@ -108,7 +108,7 @@ fn rich_text_font_size_mixed_height() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     let height = container_node.computed_layout.size.height;
     assert!(
         height >= 28.0,
@@ -126,7 +126,7 @@ fn rich_text_empty_spans_zero_size() {
     app.render();
 
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     assert_eq!(
         container_node.computed_layout.size.width, 0.0,
         "empty spans should produce zero width"
@@ -146,7 +146,7 @@ fn rich_text_inheritance_uses_defaults() {
 
     app.render();
     let rt = app.element_tree();
-    let container_node = rt.get(container_id).unwrap();
+    let container_node = rt.get_element(ElementNodeId::new(container_id.as_u64())).unwrap();
     assert!(
         container_node.computed_layout.size.width > 0.0,
         "inherited text should have positive width"

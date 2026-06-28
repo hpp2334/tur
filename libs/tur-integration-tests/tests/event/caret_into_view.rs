@@ -24,7 +24,7 @@ T.render(ctx, T.ScrollView(ctx, {
 }));
 "#;
 
-fn scroll_offset(app: &TurTestApp, sv_id: tur_engine::core::element::ElementNodeId) -> f64 {
+fn scroll_offset(app: &TurTestApp, sv_id: tur_engine::core::element::NodeId) -> f64 {
     app.with_element(sv_id, |e| {
         e.cast::<ScrollViewElement>().unwrap().scroll_offset()
     })

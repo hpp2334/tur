@@ -54,20 +54,20 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
     }
 
     pub fn set_child_offset(&mut self, child_id: ElementNodeId, offset: Offset) {
-        if let Some(node) = self.tree.nodes.get_mut(&child_id) {
+        if let Some(node) = self.tree.elements.get_mut(&child_id) {
             node.computed_layout.offset = offset;
         }
     }
 
     pub fn set_child_offset_self(&mut self, offset: Offset) {
-        if let Some(node) = self.tree.nodes.get_mut(&self.node_id) {
+        if let Some(node) = self.tree.elements.get_mut(&self.node_id) {
             node.computed_layout.offset = offset;
         }
     }
 
     pub fn child_type_name(&self, child_id: ElementNodeId) -> &'static str {
         self.tree
-            .nodes
+            .elements
             .get(&child_id)
             .and_then(|n| n.element.as_ref())
             .map(|e| e.type_name())
@@ -76,7 +76,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
 
     pub fn child_computed_size(&self, child_id: ElementNodeId) -> Size {
         self.tree
-            .nodes
+            .elements
             .get(&child_id)
             .map(|n| n.computed_layout.size)
             .unwrap_or(Size::ZERO)
@@ -89,7 +89,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
     /// instead.
     pub fn self_computed_size(&self) -> Size {
         self.tree
-            .nodes
+            .elements
             .get(&self.node_id)
             .map(|n| n.computed_layout.size)
             .unwrap_or(Size::ZERO)
@@ -97,7 +97,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
 
     pub fn child_element<T: 'static>(&self, child_id: ElementNodeId) -> Option<&T> {
         self.tree
-            .nodes
+            .elements
             .get(&child_id)
             .and_then(|n| n.element.as_ref())
             .and_then(|e| e.cast::<T>())

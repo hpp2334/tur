@@ -266,7 +266,7 @@ fn register_webdav_fakes(app: &mut TurApp, fs: Rc<RefCell<FakeFs>>) -> SaveLog {
 /// if any. Layout-independent click targeting.
 fn find_text(app: &TurTestApp, target: &str) -> Option<(f64, f64, f64, f64)> {
     let root = app.dev_tool_element_tree()?;
-    let mut stack: Vec<tur_engine::core::element::ElementNodeId> = vec![root.id];
+    let mut stack: Vec<tur_engine::core::element::NodeId> = vec![root.id];
     while let Some(id) = stack.pop() {
         let node = app.dev_tool_get_element(id)?;
         if node.name == "tur_paragraph" {
@@ -291,7 +291,7 @@ fn editables_by_y(app: &TurTestApp) -> Vec<(f64, f64, f64, f64)> {
         return Vec::new();
     };
     let mut out = Vec::new();
-    let mut stack: Vec<tur_engine::core::element::ElementNodeId> = vec![root.id];
+    let mut stack: Vec<tur_engine::core::element::NodeId> = vec![root.id];
     while let Some(id) = stack.pop() {
         if let Some(node) = app.dev_tool_get_element(id) {
             if node.name == "tur_editable_text" {

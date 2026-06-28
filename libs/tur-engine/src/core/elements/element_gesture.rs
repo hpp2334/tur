@@ -1,6 +1,6 @@
 use tur_shared::{MouseButton, Offset};
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
@@ -27,7 +27,7 @@ pub struct ElementOnGestureContext<'a> {
     event_queue: &'a mut AppEventQueue,
     focus_manager: &'a mut FocusManager,
     mutation_queue: &'a mut PendingMutationInvocationQueue,
-    node_id: ElementNodeId,
+    node_id: NodeId,
 }
 
 impl<'a> ElementOnGestureContext<'a> {
@@ -35,7 +35,7 @@ impl<'a> ElementOnGestureContext<'a> {
         event_queue: &'a mut AppEventQueue,
         focus_manager: &'a mut FocusManager,
         mutation_queue: &'a mut PendingMutationInvocationQueue,
-        node_id: ElementNodeId,
+        node_id: NodeId,
     ) -> Self {
         Self {
             event_queue,
@@ -52,12 +52,12 @@ impl<'a> ElementOnGestureContext<'a> {
     /// Request that the scroll-view node be scrolled to an absolute offset.
     /// Resolved post-dispatch by the `ScrollToHandler` (the tree is mutably
     /// borrowed for the duration of a gesture event, so we defer).
-    pub fn request_scroll_to(&mut self, node_id: ElementNodeId, offset: f64) {
+    pub fn request_scroll_to(&mut self, node_id: NodeId, offset: f64) {
         self.event_queue
             .push(AppEvent::ScrollTo { node_id, offset });
     }
 
-    pub fn request_focus(&mut self, id: ElementNodeId) {
+    pub fn request_focus(&mut self, id: NodeId) {
         self.focus_manager.set_focus(id);
     }
 

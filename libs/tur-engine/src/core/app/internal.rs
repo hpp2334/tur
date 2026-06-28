@@ -7,7 +7,7 @@ use boa_engine::context::time::FixedClock;
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
 use crate::core::fonts::FontLoader;
@@ -151,7 +151,7 @@ impl TurAppInternal {
             return false;
         };
         let tree = self.js_context.element_tree.borrow();
-        let Some(node) = tree.get(focused_id) else {
+        let Some(node) = tree.get_element(ElementNodeId::new(focused_id.as_u64())) else {
             return false;
         };
         let Some(ref element) = node.element else {
@@ -176,7 +176,7 @@ impl TurAppInternal {
             .subscriber_index()
             .dirty_subscribers(&dirties)
             .into_iter()
-            .map(|s| ElementNodeId::new(s.as_u64()))
+            .map(|s| NodeId::new(s.as_u64()))
             .collect::<HashSet<_>>();
         let mut tree = self.js_context.element_tree.borrow_mut();
         for node_id in &dirty_nodes {
@@ -190,30 +190,83 @@ impl TurAppInternal {
         !dirty_nodes.is_empty()
     }
 
-    /// Walk all tree nodes and invoke `run_effect` — lets Condition /
-    /// LazyList react to dirty atoms before layout.
+    /// Walk all tree nodes and invoke `run_effect` — lets widgets that
+    /// implement `Effect` react to dirty atoms before layout. Also walks all
+    /// fragments (Each / Condition / Switch) and invokes their `effect`.
     fn run_effects(
         &self,
         boa_context: &mut boa_engine::Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        let node_ids: Vec<crate::core::element::ElementNodeId> = {
+        let node_ids: Vec<ElementNodeId> = {
             let tree = self.js_context.element_tree.borrow();
-            tree.nodes.keys().copied().collect()
+            tree.elements.keys().copied().collect()
         };
         let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
         for id in node_ids {
             let mut element = {
                 let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_mut(id).and_then(|n| n.element.take())
+                tree.get_element_mut(id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
                 elem.run_effect(&mut cx, boa_context, dirties);
             }
             if let Some(elem) = element {
                 let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(node) = tree.get_mut(id) {
+                if let Some(node) = tree.get_element_mut(id) {
                     node.element = Some(elem);
+                }
+            }
+        }
+
+        // Fragment effects: rebuild Each / Condition / Switch children.
+        // Take the `kind` out (so we can borrow `cx` / the tree freely), call
+        // `try_rebuild` directly, handle child swap, then put `kind` back.
+        let fragment_ids: Vec<crate::core::element::FragmentNodeId> = {
+            let tree = self.js_context.element_tree.borrow();
+            tree.fragments.keys().copied().collect()
+        };
+        for fid in fragment_ids {
+            let mut kind = {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                tree.get_fragment_mut(fid).and_then(|h| h.kind.take())
+            };
+            let Some(ref mut k) = kind else { continue };
+
+            // Save old children + parent BEFORE rebuild (try_rebuild auto-links
+            // new children to frag.children via append_child).
+            let (old_children, parent) = {
+                let tree = self.js_context.element_tree.borrow();
+                tree.get_fragment(fid)
+                    .map(|f| (f.children.clone(), f.parent))
+                    .unwrap_or((Vec::new(), fid.into()))
+            };
+
+            // Try rebuild — returns Some(new_children) if dirty + changed.
+            // New children are auto-linked to frag.children (appended by
+            // append_child during Component::build).
+            let new_children = k.try_rebuild(&mut cx, boa_context, dirties, fid);
+
+            if let Some(new) = new_children {
+                // frag.children now has old + new; replace with just new.
+                {
+                    let mut tree = self.js_context.element_tree.borrow_mut();
+                    if let Some(f) = tree.get_fragment_mut(fid) {
+                        f.children = new;
+                    }
+                }
+                // Destroy old subtrees.
+                for child in &old_children {
+                    cx.destroy_child(*child);
+                }
+                cx.mark_dirty(parent);
+            }
+
+            // Put kind back.
+            if let Some(kind) = kind {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                if let Some(host) = tree.get_fragment_mut(fid) {
+                    host.kind = Some(kind);
                 }
             }
         }
@@ -242,9 +295,9 @@ impl TurAppInternal {
         // Collect candidate node ids first to avoid holding the tree borrow
         // while we mutate. We only need to consider nodes that currently have
         // a LazyListElement with the flag set.
-        let candidates: Vec<crate::core::element::ElementNodeId> = {
+        let candidates: Vec<ElementNodeId> = {
             let tree = self.js_context.element_tree.borrow();
-            tree.nodes
+            tree.elements
                 .iter()
                 .filter_map(|(id, node)| {
                     let el = node.element.as_ref()?;
@@ -265,7 +318,7 @@ impl TurAppInternal {
             // (mount/unmount) via `cx`.
             let mut element_opt = {
                 let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_mut(id).and_then(|n| n.element.take())
+                tree.get_element_mut(id).and_then(|n| n.element.take())
             };
             let Some(mut element) = element_opt.take() else { continue };
 
@@ -276,7 +329,7 @@ impl TurAppInternal {
                     .cast::<LazyListElement>()
                     .map(|ll| ll.axis())
                     .unwrap_or(tur_shared::Axis::Vertical);
-                tree.get(id)
+                tree.get_element(id)
                     .map(|n| match axis {
                         tur_shared::Axis::Vertical => n.computed_layout.size.height,
                         tur_shared::Axis::Horizontal => n.computed_layout.size.width,
@@ -294,7 +347,7 @@ impl TurAppInternal {
 
             // Put the element back.
             let mut tree = self.js_context.element_tree.borrow_mut();
-            if let Some(node) = tree.get_mut(id) {
+            if let Some(node) = tree.get_element_mut(id) {
                 node.element = Some(element);
             }
         }
@@ -375,10 +428,10 @@ impl TurAppInternal {
 
 fn focus_mutation(
     tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::ElementNodeId,
+    id: crate::core::element::NodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::FocusEvent>> {
     use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get(id)?;
+    let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
     let element = node.element.as_ref()?;
     if let Some(f) = element.cast::<FocusableElement>() {
         return f.component.on_focus;
@@ -391,10 +444,10 @@ fn focus_mutation(
 
 fn blur_mutation(
     tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::ElementNodeId,
+    id: crate::core::element::NodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::BlurEvent>> {
     use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get(id)?;
+    let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
     let element = node.element.as_ref()?;
     if let Some(f) = element.cast::<FocusableElement>() {
         return f.component.on_blur;

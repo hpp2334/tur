@@ -1,3 +1,4 @@
+use crate::core::element::ElementNodeId;
 use crate::core::event::AppEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::elements::ScrollViewElement;
@@ -18,7 +19,7 @@ impl AppHandler for ScrollToHandler {
 
         let current = cx
             .element_tree
-            .get(node_id)
+            .get_element(ElementNodeId::new(node_id.as_u64()))
             .and_then(|n| n.element.as_ref())
             .and_then(|e| e.cast::<ScrollViewElement>())
             .map(|sv| sv.scroll_offset())

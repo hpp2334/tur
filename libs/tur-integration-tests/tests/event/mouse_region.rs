@@ -1,21 +1,21 @@
-use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 use tur_shared::Cursor;
 
-fn build(app: &mut TurTestApp) -> ElementNodeId {
+fn build(app: &mut TurTestApp) -> NodeId {
     app.load_bundle("mouse-region-cursor").unwrap();
     app.query_element(&["mr-state"]).unwrap()
 }
 
-fn find_region(app: &TurTestApp) -> ElementNodeId {
+fn find_region(app: &TurTestApp) -> NodeId {
     let tree = app.element_tree();
-    let root = tree.root().unwrap();
-    let col = tree.get(root.children[0]).unwrap();
+    let root = tree.root_element().unwrap();
+    let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
     col.children[0]
 }
 
-fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {
+fn span_content(app: &TurTestApp, id: NodeId) -> String {
     app.with_element(id, |e| {
         e.cast::<TextElement>()
             .map(|tc| {

@@ -5,7 +5,7 @@ pub fn vello_counter_app() {
     app.load_bundle("vello-column-basic").unwrap();
 
     app.with_element_tree(|tree| {
-        let root = tree.root().unwrap();
+        let root = tree.root_element().unwrap();
         assert!(root.children.len() > 0);
     });
 

@@ -6,7 +6,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Axis;
 
 use crate::core::edgy_event::EventArg;
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
@@ -48,7 +48,7 @@ pub struct LazyListComponent {
 }
 
 impl Component for LazyListComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
 
         // Resolve the eager props needed by the element up-front.
@@ -73,7 +73,7 @@ impl Component for LazyListComponent {
         // will adjust the mounted set to match the actual viewport.
         let initial_count = item_count.min(INITIAL_BUILD_COUNT);
         let builder = self.builder.clone();
-        let mut visible: Vec<(u64, ElementNodeId)> = Vec::new();
+        let mut visible: Vec<(u64, NodeId)> = Vec::new();
         for index in 0..initial_count {
             let Some(spec) = build_item_spec(&builder, index, boa) else {
                 continue;
@@ -81,7 +81,7 @@ impl Component for LazyListComponent {
             let item_id = spec.build(cx, boa, id);
             visible.push((index, item_id));
         }
-        let item_ids: Vec<ElementNodeId> = visible.iter().map(|&(_, id)| id).collect();
+        let item_ids: Vec<NodeId> = visible.iter().map(|&(_, id)| id).collect();
 
         cx.insert_node(
             id,
@@ -142,7 +142,7 @@ fn build_item_spec(
 
 pub struct LazyListElement {
     pub component: LazyListComponent,
-    pub(crate) node_id: ElementNodeId,
+    pub(crate) node_id: NodeId,
     pub(crate) axis: Axis,
     pub(crate) overscan: u64,
     pub(crate) item_extent: Option<f64>,
@@ -158,7 +158,7 @@ pub struct LazyListElement {
     pub(crate) extent_cache: std::collections::BTreeMap<u64, f64>,
     /// (index, built node id) for every item currently in the tree. Kept
     /// sorted by index.
-    pub(crate) visible: Vec<(u64, ElementNodeId)>,
+    pub(crate) visible: Vec<(u64, NodeId)>,
     /// Logical index of the first mounted item (`visible[0].0`, cached for
     /// O(1) access). Together with `first_mounted_offset`, forms the
     /// persistent anchor for layout positioning: each mounted child's
@@ -287,7 +287,7 @@ impl LazyListElement {
     /// scroll-driven mount/unmount) rather than by their position in the
     /// parent's children vector (which can be scrambled when items mount
     /// out of order — see `process_remount`).
-    pub fn visible_index_of(&self, child_id: ElementNodeId) -> Option<u64> {
+    pub fn visible_index_of(&self, child_id: NodeId) -> Option<u64> {
         self.visible
             .iter()
             .find(|(_, id)| *id == child_id)
@@ -330,7 +330,7 @@ impl LazyListElement {
         let count = self.item_count();
         if count == 0 {
             // Tear down any stragglers.
-            let to_destroy: Vec<ElementNodeId> =
+            let to_destroy: Vec<NodeId> =
                 self.visible.iter().map(|&(_, id)| id).collect();
             for id in to_destroy {
                 cx.destroy_subtree(id);
@@ -343,7 +343,7 @@ impl LazyListElement {
         let (new_start, new_end) = self.compute_visible_range(viewport_main);
 
         // Unmount off-screen items.
-        let to_destroy: Vec<ElementNodeId> = self
+        let to_destroy: Vec<NodeId> = self
             .visible
             .iter()
             .filter(|(i, _)| *i < new_start || *i > new_end)
@@ -360,7 +360,7 @@ impl LazyListElement {
             self.visible.iter().map(|(i, _)| *i).collect();
         let builder = self.component.builder.clone();
         let node_id = self.node_id;
-        let mut newly_mounted: Vec<(u64, ElementNodeId)> = Vec::new();
+        let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
         for index in new_start..=new_end {
             if existing.contains(&index) {
                 continue;
@@ -492,7 +492,7 @@ impl Effect for LazyListElement {
 
             if new_count < current_max {
                 // Destroy items whose index is at or beyond the new count.
-                let to_destroy: Vec<ElementNodeId> = self
+                let to_destroy: Vec<NodeId> = self
                     .visible
                     .iter()
                     .filter(|(i, _)| *i >= new_count)

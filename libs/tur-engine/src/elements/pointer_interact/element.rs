@@ -5,7 +5,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
-use crate::core::element::ElementNodeId;
+use crate::core::element::NodeId;
 use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::widget::{
@@ -37,7 +37,7 @@ pub struct PointerInteractComponent {
 }
 
 impl Component for PointerInteractComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: ElementNodeId) -> ElementNodeId {
+    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let behavior = self
             .behavior
             .as_ref()

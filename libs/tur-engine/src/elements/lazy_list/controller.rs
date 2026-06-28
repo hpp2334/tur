@@ -11,7 +11,7 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
 use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::scroll::ScrollEvent;
 use crate::elements::lazy_list::VisibleRangeChangeEvent;
 use crate::elements::LazyListElement;
@@ -46,7 +46,7 @@ impl LazyListController {
         }
     }
 
-    fn node_id(&self) -> Option<ElementNodeId> {
+    fn node_id(&self) -> Option<NodeId> {
         let handle_obj = self.handle.as_ref()?;
         let handle = BoaOpaque::<TurNodeHandle>::wrap(handle_obj)?;
         Some(handle.id)
@@ -152,7 +152,7 @@ impl Class for LazyListController {
                 };
 
                 let mut tree = element_tree_rc.borrow_mut();
-                let Some(node) = tree.get_mut(node_id) else {
+                let Some(node) = tree.get_element_mut(ElementNodeId::new(node_id.as_u64())) else {
                     return Ok(JsValue::undefined());
                 };
                 let Some(ref mut element) = node.element else {
