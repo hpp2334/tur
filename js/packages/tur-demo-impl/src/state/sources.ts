@@ -14,7 +14,7 @@ const WHITELIST = new Set([
     "lazy-list-var-sizes",
     "jigsaw-puzzle",
     "countdown",
-    "webdav-client",
+    "github-viewer",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)
