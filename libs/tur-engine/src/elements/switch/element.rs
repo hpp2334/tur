@@ -5,6 +5,7 @@ use boa_engine::{Context, JsValue};
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
+use crate::core::layout::SubscribeCx;
 use crate::core::widget::{
     val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
 };
@@ -93,19 +94,28 @@ impl Mounted {
 impl Component for SwitchComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
+        let frag_id = FragmentNodeId::new(id.as_u64());
 
         let value = cx.read_val(&self.value, boa);
         let mounted = Mounted::resolve(self, value);
 
+        let kind = SwitchFragment {
+            component: self.clone(),
+            mounted: mounted.clone(),
+        };
+
+        // Register the fragment's reactive deps in the subscriber graph.
+        {
+            let mut sub_cx = cx.subscribe_fragment(frag_id);
+            kind.subscribe(&mut sub_cx);
+        }
+
         // Insert the empty fragment FIRST so the branch can auto-link to it.
         let host = FragmentHost {
-            id: FragmentNodeId::new(id.as_u64()),
+            id: frag_id,
             parent,
             children: Vec::new(),
-            kind: Some(Box::new(SwitchFragment {
-                component: self.clone(),
-                mounted: mounted.clone(),
-            })),
+            kind: Some(Box::new(kind)),
             query_key: self.query_key.clone(),
         };
         cx.insert_fragment(host);
@@ -115,7 +125,7 @@ impl Component for SwitchComponent {
             component: self.clone(),
             mounted,
         };
-        kind.build_branch(cx, boa, FragmentNodeId::new(id.as_u64()));
+        kind.build_branch(cx, boa, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -169,17 +179,16 @@ impl FragmentKind for SwitchFragment {
         vec![("mountedBranch", TraceValue::Str(branch))]
     }
 
-    fn try_rebuild(
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        cx.subscribe_val(&self.component.value);
+    }
+
+    fn perform_update(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        if !self.component.value.is_dirty(dirties) {
-            return None;
-        }
-
         let new_value = cx.read_val(&self.component.value, boa);
         let new_mounted = Mounted::resolve(&self.component, new_value);
         if new_mounted == self.mounted {

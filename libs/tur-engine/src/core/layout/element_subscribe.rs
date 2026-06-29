@@ -52,6 +52,12 @@ impl SubscribeCx {
             self.new_deps.insert(atom);
         }
     }
+
+    /// Declare a raw atom dependency (for fragments that hold an `AnyReadable`
+    /// rather than a `Val<T>`).
+    pub fn subscribe_atom(&mut self, atom: AtomId) {
+        self.new_deps.insert(atom);
+    }
 }
 
 impl Drop for SubscribeCx {

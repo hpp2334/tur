@@ -1,10 +1,8 @@
-use std::collections::HashSet;
-
 use boa_engine::Context;
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::TraceValue;
-use crate::core::reactive::AtomId;
+use crate::core::layout::SubscribeCx;
 use crate::core::widget::WidgetCx;
 
 /// A **control-flow primitive** (Each / Condition / Switch) that lives in the
@@ -19,10 +17,12 @@ use crate::core::widget::WidgetCx;
 /// `fragments` map and are referenced from real elements' `children` as plain
 /// `NodeId`s (distinguished from real elements via `ElementTree::is_fragment`).
 ///
-/// Reactivity: during each reactive flush, `run_effects` takes the `kind` out,
-/// calls `try_rebuild`, and if the branch/items changed, swaps `children` and
-/// marks the **real** ancestor dirty so the parent flex re-lays-out with the
-/// new flattened children in the same flush iteration.
+/// Reactivity: during each reactive flush, the subscriber graph identifies
+/// which fragments have dirty atoms (fragments subscribe via `subscribe` at
+/// build time). `perform_update` is then called only on those dirty fragments
+/// to structurally react — destroying old children and building the new
+/// branch/items. The real ancestor is marked dirty so the enclosing flex
+/// re-lays-out with the new flattened children in the same flush iteration.
 pub struct FragmentHost {
     pub id: FragmentNodeId,
     /// The nearest **real** element ancestor — used by `mark_dirty` so the
@@ -69,18 +69,25 @@ pub trait FragmentKind: 'static {
     /// Structured props for the dev tool (uses current children).
     fn trace_props(&self, children: &[NodeId]) -> Vec<(&'static str, TraceValue)>;
 
-    /// Check if the reactive prop is dirty and, if the resolved branch/items
-    /// changed, return `Some(new_children)` (built under `fragment_id`). Return
-    /// `None` if no rebuild is needed.
+    /// Declare this fragment's reactive atom deps so a reactive flush can
+    /// find this fragment via `dirty_subscribers` and mark its parent dirty.
+    /// Called once at build time. Mirrors `ElementSubscribe::subscribe`.
+    /// Default no-op so fragments without reactive props need no body.
+    fn subscribe(&self, _cx: &mut SubscribeCx) {}
+
+    /// React to a dirty reactive prop. The caller guarantees this fragment's
+    /// subscribed atom is dirty (identified via the subscriber graph). Resolve
+    /// the current value; if the branch/items changed, return `Some(new_children)`
+    /// (built under `fragment_id`). Return `None` if no structural change is
+    /// needed (e.g. same branch resolved).
     ///
     /// The returned children are built via `Component::build(cx, boa,
     /// fragment_id)` — each child auto-links itself to the fragment (pushing
     /// to `fragments[fragment_id].children`).
-    fn try_rebuild(
+    fn perform_update(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        dirties: &HashSet<AtomId>,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>>;
 }

@@ -16,15 +16,17 @@ import {
     PointerInteract,
     Row,
     SizedBox,
-    source,
     type StoreCtx,
     Switch,
-    Text,
     set,
+    source,
+    Text,
+    Transform,
 } from "@tur/edgy";
 import {
     type DirEntry,
     doDownload,
+    downloadStatus$,
     entries$,
     error$,
     fmtSize,
@@ -39,9 +41,10 @@ import {
     selectEntry,
     selectedEntry$,
     selectedPath$,
+    spinProgress$,
 } from "./state";
 import { COLORS } from "./theme";
-import { Button, IconButton } from "./ui";
+import { IconButton } from "./ui";
 
 // Per-row hover state (single source, not per-instance — keeps the
 // subscription graph flat).
@@ -144,6 +147,120 @@ function RepoCrumb(): EdgyElement {
     });
 }
 
+// --- Download button (reactive: idle → loading w/ spinner → done/error) --
+// The button's whole body is swapped via a `Switch` on `downloadStatus$` so a
+// status change structurally mounts a new subtree (spinner / check / label)
+// rather than relying on prop-level re-resolution.
+
+function Spinner(): EdgyElement {
+    return Transform({
+        rotate: derive(() => get(spinProgress$) * 2 * Math.PI),
+        child: ImageEdgy({
+            resourceId: getIcon("spinner"),
+            width: 14,
+            height: 14,
+            queryKey: ["dl-spinner"],
+        }),
+    });
+}
+
+function CheckIcon(): EdgyElement {
+    return ImageEdgy({
+        resourceId: getIcon("check"),
+        width: 14,
+        height: 14,
+        queryKey: ["dl-check"],
+    });
+}
+
+/** One button body: coloured pill with an optional leading icon + label. */
+function dlShell(
+    bg: unknown,
+    fg: unknown,
+    label: string,
+    leading: EdgyElement | null,
+): EdgyElement {
+    const textEl = Text({ text: label, fontSize: 13, color: fg });
+    return Container({
+        padding: 7,
+        borderRadius: 7,
+        color: bg,
+        children: [
+            Row({
+                mainAxisSize: MainAxisSize.Min,
+                children: leading
+                    ? [leading, SizedBox({ width: 6 }), textEl]
+                    : [textEl],
+            }),
+        ],
+    });
+}
+
+function DownloadButton(): EdgyElement {
+    return MouseRegion({
+        cursor: "pointer",
+        child: PointerInteract({
+            onClick: mutate((_ctx: StoreCtx, _ev) => {
+                if (get(downloadStatus$) !== "idle") return;
+                const e = get(selectedEntry$);
+                if (e && !e.isDir) doDownload();
+            }),
+            child: Switch({
+                value: derive(() => get(downloadStatus$)),
+                cases: [
+                    {
+                        key: "loading",
+                        child: () =>
+                            dlShell(
+                                COLORS.accentSoft,
+                                COLORS.accent,
+                                "Downloading…",
+                                Spinner(),
+                            ),
+                    },
+                    {
+                        key: "done",
+                        child: () =>
+                            dlShell(
+                                COLORS.success,
+                                COLORS.accentFg,
+                                "Saved",
+                                CheckIcon(),
+                            ),
+                    },
+                    {
+                        key: "error",
+                        child: () =>
+                            dlShell(
+                                COLORS.dangerSoft,
+                                COLORS.danger,
+                                "Failed",
+                                null,
+                            ),
+                    },
+                ],
+                fallback: () =>
+                    dlShell(
+                        derive(() => {
+                            const e = get(selectedEntry$);
+                            return e && !e.isDir
+                                ? COLORS.accent
+                                : COLORS.subtleButton;
+                        }),
+                        derive(() => {
+                            const e = get(selectedEntry$);
+                            return e && !e.isDir
+                                ? COLORS.accentFg
+                                : COLORS.textSubtle;
+                        }),
+                        "Download",
+                        null,
+                    ),
+            }),
+        }),
+    });
+}
+
 // --- Explorer screen ------------------------------------------------------
 
 export function ExplorerScreen(): EdgyElement {
@@ -186,30 +303,10 @@ export function ExplorerScreen(): EdgyElement {
                         onClick: refresh,
                     }),
                     SizedBox({ width: 8 }),
-                    Button({
-                        label: "Download",
-                        bg: derive(() => {
-                            const e = get(selectedEntry$);
-                            return e && !e.isDir
-                                ? COLORS.accent
-                                : COLORS.subtleButton;
-                        }),
-                        fg: derive(() => {
-                            const e = get(selectedEntry$);
-                            return e && !e.isDir
-                                ? COLORS.accentFg
-                                : COLORS.textSubtle;
-                        }),
-                        onClick: (_ctx) => {
-                            const e = get(selectedEntry$);
-                            if (e && !e.isDir) doDownload();
-                        },
-                        padding: 7,
-                    }),
+                    DownloadButton(),
                 ],
             }),
             SizedBox({ height: 8 }),
-            // Error banner.
             Condition({
                 condition: derive(() => get(error$) !== null),
                 child: () =>

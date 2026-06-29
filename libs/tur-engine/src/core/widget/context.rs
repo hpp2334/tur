@@ -2,9 +2,10 @@
 use boa_engine::{Context, JsValue};
 
 use crate::core::bridge::TurJsContext;
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost};
-use crate::core::reactive::{Readable, ReactiveReadStore};
+use crate::core::layout::SubscribeCx;
+use crate::core::reactive::{Readable, ReactiveReadStore, SubscriberId};
 use crate::core::widget::Component;
 
 /// Context for building specs into the ElementTree and running effects.
@@ -35,6 +36,14 @@ impl WidgetCx {
     /// Read an atom's current value as a raw `JsValue` (untracked).
     pub fn read_atom_raw<T>(&self, readable: Readable<T>, boa: &mut Context) -> JsValue {
         self.js_ctx.store.read_only().read(readable, boa)
+    }
+
+    /// Create a `SubscribeCx` scoped to a fragment, so the fragment can
+    /// declare its reactive atom deps at build time. On drop, the deps are
+    /// atomically swapped into the subscriber graph.
+    pub(crate) fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
+        let sub_index = self.js_ctx.store.subscriber_index();
+        SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the

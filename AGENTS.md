@@ -163,6 +163,7 @@ cd js/packages/tur-test-cases && pnpm build
 - Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
+- When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
 
 ### Renderer trait
 
