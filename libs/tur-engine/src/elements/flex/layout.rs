@@ -51,11 +51,11 @@ impl ElementLayout for FlexElement {
                         },
                         max_width: constraints.max_width,
                         min_height: 0.0,
-                        max_height: (constraints.max_height - total_main).max(0.0),
+                        max_height: constraints.max_height,
                     },
                     Axis::Horizontal => Constraints {
                         min_width: 0.0,
-                        max_width: (constraints.max_width - total_main).max(0.0),
+                        max_width: constraints.max_width,
                         min_height: if cross_alignment == CrossAxisAlignment::Stretch {
                             constraints.max_height
                         } else {
@@ -143,6 +143,13 @@ impl ElementLayout for FlexElement {
 
         let final_size = constraints.constrain(size);
         self.computed_size = Some(final_size);
+
+        let allocated_main: f64 = self
+            .child_data
+            .iter()
+            .map(|d| direction.main(d.size))
+            .sum();
+        self.overflow = (allocated_main - direction.main(final_size)).max(0.0);
 
         // Assign child offsets now that all sizes are known.
         self.assign_positions(cx);

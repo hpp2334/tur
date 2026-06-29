@@ -12,14 +12,20 @@ impl ElementRender for FlexElement {
 
     fn paint(
         &self,
-        _canvas: &mut dyn Canvas,
+        canvas: &mut dyn Canvas,
         offset: Offset,
-        _layout: &ComputedLayout,
+        layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
+        if self.overflow > 0.0 {
+            canvas.push_clip(offset, layout.size);
+        }
         for &child_id in children {
-            paint_ctx.paint_child(child_id, _canvas, offset);
+            paint_ctx.paint_child(child_id, canvas, offset);
+        }
+        if self.overflow > 0.0 {
+            canvas.pop_clip();
         }
     }
 }
