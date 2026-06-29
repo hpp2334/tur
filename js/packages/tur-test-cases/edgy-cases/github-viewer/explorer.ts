@@ -1,5 +1,6 @@
 import {
     Alignment,
+    Axis,
     Column,
     Condition,
     Container,
@@ -15,6 +16,7 @@ import {
     mutate,
     PointerInteract,
     Row,
+    ScrollView,
     SizedBox,
     type StoreCtx,
     Switch,
@@ -373,18 +375,21 @@ function fileListView(): EdgyElement {
                     {
                         key: "list",
                         child: () =>
-                            Column({
-                                crossAlignment: CrossAxisAlignment.Stretch,
-                                mainAxisSize: MainAxisSize.Min,
-                                children: [
-                                    Each({
-                                        items: entries$,
-                                        crossAlignment:
-                                            CrossAxisAlignment.Stretch,
-                                        build: (e: DirEntry, i: number) =>
-                                            FileRow({ entry: e, index: i }),
-                                    }),
-                                ],
+                            ScrollView({
+                                axis: Axis.Vertical,
+                                child: Column({
+                                    crossAlignment: CrossAxisAlignment.Stretch,
+                                    mainAxisSize: MainAxisSize.Min,
+                                    children: [
+                                        Each({
+                                            items: entries$,
+                                            crossAlignment:
+                                                CrossAxisAlignment.Stretch,
+                                            build: (e: DirEntry, i: number) =>
+                                                FileRow({ entry: e, index: i }),
+                                        }),
+                                    ],
+                                }),
                             }),
                     },
                 ],
