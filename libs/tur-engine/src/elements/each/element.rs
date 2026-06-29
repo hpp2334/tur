@@ -7,7 +7,8 @@ use boa_engine::{Context, JsValue};
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::reactive::{extract_readable, AtomId, AnyReadable};
+use crate::core::layout::SubscribeCx;
+use crate::core::reactive::{extract_readable, AnyReadable};
 use crate::core::widget::{extract_component, Component, WidgetCx};
 
 // ---------------------------------------------------------------------------
@@ -81,22 +82,31 @@ impl EachComponent {
 impl Component for EachComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
+        let frag_id = FragmentNodeId::new(id.as_u64());
+
+        let kind = EachFragment {
+            component: self.clone(),
+        };
+
+        // Register the fragment's reactive deps in the subscriber graph.
+        {
+            let mut sub_cx = cx.subscribe_fragment(frag_id);
+            kind.subscribe(&mut sub_cx);
+        }
 
         // Insert the empty fragment FIRST so items can auto-link to it
         // via `append_child` (which pushes to `frag.children`).
         let host = FragmentHost {
-            id: FragmentNodeId::new(id.as_u64()),
+            id: frag_id,
             parent,
             children: Vec::new(),
-            kind: Some(Box::new(EachFragment {
-                component: self.clone(),
-            })),
+            kind: Some(Box::new(kind)),
             query_key: self.query_key.clone(),
         };
         cx.insert_fragment(host);
 
-        // Build items under `id` — each auto-links to the fragment.
-        self.build_items(cx, boa, FragmentNodeId::new(id.as_u64()));
+        // Build items under `frag_id` — each auto-links to the fragment.
+        self.build_items(cx, boa, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -125,16 +135,16 @@ impl FragmentKind for EachFragment {
         vec![("itemCount", TraceValue::Num(children.len() as f64))]
     }
 
-    fn try_rebuild(
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        cx.subscribe_atom(self.component.items.id());
+    }
+
+    fn perform_update(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<AtomId>,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        if !self.component.items.is_dirty(dirties) {
-            return None;
-        }
         // Rebuild-all reconciliation: tear down every previously mounted item
         // and rebuild from the current array. Simple and correct; the item
         // subtrees are stateless widgets so rebuilding them is cheap.

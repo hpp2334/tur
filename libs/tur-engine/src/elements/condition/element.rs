@@ -5,6 +5,7 @@ use boa_engine::Context;
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
+use crate::core::layout::SubscribeCx;
 use crate::core::widget::{
     val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
 };
@@ -31,6 +32,7 @@ pub struct ConditionComponent {
 impl Component for ConditionComponent {
     fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
+        let frag_id = FragmentNodeId::new(id.as_u64());
 
         // Resolve the initial condition value and pick the branch.
         let value = cx.read_val(&self.condition, boa).unwrap_or(false);
@@ -40,15 +42,23 @@ impl Component for ConditionComponent {
             MountedBranch::Else
         };
 
+        let kind = ConditionFragment {
+            component: self.clone(),
+            mounted,
+        };
+
+        // Register the fragment's reactive deps in the subscriber graph.
+        {
+            let mut sub_cx = cx.subscribe_fragment(frag_id);
+            kind.subscribe(&mut sub_cx);
+        }
+
         // Insert the empty fragment FIRST so the branch can auto-link to it.
         let host = FragmentHost {
-            id: FragmentNodeId::new(id.as_u64()),
+            id: frag_id,
             parent,
             children: Vec::new(),
-            kind: Some(Box::new(ConditionFragment {
-                component: self.clone(),
-                mounted,
-            })),
+            kind: Some(Box::new(kind)),
             query_key: self.query_key.clone(),
         };
         cx.insert_fragment(host);
@@ -58,7 +68,7 @@ impl Component for ConditionComponent {
             component: self.clone(),
             mounted,
         };
-        kind.build_branch(cx, boa, FragmentNodeId::new(id.as_u64()));
+        kind.build_branch(cx, boa, frag_id);
 
         cx.link_child(parent, id);
         id
@@ -134,17 +144,16 @@ impl FragmentKind for ConditionFragment {
         vec![("mountedBranch", TraceValue::Str(branch.to_string()))]
     }
 
-    fn try_rebuild(
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        cx.subscribe_val(&self.component.condition);
+    }
+
+    fn perform_update(
         &mut self,
         cx: &mut WidgetCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        if !self.component.condition.is_dirty(dirties) {
-            return None;
-        }
-
         let new_value = cx.read_val(&self.component.condition, boa).unwrap_or(false);
         let new_branch = if new_value {
             MountedBranch::Then

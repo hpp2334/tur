@@ -451,16 +451,6 @@ export function selectEntry(entry: DirEntry): void {
 // to the host file-saver. Drives `downloadStatus$` for button feedback.
 // ---------------------------------------------------------------------------
 
-/** Sentinel values written to `error$` to force a reactive flush when the
- *  download status changes. Fragments (the Switch that drives the button
- *  morph) don't register subscriber deps, so a `downloadStatus$` change alone
- *  never triggers layout. Nudging `error$` — which has a regular-element
- *  subscriber (the error banner Text) — ensures `dirty_nodes` is non-empty so
- *  layout runs and the Switch's rebuilt branch gets rendered. The banner hides
- *  any value starting with this prefix. */
-const DL_SENTINEL = "__dl_";
-export { DL_SENTINEL };
-
 /** Revert the button to idle after a short confirmation window so the user
  *  sees the "Saved" / "Failed" flash before the label resets. */
 const STATUS_FLASH_MS = 1800;
@@ -468,19 +458,13 @@ let statusTimer: ReturnType<typeof setTimeout> | null = null;
 function flashStatus(status: DownloadStatus): void {
     if (statusTimer) clearTimeout(statusTimer);
     set(downloadStatus$, status);
-    // Nudge error$ to force a flush (see DL_SENTINEL comment).
-    if (status === "loading") {
-        set(error$, `${DL_SENTINEL}loading`);
-    } else if (status === "done") {
-        set(error$, `${DL_SENTINEL}done`);
-    } else if (status === "idle") {
-        set(error$, null);
+    if (status === "error") {
+        // Keep error$ set — the banner will show it.
     }
     if (status !== "loading") {
         statusTimer = setTimeout(() => {
             statusTimer = null;
             set(downloadStatus$, "idle");
-            set(error$, null);
         }, STATUS_FLASH_MS);
     }
 }

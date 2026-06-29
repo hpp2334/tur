@@ -7,7 +7,7 @@ use boa_engine::context::time::FixedClock;
 use crate::core::app::TurAppContext;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::event::AppEvent;
 use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
 use crate::core::fonts::FontLoader;
@@ -161,7 +161,7 @@ impl TurAppInternal {
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the
-    /// dep tracker. Returns `true` if any nodes were dirtied.
+    /// subscriber graph. Returns `true` if any nodes were dirtied.
     fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> bool {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
@@ -172,31 +172,45 @@ impl TurAppInternal {
         if dirties.is_empty() {
             return false;
         }
-        let dirty_nodes = store
-            .subscriber_index()
-            .dirty_subscribers(&dirties)
-            .into_iter()
-            .map(|s| ElementNodeId::new(s.as_u64()))
-            .collect::<HashSet<_>>();
-        let mut tree = self.js_context.element_tree.borrow_mut();
-        for node_id in &dirty_nodes {
-            tree.mark_dirty((*node_id).into());
+
+        let dirty_subs = store.subscriber_index().dirty_subscribers(&dirties);
+
+        // Mark all dirty subscribers dirty. mark_dirty handles fragments by
+        // skipping them and marking their real parent element.
+        {
+            let mut tree = self.js_context.element_tree.borrow_mut();
+            for sub_id in &dirty_subs {
+                tree.mark_dirty(NodeId::new(sub_id.as_u64()));
+            }
         }
-        drop(tree);
 
-        // Run effects (Condition branch swaps, LazyList range adjustments).
-        self.run_effects(boa_context, &dirties);
+        // Split dirty subscribers into elements and fragments so fragment
+        // rebuilds only process dirty fragments (not a full scan).
+        let dirty_frag_ids: Vec<FragmentNodeId> = {
+            let tree = self.js_context.element_tree.borrow();
+            dirty_subs
+                .iter()
+                .filter(|s| tree.is_fragment(NodeId::new(s.as_u64())))
+                .map(|s| FragmentNodeId::new(s.as_u64()))
+                .collect()
+        };
 
-        !dirty_nodes.is_empty()
+        // Element effects (LazyList range adjustments, etc.).
+        self.run_element_effects(boa_context, &dirties);
+
+        // Fragment rebuilds (Condition / Each / Switch branch swaps).
+        self.rebuild_fragments(boa_context, &dirty_frag_ids);
+
+        !dirty_subs.is_empty()
     }
 
-    /// Walk all tree nodes and invoke `run_effect` — lets widgets that
-    /// implement `Effect` react to dirty atoms before layout. Also walks all
-    /// fragments (Each / Condition / Switch) and invokes their `effect`.
-    fn run_effects(
+    /// Walk all tree elements and invoke `run_effect` — lets widgets that
+    /// implement `Effect` react to dirty atoms before layout (e.g. LazyList
+    /// range adjustments).
+    fn run_element_effects(
         &self,
         boa_context: &mut boa_engine::Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+        dirties: &HashSet<crate::core::reactive::AtomId>,
     ) {
         let node_ids: Vec<ElementNodeId> = {
             let tree = self.js_context.element_tree.borrow();
@@ -218,40 +232,42 @@ impl TurAppInternal {
                 }
             }
         }
+    }
 
-        // Fragment effects: rebuild Each / Condition / Switch children.
-        // Take the `kind` out (so we can borrow `cx` / the tree freely), call
-        // `try_rebuild` directly, handle child swap, then put `kind` back.
-        let fragment_ids: Vec<crate::core::element::FragmentNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            tree.fragments.keys().copied().collect()
-        };
-        for fid in fragment_ids {
+    /// Rebuild dirty fragments (Condition / Each / Switch). Only fragments
+    /// whose subscribed atoms are dirty are processed — identified via the
+    /// subscriber graph, not a full scan. Each fragment's `perform_update`
+    /// resolves the current value and swaps the branch/items if changed.
+    fn rebuild_fragments(
+        &self,
+        boa_context: &mut boa_engine::Context,
+        dirty_frag_ids: &[FragmentNodeId],
+    ) {
+        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
+
+        for fid in dirty_frag_ids {
             let mut kind = {
                 let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_fragment_mut(fid).and_then(|h| h.kind.take())
+                tree.get_fragment_mut(*fid).and_then(|h| h.kind.take())
             };
             let Some(ref mut k) = kind else { continue };
 
-            // Save old children + parent BEFORE rebuild (try_rebuild auto-links
-            // new children to frag.children via append_child).
+            // Save old children + parent BEFORE rebuild (perform_update
+            // auto-links new children to frag.children via append_child).
             let (old_children, parent) = {
                 let tree = self.js_context.element_tree.borrow();
-                tree.get_fragment(fid)
+                tree.get_fragment(*fid)
                     .map(|f| (f.children.clone(), f.parent))
-                    .unwrap_or((Vec::new(), fid.into()))
+                    .unwrap_or((Vec::new(), (*fid).into()))
             };
 
-            // Try rebuild — returns Some(new_children) if dirty + changed.
-            // New children are auto-linked to frag.children (appended by
-            // append_child during Component::build).
-            let new_children = k.try_rebuild(&mut cx, boa_context, dirties, fid);
+            let new_children = k.perform_update(&mut cx, boa_context, *fid);
 
             if let Some(new) = new_children {
                 // frag.children now has old + new; replace with just new.
                 {
                     let mut tree = self.js_context.element_tree.borrow_mut();
-                    if let Some(f) = tree.get_fragment_mut(fid) {
+                    if let Some(f) = tree.get_fragment_mut(*fid) {
                         f.children = new;
                     }
                 }
@@ -265,7 +281,7 @@ impl TurAppInternal {
             // Put kind back.
             if let Some(kind) = kind {
                 let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(host) = tree.get_fragment_mut(fid) {
+                if let Some(host) = tree.get_fragment_mut(*fid) {
                     host.kind = Some(kind);
                 }
             }

@@ -27,7 +27,6 @@ import {
     type DirEntry,
     doDownload,
     downloadStatus$,
-    DL_SENTINEL,
     entries$,
     error$,
     fmtSize,
@@ -303,13 +302,8 @@ export function ExplorerScreen(): EdgyElement {
                 ],
             }),
             SizedBox({ height: 8 }),
-            // Error banner — hidden for download-status sentinels (see
-            // `DL_SENTINEL` in state.ts), which exist only to force a flush.
             Condition({
-                condition: derive(() => {
-                    const e = get(error$);
-                    return e !== null && !e.startsWith(DL_SENTINEL);
-                }),
+                condition: derive(() => get(error$) !== null),
                 child: () =>
                     Container({
                         padding: 10,
