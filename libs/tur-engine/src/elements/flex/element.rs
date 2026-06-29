@@ -43,6 +43,7 @@ impl Component for FlexComponent {
                 child_data: Vec::new(),
                 constraints: None,
                 computed_size: None,
+                overflow: 0.0,
             }),
             boa,
         );
@@ -67,6 +68,7 @@ pub struct FlexElement {
     pub(crate) child_data: Vec<ChildData>,
     pub(crate) constraints: Option<Constraints>,
     pub(crate) computed_size: Option<Size>,
+    pub(crate) overflow: f64,
 }
 
 impl Effect for FlexElement {}

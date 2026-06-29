@@ -141,3 +141,38 @@ fn column_nested_children_do_not_overlap() {
         "third child should be positioned after inner column (50 + 30)"
     );
 }
+
+#[test]
+fn column_overflow_children_keep_natural_height() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("column-overflow").unwrap();
+
+    let (col_id, c0, c1, c2) = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        assert_eq!(col.children.len(), 3);
+        (col.id, col.children[0], col.children[1], col.children[2])
+    };
+
+    app.render();
+    let rt = app.element_tree();
+
+    let col = rt.get_element(col_id).unwrap();
+    assert_eq!(
+        col.computed_layout.size.height, 600.0,
+        "column clamped to viewport height"
+    );
+
+    for (i, &child_id) in [c0, c1, c2].iter().enumerate() {
+        let child = rt.get_element(ElementNodeId::new(child_id.as_u64())).unwrap();
+        assert_eq!(
+            child.computed_layout.size.height, 300.0,
+            "child {i} should keep its natural 300px height, not be squished"
+        );
+        assert_eq!(
+            child.computed_layout.offset.y, (i * 300) as f64,
+            "child {i} offset should be {i}*300"
+        );
+    }
+}
