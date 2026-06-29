@@ -22,10 +22,10 @@ import {
     getIcon,
     openRepo,
     openRepoFromDraft,
+    type Repo,
     repoCtrl,
     repoDraft$,
     repoError$,
-    type Repo,
 } from "./state";
 import { COLORS } from "./theme";
 import { Button, Field } from "./ui";
@@ -35,7 +35,11 @@ import { Button, Field } from "./ui";
 // row inside the 440px card.
 const SUGGESTIONS: Repo[] = [
     { owner: "facebook", repo: "react", fullName: "facebook/react" },
-    { owner: "tailwindlabs", repo: "tailwindcss", fullName: "tailwindlabs/tailwindcss" },
+    {
+        owner: "tailwindlabs",
+        repo: "tailwindcss",
+        fullName: "tailwindlabs/tailwindcss",
+    },
     { owner: "vuejs", repo: "core", fullName: "vuejs/core" },
 ];
 
@@ -165,7 +169,9 @@ export function LandingScreen(): EdgyElement {
                             Row({
                                 mainAxisSize: MainAxisSize.Min,
                                 children: SUGGESTIONS.flatMap((repo, i) => [
-                                    ...(i === 0 ? [] : [SizedBox({ width: 6 })]),
+                                    ...(i === 0
+                                        ? []
+                                        : [SizedBox({ width: 6 })]),
                                     Suggestion({ repo }),
                                 ]),
                             }),

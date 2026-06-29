@@ -16,12 +16,12 @@ import {
     PointerInteract,
     Row,
     SizedBox,
-    source,
     type StoreCtx,
     Switch,
+    set,
+    source,
     Text,
     Transform,
-    set,
 } from "@tur/edgy";
 import {
     type DirEntry,
@@ -231,7 +231,12 @@ function DownloadButton(): EdgyElement {
                     {
                         key: "error",
                         child: () =>
-                            dlShell(COLORS.dangerSoft, COLORS.danger, "Failed", null),
+                            dlShell(
+                                COLORS.dangerSoft,
+                                COLORS.danger,
+                                "Failed",
+                                null,
+                            ),
                     },
                 ],
                 fallback: () =>
@@ -251,8 +256,8 @@ function DownloadButton(): EdgyElement {
                         "Download",
                         null,
                     ),
-                }),
             }),
+        }),
     });
 }
 

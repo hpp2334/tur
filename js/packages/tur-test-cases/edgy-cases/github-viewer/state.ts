@@ -172,11 +172,7 @@ export const entries$: Readable<DirEntry[]> = derive(() => {
     }
     const list = Array.from(seen.values());
     list.sort((a, b) =>
-        a.isDir === b.isDir
-            ? a.name.localeCompare(b.name)
-            : a.isDir
-              ? -1
-              : 1,
+        a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1,
     );
     return list;
 });
