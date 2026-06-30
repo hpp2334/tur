@@ -110,7 +110,7 @@ impl TurVelloApp {
         let mut app = TurApp::new(
             Box::new(renderer),
             Box::new(PresetFontLoader::new()),
-            Box::new(tur_engine::core::host_api::NoopHostApi),
+            Box::new(tur_engine::core::platform_api::NoopPlatformApi),
         )?;
         app.push_event(AppEvent::Resize {
             logical_width: width as u32,

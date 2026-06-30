@@ -27,7 +27,7 @@ impl TurAppInternal {
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<FixedClock>,
-        host_api: Box<dyn crate::core::host_api::HostApi>,
+        platform_api: Box<dyn crate::core::platform_api::PlatformApi>,
     ) -> Self {
         use crate::core::elements::NodeTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
@@ -60,7 +60,7 @@ impl TurAppInternal {
             renderer,
             font_loader,
             clock,
-            host_api,
+            platform_api,
             dirty,
         );
 

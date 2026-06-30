@@ -19,7 +19,7 @@ use core::bridge::init_bridge;
 use core::bridge::TurJobExecutor;
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
-use core::host_api::HostApi;
+use core::platform_api::PlatformApi;
 #[cfg(feature = "trace")]
 use core::elements::NodeTreeData;
 use elements::editable_text::EditableTextElement;
@@ -34,7 +34,7 @@ impl TurApp {
     pub fn new(
         renderer: Box<dyn core::render::Renderer>,
         font_loader: Box<dyn core::fonts::FontLoader>,
-        host_api: Box<dyn HostApi>,
+        platform_api: Box<dyn PlatformApi>,
     ) -> Result<Self, TurError> {
         let clock = Rc::new(FixedClock::from_millis(0));
         let executor = Rc::new(TurJobExecutor::new());
@@ -45,7 +45,7 @@ impl TurApp {
             .expect("failed to build boa context");
 
         let BridgeResult { internal, executor } =
-            init_bridge(&mut boa_context, renderer, font_loader, clock, host_api, executor);
+            init_bridge(&mut boa_context, renderer, font_loader, clock, platform_api, executor);
 
         tracing::info!("TurApp initialized");
 
