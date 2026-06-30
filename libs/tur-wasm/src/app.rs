@@ -31,14 +31,14 @@ struct WasmState {
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
-/// Embedder-side `HostApi`: the engine pushes the resolved cursor here during
+/// Embedder-side `PlatformApi`: the engine pushes the resolved cursor here during
 /// `apply_changes`, and we apply it straight to the host canvas. This replaces
 /// the old per-frame `take_current_cursor` poll.
-struct WasmHostApi {
+struct WasmPlatformApi {
     canvas: web_sys::HtmlCanvasElement,
 }
 
-impl tur_engine::core::host_api::HostApi for WasmHostApi {
+impl tur_engine::core::platform_api::PlatformApi for WasmPlatformApi {
     fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
@@ -766,7 +766,7 @@ impl TurWasmApp {
             let mut app = TurApp::new(
                 Box::new(renderer),
                 Box::new(PresetFontLoader::new()),
-                Box::new(WasmHostApi {
+                Box::new(WasmPlatformApi {
                     canvas: canvas.clone(),
                 }),
             )

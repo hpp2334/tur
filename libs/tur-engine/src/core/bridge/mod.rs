@@ -79,7 +79,7 @@ pub fn init_bridge(
     renderer: Box<dyn Renderer>,
     font_loader: Box<dyn FontLoader>,
     clock: std::rc::Rc<FixedClock>,
-    host_api: Box<dyn crate::core::host_api::HostApi>,
+    platform_api: Box<dyn crate::core::platform_api::PlatformApi>,
     executor: std::rc::Rc<TurJobExecutor>,
 ) -> BridgeResult {
     let proto = context.intrinsics().constructors().object().prototype();
@@ -198,7 +198,7 @@ pub fn init_bridge(
         build_fn(context, &js_name, 2, tur_dev_tool_get_element),
     );
 
-    let internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock, host_api);
+    let internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock, platform_api);
     {
         let mut ctx = internal.app_context.borrow_mut();
         ctx.register_handler(Box::new(

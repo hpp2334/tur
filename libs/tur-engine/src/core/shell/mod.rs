@@ -6,7 +6,7 @@ use boa_engine::context::time::FixedClock;
 use boa_engine::context::Clock;
 use tur_shared::{Cursor, Offset};
 
-use crate::core::host_api::HostApi;
+use crate::core::platform_api::PlatformApi;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
 ///
@@ -52,22 +52,22 @@ impl Default for CursorSink {
 ///
 /// `apply_changes` is the privileged post-paint flush: it resolves the
 /// deepest cursor claim, dedups against the last applied value, and pushes the
-/// result to the embedder through [`HostApi::set_cursor`]. Biz cannot call it.
+/// result to the embedder through [`PlatformApi::set_cursor`]. Biz cannot call it.
 ///
 /// [`paint_face`]: Shell::paint_face
 pub(crate) struct Shell {
     clock: Rc<FixedClock>,
-    host_api: Box<dyn HostApi>,
+    platform_api: Box<dyn PlatformApi>,
     pointer_position: Option<Offset>,
     cursor: CursorSink,
     applied_cursor: Option<Cursor>,
 }
 
 impl Shell {
-    pub(crate) fn new(clock: Rc<FixedClock>, host_api: Box<dyn HostApi>) -> Self {
+    pub(crate) fn new(clock: Rc<FixedClock>, platform_api: Box<dyn PlatformApi>) -> Self {
         Shell {
             clock,
-            host_api,
+            platform_api,
             pointer_position: None,
             cursor: CursorSink::new(),
             applied_cursor: None,
@@ -94,7 +94,7 @@ impl Shell {
 
     /// Flush the cursor claims accumulated during paint: resolve the
     /// deepest-wins value, dedup against the last applied cursor, and on change
-    /// push it to the embedder via [`HostApi::set_cursor`]. Called once by the
+    /// push it to the embedder via [`PlatformApi::set_cursor`]. Called once by the
     /// driver after the paint pass. `take` empties the sink so the next frame
     /// starts clean (no separate reset needed).
     pub(crate) fn apply_changes(&mut self) {
@@ -102,7 +102,7 @@ impl Shell {
         let present = self.pointer_position.is_some();
         if present && self.applied_cursor != Some(resolved) {
             self.applied_cursor = Some(resolved);
-            self.host_api.set_cursor(resolved);
+            self.platform_api.set_cursor(resolved);
         }
     }
 

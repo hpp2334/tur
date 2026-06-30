@@ -15,7 +15,7 @@ use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::gesture::GestureEventComposer;
 use crate::core::handler::{AppHandler, HandlerContext};
-use crate::core::host_api::HostApi;
+use crate::core::platform_api::PlatformApi;
 use crate::core::render::Renderer;
 use crate::core::resource::ResourceMap;
 use crate::core::shell::Shell;
@@ -33,7 +33,7 @@ pub struct TurAppContext {
     pub(crate) event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
-    /// embedder via [`HostApi`]). Owns the time source shared with the boa
+    /// embedder via [`PlatformApi`]). Owns the time source shared with the boa
     /// `Context`. See [`Shell`].
     pub(crate) shell: Shell,
     /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
@@ -64,7 +64,7 @@ impl TurAppContext {
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
         clock: Rc<FixedClock>,
-        host_api: Box<dyn HostApi>,
+        platform_api: Box<dyn PlatformApi>,
         dirty: Rc<Cell<bool>>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
@@ -80,7 +80,7 @@ impl TurAppContext {
             gesture_composer: GestureEventComposer::new(),
             event_queue: AppEventQueue::new(),
             handlers: vec![],
-            shell: Shell::new(clock, host_api),
+            shell: Shell::new(clock, platform_api),
             pending_clipboard_write: Rc::new(RefCell::new(None)),
             dirty,
         }
