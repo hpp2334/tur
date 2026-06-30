@@ -49,6 +49,7 @@ macro_rules! spec_factory {
 }
 
 spec_factory!(tur_container, ContainerView);
+spec_factory!(tur_animated_container, AnimatedContainerView);
 spec_factory!(tur_text, TextView);
 spec_factory!(tur_stack, StackView);
 spec_factory!(tur_image_edgy, ImageView);
@@ -61,6 +62,7 @@ spec_factory!(tur_focusable, FocusableView);
 spec_factory!(tur_scrollbar, ScrollbarView);
 spec_factory!(tur_mouse_region, MouseRegionView);
 spec_factory!(tur_opacity, OpacityView);
+spec_factory!(tur_animated_opacity, AnimatedOpacityView);
 spec_factory!(tur_transform, TransformView);
 spec_factory!(tur_readable_subscribe, ReadableSubscribeView);
 
@@ -105,6 +107,7 @@ macro_rules! spec_factory_opt {
 
 spec_factory_opt!(tur_expanded, ExpandedView);
 spec_factory_opt!(tur_positioned, PositionedView);
+spec_factory_opt!(tur_animated_positioned, AnimatedPositionedView);
 spec_factory_opt!(tur_scroll_view, ScrollViewView);
 spec_factory_opt!(tur_lazy_list, LazyListView);
 spec_factory_opt!(tur_each, EachView);

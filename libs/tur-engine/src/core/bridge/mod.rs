@@ -7,7 +7,7 @@ use boa_engine::property::PropertyDescriptor;
 use boa_engine::Context;
 
 use crate::core::app::TurAppInternal;
-use crate::core::bridge::color::{tur_create_color, tur_create_linear_gradient};
+use crate::core::bridge::color::{tur_color_lerp, tur_create_color, tur_create_linear_gradient};
 use crate::core::bridge::dev_tool::{tur_dev_tool_element_tree, tur_dev_tool_get_element};
 use crate::core::bridge::reactive_bridge::{
     tur_view, tur_derive, tur_get, tur_mutate, tur_set, tur_source,
@@ -18,8 +18,11 @@ use crate::core::bridge::utils::{
     tur_create_undo_controller, tur_request_focus,
 };
 use crate::core::bridge::view_bridge::{
-    tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
-    tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_lifecycle_view, tur_mouse_region, tur_readable_subscribe, tur_switch, tur_opacity, tur_pointer_interact, tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text, tur_transform,
+    tur_animated_container, tur_animated_opacity, tur_animated_positioned, tur_column,
+    tur_condition, tur_container, tur_expanded, tur_focusable, tur_each, tur_fragment,
+    tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_lifecycle_view, tur_mouse_region,
+    tur_readable_subscribe, tur_switch, tur_opacity, tur_pointer_interact, tur_positioned,
+    tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text, tur_transform,
 };
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -109,7 +112,7 @@ pub fn init_bridge(
         &str,
         usize,
         boa_engine::native_function::NativeFunctionPointer,
-    ); 34] = [
+    ); 37] = [
         // --- reactive primitives ---
         ("source", 2, tur_source),
         ("derive", 2, tur_derive),
@@ -119,11 +122,13 @@ pub fn init_bridge(
         ("view", 1, tur_view),
         // --- view spec factories ---
         ("Container", 2, tur_container),
+        ("AnimatedContainer", 2, tur_animated_container),
         ("Column", 2, tur_column),
         ("Row", 2, tur_row),
         ("Expanded", 2, tur_expanded),
         ("Stack", 2, tur_stack),
         ("Positioned", 2, tur_positioned),
+        ("AnimatedPositioned", 2, tur_animated_positioned),
         ("Text", 2, tur_text),
         ("PointerInteract", 2, tur_pointer_interact),
         ("MouseRegion", 2, tur_mouse_region),
@@ -138,6 +143,7 @@ pub fn init_bridge(
         ("Fragment", 2, tur_fragment),
         ("Focusable", 2, tur_focusable),
         ("Opacity", 2, tur_opacity),
+        ("AnimatedOpacity", 2, tur_animated_opacity),
         ("Transform", 2, tur_transform),
         ("lifecycleView", 1, tur_lifecycle_view),
         ("ReadableSubscribe", 2, tur_readable_subscribe),
@@ -158,6 +164,8 @@ pub fn init_bridge(
     // Register remaining utility functions separately (variadic lengths).
     let js_name = js_string!("createColor");
     set_prop(&tur_obj, js_name.clone(), build_fn(context, &js_name, 4, tur_create_color));
+    let js_name = js_string!("colorLerp");
+    set_prop(&tur_obj, js_name.clone(), build_fn(context, &js_name, 3, tur_color_lerp));
     let js_name = js_string!("createLinearGradient");
     set_prop(&tur_obj, js_name.clone(), build_fn(context, &js_name, 5, tur_create_linear_gradient));
     let js_name = js_string!("createAnimationController");

@@ -2,6 +2,7 @@ import {
     Alignment,
     type AnimationController,
     Color,
+    ColorTween,
     Column,
     Container,
     CrossAxisAlignment,
@@ -24,6 +25,7 @@ import {
     source,
     Text,
     Transform,
+    Tween,
     view,
 } from "@tur/edgy";
 
@@ -73,19 +75,16 @@ function createController(
     });
 }
 
-// Color interpolation: indigo (99,102,241) → coral (232,93,68).
-function lerp(a: number, b: number, t: number): number {
-    return Math.round(a + (b - a) * t);
-}
-
-function interpolatedColor(t: number): unknown {
-    return Color.rgba(
-        lerp(99, 232, t),
-        lerp(102, 93, t),
-        lerp(241, 68, t),
-        255,
-    );
-}
+// Color interpolation: indigo (99,102,241) → coral (232,93,68). The new
+// `ColorTween` (tur's Flutter-aligned Tween) replaces the hand-rolled
+// per-channel `lerp` below — same component-wise interpolation, no manual
+// rounding math in user code.
+const widthTween = Tween({ begin: 120, end: 280 });
+const radiusTween = Tween({ begin: 8, end: 40 });
+const colorTween = ColorTween({
+    begin: Color.rgba(99, 102, 241, 255),
+    end: Color.rgba(232, 93, 68, 255),
+});
 
 // ---------------------------------------------------------------------------
 // Mutations
@@ -139,13 +138,16 @@ const toggleLooping = mutate(() => {
 // ---------------------------------------------------------------------------
 
 function Card(): unknown {
-    // Card animates width, borderRadius, hue based on progress$.
+    // Card animates width, borderRadius, hue based on progress$ via the
+    // Tween / ColorTween abstractions (Flutter-aligned). The explicit
+    // AnimationController drives `progress$` continuously; the tweens handle
+    // the value interpolation that previously needed hand-rolled `lerp`.
     return Container({
         // Width: 120 → 280
-        width: derive(() => 120 + 160 * get(progress$)),
+        width: derive(() => widthTween.lerp(get(progress$))),
         height: 160,
-        borderRadius: derive(() => 8 + 32 * get(progress$)),
-        color: derive(() => interpolatedColor(get(progress$))),
+        borderRadius: derive(() => radiusTween.lerp(get(progress$))),
+        color: derive(() => colorTween.lerp(get(progress$))),
         shadowColor: Color.rgba(15, 23, 42, 80),
         shadowBlur: 24,
         shadowOffset: [0, 8],

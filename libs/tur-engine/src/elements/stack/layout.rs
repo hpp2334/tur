@@ -44,7 +44,8 @@ impl ElementLayout for StackElement {
             .read_val_opt(self.view.alignment.as_ref())
             .unwrap_or_default();
         for &child_id in children {
-            let is_positioned = cx.child_type_name(child_id) == "tur_positioned";
+            let kind = cx.child_type_name(child_id);
+            let is_positioned = kind == "tur_positioned" || kind == "tur_animated_positioned";
 
             if !is_positioned {
                 let child_size = cx.child_computed_size(child_id);

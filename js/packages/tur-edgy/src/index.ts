@@ -148,6 +148,34 @@ export function Container(props: ContainerProps): EdgyElement {
     return __tur.Container(__ctx, props);
 }
 
+// ---------------------------------------------------------------------------
+// AnimatedContainer — implicit-animation Container (Flutter's
+// `AnimatedContainer` / `ImplicitlyAnimatedWidget`). Animates from the
+// previously-displayed value to the newly-resolved target over `duration`
+// whenever an animatable prop changes. No `AnimationController` needed.
+//
+// Animatable: width, height, padding, color, borderColor, borderWidth,
+// borderRadius, shadowColor, shadowBlur. Non-animatable (pass-through):
+// alignment, borderPosition, shadowOffset, queryKey, children.
+//
+// `curve` is one of the same easing keywords `createAnimationController`
+// accepts (`"linear" | "easeIn" | "easeOut" | "easeInOut"`). Changing
+// `duration` or `curve` remounts the element (they're folded into queryKey).
+// ---------------------------------------------------------------------------
+
+export interface AnimatedContainerProps extends ContainerProps {
+    /** Animation duration in milliseconds. Required. */
+    duration: Val<number>;
+    /** Easing curve keyword (default `"linear"`). */
+    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    /** Fired once when an in-flight implicit animation completes. */
+    onEnd?: Mutation<[], void>;
+}
+
+export function AnimatedContainer(props: AnimatedContainerProps): EdgyElement {
+    return __tur.AnimatedContainer(__ctx, props);
+}
+
 export function SizedBox(props: {
     width?: Val<number>;
     height?: Val<number>;
@@ -464,6 +492,40 @@ export function Opacity(props: {
     return __tur.Opacity(__ctx, props);
 }
 
+// ---------------------------------------------------------------------------
+// AnimatedOpacity / AnimatedPositioned — implicit-animation siblings of
+// `AnimatedContainer` (Flutter's `AnimatedOpacity` / `AnimatedPositioned`).
+// Same `duration` / `curve` / `onEnd` contract; changing any animatable prop
+// animates from the previous value to the new target.
+// ---------------------------------------------------------------------------
+
+export function AnimatedOpacity(props: {
+    value: Val<number>;
+    duration: Val<number>;
+    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    onEnd?: Mutation<[], void>;
+    child?: EdgyElement;
+    queryKey?: Val<string[]>;
+}): EdgyElement {
+    return __tur.AnimatedOpacity(__ctx, props);
+}
+
+export function AnimatedPositioned(props: {
+    left?: Val<number>;
+    top?: Val<number>;
+    right?: Val<number>;
+    bottom?: Val<number>;
+    width?: Val<number>;
+    height?: Val<number>;
+    duration: Val<number>;
+    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    onEnd?: Mutation<[], void>;
+    child: EdgyElement;
+    queryKey?: Val<string[]>;
+}): EdgyElement {
+    return __tur.AnimatedPositioned(__ctx, props);
+}
+
 export interface TransformProps {
     /** Uniform scale (multiplies both X and Y). */
     scale?: Val<number>;
@@ -656,6 +718,7 @@ export function render(comp: EdgyView): void {
 }
 
 export * from "./color";
+export * from "./tween";
 
 // ---------------------------------------------------------------------------
 // Enums (mirror of `tur-shared`).
@@ -727,6 +790,7 @@ interface TurGlobal {
     lifecycleView(ctx: unknown, f: () => unknown): EdgyElement;
 
     Container(ctx: unknown, props: unknown): EdgyElement;
+    AnimatedContainer(ctx: unknown, props: unknown): EdgyElement;
     Column(ctx: unknown, props: unknown): EdgyElement;
     Row(ctx: unknown, props: unknown): EdgyElement;
     Expanded(ctx: unknown, props: unknown): EdgyElement;
@@ -745,6 +809,8 @@ interface TurGlobal {
     InputEdgy(ctx: unknown, props: unknown): EdgyElement;
     Fragment(ctx: unknown, props: unknown): EdgyElement;
     Opacity(ctx: unknown, props: unknown): EdgyElement;
+    AnimatedOpacity(ctx: unknown, props: unknown): EdgyElement;
+    AnimatedPositioned(ctx: unknown, props: unknown): EdgyElement;
     Transform(ctx: unknown, props: unknown): EdgyElement;
     ReadableSubscribe(ctx: unknown, props: unknown): EdgyElement;
 

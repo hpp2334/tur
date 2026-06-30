@@ -51,9 +51,16 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`, `Input`, `PointerInteract`, `Focusable`, `Paragraph`, `Image`, `Svg`
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`, `Input`, `PointerInteract`, `Focusable`, `Paragraph`, `Image`, `Svg`, `AnimatedContainer`, `AnimatedOpacity`, `AnimatedPositioned`
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
+
+### Animation model (Flutter-aligned)
+
+- **`Curve`** (`tur-shared::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
+- **`Tween<T>`** (`tur-shared::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
+- **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
+- **Implicit animation**: `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` — pass target values + `duration` + `curve` + optional `onEnd`; the element animates from its previous value to the new target automatically when a target changes (Flutter's `ImplicitlyAnimatedWidget`). No controller/source/`lerp` in user code. See the `implicit-animations` case. Implementation: each element embeds an `ImplicitAnimationHost` (one `ImplicitDriver` timeline per element, owned by `AnimationManager`); `Effect::effect` retargets on atom change; `perform_layout` reads the eased `t` and lerps per prop.
 
 ### Domain traits
 

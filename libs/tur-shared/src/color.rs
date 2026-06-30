@@ -85,6 +85,35 @@ impl Color {
             Color::RGBA(c) => c.a,
         }
     }
+
+    /// Linear interpolation between two colors at parameter `t` in `[0, 1]`,
+    /// component-wise in u8 space (each channel rounded to nearest). Matches
+    /// Flutter's `Color.lerp` semantics: `t=0` returns `a` exactly, `t=1`
+    /// returns `b` exactly (preserving `RGB` vs `RGBA` representation); only
+    /// intermediate values interpolate. Intermediate results are always
+    /// `RGBA` so an interpolated alpha is preserved even when both inputs
+    /// are `RGB` (treated as `a=255`).
+    ///
+    /// Values of `t` outside `[0, 1]` are clamped.
+    pub fn lerp(a: Color, b: Color, t: f64) -> Color {
+        let t = t.clamp(0.0, 1.0);
+        if t == 0.0 {
+            return a;
+        }
+        if t == 1.0 {
+            return b;
+        }
+        let ch = |x: u8, y: u8| -> u8 {
+            let v = x as f64 + (y as f64 - x as f64) * t;
+            v.round().clamp(0.0, 255.0) as u8
+        };
+        Color::RGBA(RGBA::new(
+            ch(a.r(), b.r()),
+            ch(a.g(), b.g()),
+            ch(a.b(), b.b()),
+            ch(a.a(), b.a()),
+        ))
+    }
 }
 
 impl fmt::Display for Color {
