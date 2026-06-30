@@ -61,7 +61,6 @@ impl TurAppInternal {
             font_loader,
             clock,
             platform_api,
-            dirty,
         );
 
         let needs_draw = Rc::new(Cell::new(false));
@@ -104,7 +103,9 @@ impl TurAppInternal {
                 self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
             if dirty {
                 needs_render = true;
-                self.app_context.borrow_mut().layout(boa_context);
+                self.app_context
+                    .borrow_mut()
+                    .layout(self.js_context.dirty.clone(), boa_context);
             }
             self.flush_focus_notifications();
             let handled_mutations = self.flush_pending_mutations(boa_context);
