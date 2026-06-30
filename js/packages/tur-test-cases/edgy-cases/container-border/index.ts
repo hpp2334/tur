@@ -3,8 +3,8 @@ import {
     BorderPosition,
     Color,
     Container,
-    view,
     Text,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>

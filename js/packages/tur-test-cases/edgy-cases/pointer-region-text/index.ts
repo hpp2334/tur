@@ -4,12 +4,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     MouseRegion,
     mutate,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const state$ = source("idle");

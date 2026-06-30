@@ -1,9 +1,9 @@
 import {
     CrossAxisAlignment,
-    view,
     MainAxisAlignment,
     Row,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>

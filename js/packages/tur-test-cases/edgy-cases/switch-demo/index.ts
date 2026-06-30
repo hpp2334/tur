@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     Expanded,
     get,
@@ -15,6 +14,7 @@ import {
     Switch,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const tab$ = source("red");

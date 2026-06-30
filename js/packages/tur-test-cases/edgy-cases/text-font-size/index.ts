@@ -1,4 +1,4 @@
-import { view, Fragment, Text } from "@tur/edgy";
+import { Fragment, Text, view } from "@tur/edgy";
 
 export default view(() =>
     Fragment({

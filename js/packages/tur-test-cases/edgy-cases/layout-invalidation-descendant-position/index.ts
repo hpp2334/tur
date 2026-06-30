@@ -1,13 +1,13 @@
 import {
     Color,
     Container,
-    view,
     derive,
     get,
     MainAxisAlignment,
     Row,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // Reactive width of the outer container. Exposed to Rust tests via globalThis

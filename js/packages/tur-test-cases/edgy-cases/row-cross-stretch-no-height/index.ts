@@ -2,9 +2,9 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     Expanded,
     Row,
+    view,
 } from "@tur/edgy";
 
 // Test: Row with crossAlignment=Stretch should give non-flex children the

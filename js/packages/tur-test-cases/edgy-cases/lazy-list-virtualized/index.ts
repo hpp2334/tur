@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     Expanded,
     LazyList,
     MainAxisAlignment,
@@ -13,6 +12,7 @@ import {
     Row,
     SizedBox,
     Text,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------

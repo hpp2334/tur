@@ -1,10 +1,10 @@
 import {
     Column,
     CrossAxisAlignment,
-    view,
     createScrollController,
     ScrollView,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
 const controller = createScrollController({ initialOffset: 100 });

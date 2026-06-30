@@ -1,3 +1,3 @@
-import { view, PointerInteract } from "@tur/edgy";
+import { PointerInteract, view } from "@tur/edgy";
 
 export default view(() => PointerInteract({}));

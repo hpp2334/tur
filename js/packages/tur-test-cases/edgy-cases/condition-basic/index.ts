@@ -1,4 +1,4 @@
-import { Color, Condition, Container, view, Text } from "@tur/edgy";
+import { Color, Condition, Container, Text, view } from "@tur/edgy";
 
 export default view(() =>
     Condition({

@@ -1,4 +1,4 @@
-import { Color, Column, Container, view, Expanded, Text } from "@tur/edgy";
+import { Color, Column, Container, Expanded, Text, view } from "@tur/edgy";
 
 // `__turHost` is registered by tur-wasm (swc-backed). tur-engine provides the
 // generic `register_host_fn` hook; tur-wasm supplies the compiler impls.

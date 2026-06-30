@@ -1,4 +1,4 @@
-import { CrossAxisAlignment, view, Row, SizedBox } from "@tur/edgy";
+import { CrossAxisAlignment, Row, SizedBox, view } from "@tur/edgy";
 
 export default view(() =>
     Row({

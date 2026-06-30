@@ -1,8 +1,8 @@
 import {
     Container,
-    view,
     createTextEditingController,
     InputEdgy,
+    view,
 } from "@tur/edgy";
 
 const ctrl = createTextEditingController({});

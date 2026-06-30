@@ -4,12 +4,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     mutate,
     PointerInteract,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const lastX$ = source(0);

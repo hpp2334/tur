@@ -1,4 +1,4 @@
-import { Container, view, SizedBox } from "@tur/edgy";
+import { Container, SizedBox, view } from "@tur/edgy";
 
 export default view(() =>
     Container({

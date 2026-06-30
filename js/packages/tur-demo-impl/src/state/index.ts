@@ -5,8 +5,8 @@
 export {
     editorCtrl,
     editorUndo,
-    getCaseView,
     getCaseFileNames,
+    getCaseView,
     loadCase,
     recompile,
     resetCase,

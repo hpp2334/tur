@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     createTextEditingController,
     Expanded,
     InputEdgy,
     MainAxisAlignment,
     Text,
+    view,
 } from "@tur/edgy";
 
 // A controller pre-populated with a code-like snippet, split into spans whose

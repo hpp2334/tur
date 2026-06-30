@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     type Cursor,
-    view,
     derive,
     get,
     MouseRegion,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // A reactive cursor driven by a source, so Rust tests can flip it via

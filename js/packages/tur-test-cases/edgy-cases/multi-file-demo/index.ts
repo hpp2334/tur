@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     mutate,
     PointerInteract,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 import { COLORS } from "./utils";
 

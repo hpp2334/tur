@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     Each,
     type EdgyElement,
@@ -21,6 +20,7 @@ import {
     SizedBox,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------

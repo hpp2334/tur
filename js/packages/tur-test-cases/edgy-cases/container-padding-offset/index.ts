@@ -1,10 +1,4 @@
-import {
-    Container,
-    CrossAxisAlignment,
-    view,
-    Row,
-    SizedBox,
-} from "@tur/edgy";
+import { Container, CrossAxisAlignment, Row, SizedBox, view } from "@tur/edgy";
 
 export default view(() =>
     Container({

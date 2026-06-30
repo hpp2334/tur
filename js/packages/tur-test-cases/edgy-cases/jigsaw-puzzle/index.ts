@@ -6,7 +6,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    view,
     createAnimationController,
     derive,
     type EdgyElement,
@@ -24,6 +23,7 @@ import {
     source,
     Text,
     Transform,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------

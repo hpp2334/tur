@@ -2,11 +2,11 @@ import {
     BorderPosition,
     Color,
     Container,
-    view,
     derive,
     mutate,
     PointerInteract,
     source,
+    view,
 } from "@tur/edgy";
 
 const checked$ = source(true);

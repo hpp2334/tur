@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     createAnimationController,
     derive,
     Expanded,
@@ -25,6 +24,7 @@ import {
     source,
     Text,
     Transform,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------

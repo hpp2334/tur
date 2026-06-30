@@ -2,7 +2,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -11,6 +10,7 @@ import {
     Row,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const outerClicks$ = source(0);

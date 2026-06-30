@@ -1,4 +1,4 @@
-import { view, SizedBox, Stack } from "@tur/edgy";
+import { SizedBox, Stack, view } from "@tur/edgy";
 
 export default view(() =>
     Stack({

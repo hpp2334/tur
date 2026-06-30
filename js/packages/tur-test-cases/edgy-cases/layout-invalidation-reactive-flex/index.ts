@@ -1,13 +1,13 @@
 import {
     Color,
     Container,
-    view,
     derive,
     Expanded,
     get,
     Row,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // Two reactive flex weights. Exposed to Rust tests via globalThis so the test

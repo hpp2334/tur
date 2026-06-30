@@ -3,16 +3,16 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
-    type EdgyView,
     type EdgyElement,
+    type EdgyView,
     Expanded,
     get,
     Row,
     Stack,
     Switch,
     set,
+    view,
 } from "@tur/edgy";
 import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";

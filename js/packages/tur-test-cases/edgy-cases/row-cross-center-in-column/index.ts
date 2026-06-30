@@ -1,10 +1,10 @@
 import {
     Column,
     CrossAxisAlignment,
-    view,
     MainAxisSize,
     Row,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>

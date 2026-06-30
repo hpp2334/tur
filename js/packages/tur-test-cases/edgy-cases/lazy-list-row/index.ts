@@ -1,4 +1,4 @@
-import { Axis, Color, Container, view, LazyList } from "@tur/edgy";
+import { Axis, Color, Container, LazyList, view } from "@tur/edgy";
 
 const ITEM_WIDTH = 80;
 const ITEM_COUNT = 50;

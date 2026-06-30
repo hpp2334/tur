@@ -2,8 +2,8 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     PointerInteract,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>

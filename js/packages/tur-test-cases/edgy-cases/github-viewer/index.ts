@@ -4,12 +4,12 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    view,
     type EdgyElement,
     Expanded,
     Stack,
     Switch,
     Text,
+    view,
 } from "@tur/edgy";
 import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";

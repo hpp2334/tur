@@ -5,7 +5,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    view,
     createTextEditingController,
     derive,
     type EdgyElement,
@@ -26,6 +25,7 @@ import {
     Stack,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 // --- Light theme palette (slate + emerald accents) -----------------------

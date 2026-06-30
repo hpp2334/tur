@@ -1,4 +1,4 @@
-import { Alignment, Color, Container, view, Text } from "@tur/edgy";
+import { Alignment, Color, Container, Text, view } from "@tur/edgy";
 
 export default view(() =>
     Container({

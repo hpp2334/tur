@@ -2,7 +2,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     Each,
     Expanded,
     MainAxisSize,
@@ -10,6 +9,7 @@ import {
     SizedBox,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const seg$ = source<string[]>(["a", "b"]);

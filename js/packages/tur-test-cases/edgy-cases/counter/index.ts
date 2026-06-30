@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     derive,
     Expanded,
     MainAxisAlignment,
@@ -14,6 +13,7 @@ import {
     SizedBox,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const count$ = source(0);

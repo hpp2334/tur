@@ -3,11 +3,11 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     MainAxisAlignment,
     Row,
     SizedBox,
     Text,
+    view,
 } from "@tur/edgy";
 
 const TABS = [{ id: "todolist", label: "TodoList" }];

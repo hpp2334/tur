@@ -2,10 +2,10 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    view,
     Row,
     ScrollView,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>

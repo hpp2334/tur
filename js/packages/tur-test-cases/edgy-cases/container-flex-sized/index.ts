@@ -3,9 +3,9 @@ import {
     Color,
     Column,
     Container,
-    view,
     Row,
     Text,
+    view,
 } from "@tur/edgy";
 
 export default view(() =>
