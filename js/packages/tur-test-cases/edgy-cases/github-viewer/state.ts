@@ -252,8 +252,8 @@ function rawUrl(
     path: string,
 ): string | null {
     if (!repo || !version) return null;
-    const segs = path.split("/").map(encodeURIView).join("/");
-    return `https://cdn.jsdelivr.net/gh/${encodeURIView(repo.owner)}/${encodeURIView(repo.repo)}@${encodeURIView(version)}/${segs}`;
+    const segs = path.split("/").map(encodeURIComponent).join("/");
+    return `https://cdn.jsdelivr.net/gh/${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.repo)}@${encodeURIComponent(version)}/${segs}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ function loadRepo(target: Repo): void {
     set(selectedPath$, null);
     set(version$, null);
 
-    const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIView(target.owner)}/${encodeURIView(target.repo)}`;
+    const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
 
     http({ method: "GET", url: base, responseType: "text" })
         .then((rVer) => {
@@ -326,7 +326,7 @@ function loadRepo(target: Repo): void {
             set(version$, ver);
             return http({
                 method: "GET",
-                url: `${base}@${encodeURIView(ver)}?structure=flat`,
+                url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
                 responseType: "text",
             }).then((rTree) => {
                 if (rTree.status !== 200) {
