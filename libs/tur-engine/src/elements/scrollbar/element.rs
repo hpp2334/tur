@@ -9,8 +9,9 @@ use crate::core::elements::{
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::core::scroll::ScrollController;
-use crate::core::widget::{
-    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    val_from_js, Effect, PropValue, View, Val,
 };
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
@@ -19,7 +20,7 @@ pub(crate) const MIN_THUMB: f64 = 24.0;
 pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 
 // ---------------------------------------------------------------------------
-// ScrollbarComponent — the user's declaration. Pure Rust except for the
+// ScrollbarView — the user's declaration. Pure Rust except for the
 // opaque `controller` (a `ScrollController` class instance shared with a
 // `ScrollView`). `color`, `thumbRadius`, `trackColor` and `thickness` are
 // reactive (`Val<T>`).
@@ -28,7 +29,7 @@ pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ScrollbarComponent {
+pub struct ScrollbarView {
     /// Shared `ScrollController` — provides offset/maxExtent/viewport and the
     /// bound scroll-view node id (for `ScrollTo` requests during drag).
     pub controller: Option<JsObject>,
@@ -58,7 +59,7 @@ pub struct ScrollbarPainting {
 }
 
 pub struct ScrollbarElement {
-    pub component: ScrollbarComponent,
+    pub view: ScrollbarView,
     /// Last computed track size — used by the drag handler for offset math.
     pub(crate) cached_track: Size,
     /// Resolved paint props — filled in `perform_layout`.
@@ -67,13 +68,13 @@ pub struct ScrollbarElement {
     drag: Option<DragState>,
 }
 
-impl Component for ScrollbarComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for ScrollbarView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::with_gesture_and_focus(ScrollbarElement {
-                component: self.clone(),
+                view: self.clone(),
                 cached_track: Size::ZERO,
                 painting: ScrollbarPainting::default(),
                 drag: None,
@@ -94,7 +95,7 @@ impl ScrollbarElement {
     /// max_extent, viewport)`. `None` if there is no controller or it isn't
     /// bound to a scroll-view yet.
     pub(crate) fn metrics(&self) -> Option<(ElementNodeId, f64, f64, f64)> {
-        let ctrl = self.component.controller.as_ref()?;
+        let ctrl = self.view.controller.as_ref()?;
         let ctrl = ctrl.downcast_ref::<ScrollController>()?;
         let node = ctrl.bound_node?;
         Some((node, ctrl.offset, ctrl.max_scroll_extent, ctrl.viewport_dimension))
@@ -114,7 +115,7 @@ impl Effect for ScrollbarElement {}
 
 impl ElementSubscribe for ScrollbarElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.thickness.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.track_color.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
@@ -265,10 +266,10 @@ pub(super) fn prop_query_key(
     if out.is_empty() { None } else { Some(out) }
 }
 
-impl ScrollbarComponent {
-    /// Build a `ScrollbarComponent` from a JS props object.
+impl ScrollbarView {
+    /// Build a `ScrollbarView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        ScrollbarComponent {
+        ScrollbarView {
             controller: prop_controller(props, "controller", ctx),
             color: prop_val::<Brush>(props, "color", ctx),
             track_color: prop_val::<Brush>(props, "trackColor", ctx),

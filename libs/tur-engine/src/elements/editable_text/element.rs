@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
@@ -19,7 +20,7 @@ use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::core::view::{ViewCx, read_atom_raw, val_from_js, Effect, PropValue, View, Val};
 use crate::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
@@ -72,7 +73,7 @@ impl LineNavInfo {
 }
 
 // ---------------------------------------------------------------------------
-// EditableTextComponent — the user's declaration. Pure Rust, no JsValues except
+// EditableTextView — the user's declaration. Pure Rust, no JsValues except
 // the opaque `controller` (a TextEditingController class instance).
 //
 // `controller` is parsed eagerly (not reactive). The text-style props
@@ -81,7 +82,7 @@ impl LineNavInfo {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct EditableTextComponent {
+pub struct EditableTextView {
     pub controller: Option<JsObject>,
     pub controller_atom: Option<AnyReadable>,
     /// Optional `UndoController` for Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z support.
@@ -100,14 +101,14 @@ pub struct EditableTextComponent {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for EditableTextComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for EditableTextView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         let mut spec = self.clone();
 
         if spec.controller.is_none() {
             if let Some(readable) = spec.controller_atom {
-                let js_val = cx.read_atom_raw(readable, boa);
+                let js_val = read_atom_raw(cx, readable, boa);
                 if let Some(obj) = js_val.as_object() {
                     if obj.downcast_ref::<TextEditingController>().is_some() {
                         spec.controller = Some(obj.clone());
@@ -139,7 +140,7 @@ impl Component for EditableTextComponent {
         cx.insert_node(
             id,
             AnyElement::with_full_interactivity(EditableTextElement {
-                component: spec,
+                view: spec,
                 cached_layout: None,
                 resolved_multiline: false,
                 painting: EditableTextPainting::default(),
@@ -170,15 +171,25 @@ pub struct EditableTextPainting {
 }
 
 pub struct EditableTextElement {
-    pub component: EditableTextComponent,
+    pub view: EditableTextView,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) resolved_multiline: bool,
     pub(crate) painting: EditableTextPainting,
 }
 
+impl Focusable for EditableTextElement {
+    fn on_focus_mutation(&self) -> Option<EdgyMutation<FocusEvent>> {
+        self.controller().on_focus()
+    }
+
+    fn on_blur_mutation(&self) -> Option<EdgyMutation<BlurEvent>> {
+        self.controller().on_blur()
+    }
+}
+
 impl EditableTextElement {
     pub(crate) fn controller(&self) -> boa_engine::object::Ref<'_, TextEditingController> {
-        self.component
+        self.view
             .controller
             .as_ref()
             .expect("controller is always present")
@@ -187,7 +198,7 @@ impl EditableTextElement {
     }
 
     pub(crate) fn controller_mut(&self) -> boa_engine::object::RefMut<'_, TextEditingController> {
-        self.component
+        self.view
             .controller
             .as_ref()
             .expect("controller is always present")
@@ -196,7 +207,7 @@ impl EditableTextElement {
     }
 
     pub(crate) fn undo_controller_mut(&self) -> Option<boa_engine::object::RefMut<'_, crate::core::text::UndoController>> {
-        self.component
+        self.view
             .undo_controller
             .as_ref()?
             .downcast_mut::<crate::core::text::UndoController>()
@@ -426,7 +437,7 @@ impl EditableTextElement {
                 // mark the key as handled so no fallback runs.
                 true
             }
-            "z" if (ctrl || meta) && self.component.undo_controller.is_some() => {
+            "z" if (ctrl || meta) && self.view.undo_controller.is_some() => {
                 // Undo (no shift) / Redo (with shift). The undo controller
                 // owns the history stacks; we feed it the controller's
                 // current value (already captured above as `full`/`cursor`/
@@ -463,7 +474,7 @@ impl EditableTextElement {
                 }
                 true
             }
-            "y" if ctrl && self.component.undo_controller.is_some() => {
+            "y" if ctrl && self.view.undo_controller.is_some() => {
                 // Ctrl+Y redo (Windows convention) — mirror of Cmd+Shift+Z.
                 use crate::core::text::TextEditingValue;
                 let current = TextEditingValue {
@@ -661,7 +672,7 @@ impl Effect for EditableTextElement {}
 
 impl ElementSubscribe for EditableTextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.multiline.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_family.as_ref() { cx.subscribe_val(v); }
@@ -796,7 +807,7 @@ impl ElementOnGesture for EditableTextElement {
             }
             ComposedGestureEvent::PointerUp { .. } => {}
             ComposedGestureEvent::ContextMenu { local, global } => {
-                if let Some(m) = self.component.on_context_menu {
+                if let Some(m) = self.view.on_context_menu {
                     cx.push_event(
                         m,
                         ContextMenuEvent { local: *local, global: *global },
@@ -1031,10 +1042,10 @@ pub(crate) fn prop_mutation<E: EventArg>(
     edgy_mutation_from_js(&v)
 }
 
-impl EditableTextComponent {
-    /// Build an `EditableTextComponent` from a JS props object.
+impl EditableTextView {
+    /// Build an `EditableTextView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        EditableTextComponent {
+        EditableTextView {
             controller: prop_controller(props, "controller", ctx),
             controller_atom: prop_controller_atom(props, "controller", ctx),
             undo_controller: prop_undo_controller(props, "undoController", ctx),

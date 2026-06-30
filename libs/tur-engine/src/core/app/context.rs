@@ -8,7 +8,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
 use crate::core::edgy_event::PendingMutationInvocationQueue;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTree;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::focus::FocusManager;
@@ -21,7 +21,7 @@ use crate::core::resource::ResourceMap;
 use crate::core::shell::Shell;
 
 pub struct TurAppContext {
-    pub(crate) element_tree: Rc<RefCell<ElementTree>>,
+    pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
@@ -40,6 +40,10 @@ pub struct TurAppContext {
     /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
     /// `TurApp::take_clipboard_write()` once per frame.
     pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
+    /// Shared dirty flag (same `Rc` as `TurJsContext.dirty`): layout-phase
+    /// builds (LazyList remount) set this so the flush loop triggers another
+    /// layout pass when the visible set changes.
+    pub(crate) dirty: Rc<Cell<bool>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -53,7 +57,7 @@ impl fmt::Debug for TurAppContext {
 impl TurAppContext {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        element_tree: Rc<RefCell<ElementTree>>,
+        element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         resource_map: Rc<RefCell<ResourceMap>>,
@@ -61,6 +65,7 @@ impl TurAppContext {
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
         clock: Rc<FixedClock>,
         host_api: Box<dyn HostApi>,
+        dirty: Rc<Cell<bool>>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {
@@ -77,6 +82,7 @@ impl TurAppContext {
             handlers: vec![],
             shell: Shell::new(clock, host_api),
             pending_clipboard_write: Rc::new(RefCell::new(None)),
+            dirty,
         }
     }
 
@@ -128,6 +134,9 @@ impl TurAppContext {
             &mut self.font_manager,
             &mut self.text_layout_cx,
             &resource_map,
+            self.element_tree.clone(),
+            self.mutation_queue.clone(),
+            self.dirty.clone(),
             boa,
         );
     }

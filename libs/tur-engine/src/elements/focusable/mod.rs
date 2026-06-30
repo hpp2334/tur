@@ -2,4 +2,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{FocusableElement, FocusableComponent};
+pub use element::{FocusableElement, FocusableView};

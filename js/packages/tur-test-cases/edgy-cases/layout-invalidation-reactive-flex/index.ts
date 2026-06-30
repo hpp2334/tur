@@ -1,13 +1,13 @@
 import {
     Color,
     Container,
-    component,
     derive,
     Expanded,
     get,
     Row,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // Two reactive flex weights. Exposed to Rust tests via globalThis so the test
@@ -23,7 +23,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     Row({
         children: [
             Expanded({

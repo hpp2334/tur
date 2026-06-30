@@ -2,11 +2,11 @@ import {
     BorderPosition,
     Color,
     Container,
-    component,
     derive,
     mutate,
     PointerInteract,
     source,
+    view,
 } from "@tur/edgy";
 
 const checked$ = source(true);
@@ -15,7 +15,7 @@ const gray = Color.rgba(226, 232, 240, 255);
 const color$ = derive((g) => (g(checked$) ? green : undefined));
 const borderColor$ = derive((g) => (g(checked$) ? green : gray));
 
-export default component(() =>
+export default view(() =>
     Container({
         height: 100,
         width: 200,

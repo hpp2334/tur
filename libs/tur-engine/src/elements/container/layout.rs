@@ -12,23 +12,23 @@ impl ElementLayout for ContainerElement {
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let width = cx.read_val_opt(self.component.width.as_ref());
-        let height = cx.read_val_opt(self.component.height.as_ref());
-        let padding = cx.read_val_opt(self.component.padding.as_ref());
-        let alignment = cx.read_val_opt(self.component.alignment.as_ref());
+        let width = cx.read_val_opt(self.view.width.as_ref());
+        let height = cx.read_val_opt(self.view.height.as_ref());
+        let padding = cx.read_val_opt(self.view.padding.as_ref());
+        let alignment = cx.read_val_opt(self.view.alignment.as_ref());
 
         // Resolve all reactive paint props here (layout holds the store +
         // Context); paint reads `self.painting` and never touches the store.
         self.painting = super::element::ContainerPainting {
-            color: cx.read_val_opt(self.component.color.as_ref()),
-            border_color: cx.read_val_opt(self.component.border_color.as_ref()),
-            border_width: cx.read_val_opt(self.component.border_width.as_ref()),
-            border_radius: cx.read_val_opt(self.component.border_radius.as_ref()),
+            color: cx.read_val_opt(self.view.color.as_ref()),
+            border_color: cx.read_val_opt(self.view.border_color.as_ref()),
+            border_width: cx.read_val_opt(self.view.border_width.as_ref()),
+            border_radius: cx.read_val_opt(self.view.border_radius.as_ref()),
             border_position: cx
-                .read_val_opt(self.component.border_position.as_ref())
+                .read_val_opt(self.view.border_position.as_ref())
                 .unwrap_or_default(),
-            shadow_color: cx.read_val_opt(self.component.shadow_color.as_ref()),
-            shadow_blur: cx.read_val_opt(self.component.shadow_blur.as_ref()),
+            shadow_color: cx.read_val_opt(self.view.shadow_color.as_ref()),
+            shadow_blur: cx.read_val_opt(self.view.shadow_blur.as_ref()),
         };
 
         let sized_constraints = Constraints {
@@ -68,8 +68,8 @@ impl ElementLayout for ContainerElement {
 
         // --- position (assign child offset) ---
         if let Some(&child_id) = children.first() {
-            let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
-            let alignment = cx.read_val_opt(self.component.alignment.as_ref());
+            let padding = cx.read_val_opt(self.view.padding.as_ref()).unwrap_or(0.0);
+            let alignment = cx.read_val_opt(self.view.alignment.as_ref());
             let offset = match alignment {
                 Some(ref align) => {
                     let inner_size = Size::new(

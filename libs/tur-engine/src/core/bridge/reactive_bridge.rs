@@ -117,18 +117,18 @@ pub(crate) fn tur_set(
     }
 }
 
-/// `component(factory)` — wrap a JS thunk `() => EdgyElement` as a `JsComponent`
-/// (a Component) and return it as a `ComponentHandle`. The thunk is invoked
-/// lazily when the component is built (transparent pass-through).
-pub(crate) fn tur_component(
+/// `view(factory)` — wrap a JS thunk `() => EdgyElement` as a `JsView`
+/// (a View) and return it as a `ViewHandle`. The thunk is invoked
+/// lazily when the view is built (transparent pass-through).
+pub(crate) fn tur_view(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let f = require_callable(args, 1)?;
-    let component: Rc<dyn crate::core::widget::Component> =
-        Rc::new(crate::core::widget::JsComponent(f));
-    let handle = crate::core::widget::ComponentHandle::new(component);
+    let view: Rc<dyn crate::core::view::View> =
+        Rc::new(crate::core::view::JsView(f));
+    let handle = crate::core::view::ViewHandle::new(view);
     let opaque = BoaOpaque::new(handle, context);
     Ok(opaque.object().clone().into())
 }

@@ -1,3 +1,3 @@
-import { component, Text } from "@tur/edgy";
+import { Text, view } from "@tur/edgy";
 
-export default component(() => Text({ text: "Hello", fontSize: 14 }));
+export default view(() => Text({ text: "Hello", fontSize: 14 }));

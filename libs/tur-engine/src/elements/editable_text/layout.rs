@@ -32,18 +32,18 @@ impl ElementLayout for EditableTextElement {
     ) -> Size {
         // Resolve reactive props and cache `multiline` for the gesture/keyboard
         // handlers (those contexts lack store access).
-        self.resolved_multiline = cx.read_val_opt(self.component.multiline.as_ref()).unwrap_or(false);
-        let font_size = cx.read_val_opt(self.component.font_size.as_ref()).unwrap_or(14.0);
-        let font_family = cx.read_val_opt(self.component.font_family.as_ref());
-        let placeholder = cx.read_val_opt(self.component.placeholder.as_ref());
-        let color = cx.read_val_opt(self.component.color.as_ref());
-        let placeholder_color = cx.read_val_opt(self.component.placeholder_color.as_ref());
+        self.resolved_multiline = cx.read_val_opt(self.view.multiline.as_ref()).unwrap_or(false);
+        let font_size = cx.read_val_opt(self.view.font_size.as_ref()).unwrap_or(14.0);
+        let font_family = cx.read_val_opt(self.view.font_family.as_ref());
+        let placeholder = cx.read_val_opt(self.view.placeholder.as_ref());
+        let color = cx.read_val_opt(self.view.color.as_ref());
+        let placeholder_color = cx.read_val_opt(self.view.placeholder_color.as_ref());
 
         // Resolve paint props here (layout holds the store); paint reads
         // `self.painting` and never touches the store.
         self.painting = super::element::EditableTextPainting {
             color,
-            cursor_color: cx.read_val_opt(self.component.cursor_color.as_ref()),
+            cursor_color: cx.read_val_opt(self.view.cursor_color.as_ref()),
         };
         let color = self.painting.color;
 

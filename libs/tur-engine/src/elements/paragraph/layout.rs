@@ -15,16 +15,16 @@ impl ElementLayout for TextElement {
         _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let base_font_size = cx.read_val_opt(self.component.font_size.as_ref()).unwrap_or(14.0);
+        let base_font_size = cx.read_val_opt(self.view.font_size.as_ref()).unwrap_or(14.0);
 
         // Resolve the spans to lay out. If the spec carries explicit spans,
         // use them; otherwise build a single anonymous span from the `text`
         // prop (the common "plain TextElement" case).
-        let spans: Vec<SpanData> = if let Some(s) = self.component.spans.as_ref() {
+        let spans: Vec<SpanData> = if let Some(s) = self.view.spans.as_ref() {
             s.clone()
         } else {
-            let text = cx.read_val_opt(self.component.text.as_ref()).unwrap_or_default();
-            let color = cx.read_val_opt(self.component.color.as_ref());
+            let text = cx.read_val_opt(self.view.text.as_ref()).unwrap_or_default();
+            let color = cx.read_val_opt(self.view.color.as_ref());
             vec![SpanData {
                 text,
                 bold: false,

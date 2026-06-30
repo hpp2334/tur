@@ -3,7 +3,7 @@ use std::path::Path;
 
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use tur_engine::core::elements::ElementTree;
+use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::AppEvent;
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
@@ -141,7 +141,7 @@ impl TurVelloApp {
         Ok(())
     }
 
-    pub fn with_element_tree<R>(&self, f: impl FnOnce(&ElementTree) -> R) -> R {
+    pub fn with_element_tree<R>(&self, f: impl FnOnce(&NodeTreeData) -> R) -> R {
         let inner = self.inner.borrow();
         let tree = inner.app.element_tree();
         f(&tree)

@@ -9,17 +9,17 @@ use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
 use crate::core::reactive::{extract_readable, AnyReadable};
-use crate::core::widget::{extract_component, Component, WidgetCx};
+use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
 
 // ---------------------------------------------------------------------------
-// EachComponent — render one child per item of a reactive array.
+// EachView — render one child per item of a reactive array.
 //
 // `items` is an atom (source or derived) holding a JS array. `build` is a JS
 // function `(item, index) => EdgyElement` invoked once per item to produce
 // that item's subtree. Whenever the `items` atom changes, the mounted item
 // subtrees are rebuilt.
 //
-// EachComponent is a **fragment**: it hosts its item subtrees in the tree, but
+// EachView is a **fragment**: it hosts its item subtrees in the tree, but
 // the enclosing flex lays those items out directly as its own children —
 // inheriting the parent's axis and sizing. So an `Each` inside a `Row` flows
 // horizontally and an `Each` inside a `Column` flows vertically, both
@@ -27,7 +27,7 @@ use crate::core::widget::{extract_component, Component, WidgetCx};
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct EachComponent {
+pub struct EachView {
     pub items: AnyReadable,
     pub build: JsFunction,
     pub query_key: Option<Vec<String>>,
@@ -39,7 +39,7 @@ fn build_item_spec(
     item: &JsValue,
     index: u64,
     boa: &mut Context,
-) -> Option<Rc<dyn Component>> {
+) -> Option<Rc<dyn View>> {
     let result = builder
         .call(
             &JsValue::undefined(),
@@ -47,19 +47,19 @@ fn build_item_spec(
             boa,
         )
         .ok()?;
-    extract_component(&result)
+    extract_view(&result)
 }
 
-impl EachComponent {
+impl EachView {
     /// Read the current `items` array from the store and build one child per
     /// entry under `fragment_id`. Returns the built children in array order.
     fn build_items(
         &self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
-        let raw = cx.read_atom_raw(self.items, boa);
+        let raw = read_atom_raw(cx, self.items, boa);
         let Some(arr) = raw.as_object().and_then(|o| JsArray::from_object(o.clone()).ok()) else {
             return Vec::new();
         };
@@ -79,13 +79,13 @@ impl EachComponent {
     }
 }
 
-impl Component for EachComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for EachView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
         let kind = EachFragment {
-            component: self.clone(),
+            view: self.clone(),
         };
 
         // Register the fragment's reactive deps in the subscriber graph.
@@ -119,7 +119,7 @@ impl Component for EachComponent {
 // ---------------------------------------------------------------------------
 
 pub struct EachFragment {
-    pub component: EachComponent,
+    pub view: EachView,
 }
 
 impl FragmentKind for EachFragment {
@@ -136,19 +136,19 @@ impl FragmentKind for EachFragment {
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        cx.subscribe_atom(self.component.items.id());
+        cx.subscribe_atom(self.view.items.id());
     }
 
     fn perform_update(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
         // Rebuild-all reconciliation: tear down every previously mounted item
         // and rebuild from the current array. Simple and correct; the item
         // subtrees are stateless widgets so rebuilding them is cheap.
-        Some(self.component.build_items(cx, boa, fragment_id))
+        Some(self.view.build_items(cx, boa, fragment_id))
     }
 }
 
@@ -190,9 +190,9 @@ fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunc
     v.as_object().and_then(JsFunction::from_object)
 }
 
-impl EachComponent {
+impl EachView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        Some(EachComponent {
+        Some(EachView {
             items: prop_items(props, "items", ctx)?,
             build: prop_builder(props, "build", ctx)?,
             query_key: prop_query_key(props, "queryKey", ctx),

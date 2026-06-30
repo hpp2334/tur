@@ -3,17 +3,17 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     MainAxisAlignment,
     Row,
     SizedBox,
     Text,
+    view,
 } from "@tur/edgy";
 
 const TABS = [{ id: "todolist", label: "TodoList" }];
 const activeId = "todolist";
 
-export default component(() =>
+export default view(() =>
     Row({
         children: [
             Container({

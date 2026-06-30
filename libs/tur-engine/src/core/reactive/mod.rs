@@ -362,6 +362,6 @@ pub(crate) fn build_store_context_object(
     Ok(obj)
 }
 
-/// Convenience alias used by some widget helpers — `Attribute::all()` etc.
+/// Convenience alias used by some view helpers — `Attribute::all()` etc.
 #[allow(dead_code)]
 fn _use_attribute() {}

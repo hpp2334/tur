@@ -29,7 +29,7 @@ impl ElementLayout for MouseRegionElement {
 
         // Resolve the reactive cursor prop during layout (the one phase with a
         // JS engine available); the pointer handler reads `self.cursor` later.
-        self.cursor = cx.read_val_opt(self.component.cursor.as_ref());
+        self.cursor = cx.read_val_opt(self.view.cursor.as_ref());
 
         size
     }

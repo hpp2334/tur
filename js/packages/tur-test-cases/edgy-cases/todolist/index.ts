@@ -4,7 +4,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     Each,
     type EdgyElement,
@@ -22,8 +21,8 @@ import {
     SizedBox,
     Stack,
     Text,
+    view,
 } from "@tur/edgy";
-import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./components";
 import {
     addOpen$,
     getIcon,
@@ -31,6 +30,7 @@ import {
     removeTarget$,
     tasks$,
 } from "./state";
+import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./views";
 
 // --- Light theme palette (Notion / Linear-style) -------------------------
 
@@ -140,7 +140,7 @@ function TaskList(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

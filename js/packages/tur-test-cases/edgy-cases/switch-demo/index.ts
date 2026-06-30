@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     Expanded,
     get,
@@ -15,6 +14,7 @@ import {
     Switch,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const tab$ = source("red");
@@ -40,7 +40,7 @@ function coloredPanel(label: string, hex: string) {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#1a1a2e"),

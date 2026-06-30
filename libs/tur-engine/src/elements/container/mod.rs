@@ -2,4 +2,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{ContainerElement, ContainerComponent};
+pub use element::{ContainerElement, ContainerView};

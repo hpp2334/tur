@@ -13,7 +13,7 @@ import {
 import {
     compileVersion$,
     errorMsg$,
-    getCaseComponent,
+    getCaseView,
     selectedCase$,
     status$,
 } from "../state";
@@ -39,7 +39,7 @@ function ReadyViewer(): EdgyElement {
         color: tokens.bg.viewer,
         padding: 12,
         children: [
-            // Rebuild the rendered case component whenever the selected case
+            // Rebuild the rendered case view whenever the selected case
             // changes OR a fresh compile lands (compileVersion$ bumps on each
             // successful recompile). Each rebuilds its children when the items
             // array identity changes — Switch can't do this because its case
@@ -53,7 +53,7 @@ function ReadyViewer(): EdgyElement {
                 ]),
                 build: (item) =>
                     FadeIn({
-                        child: getCaseComponent(item.name) ?? Placeholder(),
+                        child: getCaseView(item.name) ?? Placeholder(),
                     }),
             }),
         ],

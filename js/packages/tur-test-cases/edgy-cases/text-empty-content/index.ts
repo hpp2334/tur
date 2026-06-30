@@ -1,3 +1,3 @@
-import { component, Text } from "@tur/edgy";
+import { Text, view } from "@tur/edgy";
 
-export default component(() => Text({ text: "" }));
+export default view(() => Text({ text: "" }));

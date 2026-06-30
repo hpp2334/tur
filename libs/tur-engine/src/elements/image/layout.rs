@@ -14,18 +14,18 @@ impl ElementLayout for ImageElement {
         cx: &mut LayoutContext,
     ) -> Size {
         let resource_id = cx
-            .read_val_opt(self.component.resource_id.as_ref())
+            .read_val_opt(self.view.resource_id.as_ref())
             .map(ResourceId::new);
 
         // Resolve paint props here (layout holds the store); paint reads
         // `self.painting` and never touches the store.
         self.painting = super::element::ImagePainting {
-            resource_id: cx.read_val_opt(self.component.resource_id.as_ref()),
-            fit: cx.read_val_opt(self.component.fit.as_ref()),
+            resource_id: cx.read_val_opt(self.view.resource_id.as_ref()),
+            fit: cx.read_val_opt(self.view.fit.as_ref()),
         };
 
-        let width = cx.read_val_opt(self.component.width.as_ref());
-        let height = cx.read_val_opt(self.component.height.as_ref());
+        let width = cx.read_val_opt(self.view.width.as_ref());
+        let height = cx.read_val_opt(self.view.height.as_ref());
 
         let natural = resource_id
             .and_then(|rid| cx.get_image_natural_size(rid))

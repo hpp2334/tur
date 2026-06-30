@@ -2,7 +2,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -11,6 +10,7 @@ import {
     Row,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const outerClicks$ = source(0);
@@ -18,7 +18,7 @@ const innerClicks$ = source(0);
 const translucentOuterClicks$ = source(0);
 const translucentInnerClicks$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         mainAxisSize: MainAxisSize.Min,

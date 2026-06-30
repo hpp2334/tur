@@ -1,6 +1,6 @@
-import { Column, Container, component } from "@tur/edgy";
+import { Column, Container, view } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             Container({ width: 200, height: 50 }),

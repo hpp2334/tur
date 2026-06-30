@@ -5,22 +5,22 @@ use boa_engine::Context;
 
 use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::widget::{extract_component, Effect, Component, WidgetCx};
+use crate::core::view::{ViewCx, extract_view, Effect, View};
 
 // ---------------------------------------------------------------------------
-// FragmentComponent — a transparent multi-child container. Children are built
+// FragmentView — a transparent multi-child container. Children are built
 // directly under a single FragmentElement node (which renders nothing and sizes to
 // the union of its children).
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct FragmentComponent {
-    pub children: Vec<Rc<dyn Component>>,
+pub struct FragmentView {
+    pub children: Vec<Rc<dyn View>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for FragmentComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for FragmentView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         // FragmentElement is truly transparent — no node is created. Children are
         // built directly under the parent. This matches React FragmentElement
         // semantics and keeps the tree flat for tests that navigate
@@ -39,7 +39,7 @@ impl Component for FragmentComponent {
 // ---------------------------------------------------------------------------
 
 pub struct FragmentElement {
-    pub component: FragmentComponent,
+    pub view: FragmentView,
 }
 
 impl crate::core::layout::ElementSubscribe for FragmentElement {}
@@ -76,7 +76,7 @@ fn prop_query_key(
 }
 
 /// Extract child specs from a JS array of ComponentHandle opaques.
-fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn Component>> {
+fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn View>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
     let Ok(v) = props.get(js_string!(key), ctx) else {
@@ -92,7 +92,7 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn C
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_component(&item) {
+            if let Some(spec) = extract_view(&item) {
                 out.push(spec);
             }
         }
@@ -100,10 +100,10 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn C
     out
 }
 
-impl FragmentComponent {
-    /// Build a `FragmentComponent` from a JS props object.
+impl FragmentView {
+    /// Build a `FragmentView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        FragmentComponent {
+        FragmentView {
             children: prop_children(props, "children", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
         }

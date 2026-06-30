@@ -1,13 +1,13 @@
 import {
     Color,
     Container,
-    component,
     derive,
     get,
     MainAxisAlignment,
     Row,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // Reactive width of the outer container. Exposed to Rust tests via globalThis
@@ -41,7 +41,7 @@ Object.assign(globalThis, {
 // skip a constraint-driven descendant, leaving the tracker at a stale X offset
 // (playground symptom: the editor scrollbar stayed painted at its old
 // position after a divider drag).
-export default component(() =>
+export default view(() =>
     Container({
         width: derive(() => get(width$)),
         children: [

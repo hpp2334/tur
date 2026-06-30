@@ -1,10 +1,4 @@
-import {
-    Color,
-    Container,
-    component,
-    mutate,
-    PointerInteract,
-} from "@tur/edgy";
+import { Color, Container, mutate, PointerInteract, view } from "@tur/edgy";
 
 // Mirrors the drag-delta tracking logic in the playground's VDivider:
 // tracks the press position (dragStart) and the previous move position
@@ -25,7 +19,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     PointerInteract({
         onPointerDown: mutate((_ctx, ev) => {
             dragStart = { x: ev.global.x, y: ev.global.y };

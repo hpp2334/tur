@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use tur_shared::Offset;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::render::{NullCanvas, Renderer};
 use crate::core::resource::ResourceMap;
 use crate::core::shell::PaintShell;
@@ -25,7 +25,7 @@ impl NoopRenderer {
 impl Renderer for NoopRenderer {
     fn render(
         &mut self,
-        tree: &ElementTree,
+        tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
@@ -57,7 +57,7 @@ impl Renderer for NoopRenderer {
 }
 
 fn collect_stats(
-    tree: &ElementTree,
+    tree: &NodeTreeData,
     id: ElementNodeId,
     parent_offset: Offset,
     depth: usize,

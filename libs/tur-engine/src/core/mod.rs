@@ -20,4 +20,4 @@ pub mod resource;
 pub mod scroll;
 pub mod shell;
 pub mod text;
-pub mod widget;
+pub mod view;

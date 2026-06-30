@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     createAnimationController,
     derive,
     Expanded,
@@ -25,6 +24,7 @@ import {
     source,
     Text,
     Transform,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ function LoopButton(): unknown {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),

@@ -1,6 +1,6 @@
-import { component, Fragment, Text } from "@tur/edgy";
+import { Fragment, Text, view } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Fragment({
         children: [
             Text({ text: "Hello", fontSize: 14 }),

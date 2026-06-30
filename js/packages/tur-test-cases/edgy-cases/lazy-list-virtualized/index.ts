@@ -5,7 +5,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     Expanded,
     LazyList,
     MainAxisAlignment,
@@ -13,6 +12,7 @@ import {
     Row,
     SizedBox,
     Text,
+    view,
 } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ function buildRow(index: number): unknown {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#ffffff"),

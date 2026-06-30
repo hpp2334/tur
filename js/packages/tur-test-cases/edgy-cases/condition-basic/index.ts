@@ -1,6 +1,6 @@
-import { Color, Condition, Container, component, Text } from "@tur/edgy";
+import { Color, Condition, Container, Text, view } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Condition({
         condition: true,
         queryKey: ["condition-basic"],

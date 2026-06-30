@@ -1,14 +1,14 @@
 use tur_shared::Offset;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 
 pub struct HitTest<'a> {
-    tree: &'a ElementTree,
+    tree: &'a NodeTreeData,
 }
 
 impl<'a> HitTest<'a> {
-    pub fn new(tree: &'a ElementTree) -> Self {
+    pub fn new(tree: &'a NodeTreeData) -> Self {
         Self { tree }
     }
 

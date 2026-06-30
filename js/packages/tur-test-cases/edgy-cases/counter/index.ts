@@ -4,7 +4,6 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     Expanded,
     MainAxisAlignment,
@@ -14,11 +13,12 @@ import {
     SizedBox,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const count$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),

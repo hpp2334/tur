@@ -1,4 +1,7 @@
+pub mod focusable;
 pub mod helper;
+
+pub use focusable::Focusable;
 
 use boa_engine::{Context, JsValue};
 
@@ -40,6 +43,14 @@ impl EventArg for BlurEvent {
 pub(crate) enum FocusChange {
     Focus(ElementNodeId),
     Blur(ElementNodeId),
+}
+
+impl FocusChange {
+    pub(crate) fn id(&self) -> ElementNodeId {
+        match self {
+            FocusChange::Focus(id) | FocusChange::Blur(id) => *id,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -85,5 +96,49 @@ impl FocusManager {
 
     pub(crate) fn drain_pending(&mut self) -> Vec<FocusChange> {
         std::mem::take(&mut self.pending)
+    }
+
+    /// Resolve pending focus/blur notifications into `EdgyMutation`s and push
+    /// them onto the pending-mutation queue. Each pending id is looked up in
+    /// the element tree; if it resolves to a `Focusable` element with an
+    /// `on_focus` / `on_blur` mutation, the invocation is enqueued.
+    ///
+    /// This is the flush step paired with the deferred `set_focus` /
+    /// `clear_focus`: those only record a pending `FocusChange` (so they stay
+    /// free of tree/queue borrows and can run inside element gesture
+    /// handlers); this method resolves the changes once per frame.
+    pub(crate) fn flush_pending(
+        &mut self,
+        tree: &crate::core::elements::NodeTreeData,
+        queue: &mut crate::core::edgy_event::PendingMutationInvocationQueue,
+    ) {
+        let changes = self.drain_pending();
+        if changes.is_empty() {
+            return;
+        }
+        for change in changes {
+            let id = change.id();
+            let Some(node) = tree.get_element(id) else {
+                continue;
+            };
+            let Some(ref element) = node.element else {
+                continue;
+            };
+            let Some(focusable) = focusable::as_focusable(element) else {
+                continue;
+            };
+            match change {
+                FocusChange::Focus(_) => {
+                    if let Some(m) = focusable.on_focus_mutation() {
+                        queue.push(m, FocusEvent);
+                    }
+                }
+                FocusChange::Blur(_) => {
+                    if let Some(m) = focusable.on_blur_mutation() {
+                        queue.push(m, BlurEvent);
+                    }
+                }
+            }
+        }
     }
 }

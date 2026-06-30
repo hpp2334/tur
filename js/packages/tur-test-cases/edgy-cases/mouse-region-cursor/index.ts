@@ -4,17 +4,17 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     MouseRegion,
     mutate,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 const state$ = source("idle");
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

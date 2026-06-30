@@ -1,12 +1,12 @@
 import {
     Column,
     CrossAxisAlignment,
-    component,
     ScrollView,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     ScrollView({
         queryKey: ["scroll-view"],
         child: Column({

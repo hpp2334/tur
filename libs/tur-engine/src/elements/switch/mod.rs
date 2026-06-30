@@ -1,3 +1,3 @@
 mod element;
 
-pub use element::{SwitchComponent, SwitchFragment, SwitchKey};
+pub use element::{SwitchView, SwitchFragment, SwitchKey};

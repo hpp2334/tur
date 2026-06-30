@@ -30,7 +30,7 @@ impl AppHandler for ScrollChainingHandler {
 /// handler. Hops through fragment ancestors transparently (fragments can't
 /// carry wheel handlers, so they're skipped without inspection).
 fn find_ancestor_with_wheel(
-    tree: &crate::core::elements::ElementTree,
+    tree: &crate::core::elements::NodeTreeData,
     start: ElementNodeId,
 ) -> Option<ElementNodeId> {
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);

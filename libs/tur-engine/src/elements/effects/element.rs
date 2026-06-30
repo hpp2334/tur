@@ -6,27 +6,28 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::widget::{
-    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    extract_view, val_from_js, Effect, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
-// OpacityComponent — applies an alpha multiplier to its child subtree.
+// OpacityView — applies an alpha multiplier to its child subtree.
 //
 // `value` is the opacity in [0.0, 1.0] and is reactive.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct OpacityComponent {
+pub struct OpacityView {
     pub value: Option<Val<f32>>,
     pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn Component>>,
+    pub child: Option<Rc<dyn View>>,
 }
 
-impl Component for OpacityComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for OpacityView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(OpacityElement { component: self.clone(), painting: OpacityPainting::default() }), boa);
+        cx.insert_node(id, AnyElement::new(OpacityElement { view: self.clone(), painting: OpacityPainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -39,7 +40,7 @@ impl Component for OpacityComponent {
 }
 
 pub struct OpacityElement {
-    pub component: OpacityComponent,
+    pub view: OpacityView,
     pub painting: OpacityPainting,
 }
 
@@ -58,7 +59,7 @@ impl Effect for OpacityElement {}
 
 impl ElementSubscribe for OpacityElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        if let Some(v) = self.component.value.as_ref() {
+        if let Some(v) = self.view.value.as_ref() {
             cx.subscribe_val(v);
         }
     }
@@ -66,7 +67,7 @@ impl ElementSubscribe for OpacityElement {
 
 impl ElementTrace for OpacityElement {
     fn trace_label(&self) -> String {
-        if let Some(Val::Static(v)) = &self.component.value {
+        if let Some(Val::Static(v)) = &self.view.value {
             format!("opacity={v}")
         } else {
             String::new()
@@ -102,15 +103,15 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     if out.is_empty() { None } else { Some(out) }
 }
 
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_component(&v)
+    extract_view(&v)
 }
 
-impl OpacityComponent {
+impl OpacityView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        OpacityComponent {
+        OpacityView {
             value: prop_val::<f32>(props, "value", ctx),
             query_key: prop_query_key(props, "queryKey", ctx),
             child: prop_child(props, "child", ctx),
@@ -119,14 +120,14 @@ impl OpacityComponent {
 }
 
 // ---------------------------------------------------------------------------
-// TransformComponent — applies a 2D affine transform to its child subtree.
+// TransformView — applies a 2D affine transform to its child subtree.
 //
 // Supported props: `scale` (uniform), `scaleX`, `scaleY`, `rotate` (radians),
 // `translateX`, `translateY`. All reactive.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
-pub struct TransformComponent {
+pub struct TransformView {
     pub scale: Option<Val<f64>>,
     pub scale_x: Option<Val<f64>>,
     pub scale_y: Option<Val<f64>>,
@@ -134,13 +135,13 @@ pub struct TransformComponent {
     pub translate_x: Option<Val<f64>>,
     pub translate_y: Option<Val<f64>>,
     pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn Component>>,
+    pub child: Option<Rc<dyn View>>,
 }
 
-impl Component for TransformComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for TransformView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(TransformElement { component: self.clone(), painting: TransformPainting::default() }), boa);
+        cx.insert_node(id, AnyElement::new(TransformElement { view: self.clone(), painting: TransformPainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -153,7 +154,7 @@ impl Component for TransformComponent {
 }
 
 pub struct TransformElement {
-    pub component: TransformComponent,
+    pub view: TransformView,
     pub painting: TransformPainting,
 }
 
@@ -172,7 +173,7 @@ impl Effect for TransformElement {}
 
 impl ElementSubscribe for TransformElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.scale.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.scale_x.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.scale_y.as_ref() { cx.subscribe_val(v); }
@@ -185,15 +186,15 @@ impl ElementSubscribe for TransformElement {
 impl ElementTrace for TransformElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(Val::Static(v)) = &self.component.scale { parts.push(format!("scale={v}")); }
-        if let Some(Val::Static(v)) = &self.component.rotate { parts.push(format!("rotate={v}")); }
+        if let Some(Val::Static(v)) = &self.view.scale { parts.push(format!("scale={v}")); }
+        if let Some(Val::Static(v)) = &self.view.rotate { parts.push(format!("rotate={v}")); }
         parts.join(" ")
     }
 }
 
-impl TransformComponent {
+impl TransformView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        TransformComponent {
+        TransformView {
             scale: prop_val::<f64>(props, "scale", ctx),
             scale_x: prop_val::<f64>(props, "scaleX", ctx),
             scale_y: prop_val::<f64>(props, "scaleY", ctx),

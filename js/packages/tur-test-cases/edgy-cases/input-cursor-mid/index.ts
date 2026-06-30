@@ -1,15 +1,15 @@
 import {
     Container,
-    component,
     createTextEditingController,
     InputEdgy,
+    view,
 } from "@tur/edgy";
 
 const ctrl = createTextEditingController({});
 
 (globalThis as Record<string, unknown>).__setCursorMidTick = () => {};
 
-export default component(() =>
+export default view(() =>
     Container({
         children: [
             InputEdgy({

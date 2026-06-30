@@ -1,5 +1,5 @@
 // One-shot: convert each edgy-case from `render(() => X);` to
-// `export default component(() => X);`. Run once; idempotent (skips files
+// `export default view(() => X);`. Run once; idempotent (skips files
 // that already `export default`).
 const fs = require("node:fs");
 const path = require("node:path");
@@ -24,18 +24,18 @@ for (const dir of fs.readdirSync(casesDir)) {
     }
 
     // 1) Replace the top-level `render(` call (always at line start in these
-    //    cases) with `export default component(`.
+    //    cases) with `export default view(`.
     const callRe = /^(\s*)render\(/m;
     if (!callRe.test(src)) {
         console.warn(`! ${dir}: render( not at line start, skipping`);
         skipped++;
         continue;
     }
-    src = src.replace(callRe, "$1export default component(");
+    src = src.replace(callRe, "$1export default view(");
 
     // 2) The only remaining `render` token is in the import — swap it for
-    //    `component`.
-    src = src.replace(/\brender\b/g, "component");
+    //    `view`.
+    src = src.replace(/\brender\b/g, "view");
 
     fs.writeFileSync(file, src);
     converted++;

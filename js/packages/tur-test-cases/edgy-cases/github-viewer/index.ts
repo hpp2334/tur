@@ -4,12 +4,12 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
     type EdgyElement,
     Expanded,
     Stack,
     Switch,
     Text,
+    view,
 } from "@tur/edgy";
 import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";
@@ -42,7 +42,7 @@ function Body(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

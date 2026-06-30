@@ -33,7 +33,7 @@ fn handle_context_menu(cx: &mut HandlerContext, position: Offset) {
     let path = HitTest::new(&*cx.element_tree).path(position);
     // Dispatch ContextMenu to every element in the hit-path. The deepest
     // element gets first crack; outer elements receive it too so a wrapping
-    // widget can show the menu on behalf of an inner one. Each element's
+    // view can show the menu on behalf of an inner one. Each element's
     // `onContextMenu` mutation (if any) is invoked with the local + global
     // positions.
     for id in &path {
@@ -120,7 +120,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
             if let Some(node) = cx.element_tree.get_element(*node_id) {
                 if let Some(ref element) = node.element {
                     if let Some(p) = element.cast::<PointerInteractElement>() {
-                        if let Some(m) = p.component.on_click {
+                        if let Some(m) = p.view.on_click {
                             let local = local_position(cx, *node_id, position);
                             cx.mutation_queue.push(
                                 m,
@@ -137,7 +137,7 @@ fn handle_pointer_up(cx: &mut HandlerContext, position: Offset, button: MouseBut
     }
 }
 
-fn is_click_opaque(tree: &crate::core::elements::ElementTree, id: ElementNodeId) -> bool {
+fn is_click_opaque(tree: &crate::core::elements::NodeTreeData, id: ElementNodeId) -> bool {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .map(|e| {

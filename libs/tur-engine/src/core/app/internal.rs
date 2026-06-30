@@ -9,7 +9,7 @@ use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::event::AppEvent;
-use crate::core::focus::{FocusChange, BlurEvent, FocusEvent};
+use crate::core::focus::helper;
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 use crate::error::TurError;
@@ -29,7 +29,7 @@ impl TurAppInternal {
         clock: std::rc::Rc<FixedClock>,
         host_api: Box<dyn crate::core::host_api::HostApi>,
     ) -> Self {
-        use crate::core::elements::ElementTree;
+        use crate::core::elements::NodeTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
         use crate::core::reactive::Store;
@@ -41,13 +41,13 @@ impl TurAppInternal {
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
         let store = Store::new(dirty.clone());
-        let element_tree = Rc::new(RefCell::new(ElementTree::new(store.clone())));
+        let element_tree = NodeTree::new(store.clone());
 
         let js_context = TurJsContext::new(
             element_tree.clone(),
             mutation_queue.clone(),
             focus_manager.clone(),
-            dirty,
+            dirty.clone(),
             resource_map.clone(),
             store,
         );
@@ -61,6 +61,7 @@ impl TurAppInternal {
             font_loader,
             clock,
             host_api,
+            dirty,
         );
 
         let needs_draw = Rc::new(Cell::new(false));
@@ -83,11 +84,6 @@ impl TurAppInternal {
         loop {
             let handled_events = self.flush_app_events();
 
-            // Process any pending LazyList remounts (set by wheel handlers
-            // when the visible range shifts). Must run before layout so the
-            // newly-mounted children get measured in this pass.
-            let remounted = self.process_lazy_remounts(boa_context);
-
             let animation_did_update = if !animation_ticked {
                 animation_ticked = true;
                 self.tick_animations(boa_context)
@@ -101,8 +97,11 @@ impl TurAppInternal {
             // layout pass.
             let reactive_changed = self.flush_reactive(boa_context);
 
+            // LazyList remount now happens *inside* `perform_layout` (it uses
+            // the real viewport from constraints), so there is no separate
+            // pre-layout remount pass here.
             let dirty =
-                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed || remounted;
+                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
             if dirty {
                 needs_render = true;
                 self.app_context.borrow_mut().layout(boa_context);
@@ -146,18 +145,9 @@ impl TurAppInternal {
     /// Used by `flush` to keep redrawing on idle frames so the caret blink
     /// animates without an explicit animation controller.
     fn focused_is_editable(&self) -> bool {
-        use crate::elements::EditableTextElement;
-        let Some(focused_id) = self.js_context.focus_manager.borrow().focused() else {
-            return false;
-        };
         let tree = self.js_context.element_tree.borrow();
-        let Some(node) = tree.get_element(focused_id) else {
-            return false;
-        };
-        let Some(ref element) = node.element else {
-            return false;
-        };
-        element.cast::<EditableTextElement>().is_some()
+        let focus = self.js_context.focus_manager.borrow();
+        helper::focused_is_editable(&tree, &focus)
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the
@@ -204,7 +194,7 @@ impl TurAppInternal {
         !dirty_subs.is_empty()
     }
 
-    /// Walk all tree elements and invoke `run_effect` — lets widgets that
+    /// Walk all tree elements and invoke `run_effect` — lets views that
     /// implement `Effect` react to dirty atoms before layout (e.g. LazyList
     /// range adjustments).
     fn run_element_effects(
@@ -216,7 +206,7 @@ impl TurAppInternal {
             let tree = self.js_context.element_tree.borrow();
             tree.elements.keys().copied().collect()
         };
-        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
+        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
         for id in node_ids {
             let mut element = {
                 let mut tree = self.js_context.element_tree.borrow_mut();
@@ -243,7 +233,7 @@ impl TurAppInternal {
         boa_context: &mut boa_engine::Context,
         dirty_frag_ids: &[FragmentNodeId],
     ) {
-        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
+        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
 
         for fid in dirty_frag_ids {
             let mut kind = {
@@ -297,79 +287,6 @@ impl TurAppInternal {
         has_active
     }
 
-    /// Walk the tree and process any `LazyListElement`s whose
-    /// `remount_requested` flag is set (typically by `on_wheel` after a
-    /// scroll). For each, recompute the visible range based on the current
-    /// scroll position + viewport size, mount newly-visible items via the JS
-    /// builder, and unmount off-screen ones.
-    ///
-    /// Returns `true` if any remount happened (so the caller knows to
-    /// trigger another layout pass).
-    fn process_lazy_remounts(&self, boa_context: &mut boa_engine::Context) -> bool {
-        use crate::elements::LazyListElement;
-
-        // Collect candidate node ids first to avoid holding the tree borrow
-        // while we mutate. We only need to consider nodes that currently have
-        // a LazyListElement with the flag set.
-        let candidates: Vec<ElementNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            tree.elements
-                .iter()
-                .filter_map(|(id, node)| {
-                    let el = node.element.as_ref()?;
-                    let ll = el.cast::<LazyListElement>()?;
-                    if ll.remount_requested { Some(*id) } else { None }
-                })
-                .collect()
-        };
-        if candidates.is_empty() {
-            return false;
-        }
-
-        let mut cx = crate::core::widget::WidgetCx::new(self.js_context.clone());
-        let mut any_changed = false;
-        for id in candidates {
-            // Take the element out of the tree so we can mutate it with
-            // exclusive access while still being able to call into the tree
-            // (mount/unmount) via `cx`.
-            let mut element_opt = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_element_mut(id).and_then(|n| n.element.take())
-            };
-            let Some(mut element) = element_opt.take() else { continue };
-
-            // Read the current viewport size from the node's computed layout.
-            let viewport_main = {
-                let tree = self.js_context.element_tree.borrow();
-                let axis = element
-                    .cast::<LazyListElement>()
-                    .map(|ll| ll.axis())
-                    .unwrap_or(tur_shared::Axis::Vertical);
-                tree.get_element(id)
-                    .map(|n| match axis {
-                        tur_shared::Axis::Vertical => n.computed_layout.size.height,
-                        tur_shared::Axis::Horizontal => n.computed_layout.size.width,
-                    })
-                    .unwrap_or(0.0)
-            };
-
-            if let Some(ll) = element.cast_mut::<LazyListElement>() {
-                let prev_count = ll.built_count();
-                ll.process_remount(&mut cx, boa_context, viewport_main);
-                if ll.built_count() != prev_count {
-                    any_changed = true;
-                }
-            }
-
-            // Put the element back.
-            let mut tree = self.js_context.element_tree.borrow_mut();
-            if let Some(node) = tree.get_element_mut(id) {
-                node.element = Some(element);
-            }
-        }
-        any_changed
-    }
-
     fn flush_app_events(&self) -> bool {
         let events = self.app_context.borrow_mut().event_queue.drain();
         if events.is_empty() {
@@ -389,32 +306,15 @@ impl TurAppInternal {
     }
 
     /// Resolve pending focus/blur notifications recorded by `FocusManager`.
-    /// Each pending id is looked up in the element tree; if it resolves to a
-    /// focusable element (FocusableElement or EditableTextElement) with an `on_focus` /
-    /// `on_blur` mutation, the invocation is pushed onto the pending-mutation
-    /// queue. Runs before `flush_pending_mutations` so focus callbacks fire in
-    /// the same pass.
+    /// Delegates to the focus domain, which maps each pending id to its
+    /// `Focusable` element (if any) and enqueues the `on_focus` / `on_blur`
+    /// mutation. Runs before `flush_pending_mutations` so focus callbacks
+    /// fire in the same pass.
     fn flush_focus_notifications(&self) {
-        let changes = self.js_context.focus_manager.borrow_mut().drain_pending();
-        if changes.is_empty() {
-            return;
-        }
         let tree = self.js_context.element_tree.borrow();
+        let mut focus = self.js_context.focus_manager.borrow_mut();
         let mut queue = self.js_context.mutation_queue.borrow_mut();
-        for change in changes {
-            match change {
-                FocusChange::Focus(id) => {
-                    if let Some(m) = focus_mutation(&tree, id) {
-                        queue.push(m, FocusEvent);
-                    }
-                }
-                FocusChange::Blur(id) => {
-                    if let Some(m) = blur_mutation(&tree, id) {
-                        queue.push(m, BlurEvent);
-                    }
-                }
-            }
-        }
+        focus.flush_pending(&tree, &mut queue);
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the
@@ -440,36 +340,4 @@ impl TurAppInternal {
         }
         true
     }
-}
-
-fn focus_mutation(
-    tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::ElementNodeId,
-) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::FocusEvent>> {
-    use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get_element(id)?;
-    let element = node.element.as_ref()?;
-    if let Some(f) = element.cast::<FocusableElement>() {
-        return f.component.on_focus;
-    }
-    if let Some(e) = element.cast::<EditableTextElement>() {
-        return e.controller().on_focus();
-    }
-    None
-}
-
-fn blur_mutation(
-    tree: &crate::core::elements::ElementTree,
-    id: crate::core::element::ElementNodeId,
-) -> Option<crate::core::edgy_event::EdgyMutation<crate::core::focus::BlurEvent>> {
-    use crate::elements::{EditableTextElement, FocusableElement};
-    let node = tree.get_element(id)?;
-    let element = node.element.as_ref()?;
-    if let Some(f) = element.cast::<FocusableElement>() {
-        return f.component.on_blur;
-    }
-    if let Some(e) = element.cast::<EditableTextElement>() {
-        return e.controller().on_blur();
-    }
-    None
 }

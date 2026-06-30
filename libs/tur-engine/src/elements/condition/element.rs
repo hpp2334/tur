@@ -6,36 +6,38 @@ use boa_engine::Context;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::widget::{
-    val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    read_val,
+    val_from_js, View, ViewFactory, JsViewFactory, PropValue, Val,
 };
 
 // ---------------------------------------------------------------------------
-// ConditionComponent — the user's declaration. Pure Rust, no JsValues.
+// ConditionView — the user's declaration. Pure Rust, no JsValues.
 //
 // `condition` is reactive (`Val<bool>`). `then_child` / `else_child` are the
-// branch factories (`Option<ComponentFactory>`): the concrete subtree is only
+// branch factories (`Option<ViewFactory>`): the concrete subtree is only
 // known at runtime, so `create()` is invoked when a branch is selected.
 //
-// ConditionComponent is a **fragment**: it mounts exactly one branch and has no
+// ConditionView is a **fragment**: it mounts exactly one branch and has no
 // layout box of its own — the enclosing flex lays the branch out directly.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ConditionComponent {
+pub struct ConditionView {
     pub condition: Val<bool>,
-    pub then_child: Option<Rc<dyn ComponentFactory>>,
-    pub else_child: Option<Rc<dyn ComponentFactory>>,
+    pub then_child: Option<Rc<dyn ViewFactory>>,
+    pub else_child: Option<Rc<dyn ViewFactory>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for ConditionComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for ConditionView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
         // Resolve the initial condition value and pick the branch.
-        let value = cx.read_val(&self.condition, boa).unwrap_or(false);
+        let value = read_val(cx, &self.condition, boa).unwrap_or(false);
         let mounted = if value {
             MountedBranch::Then
         } else {
@@ -43,7 +45,7 @@ impl Component for ConditionComponent {
         };
 
         let kind = ConditionFragment {
-            component: self.clone(),
+            view: self.clone(),
             mounted,
         };
 
@@ -65,7 +67,7 @@ impl Component for ConditionComponent {
 
         // Build the initial branch — auto-links to the fragment.
         let kind = ConditionFragment {
-            component: self.clone(),
+            view: self.clone(),
             mounted,
         };
         kind.build_branch(cx, boa, frag_id);
@@ -92,15 +94,15 @@ pub enum MountedBranch {
 // ---------------------------------------------------------------------------
 
 pub struct ConditionFragment {
-    pub component: ConditionComponent,
+    pub view: ConditionView,
     pub mounted: MountedBranch,
 }
 
 impl ConditionFragment {
-    fn current_factory(&self) -> Option<Rc<dyn ComponentFactory>> {
+    fn current_factory(&self) -> Option<Rc<dyn ViewFactory>> {
         match self.mounted {
-            MountedBranch::Then => self.component.then_child.clone(),
-            MountedBranch::Else => self.component.else_child.clone(),
+            MountedBranch::Then => self.view.then_child.clone(),
+            MountedBranch::Else => self.view.else_child.clone(),
             MountedBranch::None => None,
         }
     }
@@ -108,13 +110,13 @@ impl ConditionFragment {
     /// Build the currently-mounted branch under `fragment_id`.
     fn build_branch(
         &self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
         if let Some(factory) = self.current_factory() {
-            if let Some(component) = factory.create(boa) {
-                return vec![component.build(cx, boa, NodeId::from(fragment_id))];
+            if let Some(view) = factory.create(boa) {
+                return vec![view.build(cx, boa, NodeId::from(fragment_id))];
             }
         }
         Vec::new()
@@ -145,16 +147,16 @@ impl FragmentKind for ConditionFragment {
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        cx.subscribe_val(&self.component.condition);
+        cx.subscribe_val(&self.view.condition);
     }
 
     fn perform_update(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        let new_value = cx.read_val(&self.component.condition, boa).unwrap_or(false);
+        let new_value = read_val(cx, &self.view.condition, boa).unwrap_or(false);
         let new_branch = if new_value {
             MountedBranch::Then
         } else {
@@ -197,8 +199,8 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
 }
 
 /// Extract an optional branch factory from a JS props object. The prop value
-/// is a JS thunk `() => EdgyElement`; it is wrapped in a `JsComponentFactory`.
-fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ComponentFactory>> {
+/// is a JS thunk `() => EdgyElement`; it is wrapped in a `JsViewFactory`.
+fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ViewFactory>> {
     use boa_engine::js_string;
     use boa_engine::object::builtins::JsFunction;
     let v = props.get(js_string!(key), ctx).ok()?;
@@ -206,16 +208,16 @@ fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn
         return None;
     }
     let f = v.as_object().and_then(JsFunction::from_object)?;
-    Some(Rc::new(JsComponentFactory(f)))
+    Some(Rc::new(JsViewFactory(f)))
 }
 
-impl ConditionComponent {
-    /// Build a `ConditionComponent` from a JS props object.
+impl ConditionView {
+    /// Build a `ConditionView` from a JS props object.
     ///
     /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
     /// the JS `ConditionProps` interface). Both are thunks `() => EdgyElement`.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        ConditionComponent {
+        ConditionView {
             condition: prop_val::<bool>(props, "condition", ctx)
                 .unwrap_or(Val::Static(false)),
             then_child: prop_factory(props, "child", ctx),

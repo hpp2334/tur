@@ -6,10 +6,10 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::core::view::{ViewCx, extract_view, val_from_js, Effect, PropValue, View, Val};
 
 // ---------------------------------------------------------------------------
-// PositionedComponent — the user's declaration. Pure Rust, no JsValues.
+// PositionedView — the user's declaration. Pure Rust, no JsValues.
 //
 // A PositionedElement child of a StackElement is placed at the given edges / size. EachElement axis
 // is independent: an explicit `width`/`height` wins; otherwise a pair of
@@ -18,20 +18,20 @@ use crate::core::widget::{extract_component, val_from_js, Effect, PropValue, Com
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct PositionedComponent {
+pub struct PositionedView {
     pub left: Option<Val<f64>>,
     pub top: Option<Val<f64>>,
     pub right: Option<Val<f64>>,
     pub bottom: Option<Val<f64>>,
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
-    pub child: Rc<dyn Component>,
+    pub child: Rc<dyn View>,
 }
 
-impl Component for PositionedComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for PositionedView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(PositionedElement { component: self.clone() }), boa);
+        cx.insert_node(id, AnyElement::new(PositionedElement { view: self.clone() }), boa);
         let _child_id = self.child.build(cx, boa, id.into());
         cx.link_child(parent, id.into());
         id.into()
@@ -44,14 +44,14 @@ impl Component for PositionedComponent {
 // ---------------------------------------------------------------------------
 
 pub struct PositionedElement {
-    pub component: PositionedComponent,
+    pub view: PositionedView,
 }
 
 impl Effect for PositionedElement {}
 
 impl ElementSubscribe for PositionedElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.left.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.top.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.right.as_ref() { cx.subscribe_val(v); }
@@ -65,12 +65,12 @@ impl ElementTrace for PositionedElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
         for (key, val) in [
-            ("left", &self.component.left),
-            ("top", &self.component.top),
-            ("right", &self.component.right),
-            ("bottom", &self.component.bottom),
-            ("width", &self.component.width),
-            ("height", &self.component.height),
+            ("left", &self.view.left),
+            ("top", &self.view.top),
+            ("right", &self.view.right),
+            ("bottom", &self.view.bottom),
+            ("width", &self.view.width),
+            ("height", &self.view.height),
         ] {
             if let Some(Val::Static(v)) = val {
                 parts.push(format!("{key}={v}"));
@@ -80,7 +80,7 @@ impl ElementTrace for PositionedElement {
     }
 
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let c = &self.component;
+        let c = &self.view;
         let mut p = Vec::new();
         for (key, val) in [
             ("left", &c.left),
@@ -110,18 +110,18 @@ fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Opt
 }
 
 /// Extract the single child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_component(&v)
+    extract_view(&v)
 }
 
-impl PositionedComponent {
-    /// Build a `PositionedComponent` from a JS props object. Returns `None` when
+impl PositionedView {
+    /// Build a `PositionedView` from a JS props object. Returns `None` when
     /// the required `child` prop is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let child = prop_child(props, "child", ctx)?;
-        Some(PositionedComponent {
+        Some(PositionedView {
             left: prop_val::<f64>(props, "left", ctx),
             top: prop_val::<f64>(props, "top", ctx),
             right: prop_val::<f64>(props, "right", ctx),

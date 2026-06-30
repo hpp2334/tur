@@ -2,11 +2,11 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     PointerInteract,
+    view,
 } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

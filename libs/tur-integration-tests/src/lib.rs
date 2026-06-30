@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
-use tur_engine::core::elements::ElementTree;
+use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
@@ -127,7 +127,7 @@ impl TurTestApp {
         self.inner.spawn_loop_once(duration)
     }
 
-    pub fn element_tree(&self) -> Ref<'_, ElementTree> {
+    pub fn element_tree(&self) -> Ref<'_, NodeTreeData> {
         self.inner.element_tree()
     }
 

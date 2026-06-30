@@ -2,4 +2,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{FlexElement, FlexComponent};
+pub use element::{FlexElement, FlexView};

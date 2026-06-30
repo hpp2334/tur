@@ -140,13 +140,13 @@ export function requestRemove(ctx: StoreCtx, index: number): void {
     ctx.set(removeTarget$, index);
 }
 
-// Re-export for type-only imports in components.
+// Re-export for type-only imports in views.
 export type { Atom };
 
 // --- SVG icon resources ----------------------------------------------------
 //
 // Small inline SVGs rasterised up front via `createSvgResource` and stored as
-// regular image resources. Looked up by name from components via `getIcon`.
+// regular image resources. Looked up by name from views via `getIcon`.
 
 const ICON_SVGS: Record<string, string> = {
     check: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,

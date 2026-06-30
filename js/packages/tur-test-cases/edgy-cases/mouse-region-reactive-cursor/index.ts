@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     type Cursor,
-    component,
     derive,
     get,
     MouseRegion,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // A reactive cursor driven by a source, so Rust tests can flip it via
@@ -21,7 +21,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             MouseRegion({

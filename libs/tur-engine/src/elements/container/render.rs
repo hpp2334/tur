@@ -29,7 +29,7 @@ impl ElementRender for ContainerElement {
 
         if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur) {
             if sb > 0.0 {
-                let shadow_offset = self.component.shadow_offset.unwrap_or((0.0, 0.0));
+                let shadow_offset = self.view.shadow_offset.unwrap_or((0.0, 0.0));
                 let radius = border_radius.unwrap_or(0.0);
                 canvas.draw_shadow(offset, layout.size, sc, radius, sb, shadow_offset);
             }

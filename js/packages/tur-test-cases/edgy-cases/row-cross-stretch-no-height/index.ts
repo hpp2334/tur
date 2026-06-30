@@ -2,14 +2,14 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     Expanded,
     Row,
+    view,
 } from "@tur/edgy";
 
 // Test: Row with crossAlignment=Stretch should give non-flex children the
 // row's full height, even when those children have no explicit height prop.
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

@@ -6,7 +6,7 @@ use boa_engine::JsData;
 
 use crate::core::animation::AnimationManager;
 use crate::core::edgy_event::PendingMutationInvocationQueue;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::reactive::Store;
 use crate::core::resource::ResourceMap;
@@ -14,7 +14,7 @@ use crate::core::resource::ResourceMap;
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurJsContext {
-    pub(crate) element_tree: Rc<RefCell<ElementTree>>,
+    pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) dirty: Rc<Cell<bool>>,
@@ -25,7 +25,7 @@ pub struct TurJsContext {
 
 impl TurJsContext {
     pub fn new(
-        element_tree: Rc<RefCell<ElementTree>>,
+        element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,

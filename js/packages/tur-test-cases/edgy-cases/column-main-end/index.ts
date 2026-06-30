@@ -1,12 +1,12 @@
 import {
     Column,
     CrossAxisAlignment,
-    component,
     MainAxisAlignment,
     SizedBox,
+    view,
 } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Column({
         mainAlignment: MainAxisAlignment.End,
         crossAlignment: CrossAxisAlignment.Start,

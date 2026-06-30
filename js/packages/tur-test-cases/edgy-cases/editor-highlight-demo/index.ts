@@ -3,12 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     createTextEditingController,
     Expanded,
     InputEdgy,
     MainAxisAlignment,
     Text,
+    view,
 } from "@tur/edgy";
 
 // A controller pre-populated with a code-like snippet, split into spans whose
@@ -31,7 +31,7 @@ ctrl.setSpans([
     { content: "; }", color: Color.hex("#abb2bf") },
 ]);
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#282c34"),

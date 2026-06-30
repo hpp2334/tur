@@ -7,7 +7,7 @@ import * as rspack from "@rspack/core";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.resolve(__dirname, "edgy-cases");
 
-// Each case source `export default`s a component and no longer calls
+// Each case source `export default`s a view and no longer calls
 // `render()`. The Rust integration tests eval `dist/<name>.js` and expect the
 // tree to mount on eval, so we register an in-memory wrapper module per case
 // (rspack's VirtualModulesPlugin) that imports the default export and renders

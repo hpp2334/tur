@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::core::reactive::{AtomId, SubscriberId, SubscriberIndexStore};
-use crate::core::widget::{PropValue, Val};
+use crate::core::view::{PropValue, Val};
 
 // ---------------------------------------------------------------------------
 // ElementSubscribe — explicit declaration of which reactive atoms a node

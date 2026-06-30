@@ -57,8 +57,8 @@ const KIND_COLOR: unknown[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** The case's default export — a component handle (`EdgyElement`). */
-    component?: unknown;
+    /** The case's default export — a view handle (`EdgyElement`). */
+    view?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,9 +300,9 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
 
     const comp = g.__tur_case;
     if (comp == null) {
-        return { error: "case has no default export component" };
+        return { error: "case has no default export view" };
     }
-    return { component: comp };
+    return { view: comp };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */

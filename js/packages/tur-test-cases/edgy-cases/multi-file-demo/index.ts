@@ -3,18 +3,18 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
     mutate,
     PointerInteract,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 import { COLORS } from "./utils";
 
 const count$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Container({
         color: COLORS.bg,
         children: [

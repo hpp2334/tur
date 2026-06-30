@@ -5,17 +5,18 @@ use tur_shared::{Alignment, BorderPosition, Brush, Color};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::widget::{
-    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    val_from_js, Effect, PropValue, View, Val,
 };
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 
 // ---------------------------------------------------------------------------
-// ContainerComponent — the user's declaration. Pure Rust, no JsValues.
+// ContainerView — the user's declaration. Pure Rust, no JsValues.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
-pub struct ContainerComponent {
+pub struct ContainerView {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub padding: Option<Val<f64>>,
@@ -30,15 +31,15 @@ pub struct ContainerComponent {
     /// shadowOffset is `[x, y]` — parsed at factory time (not reactive).
     pub shadow_offset: Option<(f64, f64)>,
     pub query_key: Option<Vec<String>>,
-    pub children: Vec<Rc<dyn Component>>,
+    pub children: Vec<Rc<dyn View>>,
 }
 
-impl Component for ContainerComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for ContainerView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
-            AnyElement::new(ContainerElement { component: self.clone(), painting: ContainerPainting::default() }),
+            AnyElement::new(ContainerElement { view: self.clone(), painting: ContainerPainting::default() }),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -71,7 +72,7 @@ pub struct ContainerPainting {
 }
 
 pub struct ContainerElement {
-    pub component: ContainerComponent,
+    pub view: ContainerView,
     pub painting: ContainerPainting,
 }
 
@@ -83,30 +84,30 @@ fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
 }
 
 impl ContainerElement {
-    pub fn width(&self) -> Option<f64> { static_f64(&self.component.width) }
-    pub fn height(&self) -> Option<f64> { static_f64(&self.component.height) }
-    pub fn padding(&self) -> Option<f64> { static_f64(&self.component.padding) }
-    pub fn border_width(&self) -> Option<f64> { static_f64(&self.component.border_width) }
-    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.component.border_radius) }
-    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.component.shadow_blur) }
+    pub fn width(&self) -> Option<f64> { static_f64(&self.view.width) }
+    pub fn height(&self) -> Option<f64> { static_f64(&self.view.height) }
+    pub fn padding(&self) -> Option<f64> { static_f64(&self.view.padding) }
+    pub fn border_width(&self) -> Option<f64> { static_f64(&self.view.border_width) }
+    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.view.border_radius) }
+    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.view.shadow_blur) }
     pub fn color(&self) -> Option<Brush> {
-        match &self.component.color {
+        match &self.view.color {
             Some(Val::Static(v)) => Some(v.clone()),
             _ => self.painting.color.clone(),
         }
     }
     pub fn border_color(&self) -> Option<Color> {
-        match &self.component.border_color {
+        match &self.view.border_color {
             Some(Val::Static(v)) => Some(*v),
             _ => self.painting.border_color,
         }
     }
     pub fn shadow_color(&self) -> Option<Color> {
-        match &self.component.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
+        match &self.view.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
     }
-    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.component.shadow_offset }
+    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.view.shadow_offset }
     pub fn border_position(&self) -> BorderPosition {
-        match &self.component.border_position {
+        match &self.view.border_position {
             Some(Val::Static(v)) => *v,
             _ => BorderPosition::default(),
         }
@@ -117,7 +118,7 @@ impl Effect for ContainerElement {}
 
 impl ElementSubscribe for ContainerElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.padding.as_ref() { cx.subscribe_val(v); }
@@ -135,13 +136,13 @@ impl ElementSubscribe for ContainerElement {
 impl ElementTrace for ContainerElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(w) = self.component.width.as_ref().and_then(|v| match v {
+        if let Some(w) = self.view.width.as_ref().and_then(|v| match v {
             Val::Static(f) => Some(*f),
             _ => None,
         }) {
             parts.push(format!("width={w}"));
         }
-        if let Some(h) = self.component.height.as_ref().and_then(|v| match v {
+        if let Some(h) = self.view.height.as_ref().and_then(|v| match v {
             Val::Static(f) => Some(*f),
             _ => None,
         }) {
@@ -151,7 +152,7 @@ impl ElementTrace for ContainerElement {
     }
 
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let c = &self.component;
+        let c = &self.view;
         let mut p = Vec::new();
         if let Some(v) = c.width.as_ref().and_then(Val::as_static) {
             p.push(("width", TraceValue::Num(*v)));
@@ -240,10 +241,10 @@ fn prop_children(
     props: &boa_engine::object::JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Vec<Rc<dyn Component>> {
+) -> Vec<Rc<dyn View>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
-    use crate::core::widget::extract_component;
+    use crate::core::view::extract_view;
     let Ok(v) = props.get(js_string!(key), ctx) else {
         return Vec::new();
     };
@@ -257,7 +258,7 @@ fn prop_children(
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_component(&item) {
+            if let Some(spec) = extract_view(&item) {
                 out.push(spec);
             }
         }
@@ -265,10 +266,10 @@ fn prop_children(
     out
 }
 
-impl ContainerComponent {
-    /// Build a `ContainerComponent` from a JS props object.
+impl ContainerView {
+    /// Build a `ContainerView` from a JS props object.
     pub fn from_js(props: &boa_engine::object::JsObject, ctx: &mut Context) -> Self {
-        ContainerComponent {
+        ContainerView {
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),
             padding: prop_val::<f64>(props, "padding", ctx),

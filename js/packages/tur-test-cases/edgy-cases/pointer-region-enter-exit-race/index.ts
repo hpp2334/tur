@@ -2,12 +2,12 @@ import {
     Color,
     Column,
     Container,
-    component,
     get,
     MouseRegion,
     mutate,
     set,
     source,
+    view,
 } from "@tur/edgy";
 
 // A single shared hover source, mirroring the playground sidebar pattern.
@@ -18,7 +18,7 @@ Object.assign(globalThis, {
     __getHover: (): string => get(hover$),
 });
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             MouseRegion({

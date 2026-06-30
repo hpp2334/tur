@@ -3,16 +3,16 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
     derive,
-    type EdgyComponent,
     type EdgyElement,
+    type EdgyView,
     Expanded,
     get,
     Row,
     Stack,
     Switch,
     set,
+    view,
 } from "@tur/edgy";
 import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
@@ -86,7 +86,7 @@ function EditorAndViewer(): EdgyElement {
     });
 }
 
-export const Shell: EdgyComponent = component(() =>
+export const Shell: EdgyView = view(() =>
     Container({
         color: tokens.bg.app,
         children: [

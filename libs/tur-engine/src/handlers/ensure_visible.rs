@@ -1,7 +1,7 @@
 use tur_shared::Axis;
 
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::handler::HandlerContext;
 use crate::elements::{EditableTextElement, ScrollViewElement};
 use crate::handlers::wheel::dispatch_wheel;
@@ -69,7 +69,7 @@ pub fn ensure_caret_visible(cx: &mut HandlerContext) {
 
 /// `(line_top, line_height)` for the focused caret, in the editable's local
 /// coords. `None` if `id` isn't an `EditableTextElement` or has no layout yet.
-fn caret_line_geom(tree: &ElementTree, id: ElementNodeId) -> Option<(f32, f32)> {
+fn caret_line_geom(tree: &NodeTreeData, id: ElementNodeId) -> Option<(f32, f32)> {
     let node = tree.get_element(id)?;
     let element = node.element.as_ref()?;
     let editable = element.cast::<EditableTextElement>()?;
@@ -82,7 +82,7 @@ fn caret_line_geom(tree: &ElementTree, id: ElementNodeId) -> Option<(f32, f32)> 
 /// Walk parents from `start` to find the nearest `ScrollViewElement`. Hops
 /// through fragment ancestors transparently (fragments have no element, so
 /// without the hop the walk would silently terminate at the first fragment).
-fn nearest_scroll_ancestor(tree: &ElementTree, start: ElementNodeId) -> Option<ElementNodeId> {
+fn nearest_scroll_ancestor(tree: &NodeTreeData, start: ElementNodeId) -> Option<ElementNodeId> {
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
@@ -105,7 +105,7 @@ fn nearest_scroll_ancestor(tree: &ElementTree, start: ElementNodeId) -> Option<E
 /// Sum of `computed_layout.offset.y` from `start` up to the root (inclusive of
 /// `start`'s own offset within its parent). Hops through fragment ancestors
 /// transparently (fragments have zero offset).
-fn abs_offset_y(tree: &ElementTree, start: ElementNodeId) -> f64 {
+fn abs_offset_y(tree: &NodeTreeData, start: ElementNodeId) -> f64 {
     let mut acc = 0.0f64;
     let mut current: Option<NodeId> = Some(start.into());
     while let Some(id) = current {
@@ -123,7 +123,7 @@ fn abs_offset_y(tree: &ElementTree, start: ElementNodeId) -> f64 {
 
 /// `(axis, current_offset, viewport_main_extent, max_scroll_extent)`.
 fn scroll_metrics(
-    tree: &ElementTree,
+    tree: &NodeTreeData,
     id: ElementNodeId,
 ) -> Option<(Axis, f64, f64, f64)> {
     let node = tree.get_element(id)?;

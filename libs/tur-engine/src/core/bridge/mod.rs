@@ -10,14 +10,14 @@ use crate::core::app::TurAppInternal;
 use crate::core::bridge::color::{tur_create_color, tur_create_linear_gradient};
 use crate::core::bridge::dev_tool::{tur_dev_tool_element_tree, tur_dev_tool_get_element};
 use crate::core::bridge::reactive_bridge::{
-    tur_component, tur_derive, tur_get, tur_mutate, tur_set, tur_source,
+    tur_view, tur_derive, tur_get, tur_mutate, tur_set, tur_source,
 };
 use crate::core::bridge::utils::{
     tur_create_animation_controller, tur_create_image_resource, tur_create_lazy_list_controller,
     tur_create_scroll_controller, tur_create_svg_resource, tur_create_text_editing_controller,
     tur_create_undo_controller, tur_request_focus,
 };
-use crate::core::bridge::widget_bridge::{
+use crate::core::bridge::view_bridge::{
     tur_column, tur_condition, tur_container, tur_expanded, tur_focusable,
     tur_each, tur_fragment, tur_image_edgy, tur_input_edgy, tur_lazy_list, tur_mouse_region, tur_switch, tur_opacity, tur_pointer_interact, tur_positioned, tur_render, tur_row, tur_scroll_view, tur_scrollbar, tur_stack, tur_text, tur_transform,
 };
@@ -30,7 +30,7 @@ pub(crate) mod dev_tool;
 pub(crate) mod executor;
 pub(crate) mod reactive_bridge;
 pub(crate) mod utils;
-pub(crate) mod widget_bridge;
+pub(crate) mod view_bridge;
 mod js_context;
 mod opaque;
 pub(crate) mod timer;
@@ -116,8 +116,8 @@ pub fn init_bridge(
         ("mutate", 2, tur_mutate),
         ("get", 2, tur_get),
         ("set", 3, tur_set),
-        ("component", 1, tur_component),
-        // --- widget spec factories ---
+        ("view", 1, tur_view),
+        // --- view spec factories ---
         ("Container", 2, tur_container),
         ("Column", 2, tur_column),
         ("Row", 2, tur_row),

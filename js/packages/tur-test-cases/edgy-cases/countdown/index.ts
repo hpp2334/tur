@@ -5,7 +5,6 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
     createTextEditingController,
     derive,
     type EdgyElement,
@@ -26,6 +25,7 @@ import {
     Stack,
     source,
     Text,
+    view,
 } from "@tur/edgy";
 
 // --- Light theme palette (slate + emerald accents) -----------------------
@@ -429,7 +429,7 @@ function EditModal(): EdgyElement {
 
 // --- Page ----------------------------------------------------------------
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

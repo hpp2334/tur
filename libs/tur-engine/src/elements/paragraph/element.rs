@@ -9,15 +9,16 @@ use crate::core::elements::{
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::core::text::SelectionChangeEvent;
-use crate::core::widget::{
-    val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    val_from_js, Effect, PropValue, View, Val,
 };
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
 use tur_shared::Color;
 
 // ---------------------------------------------------------------------------
-// TextComponent — the user's declaration. Pure Rust, no JsValues.
+// TextView — the user's declaration. Pure Rust, no JsValues.
 //
 // `TextElement` is a leaf element (no children). The `text` and `font_size` props are
 // reactive (`Val<T>`); `spans` is parsed eagerly at factory time because each
@@ -26,7 +27,7 @@ use tur_shared::Color;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct TextComponent {
+pub struct TextView {
     pub text: Option<Val<String>>,
     pub font_size: Option<Val<f64>>,
     /// Default color applied to the anonymous span in the plain-text case.
@@ -42,8 +43,8 @@ pub struct TextComponent {
     pub selectable: bool,
 }
 
-impl Component for TextComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for TextView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -66,7 +67,7 @@ impl Component for TextComponent {
 // ---------------------------------------------------------------------------
 
 pub struct TextElement {
-    pub component: TextComponent,
+    pub view: TextView,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) cached_spans: Vec<SpanData>,
     pub(crate) selection_anchor: usize,
@@ -74,9 +75,9 @@ pub struct TextElement {
 }
 
 impl TextElement {
-    pub fn new(spec: TextComponent) -> Self {
+    pub fn new(spec: TextView) -> Self {
         TextElement {
-            component: spec,
+            view: spec,
             cached_layout: None,
             cached_spans: Vec::new(),
             selection_anchor: 0,
@@ -88,7 +89,7 @@ impl TextElement {
         if !self.cached_spans.is_empty() {
             &self.cached_spans
         } else {
-            self.component.spans.as_deref().unwrap_or(&[])
+            self.view.spans.as_deref().unwrap_or(&[])
         }
     }
 
@@ -104,7 +105,7 @@ impl Effect for TextElement {}
 
 impl ElementSubscribe for TextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.text.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
@@ -116,10 +117,10 @@ impl ElementTrace for TextElement {
         // Prefer eagerly-parsed spans; fall back to a static `text` prop.
         // Reactive text vals can't be decoded here (no store/Context), so
         // they contribute nothing — same convention as `ContainerElement::trace_label`.
-        let text: String = if let Some(spans) = &self.component.spans {
+        let text: String = if let Some(spans) = &self.view.spans {
             spans.iter().map(|s| s.text.as_str()).collect()
         } else {
-            match &self.component.text {
+            match &self.view.text {
                 Some(Val::Static(s)) => s.clone(),
                 _ => String::new(),
             }
@@ -133,7 +134,7 @@ impl ElementTrace for TextElement {
     }
 
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let c = &self.component;
+        let c = &self.view;
         let mut p = Vec::new();
         if let Some(spans) = &c.spans {
             let text: String = spans.iter().map(|s| s.text.as_str()).collect();
@@ -158,7 +159,7 @@ impl ElementOnGesture for TextElement {
     ) {
         // Plain Text is non-selectable by default (browser-like). Selection
         // gestures only run when the `selectable` prop was truthy.
-        if !self.component.selectable {
+        if !self.view.selectable {
             return;
         }
         match event {
@@ -169,7 +170,7 @@ impl ElementOnGesture for TextElement {
                 self.selection_end = char_idx;
                 let anchor = self.selection_anchor;
                 let end = self.selection_end;
-                if let Some(m) = self.component.on_selection_change {
+                if let Some(m) = self.view.on_selection_change {
                     cx.push_event(m, SelectionChangeEvent { anchor, end });
                 }
                 cx.request_redraw();
@@ -180,7 +181,7 @@ impl ElementOnGesture for TextElement {
                     self.selection_end = char_idx;
                     let anchor = self.selection_anchor;
                     let end = self.selection_end;
-                    if let Some(m) = self.component.on_selection_change {
+                    if let Some(m) = self.view.on_selection_change {
                         cx.push_event(m, SelectionChangeEvent { anchor, end });
                     }
                     cx.request_redraw();
@@ -235,8 +236,8 @@ fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<Span
     if parsed.is_empty() { None } else { Some(parsed) }
 }
 
-impl TextComponent {
-    /// Build a `TextComponent` from a JS props object.
+impl TextView {
+    /// Build a `TextView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         use boa_engine::js_string;
         let on_selection_change = props
@@ -248,7 +249,7 @@ impl TextComponent {
             .ok()
             .and_then(|v| v.as_boolean())
             .unwrap_or(false);
-        TextComponent {
+        TextView {
             text: prop_val::<String>(props, "text", ctx),
             font_size: prop_val::<f64>(props, "fontSize", ctx),
             color: prop_val::<Color>(props, "color", ctx),
