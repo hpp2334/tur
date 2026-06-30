@@ -40,10 +40,6 @@ pub struct TurAppContext {
     /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
     /// `TurApp::take_clipboard_write()` once per frame.
     pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
-    /// Shared dirty flag (same `Rc` as `TurJsContext.dirty`): layout-phase
-    /// builds (LazyList remount) set this so the flush loop triggers another
-    /// layout pass when the visible set changes.
-    pub(crate) dirty: Rc<Cell<bool>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -65,7 +61,6 @@ impl TurAppContext {
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
         clock: Rc<FixedClock>,
         platform_api: Box<dyn PlatformApi>,
-        dirty: Rc<Cell<bool>>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {
@@ -82,7 +77,6 @@ impl TurAppContext {
             handlers: vec![],
             shell: Shell::new(clock, platform_api),
             pending_clipboard_write: Rc::new(RefCell::new(None)),
-            dirty,
         }
     }
 
@@ -118,7 +112,7 @@ impl TurAppContext {
         }
     }
 
-    pub fn layout(&mut self, boa: &mut boa_engine::Context) {
+    pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: &mut boa_engine::Context) {
         let (width, height) = self.size;
         let constraints = Constraints {
             min_width: width,
@@ -136,7 +130,7 @@ impl TurAppContext {
             &resource_map,
             self.element_tree.clone(),
             self.mutation_queue.clone(),
-            self.dirty.clone(),
+            dirty,
             boa,
         );
     }
