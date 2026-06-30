@@ -20,7 +20,7 @@ use swc_ecma_visit::{Visit, VisitWith};
 /// Lexical kinds (from the lexer): 0 = plain/default, 1 = keyword,
 /// 2 = string, 3 = number, 4 = comment, 5 = operator/punct,
 /// 6 = literal (true/false/null).
-/// Semantic kinds (from the AST overlay): 7 = declaration name (fn/component/
+/// Semantic kinds (from the AST overlay): 7 = declaration name (fn/view/
 /// const binding/imported binding/call callee), 8 = JSX tag name, 9 = JSX
 /// attribute name, 10 = type name, 11 = property (object-literal key or member
 /// access `.prop`).
@@ -205,7 +205,7 @@ impl Visit for HighlightOverlay {
 
     fn visit_call_expr(&mut self, n: &swc_ecma_ast::CallExpr) {
         // Color the callee identifier of a plain call (`foo(...)`) as a
-        // function/component name (kind 7). Member callees (`obj.m()`) are
+        // function/view name (kind 7). Member callees (`obj.m()`) are
         // handled by `visit_member_expr` (the `.m` is a property, kind 11).
         if let swc_ecma_ast::Callee::Expr(e) = &n.callee {
             if let swc_ecma_ast::Expr::Ident(id) = e.as_ref() {
@@ -744,7 +744,7 @@ mod tests {
 
     #[test]
     fn generate_ast_finds_export_default() {
-        let src = "export default component(() => {});";
+        let src = "export default view(() => {});";
         let nodes = generate_ast(src).expect("parse should succeed");
         assert_eq!(nodes.len(), 1);
         match &nodes[0].kind {
@@ -758,8 +758,8 @@ mod tests {
         );
         let body = nodes[0].body.as_ref().expect("body should be Some");
         assert!(
-            body.starts_with("component"),
-            "body should start with 'component', was: {body}",
+            body.starts_with("view"),
+            "body should start with 'view', was: {body}",
         );
         assert!(
             !body.contains("export"),

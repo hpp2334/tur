@@ -1,12 +1,12 @@
 import {
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     Row,
     SizedBox,
 } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Container({
         height: 36,
         width: 200,

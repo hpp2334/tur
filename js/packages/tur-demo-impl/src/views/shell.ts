@@ -3,9 +3,9 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
-    type EdgyComponent,
+    type EdgyView,
     type EdgyElement,
     Expanded,
     get,
@@ -86,7 +86,7 @@ function EditorAndViewer(): EdgyElement {
     });
 }
 
-export const Shell: EdgyComponent = component(() =>
+export const Shell: EdgyView = view(() =>
     Container({
         color: tokens.bg.app,
         children: [

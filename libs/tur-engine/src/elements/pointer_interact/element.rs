@@ -8,12 +8,14 @@ use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::widget::{
-    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    read_val,
+    extract_view, val_from_js, Effect, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
-// PointerInteractComponent — the user's declaration. Pure Rust, no JsValues.
+// PointerInteractView — the user's declaration. Pure Rust, no JsValues.
 //
 // Callbacks are mutation atoms typed as `EdgyMutation<E>`. The JS bridge
 // wraps user callbacks as mutation atoms and passes the `AtomHandle` as the
@@ -25,7 +27,7 @@ use crate::core::widget::{
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct PointerInteractComponent {
+pub struct PointerInteractView {
     pub behavior: Option<Val<HitTestBehavior>>,
     pub on_click: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_pointer_down: Option<EdgyMutation<PointerInteractEvent>>,
@@ -33,22 +35,22 @@ pub struct PointerInteractComponent {
     pub on_pointer_up: Option<EdgyMutation<PointerInteractEvent>>,
     pub on_context_menu: Option<EdgyMutation<PointerInteractEvent>>,
     pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn Component>>,
+    pub child: Option<Rc<dyn View>>,
 }
 
-impl Component for PointerInteractComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for PointerInteractView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let behavior = self
             .behavior
             .as_ref()
-            .and_then(|v| cx.read_val(v, boa))
+            .and_then(|v| read_val(cx, v, boa))
             .unwrap_or_default();
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::with_gesture(PointerInteractElement {
-                component: self.clone(),
+                view: self.clone(),
                 behavior,
             })
             .with_callbacks(),
@@ -72,23 +74,23 @@ impl Component for PointerInteractComponent {
 // ---------------------------------------------------------------------------
 
 pub struct PointerInteractElement {
-    pub component: PointerInteractComponent,
+    pub view: PointerInteractView,
     behavior: HitTestBehavior,
 }
 
 impl PointerInteractElement {
     pub fn has_on_click(&self) -> bool {
-        self.component.on_click.is_some()
+        self.view.on_click.is_some()
     }
 
     pub fn has_gesture_callbacks(&self) -> bool {
-        self.component.on_pointer_down.is_some()
-            || self.component.on_pointer_move.is_some()
-            || self.component.on_pointer_up.is_some()
+        self.view.on_pointer_down.is_some()
+            || self.view.on_pointer_move.is_some()
+            || self.view.on_pointer_up.is_some()
     }
 
     pub fn is_click_opaque(&self) -> bool {
-        self.behavior == HitTestBehavior::Opaque && self.component.on_click.is_some()
+        self.behavior == HitTestBehavior::Opaque && self.view.on_click.is_some()
     }
 }
 
@@ -110,7 +112,7 @@ impl ElementOnGesture for PointerInteractElement {
     ) {
         let (mutation, payload) = match event {
             ComposedGestureEvent::PointerDown { local, global, .. } => {
-                let m = self.component.on_pointer_down;
+                let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
@@ -121,22 +123,22 @@ impl ElementOnGesture for PointerInteractElement {
             // distinct gesture implement `ElementOnGesture` directly.)
             ComposedGestureEvent::PointerDoubleDown { local, global, .. }
             | ComposedGestureEvent::PointerTripleDown { local, global, .. } => {
-                let m = self.component.on_pointer_down;
+                let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
             ComposedGestureEvent::PointerMove { local, global } => {
-                let m = self.component.on_pointer_move;
+                let m = self.view.on_pointer_move;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
             ComposedGestureEvent::PointerUp { local, global, .. } => {
-                let m = self.component.on_pointer_up;
+                let m = self.view.on_pointer_up;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
             ComposedGestureEvent::ContextMenu { local, global } => {
-                let m = self.component.on_context_menu;
+                let m = self.view.on_context_menu;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
@@ -167,10 +169,10 @@ fn prop_mutation<E: EventArg>(
     edgy_mutation_from_js(&v)
 }
 
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_component(&v)
+    extract_view(&v)
 }
 
 fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
@@ -190,9 +192,9 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
     Some(out)
 }
 
-impl PointerInteractComponent {
+impl PointerInteractView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        PointerInteractComponent {
+        PointerInteractView {
             behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
             on_click: prop_mutation::<PointerInteractEvent>(props, "onClick", ctx),
             on_pointer_down: prop_mutation::<PointerInteractEvent>(props, "onPointerDown", ctx),

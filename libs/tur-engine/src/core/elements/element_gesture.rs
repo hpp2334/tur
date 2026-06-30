@@ -19,7 +19,7 @@ pub enum ComposedGestureEvent {
     PointerUp { local: Offset, global: Offset, button: MouseButton },
     /// Right-click. `local` is relative to the element; `global` is canvas-
     /// relative. Dispatched to every element in the hit-path (deepest first)
-    /// so layered widgets can each inspect the event.
+    /// so layered views can each inspect the event.
     ContextMenu { local: Offset, global: Offset },
 }
 

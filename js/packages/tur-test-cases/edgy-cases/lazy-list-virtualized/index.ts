@@ -5,7 +5,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     Expanded,
     LazyList,
     MainAxisAlignment,
@@ -190,7 +190,7 @@ function buildRow(index: number): unknown {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#ffffff"),

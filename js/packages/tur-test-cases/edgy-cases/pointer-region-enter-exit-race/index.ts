@@ -2,7 +2,7 @@ import {
     Color,
     Column,
     Container,
-    component,
+    view,
     get,
     MouseRegion,
     mutate,
@@ -18,7 +18,7 @@ Object.assign(globalThis, {
     __getHover: (): string => get(hover$),
 });
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             MouseRegion({

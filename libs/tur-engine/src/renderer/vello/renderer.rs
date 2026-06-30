@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::render::Renderer as TurRenderer;
 use crate::core::resource::ResourceMap;
 use crate::core::shell::PaintShell;
@@ -142,7 +142,7 @@ impl VelloRenderer {
 
     pub fn render_to_scene(
         &mut self,
-        tree: &ElementTree,
+        tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
@@ -290,7 +290,7 @@ impl VelloRenderer {
 impl TurRenderer for VelloRenderer {
     fn render(
         &mut self,
-        tree: &ElementTree,
+        tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,

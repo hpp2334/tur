@@ -69,7 +69,7 @@ No `Color.hex("...")` outside `src/tokens.ts` and `src/compile.ts`'s `code.*` de
 
 This rule has three payoffs:
 1. **Rethemable**: a future dark mode (or branded variant) only edits `tokens.ts`.
-2. **Reviewable**: a PR that introduces `Color.hex("#...")` in a component is automatically suspect — the reviewer doesn't have to read every line.
+2. **Reviewable**: a PR that introduces `Color.hex("#...")` in a view is automatically suspect — the reviewer doesn't have to read every line.
 3. **Discoverable**: when a designer asks "what's our success green?", there's one answer.
 
 See §4 below for the biome lint rule that enforces this.
@@ -138,7 +138,7 @@ Hints teach the user a shortcut, then disappear.
 | Need | Use | Because |
 |---|---|---|
 | A click handler on a single element | `PointerInteract` | Adds hover/active/focus paths. Default for buttons, nav items. |
-| Swap entire subtrees based on a source | `Switch` | Atomic swap — old subtree is disposed, new one is created. The right tool when the shape of the subtree changes (e.g. different case → different component factory). |
+| Swap entire subtrees based on a source | `Switch` | Atomic swap — old subtree is disposed, new one is created. The right tool when the shape of the subtree changes (e.g. different case → different view factory). |
 | Show/hide a single subtree | `Condition` | Cheaper than `Switch` — no key matching, just a boolean gate. Use for overlays, error banners. |
 | Map an array to elements | `Each` | Identity-preserving reconciliation. Never use `.map()` inside `children` for arrays that change. |
 
@@ -172,14 +172,14 @@ Two sources, one `derive` that returns a token. Don't nest `derive` inside `deri
 Controllers (`createTextEditingController`, `createScrollController`, ...) are created at module scope and live for the lifetime of the page. They are **not** recreated per render.
 
 - ✓ Controller created once, `controller` prop passed down.
-- ✗ Controller created inside `component(() => ...)` — it'll be recreated when the component rebuilds, losing state.
+- ✗ Controller created inside `view(() => ...)` — it'll be recreated when the view rebuilds, losing state.
 
 The current `editorCtrl` in `index.ts` is correct: created at module scope, used by every render.
 
 ### 3.4 Naming
 
 - **Sources** end in `$`: `selectedCase$`, `status$`, `errorMsg$`, `hover$`. Convention from the reactive-programming world; makes data flow obvious in code review.
-- **Components** are PascalCase, one word where possible: `Sidebar`, `Panel`, `Button`. Multi-word: `EditorSurface`, `NavItem`, `StatusBadge`.
+- **Views** are PascalCase, one word where possible: `Sidebar`, `Panel`, `Button`. Multi-word: `EditorSurface`, `NavItem`, `StatusBadge`.
 - **Token groups** are lowercase nouns: `tokens.bg.panel`, `tokens.text.primary`, `tokens.status.success`.
 - **Mutations** (event handlers) begin with a verb in the present tense: `recompile`, `loadCase`. Not `onRecmpile`, not `handleRecompile`.
 
@@ -190,7 +190,7 @@ src/
   tokens.ts              # The token layer (only place Color.hex is allowed)
   compile.ts             # Case compiler + code.* syntax highlighting
   index.ts               # App entry: sources, controllers, render(Shell)
-  components/
+  views/
     Shell.ts
     Panel.ts
     NavItem.ts
@@ -205,7 +205,7 @@ src/
     resources.ts         # createImageResource calls for bundled SVGs
 ```
 
-Each component is one file, one default export, no side effects at module load.
+Each view is one file, one default export, no side effects at module load.
 
 ---
 
@@ -218,7 +218,7 @@ Each component is one file, one default export, no side effects at module load.
 import { Color, Column, Container, /* ... */ } from "@tur/edgy";
 // 2. Local utilities
 import { tokens } from "./tokens";
-import { Button } from "./components/Button";
+import { Button } from "./views/Button";
 // 3. Types (type-only import)
 import type { EdgyElement } from "@tur/edgy";
 ```
@@ -244,10 +244,10 @@ Add this to `biome.json` under the playground package (phase 1 of the roadmap):
 
 This makes any new `Color.hex("...")` outside `tokens.ts` a lint error. The token extraction in phase 1 is the prerequisite — the rule turns on once all current hexes are migrated.
 
-### 4.3 Component file template
+### 4.3 View file template
 
 ```ts
-// src/components/Button.ts
+// src/views/Button.ts
 import {
     type EdgyElement, Container, PointerInteract, Row, Text,
     derive, get, mutate, set, source,
@@ -282,7 +282,7 @@ export function Button(props: ButtonProps): EdgyElement {
 }
 ```
 
-Every component file follows this shape:
+Every view file follows this shape:
 1. Type-only imports first, value imports second, `tokens` third.
 2. `Props` interface, exported.
 3. Single factory function, exported.
@@ -306,9 +306,9 @@ Container({ color: Color.hex("#f4f6f9") })  // Where does this come from? Why th
 Text({ color: Color.hex("#5e6878") })
 ```
 
-**Don't** — Use primitives directly in components:
+**Don't** — Use primitives directly in views:
 ```tsx
-Container({ color: ink[100] })  // Components shouldn't know about the ink scale
+Container({ color: ink[100] })  // Views shouldn't know about the ink scale
 ```
 
 ### 5.2 Reactivity
@@ -340,7 +340,7 @@ const color$ = derive(() => {
 });
 ```
 
-### 5.3 Component composition
+### 5.3 View composition
 
 **Do** — Compose via `Panel`:
 ```tsx
@@ -411,7 +411,7 @@ InputEdgy({
 InputEdgy({ controller, fontSize: 14, color: Color.hex("#333") })
 ```
 
-There is exactly one editor surface in the playground. If a future feature needs an inline editable text (e.g. renaming a case), that's a different component (`<TextInput>`), not a second `<EditorSurface>`.
+There is exactly one editor surface in the playground. If a future feature needs an inline editable text (e.g. renaming a case), that's a different view (`<TextInput>`), not a second `<EditorSurface>`.
 
 ---
 
@@ -420,7 +420,7 @@ There is exactly one editor surface in the playground. If a future feature needs
 Before approving any PR that touches `@tur/demo-impl`, verify:
 
 - [ ] **No new `Color.hex(...)` outside `tokens.ts` / `compile.ts`.** Run `rg 'Color\.hex' js/packages/tur-demo-impl/src` and confirm the only matches are in those two files.
-- [ ] **No primitive tokens used directly in components.** `rg 'ink\.\d|teal\.\d|coral\.\d' js/packages/tur-demo-impl/src/components` should return nothing.
+- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' js/packages/tur-demo-impl/src/views` should return nothing.
 - [ ] **No `derive(() => ...)` wrapping static values.** Grep for `derive` and check each one reads at least one source via `get(...)`.
 - [ ] **No off-scale spacing.** Search for `padding:`, `margin:` (if introduced), and verify values are in `{0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64}`. Documented exceptions allowed with a comment.
 - [ ] **No off-scale font sizes.** Values must be in `{10, 11, 13, 14, 18}` for UI, `13` for code.
@@ -429,9 +429,9 @@ Before approving any PR that touches `@tur/demo-impl`, verify:
 - [ ] **Status badges have both dot and label.** No color-only signaling.
 - [ ] **Error messages are the real error, not a paraphrase.**
 - [ ] **Labels are sentence case.** `Run`, `ready`, `editor — counter`. Not `RUN`, not `Ready`.
-- [ ] **Component files follow §4.3 template.** Imports ordered, `Props` exported, one factory per file.
+- [ ] **View files follow §4.3 template.** Imports ordered, `Props` exported, one factory per file.
 - [ ] **No decorative shadows on layout-bound panels.** `elev.2` and above only for genuinely floating UI.
-- [ ] **If adding a new component**, it appears in `DESIGN-SYSTEM.md` §4 with an API table and state matrix.
+- [ ] **If adding a new view**, it appears in `DESIGN-SYSTEM.md` §4 with an API table and state matrix.
 - [ ] **If adding a new token**, it appears in `DESIGN-SYSTEM.md` §2 with its primitive mapping and use case.
 
 ---
@@ -442,10 +442,10 @@ Before approving any PR that touches `@tur/demo-impl`, verify:
 A: No. Either it's a new semantic token (add it to `tokens.ts` and the design system) or it's an existing token. One-off colors are how the original 17-hex chaos happened.
 
 **Q: The viewer's case content uses bright colors (rainbow test case). Does that violate "calm by default"?**
-A: No. The principle governs the *chrome* — the playground shell. Case content is the user's data, rendered by their component. The shell stays calm so the user's content can be loud.
+A: No. The principle governs the *chrome* — the playground shell. Case content is the user's data, rendered by their view. The shell stays calm so the user's content can be loud.
 
 **Q: What about a future dark mode?**
-A: The token layer is designed for it: add a parallel `tokens.dark` object and a theme switch. Components stay unchanged. Phase 5+ — not in scope for the current light-theme migration.
+A: The token layer is designed for it: add a parallel `tokens.dark` object and a theme switch. Views stay unchanged. Phase 5+ — not in scope for the current light-theme migration.
 
 **Q: Why is `bg.viewer` the same color as `bg.code` (`ink.50`)? Why not differentiate?**
 A: The viewer and editor are sibling surfaces with equal weight (both Expanded). Differentiating their backgrounds would imply one is "above" the other. Use the same color; let the content differentiate them.
@@ -463,7 +463,7 @@ A: The Run button is the *only* persistent action in the playground — it's how
 When this guide doesn't have an answer:
 
 1. **Check the design system first** — it has more tables and less prose.
-2. **Check existing components** — find the closest analog and copy its pattern.
+2. **Check existing views** — find the closest analog and copy its pattern.
 3. **Make the smallest defensible choice** and flag it in the PR description as needing design review. Don't block on it; ship and iterate.
 4. **Update this guide** once the decision is made. The guide grows; the chaos doesn't.
 

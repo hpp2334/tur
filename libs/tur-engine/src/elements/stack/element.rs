@@ -7,27 +7,27 @@ use tur_shared::{Alignment, Size, StackFit};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::widget::{val_from_js, Effect, PropValue, Component, Val, WidgetCx};
+use crate::core::view::{ViewCx, val_from_js, Effect, PropValue, View, Val};
 
 // ---------------------------------------------------------------------------
-// StackComponent — the user's declaration. Pure Rust, no JsValues.
+// StackView — the user's declaration. Pure Rust, no JsValues.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct StackComponent {
+pub struct StackView {
     pub fit: Option<Val<StackFit>>,
     pub alignment: Option<Val<Alignment>>,
-    pub children: Vec<Rc<dyn Component>>,
+    pub children: Vec<Rc<dyn View>>,
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for StackComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for StackView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(StackElement {
-                component: self.clone(),
+                view: self.clone(),
                 computed_size: None,
             }),
             boa,
@@ -50,7 +50,7 @@ impl Component for StackComponent {
 // ---------------------------------------------------------------------------
 
 pub struct StackElement {
-    pub component: StackComponent,
+    pub view: StackView,
     pub(crate) computed_size: Option<Size>,
 }
 
@@ -58,7 +58,7 @@ impl Effect for StackElement {}
 
 impl ElementSubscribe for StackElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
     }
@@ -67,17 +67,17 @@ impl ElementSubscribe for StackElement {
 impl ElementTrace for StackElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(Val::Static(f)) = &self.component.fit {
+        if let Some(Val::Static(f)) = &self.view.fit {
             parts.push(format!("fit={f:?}"));
         }
-        if let Some(Val::Static(a)) = &self.component.alignment {
+        if let Some(Val::Static(a)) = &self.view.alignment {
             parts.push(format!("alignment={a:?}"));
         }
         parts.join(" ")
     }
 
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let c = &self.component;
+        let c = &self.view;
         let mut p = Vec::new();
         if let Some(v) = c.fit.as_ref().and_then(Val::as_static) {
             p.push(("fit", TraceValue::Str(format!("{v:?}"))));
@@ -120,10 +120,10 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
 }
 
 /// Extract child specs from a JS array of ComponentHandle opaques.
-fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn Component>> {
+fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn View>> {
     use boa_engine::object::builtins::JsArray;
     use boa_engine::js_string;
-    use crate::core::widget::extract_component;
+    use crate::core::view::extract_view;
     let Ok(v) = props.get(js_string!(key), ctx) else {
         return Vec::new();
     };
@@ -137,7 +137,7 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn C
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_component(&item) {
+            if let Some(spec) = extract_view(&item) {
                 out.push(spec);
             }
         }
@@ -145,10 +145,10 @@ fn prop_children(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<Rc<dyn C
     out
 }
 
-impl StackComponent {
-    /// Build a `StackComponent` from a JS props object.
+impl StackView {
+    /// Build a `StackView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        StackComponent {
+        StackView {
             fit: prop_val::<StackFit>(props, "fit", ctx),
             alignment: prop_val::<Alignment>(props, "alignment", ctx),
             children: prop_children(props, "children", ctx),

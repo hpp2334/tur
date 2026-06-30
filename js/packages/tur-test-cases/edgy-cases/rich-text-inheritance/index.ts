@@ -1,6 +1,6 @@
-import { Color, component, Text } from "@tur/edgy";
+import { Color, view, Text } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Text({
         fontSize: 20,
         spans: [

@@ -1,7 +1,7 @@
 import {
     Column,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     mutate,
     PointerInteract,
@@ -11,7 +11,7 @@ import {
 
 const content$ = source("before");
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

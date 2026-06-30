@@ -3,7 +3,7 @@ use boa_engine::Context;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::TraceValue;
 use crate::core::layout::SubscribeCx;
-use crate::core::widget::WidgetCx;
+use crate::core::view::ViewCx;
 
 /// A **control-flow primitive** (Each / Condition / Switch) that lives in the
 /// tree as a non-element node. Fragments own a `children` list but contribute
@@ -81,12 +81,12 @@ pub trait FragmentKind: 'static {
     /// (built under `fragment_id`). Return `None` if no structural change is
     /// needed (e.g. same branch resolved).
     ///
-    /// The returned children are built via `Component::build(cx, boa,
+    /// The returned children are built via `View::build(cx, boa,
     /// fragment_id)` — each child auto-links itself to the fragment (pushing
     /// to `fragments[fragment_id].children`).
     fn perform_update(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>>;

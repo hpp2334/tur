@@ -28,7 +28,7 @@ import type { CaseFileMap, EditorController } from "./types";
 // Case cache & last-compiled-source tracking
 // ---------------------------------------------------------------------------
 
-const caseComponents = new Map<string, EdgyElement>();
+const caseViews = new Map<string, EdgyElement>();
 
 /** Per-case file cache: case name → { filename → current editor text }.
  *  Populated from CASE_SOURCES on first load; updated on each recompile. */
@@ -38,8 +38,8 @@ function compileIntoCache(name: string): void {
     const files = CASE_SOURCES[name];
     if (!files) return;
     const result = compileCase(files);
-    if (result.component) {
-        caseComponents.set(name, result.component as EdgyElement);
+    if (result.view) {
+        caseViews.set(name, result.view as EdgyElement);
     }
 }
 
@@ -150,12 +150,12 @@ export function recompile(): void {
     const files = caseFileCache.get(name) ?? {};
 
     const result = compileCase(files);
-    if (result.error || !result.component) {
+    if (result.error || !result.view) {
         set(status$, "error");
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
-    caseComponents.set(name, result.component as EdgyElement);
+    caseViews.set(name, result.view as EdgyElement);
     lastCompiledFiles.set(name, { ...files });
     set(lastCompiledAtMs$, Date.now());
     set(status$, "ready");
@@ -175,10 +175,10 @@ export function resetCase(): void {
     recompile();
 }
 
-/** Look up the cached component handle for a case (or undefined). Used by
+/** Look up the cached view handle for a case (or undefined). Used by
  *  the viewer pane to render the active case. */
-export function getCaseComponent(name: string): EdgyElement | undefined {
-    return caseComponents.get(name);
+export function getCaseView(name: string): EdgyElement | undefined {
+    return caseViews.get(name);
 }
 
 /** Get the file names for a case (e.g. ["index.ts", "utils.ts"]). */

@@ -3,12 +3,12 @@ import {
     Color,
     Column,
     Container,
-    component,
+    view,
     Row,
     Text,
 } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             Row({

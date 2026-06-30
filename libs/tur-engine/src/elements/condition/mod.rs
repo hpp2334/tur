@@ -1,3 +1,3 @@
 mod element;
 
-pub use element::{ConditionComponent, ConditionFragment, MountedBranch};
+pub use element::{ConditionView, ConditionFragment, MountedBranch};

@@ -6,43 +6,49 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::element::NodeId;
 
+pub mod build_cx;
 pub mod context;
 pub mod val;
 
-pub use context::WidgetCx;
+pub use build_cx::{read_atom_raw, read_val, read_val_opt, ViewCx};
+pub use context::SharedViewCx;
 pub use val::{val_from_js, PropValue, Val};
 
 // ---------------------------------------------------------------------------
-// Component — the user's declaration of a widget.
+// View — the user's declaration of a view.
 //
-// For native widgets this is pure Rust data (no JsValues): reactive props are
-// `Val<T>` and children are `Vec<Rc<dyn Component>>`. `build()` instantiates the
-// widget into the ElementTree. Components are immutable after creation.
+// For native views this is pure Rust data (no JsValues): reactive props are
+// `Val<T>` and children are `Vec<Rc<dyn View>>`. `build()` instantiates the
+// view into the node tree. Views are immutable after creation.
+//
+// `build` takes `&mut dyn ViewCx` so the trait stays object-safe (`dyn View`
+// is used by `ViewHandle` / builders) while still accepting either a `SharedViewCx`
+// (normal builds) or a layout-backed `ViewCx` impl (build-during-layout).
 // ---------------------------------------------------------------------------
 
-pub trait Component: 'static {
+pub trait View: 'static {
     fn build(
         &self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         parent: NodeId,
     ) -> NodeId;
 }
 
 // ---------------------------------------------------------------------------
-// ComponentFactory — produces a Component on demand.
+// ViewFactory — produces a View on demand.
 //
 // Used for branches whose concrete subtree is only determined at runtime
 // (Condition/Switch branches). The factory is retained and `create()` is
 // invoked when the branch is selected, and re-invoked on a branch swap.
 // ---------------------------------------------------------------------------
 
-pub trait ComponentFactory: 'static {
-    fn create(&self, boa: &mut Context) -> Option<Rc<dyn Component>>;
+pub trait ViewFactory: 'static {
+    fn create(&self, boa: &mut Context) -> Option<Rc<dyn View>>;
 }
 
-/// Invoke a JS thunk `() => EdgyElement` and resolve the returned Component.
-fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn Component>> {
+/// Invoke a JS thunk `() => EdgyElement` and resolve the returned View.
+fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
     let result = match thunk.call(&JsValue::undefined(), &[], boa) {
         Ok(v) => v,
         Err(e) => {
@@ -50,24 +56,24 @@ fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn Componen
             return None;
         }
     };
-    extract_component(&result)
+    extract_view(&result)
 }
 
 // ---------------------------------------------------------------------------
-// JsComponent — a user-defined component created via `component(fn)` in JS.
+// JsView — a user-defined view created via `view(fn)` in JS.
 //
-// It wraps the JS thunk `() => EdgyElement` and is itself a Component: `build`
-// invokes the thunk, resolves the returned Component, and builds it under the
+// It wraps the JS thunk `() => EdgyElement` and is itself a View: `build`
+// invokes the thunk, resolves the returned View, and builds it under the
 // parent. It allocates no node of its own (transparent pass-through), so the
 // element-tree shape is identical to invoking the thunk eagerly.
 // ---------------------------------------------------------------------------
 
-pub struct JsComponent(pub JsFunction);
+pub struct JsView(pub JsFunction);
 
-impl Component for JsComponent {
+impl View for JsView {
     fn build(
         &self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         parent: NodeId,
     ) -> NodeId {
@@ -79,24 +85,24 @@ impl Component for JsComponent {
 }
 
 // ---------------------------------------------------------------------------
-// JsComponentFactory — a ComponentFactory backed by a JS thunk
+// JsViewFactory — a ViewFactory backed by a JS thunk
 // `() => EdgyElement`. Used for Condition/Switch branches: `create()` invokes
-// the thunk and returns the produced Component.
+// the thunk and returns the produced View.
 // ---------------------------------------------------------------------------
 
-pub struct JsComponentFactory(pub JsFunction);
+pub struct JsViewFactory(pub JsFunction);
 
-impl ComponentFactory for JsComponentFactory {
-    fn create(&self, boa: &mut Context) -> Option<Rc<dyn Component>> {
+impl ViewFactory for JsViewFactory {
+    fn create(&self, boa: &mut Context) -> Option<Rc<dyn View>> {
         invoke_thunk(&self.0, boa)
     }
 }
 
 // ---------------------------------------------------------------------------
-// ComponentHandle — boa opaque wrapper so JS can hold and pass Components.
+// ViewHandle — boa opaque wrapper so JS can hold and pass Views.
 //
-// `unsafe_empty_trace` note: native Components contain no JsValues (props are
-// pure Rust). JsComponent/JsComponentFactory (and Each/LazyList builders) do
+// `unsafe_empty_trace` note: native Views contain no JsValues (props are
+// pure Rust). JsView/JsViewFactory (and Each/LazyList builders) do
 // hold a `JsFunction`, but in this boa fork a `JsObject`/`JsFunction` clone
 // held in Rust is a strong GC root via refcounting, so the conservative
 // `unsafe_empty_trace` cannot collect them prematurely (worst case: a leak).
@@ -104,31 +110,31 @@ impl ComponentFactory for JsComponentFactory {
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
-pub struct ComponentHandle(pub Rc<dyn Component>);
+pub struct ViewHandle(pub Rc<dyn View>);
 
-impl ComponentHandle {
-    pub fn new(component: Rc<dyn Component>) -> Self {
-        ComponentHandle(component)
+impl ViewHandle {
+    pub fn new(view: Rc<dyn View>) -> Self {
+        ViewHandle(view)
     }
 }
 
-/// Extract a Component from a JS value wrapping a `ComponentHandle`.
-pub fn extract_component(value: &JsValue) -> Option<Rc<dyn Component>> {
+/// Extract a View from a JS value wrapping a `ViewHandle`.
+pub fn extract_view(value: &JsValue) -> Option<Rc<dyn View>> {
     let obj = value.as_object()?;
-    obj.downcast_ref::<ComponentHandle>().map(|h| h.0.clone())
+    obj.downcast_ref::<ViewHandle>().map(|h| h.0.clone())
 }
 
 // ---------------------------------------------------------------------------
-// Effect — optional lifecycle hook for widgets that mutate the tree in
+// Effect — optional lifecycle hook for views that mutate the tree in
 // response to reactive changes (Condition swaps branches, LazyList adjusts
-// its visible range).  Default impl is a no-op so every widget type
+// its visible range).  Default impl is a no-op so every view type
 // satisfies the bound without boilerplate.
 // ---------------------------------------------------------------------------
 
 pub trait Effect {
     fn effect(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut SharedViewCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {

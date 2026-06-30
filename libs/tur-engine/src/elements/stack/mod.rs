@@ -2,4 +2,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{StackElement, StackComponent};
+pub use element::{StackElement, StackView};

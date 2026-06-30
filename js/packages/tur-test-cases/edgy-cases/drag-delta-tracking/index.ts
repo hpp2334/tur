@@ -1,7 +1,7 @@
 import {
     Color,
     Container,
-    component,
+    view,
     mutate,
     PointerInteract,
 } from "@tur/edgy";
@@ -25,7 +25,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     PointerInteract({
         onPointerDown: mutate((_ctx, ev) => {
             dragStart = { x: ev.global.x, y: ev.global.y };

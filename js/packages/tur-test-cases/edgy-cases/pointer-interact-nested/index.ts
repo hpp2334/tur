@@ -2,7 +2,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -18,7 +18,7 @@ const innerClicks$ = source(0);
 const translucentOuterClicks$ = source(0);
 const translucentInnerClicks$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         mainAxisSize: MainAxisSize.Min,

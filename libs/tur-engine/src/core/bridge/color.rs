@@ -4,7 +4,7 @@ use boa_gc::{Finalize, Trace};
 use tur_shared::{Brush, Color, GradientStop};
 
 use crate::core::bridge::BoaOpaque;
-use crate::core::widget::val::PropValue;
+use crate::core::view::val::PropValue;
 
 // ---------------------------------------------------------------------------
 // Opaque wrappers for tur-shared color/brush types so they can be stored

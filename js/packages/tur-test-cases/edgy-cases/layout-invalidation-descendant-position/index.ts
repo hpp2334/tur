@@ -1,7 +1,7 @@
 import {
     Color,
     Container,
-    component,
+    view,
     derive,
     get,
     MainAxisAlignment,
@@ -41,7 +41,7 @@ Object.assign(globalThis, {
 // skip a constraint-driven descendant, leaving the tracker at a stale X offset
 // (playground symptom: the editor scrollbar stayed painted at its old
 // position after a divider drag).
-export default component(() =>
+export default view(() =>
     Container({
         width: derive(() => get(width$)),
         children: [

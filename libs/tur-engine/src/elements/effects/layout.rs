@@ -14,7 +14,7 @@ impl ElementLayout for OpacityElement {
     ) -> Size {
         // Resolve the paint-time opacity here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
-        self.painting.value = cx.read_val_opt(self.component.value.as_ref()).unwrap_or(1.0);
+        self.painting.value = cx.read_val_opt(self.view.value.as_ref()).unwrap_or(1.0);
         let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
@@ -50,12 +50,12 @@ impl ElementLayout for TransformElement {
         // Resolve transform paint props here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
         self.painting = super::element::TransformPainting {
-            scale: cx.read_val_opt(self.component.scale.as_ref()),
-            scale_x: cx.read_val_opt(self.component.scale_x.as_ref()),
-            scale_y: cx.read_val_opt(self.component.scale_y.as_ref()),
-            rotate: cx.read_val_opt(self.component.rotate.as_ref()),
-            translate_x: cx.read_val_opt(self.component.translate_x.as_ref()),
-            translate_y: cx.read_val_opt(self.component.translate_y.as_ref()),
+            scale: cx.read_val_opt(self.view.scale.as_ref()),
+            scale_x: cx.read_val_opt(self.view.scale_x.as_ref()),
+            scale_y: cx.read_val_opt(self.view.scale_y.as_ref()),
+            rotate: cx.read_val_opt(self.view.rotate.as_ref()),
+            translate_x: cx.read_val_opt(self.view.translate_x.as_ref()),
+            translate_y: cx.read_val_opt(self.view.translate_y.as_ref()),
         };
 
         // --- position ---

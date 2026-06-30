@@ -1,4 +1,4 @@
-import { Color, Column, Container, component, Expanded, Text } from "@tur/edgy";
+import { Color, Column, Container, view, Expanded, Text } from "@tur/edgy";
 
 // `__turHost` is registered by tur-wasm (swc-backed). tur-engine provides the
 // generic `register_host_fn` hook; tur-wasm supplies the compiler impls.
@@ -45,7 +45,7 @@ if (pos < HL.length) {
     spans.push({ content: HL.slice(pos) });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#282c34"),

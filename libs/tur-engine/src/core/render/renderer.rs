@@ -1,12 +1,12 @@
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::resource::ResourceMap;
 use crate::core::shell::PaintShell;
 
 pub trait Renderer {
     fn render(
         &mut self,
-        tree: &ElementTree,
+        tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,

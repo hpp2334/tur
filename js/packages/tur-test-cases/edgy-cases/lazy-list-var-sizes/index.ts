@@ -5,7 +5,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     Each,
     type EdgyElement,
@@ -28,7 +28,7 @@ import {
 // (heights in vertical mode, widths in horizontal mode). A toggle button at
 // the top flips the axis at runtime via an `Each`-keyed rebuild — the same
 // "rebuild-on-change" idiom used in
-// js/packages/tur-demo-impl/src/components/viewer.ts.
+// js/packages/tur-demo-impl/src/views/viewer.ts.
 //
 // Engine notes:
 //   * When `itemExtent` is OMITTED, LazyList measures each visible item,
@@ -212,7 +212,7 @@ function ToggleButton(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#020617"),

@@ -15,15 +15,15 @@ impl ElementLayout for ScrollbarElement {
         // Thickness is the scrollbar's own width; height fills whatever the
         // parent grants (the scroll viewport's cross axis).
         let thickness = cx
-            .read_val_opt(self.component.thickness.as_ref())
+            .read_val_opt(self.view.thickness.as_ref())
             .unwrap_or(DEFAULT_THICKNESS);
 
         // Resolve paint props here (layout holds the store); paint reads
         // `self.painting` and never touches the store.
         self.painting = super::element::ScrollbarPainting {
-            track_color: cx.read_val_opt(self.component.track_color.as_ref()),
-            color: cx.read_val_opt(self.component.color.as_ref()),
-            thumb_radius: cx.read_val_opt(self.component.thumb_radius.as_ref()),
+            track_color: cx.read_val_opt(self.view.track_color.as_ref()),
+            color: cx.read_val_opt(self.view.color.as_ref()),
+            thumb_radius: cx.read_val_opt(self.view.thumb_radius.as_ref()),
         };
 
         let h = if constraints.max_height.is_finite() && constraints.max_height > 0.0 {

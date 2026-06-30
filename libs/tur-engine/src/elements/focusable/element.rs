@@ -6,30 +6,30 @@ use boa_engine::Context;
 use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
-use crate::core::focus::{BlurEvent, FocusEvent};
+use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
-use crate::core::widget::{extract_component, Effect, Component, WidgetCx};
+use crate::core::view::{ViewCx, extract_view, Effect, View};
 
 // ---------------------------------------------------------------------------
-// FocusableComponent — wraps a child and provides keyboard / focus callbacks.
+// FocusableView — wraps a child and provides keyboard / focus callbacks.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct FocusableComponent {
+pub struct FocusableView {
     pub on_key_down: Option<EdgyMutation<KeydownEvent>>,
     pub on_key_up: Option<EdgyMutation<KeyupEvent>>,
     pub on_focus: Option<EdgyMutation<FocusEvent>>,
     pub on_blur: Option<EdgyMutation<BlurEvent>>,
-    pub child: Option<Rc<dyn Component>>,
+    pub child: Option<Rc<dyn View>>,
 }
 
-impl Component for FocusableComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for FocusableView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
             AnyElement::new(FocusableElement {
-                component: self.clone(),
+                view: self.clone(),
             })
             .with_callbacks(),
             boa,
@@ -48,7 +48,17 @@ impl Component for FocusableComponent {
 // ---------------------------------------------------------------------------
 
 pub struct FocusableElement {
-    pub component: FocusableComponent,
+    pub view: FocusableView,
+}
+
+impl Focusable for FocusableElement {
+    fn on_focus_mutation(&self) -> Option<EdgyMutation<FocusEvent>> {
+        self.view.on_focus
+    }
+
+    fn on_blur_mutation(&self) -> Option<EdgyMutation<BlurEvent>> {
+        self.view.on_blur
+    }
 }
 
 impl crate::core::layout::ElementSubscribe for FocusableElement {}
@@ -73,15 +83,15 @@ fn prop_mutation<E: EventArg>(
     edgy_mutation_from_js(&v)
 }
 
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_component(&v)
+    extract_view(&v)
 }
 
-impl FocusableComponent {
+impl FocusableView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        FocusableComponent {
+        FocusableView {
             on_key_down: prop_mutation::<KeydownEvent>(props, "onKeyDown", ctx),
             on_key_up: prop_mutation::<KeyupEvent>(props, "onKeyUp", ctx),
             on_focus: prop_mutation::<FocusEvent>(props, "onFocus", ctx),

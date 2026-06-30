@@ -2,4 +2,4 @@ mod element;
 mod layout;
 mod render;
 
-pub use element::{FragmentElement, FragmentComponent};
+pub use element::{FragmentElement, FragmentView};

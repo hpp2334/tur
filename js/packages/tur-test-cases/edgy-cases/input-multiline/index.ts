@@ -1,13 +1,13 @@
 import {
     Container,
-    component,
+    view,
     createTextEditingController,
     InputEdgy,
 } from "@tur/edgy";
 
 const controller = createTextEditingController({});
 
-export default component(() =>
+export default view(() =>
     Container({
         children: [
             InputEdgy({

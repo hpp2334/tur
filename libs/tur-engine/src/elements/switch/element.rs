@@ -6,8 +6,10 @@ use boa_engine::{Context, JsValue};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::widget::{
-    val_from_js, Component, ComponentFactory, JsComponentFactory, PropValue, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    read_val,
+    val_from_js, View, ViewFactory, JsViewFactory, PropValue, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -27,18 +29,18 @@ impl PropValue for SwitchKey {
 }
 
 // ---------------------------------------------------------------------------
-// SwitchComponent — the user's declaration.
+// SwitchView — the user's declaration.
 //
 // `value` is reactive (`Val<SwitchKey>`). `cases` is an ordered list of
-// (key, branch factory) pairs. SwitchComponent is a **fragment**: it mounts
+// (key, branch factory) pairs. SwitchView is a **fragment**: it mounts
 // one branch and relays layout to it.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct SwitchComponent {
+pub struct SwitchView {
     pub value: Val<SwitchKey>,
-    pub cases: Vec<(SwitchKey, Rc<dyn ComponentFactory>)>,
-    pub fallback: Option<Rc<dyn ComponentFactory>>,
+    pub cases: Vec<(SwitchKey, Rc<dyn ViewFactory>)>,
+    pub fallback: Option<Rc<dyn ViewFactory>>,
     pub query_key: Option<Vec<String>>,
 }
 
@@ -56,7 +58,7 @@ pub(crate) enum Mounted {
 impl Mounted {
     /// Resolve which branch should be mounted for a given (possibly absent)
     /// current value. Absent value / no matching case → fallback (if any).
-    fn resolve(spec: &SwitchComponent, value: Option<SwitchKey>) -> Mounted {
+    fn resolve(spec: &SwitchView, value: Option<SwitchKey>) -> Mounted {
         match value {
             Some(k) => {
                 if spec.cases.iter().any(|(key, _)| *key == k) {
@@ -78,7 +80,7 @@ impl Mounted {
     }
 
     /// The factory to build for this branch (None for `Mounted::None`).
-    fn factory(&self, spec: &SwitchComponent) -> Option<Rc<dyn ComponentFactory>> {
+    fn factory(&self, spec: &SwitchView) -> Option<Rc<dyn ViewFactory>> {
         match self {
             Mounted::Case(k) => spec
                 .cases
@@ -91,16 +93,16 @@ impl Mounted {
     }
 }
 
-impl Component for SwitchComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for SwitchView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
-        let value = cx.read_val(&self.value, boa);
+        let value = read_val(cx, &self.value, boa);
         let mounted = Mounted::resolve(self, value);
 
         let kind = SwitchFragment {
-            component: self.clone(),
+            view: self.clone(),
             mounted: mounted.clone(),
         };
 
@@ -122,7 +124,7 @@ impl Component for SwitchComponent {
 
         // Build the initial branch — auto-links to the fragment.
         let kind = SwitchFragment {
-            component: self.clone(),
+            view: self.clone(),
             mounted,
         };
         kind.build_branch(cx, boa, frag_id);
@@ -137,20 +139,20 @@ impl Component for SwitchComponent {
 // ---------------------------------------------------------------------------
 
 pub struct SwitchFragment {
-    pub component: SwitchComponent,
+    pub view: SwitchView,
     pub(crate) mounted: Mounted,
 }
 
 impl SwitchFragment {
     fn build_branch(
         &self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
-        if let Some(factory) = self.mounted.factory(&self.component) {
-            if let Some(component) = factory.create(boa) {
-                return vec![component.build(cx, boa, NodeId::from(fragment_id))];
+        if let Some(factory) = self.mounted.factory(&self.view) {
+            if let Some(view) = factory.create(boa) {
+                return vec![view.build(cx, boa, NodeId::from(fragment_id))];
             }
         }
         Vec::new()
@@ -180,17 +182,17 @@ impl FragmentKind for SwitchFragment {
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        cx.subscribe_val(&self.component.value);
+        cx.subscribe_val(&self.view.value);
     }
 
     fn perform_update(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Option<Vec<NodeId>> {
-        let new_value = cx.read_val(&self.component.value, boa);
-        let new_mounted = Mounted::resolve(&self.component, new_value);
+        let new_value = read_val(cx, &self.view.value, boa);
+        let new_mounted = Mounted::resolve(&self.view, new_value);
         if new_mounted == self.mounted {
             return None;
         }
@@ -232,7 +234,7 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
 }
 
 /// Extract an optional branch factory from a JS props object.
-fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ComponentFactory>> {
+fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ViewFactory>> {
     use boa_engine::js_string;
     use boa_engine::object::builtins::JsFunction;
     let v = props.get(js_string!(key), ctx).ok()?;
@@ -240,7 +242,7 @@ fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn
         return None;
     }
     let f = v.as_object().and_then(JsFunction::from_object)?;
-    Some(Rc::new(JsComponentFactory(f)))
+    Some(Rc::new(JsViewFactory(f)))
 }
 
 /// Parse `cases` — a JS array of `{ key, child }` entries.
@@ -248,7 +250,7 @@ fn prop_cases(
     props: &JsObject,
     key: &str,
     ctx: &mut Context,
-) -> Vec<(SwitchKey, Rc<dyn ComponentFactory>)> {
+) -> Vec<(SwitchKey, Rc<dyn ViewFactory>)> {
     use boa_engine::js_string;
     use boa_engine::object::builtins::{JsArray, JsFunction};
 
@@ -266,7 +268,7 @@ fn prop_cases(
         return Vec::new();
     };
 
-    let mut out: Vec<(SwitchKey, Rc<dyn ComponentFactory>)> = Vec::with_capacity(len as usize);
+    let mut out: Vec<(SwitchKey, Rc<dyn ViewFactory>)> = Vec::with_capacity(len as usize);
     for i in 0..len as i64 {
         let Ok(entry) = arr.at(i, ctx) else {
             continue;
@@ -283,14 +285,14 @@ fn prop_cases(
         let Some(f) = child_val.as_object().and_then(JsFunction::from_object) else {
             continue;
         };
-        out.push((SwitchKey(key_val), Rc::new(JsComponentFactory(f))));
+        out.push((SwitchKey(key_val), Rc::new(JsViewFactory(f))));
     }
     out
 }
 
-impl SwitchComponent {
+impl SwitchView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        SwitchComponent {
+        SwitchView {
             value: prop_val::<SwitchKey>(props, "value", ctx)
                 .unwrap_or_else(|| Val::Static(SwitchKey(JsValue::undefined()))),
             cases: prop_cases(props, "cases", ctx),

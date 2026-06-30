@@ -47,7 +47,7 @@ impl Default for CursorSink {
 
 /// Owner of shell state and the privileged driver operations.
 ///
-/// Held by the app driver (`TurAppContext`). The biz (paint / widgets) never
+/// Held by the app driver (`TurAppContext`). The biz (paint / views) never
 /// sees this type — only the [`PaintShell`] face borrowed via [`paint_face`].
 ///
 /// `apply_changes` is the privileged post-paint flush: it resolves the

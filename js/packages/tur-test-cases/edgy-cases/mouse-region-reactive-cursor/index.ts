@@ -3,7 +3,7 @@ import {
     Column,
     Container,
     type Cursor,
-    component,
+    view,
     derive,
     get,
     MouseRegion,
@@ -21,7 +21,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     Column({
         children: [
             MouseRegion({

@@ -12,11 +12,11 @@ impl ElementLayout for ScrollViewElement {
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let padding = cx.read_val_opt(self.component.padding.as_ref());
+        let padding = cx.read_val_opt(self.view.padding.as_ref());
 
         // Resolve the paint-time color here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
-        self.painting.color = cx.read_val_opt(self.component.color.as_ref());
+        self.painting.color = cx.read_val_opt(self.view.color.as_ref());
 
         let viewport_w = if constraints.max_width.is_finite() {
             constraints.max_width
@@ -64,7 +64,7 @@ impl ElementLayout for ScrollViewElement {
 
         // --- position (assign child offset) ---
         if let Some(&child_id) = children.first() {
-            let padding = cx.read_val_opt(self.component.padding.as_ref()).unwrap_or(0.0);
+            let padding = cx.read_val_opt(self.view.padding.as_ref()).unwrap_or(0.0);
             let scroll_offset = match self.axis {
                 tur_shared::Axis::Vertical => Offset::new(padding, padding - self.position.pixels()),
                 tur_shared::Axis::Horizontal => {

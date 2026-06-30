@@ -7,12 +7,13 @@ use tur_shared::BoxFit;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::widget::{
-    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    extract_view, val_from_js, Effect, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
-// ImageComponent — the user's declaration. Pure Rust, no JsValues.
+// ImageView — the user's declaration. Pure Rust, no JsValues.
 //
 // `resource_id`, `width`, `height`, and `fit` are reactive (`Val<T>`).
 // An optional `child` is supported (rendered behind/over the image — painted
@@ -21,19 +22,19 @@ use crate::core::widget::{
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct ImageComponent {
+pub struct ImageView {
     pub resource_id: Option<Val<u64>>,
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub fit: Option<Val<BoxFit>>,
     pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn Component>>,
+    pub child: Option<Rc<dyn View>>,
 }
 
-impl Component for ImageComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for ImageView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(ImageElement { component: self.clone(), painting: ImagePainting::default() }), boa);
+        cx.insert_node(id, AnyElement::new(ImageElement { view: self.clone(), painting: ImagePainting::default() }), boa);
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -57,7 +58,7 @@ pub struct ImagePainting {
 }
 
 pub struct ImageElement {
-    pub component: ImageComponent,
+    pub view: ImageView,
     pub painting: ImagePainting,
 }
 
@@ -65,7 +66,7 @@ impl Effect for ImageElement {}
 
 impl ElementSubscribe for ImageElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        let c = &self.component;
+        let c = &self.view;
         if let Some(v) = c.resource_id.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
@@ -76,23 +77,23 @@ impl ElementSubscribe for ImageElement {
 impl ElementTrace for ImageElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(Val::Static(rid)) = &self.component.resource_id {
+        if let Some(Val::Static(rid)) = &self.view.resource_id {
             parts.push(format!("resource={rid}"));
         }
-        if let Some(Val::Static(w)) = &self.component.width {
+        if let Some(Val::Static(w)) = &self.view.width {
             parts.push(format!("width={w}"));
         }
-        if let Some(Val::Static(h)) = &self.component.height {
+        if let Some(Val::Static(h)) = &self.view.height {
             parts.push(format!("height={h}"));
         }
-        if let Some(Val::Static(f)) = &self.component.fit {
+        if let Some(Val::Static(f)) = &self.view.fit {
             parts.push(format!("fit={f:?}"));
         }
         parts.join(" ")
     }
 
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
-        let c = &self.component;
+        let c = &self.view;
         let mut p = Vec::new();
         if let Some(v) = c.resource_id.as_ref().and_then(Val::as_static) {
             p.push(("resourceId", TraceValue::Num(*v as f64)));
@@ -141,16 +142,16 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
 }
 
 /// Extract the optional child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn Component>> {
+fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_component(&v)
+    extract_view(&v)
 }
 
-impl ImageComponent {
-    /// Build an `ImageComponent` from a JS props object.
+impl ImageView {
+    /// Build an `ImageView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        ImageComponent {
+        ImageView {
             resource_id: prop_val::<u64>(props, "resourceId", ctx),
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),

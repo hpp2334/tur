@@ -25,11 +25,11 @@ pub struct ScrollController {
     pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
     pub(crate) handle: Option<JsObject>,
     /// The scroll-view node this controller is bound to. Set at build time by
-    /// `ScrollViewComponent::build` (the `_attach` JS path is the legacy
+    /// `ScrollViewView::build` (the `_attach` JS path is the legacy
     /// fallback). `jumpTo`/drag use this to locate the scroll element.
     pub(crate) bound_node: Option<ElementNodeId>,
     pub(crate) element_tree:
-        Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
+        Option<crate::core::elements::NodeTree>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
     pub(crate) pending_initial_offset: Option<f64>,

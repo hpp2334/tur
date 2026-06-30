@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use tur_engine::core::elements::ElementTree;
+use tur_engine::core::elements::NodeTree;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::TurApp;
@@ -116,7 +116,7 @@ impl TurVelloApp {
         self.inner.borrow_mut().app.load_js(source)
     }
 
-    pub fn element_tree(&self) -> Rc<RefCell<ElementTree>> {
+    pub fn element_tree(&self) -> NodeTree {
         self.inner.borrow().app.element_tree()
     }
 

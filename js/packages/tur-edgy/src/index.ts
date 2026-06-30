@@ -1,9 +1,9 @@
 /**
- * tur-edgy — Reactive widget composition layer for tur.
+ * tur-edgy — Reactive view composition layer for tur.
  *
  * Replaces the old React-based API (@tur/react-renderer + @tur/react). All
  * reactivity lives in the Rust store (signals/derive/mutate); JS code just
- * composes built-in widget factories and supplies closures for derive/mutate
+ * composes built-in view factories and supplies closures for derive/mutate
  * callbacks.
  */
 
@@ -71,24 +71,24 @@ export function isReadable(x: unknown): x is Readable<unknown> {
 }
 
 // ---------------------------------------------------------------------------
-// Component helper — wraps a `() => EdgyElement` thunk as a component handle.
-// The thunk is invoked lazily by the engine when the component is built.
+// View helper — wraps a `() => EdgyElement` thunk as a view handle.
+// The thunk is invoked lazily by the engine when the view is built.
 // ---------------------------------------------------------------------------
 
-export type EdgyComponent = EdgyElement;
+export type EdgyView = EdgyElement;
 
-export function component(f: () => EdgyElement): EdgyComponent {
-    return __tur.component(__ctx, f) as EdgyComponent;
+export function view(f: () => EdgyElement): EdgyView {
+    return __tur.view(__ctx, f) as EdgyView;
 }
 
 // ---------------------------------------------------------------------------
-// EdgyElement handle — opaque reference returned by widget factories.
+// EdgyElement handle — opaque reference returned by view factories.
 // ---------------------------------------------------------------------------
 
 export type EdgyElement = unknown;
 
 // ---------------------------------------------------------------------------
-// Widget factories.
+// View factories.
 // ---------------------------------------------------------------------------
 
 export interface ContainerProps {
@@ -612,10 +612,10 @@ export function createSvgResource(svg: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// Render — mount a component tree.
+// Render — mount a view tree.
 // ---------------------------------------------------------------------------
 
-export function render(comp: EdgyComponent): void {
+export function render(comp: EdgyView): void {
     __tur.render(__ctx, comp);
 }
 
@@ -687,7 +687,7 @@ interface TurGlobal {
     ): unknown;
     get(ctx: unknown, a: unknown): unknown;
     set(ctx: unknown, target: unknown, ...rest: unknown[]): unknown;
-    component(ctx: unknown, f: () => EdgyElement): EdgyElement;
+    view(ctx: unknown, f: () => EdgyElement): EdgyElement;
 
     Container(ctx: unknown, props: unknown): EdgyElement;
     Column(ctx: unknown, props: unknown): EdgyElement;

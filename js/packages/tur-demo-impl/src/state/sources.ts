@@ -35,7 +35,7 @@ export const errorMsg$ = source("");
 export const edited$ = source(false);
 
 // Bumped on every successful recompile so consumers keyed on the active case
-// (e.g. the viewer) re-read the cached component handle.
+// (e.g. the viewer) re-read the cached view handle.
 export const compileVersion$ = source<number>(0);
 
 // Per-element hover state (single source per interactive group, not per
@@ -54,7 +54,7 @@ export const layoutMode$ = source<LayoutMode>("split");
 // `sidebarWidth$` is the sidebar's pixel width; `editorWidth$` is the editor
 // pane's pixel width in split mode (the viewer pane is `Expanded` and fills
 // the remaining space). Updated by the divider drag handlers in
-// `components/divider.ts`.
+// `views/divider.ts`.
 export const sidebarWidth$ = source(200);
 export const editorWidth$ = source(600);
 

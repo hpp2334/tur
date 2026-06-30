@@ -2,7 +2,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     Each,
     Expanded,
     MainAxisSize,
@@ -14,7 +14,7 @@ import {
 
 const seg$ = source<string[]>(["a", "b"]);
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [

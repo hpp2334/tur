@@ -6,7 +6,7 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     createAnimationController,
     derive,
     type EdgyElement,
@@ -487,7 +487,7 @@ function WinBanner(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     // Fill the entire viewer pane: an outer Stack provides the full-bleed
     // dark background + a centered puzzle play area + the win banner overlay.
     // The puzzle itself is a fixed-size Stack (PLAY_W × PLAY_H) so the

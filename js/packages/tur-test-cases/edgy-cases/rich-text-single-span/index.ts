@@ -1,6 +1,6 @@
-import { component, Text } from "@tur/edgy";
+import { view, Text } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Text({
         fontSize: 14,
         spans: [{ content: "Hello World" }],

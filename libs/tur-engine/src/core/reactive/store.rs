@@ -455,7 +455,7 @@ impl std::fmt::Debug for Store {
 
 // ---------------------------------------------------------------------------
 // ReactiveReadStore — read-only capability face for business code (element impls,
-// layout, widgets, handlers). Wraps the core but exposes only value reads.
+// layout, views, handlers). Wraps the core but exposes only value reads.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
@@ -498,6 +498,15 @@ impl<'a> ReactiveReadJsContext<'a> {
     /// layout phase — there is no `set`, no mutation, no engine mutation here.
     pub fn read<T>(&mut self, readable: Readable<T>) -> JsValue {
         self.read.read(readable, self.boa)
+    }
+
+    /// Borrow the underlying JS `Context`. Layout-phase build (e.g. LazyList
+    /// remount) needs it to call the JS item builder and construct
+    /// `ElementObject`s. The read-only guarantee is weakened only for code
+    /// that chooses to call mutating JS.
+    #[allow(dead_code)]
+    pub(crate) fn boa_mut(&mut self) -> &mut Context {
+        self.boa
     }
 }
 

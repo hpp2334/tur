@@ -3,7 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     mutate,
     PointerInteract,
@@ -14,7 +14,7 @@ import { COLORS } from "./utils";
 
 const count$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Container({
         color: COLORS.bg,
         children: [

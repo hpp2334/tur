@@ -1,3 +1,3 @@
 mod element;
 
-pub use element::{EachComponent, EachFragment};
+pub use element::{EachView, EachFragment};

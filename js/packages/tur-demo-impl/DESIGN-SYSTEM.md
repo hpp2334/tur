@@ -2,7 +2,7 @@
 
 **Status**: Normative · **Scope**: `@tur/demo-impl` (the playground shell — sidebar, editor, viewer, error chrome) · **Theme**: Light
 
-This document is the single source of truth for visual decisions in the tur playground. Every color, size, and component shape in `src/index.ts` and `src/compile.ts` must trace back to a token defined here. See [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) for how to apply these tokens.
+This document is the single source of truth for visual decisions in the tur playground. Every color, size, and view shape in `src/index.ts` and `src/compile.ts` must trace back to a token defined here. See [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) for how to apply these tokens.
 
 ---
 
@@ -10,7 +10,7 @@ This document is the single source of truth for visual decisions in the tur play
 
 ### 1.1 Color — primitive palette
 
-Primitives are organized by family with a numeric step. **Never use primitives directly in components** — go through semantic tokens (§2). Primitives exist so the semantic layer can be rethemed without touching component code.
+Primitives are organized by family with a numeric step. **Never use primitives directly in views** — go through semantic tokens (§2). Primitives exist so the semantic layer can be rethemed without touching view code.
 
 #### Neutrals — `tur.ink.*`
 
@@ -175,7 +175,7 @@ Light theme shadows are subtle — most separation is done with **background-col
 
 ## 2. Semantic token table
 
-**This is the layer components use.** Each entry maps to one or more primitives.
+**This is the layer views use.** Each entry maps to one or more primitives.
 
 ### Background
 
@@ -285,9 +285,9 @@ Driven by `layoutMode$: Source<"split" | "editor" | "viewer">`. The EditorAndVie
 
 ---
 
-## 4. Component catalog
+## 4. View catalog
 
-Each component below must be extracted into `src/components/` during phase 3 of the roadmap (§9). Specs are normative — any deviation needs design review.
+Each view below must be extracted into `src/views/` during phase 3 of the roadmap (§9). Specs are normative — any deviation needs design review.
 
 ### 4.1 `Shell`
 
@@ -494,10 +494,10 @@ Rendered-case pane: header (status badge) + body (case content) + optional error
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `status$` | `Readable<"ready" \| "error">` | — | Drives `<StatusBadge>` |
-| `child$` | `Readable<EdgyElement>` | — | The case component to render |
+| `child$` | `Readable<EdgyElement>` | — | The case view to render |
 | `error$` | `Readable<string>` | — | When non-empty, shows `<ErrorBanner>` |
 
-**Background**: `bg.viewer`. **Body**: case component inside `Expanded`. **Error overlay**: pinned to bottom of body, `Condition` on `error$`.
+**Background**: `bg.viewer`. **Body**: case view inside `Expanded`. **Error overlay**: pinned to bottom of body, `Condition` on `error$`.
 
 ### 4.9 `ErrorBanner`
 
@@ -558,7 +558,7 @@ Secondary action. Reverts editor to selected case's original source and recompil
 
 ### 4.14 `Toggle` (implemented — currently inlined as `AutoRunToggle`)
 
-Pill-shaped boolean switch. Built from `PointerInteract` + `Container` + `Stack` + `Positioned` — the engine has no built-in toggle widget.
+Pill-shaped boolean switch. Built from `PointerInteract` + `Container` + `Stack` + `Positioned` — the engine has no built-in toggle view.
 
 | Prop | Type | Notes |
 |---|---|---|
@@ -634,9 +634,9 @@ Full-panel error state. Replaces the Viewer body when `status$ === "error"` (not
 
 ## 5. State matrix
 
-Every interactive component must define all five states. Hover/active require `PointerInteract` with `onPointerEnter`/`onPointerExit` (already in the API — `tur-edgy/src/index.ts:181`). Focus requires future keyboard support; spec it now so it can drop in.
+Every interactive view must define all five states. Hover/active require `PointerInteract` with `onPointerEnter`/`onPointerExit` (already in the API — `tur-edgy/src/index.ts:181`). Focus requires future keyboard support; spec it now so it can drop in.
 
-| Component | default | hover | active/pressed | focused | disabled |
+| View | default | hover | active/pressed | focused | disabled |
 |---|---|---|---|---|---|
 | NavItem | panel/body | hover/primary | teal.300/primary | focus ring | panel/disabled |
 | Button primary | teal.400/onAccent | teal.300/onAccent | teal.500/onAccent | focus ring | ink.200/disabled |
@@ -718,7 +718,7 @@ Tokens live in **`src/tokens.ts`**. The file is the only place `Color.hex(...)` 
 // src/tokens.ts
 import { Color } from "@tur/edgy";
 
-// Primitive palette — do not import these from components.
+// Primitive palette — do not import these from views.
 export const ink = {
     50: Color.hex("#fbfcfd"), 100: Color.hex("#f4f6f9"), 150: Color.hex("#eceff4"),
     200: Color.hex("#e1e5ec"), 300: Color.hex("#d4d9e0"), 400: Color.hex("#b8c0cc"),
@@ -734,7 +734,7 @@ export const teal = {
 
 // ... coral, status, code similarly
 
-// Semantic layer — components import from here.
+// Semantic layer — views import from here.
 export const tokens = {
     bg: {
         app: ink[50], panel: ink[100], elevated: ink[150], hover: ink[200],
@@ -763,7 +763,7 @@ export const tokens = {
 } as const;
 ```
 
-Components import `tokens`, never primitives:
+Views import `tokens`, never primitives:
 
 ```ts
 import { tokens } from "./tokens";
@@ -790,7 +790,7 @@ Five phases. Each is independently shippable.
 
 ### Phase 2 — Replace inline hexes (visual change, no refactor)
 - Walk `src/index.ts` against the table in §10, replacing each `Color.hex(...)` with the named token.
-- No layout or component-shape changes — pure rename.
+- No layout or view-shape changes — pure rename.
 - PR: "refactor: replace inline hexes with design tokens".
 
 ### Phase 3 — Extract primitives (no visual change)
@@ -802,7 +802,7 @@ Five phases. Each is independently shippable.
 - One PR per primitive or one batched PR; reviewer's call.
 
 ### Phase 4 — Interactive states (visual improvement)
-- Add `hover$` source per interactive component via `PointerInteract`'s `onPointerEnter`/`onPointerExit` (API already present).
+- Add `hover$` source per interactive view via `PointerInteract`'s `onPointerEnter`/`onPointerExit` (API already present).
 - Apply the state matrix from §5.
 - Add focus ring rendering (requires engine support for focus events — coordinate with platform team).
 
@@ -855,8 +855,8 @@ Map of every `Color.hex("...")` in the current `src/index.ts` and `src/compile.t
 
 ## 11. Glossary
 
-- **Primitive**: a raw palette entry (`teal.400`). Never used in components.
-- **Semantic token**: a named role (`bg.button.primary`) mapped to a primitive. The component-facing layer.
-- **Component token**: an even more specific alias (`sidebar.item.bg.active`). Optional — only introduce when a component needs the same value across many files.
-- **State matrix**: the standard set of visual states (default/hover/active/focus/disabled/selected) every interactive component must define.
+- **Primitive**: a raw palette entry (`teal.400`). Never used in views.
+- **Semantic token**: a named role (`bg.button.primary`) mapped to a primitive. The view-facing layer.
+- **View token**: an even more specific alias (`sidebar.item.bg.active`). Optional — only introduce when a view needs the same value across many files.
+- **State matrix**: the standard set of visual states (default/hover/active/focus/disabled/selected) every interactive view must define.
 - **AA / AAA**: WCAG 2.1 contrast levels. AA = 4.5:1 for body, 3:1 for large/UI. AAA = 7:1 / 4.5:1.

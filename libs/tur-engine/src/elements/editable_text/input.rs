@@ -5,20 +5,20 @@ use boa_engine::Context;
 use tur_shared::Color;
 
 use crate::core::element::NodeId;
-use crate::core::widget::{Component, Val, WidgetCx};
+use crate::core::view::{ViewCx, View, Val};
 use crate::core::reactive::AnyReadable;
-use crate::elements::ContainerComponent;
+use crate::elements::ContainerView;
 
-use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_undo_controller, prop_val, ContextMenuEvent, EditableTextComponent};
+use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_undo_controller, prop_val, ContextMenuEvent, EditableTextView};
 
 // ---------------------------------------------------------------------------
-// InputComponent — composes a ContainerElement (sizing/border wrapper) with a single
+// InputView — composes a ContainerElement (sizing/border wrapper) with a single
 // EditableTextElement child. Input is NOT its own element; it's a spec that builds
 // a ContainerElement + EditableTextElement subtree.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct InputComponent {
+pub struct InputView {
     pub width: Option<Val<f64>>,
     pub height: Option<Val<f64>>,
     pub controller: Option<JsObject>,
@@ -35,9 +35,9 @@ pub struct InputComponent {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for InputComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let editable = Rc::new(EditableTextComponent {
+impl View for InputView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+        let editable = Rc::new(EditableTextView {
             controller: self.controller.clone(),
             controller_atom: self.controller_atom,
             undo_controller: self.undo_controller.clone(),
@@ -51,7 +51,7 @@ impl Component for InputComponent {
             on_context_menu: self.on_context_menu,
             query_key: None,
         });
-        let container_spec = ContainerComponent {
+        let container_spec = ContainerView {
             width: self.width.clone(),
             height: self.height.clone(),
             children: vec![editable],
@@ -62,10 +62,10 @@ impl Component for InputComponent {
     }
 }
 
-impl InputComponent {
-    /// Build an `InputComponent` from a JS props object.
+impl InputView {
+    /// Build an `InputView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        InputComponent {
+        InputView {
             width: prop_val::<f64>(props, "width", ctx),
             height: prop_val::<f64>(props, "height", ctx),
             controller: prop_controller(props, "controller", ctx),

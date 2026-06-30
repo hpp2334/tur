@@ -4,7 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     MouseRegion,
     mutate,
@@ -14,7 +14,7 @@ import {
 
 const state$ = source("idle");
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

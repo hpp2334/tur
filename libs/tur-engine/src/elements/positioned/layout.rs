@@ -12,12 +12,12 @@ impl ElementLayout for PositionedElement {
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let left = cx.read_val_opt(self.component.left.as_ref());
-        let top = cx.read_val_opt(self.component.top.as_ref());
-        let right = cx.read_val_opt(self.component.right.as_ref());
-        let bottom = cx.read_val_opt(self.component.bottom.as_ref());
-        let width = cx.read_val_opt(self.component.width.as_ref());
-        let height = cx.read_val_opt(self.component.height.as_ref());
+        let left = cx.read_val_opt(self.view.left.as_ref());
+        let top = cx.read_val_opt(self.view.top.as_ref());
+        let right = cx.read_val_opt(self.view.right.as_ref());
+        let bottom = cx.read_val_opt(self.view.bottom.as_ref());
+        let width = cx.read_val_opt(self.view.width.as_ref());
+        let height = cx.read_val_opt(self.view.height.as_ref());
 
         // Resolve each axis independently: explicit size wins; otherwise a
         // pair of opposing edges implies a tight extent; else loose.
@@ -56,8 +56,8 @@ impl ElementLayout for PositionedElement {
         };
 
         // --- position (set own offset within the parent Stack) ---
-        let offset_x = cx.read_val_opt(self.component.left.as_ref()).unwrap_or(0.0);
-        let offset_y = cx.read_val_opt(self.component.top.as_ref()).unwrap_or(0.0);
+        let offset_x = cx.read_val_opt(self.view.left.as_ref()).unwrap_or(0.0);
+        let offset_y = cx.read_val_opt(self.view.top.as_ref()).unwrap_or(0.0);
         cx.set_child_offset_self(Offset::new(offset_x, offset_y));
 
         size

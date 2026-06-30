@@ -4,7 +4,7 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     type EdgyElement,
     Expanded,
     Stack,
@@ -42,7 +42,7 @@ function Body(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

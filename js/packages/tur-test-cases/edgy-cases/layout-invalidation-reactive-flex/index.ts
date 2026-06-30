@@ -1,7 +1,7 @@
 import {
     Color,
     Container,
-    component,
+    view,
     derive,
     Expanded,
     get,
@@ -23,7 +23,7 @@ Object.assign(globalThis, {
     },
 });
 
-export default component(() =>
+export default view(() =>
     Row({
         children: [
             Expanded({

@@ -1,7 +1,7 @@
 // Design tokens — the single source of truth for visual decisions.
 //
 // This is the only file (besides cases/compile.ts, which owns the code-
-// highlighting palette) where `Color.hex(...)` is allowed. Components import
+// highlighting palette) where `Color.hex(...)` is allowed. Views import
 // from `tokens` and never touch primitives directly. See DESIGN-SYSTEM.md §8.
 //
 // Light theme. Saturation: ink.* (warm-tinted neutrals) + teal.* (saturated
@@ -10,7 +10,7 @@
 import { Color } from "@tur/edgy";
 
 // ---------------------------------------------------------------------------
-// Primitive palette — do not import from components.
+// Primitive palette — do not import from views.
 // ---------------------------------------------------------------------------
 
 export const ink = {
@@ -63,7 +63,7 @@ export const code = {
     operator: ink[600],
     literal: Color.hex("#92400e"),
     // AST-derived semantic categories (see tur-wasm `highlight_tsx`).
-    decl: Color.hex("#1e6fb8"), // 7 — fn/component/const/import/call-callee name
+    decl: Color.hex("#1e6fb8"), // 7 — fn/view/const/import/call-callee name
     jsxTag: coral[700], // 8 — JSX element tag name
     jsxAttr: Color.hex("#7c3aed"), // 9 — JSX attribute name
     type: teal[800], // 10 — interface/type name
@@ -71,7 +71,7 @@ export const code = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Semantic layer — what components actually use.
+// Semantic layer — what views actually use.
 // ---------------------------------------------------------------------------
 
 export const tokens = {

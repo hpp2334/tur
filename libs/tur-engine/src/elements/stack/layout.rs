@@ -13,7 +13,7 @@ impl ElementLayout for StackElement {
         cx: &mut LayoutContext,
     ) -> Size {
         let fit = cx
-            .read_val_opt(self.component.fit.as_ref())
+            .read_val_opt(self.view.fit.as_ref())
             .unwrap_or(StackFit::Loose);
 
         let mut max_size = Size::ZERO;
@@ -41,7 +41,7 @@ impl ElementLayout for StackElement {
         // --- position (assign non-positioned child offsets) ---
         let stack_size = self.computed_size.unwrap_or(Size::ZERO);
         let alignment = cx
-            .read_val_opt(self.component.alignment.as_ref())
+            .read_val_opt(self.view.alignment.as_ref())
             .unwrap_or_default();
         for &child_id in children {
             let is_positioned = cx.child_type_name(child_id) == "tur_positioned";

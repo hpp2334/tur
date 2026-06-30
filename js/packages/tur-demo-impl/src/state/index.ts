@@ -1,11 +1,11 @@
-// Public surface of the state layer. Components and entry point import from
+// Public surface of the state layer. Views and entry point import from
 // here; internal state files import each other directly (not via this barrel)
 // to avoid barrel→case-store→barrel cycles.
 
 export {
     editorCtrl,
     editorUndo,
-    getCaseComponent,
+    getCaseView,
     getCaseFileNames,
     loadCase,
     recompile,

@@ -3,13 +3,13 @@ use std::time::Duration;
 use tur_shared::{Cursor, Offset, Size};
 
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::render::Canvas;
 use crate::core::resource::{ImageResource, ResourceId, ResourceMap};
 use crate::core::shell::PaintShell;
 
 pub struct PaintContext<'a> {
-    tree: &'a ElementTree,
+    tree: &'a NodeTreeData,
     resource_map: &'a ResourceMap,
     focused_node_id: Option<ElementNodeId>,
     current_node_id: Option<ElementNodeId>,
@@ -20,7 +20,7 @@ pub struct PaintContext<'a> {
 
 impl<'a> PaintContext<'a> {
     pub(crate) fn new(
-        tree: &'a ElementTree,
+        tree: &'a NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,
         resource_map: &'a ResourceMap,

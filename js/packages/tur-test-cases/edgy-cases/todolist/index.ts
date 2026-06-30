@@ -4,7 +4,7 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     Each,
     type EdgyElement,
@@ -23,7 +23,7 @@ import {
     Stack,
     Text,
 } from "@tur/edgy";
-import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./components";
+import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./views";
 import {
     addOpen$,
     getIcon,
@@ -140,7 +140,7 @@ function TaskList(): EdgyElement {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

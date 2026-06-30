@@ -1,5 +1,5 @@
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::event::{AppEvent, AppGestureEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
@@ -63,26 +63,26 @@ impl AppHandler for PointerRegionAppHandler {
 }
 
 fn mouse_region_enter_mutation(
-    tree: &ElementTree,
+    tree: &NodeTreeData,
     id: ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
-        .and_then(|m| m.component.on_enter)
+        .and_then(|m| m.view.on_enter)
 }
 
 fn mouse_region_exit_mutation(
-    tree: &ElementTree,
+    tree: &NodeTreeData,
     id: ElementNodeId,
 ) -> Option<crate::core::edgy_event::EdgyMutation<PointerRegionEvent>> {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
-        .and_then(|m| m.component.on_exit)
+        .and_then(|m| m.view.on_exit)
 }
 
-fn has_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
+fn has_region_callbacks(tree: &NodeTreeData, id: ElementNodeId) -> bool {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
@@ -90,7 +90,7 @@ fn has_region_callbacks(tree: &ElementTree, id: ElementNodeId) -> bool {
         .unwrap_or(false)
 }
 
-fn is_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
+fn is_region_opaque(tree: &NodeTreeData, id: ElementNodeId) -> bool {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
@@ -98,7 +98,7 @@ fn is_region_opaque(tree: &ElementTree, id: ElementNodeId) -> bool {
         .unwrap_or(false)
 }
 
-fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<ElementNodeId> {
+fn filter_opaque_path(path: &[ElementNodeId], tree: &NodeTreeData) -> Vec<ElementNodeId> {
     let mut result = Vec::new();
     for &id in path {
         result.push(id);
@@ -114,7 +114,7 @@ fn filter_opaque_path(path: &[ElementNodeId], tree: &ElementTree) -> Vec<Element
 /// transparently (fragments have zero offset, so they're skipped without
 /// affecting the sum). Mirrors the helper in `handlers/gesture.rs`; kept
 /// local to avoid coupling.
-fn local_position(tree: &ElementTree, node_id: ElementNodeId, global: Offset) -> Offset {
+fn local_position(tree: &NodeTreeData, node_id: ElementNodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
     let mut abs_y = 0.0f64;
     let mut current: Option<NodeId> = Some(node_id.into());

@@ -1,6 +1,6 @@
-import { Alignment, Color, Container, component, Text } from "@tur/edgy";
+import { Alignment, Color, Container, view, Text } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Container({
         width: 200,
         height: 200,

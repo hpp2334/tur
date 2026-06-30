@@ -5,7 +5,7 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     createTextEditingController,
     derive,
     type EdgyElement,
@@ -429,7 +429,7 @@ function EditModal(): EdgyElement {
 
 // --- Page ----------------------------------------------------------------
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Stack({
             children: [

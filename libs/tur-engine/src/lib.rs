@@ -21,7 +21,7 @@ use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::host_api::HostApi;
 #[cfg(feature = "trace")]
-use core::elements::ElementTree;
+use core::elements::NodeTreeData;
 use elements::editable_text::EditableTextElement;
 
 pub struct TurApp {
@@ -87,7 +87,7 @@ impl TurApp {
     ///
     /// Generic, compiler-agnostic extension point: lets an embedder (e.g.
     /// `tur-wasm`) expose native services to JS without polluting the core
-    /// `__tur` widget namespace. The `__turHost` object is created on first
+    /// `__tur` view namespace. The `__turHost` object is created on first
     /// call. The embedder owns any heavy dependencies (e.g. swc) — tur-engine
     /// itself only provides this hook.
     pub fn register_host_fn(
@@ -144,10 +144,10 @@ impl TurApp {
         Ok(())
     }
 
-    /// Register a function on `globalThis.__tur.<name>` — the core widget
+    /// Register a function on `globalThis.__tur.<name>` — the core view
     /// namespace, set up by `init_bridge`. Lets an embedder (e.g. tur-wasm)
     /// add capability functions that JS calls as `__tur.<name>(...)`, alongside
-    /// the built-in widget factories. The embedder owns any heavy dependencies
+    /// the built-in view factories. The embedder owns any heavy dependencies
     /// (e.g. reqwest_wasm); tur-engine only provides this hook.
     pub fn register_tur_fn(
         &mut self,
@@ -314,22 +314,15 @@ impl TurApp {
     }
 
     pub fn focused_is_editable(&self) -> bool {
-        let Some(focused_id) = self.focused_element() else {
-            return false;
-        };
+        use core::focus::helper;
         let tree = self.internal.js_context.element_tree.borrow();
-        let Some(node) = tree.get_element(focused_id) else {
-            return false;
-        };
-        let Some(ref element) = node.element else {
-            return false;
-        };
-        element.cast::<EditableTextElement>().is_some()
+        let focus = self.internal.js_context.focus_manager.borrow();
+        helper::focused_is_editable(&tree, &focus)
     }
 
     #[cfg(feature = "trace")]
-    pub fn element_tree(&self) -> std::cell::Ref<'_, ElementTree> {
-        std::cell::Ref::map(self.internal.js_context.element_tree.borrow(), |t| t)
+    pub fn element_tree(&self) -> std::cell::Ref<'_, NodeTreeData> {
+        self.internal.js_context.element_tree.borrow()
     }
 
     pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {

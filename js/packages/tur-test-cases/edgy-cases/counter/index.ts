@@ -4,7 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     Expanded,
     MainAxisAlignment,
@@ -18,7 +18,7 @@ import {
 
 const count$ = source(0);
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),

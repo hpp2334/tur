@@ -32,7 +32,7 @@ impl AppHandler for KeyboardAppHandler {
             if let Some(node) = cx.element_tree.get_element(ElementNodeId::new(nid.as_u64())) {
                 if let Some(ref element) = node.element {
                     if let Some(f) = element.cast::<FocusableElement>() {
-                        if let Some(m) = f.component.on_key_down {
+                        if let Some(m) = f.view.on_key_down {
                             cx.mutation_queue.push(
                                 m,
                                 KeydownEvent {

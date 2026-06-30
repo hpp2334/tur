@@ -5,7 +5,7 @@ use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};
-use crate::core::widget::Effect;
+use crate::core::view::Effect;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -55,7 +55,7 @@ trait Erased: 'static {
 
     fn run_effect(
         &mut self,
-        cx: &mut crate::core::widget::WidgetCx,
+        cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     );
@@ -164,7 +164,7 @@ where
 
     fn run_effect(
         &mut self,
-        cx: &mut crate::core::widget::WidgetCx,
+        cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
@@ -381,11 +381,11 @@ impl AnyElement {
         self.inner.subscribe(cx)
     }
 
-    /// Run the widget's effect hook (Condition branch swap, LazyList range
-    /// adjustment, etc.). No-op for most widgets.
+    /// Run the view's effect hook (Condition branch swap, LazyList range
+    /// adjustment, etc.). No-op for most views.
     pub fn run_effect(
         &mut self,
-        cx: &mut crate::core::widget::WidgetCx,
+        cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {

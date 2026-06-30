@@ -1,6 +1,6 @@
-import { Color, Container, component, Positioned, Stack } from "@tur/edgy";
+import { Color, Container, view, Positioned, Stack } from "@tur/edgy";
 
-export default component(() =>
+export default view(() =>
     Stack({
         children: [
             Positioned({

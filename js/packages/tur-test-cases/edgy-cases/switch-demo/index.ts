@@ -4,7 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     Expanded,
     get,
@@ -40,7 +40,7 @@ function coloredPanel(label: string, hex: string) {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#1a1a2e"),

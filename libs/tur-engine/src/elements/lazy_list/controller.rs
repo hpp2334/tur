@@ -26,7 +26,7 @@ pub struct LazyListController {
     pub(crate) on_visible_range_change: Option<EdgyMutation<VisibleRangeChangeEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
-        Option<Rc<RefCell<crate::core::elements::ElementTree>>>,
+        Option<crate::core::elements::NodeTree>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
 }

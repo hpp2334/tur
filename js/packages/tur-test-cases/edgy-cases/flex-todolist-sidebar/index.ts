@@ -3,7 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     MainAxisAlignment,
     Row,
     SizedBox,
@@ -13,7 +13,7 @@ import {
 const TABS = [{ id: "todolist", label: "TodoList" }];
 const activeId = "todolist";
 
-export default component(() =>
+export default view(() =>
     Row({
         children: [
             Container({

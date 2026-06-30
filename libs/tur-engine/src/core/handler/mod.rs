@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::core::edgy_event::PendingMutationInvocationQueue;
-use crate::core::elements::ElementTree;
+use crate::core::elements::NodeTreeData;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::focus::FocusManager;
 use crate::core::gesture::GestureEventComposer;
@@ -14,7 +14,7 @@ pub trait AppHandler {
 }
 
 pub struct HandlerContext<'a> {
-    pub element_tree: &'a mut ElementTree,
+    pub element_tree: &'a mut NodeTreeData,
     pub focus_manager: &'a mut FocusManager,
     pub mutation_queue: &'a mut PendingMutationInvocationQueue,
     pub event_queue: &'a mut AppEventQueue,

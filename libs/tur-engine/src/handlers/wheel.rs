@@ -31,7 +31,7 @@ impl AppHandler for WheelAppHandler {
 }
 
 fn find_deepest_with_wheel(
-    tree: &crate::core::elements::ElementTree,
+    tree: &crate::core::elements::NodeTreeData,
     hit_path: &[ElementNodeId],
 ) -> Option<ElementNodeId> {
     for &id in hit_path {
@@ -69,7 +69,7 @@ pub fn dispatch_wheel(
     // change, so the per-node `dirty_layout` cache keeps re-measurement of
     // already-mounted descendants cheap (each `layout` call short-circuits
     // on the cached size). If a scroll handler later mounts/unmounts children
-    // (LazyList's `process_remount`), that path explicitly calls full
+    // (LazyList's `remount`), that path explicitly calls full
     // `mark_dirty` for the affected subtree.
     cx.element_tree.mark_dirty(id.into());
     overscroll

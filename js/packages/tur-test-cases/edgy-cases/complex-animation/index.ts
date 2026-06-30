@@ -5,7 +5,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     createAnimationController,
     derive,
     Expanded,
@@ -336,7 +336,7 @@ function LoopButton(): unknown {
     });
 }
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#f8fafc"),

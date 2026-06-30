@@ -3,7 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     createTextEditingController,
     Expanded,
     InputEdgy,
@@ -31,7 +31,7 @@ ctrl.setSpans([
     { content: "; }", color: Color.hex("#abb2bf") },
 ]);
 
-export default component(() =>
+export default view(() =>
     Expanded({
         child: Container({
             color: Color.hex("#282c34"),

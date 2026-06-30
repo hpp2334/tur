@@ -4,7 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    component,
+    view,
     derive,
     mutate,
     PointerInteract,
@@ -16,7 +16,7 @@ const lastX$ = source(0);
 const lastY$ = source(0);
 const phase$ = source("idle");
 
-export default component(() =>
+export default view(() =>
     Column({
         crossAlignment: CrossAxisAlignment.Start,
         children: [

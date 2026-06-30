@@ -1,20 +1,32 @@
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
 use crate::core::reactive::ReactiveReadJsContext;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use tur_shared::{Constraints, Offset, Size};
 
+use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;
-use crate::core::elements::ElementTree;
+use crate::core::elements::{NodeTree, NodeTreeData};
 use crate::core::fonts::FontManager;
 use crate::core::resource::{ResourceId, ResourceMap};
-use crate::core::widget::{PropValue, Val};
+use crate::core::view::{PropValue, Val};
 use crate::elements::ExpandedElement;
 
 pub struct LayoutContext<'a, 'js> {
-    pub(crate) tree: &'a mut ElementTree,
+    pub(crate) tree: &'a mut NodeTreeData,
     node_id: ElementNodeId,
     font_manager: &'a mut FontManager,
     text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
     resource_map: &'a ResourceMap,
+    /// Shared handles needed to build a `LayoutViewCx` for layout-phase
+    /// mount/unmount (LazyList remount). The `node_tree` is a clonable
+    /// handle so controllers captured at build time can reach the tree at
+    /// event time; `mutation_queue` / `dirty` let built views request
+    /// redraws and enqueue mutations.
+    pub(crate) node_tree: NodeTree,
+    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    pub(crate) dirty: Rc<Cell<bool>>,
     /// Read-only JS engine face. Held so `read_val` can (lazily) recompute
     /// stale derived atoms; this is the only JS access layout has, and the face
     /// exposes **only** `read` — no `set` / mutation is reachable from layout.
@@ -24,12 +36,16 @@ pub struct LayoutContext<'a, 'js> {
 }
 
 impl<'a, 'js> LayoutContext<'a, 'js> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
-        tree: &'a mut ElementTree,
+        tree: &'a mut NodeTreeData,
         node_id: ElementNodeId,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &'a ResourceMap,
+        node_tree: NodeTree,
+        mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+        dirty: Rc<Cell<bool>>,
         js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Self {
         LayoutContext {
@@ -38,6 +54,9 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
             font_manager,
             text_layout_cx,
             resource_map,
+            node_tree,
+            mutation_queue,
+            dirty,
             js,
         }
     }
@@ -49,6 +68,9 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
             self.font_manager,
             self.text_layout_cx,
             self.resource_map,
+            self.node_tree.clone(),
+            self.mutation_queue.clone(),
+            self.dirty.clone(),
             self.js,
         )
     }
@@ -110,7 +132,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
         let Some(expanded) = self.child_element::<ExpandedElement>(child_id) else {
             return 0.0;
         };
-        let Some(flex_val) = expanded.component.flex.clone() else {
+        let Some(flex_val) = expanded.view.flex.clone() else {
             return 1.0;
         };
         self.read_val(&flex_val).unwrap_or(1.0).max(0.0)

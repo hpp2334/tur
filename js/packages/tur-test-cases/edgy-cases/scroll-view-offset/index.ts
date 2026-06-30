@@ -1,7 +1,7 @@
 import {
     Column,
     CrossAxisAlignment,
-    component,
+    view,
     createScrollController,
     ScrollView,
     SizedBox,
@@ -9,7 +9,7 @@ import {
 
 const controller = createScrollController({ initialOffset: 100 });
 
-export default component(() =>
+export default view(() =>
     ScrollView({
         controller,
         queryKey: ["scroll-view"],

@@ -11,8 +11,10 @@ use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
 };
-use crate::core::widget::{
-    extract_component, val_from_js, Effect, PropValue, Component, Val, WidgetCx,
+use crate::core::view::{
+    ViewCx,
+    read_val,
+    extract_view, val_from_js, Effect, PropValue, View, Val, SharedViewCx,
 };
 
 use crate::elements::lazy_list::controller::LazyListController;
@@ -26,7 +28,7 @@ const FALLBACK_EXTENT: f64 = 50.0;
 const INITIAL_BUILD_COUNT: u64 = 20;
 
 // ---------------------------------------------------------------------------
-// LazyListComponent — the user's declaration.
+// LazyListView — the user's declaration.
 //
 // `axis`, `itemCount`, `overscan`, and `itemExtent` are reactive (`Val<T>`).
 // `builder` is a JS function `(index) => EdgyElement` captured at factory
@@ -34,7 +36,7 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub struct LazyListComponent {
+pub struct LazyListView {
     pub axis: Option<Val<Axis>>,
     pub item_count: Val<u64>,
     pub overscan: Option<Val<u64>>,
@@ -47,26 +49,26 @@ pub struct LazyListComponent {
     pub query_key: Option<Vec<String>>,
 }
 
-impl Component for LazyListComponent {
-    fn build(&self, cx: &mut WidgetCx, boa: &mut Context, parent: NodeId) -> NodeId {
+impl View for LazyListView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
 
         // Resolve the eager props needed by the element up-front.
         let axis = self
             .axis
             .as_ref()
-            .and_then(|v| cx.read_val(v, boa))
+            .and_then(|v| read_val(cx, v, boa))
             .unwrap_or(Axis::Vertical);
-        let item_count = cx.read_val(&self.item_count, boa).unwrap_or(0);
+        let item_count = read_val(cx, &self.item_count, boa).unwrap_or(0);
         let overscan = self
             .overscan
             .as_ref()
-            .and_then(|v| cx.read_val(v, boa))
+            .and_then(|v| read_val(cx, v, boa))
             .unwrap_or(3);
         let item_extent = self
             .item_extent
             .as_ref()
-            .and_then(|v| cx.read_val(v, boa));
+            .and_then(|v| read_val(cx, v, boa));
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
@@ -86,7 +88,7 @@ impl Component for LazyListComponent {
         cx.insert_node(
             id,
             AnyElement::with_wheel(LazyListElement {
-                component: self.clone(),
+                view: self.clone(),
                 node_id: id,
                 axis,
                 overscan,
@@ -99,8 +101,6 @@ impl Component for LazyListComponent {
                 first_mounted_offset: 0.0,
                 reported_start: 0,
                 reported_end: 0,
-                remount_requested: true,
-                last_viewport_main: 0.0,
             })
             .with_callbacks(),
             boa,
@@ -122,11 +122,11 @@ fn build_item_spec(
     builder: &JsFunction,
     index: u64,
     boa: &mut Context,
-) -> Option<Rc<dyn Component>> {
+) -> Option<Rc<dyn View>> {
     let result = builder
         .call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa)
         .ok()?;
-    extract_component(&result)
+    extract_view(&result)
 }
 
 // ---------------------------------------------------------------------------
@@ -135,13 +135,14 @@ fn build_item_spec(
 // children by the current scroll position.
 //
 // Virtualization: only items inside [start, end] (computed from scroll
-// position + viewport size + overscan) are mounted. The wheel handler sets
-// `remount_requested=true`; a flush pass then mounts/unmounts items to
-// match the new range.
+// position + viewport size + overscan) are mounted. Remount happens inside
+// `perform_layout` (via `LayoutViewCx`), using the real viewport from
+// constraints, so newly-visible items mount/unmount in the same pass that
+// measures them.
 // ---------------------------------------------------------------------------
 
 pub struct LazyListElement {
-    pub component: LazyListComponent,
+    pub view: LazyListView,
     pub(crate) node_id: ElementNodeId,
     pub(crate) axis: Axis,
     pub(crate) overscan: u64,
@@ -164,23 +165,17 @@ pub struct LazyListElement {
     /// persistent anchor for layout positioning: each mounted child's
     /// content-space offset is `first_mounted_offset` + sum of extents
     /// between it and the first mounted. Maintained incrementally in
-    /// `process_remount` so positioning is O(visible_count) regardless of
+    /// `remount` so positioning is O(visible_count) regardless of
     /// scroll depth (no `cumulative_offset` walk from 0).
     pub(crate) first_mounted_index: u64,
     /// Content-space offset of the first mounted item's top edge.
     /// `perform_layout`'s position step walks forward from this anchor, setting
-    /// each child's offset to the running sum. Synced in `process_remount`
+    /// each child's offset to the running sum. Synced in `remount`
     /// as the leading edge shifts (delta-update: O(items added/removed at
     /// the leading edge), not O(first_mounted_index)).
     pub(crate) first_mounted_offset: f64,
     pub(crate) reported_start: u64,
     pub(crate) reported_end: u64,
-    /// Set by `on_wheel` when the scroll offset shifts enough to possibly
-    /// change the visible range. Consumed by `process_remount`.
-    pub(crate) remount_requested: bool,
-    /// Last viewport main-axis size seen during layout. Used by
-    /// `compute_visible_range` when the wheel fires between layouts.
-    pub(crate) last_viewport_main: f64,
 }
 
 impl LazyListElement {
@@ -196,7 +191,7 @@ impl LazyListElement {
     /// to the number of items actually built, which is kept in sync by the
     /// effect).
     pub fn item_count(&self) -> u64 {
-        match &self.component.item_count {
+        match &self.view.item_count {
             Val::Static(v) => *v,
             Val::Reactive(_) => self.visible.len() as u64,
         }
@@ -286,7 +281,7 @@ impl LazyListElement {
     /// position children by their logical index (which is stable across
     /// scroll-driven mount/unmount) rather than by their position in the
     /// parent's children vector (which can be scrambled when items mount
-    /// out of order — see `process_remount`).
+    /// out of order — see `remount`).
     pub fn visible_index_of(&self, child_id: NodeId) -> Option<u64> {
         self.visible
             .iter()
@@ -308,24 +303,22 @@ impl LazyListElement {
 
     /// Mount items in `[start, end]` that aren't currently built, and
     /// unmount any built items outside that range. Mutates the tree via
-    /// `cx`. Sorted visible is preserved.
+    /// `cx`. Sorted `visible` is preserved.
     ///
-    /// This is called from `process_pending_remounts` in the flush loop
-    /// — it has full WidgetCx + Context access, which `on_wheel` does not.
-    pub fn process_remount(
+    /// Called from `perform_layout` with the **real** viewport (from
+    /// constraints) via a `LayoutViewCx` — so remount runs during layout,
+    /// not as a separate pre-layout pass.
+    pub fn remount(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut dyn ViewCx,
         boa: &mut Context,
         viewport_main: f64,
     ) {
-        // Defer remount until we have a real viewport size. Layout writes
-        // the viewport into `last_viewport_main`; until then we keep the
-        // initial set mounted so the first paint isn't blank.
+        // Defer remount until we have a real viewport size. Until then keep
+        // the initial set mounted so the first paint isn't blank.
         if viewport_main <= 0.0 {
             return;
         }
-        self.remount_requested = false;
-        self.last_viewport_main = viewport_main;
 
         let count = self.item_count();
         if count == 0 {
@@ -336,7 +329,6 @@ impl LazyListElement {
                 cx.destroy_child(id);
             }
             self.visible.clear();
-            cx.mark_dirty(self.node_id.into());
             return;
         }
 
@@ -349,7 +341,6 @@ impl LazyListElement {
             .filter(|(i, _)| *i < new_start || *i > new_end)
             .map(|&(_, id)| id)
             .collect();
-        let mut did_change = !to_destroy.is_empty();
         for id in to_destroy {
             cx.destroy_child(id);
         }
@@ -358,7 +349,7 @@ impl LazyListElement {
         // Mount newly-visible items.
         let existing: std::collections::HashSet<u64> =
             self.visible.iter().map(|(i, _)| *i).collect();
-        let builder = self.component.builder.clone();
+        let builder = self.view.builder.clone();
         let node_id = self.node_id;
         let mut newly_mounted: Vec<(u64, NodeId)> = Vec::new();
         for index in new_start..=new_end {
@@ -385,7 +376,6 @@ impl LazyListElement {
             }
         }
         if !newly_mounted.is_empty() {
-            did_change = true;
             self.visible.extend(newly_mounted);
             self.visible.sort_by_key(|(i, _)| *i);
         }
@@ -419,15 +409,6 @@ impl LazyListElement {
             self.first_mounted_offset -= ext;
         }
 
-        if did_change {
-            cx.mark_dirty(self.node_id.into());
-        } else {
-            // No structural change (scroll within the currently-mounted
-            // range): the wheel handler already marked this node dirty, so
-            // `perform_layout` will re-run, pick up the new `position.pixels`,
-            // and re-offset children using the persistent anchor above.
-        }
-
         // Report visible-range change.
         if (self.reported_start, self.reported_end) != (new_start, new_end) {
             self.reported_start = new_start;
@@ -447,20 +428,20 @@ impl crate::core::layout::ElementSubscribe for LazyListElement {}
 impl Effect for LazyListElement {
     fn effect(
         &mut self,
-        cx: &mut WidgetCx,
+        cx: &mut SharedViewCx,
         boa: &mut Context,
         dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        let count_dirty = self.component.item_count.is_dirty(dirties);
-        let axis_dirty = self.component.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
-        let extent_dirty = self.component.item_extent.as_ref().is_some_and(|v| v.is_dirty(dirties));
+        let count_dirty = self.view.item_count.is_dirty(dirties);
+        let axis_dirty = self.view.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
+        let extent_dirty = self.view.item_extent.as_ref().is_some_and(|v| v.is_dirty(dirties));
 
         if axis_dirty {
             self.axis = self
-                .component
+                .view
                 .axis
                 .as_ref()
-                .and_then(|v| cx.read_val(v, boa))
+                .and_then(|v| read_val(cx, v, boa))
                 .unwrap_or(self.axis);
             // Cached extents are axis-specific — invalidate. Also reset the
             // positioning anchor: extents along the new axis differ, so the
@@ -475,10 +456,10 @@ impl Effect for LazyListElement {
 
         if extent_dirty {
             self.item_extent = self
-                .component
+                .view
                 .item_extent
                 .as_ref()
-                .and_then(|v| cx.read_val(v, boa));
+                .and_then(|v| read_val(cx, v, boa));
             // New fixed extent invalidates cached measurements and the
             // positioning anchor (which was computed from old extents).
             self.extent_cache.clear();
@@ -487,7 +468,7 @@ impl Effect for LazyListElement {
         }
 
         if count_dirty {
-            let new_count = cx.read_val(&self.component.item_count, boa).unwrap_or(0);
+            let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(0);
             let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
 
             if new_count < current_max {
@@ -513,28 +494,10 @@ impl Effect for LazyListElement {
                     self.first_mounted_offset = self.cumulative_offset(new_first);
                 }
             } else if new_count > current_max {
-                // Only build the items that fall inside the current visible
-                // range. Items beyond it will be built lazily by the remount
-                // pass as the user scrolls.
-                let vp = self.last_viewport_main;
-                let (start, end) = if vp > 0.0 {
-                    self.compute_visible_range(vp)
-                } else {
-                    (0, new_count.min(INITIAL_BUILD_COUNT).saturating_sub(1))
-                };
-                let builder = self.component.builder.clone();
-                let node_id = self.node_id;
-                for index in current_max.max(start).max(current_max)..=end.max(current_max).min(new_count.saturating_sub(1)) {
-                    if index < current_max {
-                        continue;
-                    }
-                    let Some(spec) = build_item_spec(&builder, index, boa) else {
-                        continue;
-                    };
-                    let item_id = spec.build(cx, boa, node_id.into());
-                    self.visible.push((index, item_id));
-                }
-                self.visible.sort_by_key(|(i, _)| *i);
+                // itemCount grew: don't build eagerly here. `perform_layout`'s
+                // remount step will mount the newly-in-range items using the
+                // real viewport. Just clearing the anchor isn't needed — the
+                // existing items keep their positions.
             }
 
             cx.mark_dirty(self.node_id.into());
@@ -592,7 +555,10 @@ impl ElementOnWheel for LazyListElement {
         let new_pixels = self.position.pixels();
 
         if (new_pixels - old_pixels).abs() > 0.001 {
-            self.remount_requested = true;
+            // No flag to set: the wheel handler's `mark_dirty` (in
+            // `dispatch_wheel`) makes the next `perform_layout` re-run, and
+            // its remount step uses the new `position.pixels()` with the real
+            // viewport to adjust the mounted set.
             cx.request_redraw();
         }
 
@@ -634,13 +600,13 @@ fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunc
     v.as_object().and_then(JsFunction::from_object)
 }
 
-impl LazyListComponent {
-    /// Build a `LazyListComponent` from a JS props object. Returns `None` when a
+impl LazyListView {
+    /// Build a `LazyListView` from a JS props object. Returns `None` when a
     /// required prop (`itemCount`, `builder`) is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let item_count = prop_val::<u64>(props, "itemCount", ctx)?;
         let builder = prop_builder(props, "builder", ctx)?;
-        Some(LazyListComponent {
+        Some(LazyListView {
             axis: prop_val::<Axis>(props, "axis", ctx),
             item_count,
             overscan: prop_val::<u64>(props, "overscan", ctx),

@@ -1,7 +1,8 @@
 use tur_shared::{Constraints, Offset, Size};
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementLayout, LayoutContext};
+use crate::core::layout::{ElementLayout, LayoutContext, LayoutViewCx};
+use crate::core::view::ViewCx;
 
 use super::element::LazyListElement;
 
@@ -9,7 +10,7 @@ impl ElementLayout for LazyListElement {
     fn perform_layout(
         &mut self,
         constraints: &Constraints,
-        children: &[ElementNodeId],
+        _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
         let viewport_w = if constraints.max_width.is_finite() {
@@ -23,13 +24,49 @@ impl ElementLayout for LazyListElement {
             0.0
         };
         let viewport = constraints.constrain(Size::new(viewport_w, viewport_h));
+        let viewport_main = self.axis.main(viewport);
 
-        if self.item_count() == 0 || children.is_empty() {
+        if self.item_count() == 0 {
             self.position.apply_dimensions(viewport, Size::ZERO);
             self.position.set_extents(0.0, 0.0);
+            // Drop any mounted items.
+            if !self.visible.is_empty() {
+                let to_destroy: Vec<NodeId> =
+                    self.visible.iter().map(|&(_, id)| id).collect();
+                self.visible.clear();
+                let mut vcx = LayoutViewCx::new(
+                    cx.tree,
+                    cx.node_tree.clone(),
+                    cx.mutation_queue.clone(),
+                    cx.dirty.clone(),
+                );
+                for id in to_destroy {
+                    vcx.destroy_child(id);
+                }
+            }
             return viewport;
         }
 
+        // --- remount phase: use the REAL viewport (from constraints) to
+        // adjust the mounted set. Build-during-layout runs through a
+        // LayoutViewCx backed by this same `&mut NodeTreeData` borrow, so
+        // no competing Rc<RefCell> borrow. Dropped before measure so
+        // `cx.layout_child` can reborrow the tree. ---
+        if viewport_main > 0.0 {
+            let boa = cx.js.boa_mut();
+            let mut vcx = LayoutViewCx::new(
+                cx.tree,
+                cx.node_tree.clone(),
+                cx.mutation_queue.clone(),
+                cx.dirty.clone(),
+            );
+            self.remount(&mut vcx, boa, viewport_main);
+        }
+
+        // --- measure phase: lay out every currently-mounted item. We
+        // iterate `self.visible` (the authoritative mounted set after
+        // remount), not the `children` snapshot, so newly-mounted items
+        // measure in this same pass. ---
         let child_cs = match self.axis {
             tur_shared::Axis::Vertical => Constraints {
                 min_width: viewport.width,
@@ -46,20 +83,19 @@ impl ElementLayout for LazyListElement {
         };
 
         self.child_extents.clear();
-        self.child_extents.reserve(children.len());
+        self.child_extents.reserve(self.visible.len());
 
+        let visible: Vec<(u64, NodeId)> = self.visible.clone();
         let mut measured_main = 0.0f64;
-        for &child_id in children {
-            let size = cx.layout_child(child_id, &child_cs);
+        for (logical, child_id) in &visible {
+            let size = cx.layout_child(ElementNodeId::new(child_id.as_u64()), &child_cs);
             let extent = self.axis.main(size);
             self.child_extents.push(extent);
             measured_main += extent;
             // Persist the measurement in the per-index cache. Keyed by
             // logical index (stable across scroll-driven mount/unmount) so
             // unmounted-then-remounted items recall their previous extent.
-            if let Some(logical) = self.visible_index_of(NodeId::from(child_id)) {
-                self.extent_cache.insert(logical, extent);
-            }
+            self.extent_cache.insert(*logical, extent);
         }
 
         // Total content length is computed from the declared item count,
@@ -68,14 +104,10 @@ impl ElementLayout for LazyListElement {
         // this is exact; for variable heights, we extrapolate from the
         // average of measured children.
         let avg = self.average_extent();
-        let total_main = if children.len() as u64 >= self.item_count() {
+        let total_main = if visible.len() as u64 >= self.item_count() {
             // All items are mounted — use the exact sum.
             measured_main
-        } else if self.child_extents.is_empty() {
-            self.item_count() as f64 * avg
         } else {
-            // Average over measured children, scaled to declared count.
-            // Use the item_extent directly when provided so the math is exact.
             self.item_count() as f64 * avg
         };
 
@@ -84,8 +116,6 @@ impl ElementLayout for LazyListElement {
             tur_shared::Axis::Horizontal => Size::new(total_main, viewport.height),
         };
         self.position.apply_dimensions(viewport, content);
-        let viewport_main = self.axis.main(viewport);
-        self.last_viewport_main = viewport_main;
         let max_scroll = (total_main - viewport_main).max(0.0);
         self.position.set_extents(0.0, max_scroll);
 
@@ -106,11 +136,10 @@ impl LazyListElement {
         // item's top edge) and walk forward, setting each child's offset to
         // the running sum and advancing by the child's cached (or
         // avg-fallback) extent. O(visible_count) per layout, regardless of
-        // how deep the user has scrolled — the old `cumulative_offset(N)`
-        // walk from index 0 is gone.
+        // how deep the user has scrolled.
         //
-        // The anchor is maintained in `process_remount` (delta-updated as
-        // the leading visible index shifts) and reset on axis/itemExtent/
+        // The anchor is maintained in `remount` (delta-updated as the
+        // leading visible index shifts) and reset on axis/itemExtent/
         // itemCount changes in the Effect handler.
         let visible: Vec<(u64, NodeId)> = self.visible.clone();
         let mut offset = self.first_mounted_offset;
@@ -125,3 +154,4 @@ impl LazyListElement {
         }
     }
 }
+
