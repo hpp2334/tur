@@ -9,6 +9,7 @@ import {
     MainAxisAlignment,
     Mutation,
     PointerInteract,
+    PointerInteractEvent,
     ReadableSubscribe,
     Readable,
     Row,
@@ -66,7 +67,7 @@ export default view(() =>
                                 pill({
                                     label: "+1",
                                     queryKey: ["inc"],
-                                    onClick: mutate(({ get, set }) =>
+                                    onClick: mutate(({ get, set }, _e: PointerInteractEvent) =>
                                         set(count$, get(count$) + 1),
                                     ),
                                 }),
@@ -74,7 +75,7 @@ export default view(() =>
                                 pill({
                                     label: derive((g) => (g(visible$) ? "hide" : "show")),
                                     queryKey: ["toggle"],
-                                    onClick: mutate(({ get, set }) =>
+                                    onClick: mutate(({ get, set }, _e: PointerInteractEvent) =>
                                         set(visible$, !get(visible$)),
                                     ),
                                 }),
@@ -125,7 +126,7 @@ export default view(() =>
 function pill(opts: {
     label: string | Readable<string>;
     queryKey?: string[];
-    onClick: Mutation<[]>;
+    onClick: Mutation<[PointerInteractEvent]>;
 }) {
     return PointerInteract({
         queryKey: opts.queryKey,
