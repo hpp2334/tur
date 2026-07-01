@@ -5,20 +5,20 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    derive,
     Expanded,
+    lifecycleView,
     MainAxisAlignment,
-    Mutation,
+    type Mutation,
+    mutate,
     PointerInteract,
-    PointerInteractEvent,
+    type PointerInteractEvent,
+    type Readable,
     ReadableSubscribe,
-    Readable,
     Row,
     SizedBox,
-    Text,
-    derive,
-    lifecycleView,
-    mutate,
     source,
+    Text,
     view,
 } from "@tur/edgy";
 
@@ -43,19 +43,25 @@ export default view(() =>
                             color: Color.hex("#0f172a"),
                         }),
                         Text({
-                            text: derive((g) => `onUpdated: ${g(updateCount$)}`),
+                            text: derive(
+                                (g) => `onUpdated: ${g(updateCount$)}`,
+                            ),
                             queryKey: ["update-count"],
                             fontSize: 18,
                             color: Color.hex("#1d4ed8"),
                         }),
                         Text({
-                            text: derive((g) => `onMounted: ${g(mountedCount$)}`),
+                            text: derive(
+                                (g) => `onMounted: ${g(mountedCount$)}`,
+                            ),
                             queryKey: ["mounted-count"],
                             fontSize: 18,
                             color: Color.hex("#16a34a"),
                         }),
                         Text({
-                            text: derive((g) => `beforeDestroy: ${g(destroyedCount$)}`),
+                            text: derive(
+                                (g) => `beforeDestroy: ${g(destroyedCount$)}`,
+                            ),
                             queryKey: ["destroyed-count"],
                             fontSize: 18,
                             color: Color.hex("#dc2626"),
@@ -67,16 +73,24 @@ export default view(() =>
                                 pill({
                                     label: "+1",
                                     queryKey: ["inc"],
-                                    onClick: mutate(({ get, set }, _e: PointerInteractEvent) =>
-                                        set(count$, get(count$) + 1),
+                                    onClick: mutate(
+                                        (
+                                            { get, set },
+                                            _e: PointerInteractEvent,
+                                        ) => set(count$, get(count$) + 1),
                                     ),
                                 }),
                                 SizedBox({ width: 12 }),
                                 pill({
-                                    label: derive((g) => (g(visible$) ? "hide" : "show")),
+                                    label: derive((g) =>
+                                        g(visible$) ? "hide" : "show",
+                                    ),
                                     queryKey: ["toggle"],
-                                    onClick: mutate(({ get, set }, _e: PointerInteractEvent) =>
-                                        set(visible$, !get(visible$)),
+                                    onClick: mutate(
+                                        (
+                                            { get, set },
+                                            _e: PointerInteractEvent,
+                                        ) => set(visible$, !get(visible$)),
                                     ),
                                 }),
                             ],
@@ -89,7 +103,10 @@ export default view(() =>
                                     element: ReadableSubscribe({
                                         readables: [count$],
                                         onUpdate$: mutate(({ get, set }) =>
-                                            set(updateCount$, get(updateCount$) + 1),
+                                            set(
+                                                updateCount$,
+                                                get(updateCount$) + 1,
+                                            ),
                                         ),
                                         child: Container({
                                             width: 220,
@@ -108,13 +125,20 @@ export default view(() =>
                                         }),
                                     }),
                                     onMounted$: mutate(({ get, set }) =>
-                                        set(mountedCount$, get(mountedCount$) + 1),
+                                        set(
+                                            mountedCount$,
+                                            get(mountedCount$) + 1,
+                                        ),
                                     ),
                                     beforeDestroy$: mutate(({ get, set }) =>
-                                        set(destroyedCount$, get(destroyedCount$) + 1),
+                                        set(
+                                            destroyedCount$,
+                                            get(destroyedCount$) + 1,
+                                        ),
                                     ),
                                 })),
-                            elseChild: () => SizedBox({ width: 220, height: 64 }),
+                            elseChild: () =>
+                                SizedBox({ width: 220, height: 64 }),
                         }),
                     ],
                 }),
