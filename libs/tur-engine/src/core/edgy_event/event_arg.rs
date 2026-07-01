@@ -19,6 +19,13 @@ pub trait EventArg: 'static {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue>;
 }
 
+/// No-arg callbacks (lifecycle hooks: onMounted / onUpdated / beforeDestroy).
+impl EventArg for () {
+    fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
+        Vec::new()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // JS extraction helpers — the controller-side analogue of `prop_mutation` for
 // specs. Both paths produce an `EdgyMutation<E>` from an atom handle.

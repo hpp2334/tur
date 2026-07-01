@@ -7,7 +7,7 @@ use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::view::{
     ViewCx,
-    val_from_js, Effect, PropValue, View, Val,
+    val_from_js, Lifecycle, PropValue, View, Val,
 };
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 
@@ -114,7 +114,7 @@ impl ContainerElement {
     }
 }
 
-impl Effect for ContainerElement {}
+impl Lifecycle for ContainerElement {}
 
 impl ElementSubscribe for ContainerElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

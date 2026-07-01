@@ -125,19 +125,20 @@ pub fn extract_view(value: &JsValue) -> Option<Rc<dyn View>> {
 }
 
 // ---------------------------------------------------------------------------
-// Effect — optional lifecycle hook for views that mutate the tree in
-// response to reactive changes (Condition swaps branches, LazyList adjusts
-// its visible range).  Default impl is a no-op so every view type
-// satisfies the bound without boilerplate.
+// Lifecycle — optional element lifecycle hooks. All three default to no-op
+// so every element type satisfies the bound without boilerplate.
+//
+//   * `on_mounted`     — fired once, right after the element is inserted
+//                        into the tree (in `SharedViewCx::insert_node`).
+//   * `on_updated`     — fired after layout, for each element whose
+//                        subscribed atoms were dirtied during the reactive
+//                        flush (driven by the subscriber graph).
+//   * `before_destroy` — fired once, immediately before the element is
+//                        removed from the tree (in `destroy_subtree`).
 // ---------------------------------------------------------------------------
 
-pub trait Effect {
-    fn effect(
-        &mut self,
-        cx: &mut SharedViewCx,
-        boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
-    ) {
-        let _ = (cx, boa, dirties);
-    }
+pub trait Lifecycle {
+    fn on_mounted(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
+    fn on_updated(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
+    fn before_destroy(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
 }

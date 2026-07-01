@@ -5,7 +5,7 @@ use tur_shared::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};
-use crate::core::view::Effect;
+use crate::core::view::Lifecycle;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -53,11 +53,20 @@ trait Erased: 'static {
 
     fn subscribe(&self, cx: &mut SubscribeCx);
 
-    fn run_effect(
+    fn run_on_mounted(
         &mut self,
         cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
+    );
+    fn run_on_updated(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    );
+    fn run_before_destroy(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
     );
 }
 
@@ -99,7 +108,7 @@ fn ime_dispatch<E: ElementOnIme + 'static>(
 
 impl<E> Erased for E
 where
-    E: ElementLayout + ElementRender + ElementTrace + Effect + ElementSubscribe + 'static,
+    E: ElementLayout + ElementRender + ElementTrace + Lifecycle + ElementSubscribe + 'static,
 {
     fn kind(&self) -> ElementKind {
         ElementKind::new(<Self as ElementRender>::type_name(self))
@@ -162,18 +171,33 @@ where
         <Self as ElementSubscribe>::subscribe(self, cx)
     }
 
-    fn run_effect(
+    fn run_on_mounted(
         &mut self,
         cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        <Self as Effect>::effect(self, cx, boa, dirties);
+        <Self as Lifecycle>::on_mounted(self, cx, boa);
+    }
+
+    fn run_on_updated(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        <Self as Lifecycle>::on_updated(self, cx, boa);
+    }
+
+    fn run_before_destroy(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        <Self as Lifecycle>::before_destroy(self, cx, boa);
     }
 }
 
 impl AnyElement {
-    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Effect + ElementSubscribe + 'static>(
+    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Lifecycle + ElementSubscribe + 'static>(
         element: E,
     ) -> Self {
         AnyElement {
@@ -190,7 +214,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnKeyboard
             + ElementOnGesture
@@ -212,7 +236,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnGesture
             + 'static,
@@ -233,7 +257,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnWheel
             + 'static,
@@ -254,7 +278,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnFocus
             + 'static,
@@ -275,7 +299,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnFocus
             + ElementOnGesture
@@ -297,7 +321,7 @@ impl AnyElement {
         E: ElementLayout
             + ElementRender
             + ElementTrace
-            + Effect
+            + Lifecycle
             + ElementSubscribe
             + ElementOnKeyboard
             + ElementOnGesture
@@ -381,15 +405,36 @@ impl AnyElement {
         self.inner.subscribe(cx)
     }
 
-    /// Run the view's effect hook (Condition branch swap, LazyList range
-    /// adjustment, etc.). No-op for most views.
-    pub fn run_effect(
+    /// Fire the element's `on_mounted` lifecycle hook (called once, right
+    /// after the element is inserted into the tree). No-op for most elements.
+    pub fn run_on_mounted(
         &mut self,
         cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
     ) {
-        self.inner.run_effect(cx, boa, dirties);
+        self.inner.run_on_mounted(cx, boa);
+    }
+
+    /// Fire the element's `on_updated` lifecycle hook (called after layout,
+    /// for elements whose subscribed atoms were dirtied this flush).
+    /// No-op for most elements.
+    pub fn run_on_updated(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        self.inner.run_on_updated(cx, boa);
+    }
+
+    /// Fire the element's `before_destroy` lifecycle hook (called once,
+    /// immediately before the element is removed from the tree).
+    /// No-op for most elements.
+    pub fn run_before_destroy(
+        &mut self,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        self.inner.run_before_destroy(cx, boa);
     }
 
     pub fn on_keyboard_event(

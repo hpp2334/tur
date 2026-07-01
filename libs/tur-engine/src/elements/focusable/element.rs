@@ -8,7 +8,7 @@ use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::keyboard::{KeydownEvent, KeyupEvent};
-use crate::core::view::{ViewCx, extract_view, Effect, View};
+use crate::core::view::{ViewCx, extract_view, Lifecycle, View};
 
 // ---------------------------------------------------------------------------
 // FocusableView — wraps a child and provides keyboard / focus callbacks.
@@ -63,7 +63,7 @@ impl Focusable for FocusableElement {
 
 impl crate::core::layout::ElementSubscribe for FocusableElement {}
 
-impl Effect for FocusableElement {}
+impl Lifecycle for FocusableElement {}
 
 impl ElementTrace for FocusableElement {}
 

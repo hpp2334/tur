@@ -8,7 +8,7 @@ use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::view::{
     ViewCx,
-    extract_view, val_from_js, Effect, PropValue, View, Val,
+    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -55,7 +55,7 @@ impl Default for OpacityPainting {
     }
 }
 
-impl Effect for OpacityElement {}
+impl Lifecycle for OpacityElement {}
 
 impl ElementSubscribe for OpacityElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
@@ -169,7 +169,7 @@ pub struct TransformPainting {
     pub translate_y: Option<f64>,
 }
 
-impl Effect for TransformElement {}
+impl Lifecycle for TransformElement {}
 
 impl ElementSubscribe for TransformElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

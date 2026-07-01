@@ -11,7 +11,7 @@ use crate::core::elements::{
 use crate::core::scroll::ScrollController;
 use crate::core::view::{
     ViewCx,
-    val_from_js, Effect, PropValue, View, Val,
+    val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
@@ -111,7 +111,7 @@ impl ScrollbarElement {
     }
 }
 
-impl Effect for ScrollbarElement {}
+impl Lifecycle for ScrollbarElement {}
 
 impl ElementSubscribe for ScrollbarElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

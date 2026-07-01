@@ -1,0 +1,97 @@
+use boa_engine::object::builtins::JsFunction;
+use boa_engine::object::JsObject;
+use boa_engine::{Context, JsValue};
+
+use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
+use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::layout::ElementSubscribe;
+use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
+
+// ---------------------------------------------------------------------------
+// LifecycleView — wraps a JS factory `() => { element, onMounted$?, beforeDestroy$? }`.
+//
+// The factory is invoked once at build time. It returns the child `element`
+// plus optional `onMounted$` / `beforeDestroy$` mutation callbacks, which fire
+// at the element's mount / destroy lifecycle points (driven centrally by the
+// flush loop). The wrapper is a transparent pass-through for layout / paint.
+// ---------------------------------------------------------------------------
+
+pub struct LifecycleView {
+    pub factory: JsFunction,
+}
+
+impl View for LifecycleView {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
+        let descriptor = match self.factory.call(&JsValue::undefined(), &[], boa) {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::error!("lifecycleView factory error: {e}");
+                return parent;
+            }
+        };
+        let Some(obj) = descriptor.as_object() else {
+            tracing::error!("lifecycleView factory must return an object");
+            return parent;
+        };
+
+        let element_view = {
+            let v = obj
+                .get(boa_engine::js_string!("element"), boa)
+                .ok()
+                .unwrap_or(JsValue::undefined());
+            extract_view(&v)
+        };
+        let on_mounted = prop_mutation(&obj, "onMounted$", boa);
+        let before_destroy = prop_mutation(&obj, "beforeDestroy$", boa);
+
+        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        cx.insert_node(
+            id,
+            AnyElement::new(LifecycleElement {
+                on_mounted,
+                before_destroy,
+            }),
+            boa,
+        );
+        if let Some(child) = element_view {
+            child.build(cx, boa, id.into());
+        }
+        cx.link_child(parent, id.into());
+        id.into()
+    }
+}
+
+pub struct LifecycleElement {
+    pub on_mounted: Option<EdgyMutation<()>>,
+    pub before_destroy: Option<EdgyMutation<()>>,
+}
+
+impl ElementTrace for LifecycleElement {
+    fn trace_label(&self) -> String {
+        String::new()
+    }
+}
+
+// No reactive deps; the default no-op subscribe satisfies the bound.
+impl ElementSubscribe for LifecycleElement {}
+
+impl Lifecycle for LifecycleElement {
+    fn on_mounted(&mut self, cx: &mut SharedViewCx, _boa: &mut Context) {
+        if let Some(m) = self.on_mounted {
+            cx.mutation_queue().borrow_mut().push(m, ());
+        }
+    }
+
+    fn before_destroy(&mut self, cx: &mut SharedViewCx, _boa: &mut Context) {
+        if let Some(m) = self.before_destroy {
+            cx.mutation_queue().borrow_mut().push(m, ());
+        }
+    }
+}
+
+fn prop_mutation(obj: &JsObject, key: &str, ctx: &mut Context) -> Option<EdgyMutation<()>> {
+    use boa_engine::js_string;
+    let v = obj.get(js_string!(key), ctx).ok()?;
+    edgy_mutation_from_js(&v)
+}

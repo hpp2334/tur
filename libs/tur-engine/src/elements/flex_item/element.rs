@@ -6,7 +6,7 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{ViewCx, extract_view, val_from_js, Effect, PropValue, View, Val};
+use crate::core::view::{ViewCx, extract_view, val_from_js, Lifecycle, PropValue, View, Val};
 
 // ---------------------------------------------------------------------------
 // ExpandedView — declares a flex item. Has exactly one child; the parent FlexElement
@@ -38,7 +38,7 @@ pub struct ExpandedElement {
     pub view: ExpandedView,
 }
 
-impl Effect for ExpandedElement {}
+impl Lifecycle for ExpandedElement {}
 
 impl ElementSubscribe for ExpandedElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

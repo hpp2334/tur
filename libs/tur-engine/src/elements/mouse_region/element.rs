@@ -11,7 +11,7 @@ use crate::core::layout::SubscribeCx;
 use crate::core::view::{
     ViewCx,
     read_val,
-    extract_view, val_from_js, Effect, PropValue, View, Val,
+    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ impl crate::core::layout::ElementSubscribe for MouseRegionElement {
     }
 }
 
-impl Effect for MouseRegionElement {}
+impl Lifecycle for MouseRegionElement {}
 
 impl ElementTrace for MouseRegionElement {
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {

@@ -6,7 +6,7 @@ use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAl
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{ViewCx, val_from_js, Effect, PropValue, View, Val};
+use crate::core::view::{ViewCx, val_from_js, Lifecycle, PropValue, View, Val};
 
 pub(crate) struct ChildData {
     pub id: ElementNodeId,
@@ -71,7 +71,7 @@ pub struct FlexElement {
     pub(crate) overflow: f64,
 }
 
-impl Effect for FlexElement {}
+impl Lifecycle for FlexElement {}
 
 impl ElementSubscribe for FlexElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

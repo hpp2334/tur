@@ -5,7 +5,7 @@ use boa_engine::Context;
 
 use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::view::{ViewCx, extract_view, Effect, View};
+use crate::core::view::{ViewCx, extract_view, Lifecycle, View};
 
 // ---------------------------------------------------------------------------
 // FragmentView — a transparent multi-child container. Children are built
@@ -44,7 +44,7 @@ pub struct FragmentElement {
 
 impl crate::core::layout::ElementSubscribe for FragmentElement {}
 
-impl Effect for FragmentElement {}
+impl Lifecycle for FragmentElement {}
 
 impl ElementTrace for FragmentElement {}
 

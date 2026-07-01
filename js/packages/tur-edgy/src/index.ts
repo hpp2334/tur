@@ -82,6 +82,42 @@ export function view(f: () => EdgyElement): EdgyView {
 }
 
 // ---------------------------------------------------------------------------
+// lifecycleView — wrap a static subtree with mount / destroy callbacks.
+//
+// The factory runs once at build time, returning the `element` plus optional
+// `onMounted$` / `beforeDestroy$` mutation callbacks. `onMounted$` fires once
+// after the element is inserted (and laid out); `beforeDestroy$` fires once
+// when the element is removed from the tree. The wrapper is a transparent
+// pass-through for layout and paint.
+// ---------------------------------------------------------------------------
+
+export interface LifecycleDescriptor {
+    element: EdgyElement;
+    onMounted$?: Mutation<[]>;
+    beforeDestroy$?: Mutation<[]>;
+}
+
+export function lifecycleView(f: () => LifecycleDescriptor): EdgyElement {
+    return __tur.lifecycleView(__ctx, f) as EdgyElement;
+}
+
+// ---------------------------------------------------------------------------
+// ReadableSubscribe — subscribe to a list of readable atoms and fire an
+// `onUpdate$` mutation after layout whenever any of them is dirtied. `child`
+// is required (transparent pass-through).
+// ---------------------------------------------------------------------------
+
+export interface ReadableSubscribeProps {
+    readables: Readable<unknown>[];
+    onUpdate$: Mutation<[]>;
+    child: EdgyElement;
+}
+
+export function ReadableSubscribe(props: ReadableSubscribeProps): EdgyElement {
+    return __tur.ReadableSubscribe(__ctx, props);
+}
+
+// ---------------------------------------------------------------------------
 // EdgyElement handle — opaque reference returned by view factories.
 // ---------------------------------------------------------------------------
 
@@ -688,6 +724,7 @@ interface TurGlobal {
     get(ctx: unknown, a: unknown): unknown;
     set(ctx: unknown, target: unknown, ...rest: unknown[]): unknown;
     view(ctx: unknown, f: () => EdgyElement): EdgyElement;
+    lifecycleView(ctx: unknown, f: () => unknown): EdgyElement;
 
     Container(ctx: unknown, props: unknown): EdgyElement;
     Column(ctx: unknown, props: unknown): EdgyElement;
@@ -709,6 +746,7 @@ interface TurGlobal {
     Fragment(ctx: unknown, props: unknown): EdgyElement;
     Opacity(ctx: unknown, props: unknown): EdgyElement;
     Transform(ctx: unknown, props: unknown): EdgyElement;
+    ReadableSubscribe(ctx: unknown, props: unknown): EdgyElement;
 
     render(ctx: unknown, root: EdgyElement): void;
 
