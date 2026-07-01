@@ -20,7 +20,7 @@ use crate::core::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::view::{ViewCx, read_atom_raw, val_from_js, Effect, PropValue, View, Val};
+use crate::core::view::{ViewCx, read_atom_raw, val_from_js, Lifecycle, PropValue, View, Val};
 use crate::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
@@ -668,7 +668,7 @@ impl EventArg for ContextMenuEvent {
     }
 }
 
-impl Effect for EditableTextElement {}
+impl Lifecycle for EditableTextElement {}
 
 impl ElementSubscribe for EditableTextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

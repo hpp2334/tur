@@ -7,7 +7,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::{Constraints, Offset, Size};
 
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
-use crate::core::elements::{ElementObject, FragmentHost, TraceValue};
+use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
@@ -29,6 +29,14 @@ pub struct NodeTreeData {
     /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
     /// read atoms, never `set` / mutate.
     pub(crate) read_face: ReactiveReadStore,
+    /// Element ids inserted since the last lifecycle flush. Drained by the
+    /// flush loop, which fires each element's `on_mounted` hook.
+    pub(crate) pending_mounted: Vec<ElementNodeId>,
+    /// Elements removed (taken out) since the last lifecycle flush. Drained by
+    /// the flush loop, which fires each element's `before_destroy` hook before
+    /// dropping it. Keeping them here (rather than dropping immediately) lets
+    /// the hook run with a live element + mutation queue in scope.
+    pub(crate) pending_destroy: Vec<AnyElement>,
 }
 
 
@@ -42,6 +50,8 @@ impl NodeTreeData {
             next_id: 1,
             store,
             read_face,
+            pending_mounted: Vec::new(),
+            pending_destroy: Vec::new(),
         }
     }
 
@@ -61,10 +71,22 @@ impl NodeTreeData {
         self.elements.keys().copied().collect()
     }
 
+    /// Take the pending-mounted ids (for the `on_mounted` flush).
+    pub fn take_pending_mounted(&mut self) -> Vec<ElementNodeId> {
+        std::mem::take(&mut self.pending_mounted)
+    }
+
+    /// Take the pending-destroyed elements (for the `before_destroy` flush).
+    pub fn take_pending_destroy(&mut self) -> Vec<AnyElement> {
+        std::mem::take(&mut self.pending_destroy)
+    }
+
     pub fn insert_element(&mut self, element: ElementObject) {
         if self.root_id.is_none() {
             self.root_id = Some(element.id);
         }
+        // Record for the `on_mounted` lifecycle flush.
+        self.pending_mounted.push(element.id);
         self.elements.insert(element.id, element);
     }
 
@@ -255,7 +277,12 @@ impl NodeTreeData {
                 self.destroy_child(c);
             }
         }
-        let _ = self.remove_element(id);
+        // Capture the element so the flush loop can fire `before_destroy`.
+        if let Some(node) = self.remove_element(id) {
+            if let Some(elem) = node.element {
+                self.pending_destroy.push(elem);
+            }
+        }
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and

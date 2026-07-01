@@ -14,7 +14,7 @@ use crate::core::scroll::{ScrollController, ScrollEvent};
 use crate::core::view::{
     ViewCx,
     read_val,
-    extract_view, val_from_js, Effect, PropValue, View, Val,
+    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 use super::scroll_position::ScrollPosition;
@@ -149,7 +149,7 @@ impl ScrollViewElement {
     }
 }
 
-impl Effect for ScrollViewElement {}
+impl Lifecycle for ScrollViewElement {}
 
 impl ElementSubscribe for ScrollViewElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

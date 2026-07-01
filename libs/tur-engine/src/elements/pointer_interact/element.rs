@@ -11,7 +11,7 @@ use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::view::{
     ViewCx,
     read_val,
-    extract_view, val_from_js, Effect, PropValue, View, Val,
+    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ impl PointerInteractElement {
 
 impl crate::core::layout::ElementSubscribe for PointerInteractElement {}
 
-impl Effect for PointerInteractElement {}
+impl Lifecycle for PointerInteractElement {}
 
 impl ElementTrace for PointerInteractElement {
     fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {

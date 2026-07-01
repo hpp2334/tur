@@ -47,11 +47,11 @@ impl ElementLayout for LazyListElement {
             return viewport;
         }
 
-        // --- remount phase: use the REAL viewport (from constraints) to
-        // adjust the mounted set. Build-during-layout runs through a
-        // LayoutViewCx backed by this same `&mut NodeTreeData` borrow, so
-        // no competing Rc<RefCell> borrow. Dropped before measure so
-        // `cx.layout_child` can reborrow the tree. ---
+        // --- reactive-change reaction + remount: use the REAL viewport
+        // (from constraints) to adjust the mounted set. Build-during-layout
+        // runs through a LayoutViewCx backed by this same `&mut NodeTreeData`
+        // borrow, so no competing Rc<RefCell> borrow. Dropped before measure
+        // so `cx.layout_child` can reborrow the tree. ---
         if viewport_main > 0.0 {
             let boa = cx.js.boa_mut();
             let mut vcx = LayoutViewCx::new(
@@ -60,6 +60,9 @@ impl ElementLayout for LazyListElement {
                 cx.mutation_queue.clone(),
                 cx.dirty.clone(),
             );
+            // React to axis/itemExtent/itemCount changes first (replaces the
+            // former pre-layout Effect handler).
+            self.react_to_prop_changes(&mut vcx, boa);
             self.remount(&mut vcx, boa, viewport_main);
         }
 
@@ -140,7 +143,7 @@ impl LazyListElement {
         //
         // The anchor is maintained in `remount` (delta-updated as the
         // leading visible index shifts) and reset on axis/itemExtent/
-        // itemCount changes in the Effect handler.
+        // itemCount changes in `react_to_prop_changes`.
         let visible: Vec<(u64, NodeId)> = self.visible.clone();
         let mut offset = self.first_mounted_offset;
         for (i, child_id) in visible {

@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use tur_shared::Axis;
@@ -61,6 +62,27 @@ spec_factory!(tur_scrollbar, ScrollbarView);
 spec_factory!(tur_mouse_region, MouseRegionView);
 spec_factory!(tur_opacity, OpacityView);
 spec_factory!(tur_transform, TransformView);
+spec_factory!(tur_readable_subscribe, ReadableSubscribeView);
+
+/// `lifecycleView(factory)` — wraps a JS factory
+/// `() => { element, onMounted$?, beforeDestroy$? }` as a `LifecycleView`.
+/// The factory is invoked lazily at build time.
+pub(crate) fn tur_lifecycle_view(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> JsResult<JsValue> {
+    let _ = extract_ctx(args)?;
+    let v = args.get_or_undefined(1);
+    let obj = v.as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected a function"))
+    })?;
+    let factory = JsFunction::from_object(obj.clone()).ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message("expected a function"))
+    })?;
+    let view: Rc<dyn View> = Rc::new(crate::elements::LifecycleView { factory });
+    Ok(wrap_view(view, context))
+}
 
 macro_rules! spec_factory_opt {
     ($fn_name:ident, $spec_ty:ident) => {

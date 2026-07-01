@@ -6,7 +6,7 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{ViewCx, extract_view, val_from_js, Effect, PropValue, View, Val};
+use crate::core::view::{ViewCx, extract_view, val_from_js, Lifecycle, PropValue, View, Val};
 
 // ---------------------------------------------------------------------------
 // PositionedView — the user's declaration. Pure Rust, no JsValues.
@@ -47,7 +47,7 @@ pub struct PositionedElement {
     pub view: PositionedView,
 }
 
-impl Effect for PositionedElement {}
+impl Lifecycle for PositionedElement {}
 
 impl ElementSubscribe for PositionedElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

@@ -7,7 +7,7 @@ use tur_shared::{Alignment, Size, StackFit};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{ViewCx, val_from_js, Effect, PropValue, View, Val};
+use crate::core::view::{ViewCx, val_from_js, Lifecycle, PropValue, View, Val};
 
 // ---------------------------------------------------------------------------
 // StackView — the user's declaration. Pure Rust, no JsValues.
@@ -54,7 +54,7 @@ pub struct StackElement {
     pub(crate) computed_size: Option<Size>,
 }
 
-impl Effect for StackElement {}
+impl Lifecycle for StackElement {}
 
 impl ElementSubscribe for StackElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

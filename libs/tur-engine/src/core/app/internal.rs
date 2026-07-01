@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use boa_engine::context::time::FixedClock;
@@ -90,25 +89,29 @@ impl TurAppInternal {
                 self.js_context.animation_manager.borrow().has_active()
             };
 
-            // Reactive flush: drain the store, expand dirty atoms, and dispatch
-            // `do_update(dirties)` to the mounted edgy root. This may mutate
-            // the ElementTree, which sets `dirty`/`needs_draw` for the next
-            // layout pass.
-            let reactive_changed = self.flush_reactive(boa_context);
+        // Reactive flush: drain the store, expand dirty atoms, and dispatch
+        // `do_update(dirties)` to the mounted edgy root. This may mutate
+        // the ElementTree, which sets `dirty`/`needs_draw` for the next
+        // layout pass.
+        let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);
 
-            // LazyList remount now happens *inside* `perform_layout` (it uses
-            // the real viewport from constraints), so there is no separate
-            // pre-layout remount pass here.
-            let dirty =
-                self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
-            if dirty {
-                needs_render = true;
-                self.app_context
-                    .borrow_mut()
-                    .layout(self.js_context.dirty.clone(), boa_context);
-            }
-            self.flush_focus_notifications();
-            let handled_mutations = self.flush_pending_mutations(boa_context);
+        // LazyList remount now happens *inside* `perform_layout` (it uses
+        // the real viewport from constraints), so there is no separate
+        // pre-layout remount pass here.
+        let dirty =
+            self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
+        if dirty {
+            needs_render = true;
+            self.app_context
+                .borrow_mut()
+                .layout(self.js_context.dirty.clone(), boa_context);
+        }
+        // Lifecycle hooks fire after layout: on_mounted for inserted
+        // elements, on_updated for dirtied elements, before_destroy for
+        // removed elements. Pushed mutations are drained right after.
+        self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
+        self.flush_focus_notifications();
+        let handled_mutations = self.flush_pending_mutations(boa_context);
             let _ = self.executor.drain(boa_context);
             let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
             if !handled_events && !handled_mutations && !new_dirty {
@@ -152,16 +155,21 @@ impl TurAppInternal {
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the
-    /// subscriber graph. Returns `true` if any nodes were dirtied.
-    fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> bool {
+    /// subscriber graph. Returns `(reactive_changed, dirty_element_ids)`:
+    /// the element ids whose subscribed atoms changed this flush — used by
+    /// the flush loop to fire `on_updated` lifecycle hooks after layout.
+    fn flush_reactive(
+        &self,
+        boa_context: &mut boa_engine::Context,
+    ) -> (bool, Vec<ElementNodeId>) {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {
-            return false;
+            return (false, Vec::new());
         }
         let dirties = flush_engine.flush();
         if dirties.is_empty() {
-            return false;
+            return (false, Vec::new());
         }
 
         let dirty_subs = store.subscriber_index().dirty_subscribers(&dirties);
@@ -185,36 +193,47 @@ impl TurAppInternal {
                 .map(|s| FragmentNodeId::new(s.as_u64()))
                 .collect()
         };
-
-        // Element effects (LazyList range adjustments, etc.).
-        self.run_element_effects(boa_context, &dirties);
+        // Element ids dirtied this flush (for the post-layout `on_updated` pass).
+        let dirty_element_ids: Vec<ElementNodeId> = {
+            let tree = self.js_context.element_tree.borrow();
+            dirty_subs
+                .iter()
+                .filter(|s| !tree.is_fragment(NodeId::new(s.as_u64())))
+                .map(|s| ElementNodeId::new(s.as_u64()))
+                .collect()
+        };
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
         self.rebuild_fragments(boa_context, &dirty_frag_ids);
 
-        !dirty_subs.is_empty()
+        (!dirty_subs.is_empty(), dirty_element_ids)
     }
 
-    /// Walk all tree elements and invoke `run_effect` — lets views that
-    /// implement `Effect` react to dirty atoms before layout (e.g. LazyList
-    /// range adjustments).
-    fn run_element_effects(
+    /// Fire element lifecycle hooks: `on_mounted` for newly-inserted elements,
+    /// `on_updated` for elements whose subscribed atoms were dirtied this
+    /// flush, and `before_destroy` for elements removed since the last pass.
+    /// All hooks run after layout (so the mutation queue is drained by the
+    /// subsequent `flush_pending_mutations`).
+    fn run_lifecycle_hooks(
         &self,
         boa_context: &mut boa_engine::Context,
-        dirties: &HashSet<crate::core::reactive::AtomId>,
+        dirty_element_ids: &[ElementNodeId],
     ) {
-        let node_ids: Vec<ElementNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            tree.elements.keys().copied().collect()
-        };
         let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
-        for id in node_ids {
+
+        // on_mounted — freshly-inserted elements.
+        let mounted_ids = self
+            .js_context
+            .element_tree
+            .borrow_mut()
+            .take_pending_mounted();
+        for id in mounted_ids {
             let mut element = {
                 let mut tree = self.js_context.element_tree.borrow_mut();
                 tree.get_element_mut(id).and_then(|n| n.element.take())
             };
             if let Some(ref mut elem) = element {
-                elem.run_effect(&mut cx, boa_context, dirties);
+                elem.run_on_mounted(&mut cx, boa_context);
             }
             if let Some(elem) = element {
                 let mut tree = self.js_context.element_tree.borrow_mut();
@@ -222,6 +241,35 @@ impl TurAppInternal {
                     node.element = Some(elem);
                 }
             }
+        }
+
+        // on_updated — elements dirtied this flush (post-layout).
+        for id in dirty_element_ids {
+            let mut element = {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                tree.get_element_mut(*id).and_then(|n| n.element.take())
+            };
+            if let Some(ref mut elem) = element {
+                elem.run_on_updated(&mut cx, boa_context);
+            }
+            if let Some(elem) = element {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                if let Some(node) = tree.get_element_mut(*id) {
+                    node.element = Some(elem);
+                }
+            }
+        }
+
+        // before_destroy — elements removed since the last pass. The element
+        // is already detached from the tree (taken out during destroy), so we
+        // just fire the hook and let it drop.
+        let destroyed = self
+            .js_context
+            .element_tree
+            .borrow_mut()
+            .take_pending_destroy();
+        for mut elem in destroyed {
+            elem.run_before_destroy(&mut cx, boa_context);
         }
     }
 

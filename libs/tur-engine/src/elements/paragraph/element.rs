@@ -11,7 +11,7 @@ use crate::core::elements::{
 use crate::core::text::SelectionChangeEvent;
 use crate::core::view::{
     ViewCx,
-    val_from_js, Effect, PropValue, View, Val,
+    val_from_js, Lifecycle, PropValue, View, Val,
 };
 use crate::elements::text::span_data::SpanData;
 use crate::elements::text::text_layout::TextLayoutData;
@@ -101,7 +101,7 @@ impl TextElement {
     }
 }
 
-impl Effect for TextElement {}
+impl Lifecycle for TextElement {}
 
 impl ElementSubscribe for TextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

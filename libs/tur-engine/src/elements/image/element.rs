@@ -9,7 +9,7 @@ use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::view::{
     ViewCx,
-    extract_view, val_from_js, Effect, PropValue, View, Val,
+    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
 };
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,7 @@ pub struct ImageElement {
     pub painting: ImagePainting,
 }
 
-impl Effect for ImageElement {}
+impl Lifecycle for ImageElement {}
 
 impl ElementSubscribe for ImageElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

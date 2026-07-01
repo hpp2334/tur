@@ -15,6 +15,7 @@ const WHITELIST = new Set([
     "jigsaw-puzzle",
     "countdown",
     "github-viewer",
+    "lifecycle-hooks",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)

@@ -14,7 +14,7 @@ use crate::core::elements::{
 use crate::core::view::{
     ViewCx,
     read_val,
-    extract_view, val_from_js, Effect, PropValue, View, Val, SharedViewCx,
+    extract_view, val_from_js, PropValue, View, Val,
 };
 
 use crate::elements::lazy_list::controller::LazyListController;
@@ -155,7 +155,7 @@ pub struct LazyListElement {
     /// items are positioned at the actual running sum of previous heights
     /// rather than `index * averageExtent` — which caused overlaps when
     /// items had different sizes. Cleared on axis/itemExtent/itemCount
-    /// changes via the Effect handler.
+    /// changes via `react_to_prop_changes` in `perform_layout`.
     pub(crate) extent_cache: std::collections::BTreeMap<u64, f64>,
     /// (index, built node id) for every item currently in the tree. Kept
     /// sorted by index.
@@ -301,6 +301,67 @@ impl LazyListElement {
         ctrl.viewport_dimension = dim;
     }
 
+    /// Detect axis / itemExtent / itemCount changes by diffing freshly-read
+    /// reactive values against the cached ones on `self`, and tear down /
+    /// reset state accordingly. Idempotent: once the cached value matches the
+    /// read value, subsequent passes are no-ops. Called at the top of
+    /// `perform_layout` (with a `LayoutViewCx` so tree mutations work);
+    /// replaces the former pre-layout `Effect` handler.
+    pub(super) fn react_to_prop_changes(&mut self, cx: &mut dyn ViewCx, boa: &mut Context) {
+        // Axis change: cached extents are axis-specific, so invalidate them
+        // and reset the positioning anchor.
+        let new_axis = self
+            .view
+            .axis
+            .as_ref()
+            .and_then(|v| read_val(cx, v, boa))
+            .unwrap_or(self.axis);
+        if new_axis != self.axis {
+            self.axis = new_axis;
+            self.extent_cache.clear();
+            self.first_mounted_index = 0;
+            self.first_mounted_offset = 0.0;
+        }
+
+        // itemExtent change: invalidate cached measurements and the anchor.
+        let new_extent = self
+            .view
+            .item_extent
+            .as_ref()
+            .and_then(|v| read_val(cx, v, boa));
+        if new_extent != self.item_extent {
+            self.item_extent = new_extent;
+            self.extent_cache.clear();
+            self.first_mounted_index = 0;
+            self.first_mounted_offset = 0.0;
+        }
+
+        // itemCount shrink: destroy items at or beyond the new count.
+        let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(0);
+        let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
+        if new_count < current_max {
+            let to_destroy: Vec<NodeId> = self
+                .visible
+                .iter()
+                .filter(|(i, _)| *i >= new_count)
+                .map(|&(_, id)| id)
+                .collect();
+            for id in to_destroy {
+                cx.destroy_child(id);
+            }
+            self.visible.retain(|(i, _)| *i < new_count);
+            self.extent_cache.retain(|i, _| *i < new_count);
+            // If the leading edge got chopped off, recompute the anchor.
+            let new_first = self.visible.first().map(|(i, _)| *i).unwrap_or(0);
+            if new_first != self.first_mounted_index {
+                self.first_mounted_index = new_first;
+                self.first_mounted_offset = self.cumulative_offset(new_first);
+            }
+        }
+        // itemCount grew: don't build eagerly — `remount` mounts the
+        // newly-in-range items using the real viewport.
+    }
+
     /// Mount items in `[start, end]` that aren't currently built, and
     /// unmount any built items outside that range. Mutates the tree via
     /// `cx`. Sorted `visible` is preserved.
@@ -418,92 +479,35 @@ impl LazyListElement {
 }
 
 // ---------------------------------------------------------------------------
-// Effect — rebuild the item set when itemCount or axis changes. Also runs
-// the remount logic if requested (the wheel handler sets the flag and the
-// flush loop triggers this effect).
+// Subscribe + reactive-change reaction.
+//
+// `subscribe` declares this element's reactive deps so a prop change marks
+// it dirty and re-runs `perform_layout`. `react_to_prop_changes` (called at
+// the top of `perform_layout`) then detects axis / itemExtent / itemCount
+// changes by diffing freshly-read values against the cached ones on `self`,
+// and tears down / resets state accordingly. This replaces the former
+// pre-layout `Effect` handler.
 // ---------------------------------------------------------------------------
 
-impl crate::core::layout::ElementSubscribe for LazyListElement {}
-
-impl Effect for LazyListElement {
-    fn effect(
-        &mut self,
-        cx: &mut SharedViewCx,
-        boa: &mut Context,
-        dirties: &std::collections::HashSet<crate::core::reactive::AtomId>,
-    ) {
-        let count_dirty = self.view.item_count.is_dirty(dirties);
-        let axis_dirty = self.view.axis.as_ref().is_some_and(|v| v.is_dirty(dirties));
-        let extent_dirty = self.view.item_extent.as_ref().is_some_and(|v| v.is_dirty(dirties));
-
-        if axis_dirty {
-            self.axis = self
-                .view
-                .axis
-                .as_ref()
-                .and_then(|v| read_val(cx, v, boa))
-                .unwrap_or(self.axis);
-            // Cached extents are axis-specific — invalidate. Also reset the
-            // positioning anchor: extents along the new axis differ, so the
-            // old `first_mounted_offset` is meaningless.
-            self.extent_cache.clear();
-            self.first_mounted_index = 0;
-            self.first_mounted_offset = 0.0;
-            // Also reset scroll — different axis means old scroll offset
-            // doesn't apply. (The scroll position is preserved across
-            // non-axis changes, just not axis flips.)
+impl crate::core::layout::ElementSubscribe for LazyListElement {
+    fn subscribe(&self, cx: &mut crate::core::layout::SubscribeCx) {
+        if let Some(v) = self.view.axis.as_ref() {
+            cx.subscribe_val(v);
         }
-
-        if extent_dirty {
-            self.item_extent = self
-                .view
-                .item_extent
-                .as_ref()
-                .and_then(|v| read_val(cx, v, boa));
-            // New fixed extent invalidates cached measurements and the
-            // positioning anchor (which was computed from old extents).
-            self.extent_cache.clear();
-            self.first_mounted_index = 0;
-            self.first_mounted_offset = 0.0;
+        cx.subscribe_val(&self.view.item_count);
+        if let Some(v) = self.view.item_extent.as_ref() {
+            cx.subscribe_val(v);
         }
-
-        if count_dirty {
-            let new_count = read_val(cx, &self.view.item_count, boa).unwrap_or(0);
-            let current_max = self.visible.last().map(|(i, _)| *i + 1).unwrap_or(0);
-
-            if new_count < current_max {
-                // Destroy items whose index is at or beyond the new count.
-                let to_destroy: Vec<NodeId> = self
-                    .visible
-                    .iter()
-                    .filter(|(i, _)| *i >= new_count)
-                    .map(|&(_, id)| id)
-                    .collect();
-                for id in to_destroy {
-                    cx.destroy_child(id);
-                }
-                self.visible.retain(|(i, _)| *i < new_count);
-                // Drop cached entries beyond the new count.
-                self.extent_cache.retain(|i, _| *i < new_count);
-                // If the leading edge got chopped off (rare: itemCount
-                // dropped below first_mounted_index), recompute the anchor
-                // from the current visible set.
-                let new_first = self.visible.first().map(|(i, _)| *i).unwrap_or(0);
-                if new_first != self.first_mounted_index {
-                    self.first_mounted_index = new_first;
-                    self.first_mounted_offset = self.cumulative_offset(new_first);
-                }
-            } else if new_count > current_max {
-                // itemCount grew: don't build eagerly here. `perform_layout`'s
-                // remount step will mount the newly-in-range items using the
-                // real viewport. Just clearing the anchor isn't needed — the
-                // existing items keep their positions.
-            }
-
-            cx.mark_dirty(self.node_id.into());
+        if let Some(v) = self.view.overscan.as_ref() {
+            cx.subscribe_val(v);
         }
     }
 }
+
+// LazyList has no lifecycle hooks: its reactive handling lives in
+// `react_to_prop_changes` (called from `perform_layout`). The default no-op
+// `Lifecycle` impl satisfies the `AnyElement` bound.
+impl crate::core::view::Lifecycle for LazyListElement {}
 
 impl ElementTrace for LazyListElement {
     fn trace_label(&self) -> String {
