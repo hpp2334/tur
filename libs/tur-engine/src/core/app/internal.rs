@@ -330,19 +330,7 @@ impl TurAppInternal {
     fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let now_ms = self.app_context.borrow().shell.now().as_millis() as u64;
         let mut mgr = self.js_context.animation_manager.borrow_mut();
-        // Cache the clock so a `retarget` issued later this flush (during the
-        // element Effect phase) can stamp a precise driver `start_time`.
-        mgr.set_clock(now_ms);
         mgr.tick_controllers(now_ms, boa_context);
-        // Native implicit-animation drivers (AnimatedContainer /
-        // AnimatedOpacity / AnimatedPositioned). Each tick writes the eased
-        // progress into the element's shared cell and marks it dirty.
-        let _ = mgr.tick_drivers(
-            now_ms,
-            &self.js_context.element_tree,
-            &self.js_context.dirty,
-            &self.js_context.mutation_queue,
-        );
         let has_active = mgr.has_active();
         drop(mgr);
         has_active

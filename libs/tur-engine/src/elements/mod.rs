@@ -1,7 +1,4 @@
 pub mod container;
-pub mod animated_container;
-pub mod animated_opacity;
-pub mod animated_positioned;
 pub mod condition;
 pub mod each;
 pub mod editable_text;
@@ -25,9 +22,6 @@ pub mod switch;
 pub mod text;
 
 pub use container::{ContainerElement, ContainerView};
-pub use animated_container::{AnimatedContainerElement, AnimatedContainerView};
-pub use animated_opacity::{AnimatedOpacityElement, AnimatedOpacityView};
-pub use animated_positioned::{AnimatedPositionedElement, AnimatedPositionedView};
 pub use condition::{ConditionView, ConditionFragment};
 pub use each::{EachView, EachFragment};
 pub use editable_text::{EditableTextElement, EditableTextView, InputView};
