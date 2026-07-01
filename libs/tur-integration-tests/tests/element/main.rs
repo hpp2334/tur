@@ -9,6 +9,7 @@ mod lazy_list;
 mod reactive;
 mod switch_view;
 mod positioned;
+mod readable_subscribe;
 mod rich_text;
 mod row;
 mod scroll_view;

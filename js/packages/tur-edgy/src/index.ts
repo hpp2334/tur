@@ -7,6 +7,9 @@
  * callbacks.
  */
 
+import { ColorTween, Tween } from "./tween";
+import type { Color } from "./color";
+
 // ---------------------------------------------------------------------------
 // Reactive primitives — thin wrappers over `__tur.*`. Atoms are opaque
 // handles; closures receive a `{get, set}` ctx as their first argument.
@@ -149,32 +152,135 @@ export function Container(props: ContainerProps): EdgyElement {
 }
 
 // ---------------------------------------------------------------------------
-// AnimatedContainer — implicit-animation Container (Flutter's
-// `AnimatedContainer` / `ImplicitlyAnimatedWidget`). Animates from the
-// previously-displayed value to the newly-resolved target over `duration`
-// whenever an animatable prop changes. No `AnimationController` needed.
+// AnimatedContainer / AnimatedOpacity / AnimatedPositioned — Flutter's
+// `ImplicitlyAnimatedWidget` family, built entirely in JS from the primitives
+// `ReadableSubscribe` + `Tween` + `createAnimationController`. No native
+// element is involved: each factory wraps the matching plain element
+// (Container / Opacity / Positioned) and animates its props by retargeting a
+// shared progress source whenever a reactive target changes.
 //
-// Animatable: width, height, padding, color, borderColor, borderWidth,
-// borderRadius, shadowColor, shadowBlur. Non-animatable (pass-through):
-// alignment, borderPosition, shadowOffset, queryKey, children.
-//
-// `curve` is one of the same easing keywords `createAnimationController`
-// accepts (`"linear" | "easeIn" | "easeOut" | "easeInOut"`). Changing
-// `duration` or `curve` remounts the element (they're folded into queryKey).
+// Animatable props become "channels": a Tween/ColorTween seeded at the prop's
+// initial value, displayed as `tween.lerp(progress)`. One AnimationController
+// drives a shared `progress` source via `onTick`. When a reactive target
+// changes, `ReadableSubscribe.onUpdate$` rebases each channel's `begin` to its
+// currently-displayed value, sets `end` to the new target, and restarts the
+// controller. Static (non-readable) props never retarget — they pass through.
 // ---------------------------------------------------------------------------
+
+/**
+ * Registers one animatable channel and returns the value to hand to the
+ * underlying element: a `derive(() => tween.lerp(progress))` for reactive
+ * props, or the static value unchanged for non-reactive props. Accumulates a
+ * retarget closure (rebase `begin`, retarget `end`) and the target readable.
+ */
+function animChannel<T>(
+    target: Val<T>,
+    progress: Readable<number>,
+    makeTween: (initial: T) => { begin: T; end: T; lerp(t: number): T },
+    retargets: Array<() => void>,
+    readables: Readable<unknown>[],
+): Val<T> {
+    const probe = probeAtom(target);
+    if (!probe.atom) {
+        return target;
+    }
+    readables.push(probe.handle);
+    const tween = makeTween(probe.value);
+    const handle = probe.handle;
+    retargets.push(() => {
+        tween.begin = tween.lerp(get(progress));
+        tween.end = get(handle);
+    });
+    return derive(() => tween.lerp(get(progress)));
+}
+
+/**
+ * Precisely detects reactive atom handles. The public `isReadable` helper uses
+ * a loose `typeof === 'object'` check that misfires on other opaque Rust
+ * handles (Color, gradients) — so we probe via `get`, which the bridge
+ * validates and rejects (throws) for non-atoms. Carries the current value so
+ * callers avoid a second read.
+ */
+function probeAtom<T>(
+    v: Val<T>,
+): { atom: true; handle: Readable<T>; value: T } | { atom: false } {
+    if (typeof v !== "object" || v === null) return { atom: false };
+    try {
+        const value = get(v as Readable<unknown>) as T;
+        return { atom: true, handle: v as Readable<T>, value };
+    } catch {
+        return { atom: false };
+    }
+}
+
+/** Resolves a `Val<T>` to its current static value (read once, then fixed). */
+function resolveStatic<T>(v: Val<T> | undefined, fallback: T): T {
+    if (v == null) return fallback;
+    const probe = probeAtom(v);
+    if (probe.atom) return probe.value;
+    return v as T;
+}
+
+type Curve = "linear" | "easeIn" | "easeOut" | "easeInOut";
 
 export interface AnimatedContainerProps extends ContainerProps {
     /** Animation duration in milliseconds. Required. */
     duration: Val<number>;
     /** Easing curve keyword (default `"linear"`). */
-    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    curve?: Val<Curve>;
     /** Fired once when an in-flight implicit animation completes. */
     onEnd?: Mutation<[], void>;
 }
 
 export function AnimatedContainer(props: AnimatedContainerProps): EdgyElement {
-    return __tur.AnimatedContainer(__ctx, props);
+    const duration = resolveStatic(props.duration, 300);
+    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const progress$ = source(1.0);
+    const retargets: Array<() => void> = [];
+    const readables: Readable<unknown>[] = [];
+    const num = (i: number) => Tween({ begin: i, end: i });
+    // `color` props are `Val<unknown>` (Color or gradient). ColorTween handles
+    // solid Color→Color; gradients snap to the new target (no interpolation),
+    // matching the prior native behaviour.
+    const col = (i: unknown) => ColorTween({ begin: i as Color, end: i as Color });
+
+    const ch = <T>(v: Val<T> | undefined, mk: (i: T) => { begin: T; end: T; lerp(t: number): T }) =>
+        v != null ? animChannel(v, progress$, mk, retargets, readables) : undefined;
+
+    const child = Container({
+        width: ch(props.width, num),
+        height: ch(props.height, num),
+        padding: ch(props.padding, num),
+        color: ch(props.color, col),
+        borderColor: ch(props.borderColor, col),
+        borderWidth: ch(props.borderWidth, num),
+        borderRadius: ch(props.borderRadius, num),
+        shadowColor: ch(props.shadowColor, col),
+        shadowBlur: ch(props.shadowBlur, num),
+        alignment: props.alignment,
+        borderPosition: props.borderPosition,
+        shadowOffset: props.shadowOffset,
+        queryKey: props.queryKey,
+        children: props.children,
+    });
+
+    const ctrl = createAnimationController({
+        duration,
+        curve,
+        onTick: mutate((_c, t) => set(progress$, t)),
+        onEnd: props.onEnd,
+    });
+
+    return ReadableSubscribe({
+        readables,
+        onUpdate$: mutate(() => {
+            for (const r of retargets) r();
+            ctrl.forward();
+        }),
+        child,
+    });
 }
+
 
 export function SizedBox(props: {
     width?: Val<number>;
@@ -494,20 +600,43 @@ export function Opacity(props: {
 
 // ---------------------------------------------------------------------------
 // AnimatedOpacity / AnimatedPositioned — implicit-animation siblings of
-// `AnimatedContainer` (Flutter's `AnimatedOpacity` / `AnimatedPositioned`).
-// Same `duration` / `curve` / `onEnd` contract; changing any animatable prop
-// animates from the previous value to the new target.
+// `AnimatedContainer` (Flutter's `AnimatedOpacity` / `AnimatedPositioned`),
+// built on the same `ReadableSubscribe` + `Tween` + `createAnimationController`
+// mechanism. Same `duration` / `curve` / `onEnd` contract; changing any
+// animatable prop animates from the previous value to the new target.
 // ---------------------------------------------------------------------------
 
 export function AnimatedOpacity(props: {
     value: Val<number>;
     duration: Val<number>;
-    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    curve?: Val<Curve>;
     onEnd?: Mutation<[], void>;
     child?: EdgyElement;
     queryKey?: Val<string[]>;
 }): EdgyElement {
-    return __tur.AnimatedOpacity(__ctx, props);
+    const duration = resolveStatic(props.duration, 300);
+    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const progress$ = source(1.0);
+    const retargets: Array<() => void> = [];
+    const readables: Readable<unknown>[] = [];
+    const num = (i: number) => Tween({ begin: i, end: i });
+
+    const value = animChannel(props.value, progress$, num, retargets, readables);
+    const ctrl = createAnimationController({
+        duration,
+        curve,
+        onTick: mutate((_c, t) => set(progress$, t)),
+        onEnd: props.onEnd,
+    });
+
+    return ReadableSubscribe({
+        readables,
+        onUpdate$: mutate(() => {
+            for (const r of retargets) r();
+            ctrl.forward();
+        }),
+        child: Opacity({ value, child: props.child, queryKey: props.queryKey }),
+    });
 }
 
 export function AnimatedPositioned(props: {
@@ -518,13 +647,48 @@ export function AnimatedPositioned(props: {
     width?: Val<number>;
     height?: Val<number>;
     duration: Val<number>;
-    curve?: Val<"linear" | "easeIn" | "easeOut" | "easeInOut">;
+    curve?: Val<Curve>;
     onEnd?: Mutation<[], void>;
     child: EdgyElement;
     queryKey?: Val<string[]>;
 }): EdgyElement {
-    return __tur.AnimatedPositioned(__ctx, props);
+    const duration = resolveStatic(props.duration, 300);
+    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const progress$ = source(1.0);
+    const retargets: Array<() => void> = [];
+    const readables: Readable<unknown>[] = [];
+    const num = (i: number) => Tween({ begin: i, end: i });
+
+    const ch = (v: Val<number> | undefined) =>
+        v != null ? animChannel(v, progress$, num, retargets, readables) : undefined;
+
+    const child = Positioned({
+        left: ch(props.left),
+        top: ch(props.top),
+        right: ch(props.right),
+        bottom: ch(props.bottom),
+        width: ch(props.width),
+        height: ch(props.height),
+        child: props.child,
+    });
+
+    const ctrl = createAnimationController({
+        duration,
+        curve,
+        onTick: mutate((_c, t) => set(progress$, t)),
+        onEnd: props.onEnd,
+    });
+
+    return ReadableSubscribe({
+        readables,
+        onUpdate$: mutate(() => {
+            for (const r of retargets) r();
+            ctrl.forward();
+        }),
+        child,
+    });
 }
+
 
 export interface TransformProps {
     /** Uniform scale (multiplies both X and Y). */
@@ -790,7 +954,6 @@ interface TurGlobal {
     lifecycleView(ctx: unknown, f: () => unknown): EdgyElement;
 
     Container(ctx: unknown, props: unknown): EdgyElement;
-    AnimatedContainer(ctx: unknown, props: unknown): EdgyElement;
     Column(ctx: unknown, props: unknown): EdgyElement;
     Row(ctx: unknown, props: unknown): EdgyElement;
     Expanded(ctx: unknown, props: unknown): EdgyElement;
@@ -809,8 +972,6 @@ interface TurGlobal {
     InputEdgy(ctx: unknown, props: unknown): EdgyElement;
     Fragment(ctx: unknown, props: unknown): EdgyElement;
     Opacity(ctx: unknown, props: unknown): EdgyElement;
-    AnimatedOpacity(ctx: unknown, props: unknown): EdgyElement;
-    AnimatedPositioned(ctx: unknown, props: unknown): EdgyElement;
     Transform(ctx: unknown, props: unknown): EdgyElement;
     ReadableSubscribe(ctx: unknown, props: unknown): EdgyElement;
 
