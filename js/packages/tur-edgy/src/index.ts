@@ -7,8 +7,8 @@
  * callbacks.
  */
 
-import { ColorTween, Tween } from "./tween";
 import type { Color } from "./color";
+import { ColorTween, Tween } from "./tween";
 
 // ---------------------------------------------------------------------------
 // Reactive primitives — thin wrappers over `__tur.*`. Atoms are opaque
@@ -234,7 +234,10 @@ export interface AnimatedContainerProps extends ContainerProps {
 
 export function AnimatedContainer(props: AnimatedContainerProps): EdgyElement {
     const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const curve = resolveStatic<Curve>(
+        props.curve as Val<Curve> | undefined,
+        "linear",
+    );
     const progress$ = source(1.0);
     const retargets: Array<() => void> = [];
     const readables: Readable<unknown>[] = [];
@@ -242,10 +245,16 @@ export function AnimatedContainer(props: AnimatedContainerProps): EdgyElement {
     // `color` props are `Val<unknown>` (Color or gradient). ColorTween handles
     // solid Color→Color; gradients snap to the new target (no interpolation),
     // matching the prior native behaviour.
-    const col = (i: unknown) => ColorTween({ begin: i as Color, end: i as Color });
+    const col = (i: unknown) =>
+        ColorTween({ begin: i as Color, end: i as Color });
 
-    const ch = <T>(v: Val<T> | undefined, mk: (i: T) => { begin: T; end: T; lerp(t: number): T }) =>
-        v != null ? animChannel(v, progress$, mk, retargets, readables) : undefined;
+    const ch = <T>(
+        v: Val<T> | undefined,
+        mk: (i: T) => { begin: T; end: T; lerp(t: number): T },
+    ) =>
+        v != null
+            ? animChannel(v, progress$, mk, retargets, readables)
+            : undefined;
 
     const child = Container({
         width: ch(props.width, num),
@@ -280,7 +289,6 @@ export function AnimatedContainer(props: AnimatedContainerProps): EdgyElement {
         child,
     });
 }
-
 
 export function SizedBox(props: {
     width?: Val<number>;
@@ -615,13 +623,22 @@ export function AnimatedOpacity(props: {
     queryKey?: Val<string[]>;
 }): EdgyElement {
     const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const curve = resolveStatic<Curve>(
+        props.curve as Val<Curve> | undefined,
+        "linear",
+    );
     const progress$ = source(1.0);
     const retargets: Array<() => void> = [];
     const readables: Readable<unknown>[] = [];
     const num = (i: number) => Tween({ begin: i, end: i });
 
-    const value = animChannel(props.value, progress$, num, retargets, readables);
+    const value = animChannel(
+        props.value,
+        progress$,
+        num,
+        retargets,
+        readables,
+    );
     const ctrl = createAnimationController({
         duration,
         curve,
@@ -653,14 +670,19 @@ export function AnimatedPositioned(props: {
     queryKey?: Val<string[]>;
 }): EdgyElement {
     const duration = resolveStatic(props.duration, 300);
-    const curve = resolveStatic<Curve>(props.curve as Val<Curve> | undefined, "linear");
+    const curve = resolveStatic<Curve>(
+        props.curve as Val<Curve> | undefined,
+        "linear",
+    );
     const progress$ = source(1.0);
     const retargets: Array<() => void> = [];
     const readables: Readable<unknown>[] = [];
     const num = (i: number) => Tween({ begin: i, end: i });
 
     const ch = (v: Val<number> | undefined) =>
-        v != null ? animChannel(v, progress$, num, retargets, readables) : undefined;
+        v != null
+            ? animChannel(v, progress$, num, retargets, readables)
+            : undefined;
 
     const child = Positioned({
         left: ch(props.left),
@@ -688,7 +710,6 @@ export function AnimatedPositioned(props: {
         child,
     });
 }
-
 
 export interface TransformProps {
     /** Uniform scale (multiplies both X and Y). */
