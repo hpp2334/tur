@@ -59,6 +59,24 @@ pub(crate) fn tur_create_color(
     Ok(opaque.object().clone().into())
 }
 
+/// Bridge function `colorLerp(colorA, colorB, t)` → new `Color` opaque at
+/// the interpolated position. Backs the JS-facing `ColorTween.lerp`. Mirrors
+/// Flutter's `Color.lerp` (which `ColorTween` delegates to).
+pub(crate) fn tur_color_lerp(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let a = extract_color(args.get_or_undefined(0), context)
+        .ok_or_else(|| boa_engine::JsNativeError::typ().with_message("colorLerp: `begin` must be a Color"))?;
+    let b = extract_color(args.get_or_undefined(1), context)
+        .ok_or_else(|| boa_engine::JsNativeError::typ().with_message("colorLerp: `end` must be a Color"))?;
+    let t = args.get_or_undefined(2).as_number().unwrap_or(0.0);
+    let out = Color::lerp(a, b, t);
+    let opaque = BoaOpaque::new(ColorOpaque(out), context);
+    Ok(opaque.object().clone().into())
+}
+
 /// Bridge function `createLinearGradient(startX, startY, endX, endY, stops)`
 /// where stops is an array of `{offset, r, g, b, a}`. Returns JS opaque
 /// wrapping `Brush::LinearGradient`.

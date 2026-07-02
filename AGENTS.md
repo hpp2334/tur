@@ -55,6 +55,15 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
+### Animation model (Flutter-aligned)
+
+The engine exposes only the animation **primitives**; the `Animated*` widget family is composed in JS (`@tur/edgy`), not implemented as native elements.
+
+- **`Curve`** (`tur-shared::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
+- **`Tween<T>`** (`tur-shared::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
+- **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
+- **Implicit animation** (JS, in `@tur/edgy`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
+
 ### Domain traits
 
 Each element implements these focused traits:

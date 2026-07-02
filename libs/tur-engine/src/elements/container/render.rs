@@ -18,20 +18,25 @@ impl ElementRender for ContainerElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let p = &self.painting;
-        let shadow_blur = p.shadow_blur;
-        let shadow_color = p.shadow_color.as_ref();
-        let color = p.color.as_ref();
-        let border_color = p.border_color.as_ref();
-        let border_width = p.border_width;
-        let border_radius = p.border_radius;
-        let border_position = p.border_position;
+        let shadow_blur = self.painting.shadow_blur;
+        let shadow_color = self.painting.shadow_color.as_ref();
+        let color = self.painting.color.as_ref();
+        let border_color = self.painting.border_color.as_ref();
+        let border_width = self.painting.border_width;
+        let border_radius = self.painting.border_radius;
+        let border_position = self.painting.border_position;
 
         if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur) {
             if sb > 0.0 {
-                let shadow_offset = self.view.shadow_offset.unwrap_or((0.0, 0.0));
                 let radius = border_radius.unwrap_or(0.0);
-                canvas.draw_shadow(offset, layout.size, sc, radius, sb, shadow_offset);
+                canvas.draw_shadow(
+                    offset,
+                    layout.size,
+                    sc,
+                    radius,
+                    sb,
+                    self.view.shadow_offset.unwrap_or((0.0, 0.0)),
+                );
             }
         }
 

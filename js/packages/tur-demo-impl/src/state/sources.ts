@@ -10,6 +10,7 @@ const WHITELIST = new Set([
     "counter",
     "todolist",
     "complex-animation",
+    "implicit-animations",
     "lazy-list-virtualized",
     "lazy-list-var-sizes",
     "jigsaw-puzzle",

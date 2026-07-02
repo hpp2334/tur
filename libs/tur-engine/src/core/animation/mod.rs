@@ -4,7 +4,12 @@ pub mod controller;
 pub use controller::AnimationController;
 pub mod event;
 
-#[derive(Debug, Default)]
+/// Registry of active JS `AnimationController`s. Each `AnimationController`
+/// registers itself via `forward()` / `reverse()`; the frame loop ticks them
+/// and enqueues (does not fire) their `onTick` / `onEnd` callbacks on the
+/// mutation queue, which fire later in `flush_pending_mutations` after the
+/// `RefMut` on each controller is released.
+#[derive(Default)]
 pub struct AnimationManager {
     controllers: Vec<JsObject>,
 }
@@ -22,7 +27,7 @@ impl AnimationManager {
         }
     }
 
-    /// Tick all active controllers. Each tick updates `value` / `status` and
+    /// Tick all active JS controllers. Each tick updates `value` / `status` and
     /// **enqueues** (does not fire) any `onTick` / `onEnd` callbacks on the
     /// mutation queue. The callbacks fire later in `flush_pending_mutations`,
     /// after the `RefMut` on each controller is released.
@@ -45,5 +50,13 @@ impl AnimationManager {
 
     pub fn has_active(&self) -> bool {
         !self.controllers.is_empty()
+    }
+}
+
+impl std::fmt::Debug for AnimationManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AnimationManager")
+            .field("controllers", &self.controllers.len())
+            .finish()
     }
 }

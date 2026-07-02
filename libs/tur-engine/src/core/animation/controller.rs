@@ -7,7 +7,7 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tur_shared::AnimationCurve;
+use tur_shared::Curve;
 
 use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::core::animation::AnimationManager;
@@ -46,7 +46,7 @@ impl Default for RepeatMode {
 #[boa_gc(unsafe_empty_trace)]
 pub struct AnimationController {
     pub(crate) duration_ms: u64,
-    pub(crate) curve: AnimationCurve,
+    pub(crate) curve: Curve,
     pub(crate) value: f64,
     pub(crate) status: AnimationStatus,
     pub(crate) repeat_mode: RepeatMode,
@@ -79,7 +79,7 @@ pub struct AnimationController {
 }
 
 impl AnimationController {
-    pub fn new(duration_ms: u64, curve: AnimationCurve) -> Self {
+    pub fn new(duration_ms: u64, curve: Curve) -> Self {
         Self {
             duration_ms,
             curve,
@@ -226,7 +226,7 @@ impl AnimationController {
             0
         };
 
-        let eased_t = self.curve.apply(t);
+        let eased_t = self.curve.transform(t);
 
         if completed {
             self.status = AnimationStatus::Completed;
@@ -253,7 +253,7 @@ impl Class for AnimationController {
         ctx: &mut Context,
     ) -> JsResult<Self> {
         let mut duration_ms = 300u64;
-        let mut curve = AnimationCurve::Linear;
+        let mut curve = Curve::Linear;
         let mut on_tick: Option<EdgyMutation<AnimationTickEvent>> = None;
         let mut on_end: Option<EdgyMutation<AnimationEndEvent>> = None;
         let mut repeat_mode = RepeatMode::default();
@@ -269,7 +269,7 @@ impl Class for AnimationController {
                     curve = s
                         .to_std_string_escaped()
                         .parse()
-                        .unwrap_or(AnimationCurve::Linear);
+                        .unwrap_or(Curve::Linear);
                 }
             }
             if let Ok(val) = opts.get(js_string!("repeat"), ctx) {
