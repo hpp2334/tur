@@ -4,12 +4,12 @@ import {
     CrossAxisAlignment,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     get,
     SizedBox,
     Switch,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     compileVersion$,
     errorMsg$,
@@ -20,7 +20,7 @@ import {
 import { FadeIn } from "../state/transitions";
 import { tokens } from "../theme/tokens";
 
-function Placeholder(): EdgyElement {
+function Placeholder(): Element {
     return Container({
         color: tokens.bg.viewer,
         alignment: 4, // Alignment.Center
@@ -34,7 +34,7 @@ function Placeholder(): EdgyElement {
     });
 }
 
-function ReadyViewer(): EdgyElement {
+function ReadyViewer(): Element {
     return Container({
         color: tokens.bg.viewer,
         padding: 12,
@@ -60,7 +60,7 @@ function ReadyViewer(): EdgyElement {
     });
 }
 
-function ErrorPanel(): EdgyElement {
+function ErrorPanel(): Element {
     return Container({
         color: tokens.bg.danger,
         alignment: 4, // Alignment.Center
@@ -100,7 +100,7 @@ function ErrorPanel(): EdgyElement {
     });
 }
 
-export function Viewer(): EdgyElement {
+export function Viewer(): Element {
     return Switch({
         value: status$,
         cases: [

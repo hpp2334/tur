@@ -9,13 +9,11 @@ import {
     MainAxisAlignment,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // A controller pre-populated with a code-like snippet, split into spans whose
 // colors simulate syntax highlighting (keyword / identifier / number / punct).
-const ctrl = createTextEditingController() as {
-    setSpans(spans: Array<{ content: string; color?: unknown }>): void;
-};
+const ctrl = createTextEditingController();
 ctrl.setSpans([
     { content: "const", color: Color.hex("#c678dd") }, // keyword (purple)
     { content: " count", color: Color.hex("#61afef") }, // identifier (blue)

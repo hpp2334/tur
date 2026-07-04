@@ -1,11 +1,12 @@
 import {
+    type Brush,
     Column,
     Condition,
     Container,
     CrossAxisAlignment,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     MainAxisAlignment,
@@ -18,7 +19,7 @@ import {
     SizedBox,
     set,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     CASE_NAMES,
     edited$,
@@ -34,7 +35,7 @@ import {
 import { tokens } from "../theme/tokens";
 
 /** Sidebar header: small uppercase label + count of available cases. */
-function SidebarHeader(): EdgyElement {
+function SidebarHeader(): Element {
     return Container({
         padding: 14,
         children: [
@@ -60,7 +61,7 @@ function SidebarHeader(): EdgyElement {
 /** A case row in the navigation list. Renders as a card with a left accent
  *  bar when selected; multi-file cases expand an indented file list below
  *  the row when active. */
-function NavItem(name: string): EdgyElement {
+function NavItem(name: string): Element {
     const isSelected = () => get(selectedCase$) === name;
 
     return Column({
@@ -93,7 +94,7 @@ function NavItem(name: string): EdgyElement {
                                             isSelected()
                                                 ? tokens.accent.solid
                                                 : null,
-                                        ),
+                                        ) as unknown as Brush,
                                     }),
                                     SizedBox({ width: 8 }),
                                     Expanded({
@@ -111,7 +112,7 @@ function NavItem(name: string): EdgyElement {
                                                 return hovered
                                                     ? tokens.bg.hover
                                                     : null;
-                                            }),
+                                            }) as unknown as Brush,
                                             children: [
                                                 Row({
                                                     mainAlignment:
@@ -224,7 +225,7 @@ function NavItem(name: string): EdgyElement {
 }
 
 /** A file tab in the nested file list. Only shown for multi-file cases. */
-function FileItem(filename: string): EdgyElement {
+function FileItem(filename: string): Element {
     const isSelected = () => get(selectedFile$) === filename;
     return MouseRegion({
         cursor: "pointer",
@@ -240,7 +241,7 @@ function FileItem(filename: string): EdgyElement {
                     const hovered = get(hoveredFile$) === filename;
                     if (selected) return tokens.bg.strongHover;
                     return hovered ? tokens.bg.hover : null;
-                }),
+                }) as unknown as Brush,
                 children: [
                     Row({
                         mainAlignment: MainAxisAlignment.SpaceBetween,
@@ -277,7 +278,7 @@ function FileItem(filename: string): EdgyElement {
     });
 }
 
-export function Sidebar(): EdgyElement {
+export function Sidebar(): Element {
     return Container({
         width: derive(() => get(sidebarWidth$)),
         color: tokens.bg.panel,

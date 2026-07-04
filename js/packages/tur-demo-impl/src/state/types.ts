@@ -1,19 +1,10 @@
 /** Shared types across the playground's state layer. */
 
-export interface EditorController {
-    setSpans(spans: Array<{ content: string; color?: unknown }>): void;
-    setSpansPreserveCursor(
-        spans: Array<{ content: string; color?: unknown }>,
-    ): void;
-    readonly text: string;
-    readonly cursorPosition: number;
-    readonly selectionAnchor: number;
-    readonly selectionEnd: number;
-    readonly selectedText: string;
-    insertText(text: string): void;
-    deleteSelection(): void;
-    setSelection(anchor: number, end: number): void;
-}
+import type { TextController } from "builtin:tur/core";
+
+/** The editor's text controller — the real `TextController` surface from
+ *  `builtin:tur/core`. */
+export type EditorController = TextController;
 
 export type LayoutMode = "split" | "editor" | "viewer";
 

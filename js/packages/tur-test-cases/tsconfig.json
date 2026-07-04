@@ -1,8 +1,10 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "outDir": "dist",
-        "rootDir": "edgy-cases"
+        "noEmit": true,
+        "types": ["@tur/core", "@tur/host", "@tur/net"]
     },
-    "include": ["edgy-cases"]
+    "include": [
+        "edgy-cases"
+    ]
 }

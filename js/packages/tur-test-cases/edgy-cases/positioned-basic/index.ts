@@ -1,4 +1,4 @@
-import { Positioned, SizedBox, Stack, view } from "@tur/edgy";
+import { Positioned, SizedBox, Stack, view } from "builtin:tur/core";
 
 export default view(() =>
     Stack({

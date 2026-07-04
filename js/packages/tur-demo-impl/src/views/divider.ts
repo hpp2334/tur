@@ -2,7 +2,7 @@ import {
     Color,
     Container,
     derive,
-    type EdgyElement,
+    type Element,
     get,
     MouseRegion,
     mutate,
@@ -10,7 +10,7 @@ import {
     PointerInteract,
     set,
     source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { tokens } from "../theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -42,7 +42,7 @@ export interface PointerDragEvent {
  */
 export function VDivider(opts: {
     onDrag: (event: PointerDragEvent) => void;
-}): EdgyElement {
+}): Element {
     const myId = ++dividerCounter;
     let dragStart: Point | null = null;
     let dragLast: Point | null = null;

@@ -1,4 +1,4 @@
-import { type Atom, set, source } from "@tur/edgy";
+import { type Atom, set, source } from "builtin:tur/core";
 import { CASE_SOURCES } from "../cases";
 import type { LayoutMode } from "./types";
 

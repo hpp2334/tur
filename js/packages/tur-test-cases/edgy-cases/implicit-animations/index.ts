@@ -1,8 +1,6 @@
 import {
     Alignment,
-    AnimatedContainer,
-    AnimatedOpacity,
-    AnimatedPositioned,
+    type Element,
     Color,
     Column,
     Container,
@@ -24,7 +22,12 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
+import {
+    AnimatedContainer,
+    AnimatedOpacity,
+    AnimatedPositioned,
+} from "@tur/animation-ext";
 
 // ---------------------------------------------------------------------------
 // "Implicit Animations" — demonstrates tur's AnimatedContainer /
@@ -44,7 +47,7 @@ const DURATION = 600;
 const expanded$ = source(false);
 const toggle = mutate(() => set(expanded$, !get(expanded$)));
 
-function Card(): unknown {
+function Card(): Element {
     return Stack({
         children: [
             // Sizer: gives the inner Stack a finite canvas so Positioned
@@ -90,7 +93,7 @@ function Card(): unknown {
     });
 }
 
-function ToggleButton(): unknown {
+function ToggleButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({

@@ -214,13 +214,13 @@ Each view is one file, one default export, no side effects at module load.
 ### 4.1 Import order
 
 ```ts
-// 1. @tur/edgy primitives
-import { Color, Column, Container, /* ... */ } from "@tur/edgy";
+// 1. builtin:tur/core primitives
+import { Color, Column, Container, /* ... */ } from "builtin:tur/core";
 // 2. Local utilities
 import { tokens } from "./tokens";
 import { Button } from "./views/Button";
 // 3. Types (type-only import)
-import type { EdgyElement } from "@tur/edgy";
+import type { Element } from "builtin:tur/core";
 ```
 
 ### 4.2 The no-hex lint rule
@@ -249,9 +249,9 @@ This makes any new `Color.hex("...")` outside `tokens.ts` a lint error. The toke
 ```ts
 // src/views/Button.ts
 import {
-    type EdgyElement, Container, PointerInteract, Row, Text,
+    type Element, Container, PointerInteract, Row, Text,
     derive, get, mutate, set, source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { tokens } from "../tokens";
 
 export interface ButtonProps {
@@ -261,7 +261,7 @@ export interface ButtonProps {
     disabled?: boolean;
 }
 
-export function Button(props: ButtonProps): EdgyElement {
+export function Button(props: ButtonProps): Element {
     const variant = props.variant ?? "secondary";
     const hover$ = source(false);
     const pressed$ = source(false);
@@ -344,7 +344,7 @@ const color$ = derive(() => {
 
 **Do** — Compose via `Panel`:
 ```tsx
-function ViewerSurface(props): EdgyElement {
+function ViewerSurface(props): Element {
     return Panel({
         title: "viewer",
         actions: [StatusBadge({ status: props.status$ })],
@@ -593,7 +593,7 @@ const editorCtrl = createTextEditingController({
 When the application enters a non-default state (error, loading, empty), **replace the relevant pane's body entirely** rather than overlaying a banner. This forces the user to address the state before continuing.
 
 ```ts
-function Viewer(): EdgyElement {
+function Viewer(): Element {
     return Switch({
         value: status$,
         cases: [

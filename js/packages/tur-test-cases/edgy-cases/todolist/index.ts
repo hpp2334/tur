@@ -6,7 +6,7 @@ import {
     CrossAxisAlignment,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     ImageEdgy,
@@ -22,7 +22,7 @@ import {
     Stack,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     addOpen$,
     getIcon,
@@ -42,7 +42,7 @@ const COLORS = {
     accentFg: Color.hex("#ffffff"),
 };
 
-function Header(): EdgyElement {
+function Header(): Element {
     return Row({
         mainAlignment: MainAxisAlignment.SpaceBetween,
         crossAlignment: CrossAxisAlignment.Center,
@@ -114,7 +114,7 @@ function Header(): EdgyElement {
     });
 }
 
-function TaskList(): EdgyElement {
+function TaskList(): Element {
     return Expanded({
         child: ScrollView({
             child: Column({

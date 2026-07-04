@@ -1,8 +1,10 @@
 {
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
-        "outDir": "dist",
-        "rootDir": "src"
+        "noEmit": true,
+        "types": ["@tur/core", "@tur/host", "@tur/net"]
     },
-    "include": ["src"]
+    "include": [
+        "src"
+    ]
 }

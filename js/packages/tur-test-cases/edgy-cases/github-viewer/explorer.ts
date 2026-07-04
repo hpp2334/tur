@@ -1,13 +1,14 @@
 import {
     Alignment,
     Axis,
+    type Brush,
     Column,
     Condition,
     Container,
     CrossAxisAlignment,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     ImageEdgy,
@@ -24,7 +25,7 @@ import {
     source,
     Text,
     Transform,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     type DirEntry,
     doDownload,
@@ -60,7 +61,7 @@ function FileRow({
 }: {
     entry: DirEntry;
     index: number;
-}): EdgyElement {
+}): Element {
     return Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         mainAxisSize: MainAxisSize.Min,
@@ -130,7 +131,7 @@ function FileRow({
 
 // --- Breadcrumb -----------------------------------------------------------
 
-function RepoCrumb(): EdgyElement {
+function RepoCrumb(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -154,7 +155,7 @@ function RepoCrumb(): EdgyElement {
 // status change structurally mounts a new subtree (spinner / check / label)
 // rather than relying on prop-level re-resolution.
 
-function Spinner(): EdgyElement {
+function Spinner(): Element {
     return Transform({
         rotate: derive(() => get(spinProgress$) * 2 * Math.PI),
         child: ImageEdgy({
@@ -166,7 +167,7 @@ function Spinner(): EdgyElement {
     });
 }
 
-function CheckIcon(): EdgyElement {
+function CheckIcon(): Element {
     return ImageEdgy({
         resourceId: getIcon("check"),
         width: 14,
@@ -180,13 +181,13 @@ function dlShell(
     bg: unknown,
     fg: unknown,
     label: string,
-    leading: EdgyElement | null,
-): EdgyElement {
-    const textEl = Text({ text: label, fontSize: 13, color: fg });
+    leading: Element | null,
+): Element {
+    const textEl = Text({ text: label, fontSize: 13, color: fg as Brush });
     return Container({
         padding: 7,
         borderRadius: 7,
-        color: bg,
+        color: bg as Brush,
         children: [
             Row({
                 mainAxisSize: MainAxisSize.Min,
@@ -198,7 +199,7 @@ function dlShell(
     });
 }
 
-function DownloadButton(): EdgyElement {
+function DownloadButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -265,7 +266,7 @@ function DownloadButton(): EdgyElement {
 
 // --- Explorer screen ------------------------------------------------------
 
-export function ExplorerScreen(): EdgyElement {
+export function ExplorerScreen(): Element {
     // Top bar + toolbar are bare `Row`s (content-sized) — wrapping them in a
     // `Container` would inflate to the Column's full height and starve the
     // `Expanded` file list.
@@ -337,7 +338,7 @@ export function ExplorerScreen(): EdgyElement {
     });
 }
 
-function fileListView(): EdgyElement {
+function fileListView(): Element {
     return Container({
         padding: 4,
         children: [
@@ -398,7 +399,7 @@ function fileListView(): EdgyElement {
     });
 }
 
-function emptyFolder(): EdgyElement {
+function emptyFolder(): Element {
     return Container({
         alignment: Alignment.Center,
         padding: 40,

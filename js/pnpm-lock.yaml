@@ -27,6 +27,18 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/tur-animation-ext:
+    dependencies:
+      '@tur/core':
+        specifier: workspace:*
+        version: link:../tur-core
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/tur-core: {}
+
   packages/tur-demo:
     devDependencies:
       '@rspack/cli':
@@ -41,9 +53,18 @@ importers:
 
   packages/tur-demo-impl:
     dependencies:
-      '@tur/edgy':
+      '@tur/animation-ext':
         specifier: workspace:*
-        version: link:../tur-edgy
+        version: link:../tur-animation-ext
+      '@tur/core':
+        specifier: workspace:*
+        version: link:../tur-core
+      '@tur/host':
+        specifier: workspace:*
+        version: link:../tur-host
+      '@tur/net':
+        specifier: workspace:*
+        version: link:../tur-net
     devDependencies:
       '@rspack/cli':
         specifier: ^1.2.0
@@ -55,17 +76,24 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/tur-edgy:
-    devDependencies:
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
+  packages/tur-host: {}
+
+  packages/tur-net: {}
 
   packages/tur-test-cases:
     dependencies:
-      '@tur/edgy':
+      '@tur/animation-ext':
         specifier: workspace:*
-        version: link:../tur-edgy
+        version: link:../tur-animation-ext
+      '@tur/core':
+        specifier: workspace:*
+        version: link:../tur-core
+      '@tur/host':
+        specifier: workspace:*
+        version: link:../tur-host
+      '@tur/net':
+        specifier: workspace:*
+        version: link:../tur-net
     devDependencies:
       '@rspack/cli':
         specifier: ^1.2.0

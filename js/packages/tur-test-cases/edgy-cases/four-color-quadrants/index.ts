@@ -1,4 +1,4 @@
-import { Color, Container, Positioned, Stack, view } from "@tur/edgy";
+import { Color, Container, Positioned, Stack, view } from "builtin:tur/core";
 
 export default view(() =>
     Stack({

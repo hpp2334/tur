@@ -5,7 +5,7 @@ import {
     Container,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 export default view(() =>
     Container({

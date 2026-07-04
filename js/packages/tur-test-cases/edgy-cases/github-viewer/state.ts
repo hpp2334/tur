@@ -9,7 +9,9 @@ import {
     type StoreCtx,
     set,
     source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
+import { request } from "builtin:tur/net";
+import { saveFile } from "builtin:tur/host";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,9 +32,9 @@ export interface DirEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Host bridge — `__tur.request` (HTTP, Promise) + `__turHost` (file save).
-// Lives in tur-wasm; absent under the native engine, so the UI guards on
-// `hasHttp` and shows a "requires the browser playground" notice otherwise.
+// Host bridge — HTTP via `builtin:tur/net`, file save via `builtin:tur/host`.
+// Both are registered by tur-wasm (playground). The case is playground-only,
+// so `hasHttp` is true whenever the case loads.
 // ---------------------------------------------------------------------------
 
 interface HttpResponse {
@@ -52,23 +54,10 @@ interface HttpRequestOpts {
     responseType?: "text" | "bytes";
 }
 
-interface TurHost {
-    saveFile?: (name: string, bytes: ArrayBuffer) => void;
-}
-
-type TurRequest = (opts: HttpRequestOpts) => Promise<HttpResponse>;
-
-const TUR = (globalThis as unknown as { __tur?: { request?: TurRequest } })
-    .__tur;
-const HOST = (globalThis as unknown as { __turHost?: TurHost }).__turHost;
-const TUR_REQUEST = TUR?.request;
-
-export const hasHttp = typeof TUR_REQUEST === "function";
+export const hasHttp = typeof request === "function";
 
 function http(opts: HttpRequestOpts): Promise<HttpResponse> {
-    if (!TUR_REQUEST)
-        return Promise.reject({ message: "__tur.request not available" });
-    return TUR_REQUEST(opts);
+    return request(opts) as Promise<HttpResponse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +86,7 @@ export const downloadStatus$ = source<DownloadStatus>("idle");
 // Indeterminate spinner — an infinite animation controller that writes its
 // eased progress (0..1) into `spinProgress$`. Stopped by default; `forward()`
 // on download start, `stop()` on completion. We can't show real byte progress
-// because `__tur.request` resolves the entire body in one shot.
+// because `request` resolves the entire body in one shot.
 export const spinProgress$ = source(0);
 const spinCtrl = createAnimationController({
     duration: 900,
@@ -187,18 +176,13 @@ export const selectedEntry$: Readable<DirEntry | null> = derive(() => {
 // Text controllers
 // ---------------------------------------------------------------------------
 
-interface TextController {
-    setSpans(spans: Array<{ content: string; color?: unknown }>): void;
-    readonly text: string;
-}
-
 /** Controller bound to `repoDraft$`; Enter submits the landing form. */
 export const repoCtrl = createTextEditingController({
     onInput: mutate((ctx: StoreCtx, text: string, enter: boolean) => {
         ctx.set(repoDraft$, text);
         if (enter) openRepoFromDraft(ctx);
     }),
-}) as unknown as TextController;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -468,7 +452,7 @@ function flashStatus(status: DownloadStatus): void {
 export function doDownload(): void {
     // Guard re-entry: ignore clicks while a download or its flash is active.
     if (get(downloadStatus$) !== "idle") return;
-    const save = HOST?.saveFile;
+    const save = saveFile;
     if (!save) {
         set(error$, "Save not available in this host");
         flashStatus("error");

@@ -9,7 +9,7 @@ import {
     set,
     source,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // A reactive cursor driven by a source, so Rust tests can flip it via
 // `globalThis.__setCursor` and assert the host cursor updates after a flush.

@@ -6,21 +6,20 @@ use tur_integration_tests::TurTestApp;
 /// `ScrollController` with an overlaid `Scrollbar`. The controller is exposed
 /// as `globalThis.__ctrl` so the test can drive `jumpTo` directly.
 const SCROLLBAR_BUNDLE: &str = r#"
-const T = globalThis.__tur;
-const ctx = T.__ctx;
+import { render, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "builtin:tur/core";
 globalThis.__ctrl = new globalThis.ScrollController();
 const blocks = [];
-for (let i = 0; i < 6; i++) blocks.push(T.Container(ctx, { height: 100 }));
-T.render(ctx, T.Row(ctx, {
+for (let i = 0; i < 6; i++) blocks.push(Container({ height: 100 }));
+render(Row({
     children: [
-        T.Expanded(ctx, {
-            child: T.ScrollView(ctx, {
+        Expanded({
+            child: ScrollView({
                 controller: globalThis.__ctrl,
                 queryKey: ["scroll"],
-                child: T.Column(ctx, { children: blocks }),
+                child: Column({ children: blocks }),
             }),
         }),
-        T.Scrollbar(ctx, {
+        Scrollbar({
             controller: globalThis.__ctrl,
             thickness: 10,
             queryKey: ["bar"],
@@ -41,7 +40,7 @@ fn jump_to_sets_scroll_offset() {
     // Regression for the ScrollController binding: `jumpTo` used to be a
     // no-op because the controller was never attached to its scroll-view.
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
-    app.load_bundle_source(SCROLLBAR_BUNDLE).unwrap();
+    app.eval_module_source(SCROLLBAR_BUNDLE).unwrap();
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
@@ -67,7 +66,7 @@ fn jump_to_sets_scroll_offset() {
 #[test]
 fn dragging_scrollbar_thumb_scrolls() {
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
-    app.load_bundle_source(SCROLLBAR_BUNDLE).unwrap();
+    app.eval_module_source(SCROLLBAR_BUNDLE).unwrap();
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();

@@ -6,22 +6,23 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn animation_controller_forward_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -61,22 +62,23 @@ fn animation_controller_forward_with_on_tick() {
 #[test]
 fn animation_controller_reverse_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 200);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(200);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.reverse();
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -107,23 +109,24 @@ fn animation_controller_reverse_with_on_tick() {
 #[test]
 fn animation_controller_stop_freezes_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.forward();
         globalThis.__test_ctrl = ctrl;
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -159,23 +162,24 @@ fn animation_controller_stop_freezes_value() {
 #[test]
 fn animation_controller_repeats() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 100,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.repeat(3);
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -207,12 +211,12 @@ fn animation_controller_repeats() {
 #[test]
 fn animation_controller_status_transitions() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController } from "builtin:tur/core";
+        const container = Container({});
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 100
         });
         globalThis.__test_ctrl = ctrl;
@@ -220,7 +224,8 @@ fn animation_controller_status_transitions() {
         globalThis.__statuses = [ctrl.status];
         ctrl.forward();
         globalThis.__statuses.push(ctrl.status);
-    "#);
+    "#)
+    .unwrap();
 
     let statuses_raw = app.eval_js(r#"
         globalThis.__statuses[0] + "," + globalThis.__statuses[1];
@@ -242,20 +247,21 @@ fn animation_controller_status_transitions() {
 #[test]
 fn animation_controller_on_end_callback() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        const container = Container({});
+        render(container);
 
         globalThis.__ended = false;
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 100,
-            onEnd: globalThis.__tur.mutate(ctx, function(_sctx) {
+            onEnd: mutate(function(_sctx) {
                 globalThis.__ended = true;
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     app.advance(Duration::from_millis(150)).unwrap();
     app.render();
@@ -269,21 +275,22 @@ fn animation_controller_on_end_callback() {
 #[test]
 fn animation_controller_ease_in_curve() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 0);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(0);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 1000,
             curve: "easeIn",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                globalThis.__tur.set(ctx, width$, 1000 * v);
+            onTick: mutate(function(_sctx, v) {
+                set(width$, 1000 * v);
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -305,23 +312,24 @@ fn animation_controller_ease_in_curve() {
 #[test]
 fn animation_controller_pause_freezes_and_resume_continues() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.forward();
         globalThis.__test_ctrl = ctrl;
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -374,23 +382,24 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 #[test]
 fn animation_controller_seek_jumps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.forward();
         globalThis.__test_ctrl = ctrl;
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -425,23 +434,24 @@ fn animation_controller_seek_jumps_value() {
 #[test]
 fn animation_controller_set_speed_scales_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var width$ = globalThis.__tur.source(ctx, 100);
-        var container = globalThis.__tur.Container(ctx, { width: width$ });
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        const width$ = source(100);
+        const container = Container({ width: width$ });
+        render(container);
 
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
-                var w = 100 + (200 - 100) * v;
-                globalThis.__tur.set(ctx, width$, w);
+            onTick: mutate(function(_sctx, v) {
+                const w = 100 + (200 - 100) * v;
+                set(width$, w);
             })
         });
         ctrl.forward();
         globalThis.__test_ctrl = ctrl;
-    "#);
+    "#)
+    .unwrap();
 
     let container_id = {
         let tree = app.element_tree();
@@ -496,20 +506,21 @@ fn controller_on_tick_can_read_status_from_forward() {
     // with BorrowError because forward() fires onTick(0) synchronously
     // while holding the RefMut.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        const container = Container({});
+        render(container);
 
         globalThis.__tick_status = null;
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
-            onTick: globalThis.__tur.mutate(ctx, function(_ctx, v) {
+            onTick: mutate(function(_ctx, v) {
                 globalThis.__tick_status = ctrl.status;
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     // After forward() + flush, the queued onTick should have fired and read
     // ctrl.status without panicking.
@@ -524,20 +535,21 @@ fn controller_on_tick_can_read_status_from_forward() {
 fn controller_on_end_can_read_status_after_complete() {
     // onEnd callback reads ctrl.status after the animation completes.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        const container = Container({});
+        render(container);
 
         globalThis.__end_status = null;
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 50,
-            onEnd: globalThis.__tur.mutate(ctx, function(_ctx) {
+            onEnd: mutate(function(_ctx) {
                 globalThis.__end_status = ctrl.status;
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     app.advance(Duration::from_millis(100)).unwrap();
     app.render();
@@ -554,22 +566,23 @@ fn controller_on_tick_can_read_value_during_forward() {
     // because the read attempted a downcast_ref while forward()'s
     // downcast_mut was still held.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        const container = Container({});
+        render(container);
 
         globalThis.__tick_values = [];
-        var ctrl = globalThis.__tur.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
-            onTick: globalThis.__tur.mutate(ctx, function(_ctx, v) {
+            onTick: mutate(function(_ctx, v) {
                 // Read both the eased arg and the controller's own `value`
                 // field — both must work without panic.
                 globalThis.__tick_values.push(v + "_" + ctrl.value);
             })
         });
         ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     app.advance(Duration::from_millis(100)).unwrap();
     app.render();
@@ -592,28 +605,29 @@ fn controller_on_tick_can_read_value_during_forward() {
 #[test]
 fn controller_infinite_does_not_complete_after_many_iterations() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
         globalThis.__tick_count = 0;
         globalThis.__end_count = 0;
         globalThis.__last_tick_value = -1;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+        const container = Container({});
+        render(container);
 
-        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+        globalThis.__ctrl = createAnimationController({
             duration: 100,
             curve: "linear",
             repeat: "infinite",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
+            onTick: mutate(function(_sctx, v) {
                 globalThis.__tick_count++;
                 globalThis.__last_tick_value = v;
             }),
-            onEnd: globalThis.__tur.mutate(ctx, function(_sctx) {
+            onEnd: mutate(function(_sctx) {
                 globalThis.__end_count++;
             })
         });
         globalThis.__ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     // Advance well beyond a single iteration — call advance multiple times
     // so the flush loop fires `onTick` each time. 5 calls of 100ms each =
@@ -646,22 +660,23 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
 #[test]
 fn controller_infinite_reverse_cycles_back_to_zero() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
         globalThis.__tick_values = [];
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+        const container = Container({});
+        render(container);
 
-        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+        globalThis.__ctrl = createAnimationController({
             duration: 100,
             curve: "linear",
             repeat: "infinite",
-            onTick: globalThis.__tur.mutate(ctx, function(_sctx, v) {
+            onTick: mutate(function(_sctx, v) {
                 globalThis.__tick_values.push(v);
             })
         });
         globalThis.__ctrl.reverse();
-    "#);
+    "#)
+    .unwrap();
 
     // Reverse: value goes 1.0 → 0.0, then loops back to 1.0 → 0.0...
     app.advance(Duration::from_millis(250)).unwrap();
@@ -693,22 +708,23 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
 #[test]
 fn controller_repeat_three_then_completes() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
+    app.eval_module_source(r#"
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
         globalThis.__end_count = 0;
-        var container = globalThis.__tur.Container(ctx, {});
-        globalThis.__tur.render(ctx, container);
+        const container = Container({});
+        render(container);
 
-        globalThis.__ctrl = globalThis.__tur.createAnimationController(ctx, {
+        globalThis.__ctrl = createAnimationController({
             duration: 100,
             curve: "linear",
             repeat: 3,
-            onEnd: globalThis.__tur.mutate(ctx, function(_sctx) {
+            onEnd: mutate(function(_sctx) {
                 globalThis.__end_count++;
             })
         });
         globalThis.__ctrl.forward();
-    "#);
+    "#)
+    .unwrap();
 
     // 3 iterations of 100ms = 300ms total. Advance just past.
     app.advance(Duration::from_millis(320)).unwrap();

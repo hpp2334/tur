@@ -1,24 +1,23 @@
 use tur_integration_tests::TurTestApp;
 
 const RUNTIME: &str = r#"
-const T = globalThis.__tur;
-const ctx = T.__ctx;
-globalThis.__key = T.source(ctx, "a");
-const root = T.Switch(ctx, {
+import { source, Switch, Text, render } from "builtin:tur/core";
+globalThis.__key = source("a");
+const root = Switch({
     value: globalThis.__key,
     cases: [
-        { key: "a", child: () => T.Text(ctx, { text: "AAA", queryKey: ["case_a"] }) },
-        { key: "b", child: () => T.Text(ctx, { text: "BBB", queryKey: ["case_b"] }) },
+        { key: "a", child: () => Text({ text: "AAA", queryKey: ["case_a"] }) },
+        { key: "b", child: () => Text({ text: "BBB", queryKey: ["case_b"] }) },
     ],
-    fallback: () => T.Text(ctx, { text: "FALL", queryKey: ["case_fallback"] }),
+    fallback: () => Text({ text: "FALL", queryKey: ["case_fallback"] }),
 });
-T.render(ctx, root);
+render(root);
 "#;
 
 #[test]
 fn switch_mounts_initial_branch() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.load_bundle_source(RUNTIME).unwrap();
+    app.eval_module_source(RUNTIME).unwrap();
     app.render();
 
     // The "a" branch should be mounted; "b" and fallback should not.
@@ -33,15 +32,16 @@ fn switch_mounts_initial_branch() {
 #[test]
 fn switch_swaps_branch_on_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.load_bundle_source(RUNTIME).unwrap();
+    app.eval_module_source(RUNTIME).unwrap();
     app.render();
 
     assert!(app.query_element(&["case_a"]).is_some());
 
     // Flip the value atom to "b".
-    app.eval_js(
-        r#"globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__key, "b");"#,
-    );
+    app.eval_module_source(
+        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "b");"#,
+    )
+    .unwrap();
     app.render();
 
     assert!(app.query_element(&["case_a"]).is_none(), "case_a should be torn down");
@@ -54,13 +54,14 @@ fn switch_swaps_branch_on_value_change() {
 #[test]
 fn switch_uses_fallback_when_no_case_matches() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.load_bundle_source(RUNTIME).unwrap();
+    app.eval_module_source(RUNTIME).unwrap();
     app.render();
 
     // Value with no matching case → fallback branch.
-    app.eval_js(
-        r#"globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__key, "zzz");"#,
-    );
+    app.eval_module_source(
+        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "zzz");"#,
+    )
+    .unwrap();
     app.render();
 
     assert!(app.query_element(&["case_a"]).is_none());
@@ -74,39 +75,39 @@ fn switch_uses_fallback_when_no_case_matches() {
 #[test]
 fn switch_no_rebuild_when_value_re_emits_same_key() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.load_bundle_source(RUNTIME).unwrap();
+    app.eval_module_source(RUNTIME).unwrap();
     app.render();
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
-    app.eval_js(
-        r#"globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__key, "a");"#,
-    );
+    app.eval_module_source(
+        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "a");"#,
+    )
+    .unwrap();
     app.render();
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
 }
 
 const DERIVED_RUNTIME: &str = r#"
-const T = globalThis.__tur;
-const ctx = T.__ctx;
-globalThis.__key = T.source(ctx, "a");
-globalThis.__derived = T.derive(ctx, () => T.get(ctx, globalThis.__key));
-const root = T.Switch(ctx, {
+import { source, derive, get, Switch, Text, render } from "builtin:tur/core";
+globalThis.__key = source("a");
+globalThis.__derived = derive(() => get(globalThis.__key));
+const root = Switch({
     value: globalThis.__derived,
     cases: [
-        { key: "a", child: () => T.Text(ctx, { text: "AAA", queryKey: ["d_case_a"] }) },
-        { key: "b", child: () => T.Text(ctx, { text: "BBB", queryKey: ["d_case_b"] }) },
+        { key: "a", child: () => Text({ text: "AAA", queryKey: ["d_case_a"] }) },
+        { key: "b", child: () => Text({ text: "BBB", queryKey: ["d_case_b"] }) },
     ],
-    fallback: () => T.Text(ctx, { text: "FALL", queryKey: ["d_case_fallback"] }),
+    fallback: () => Text({ text: "FALL", queryKey: ["d_case_fallback"] }),
 });
-T.render(ctx, root);
+render(root);
 "#;
 
 #[test]
 fn switch_swaps_branch_on_derived_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
-    app.load_bundle_source(DERIVED_RUNTIME).unwrap();
+    app.eval_module_source(DERIVED_RUNTIME).unwrap();
     app.render();
 
     assert!(
@@ -116,9 +117,10 @@ fn switch_swaps_branch_on_derived_value_change() {
 
     // Flip the source atom — the derived should go stale and the Switch
     // should swap via the subscriber graph (not a full-scan try_rebuild).
-    app.eval_js(
-        r#"globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__key, "b");"#,
-    );
+    app.eval_module_source(
+        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "b");"#,
+    )
+    .unwrap();
     app.render();
 
     assert!(

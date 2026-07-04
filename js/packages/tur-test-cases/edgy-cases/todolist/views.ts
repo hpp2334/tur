@@ -1,11 +1,12 @@
 import {
     Alignment,
+    type Brush,
     Color,
     Column,
     Container,
     CrossAxisAlignment,
     derive,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     HitTestBehavior,
@@ -20,7 +21,7 @@ import {
     SizedBox,
     type StoreCtx,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     closeAddModal,
     closeRemoveModal,
@@ -67,7 +68,7 @@ export function TaskItem({
 }: {
     task: Task;
     index: number;
-}): EdgyElement {
+}): Element {
     return Container({
         borderRadius: 10,
         padding: 14,
@@ -92,7 +93,10 @@ export function TaskItem({
                                 width: 20,
                                 height: 20,
                                 borderRadius: 6,
-                                color: task.completed ? COLORS.success : null,
+                                color:
+                                    (task.completed
+                                        ? COLORS.success
+                                        : null) as unknown as Brush,
                                 borderColor: task.completed
                                     ? COLORS.successBorder
                                     : COLORS.inputBorder,
@@ -176,8 +180,8 @@ function ModalShell({
     card,
 }: {
     onBackdropClick: (ctx: StoreCtx) => void;
-    card: EdgyElement;
-}): EdgyElement {
+    card: Element;
+}): Element {
     return PointerInteract({
         behavior: HitTestBehavior.Opaque,
         onClick: mutate((ctx, _ev) => onBackdropClick(ctx)),
@@ -209,7 +213,7 @@ function Button({
     bg: Color;
     fg: Color;
     onClick: (ctx: StoreCtx) => void;
-}): EdgyElement {
+}): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -232,7 +236,7 @@ function Button({
 
 // --- AddTaskModal ---------------------------------------------------------
 
-export function AddTaskModal(): EdgyElement {
+export function AddTaskModal(): Element {
     return ModalShell({
         onBackdropClick: closeAddModal,
         card: Container({
@@ -334,7 +338,7 @@ export function AddTaskModal(): EdgyElement {
 
 // --- ConfirmRemoveModal ---------------------------------------------------
 
-export function ConfirmRemoveModal(): EdgyElement {
+export function ConfirmRemoveModal(): Element {
     return ModalShell({
         onBackdropClick: closeRemoveModal,
         card: Container({

@@ -28,6 +28,7 @@ pub struct TurApp {
     boa_context: Context,
     internal: TurAppInternal,
     executor: Rc<TurJobExecutor>,
+    module_loader: Rc<core::bridge::TurModuleLoader>,
 }
 
 impl TurApp {
@@ -38,14 +39,23 @@ impl TurApp {
     ) -> Result<Self, TurError> {
         let clock = Rc::new(FixedClock::from_millis(0));
         let executor = Rc::new(TurJobExecutor::new());
+        let module_loader = core::bridge::TurModuleLoader::new();
         let mut boa_context = Context::builder()
             .clock(clock.clone())
             .job_executor(executor.clone())
+            .module_loader(module_loader.clone())
             .build()
             .expect("failed to build boa context");
 
-        let BridgeResult { internal, executor } =
-            init_bridge(&mut boa_context, renderer, font_loader, clock, platform_api, executor);
+        let BridgeResult { internal, executor } = init_bridge(
+            &mut boa_context,
+            renderer,
+            font_loader,
+            clock,
+            platform_api,
+            executor,
+            module_loader.clone(),
+        );
 
         tracing::info!("TurApp initialized");
 
@@ -53,6 +63,7 @@ impl TurApp {
             boa_context,
             internal,
             executor,
+            module_loader,
         })
     }
 
@@ -71,6 +82,56 @@ impl TurApp {
         Ok(())
     }
 
+    /// Evaluate `source` as an ES module: parse it, resolve imports via the
+    /// registered module loader (`builtin:tur/core`, host modules, …),
+    /// link, evaluate, and drain pending jobs.
+    ///
+    /// Unlike [`load_js`](Self::load_js) (script mode), this supports real
+    /// `import` / `export` syntax — the replacement for the legacy
+    /// `globalThis.__tur` + hand-rewritten module shims.
+    pub fn load_module(&mut self, source: &str) -> Result<(), TurError> {
+        tracing::info!("load_module: evaluating module ({} bytes)", source.len());
+        let module = boa_engine::Module::parse(
+            Source::from_bytes(source).with_path(Path::new("entry.mjs")),
+            None,
+            &mut self.boa_context,
+        )
+        .map_err(|e| {
+            tracing::error!("module parse error: {e}");
+            TurError::JsEval(e)
+        })?;
+        let _promise = module.load_link_evaluate(&mut self.boa_context);
+        if let Err(e) = self.boa_context.run_jobs() {
+            tracing::error!("module run_jobs error: {e}");
+        }
+        if let Err(e) = self.executor.drain(&mut self.boa_context) {
+            tracing::error!("load_module drain error: {e}");
+        }
+        Ok(())
+    }
+
+    /// Evaluate `source` as a short-lived ES module (used for one-off
+    /// snippets that `import` from `builtin:tur/*`). Returns nothing — modules have
+    /// no completion value; callers stash results on `globalThis` and read
+    /// them back via [`eval_js`](Self::eval_js).
+    pub fn eval_module(&mut self, source: &str) -> Result<(), TurError> {
+        let module = boa_engine::Module::parse(
+            Source::from_bytes(source).with_path(Path::new("eval.mjs")),
+            None,
+            &mut self.boa_context,
+        )
+        .map_err(|e| {
+            tracing::error!("eval_module parse error: {e}");
+            TurError::JsEval(e)
+        })?;
+        let _promise = module.load_link_evaluate(&mut self.boa_context);
+        if let Err(e) = self.boa_context.run_jobs() {
+            tracing::error!("eval_module run_jobs error: {e}");
+        }
+        let _ = self.executor.drain(&mut self.boa_context);
+        Ok(())
+    }
+
     pub fn eval_js(&mut self, source: &str) -> Result<String, TurError> {
         let result = self
             .boa_context
@@ -83,121 +144,26 @@ impl TurApp {
         Ok(s)
     }
 
-    /// Register a host function on `globalThis.__turHost.<name>`.
-    ///
-    /// Generic, compiler-agnostic extension point: lets an embedder (e.g.
-    /// `tur-wasm`) expose native services to JS without polluting the core
-    /// `__tur` view namespace. The `__turHost` object is created on first
-    /// call. The embedder owns any heavy dependencies (e.g. swc) — tur-engine
-    /// itself only provides this hook.
-    pub fn register_host_fn(
+    /// Register a synthetic ES module under `specifier` whose exports are the
+    /// given native functions. Embedders (tur-wasm) use this to expose host
+    /// services as importable modules — e.g. `builtin:tur/host`, `builtin:tur/net` —
+    /// replacing the legacy `globalThis.__turHost` / `globalThis.__tur.*`
+    /// globals. JS then does `import { request } from "builtin:tur/net"`.
+    pub fn register_host_module(
         &mut self,
-        name: &str,
-        length: usize,
-        f: boa_engine::native_function::NativeFunction,
+        specifier: &str,
+        exports: Vec<(String, boa_engine::NativeFunction, usize)>,
     ) -> Result<(), boa_engine::JsError> {
-        use boa_engine::js_string;
-        use boa_engine::object::FunctionObjectBuilder;
-        use boa_engine::property::PropertyDescriptor;
-
-        let host_key = js_string!("__turHost");
-
-        // Get-or-create globalThis.__turHost.
-        let host_obj = {
-            let global = self.boa_context.global_object();
-            let existing = global.get(host_key.clone(), &mut self.boa_context)?;
-            if let Some(obj) = existing.as_object() {
-                obj.clone()
-            } else {
-                let proto = self
-                    .boa_context
-                    .intrinsics()
-                    .constructors()
-                    .object()
-                    .prototype();
-                let obj = boa_engine::object::JsObject::from_proto_and_data(proto, ());
-                let desc = PropertyDescriptor::builder()
-                    .value(obj.clone())
-                    .writable(true)
-                    .enumerable(false)
-                    .configurable(true)
-                    .build();
-                global.insert_property(host_key.clone(), desc);
-                obj
-            }
-        };
-
-        // Build the function and attach it to __turHost.<name>.
-        let fn_obj = FunctionObjectBuilder::new(self.boa_context.realm(), f)
-            .name(js_string!(name))
-            .length(length)
-            .build();
-        let desc = PropertyDescriptor::builder()
-            .value(fn_obj)
-            .writable(true)
-            .enumerable(false)
-            .configurable(true)
-            .build();
-        host_obj.insert_property(js_string!(name), desc);
-
-        tracing::info!("registered host function __turHost.{name}");
-        Ok(())
-    }
-
-    /// Register a function on `globalThis.__tur.<name>` — the core view
-    /// namespace, set up by `init_bridge`. Lets an embedder (e.g. tur-wasm)
-    /// add capability functions that JS calls as `__tur.<name>(...)`, alongside
-    /// the built-in view factories. The embedder owns any heavy dependencies
-    /// (e.g. reqwest_wasm); tur-engine only provides this hook.
-    pub fn register_tur_fn(
-        &mut self,
-        name: &str,
-        length: usize,
-        f: boa_engine::native_function::NativeFunction,
-    ) -> Result<(), boa_engine::JsError> {
-        use boa_engine::js_string;
-        use boa_engine::object::FunctionObjectBuilder;
-        use boa_engine::property::PropertyDescriptor;
-
-        let tur_key = js_string!("__tur");
-
-        let global = self.boa_context.global_object();
-        let tur_obj = match global.get(tur_key.clone(), &mut self.boa_context) {
-            Ok(v) if v.as_object().is_some() => v.as_object().unwrap().clone(),
-            _ => {
-                // `__tur` should always exist after init_bridge; create a
-                // bare fallback so a misordered call doesn't panic.
-                let proto = self
-                    .boa_context
-                    .intrinsics()
-                    .constructors()
-                    .object()
-                    .prototype();
-                let obj = boa_engine::object::JsObject::from_proto_and_data(proto, ());
-                let desc = PropertyDescriptor::builder()
-                    .value(obj.clone())
-                    .writable(true)
-                    .enumerable(false)
-                    .configurable(true)
-                    .build();
-                global.insert_property(tur_key.clone(), desc);
-                obj
-            }
-        };
-
-        let fn_obj = FunctionObjectBuilder::new(self.boa_context.realm(), f)
-            .name(js_string!(name))
-            .length(length)
-            .build();
-        let desc = PropertyDescriptor::builder()
-            .value(fn_obj)
-            .writable(true)
-            .enumerable(false)
-            .configurable(true)
-            .build();
-        tur_obj.insert_property(js_string!(name), desc);
-
-        tracing::info!("registered tur function __tur.{name}");
+        let owned: Vec<(&str, boa_engine::NativeFunction, usize)> = exports
+            .iter()
+            .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
+            .collect();
+        let module = core::bridge::module_loader::build_fn_module(
+            &mut self.boa_context,
+            &owned,
+        );
+        self.module_loader.register(specifier, module);
+        tracing::info!("registered host module {specifier} ({} exports)", owned.len());
         Ok(())
     }
 

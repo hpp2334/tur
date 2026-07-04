@@ -7,7 +7,7 @@
 // Light theme. Saturation: ink.* (warm-tinted neutrals) + teal.* (saturated
 // cyan-leaning signature) + coral.* (warm complement) + status.* (AA-verified).
 
-import { Color } from "@tur/edgy";
+import { Color } from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
 // Primitive palette — do not import from views.

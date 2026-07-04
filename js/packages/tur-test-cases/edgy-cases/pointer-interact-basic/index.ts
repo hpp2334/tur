@@ -1,4 +1,4 @@
-import { Container, PointerInteract, view } from "@tur/edgy";
+import { Container, PointerInteract, view } from "builtin:tur/core";
 
 export default view(() =>
     PointerInteract({

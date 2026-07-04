@@ -50,12 +50,12 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single InputEdgy at the top-left of the canvas,
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
-    const ctx = globalThis.__tur.__ctx;
-    globalThis.__ctrl = globalThis.__tur.createTextEditingController(ctx, {});
-    globalThis.__undo = globalThis.__tur.createUndoController(ctx);
-    globalThis.__tur.render(ctx, globalThis.__tur.Container(ctx, {
+    import { createTextEditingController, createUndoController, render, Container, InputEdgy } from "builtin:tur/core";
+    globalThis.__ctrl = createTextEditingController({});
+    globalThis.__undo = createUndoController();
+    render(Container({
         children: [
-            globalThis.__tur.InputEdgy(ctx, {
+            InputEdgy({
                 controller: globalThis.__ctrl,
                 undoController: globalThis.__undo,
                 multiline: true,
@@ -73,21 +73,21 @@ const UNDO_INPUT_BUNDLE: &str = r#"
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"
-    const ctx = globalThis.__tur.__ctx;
+    import { mutate, createTextEditingController, createUndoController, render, Container, InputEdgy } from "builtin:tur/core";
     // Tokenize the buffer into a single plain span (no syntax highlighting —
     // the act of calling setSpansPreserveCursor on every input is what matters).
-    const onInput = globalThis.__tur.mutate(ctx, (_ctxArg) => {
+    const onInput = mutate((_ctxArg) => {
         globalThis.__ctrl.setSpansPreserveCursor(
             [{ content: globalThis.__ctrl.text }],
         );
     });
-    globalThis.__ctrl = globalThis.__tur.createTextEditingController(ctx, {
+    globalThis.__ctrl = createTextEditingController({
         onInput: onInput,
     });
-    globalThis.__undo = globalThis.__tur.createUndoController(ctx);
-    globalThis.__tur.render(ctx, globalThis.__tur.Container(ctx, {
+    globalThis.__undo = createUndoController();
+    render(Container({
         children: [
-            globalThis.__tur.InputEdgy(ctx, {
+            InputEdgy({
                 controller: globalThis.__ctrl,
                 undoController: globalThis.__undo,
                 multiline: true,
@@ -103,7 +103,7 @@ const PLAYGROUND_BUNDLE: &str = r#"
 
 fn setup() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
-    app.load_bundle_source(UNDO_INPUT_BUNDLE).unwrap();
+    app.eval_module_source(UNDO_INPUT_BUNDLE).unwrap();
     app.render();
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);
@@ -113,7 +113,7 @@ fn setup() -> (TurTestApp, ElementNodeId) {
 
 fn setup_playground() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
-    app.load_bundle_source(PLAYGROUND_BUNDLE).unwrap();
+    app.eval_module_source(PLAYGROUND_BUNDLE).unwrap();
     app.render();
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);

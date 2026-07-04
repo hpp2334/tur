@@ -10,7 +10,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const state$ = source("idle");
 
@@ -28,7 +28,7 @@ export default view(() =>
                     alignment: Alignment.Center,
                     children: [
                         Text({
-                            text: derive((g) => g(state$)),
+                            text: derive((ctx) => ctx.get(state$)),
                             queryKey: ["region-text"],
                         }),
                     ],

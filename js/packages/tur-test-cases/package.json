@@ -8,7 +8,10 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@tur/edgy": "workspace:*"
+        "@tur/animation-ext": "workspace:*",
+        "@tur/core": "workspace:*",
+        "@tur/host": "workspace:*",
+        "@tur/net": "workspace:*"
     },
     "devDependencies": {
         "@rspack/cli": "^1.2.0",

@@ -9,7 +9,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { COLORS } from "./utils";
 
 const count$ = source(0);
@@ -22,7 +22,7 @@ export default view(() =>
                 crossAlignment: CrossAxisAlignment.Center,
                 children: [
                     Text({
-                        text: derive((g) => `Multi-file count: ${g(count$)}`),
+                        text: derive((ctx) => `Multi-file count: ${ctx.get(count$)}`),
                         fontSize: 24,
                         color: COLORS.text,
                     }),

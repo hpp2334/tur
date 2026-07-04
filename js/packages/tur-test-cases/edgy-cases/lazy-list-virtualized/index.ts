@@ -1,6 +1,7 @@
 import {
     Alignment,
     Axis,
+    type Element,
     Color,
     Column,
     Container,
@@ -13,7 +14,7 @@ import {
     SizedBox,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
 // "10,000-item Contact List" — a demo of tur's (now actually lazy) LazyList.
@@ -136,7 +137,7 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function buildRow(index: number): unknown {
+function buildRow(index: number): Element {
     const name = nameFor(index);
     const initials = initialsFor(name);
     const hue = hueFor(index);

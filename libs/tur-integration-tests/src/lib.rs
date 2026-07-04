@@ -92,7 +92,9 @@ impl TurTestApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.load_js(&source)?;
+        // Case dist files are ES modules that import `builtin:tur/core` (resolved by
+        // the engine's module loader) and call `render(<case default>)`.
+        self.inner.load_module(&source)?;
         self.ensure_flushed();
         Ok(())
     }
@@ -403,6 +405,13 @@ impl TurTestApp {
 
     pub fn load_bundle_source(&mut self, source: &str) -> Result<(), TurError> {
         self.inner.load_js(source)
+    }
+
+    /// Evaluate `source` as an ES module — supports real
+    /// `import { … } from "builtin:tur/core"` (or `builtin:tur/host`/`builtin:tur/net`). Returns
+    /// nothing; read results back via [`eval_js`](Self::eval_js).
+    pub fn eval_module_source(&mut self, source: &str) -> Result<(), TurError> {
+        self.inner.load_module(source)
     }
 
     /// Structured dev-tool snapshot of the root node, or `None` if no tree

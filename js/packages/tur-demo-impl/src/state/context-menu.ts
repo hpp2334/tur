@@ -1,4 +1,8 @@
-import { mutate, set, source } from "@tur/edgy";
+import { mutate, set, source } from "builtin:tur/core";
+import {
+    clipboardReadText,
+    clipboardWriteText,
+} from "builtin:tur/host";
 import { editorCtrl } from "./case-store";
 
 // ---------------------------------------------------------------------------
@@ -49,13 +53,7 @@ export const cutSelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         editorCtrl.deleteSelection();
-        // Best-effort clipboard write via the host bridge.
-        const host = (
-            globalThis as unknown as {
-                __turHost?: { clipboardWriteText?: (s: string) => void };
-            }
-        ).__turHost;
-        host?.clipboardWriteText?.(text);
+        clipboardWriteText(text);
     }
     set(contextMenuOpen$, false);
 });
@@ -63,12 +61,7 @@ export const cutSelection = mutate(() => {
 export const copySelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
-        const host = (
-            globalThis as unknown as {
-                __turHost?: { clipboardWriteText?: (s: string) => void };
-            }
-        ).__turHost;
-        host?.clipboardWriteText?.(text);
+        clipboardWriteText(text);
     }
     set(contextMenuOpen$, false);
 });
@@ -79,14 +72,7 @@ export const pasteFromClipboard = mutate(() => {
     // context-menu action needs an explicit call. `clipboardReadText` is
     // callback-based (the host resolves it on the next frame from within
     // the boa context, where a &mut Context is available).
-    const host = (
-        globalThis as unknown as {
-            __turHost?: {
-                clipboardReadText?: (cb: (text: string) => void) => void;
-            };
-        }
-    ).__turHost;
-    host?.clipboardReadText?.((text) => {
+    clipboardReadText((text) => {
         if (text.length > 0) editorCtrl.insertText(text);
     });
     set(contextMenuOpen$, false);

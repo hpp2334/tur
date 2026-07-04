@@ -20,7 +20,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const count$ = source(0);
 const mountedCount$ = source(0);
@@ -38,13 +38,13 @@ export default view(() =>
                     crossAlignment: CrossAxisAlignment.Center,
                     children: [
                         Text({
-                            text: derive((g) => `Count: ${g(count$)}`),
+                            text: derive((ctx) => `Count: ${ctx.get(count$)}`),
                             fontSize: 32,
                             color: Color.hex("#0f172a"),
                         }),
                         Text({
                             text: derive(
-                                (g) => `onUpdated: ${g(updateCount$)}`,
+                                (ctx) => `onUpdated: ${ctx.get(updateCount$)}`,
                             ),
                             queryKey: ["update-count"],
                             fontSize: 18,
@@ -52,7 +52,7 @@ export default view(() =>
                         }),
                         Text({
                             text: derive(
-                                (g) => `onMounted: ${g(mountedCount$)}`,
+                                (ctx) => `onMounted: ${ctx.get(mountedCount$)}`,
                             ),
                             queryKey: ["mounted-count"],
                             fontSize: 18,
@@ -60,7 +60,7 @@ export default view(() =>
                         }),
                         Text({
                             text: derive(
-                                (g) => `beforeDestroy: ${g(destroyedCount$)}`,
+                                (ctx) => `beforeDestroy: ${ctx.get(destroyedCount$)}`,
                             ),
                             queryKey: ["destroyed-count"],
                             fontSize: 18,
@@ -82,8 +82,8 @@ export default view(() =>
                                 }),
                                 SizedBox({ width: 12 }),
                                 pill({
-                                    label: derive((g) =>
-                                        g(visible$) ? "hide" : "show",
+                                    label: derive((ctx) =>
+                                        ctx.get(visible$) ? "hide" : "show",
                                     ),
                                     queryKey: ["toggle"],
                                     onClick: mutate(
@@ -97,7 +97,7 @@ export default view(() =>
                         }),
                         SizedBox({ height: 16 }),
                         Condition({
-                            condition: derive((g) => g(visible$)),
+                            condition: derive((ctx) => ctx.get(visible$)),
                             child: () =>
                                 lifecycleView(() => ({
                                     element: ReadableSubscribe({

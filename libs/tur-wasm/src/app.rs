@@ -59,13 +59,19 @@ impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
     }
 }
 
-/// Register the swc-backed compiler services as `globalThis.__turHost`.
-/// `transpileTsx(src: string): string` (throws on parse error),
-/// `tokenizeTsx(src: string): Array<{ start, end, kind }>` (lexical token
-/// categories refined by AST-derived semantic categories — declaration names,
-/// JSX tags/attributes, type names, comments — for syntax highlighting), and
-/// `generateAst(src: string): AstNode[]`.
-fn register_host_services(app: &mut TurApp) {
+/// Build the swc-backed compiler + clipboard host functions.
+///
+/// Returns `(name, fn, length)` tuples. The caller registers them both as the
+/// legacy `globalThis.__turHost.*` globals and as the `builtin:tur/host` module
+/// exports (see [`register_all_services`]).
+///
+/// - `transpileTsx(src): string` (throws on parse error)
+/// - `tokenizeTsx(src): Array<{ start, end, kind }>` (lexical token categories
+///   refined by AST-derived semantic categories — declaration names, JSX
+///   tags/attributes, type names, comments — for syntax highlighting)
+/// - `generateAst(src): AstNode[]`
+/// - `clipboardWriteText(text)` / `clipboardReadText(callback)`
+fn build_host_service_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)> {
     use boa_engine::native_function::NativeFunction;
     use boa_engine::object::builtins::JsArray;
     use boa_engine::object::JsObject;
@@ -84,9 +90,6 @@ fn register_host_services(app: &mut TurApp) {
             Err(e) => Err(JsError::from(JsNativeError::typ().with_message(e))),
         }
     });
-    if let Err(e) = app.register_host_fn("transpileTsx", 1, transpile) {
-        tracing::error!("failed to register transpileTsx: {e}");
-    }
 
     let tokenize = NativeFunction::from_copy_closure(|_this, args, ctx| {
         let src = args
@@ -107,12 +110,8 @@ fn register_host_services(app: &mut TurApp) {
         }
         Ok(arr.into())
     });
-    if let Err(e) = app.register_host_fn("tokenizeTsx", 1, tokenize) {
-        tracing::error!("failed to register tokenizeTsx: {e}");
-    }
 
-    let generate_ast = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let src = args
+    let generate_ast = NativeFunction::from_copy_closure(|_this, args, ctx| {        let src = args
             .get_or_undefined(0)
             .as_string()
             .ok_or_else(|| {
@@ -168,15 +167,12 @@ fn register_host_services(app: &mut TurApp) {
         }
         Ok(arr.into())
     });
-    if let Err(e) = app.register_host_fn("generateAst", 1, generate_ast) {
-        tracing::error!("failed to register generateAst: {e}");
-    }
 
-    // Clipboard write bridge — `__turHost.clipboardWriteText(text)`. Used by
-    // the engine's editable text Cmd+C / Cmd+X handling (which extracts the
-    // selected text and pushes AppEvent::ClipboardWrite). The wasm layer
-    // owns the actual browser clipboard interaction. Fire-and-forget — the
-    // returned Promise is discarded.
+    // Clipboard write bridge — used by the engine's editable text Cmd+C /
+    // Cmd+X handling (which extracts the selected text and pushes
+    // AppEvent::ClipboardWrite). The wasm layer owns the actual browser
+    // clipboard interaction. Fire-and-forget — the returned Promise is
+    // discarded.
     let clipboard_write = NativeFunction::from_copy_closure(|_this, args, _ctx| {
         let text = args
             .get_or_undefined(0)
@@ -190,21 +186,17 @@ fn register_host_services(app: &mut TurApp) {
         }
         Ok(JsValue::undefined())
     });
-    if let Err(e) = app.register_host_fn("clipboardWriteText", 1, clipboard_write) {
-        tracing::error!("failed to register clipboardWriteText: {e}");
-    }
 
-    // Clipboard read bridge — `__turHost.clipboardReadText(callback)`. The
-    // host fn captures the JS callback, kicks off a browser-side
-    // `navigator.clipboard.read_text()` future, and on completion pushes
-    // (callback, text) into a wasm-side slot. The frame loop drains that
-    // slot once per frame, invoking each callback from within the boa
-    // context (the only place we have a `&mut Context`). Resolves with an
-    // empty string if the browser denies the read.
+    // Clipboard read bridge — `clipboardReadText(callback)`. The fn captures
+    // the JS callback, kicks off a browser-side `navigator.clipboard.read_text()`
+    // future, and on completion pushes (callback, text) into a wasm-side slot.
+    // The frame loop drains that slot once per frame, invoking each callback
+    // from within the boa context (the only place we have a `&mut Context`).
+    // Resolves with an empty string if the browser denies the read.
     //
-    // We can't return a Promise directly because resolving one from
-    // outside a `&mut Context` is impossible — the callback-based API is
-    // equivalent and avoids the borrow issue.
+    // We can't return a Promise directly because resolving one from outside a
+    // `&mut Context` is impossible — the callback-based API is equivalent and
+    // avoids the borrow issue.
     let clipboard_read = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
         use boa_engine::object::builtins::JsFunction;
         let Some(cb_obj) = args.get_or_undefined(0).as_object() else {
@@ -232,9 +224,14 @@ fn register_host_services(app: &mut TurApp) {
         });
         Ok(JsValue::undefined())
     });
-    if let Err(e) = app.register_host_fn("clipboardReadText", 1, clipboard_read) {
-        tracing::error!("failed to register clipboardReadText: {e}");
-    }
+
+    vec![
+        ("transpileTsx", transpile, 1),
+        ("tokenizeTsx", tokenize, 1),
+        ("generateAst", generate_ast, 1),
+        ("clipboardWriteText", clipboard_write, 1),
+        ("clipboardReadText", clipboard_read, 1),
+    ]
 }
 
 // ---------------------------------------------------------------------------
@@ -349,15 +346,15 @@ fn js_opt_str(
         .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
 }
 
-fn register_tur_services(app: &mut TurApp) {
+fn build_net_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)> {
     use boa_engine::native_function::NativeFunction;
     use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
     use boa_engine::property::PropertyKey;
     use boa_engine::{js_string, JsArgs, JsValue};
 
-    // `__tur.request({ url, method?, headers?, body?, responseType?, username?, password? }) -> Promise`
+    // `request({ url, method?, headers?, body?, responseType?, username?, password? }) -> Promise`
     //
-    // `body` accepts a string or an ArrayBuffer (from `__turHost.pickFile`).
+    // `body` accepts a string or an ArrayBuffer (from `pickFile`).
     // `responseType` is "text" (default; fills `bodyText`) or "bytes" (fills
     // `bodyBytes` as an ArrayBuffer). The resolved value is always an object:
     //   { ok: true, status, statusText, headers: {name:value}, bodyText?|bodyBytes? }
@@ -428,19 +425,18 @@ fn register_tur_services(app: &mut TurApp) {
 
         Ok(promise.into())
     });
-    if let Err(e) = app.register_tur_fn("request", 1, request) {
-        tracing::error!("failed to register __tur.request: {e}");
-    }
+
+    vec![("request", request, 1)]
 }
 
-// --- File IO host bridges (browser-only; `__turHost` namespace) ------------
+// --- File IO host bridges (browser-only) -----------------------------------
 //
 // `pickFile(callback)` opens the native file picker and resolves with
 // `{ name, bytes<ArrayBuffer> }` (or null if cancelled). `saveFile(name, bytes)`
 // triggers a browser download. Bytes round-trip through boa ArrayBuffers; the
 // actual File/Blob live in the browser heap, so we copy through `Vec<u8>`.
 
-fn register_file_io(app: &mut TurApp) {
+fn build_file_io_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)> {
     use boa_engine::native_function::NativeFunction;
     use boa_engine::object::builtins::{JsArrayBuffer, JsFunction};
     use boa_engine::{JsArgs, JsValue};
@@ -502,9 +498,6 @@ fn register_file_io(app: &mut TurApp) {
         input.click();
         Ok(JsValue::undefined())
     });
-    if let Err(e) = app.register_host_fn("pickFile", 1, pick_file) {
-        tracing::error!("failed to register pickFile: {e}");
-    }
 
     let save_file = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
         let name = args
@@ -543,8 +536,41 @@ fn register_file_io(app: &mut TurApp) {
         }
         Ok(JsValue::undefined())
     });
-    if let Err(e) = app.register_host_fn("saveFile", 2, save_file) {
-        tracing::error!("failed to register saveFile: {e}");
+
+    vec![
+        ("pickFile", pick_file, 1),
+        ("saveFile", save_file, 2),
+    ]
+}
+
+/// Register host services as ES modules only (no globals).
+///
+/// - `builtin:tur/host`: swc compiler (`transpileTsx` / `tokenizeTsx` /
+///   `generateAst`), clipboard (`clipboardWriteText` / `clipboardReadText`),
+///   and file IO (`pickFile` / `saveFile`).
+/// - `builtin:tur/net`: HTTP `request` (reqwest-wasm).
+///
+/// JS imports them directly: `import { transpileTsx } from "builtin:tur/host"`.
+fn register_all_services(app: &mut TurApp) {
+    let host_fns = build_host_service_fns();
+    let file_fns = build_file_io_fns();
+    let net_fns = build_net_fns();
+
+    let host_exports: Vec<(String, boa_engine::NativeFunction, usize)> = host_fns
+        .into_iter()
+        .chain(file_fns)
+        .map(|(n, f, l)| (n.to_string(), f, l))
+        .collect();
+    if let Err(e) = app.register_host_module("builtin:tur/host", host_exports) {
+        tracing::error!("failed to register builtin:tur/host module: {e}");
+    }
+
+    let net_exports: Vec<(String, boa_engine::NativeFunction, usize)> = net_fns
+        .into_iter()
+        .map(|(n, f, l)| (n.to_string(), f, l))
+        .collect();
+    if let Err(e) = app.register_host_module("builtin:tur/net", net_exports) {
+        tracing::error!("failed to register builtin:tur/net module: {e}");
     }
 }
 
@@ -772,12 +798,10 @@ impl TurWasmApp {
             )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-            // Register the swc-backed compiler services on `globalThis.__turHost`
-            // so JS (e.g. tur-demo-impl) can call `transpileTsx` / `tokenizeTsx`.
-            // swc lives only in tur-wasm; tur-engine provides the generic hook.
-            register_host_services(&mut app);
-            register_file_io(&mut app);
-            register_tur_services(&mut app);
+            // Register host services (swc compiler, file IO, HTTP) both as
+            // the legacy `globalThis.__turHost.*` / `globalThis.__tur.request`
+            // globals AND as the `builtin:tur/host` / `builtin:tur/net` ES modules.
+            register_all_services(&mut app);
 
             app.push_event(AppEvent::Resize {
                 logical_width,
@@ -1163,6 +1187,33 @@ impl TurWasmApp {
         state.app.push_event(AppEvent::RequestDraw);
         if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
             tracing::error!("load_and_run_js: initial spawn_loop_once error: {e}");
+        }
+
+        drop(guard);
+        Self::start_frame_loop(&self.state);
+
+        Ok(())
+    }
+
+    /// Evaluate `js_source` as an ES module (supports real
+    /// `import { ... } from "builtin:tur/..."`, resolved by the engine's module
+    /// loader), then start the frame loop. The replacement for
+    /// [`load_and_run_js`](Self::load_and_run_js) for module-mode bundles
+    /// (e.g. the self-hosted playground `impl.js`).
+    #[wasm_bindgen(js_name = loadAndRunModule)]
+    pub fn load_and_run_module(&mut self, js_source: &str) -> Result<(), JsValue> {
+        let mut guard = self.state.borrow_mut();
+        let state = guard
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
+        state
+            .app
+            .load_module(js_source)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        state.app.push_event(AppEvent::RequestDraw);
+        if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
+            tracing::error!("load_and_run_module: initial spawn_loop_once error: {e}");
         }
 
         drop(guard);

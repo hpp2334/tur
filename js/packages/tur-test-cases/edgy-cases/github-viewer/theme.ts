@@ -1,4 +1,4 @@
-import { Color } from "@tur/edgy";
+import { Color } from "builtin:tur/core";
 
 /** Light palette (Notion / Linear-style), shared across the case's screens. */
 export const COLORS = {

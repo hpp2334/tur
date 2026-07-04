@@ -1,0 +1,659 @@
+/**
+ * @tur/core — ambient type declarations for the native tur bridge module.
+ *
+ * Runtime is a synthetic boa module registered by tur-engine
+ * (`core::bridge::module_loader`) under the specifier `"builtin:tur/core"`. It
+ * exports the reactive primitives, view factories, controllers, and resource
+ * builders with a ctx-free surface — the bridge context is captured inside the
+ * module, so callers do NOT pass it (unlike the legacy `globalThis.__tur` which
+ * took `__ctx` as its first argument).
+ *
+ * This is the authoritative contract for the engine backend. Higher-level
+ * libraries (`@tur/animation-ext`, app code) build on top of it. Handles
+ * (`Element`, `Atom`, `Color`, `LinearGradient`, `Mutation`) are opaque — the
+ * engine hands out Rust-owned `JsObject` opaques; callers must treat them as
+ * opaque. `Color` / `LinearGradient` are exported as builder const-objects
+ * (namespace for the static factory methods); their instance type is the opaque
+ * handle. Controllers expose real APIs and are the exception.
+ *
+ * Enums are real `enum` declarations, exported as runtime objects from this
+ * native module (`Axis.Vertical === 0`, `Axis[0] === "Vertical"`).
+ *
+ * `derive` callbacks receive a `ReadonlyStoreCtx` (get-only); `mutate` and
+ * other side-effecting callbacks receive the full `StoreCtx` (get + set).
+ */
+
+declare module "builtin:tur/core" {
+// ---------------------------------------------------------------------------
+// Opaque handles
+// ---------------------------------------------------------------------------
+
+/** An element handle returned by a view factory (`Container`, `Column`, …).
+ *  Opaque — the engine owns the underlying `ElementTree` node. */
+export interface Element {}
+
+/** A writable reactive atom holding a value of type `T`. `T` is recovered at
+ *  the call site by the generic primitives (`get`, `set`) — no runtime field. */
+export interface Atom<T> {}
+
+/** A mutation atom: a deferred callback `(ctx, ...Args) => R`. */
+export interface Mutation<Args extends unknown[] = [], R = void> {}
+
+/** Anything you can read a current value from (an `Atom` or derived atom). */
+export type Readable<T> = Atom<T>;
+
+/** A value-or-reactive: either a plain `T` or a `Readable<T>`. The engine
+ *  re-reads reactives each layout pass; plain values are fixed at build time. */
+export type Val<T> = T | Readable<T>;
+
+/** A solid sRGB color handle (Rust `ColorOpaque`). Built via the `Color`
+ *  builder's static methods (`Color.hex/rgb/rgba`); the runtime value is a
+ *  Rust-owned opaque, so callers must treat it as opaque. `Color` is also the
+ *  instance type (the handle returned by `createColor`). */
+export class Color {
+    private constructor();
+    static rgb(r: number, g: number, b: number): Color;
+    static rgba(r: number, g: number, b: number, a: number): Color;
+    static hex(hex: string): Color;
+}
+
+/** A gradient stop: an offset along the gradient and its color. */
+export interface GradientStop {
+    offset: number;
+    color: Color;
+}
+
+/** A linear gradient brush handle (Rust `BrushOpaque`). Built via
+ *  `LinearGradient.create`. Opaque to JS. */
+export class LinearGradient {
+    private constructor();
+    static create(options: LinearGradientOptions): LinearGradient;
+}
+
+/** Options for `LinearGradient.create`. */
+export interface LinearGradientOptions {
+    start: [number, number];
+    end: [number, number];
+    stops: GradientStop[];
+}
+
+/** Any fill the engine accepts for `color`-style props: a solid color or a
+ *  gradient. */
+export type Brush = Color | LinearGradient;
+
+/** One styled run inside a rich-text `Text.spans` array. Mirrors the Rust
+ *  `SpanData` struct (the JS field is `content`; Rust maps it to `text`). */
+export interface SpanData {
+    content: string;
+    bold?: boolean;
+    italic?: boolean;
+    underline?: boolean;
+    fontSize?: number;
+    color?: Color;
+}
+
+// ---------------------------------------------------------------------------
+// Store context — handed to `derive` / `mutate` closures as their first arg.
+// `derive` is pure (read-only); `mutate` (and other side-effecting callbacks)
+// may also write. The split is type-level only — the runtime ctx object is the
+// same `{ get, set }`; this just guides callers away from calling `set` inside
+// a `derive` (which could trigger a recompute loop).
+// ---------------------------------------------------------------------------
+
+/** Read-only view of the store context. Handed to `derive` closures. */
+export interface ReadonlyStoreCtx {
+    get<T>(a: Readable<T>): T;
+}
+
+/** Read/write store context. Handed to `mutate` and other side-effecting
+ *  closures (`onTick`, event handlers, …). Extends `ReadonlyStoreCtx`. */
+export interface StoreCtx extends ReadonlyStoreCtx {
+    set<T>(s: Atom<T>, value: T): void;
+    set<Args extends unknown[], R>(m: Mutation<Args, R>, ...args: Args): R;
+}
+
+// ---------------------------------------------------------------------------
+// Enums — exported as runtime objects (`MainAxisSize.Max`) directly from
+// this native module; the matching type is the union of their literal values.
+// Mirrors the `tur_shared` C-like enums. The native module exports each as a
+// TS-style numeric enum object (forward `Name: n` + reverse `"n": "Name"`).
+// ---------------------------------------------------------------------------
+
+export enum Axis {
+    Vertical = 0,
+    Horizontal = 1,
+}
+
+export enum MainAxisAlignment {
+    Start = 0,
+    Center = 1,
+    End = 2,
+    SpaceBetween = 3,
+    SpaceAround = 4,
+    SpaceEvenly = 5,
+}
+
+export enum CrossAxisAlignment {
+    Start = 0,
+    Center = 1,
+    End = 2,
+    Stretch = 3,
+}
+
+export enum MainAxisSize {
+    Max = 0,
+    Min = 1,
+}
+
+export enum HitTestBehavior {
+    Opaque = 0,
+    Translucent = 1,
+}
+
+export enum BoxFit {
+    Fill = 0,
+    Contain = 1,
+    Cover = 2,
+    FitWidth = 3,
+    FitHeight = 4,
+    None = 5,
+}
+
+export enum Alignment {
+    TopLeft = 0,
+    TopCenter = 1,
+    TopRight = 2,
+    CenterLeft = 3,
+    Center = 4,
+    CenterRight = 5,
+    BottomLeft = 6,
+    BottomCenter = 7,
+    BottomRight = 8,
+}
+
+export enum BorderPosition {
+    Inside = 0,
+    Center = 1,
+    Outside = 2,
+}
+
+export type AnimationStatus =
+    | "stopped"
+    | "forward"
+    | "reverse"
+    | "completed"
+    | "paused";
+
+/** OS cursor keywords (CSS cursor names). Mirrors `tur_shared::Cursor`. */
+export type Cursor =
+    | "auto"
+    | "default"
+    | "none"
+    | "context-menu"
+    | "help"
+    | "pointer"
+    | "progress"
+    | "wait"
+    | "cell"
+    | "crosshair"
+    | "text"
+    | "vertical-text"
+    | "alias"
+    | "copy"
+    | "move"
+    | "no-drop"
+    | "not-allowed"
+    | "grab"
+    | "grabbing"
+    | "e-resize"
+    | "n-resize"
+    | "ne-resize"
+    | "nw-resize"
+    | "s-resize"
+    | "se-resize"
+    | "sw-resize"
+    | "w-resize"
+    | "ew-resize"
+    | "ns-resize"
+    | "nesw-resize"
+    | "nwse-resize"
+    | "col-resize"
+    | "row-resize"
+    | "all-scroll"
+    | "zoom-in"
+    | "zoom-out";
+
+// ---------------------------------------------------------------------------
+// Event payloads
+// ---------------------------------------------------------------------------
+
+export interface Point {
+    x: number;
+    y: number;
+}
+
+export interface PointerInteractEvent {
+    /** Position relative to the element's top-left. */
+    local: Point;
+    /** Position relative to the canvas. */
+    global: Point;
+}
+
+export interface PointerRegionEvent {
+    local: Point;
+    global: Point;
+}
+
+export interface KeyEvent {
+    key: string;
+    code: string;
+    ctrl: boolean;
+    shift: boolean;
+    alt: boolean;
+    meta: boolean;
+}
+
+export interface ScrollEvent {
+    offset: number;
+    maxExtent: number;
+    viewportDimension: number;
+}
+
+// ---------------------------------------------------------------------------
+// Prop interfaces
+// ---------------------------------------------------------------------------
+
+export interface ContainerProps {
+    width?: Val<number>;
+    height?: Val<number>;
+    padding?: Val<number>;
+    color?: Val<Brush | null>;
+    borderColor?: Val<Brush | null>;
+    borderWidth?: Val<number>;
+    borderRadius?: Val<number>;
+    borderPosition?: Val<BorderPosition>;
+    shadowColor?: Val<Brush | null>;
+    shadowOffset?: Val<[number, number]>;
+    shadowBlur?: Val<number>;
+    alignment?: Val<Alignment>;
+    queryKey?: Val<string[]>;
+    children?: Element[];
+}
+
+export interface FlexProps {
+    mainAlignment?: Val<MainAxisAlignment>;
+    crossAlignment?: Val<CrossAxisAlignment>;
+    mainAxisSize?: Val<MainAxisSize>;
+    children: Element[];
+}
+
+export interface ExpandedProps {
+    flex?: Val<number>;
+    child: Element;
+}
+
+export interface StackProps {
+    children: Element[];
+}
+
+export interface PositionedProps {
+    left?: Val<number>;
+    top?: Val<number>;
+    right?: Val<number>;
+    bottom?: Val<number>;
+    width?: Val<number>;
+    height?: Val<number>;
+    child: Element;
+}
+
+export interface TextProps {
+    text: Val<string>;
+    fontSize?: Val<number>;
+    color?: Val<Brush | null>;
+    spans?: Val<SpanData[]>;
+    /** When `true`, the text can be drag-selected with the pointer. */
+    selectable?: boolean;
+    queryKey?: Val<string[]>;
+}
+
+export interface PointerInteractProps {
+    onClick?: Mutation<[PointerInteractEvent]>;
+    onPointerDown?: Mutation<[PointerInteractEvent]>;
+    onPointerMove?: Mutation<[PointerInteractEvent]>;
+    onPointerUp?: Mutation<[PointerInteractEvent]>;
+    onContextMenu?: Mutation<[PointerInteractEvent]>;
+    behavior?: Val<HitTestBehavior>;
+    queryKey?: Val<string[]>;
+    child?: Element;
+}
+
+export interface MouseRegionProps {
+    cursor?: Val<Cursor>;
+    onEnter?: Mutation<[PointerRegionEvent]>;
+    onExit?: Mutation<[PointerRegionEvent]>;
+    behavior?: Val<HitTestBehavior>;
+    child?: Element;
+}
+
+export interface ConditionProps {
+    condition: Val<boolean>;
+    child?: () => Element;
+    elseChild?: () => Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface SwitchCase {
+    key: string | number | boolean | null | undefined;
+    child: () => Element;
+}
+
+export interface SwitchProps {
+    value: Val<string | number | boolean | null | undefined>;
+    cases: SwitchCase[];
+    fallback?: () => Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface ScrollViewProps {
+    axis?: Val<Axis>;
+    padding?: Val<number>;
+    color?: Val<Brush | null>;
+    controller?: ScrollController;
+    child: Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface ScrollbarProps {
+    controller?: ScrollController;
+    color?: Val<Brush | null>;
+    trackColor?: Val<Brush | null>;
+    thickness?: Val<number>;
+    thumbRadius?: Val<number>;
+    queryKey?: Val<string[]>;
+}
+
+export interface LazyListProps {
+    axis?: Val<Axis>;
+    itemCount: Val<number>;
+    overscan?: Val<number>;
+    itemExtent?: Val<number>;
+    builder: (index: number) => Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface EachProps<T> {
+    items: Readable<T[]>;
+    build: (item: T, index: number) => Element;
+    mainAlignment?: Val<MainAxisAlignment>;
+    crossAlignment?: Val<CrossAxisAlignment>;
+    mainAxisSize?: Val<MainAxisSize>;
+    queryKey?: Val<string[]>;
+}
+
+export interface ImageEdgyProps {
+    resourceId: Val<number>;
+    width?: Val<number>;
+    height?: Val<number>;
+    fit?: Val<BoxFit>;
+    queryKey?: Val<string[]>;
+    child?: Element;
+}
+
+export interface InputEdgyProps {
+    controller?: TextController;
+    undoController?: UndoController;
+    placeholder?: Val<string>;
+    color?: Val<Brush | null>;
+    placeholderColor?: Val<Brush | null>;
+    cursorColor?: Val<Brush | null>;
+    fontSize?: Val<number>;
+    fontFamily?: Val<string>;
+    width?: Val<number>;
+    height?: Val<number>;
+    multiline?: Val<boolean>;
+    onContextMenu?: Mutation<[PointerInteractEvent]>;
+    queryKey?: Val<string[]>;
+}
+
+export interface FragmentProps {
+    children: Element[];
+}
+
+export interface FocusableProps {
+    onKeyDown?: Mutation<[KeyEvent]>;
+    onKeyUp?: Mutation<[KeyEvent]>;
+    onFocus?: Mutation<[]>;
+    onBlur?: Mutation<[]>;
+    child?: Element;
+}
+
+export interface OpacityProps {
+    value: Val<number>;
+    child?: Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface TransformProps {
+    scale?: Val<number>;
+    scaleX?: Val<number>;
+    scaleY?: Val<number>;
+    rotate?: Val<number>;
+    translateX?: Val<number>;
+    translateY?: Val<number>;
+    child?: Element;
+    queryKey?: Val<string[]>;
+}
+
+export interface ReadableSubscribeProps {
+    readables: Readable<unknown>[];
+    onUpdate$: Mutation<[]>;
+    child: Element;
+}
+
+export interface LifecycleDescriptor {
+    element: Element;
+    onMounted$?: Mutation<[]>;
+    beforeDestroy$?: Mutation<[]>;
+}
+
+// ---------------------------------------------------------------------------
+// Controllers
+// ---------------------------------------------------------------------------
+
+export interface TextEditingControllerOpts {
+    initialText?: string;
+    onInput?: Mutation<[string, boolean], void>;
+    onCursorChange?: Mutation<[number], void>;
+    onSelectionChange?: Mutation<[number, number], void>;
+    onKeyDown?: Mutation<[KeyEvent], void>;
+    onKeyUp?: Mutation<[KeyEvent], void>;
+    onFocus?: Mutation<[], void>;
+    onBlur?: Mutation<[], void>;
+    onCompositionStart?: Mutation<[], void>;
+    onCompositionUpdate?: Mutation<[string], void>;
+    onCompositionEnd?: Mutation<[string], void>;
+}
+
+/** Text-edit controller (registered boa class). Built via
+ *  `createTextEditingController`. Exposes the editable buffer + selection. */
+export interface TextController {
+    /** The full buffer text. */
+    readonly text: string;
+    /** Current cursor offset (byte index into `text`). */
+    readonly cursorPosition: number;
+    /** Selection anchor (start) byte offset. */
+    readonly selectionAnchor: number;
+    /** Selection end byte offset. */
+    readonly selectionEnd: number;
+    /** The currently selected text, or `""` if no selection. */
+    readonly selectedText: string;
+    /** Replace the rich-text span list. */
+    setSpans(spans: SpanData[]): void;
+    /** Replace spans without moving the cursor. */
+    setSpansPreserveCursor(spans: SpanData[]): void;
+    /** Clear all text and spans. */
+    clear(): void;
+    /** Set the selection range `[anchor, end)` (byte offsets). */
+    setSelection(anchor: number, end: number): void;
+    /** Replace the current selection with `text`, or insert at the cursor. */
+    insertText(text: string): void;
+    /** Delete the current selection, if any. */
+    deleteSelection(): void;
+    /** Attach an `UndoController` so edits record undo history. */
+    setUndoController(undo: UndoController): void;
+    /** Focus the bound input. */
+    requestFocus(): void;
+}
+
+export interface UndoController {
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+    clear(): void;
+}
+
+export interface ScrollControllerOpts {
+    onScroll?: Mutation<[ScrollEvent], void>;
+    initialOffset?: number;
+}
+
+/** Scroll controller (registered boa class). Built via `createScrollController`.
+ *  Pair with a `ScrollView` / `Scrollbar` via the `controller` prop. */
+export interface ScrollController {
+    readonly offset: number;
+    readonly maxScrollExtent: number;
+    readonly viewportDimension: number;
+    /** Jump to `offset` (clamped to the scroll bounds). */
+    jumpTo(offset: number): void;
+}
+
+export interface LazyListControllerOpts {
+    onScroll?: Mutation<[ScrollEvent], void>;
+    onVisibleRangeChange?: Mutation<[number, number], void>;
+}
+
+/** Lazy-list controller (registered boa class). Built via
+ *  `createLazyListController`. Pair with a `LazyList` via the `controller` prop
+ *  (the prop is currently read implicitly — pass the same instance). */
+export interface LazyListController {
+    readonly offset: number;
+    readonly maxScrollExtent: number;
+    readonly viewportDimension: number;
+    jumpTo(offset: number): void;
+}
+
+export interface AnimationControllerOpts {
+    duration?: number;
+    curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
+    repeat?: number | "infinite";
+    onTick?: Mutation<[number], void>;
+    onEnd?: Mutation<[], void>;
+}
+
+export interface AnimationController {
+    readonly value: number;
+    readonly status: AnimationStatus;
+    readonly duration: number;
+    readonly speed: number;
+    forward(): void;
+    reverse(): void;
+    stop(): void;
+    pause(): void;
+    resume(): void;
+    seek(t: number): void;
+    setSpeed(factor: number): void;
+    repeat(count: number | "infinite"): void;
+}
+
+// ---------------------------------------------------------------------------
+// Reactive primitives
+// ---------------------------------------------------------------------------
+
+export function source<T>(value: T): Atom<T>;
+export function derive<T>(fn: (ctx: ReadonlyStoreCtx) => T): Readable<T>;
+export function mutate<Args extends unknown[], R>(
+    fn: (ctx: StoreCtx, ...args: Args) => R,
+): Mutation<Args, R>;
+export function get<T>(a: Readable<T>): T;
+export function set<T>(s: Atom<T>, value: T): void;
+export function set<Args extends unknown[], R>(
+    m: Mutation<Args, R>,
+    ...args: Args
+): R;
+export function view(f: () => Element): Element;
+
+// ---------------------------------------------------------------------------
+// Element factories
+// ---------------------------------------------------------------------------
+
+export function Container(props: ContainerProps): Element;
+
+/** A width/height-only `Container` (no decoration, no child layout props beyond
+ *  `children`). Sugar for `Container({ width, height, children })`. */
+export function SizedBox(props: {
+    width?: Val<number>;
+    height?: Val<number>;
+    children?: Element[];
+}): Element;
+export function Column(props: FlexProps): Element;
+export function Row(props: FlexProps): Element;
+export function Expanded(props: ExpandedProps): Element;
+export function Stack(props: StackProps): Element;
+export function Positioned(props: PositionedProps): Element;
+export function Text(props: TextProps): Element;
+export function PointerInteract(props: PointerInteractProps): Element;
+export function MouseRegion(props: MouseRegionProps): Element;
+export function Condition(props: ConditionProps): Element;
+export function Switch(props: SwitchProps): Element;
+export function Each<T>(props: EachProps<T>): Element;
+export function LazyList(props: LazyListProps): Element;
+export function ScrollView(props: ScrollViewProps): Element;
+export function Scrollbar(props: ScrollbarProps): Element;
+export function ImageEdgy(props: ImageEdgyProps): Element;
+export function InputEdgy(props: InputEdgyProps): Element;
+export function Fragment(props: FragmentProps): Element;
+export function Focusable(props: FocusableProps): Element;
+export function Opacity(props: OpacityProps): Element;
+export function Transform(props: TransformProps): Element;
+export function lifecycleView(f: () => LifecycleDescriptor): Element;
+export function ReadableSubscribe(props: ReadableSubscribeProps): Element;
+
+// ---------------------------------------------------------------------------
+// Mounting
+// ---------------------------------------------------------------------------
+
+export function render(root: Element): void;
+
+// ---------------------------------------------------------------------------
+// Controllers / resources / colors
+// ---------------------------------------------------------------------------
+
+export function createTextEditingController(
+    opts?: TextEditingControllerOpts,
+): TextController;
+export function createUndoController(): UndoController;
+export function createScrollController(opts?: ScrollControllerOpts): ScrollController;
+export function createLazyListController(
+    opts?: LazyListControllerOpts,
+): LazyListController;
+export function createAnimationController(
+    opts?: AnimationControllerOpts,
+): AnimationController;
+export function createImageResource(bytes: Uint8Array | ArrayBuffer): number;
+export function createSvgResource(svg: string): number;
+export function createColor(r: number, g: number, b: number, a: number): Color;
+export function createLinearGradient(
+    sx: number,
+    sy: number,
+    ex: number,
+    ey: number,
+    stops: Array<{
+        offset: number;
+        r: number;
+        g: number;
+        b: number;
+        a: number;
+    }>,
+): LinearGradient;
+export function colorLerp(a: Color, b: Color, t: number): Color;
+export function requestFocus(target: TextController | Element): void;
+}

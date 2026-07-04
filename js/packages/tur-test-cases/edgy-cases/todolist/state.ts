@@ -5,7 +5,7 @@ import {
     mutate,
     type StoreCtx,
     source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 export interface Task {
     title: string;
@@ -54,11 +54,6 @@ export const descDraft$ = source("");
 // Created at module load. Reset (via setSpans) whenever the modal opens so
 // the fields start blank.
 
-interface TextController {
-    setSpans(spans: Array<{ content: string; color?: unknown }>): void;
-    readonly text: string;
-}
-
 const noopSpans = (s: string): Array<{ content: string }> => [{ content: s }];
 
 export const titleCtrl = createTextEditingController({
@@ -69,7 +64,7 @@ export const titleCtrl = createTextEditingController({
     onKeyDown: mutate((ctx: StoreCtx, ev) => {
         if (ev.key === "Escape") closeAddModal(ctx);
     }),
-}) as unknown as TextController;
+});
 
 export const descCtrl = createTextEditingController({
     onInput: mutate((ctx: StoreCtx, text: string, enter: boolean) => {
@@ -79,7 +74,7 @@ export const descCtrl = createTextEditingController({
     onKeyDown: mutate((ctx: StoreCtx, ev) => {
         if (ev.key === "Escape") closeAddModal(ctx);
     }),
-}) as unknown as TextController;
+});
 
 // --- Modal actions ---------------------------------------------------------
 //

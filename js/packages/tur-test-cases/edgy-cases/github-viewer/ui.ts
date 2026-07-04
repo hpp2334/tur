@@ -4,7 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
-    type EdgyElement,
+    type Element,
     ImageEdgy,
     InputEdgy,
     MainAxisSize,
@@ -13,8 +13,9 @@ import {
     PointerInteract,
     SizedBox,
     type StoreCtx,
+    type TextController,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { COLORS } from "./theme";
 
 /** Standard text / accent button. `onClick` runs within a mutation context. */
@@ -32,7 +33,7 @@ export function Button({
     onClick: (ctx: StoreCtx) => void;
     padding?: number;
     shadow?: boolean;
-}): EdgyElement {
+}): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -57,7 +58,7 @@ export function IconButton({
 }: {
     resourceId: number;
     onClick: (ctx: StoreCtx) => void;
-}): EdgyElement {
+}): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -88,9 +89,9 @@ export function Field({
     placeholder,
 }: {
     label: string;
-    controller: unknown;
+    controller: TextController;
     placeholder: string;
-}): EdgyElement {
+}): Element {
     return Column({
         crossAlignment: CrossAxisAlignment.Stretch,
         mainAxisSize: MainAxisSize.Min,
