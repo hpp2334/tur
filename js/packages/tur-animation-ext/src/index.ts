@@ -18,23 +18,23 @@
  */
 
 import {
-    type ContainerProps,
-    type Element,
-    type Mutation,
-    type Readable,
-    type Val,
     type Color,
     Container,
-    Positioned,
-    Opacity,
-    ReadableSubscribe,
-    source,
-    get,
-    set,
-    derive,
-    mutate,
-    createAnimationController,
+    type ContainerProps,
     colorLerp,
+    createAnimationController,
+    derive,
+    type Element,
+    get,
+    type Mutation,
+    mutate,
+    Opacity,
+    Positioned,
+    type Readable,
+    ReadableSubscribe,
+    set,
+    source,
+    type Val,
 } from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
@@ -88,7 +88,10 @@ export function Tween(opts: { begin: number; end: number }): TweenValue {
     };
 }
 
-export function ColorTween(opts: { begin: Color; end: Color }): ColorTweenValue {
+export function ColorTween(opts: {
+    begin: Color;
+    end: Color;
+}): ColorTweenValue {
     let begin = opts.begin;
     let end = opts.end;
     return {
@@ -196,7 +199,9 @@ export function AnimatedContainer(props: AnimatedContainerProps): Element {
         v: Val<T> | undefined,
         mk: (initial: T) => TweenLike<T>,
     ): Val<T> | undefined =>
-        v != null ? animChannel(v, progress$, mk, retargets, readables) : undefined;
+        v != null
+            ? animChannel(v, progress$, mk, retargets, readables)
+            : undefined;
 
     const child = Container({
         width: ch(props.width, num),
@@ -244,7 +249,13 @@ export function AnimatedOpacity(props: {
     const readables: Readable<unknown>[] = [];
     const num = (i: number): TweenValue => Tween({ begin: i, end: i });
 
-    const value = animChannel(props.value, progress$, num, retargets, readables);
+    const value = animChannel(
+        props.value,
+        progress$,
+        num,
+        retargets,
+        readables,
+    );
     const ctrl = createAnimationController({
         duration,
         curve,
@@ -279,7 +290,9 @@ export function AnimatedPositioned(props: {
     const readables: Readable<unknown>[] = [];
     const num = (i: number): TweenValue => Tween({ begin: i, end: i });
     const ch = (v: Val<number> | undefined): Val<number> | undefined =>
-        v != null ? animChannel(v, progress$, num, retargets, readables) : undefined;
+        v != null
+            ? animChannel(v, progress$, num, retargets, readables)
+            : undefined;
 
     const child = Positioned({
         left: ch(props.left),

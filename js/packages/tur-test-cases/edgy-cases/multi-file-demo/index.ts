@@ -22,7 +22,9 @@ export default view(() =>
                 crossAlignment: CrossAxisAlignment.Center,
                 children: [
                     Text({
-                        text: derive((ctx) => `Multi-file count: ${ctx.get(count$)}`),
+                        text: derive(
+                            (ctx) => `Multi-file count: ${ctx.get(count$)}`,
+                        ),
                         fontSize: 24,
                         color: COLORS.text,
                     }),

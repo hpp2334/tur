@@ -1,5 +1,12 @@
-import { Color, Column, Container, Expanded, Text, view } from "builtin:tur/core";
-import { transpileTsx, tokenizeTsx } from "builtin:tur/host";
+import {
+    Color,
+    Column,
+    Container,
+    Expanded,
+    Text,
+    view,
+} from "builtin:tur/core";
+import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
 
 const SRC = "const x: number = 42;";
 const OUT = transpileTsx(SRC);

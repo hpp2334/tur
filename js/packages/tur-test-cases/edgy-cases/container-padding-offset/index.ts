@@ -1,4 +1,10 @@
-import { Container, CrossAxisAlignment, Row, SizedBox, view } from "builtin:tur/core";
+import {
+    Container,
+    CrossAxisAlignment,
+    Row,
+    SizedBox,
+    view,
+} from "builtin:tur/core";
 
 export default view(() =>
     Container({

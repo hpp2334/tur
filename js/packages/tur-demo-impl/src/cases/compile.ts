@@ -1,12 +1,9 @@
-import type {
-    AstNode,
-    TokenSpan,
-} from "builtin:tur/host";
+import type { Color, SpanData } from "builtin:tur/core";
+import * as Core from "builtin:tur/core";
+import type { AstNode, TokenSpan } from "builtin:tur/host";
 import * as Host from "builtin:tur/host";
 import * as Net from "builtin:tur/net";
-import * as Core from "builtin:tur/core";
 import * as Anim from "@tur/animation-ext";
-import type { Color, SpanData } from "builtin:tur/core";
 import { code } from "../theme/tokens";
 
 /** Highlight palette indexed by token kind (see tur-wasm `highlight_tsx`).

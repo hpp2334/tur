@@ -87,7 +87,8 @@ export default view(() =>
             }),
             Text({
                 text: derive(
-                    (ctx) => `opaque:${ctx.get(outerClicks$)}/${ctx.get(innerClicks$)}`,
+                    (ctx) =>
+                        `opaque:${ctx.get(outerClicks$)}/${ctx.get(innerClicks$)}`,
                 ),
                 queryKey: ["result-opaque"],
             }),

@@ -6,7 +6,5 @@
         "noEmit": true,
         "types": ["@tur/core"]
     },
-    "include": [
-        "src"
-    ]
+    "include": ["src"]
 }

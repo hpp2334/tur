@@ -93,10 +93,9 @@ export function TaskItem({
                                 width: 20,
                                 height: 20,
                                 borderRadius: 6,
-                                color:
-                                    (task.completed
-                                        ? COLORS.success
-                                        : null) as unknown as Brush,
+                                color: (task.completed
+                                    ? COLORS.success
+                                    : null) as unknown as Brush,
                                 borderColor: task.completed
                                     ? COLORS.successBorder
                                     : COLORS.inputBorder,

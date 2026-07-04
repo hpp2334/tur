@@ -10,8 +10,8 @@ import {
     set,
     source,
 } from "builtin:tur/core";
-import { request } from "builtin:tur/net";
 import { saveFile } from "builtin:tur/host";
+import { request } from "builtin:tur/net";
 
 // ---------------------------------------------------------------------------
 // Types

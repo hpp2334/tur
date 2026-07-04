@@ -49,10 +49,7 @@ interface MenuItemSpec {
 
 /** Like a `cond` helper but for elements — render `child` only when `value`
  *  is defined. Used to optionally include an icon column. */
-function ifDefined<T>(
-    value: T | undefined,
-    build: (v: T) => Element,
-): Element {
+function ifDefined<T>(value: T | undefined, build: (v: T) => Element): Element {
     if (value === undefined) {
         return SizedBox({ width: 0, height: 0 });
     }

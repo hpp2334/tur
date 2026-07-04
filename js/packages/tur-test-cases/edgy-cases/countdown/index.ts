@@ -24,8 +24,8 @@ import {
     SizedBox,
     Stack,
     source,
-    type TextController,
     Text,
+    type TextController,
     view,
 } from "builtin:tur/core";
 

@@ -60,7 +60,8 @@ export default view(() =>
                         }),
                         Text({
                             text: derive(
-                                (ctx) => `beforeDestroy: ${ctx.get(destroyedCount$)}`,
+                                (ctx) =>
+                                    `beforeDestroy: ${ctx.get(destroyedCount$)}`,
                             ),
                             queryKey: ["destroyed-count"],
                             fontSize: 18,

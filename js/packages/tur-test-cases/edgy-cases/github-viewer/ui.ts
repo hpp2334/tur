@@ -13,8 +13,8 @@ import {
     PointerInteract,
     SizedBox,
     type StoreCtx,
-    type TextController,
     Text,
+    type TextController,
 } from "builtin:tur/core";
 import { COLORS } from "./theme";
 
