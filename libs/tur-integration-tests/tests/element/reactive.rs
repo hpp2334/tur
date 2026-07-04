@@ -9,31 +9,36 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn set_mutation_receives_ctx_then_args() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(
+    app.eval_module_source(
         r#"
-        const ctx = globalThis.__tur.__ctx;
-        const t = globalThis.__tur;
+        import { source, mutate, set } from "builtin:tur/core";
         // Sink source — captures whatever the mutation writes.
-        globalThis.__sink = t.source(ctx, "");
+        globalThis.__sink = source("");
 
         // Mutation that receives (ctx, a, b) and writes a formatted string
         // to the sink so the test can read it back. If ctx is not prepended,
         // the closure would receive (a, b, undefined) instead.
-        const m = t.mutate(ctx, (sctx, a, b) => {
+        const m = mutate((sctx, a, b) => {
             const hasCtx = sctx && typeof sctx === "object" && typeof sctx.get === "function";
             sctx.set(globalThis.__sink, (hasCtx ? "ctx-" : "noctx-") + a + "-" + b);
         });
 
         // Invoke via set(mutation, ...args) — the path that was buggy.
-        t.set(ctx, m, "x", "y");
+        set(m, "x", "y");
         "#,
     )
     .unwrap();
     app.render();
 
-    let val = app.eval_js("globalThis.__tur.get(globalThis.__tur.__ctx, globalThis.__sink);");
-    assert_eq!(val, "ctx-x-y",
-        "set(m, x, y) should invoke m with (ctx, x, y) — got {val:?}");
+    app.eval_module_source(
+        r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#,
+    )
+    .unwrap();
+    let val = app.eval_js("globalThis.__result");
+    assert_eq!(
+        val, "ctx-x-y",
+        "set(m, x, y) should invoke m with (ctx, x, y) — got {val:?}"
+    );
 }
 
 /// Sanity check: `set(mutation, ...args)` with zero extra args still works
@@ -42,22 +47,27 @@ fn set_mutation_receives_ctx_then_args() {
 #[test]
 fn set_mutation_with_zero_args_passes_ctx_only() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(
+    app.eval_module_source(
         r#"
-        const ctx = globalThis.__tur.__ctx;
-        const t = globalThis.__tur;
-        globalThis.__sink = t.source(ctx, "");
-        const m = t.mutate(ctx, (sctx) => {
+        import { source, mutate, set } from "builtin:tur/core";
+        globalThis.__sink = source("");
+        const m = mutate((sctx) => {
             const hasCtx = sctx && typeof sctx === "object" && typeof sctx.get === "function";
             sctx.set(globalThis.__sink, hasCtx ? "ok" : "missing");
         });
-        t.set(ctx, m);
+        set(m);
         "#,
     )
     .unwrap();
     app.render();
 
-    let val = app.eval_js("globalThis.__tur.get(globalThis.__tur.__ctx, globalThis.__sink);");
-    assert_eq!(val, "ok",
-        "set(m) should invoke m with just the ctx — got {val:?}");
+    app.eval_module_source(
+        r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#,
+    )
+    .unwrap();
+    let val = app.eval_js("globalThis.__result");
+    assert_eq!(
+        val, "ok",
+        "set(m) should invoke m with just the ctx — got {val:?}"
+    );
 }

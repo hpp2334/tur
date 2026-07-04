@@ -1,7 +1,7 @@
 import {
     Container,
     derive,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     ImageEdgy,
@@ -15,7 +15,7 @@ import {
     Stack,
     set,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     autoRun$,
     type LayoutMode,
@@ -32,7 +32,7 @@ import { resetIconId, runIconId } from "./icons";
 
 // --- Run button ------------------------------------------------------------
 
-function RunButton(): EdgyElement {
+function RunButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         onEnter: mutate((_ctx, _ev) => set(runHovered$, true)),
@@ -72,7 +72,7 @@ function RunButton(): EdgyElement {
 
 // --- Reset button ----------------------------------------------------------
 
-function ResetButton(): EdgyElement {
+function ResetButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         onEnter: mutate((_ctx, _ev) => set(resetHovered$, true)),
@@ -112,7 +112,7 @@ function ResetButton(): EdgyElement {
 
 // --- Auto-run toggle -------------------------------------------------------
 
-function AutoRunToggle(): EdgyElement {
+function AutoRunToggle(): Element {
     return Row({
         mainAxisSize: MainAxisSize.Min,
         children: [
@@ -164,7 +164,7 @@ function AutoRunToggle(): EdgyElement {
 
 // --- Layout mode segmented control -----------------------------------------
 
-function LayoutButton(mode: LayoutMode, label: string): EdgyElement {
+function LayoutButton(mode: LayoutMode, label: string): Element {
     return MouseRegion({
         cursor: "pointer",
         onEnter: mutate((_ctx, _ev) => set(layoutHovered$, mode)),
@@ -196,7 +196,7 @@ function LayoutButton(mode: LayoutMode, label: string): EdgyElement {
     });
 }
 
-function LayoutControl(): EdgyElement {
+function LayoutControl(): Element {
     return Container({
         color: tokens.bg.controlTray,
         children: [
@@ -214,7 +214,7 @@ function LayoutControl(): EdgyElement {
 
 // --- Toolbar (composite) ---------------------------------------------------
 
-export function Toolbar(): EdgyElement {
+export function Toolbar(): Element {
     return Container({
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,

@@ -5,7 +5,7 @@ import {
     Container,
     CrossAxisAlignment,
     derive,
-    type EdgyElement,
+    type Element,
     get,
     ImageEdgy,
     MainAxisAlignment,
@@ -17,7 +17,7 @@ import {
     SizedBox,
     type StoreCtx,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     getIcon,
     openRepo,
@@ -43,7 +43,7 @@ const SUGGESTIONS: Repo[] = [
     { owner: "vuejs", repo: "core", fullName: "vuejs/core" },
 ];
 
-function Suggestion({ repo }: { repo: Repo }): EdgyElement {
+function Suggestion({ repo }: { repo: Repo }): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -69,7 +69,7 @@ function Suggestion({ repo }: { repo: Repo }): EdgyElement {
     });
 }
 
-export function LandingScreen(): EdgyElement {
+export function LandingScreen(): Element {
     return Container({
         alignment: Alignment.Center,
         children: [

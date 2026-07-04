@@ -24,24 +24,24 @@ fn find_text_width(tree: &NodeTreeData, id: ElementNodeId) -> Option<f64> {
 #[test]
 fn readable_subscribe_propagates_reactive_updates_to_child() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var t = globalThis.__tur;
-        globalThis.__flag = t.source(ctx, false);
-        var flag = globalThis.__flag;
-        var cardText = t.derive(ctx, function (g) {
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, render } from "builtin:tur/core";
+        globalThis.__flag = source(false);
+        const flag = globalThis.__flag;
+        const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
         });
-        var inner = t.Container(ctx, {
-            children: [ t.Text(ctx, { text: cardText, fontSize: 16 }) ]
+        const inner = Container({
+            children: [ Text({ text: cardText, fontSize: 16 }) ]
         });
-        var tree = t.ReadableSubscribe(ctx, {
+        const tree = ReadableSubscribe({
             readables: [flag],
-            onUpdate$: t.mutate(ctx, function () {}),
+            onUpdate$: mutate(function () {}),
             child: inner
         });
-        t.render(ctx, tree);
-    "#);
+        render(tree);
+    "#)
+    .unwrap();
 
     app.render();
     let w1 = {
@@ -51,7 +51,8 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     };
 
     // Flip the flag — the inner Text's derive must recompute → width changes.
-    app.eval_js("globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__flag, true);");
+    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+        .unwrap();
     app.render();
 
     let w2 = {
@@ -72,26 +73,26 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 #[test]
 fn readable_subscribe_inside_stack_positioned_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var t = globalThis.__tur;
-        globalThis.__flag = t.source(ctx, false);
-        var flag = globalThis.__flag;
-        var cardText = t.derive(ctx, function (g) {
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, render } from "builtin:tur/core";
+        globalThis.__flag = source(false);
+        const flag = globalThis.__flag;
+        const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
         });
-        var inner = t.Container(ctx, {
-            children: [ t.Text(ctx, { text: cardText, fontSize: 16 }) ]
+        const inner = Container({
+            children: [ Text({ text: cardText, fontSize: 16 }) ]
         });
-        var rs = t.ReadableSubscribe(ctx, {
+        const rs = ReadableSubscribe({
             readables: [flag],
-            onUpdate$: t.mutate(ctx, function () {}),
+            onUpdate$: mutate(function () {}),
             child: inner
         });
-        var positioned = t.Positioned(ctx, { left: 30, top: 30, child: rs });
-        var stack = t.Stack(ctx, { children: [ positioned ] });
-        t.render(ctx, stack);
-    "#);
+        const positioned = Positioned({ left: 30, top: 30, child: rs });
+        const stack = Stack({ children: [ positioned ] });
+        render(stack);
+    "#)
+    .unwrap();
 
     app.render();
     let w1 = {
@@ -100,7 +101,8 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_js("globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__flag, true);");
+    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+        .unwrap();
     app.render();
 
     let w2 = {
@@ -122,44 +124,44 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 #[test]
 fn animated_container_pattern_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var t = globalThis.__tur;
+    app.eval_module_source(r#"
+        import { source, derive, Container, Text, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/core";
 
-        globalThis.__flag = t.source(ctx, false);
-        var flag = globalThis.__flag;
+        globalThis.__flag = source(false);
+        const flag = globalThis.__flag;
 
         // Animation progress (drives the Container's width).
-        var progress = t.source(ctx, 1.0);
-        var widthTween = { begin: 120, end: 120, lerp: function (tt) { return this.begin + (this.end - this.begin) * tt; } };
+        const progress = source(1.0);
+        const widthTween = { begin: 120, end: 120, lerp: function (tt) { return this.begin + (this.end - this.begin) * tt; } };
 
-        var cardText = t.derive(ctx, function (g) {
+        const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
         });
 
         // The Container's width is animated (reads progress); the Text reads flag.
-        var inner = t.Container(ctx, {
-            width: t.derive(ctx, function (g) { return widthTween.lerp(g.get(progress)); }),
-            children: [ t.Text(ctx, { text: cardText, fontSize: 16 }) ]
+        const inner = Container({
+            width: derive(function (g) { return widthTween.lerp(g.get(progress)); }),
+            children: [ Text({ text: cardText, fontSize: 16 }) ]
         });
 
-        var ctrl = t.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200,
             curve: "linear",
-            onTick: t.mutate(ctx, function (_sctx, v) { t.set(ctx, progress, v); })
+            onTick: mutate(function (_sctx, v) { set(progress, v); })
         });
 
-        var tree = t.ReadableSubscribe(ctx, {
+        const tree = ReadableSubscribe({
             readables: [flag],
-            onUpdate$: t.mutate(ctx, function () {
+            onUpdate$: mutate(function () {
                 widthTween.begin = widthTween.lerp(1.0);
                 widthTween.end = 200;
                 ctrl.forward();
             }),
             child: inner
         });
-        t.render(ctx, tree);
-    "#);
+        render(tree);
+    "#)
+    .unwrap();
 
     app.render();
     let w1 = {
@@ -168,7 +170,8 @@ fn animated_container_pattern_inner_text_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_js("globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__flag, true);");
+    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+        .unwrap();
     app.render();
     // advance past the animation duration so retarget + tick have run
     app.advance(std::time::Duration::from_millis(300)).unwrap();
@@ -193,52 +196,57 @@ fn animated_container_pattern_inner_text_still_updates() {
 #[test]
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var t = globalThis.__tur;
-        globalThis.__flag = t.source(ctx, false);
-        var flag = globalThis.__flag;
+    app.eval_module_source(r#"
+        import { source, derive, set, Container, Opacity, Text, ReadableSubscribe, createAnimationController, mutate, render } from "builtin:tur/core";
+        globalThis.__flag = source(false);
+        const flag = globalThis.__flag;
         // Sink captures the cardText derive's recomputed value (ground truth,
         // independent of layout measurement).
-        globalThis.__sink = t.source(ctx, "INITIAL");
+        globalThis.__sink = source("INITIAL");
 
         function makeLayer(child, animatedProp) {
-            var progress = t.source(ctx, 1.0);
-            var ctrl = t.createAnimationController(ctx, {
+            const progress = source(1.0);
+            const ctrl = createAnimationController({
                 duration: 200, curve: "linear",
-                onTick: t.mutate(ctx, function (_s, v) { t.set(ctx, progress, v); })
+                onTick: mutate(function (_s, v) { set(progress, v); })
             });
-            var inner = animatedProp
-                ? t.Container(ctx, { width: t.derive(ctx, function (g) { return 100 + 50 * g.get(progress); }), children: [child] })
-                : t.Opacity(ctx, { value: t.derive(ctx, function (g) { return 0.5 + 0.5 * g.get(progress); }), child: child });
-            return t.ReadableSubscribe(ctx, {
+            const inner = animatedProp
+                ? Container({ width: derive(function (g) { return 100 + 50 * g.get(progress); }), children: [child] })
+                : Opacity({ value: derive(function (g) { return 0.5 + 0.5 * g.get(progress); }), child: child });
+            return ReadableSubscribe({
                 readables: [flag],
-                onUpdate$: t.mutate(ctx, function () { /* no-op */ }),
+                onUpdate$: mutate(function () { /* no-op */ }),
                 child: inner
             });
         }
 
-        var cardText = t.derive(ctx, function (g) {
-            var v = g.get(flag) ? "EXPANDED" : "compact";
-            t.set(ctx, globalThis.__sink, v);
+        const cardText = derive(function (g) {
+            const v = g.get(flag) ? "EXPANDED" : "compact";
+            set(globalThis.__sink, v);
             return v;
         });
-        var text = t.Text(ctx, { text: cardText, fontSize: 16 });
-        var layer3 = makeLayer(text, true);
-        var layer2 = makeLayer(layer3, false);
-        var layer1 = makeLayer(layer2, true);
-        t.render(ctx, layer1);
-    "#);
+        const text = Text({ text: cardText, fontSize: 16 });
+        const layer3 = makeLayer(text, true);
+        const layer2 = makeLayer(layer3, false);
+        const layer1 = makeLayer(layer2, true);
+        render(layer1);
+    "#)
+    .unwrap();
 
     app.render();
-    let v1: String = app.eval_js("globalThis.__tur.get(globalThis.__tur.__ctx, globalThis.__sink);");
+    app.eval_module_source(r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#)
+        .unwrap();
+    let v1: String = app.eval_js("globalThis.__result");
 
-    app.eval_js("globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__flag, true);");
+    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+        .unwrap();
     app.render();
     app.advance(std::time::Duration::from_millis(300)).unwrap();
     app.render();
 
-    let v2: String = app.eval_js("globalThis.__tur.get(globalThis.__tur.__ctx, globalThis.__sink);");
+    app.eval_module_source(r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#)
+        .unwrap();
+    let v2: String = app.eval_js("globalThis.__result");
     assert_eq!(
         v1, "compact",
         "initial cardText should be 'compact' — got {v1:?}"
@@ -257,34 +265,34 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 #[test]
 fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_js(r#"
-        var ctx = globalThis.__tur.__ctx;
-        var t = globalThis.__tur;
-        globalThis.__target = t.source(ctx, 100);
-        var target = globalThis.__target;
-        var progress = t.source(ctx, 1.0);
-        var widthTween = {
+    app.eval_module_source(r#"
+        import { source, derive, Container, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/core";
+        globalThis.__target = source(100);
+        const target = globalThis.__target;
+        const progress = source(1.0);
+        const widthTween = {
             begin: 100, end: 100,
             lerp: function (tt) { return this.begin + (this.end - this.begin) * tt; }
         };
-        var container = t.Container(ctx, {
-            width: t.derive(ctx, function (g) { return widthTween.lerp(g.get(progress)); })
+        const container = Container({
+            width: derive(function (g) { return widthTween.lerp(g.get(progress)); })
         });
-        var ctrl = t.createAnimationController(ctx, {
+        const ctrl = createAnimationController({
             duration: 200, curve: "linear",
-            onTick: t.mutate(ctx, function (_s, v) { t.set(ctx, progress, v); })
+            onTick: mutate(function (_s, v) { set(progress, v); })
         });
-        var tree = t.ReadableSubscribe(ctx, {
+        const tree = ReadableSubscribe({
             readables: [target],
-            onUpdate$: t.mutate(ctx, function () {
+            onUpdate$: mutate(function () {
                 widthTween.begin = widthTween.lerp(1.0);
                 widthTween.end = 200;
                 ctrl.forward();
             }),
             child: container
         });
-        t.render(ctx, tree);
-    "#);
+        render(tree);
+    "#)
+    .unwrap();
 
     app.render();
     // Find the Container id once.
@@ -304,7 +312,8 @@ fn js_animated_container_pattern_animates_width_over_time() {
     assert_eq!(width_at(&app), 100.0, "initial width should be 100");
 
     // Flip the target -> on_updated -> retarget (begin=100, end=200) + forward.
-    app.eval_js("globalThis.__tur.set(globalThis.__tur.__ctx, globalThis.__target, 200);");
+    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__target, 200);"#)
+        .unwrap();
     app.render();
     // ctrl.forward() resets progress to 0 then advances; after a tiny advance
     // the width should be moving away from 100 toward 200.

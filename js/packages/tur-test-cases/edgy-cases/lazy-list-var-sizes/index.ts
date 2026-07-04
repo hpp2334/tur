@@ -7,7 +7,7 @@ import {
     CrossAxisAlignment,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     LazyList,
@@ -21,7 +21,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
 // "Variable width + height LazyList" — items with DIFFERENT main-axis extents
@@ -107,7 +107,7 @@ function hslToHex(h: number, s: number, l: number): string {
 // Reactive axis. Toggling flips vertical ↔ horizontal and rebuilds the list.
 const axis$ = source<Axis>(Axis.Vertical);
 
-function buildItem(i: number, axis: Axis): EdgyElement {
+function buildItem(i: number, axis: Axis): Element {
     const main = mainSizeFor(i);
     const cross = crossSizeFor(i);
     const hue = hueFor(i);
@@ -181,7 +181,7 @@ function buildItem(i: number, axis: Axis): EdgyElement {
     });
 }
 
-function ToggleButton(): EdgyElement {
+function ToggleButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({

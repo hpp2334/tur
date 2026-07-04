@@ -217,17 +217,17 @@ fn lazy_list_virtualizes_large_item_count() {
     // Build a LazyList inline with 10,000 fixed-extent items and verify
     // that only a small subset is actually mounted after layout + scroll.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(r#"
-        const ctx = globalThis.__tur.__ctx;
-        globalThis.__tur.render(ctx, globalThis.__tur.LazyList(ctx, {
+    app.eval_module_source(r#"
+        import { render, LazyList, Container, createColor, Text } from "builtin:tur/core";
+        render(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 50,
             overscan: 2,
-            builder: (i) => globalThis.__tur.Container(ctx, {
+            builder: (i) => Container({
                 height: 50,
-                color: globalThis.__tur.createColor(ctx, 200, 200, 200, 255),
-                children: [globalThis.__tur.Text(ctx, { text: "Item " + i })],
+                color: createColor(200, 200, 200, 255),
+                children: [Text({ text: "Item " + i })],
             }),
         }));
     "#).unwrap();
@@ -277,19 +277,19 @@ fn lazy_list_virtualizes_large_item_count() {
 /// Helper: load a virtualized 10,000-item list with fixed 56px extent.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(
+    app.eval_module_source(
         r#"
-        const ctx = globalThis.__tur.__ctx;
-        globalThis.__tur.render(ctx, globalThis.__tur.LazyList(ctx, {
+        import { render, LazyList, Container, createColor, Text } from "builtin:tur/core";
+        render(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 56,
             overscan: 2,
             queryKey: ["ll"],
-            builder: (i) => globalThis.__tur.Container(ctx, {
+            builder: (i) => Container({
                 height: 56,
-                color: globalThis.__tur.createColor(ctx, 200, 200, 200, 255),
-                children: [globalThis.__tur.Text(ctx, { text: "Item " + i })],
+                color: createColor(200, 200, 200, 255),
+                children: [Text({ text: "Item " + i })],
             }),
         }));
         "#,

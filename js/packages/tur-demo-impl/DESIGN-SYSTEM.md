@@ -295,9 +295,9 @@ The root layout. Holds Sidebar + Editor + Viewer in a `Row`.
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
-| `sidebar` | `EdgyElement` | required | Typically `<NavList>` |
-| `editor` | `EdgyElement` | required | Typically `<EditorSurface>` |
-| `viewer` | `EdgyElement` | required | Typically `<ViewerSurface>` |
+| `sidebar` | `Element` | required | Typically `<NavList>` |
+| `editor` | `Element` | required | Typically `<EditorSurface>` |
+| `viewer` | `Element` | required | Typically `<ViewerSurface>` |
 
 **Background**: `bg.app`. **Padding**: none. **Children layout**: `Row`, sidebar fixed `220px`, editor and viewer each `Expanded`.
 
@@ -321,8 +321,8 @@ Reusable header + body container.
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `title` | `Val<string>` | — | Left-aligned in header |
-| `actions` | `EdgyElement[]` | `[]` | Right-aligned row |
-| `body` | `EdgyElement` | required | Fills remaining space |
+| `actions` | `Element[]` | `[]` | Right-aligned row |
+| `body` | `Element` | required | Fills remaining space |
 | `headerless` | `boolean` | `false` | Hide header strip entirely |
 
 **Colors**: header = `bg.header`, body = `bg.panel`. **Padding**: header `space.sm` horizontal × `space.sm` vertical; body `space.md`. **Border**: 1px `border.subtle` between header and body (only when header visible).
@@ -359,7 +359,7 @@ A single selectable item in the sidebar.
 | `label` | `Val<string>` | required | Case name |
 | `selected$` | `Readable<boolean>` | — | Reactive selected state |
 | `onClick` | `Mutation` | — | Selection handler |
-| `icon` | `EdgyElement` | — | Optional leading icon (16×16) |
+| `icon` | `Element` | — | Optional leading icon (16×16) |
 
 **States** (see §5 for full matrix):
 
@@ -402,7 +402,7 @@ Vertical list of `NavItem`s inside a `ScrollView`. Used by the sidebar body.
 | `items` | `{ label, key }[]` | required | Drives an `Each` |
 | `selectedKey$` | `Readable<string>` | — | Currently selected key |
 | `onSelect` | `Mutation<[string]>` | — | Receives selected key |
-| `header` | `EdgyElement` | — | Optional leading element (app title) |
+| `header` | `Element` | — | Optional leading element (app title) |
 
 ### 4.5 `Button`
 
@@ -412,7 +412,7 @@ Three variants, same shape.
 |---|---|---|---|
 | `variant` | `"primary" \| "secondary" \| "ghost"` | `"secondary"` | See state table |
 | `label` | `Val<string>` | required | Always sentence case |
-| `icon` | `EdgyElement` | — | Optional leading icon |
+| `icon` | `Element` | — | Optional leading icon |
 | `onClick` | `Mutation` | — | |
 | `disabled` | `Val<boolean>` | `false` | |
 
@@ -494,7 +494,7 @@ Rendered-case pane: header (status badge) + body (case content) + optional error
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `status$` | `Readable<"ready" \| "error">` | — | Drives `<StatusBadge>` |
-| `child$` | `Readable<EdgyElement>` | — | The case view to render |
+| `child$` | `Readable<Element>` | — | The case view to render |
 | `error$` | `Readable<string>` | — | When non-empty, shows `<ErrorBanner>` |
 
 **Background**: `bg.viewer`. **Body**: case view inside `Expanded`. **Error overlay**: pinned to bottom of body, `Condition` on `error$`.
@@ -716,7 +716,7 @@ Tokens live in **`src/tokens.ts`**. The file is the only place `Color.hex(...)` 
 
 ```ts
 // src/tokens.ts
-import { Color } from "@tur/edgy";
+import { Color } from "builtin:tur/core";
 
 // Primitive palette — do not import these from views.
 export const ink = {

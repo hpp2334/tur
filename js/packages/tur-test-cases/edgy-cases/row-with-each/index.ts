@@ -1,4 +1,5 @@
 import {
+    type Brush,
     Column,
     Container,
     CrossAxisAlignment,
@@ -10,7 +11,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const seg$ = source<string[]>(["a", "b"]);
 
@@ -30,7 +31,7 @@ export default view(() =>
             }),
             SizedBox({ width: 40, height: 10 }),
             Expanded({
-                child: Container({ color: 0x00000000 }),
+                child: Container({ color: 0x00000000 as unknown as Brush }),
             }),
         ],
     }),

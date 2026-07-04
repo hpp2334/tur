@@ -7,7 +7,7 @@ import {
     CrossAxisAlignment,
     createTextEditingController,
     derive,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     HitTestBehavior,
@@ -25,8 +25,9 @@ import {
     Stack,
     source,
     Text,
+    type TextController,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // --- Light theme palette (slate + emerald accents) -----------------------
 
@@ -167,7 +168,7 @@ function PrimaryButton({
     shadowColor: Color;
     onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
-}): EdgyElement {
+}): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -202,7 +203,7 @@ function GhostButton({
     label: string;
     onClick: Mutation<[PointerInteractEvent], void>;
     queryKey?: string[];
-}): EdgyElement {
+}): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -228,7 +229,7 @@ function GhostButton({
 
 // --- Status pill ---------------------------------------------------------
 
-function StatusPill(): EdgyElement {
+function StatusPill(): Element {
     return Container({
         padding: 6,
         borderRadius: 999,
@@ -260,7 +261,7 @@ function StatusPill(): EdgyElement {
 
 // --- Main display --------------------------------------------------------
 
-function TimerView(): EdgyElement {
+function TimerView(): Element {
     return Column({
         mainAxisSize: MainAxisSize.Min,
         crossAlignment: CrossAxisAlignment.Center,
@@ -283,7 +284,7 @@ function TimerView(): EdgyElement {
     });
 }
 
-function Controls(): EdgyElement {
+function Controls(): Element {
     return Column({
         mainAxisSize: MainAxisSize.Min,
         crossAlignment: CrossAxisAlignment.Center,
@@ -332,7 +333,7 @@ function Controls(): EdgyElement {
 
 // --- Edit modal ----------------------------------------------------------
 
-function EditModal(): EdgyElement {
+function EditModal(): Element {
     // Click-anywhere-on-backdrop dismisses the modal. The inner card stops
     // propagation by being an opaque hit-test target itself.
     return Positioned({
@@ -386,7 +387,7 @@ function EditModal(): EdgyElement {
                                                 InputEdgy({
                                                     controller: derive(() =>
                                                         get(editController$),
-                                                    ),
+                                                    ) as unknown as TextController,
                                                     placeholder:
                                                         "Positive integer",
                                                     fontSize: 14,

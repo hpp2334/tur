@@ -5,7 +5,7 @@ import {
     ScrollView,
     SizedBox,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const controller = createScrollController({ initialOffset: 100 });
 

@@ -1,11 +1,11 @@
 import {
     createAnimationController,
-    type EdgyElement,
+    type Element,
     mutate,
     Opacity,
     set,
     source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
 // FadeIn — opacity transition used when the playground's active case content
@@ -48,7 +48,7 @@ export function triggerFadeIn(): void {
 
 /** Wrap a child element so it fades in from opacity 0 → 1 over
  *  `FADE_DURATION_MS` ms whenever `triggerFadeIn()` is called. */
-export function FadeIn(props: { child: EdgyElement }): EdgyElement {
+export function FadeIn(props: { child: Element }): Element {
     return Opacity({
         value: fadeT$,
         child: props.child,

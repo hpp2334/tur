@@ -1,12 +1,12 @@
 import {
     createTextEditingController,
     createUndoController,
-    type EdgyElement,
+    type Element,
     get,
     type KeyEvent,
     mutate,
     set,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { CASE_SOURCES, compileCase } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
 import {
@@ -28,7 +28,7 @@ import type { CaseFileMap, EditorController } from "./types";
 // Case cache & last-compiled-source tracking
 // ---------------------------------------------------------------------------
 
-const caseViews = new Map<string, EdgyElement>();
+const caseViews = new Map<string, Element>();
 
 /** Per-case file cache: case name → { filename → current editor text }.
  *  Populated from CASE_SOURCES on first load; updated on each recompile. */
@@ -39,7 +39,7 @@ function compileIntoCache(name: string): void {
     if (!files) return;
     const result = compileCase(files);
     if (result.view) {
-        caseViews.set(name, result.view as EdgyElement);
+        caseViews.set(name, result.view as Element);
     }
 }
 
@@ -78,7 +78,7 @@ export const editorCtrl = createTextEditingController({
             recompile();
         }
     }),
-}) as unknown as EditorController;
+});
 
 /** Undo/redo history stack for the code editor. Passed to `InputEdgy` via
  *  the `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
@@ -155,7 +155,7 @@ export function recompile(): void {
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
-    caseViews.set(name, result.view as EdgyElement);
+    caseViews.set(name, result.view as Element);
     lastCompiledFiles.set(name, { ...files });
     set(lastCompiledAtMs$, Date.now());
     set(status$, "ready");
@@ -177,7 +177,7 @@ export function resetCase(): void {
 
 /** Look up the cached view handle for a case (or undefined). Used by
  *  the viewer pane to render the active case. */
-export function getCaseView(name: string): EdgyElement | undefined {
+export function getCaseView(name: string): Element | undefined {
     return caseViews.get(name);
 }
 

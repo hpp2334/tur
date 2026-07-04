@@ -14,7 +14,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const count$ = source(0);
 
@@ -28,7 +28,7 @@ export default view(() =>
                     crossAlignment: CrossAxisAlignment.Center,
                     children: [
                         Text({
-                            text: derive((g) => `Count: ${g(count$)}`),
+                            text: derive((ctx) => `Count: ${ctx.get(count$)}`),
                             queryKey: ["count"],
                             fontSize: 36,
                             color: Color.hex("#1e293b"),

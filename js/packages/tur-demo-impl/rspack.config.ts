@@ -4,10 +4,14 @@ import { defineConfig } from "@rspack/cli";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Builds the self-hosted playground as a single IIFE bundle (`impl.js`) that
-// the thin `tur-demo` wrapper loads via `TurWasmApp.load_and_run_js`. The
-// bundle contains @tur/edgy + the Shell UI + inlined case sources; it sets
-// `globalThis.TurEdgy` and calls `render(Shell)` on eval.
+// Builds the self-hosted playground as a single ES-module bundle (`impl.js`)
+// that the thin `tur-demo` wrapper loads via `TurWasmApp.load_and_run_module`.
+// `builtin:tur/*` are external — resolved at run time by the engine's boa
+// module loader — so the bundle keeps its `import` statements. The
+// `@tur/animation-ext` workspace package is bundled in (only its
+// `builtin:tur/core` imports stay external). The bundle contains the Shell UI
+// + inlined case sources; it sets `globalThis.TurEdgy` and calls
+// `render(Shell)` on evaluation.
 export default defineConfig({
     entry: {
         impl: "./src/index.ts",
@@ -16,7 +20,13 @@ export default defineConfig({
         path: resolve(__dirname, "dist"),
         filename: "impl.js",
         clean: true,
-        library: { type: "iife" },
+        library: { type: "module" },
+    },
+    experiments: { outputModule: true },
+    externals: {
+        "builtin:tur/core": "builtin:tur/core",
+        "builtin:tur/host": "builtin:tur/host",
+        "builtin:tur/net": "builtin:tur/net",
     },
     optimization: {
         minimize: false,

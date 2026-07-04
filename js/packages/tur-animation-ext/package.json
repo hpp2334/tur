@@ -1,5 +1,5 @@
 {
-    "name": "@tur/edgy",
+    "name": "@tur/animation-ext",
     "version": "0.1.0",
     "type": "module",
     "private": true,
@@ -11,5 +11,8 @@
     },
     "devDependencies": {
         "typescript": "^5.7.0"
+    },
+    "dependencies": {
+        "@tur/core": "workspace:*"
     }
 }

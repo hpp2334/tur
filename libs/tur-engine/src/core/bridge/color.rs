@@ -51,10 +51,12 @@ pub(crate) fn tur_create_color(
     args: &[JsValue],
     context: &mut Context,
 ) -> boa_engine::JsResult<JsValue> {
-    let r = args.get_or_undefined(0).as_number().unwrap_or(0.0) as u8;
-    let g = args.get_or_undefined(1).as_number().unwrap_or(0.0) as u8;
-    let b = args.get_or_undefined(2).as_number().unwrap_or(0.0) as u8;
-    let a = args.get_or_undefined(3).as_number().unwrap_or(255.0) as u8;
+    // `args[0]` is the bound bridge ctx (prepended by `bound_native` when the
+    // `builtin:tur/core` module is built); the real RGBA args follow at [1..].
+    let r = args.get_or_undefined(1).as_number().unwrap_or(0.0) as u8;
+    let g = args.get_or_undefined(2).as_number().unwrap_or(0.0) as u8;
+    let b = args.get_or_undefined(3).as_number().unwrap_or(0.0) as u8;
+    let a = args.get_or_undefined(4).as_number().unwrap_or(255.0) as u8;
     let opaque = BoaOpaque::new(ColorOpaque(Color::rgba(r, g, b, a)), context);
     Ok(opaque.object().clone().into())
 }
@@ -67,11 +69,12 @@ pub(crate) fn tur_color_lerp(
     args: &[JsValue],
     context: &mut Context,
 ) -> boa_engine::JsResult<JsValue> {
-    let a = extract_color(args.get_or_undefined(0), context)
+    // `args[0]` is the bound bridge ctx (see `tur_create_color`); real args at [1..].
+    let a = extract_color(args.get_or_undefined(1), context)
         .ok_or_else(|| boa_engine::JsNativeError::typ().with_message("colorLerp: `begin` must be a Color"))?;
-    let b = extract_color(args.get_or_undefined(1), context)
+    let b = extract_color(args.get_or_undefined(2), context)
         .ok_or_else(|| boa_engine::JsNativeError::typ().with_message("colorLerp: `end` must be a Color"))?;
-    let t = args.get_or_undefined(2).as_number().unwrap_or(0.0);
+    let t = args.get_or_undefined(3).as_number().unwrap_or(0.0);
     let out = Color::lerp(a, b, t);
     let opaque = BoaOpaque::new(ColorOpaque(out), context);
     Ok(opaque.object().clone().into())
@@ -85,16 +88,17 @@ pub(crate) fn tur_create_linear_gradient(
     args: &[JsValue],
     context: &mut Context,
 ) -> boa_engine::JsResult<JsValue> {
+    // `args[0]` is the bound bridge ctx (see `tur_create_color`); real args at [1..].
     let start = (
-        args.get_or_undefined(0).as_number().unwrap_or(0.0),
         args.get_or_undefined(1).as_number().unwrap_or(0.0),
+        args.get_or_undefined(2).as_number().unwrap_or(0.0),
     );
     let end = (
-        args.get_or_undefined(2).as_number().unwrap_or(0.0),
         args.get_or_undefined(3).as_number().unwrap_or(0.0),
+        args.get_or_undefined(4).as_number().unwrap_or(0.0),
     );
     let mut stops: Vec<GradientStop> = Vec::new();
-    if let Some(stops_val) = args.get_or_undefined(4).as_object() {
+    if let Some(stops_val) = args.get_or_undefined(5).as_object() {
         if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone()) {
             let len = arr.length(context).unwrap_or(0);
             for i in 0..len {
@@ -117,6 +121,141 @@ pub(crate) fn tur_create_linear_gradient(
             }
         }
     }
+    let brush = Brush::LinearGradient { start, end, stops };
+    let opaque = BoaOpaque::new(BrushOpaque(brush), context);
+    Ok(opaque.object().clone().into())
+}
+
+/// `Color.rgb(r, g, b)` — bound method on the native `Color` const-object.
+/// `args = [ctx, r, g, b]`; forwards to `tur_create_color` with `a = 255`.
+pub(crate) fn tur_color_rgb(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let full: Vec<JsValue> = vec![
+        args.get_or_undefined(0).clone(),
+        args.get_or_undefined(1).clone(),
+        args.get_or_undefined(2).clone(),
+        args.get_or_undefined(3).clone(),
+        JsValue::from(255),
+    ];
+    tur_create_color(_this, &full, context)
+}
+
+/// `Color.rgba(r, g, b, a)` — bound method. Same arg layout as
+/// `tur_create_color` (`[ctx, r, g, b, a]`), so it forwards verbatim.
+pub(crate) fn tur_color_rgba(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    tur_create_color(_this, args, context)
+}
+
+/// `Color.hex("#RRGGBB[AA]" | "#RGB")` — bound method. Parses the hex string
+/// and forwards to `tur_create_color`.
+pub(crate) fn tur_color_hex(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let hex = args
+        .get_or_undefined(1)
+        .as_string()
+        .ok_or_else(|| {
+            boa_engine::JsError::from(
+                boa_engine::JsNativeError::typ()
+                    .with_message("Color.hex: expected a hex color string"),
+            )
+        })?
+        .to_std_string_escaped();
+    let (r, g, b, a) = parse_hex_color(&hex).ok_or_else(|| {
+        boa_engine::JsError::from(
+            boa_engine::JsNativeError::typ()
+                .with_message(format!("Color.hex: invalid hex color: {hex}")),
+        )
+    })?;
+    let full = [
+        args.get_or_undefined(0).clone(),
+        JsValue::from(r),
+        JsValue::from(g),
+        JsValue::from(b),
+        JsValue::from(a),
+    ];
+    tur_create_color(_this, &full, context)
+}
+
+/// Parse a CSS-style hex color (`"#RGB"`, `"#RRGGBB"`, `"#RRGGBBAA"`, with or
+/// without the leading `#`) into `(r, g, b, a)`.
+fn parse_hex_color(hex: &str) -> Option<(u8, u8, u8, u8)> {
+    let h = hex.strip_prefix('#').unwrap_or(hex);
+    let parse = |s: &str| u8::from_str_radix(s, 16).ok();
+    match h.len() {
+        3 => Some((
+            parse(&h[0..1].repeat(2))?,
+            parse(&h[1..2].repeat(2))?,
+            parse(&h[2..3].repeat(2))?,
+            255,
+        )),
+        6 => Some((parse(&h[0..2])?, parse(&h[2..4])?, parse(&h[4..6])?, 255)),
+        8 => Some((
+            parse(&h[0..2])?,
+            parse(&h[2..4])?,
+            parse(&h[4..6])?,
+            parse(&h[6..8])?,
+        )),
+        _ => None,
+    }
+}
+
+/// `LinearGradient.create(options)` — bound method on the native
+/// `LinearGradient` const-object. `args = [ctx, options]` where
+/// `options = { start: [x,y], end: [x,y], stops: [{offset, color}] }`.
+/// Each stop's `color` is decoded via `extract_color` (downcasts
+/// `ColorOpaque`), so it accepts Rust-owned `Color` handles directly — unlike
+/// the low-level `createLinearGradient` which takes `{r,g,b,a}` structs.
+pub(crate) fn tur_linear_gradient_create(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let opts = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        boa_engine::JsError::from(
+            boa_engine::JsNativeError::typ()
+                .with_message("LinearGradient.create: expected an options object"),
+        )
+    })?;
+    let start = extract_offset_pair(&opts, "start", context).unwrap_or((0.0, 0.0));
+    let end = extract_offset_pair(&opts, "end", context).unwrap_or((0.0, 0.0));
+
+    let mut stops: Vec<GradientStop> = Vec::new();
+    if let Ok(stops_val) = opts.get(js_string!("stops"), context) {
+        if let Some(stops_obj) = stops_val.as_object() {
+            if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_obj.clone()) {
+                let len = arr.length(context).unwrap_or(0);
+                for i in 0..len {
+                    let Ok(stop_val) = arr.at(i as i64, context) else {
+                        continue;
+                    };
+                    let Some(stop_obj) = stop_val.as_object() else {
+                        continue;
+                    };
+                    let offset = stop_obj
+                        .get(js_string!("offset"), context)
+                        .ok()
+                        .and_then(|v| v.as_number())
+                        .unwrap_or(0.0) as f32;
+                    let color_val = stop_obj
+                        .get(js_string!("color"), context)
+                        .unwrap_or(JsValue::undefined());
+                    let color = extract_color(&color_val, context).unwrap_or(Color::rgba(0, 0, 0, 0));
+                    stops.push(GradientStop { offset, color });
+                }
+            }
+        }
+    }
+
     let brush = Brush::LinearGradient { start, end, stops };
     let opaque = BoaOpaque::new(BrushOpaque(brush), context);
     Ok(opaque.object().clone().into())

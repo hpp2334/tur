@@ -2,12 +2,12 @@ import {
     Alignment,
     type AnimationController,
     Color,
-    ColorTween,
     Column,
     Container,
     CrossAxisAlignment,
     createAnimationController,
     derive,
+    type Element,
     Expanded,
     get,
     MainAxisAlignment,
@@ -25,9 +25,9 @@ import {
     source,
     Text,
     Transform,
-    Tween,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
+import { ColorTween, Tween } from "@tur/animation-ext";
 
 // ---------------------------------------------------------------------------
 // "Animated Card Studio" — a demo of tur's animation API.
@@ -137,7 +137,7 @@ const toggleLooping = mutate(() => {
 // UI
 // ---------------------------------------------------------------------------
 
-function Card(): unknown {
+function Card(): Element {
     // Card animates width, borderRadius, hue based on progress$ via the
     // Tween / ColorTween abstractions (Flutter-aligned). The explicit
     // AnimationController drives `progress$` continuously; the tweens handle
@@ -167,7 +167,7 @@ function Card(): unknown {
     });
 }
 
-function OrbitingDot(): unknown {
+function OrbitingDot(): Element {
     // A dot that orbits around the card center.
     return Positioned({
         left: derive(() => 140 + 80 * Math.cos(2 * Math.PI * get(progress$))),
@@ -184,7 +184,7 @@ function OrbitingDot(): unknown {
     });
 }
 
-function ProgressReadout(): unknown {
+function ProgressReadout(): Element {
     return Text({
         text: derive(() => `${Math.round(get(progress$) * 100)}%`),
         fontSize: 12,
@@ -192,7 +192,7 @@ function ProgressReadout(): unknown {
     });
 }
 
-function StatusBadge(): unknown {
+function StatusBadge(): Element {
     return Container({
         padding: 6,
         borderRadius: 999,
@@ -219,7 +219,7 @@ function Button(
     label: string,
     onClick: Mutation<[], void>,
     color = "#4f46e5",
-): unknown {
+): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -243,7 +243,7 @@ function Button(
     });
 }
 
-function SpeedButton(factor: number, label: string): unknown {
+function SpeedButton(factor: number, label: string): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -277,7 +277,7 @@ function SpeedButton(factor: number, label: string): unknown {
 function CurveButton(
     curve: "linear" | "easeIn" | "easeOut" | "easeInOut",
     label: string,
-): unknown {
+): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
@@ -309,7 +309,7 @@ function CurveButton(
     });
 }
 
-function LoopButton(): unknown {
+function LoopButton(): Element {
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({

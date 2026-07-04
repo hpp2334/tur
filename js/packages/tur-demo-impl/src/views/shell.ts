@@ -4,8 +4,7 @@ import {
     Container,
     CrossAxisAlignment,
     derive,
-    type EdgyElement,
-    type EdgyView,
+    type Element,
     Expanded,
     get,
     Row,
@@ -13,7 +12,7 @@ import {
     Switch,
     set,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
 import { ContextMenuOverlay } from "./context-menu";
@@ -30,7 +29,7 @@ import { Viewer } from "./viewer";
  *  - `split`: editor = fixed `editorWidth$`, viewer = Expanded.
  *  - `editor`: editor = Expanded (fills all), viewer hidden.
  *  - `viewer`: editor hidden, viewer = Expanded. */
-function EditorAndViewer(): EdgyElement {
+function EditorAndViewer(): Element {
     return Row({
         crossAlignment: CrossAxisAlignment.Stretch,
         children: [
@@ -86,7 +85,7 @@ function EditorAndViewer(): EdgyElement {
     });
 }
 
-export const Shell: EdgyView = view(() =>
+export const Shell: Element = view(() =>
     Container({
         color: tokens.bg.app,
         children: [

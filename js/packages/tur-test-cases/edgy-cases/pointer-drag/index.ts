@@ -10,7 +10,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const lastX$ = source(0);
 const lastY$ = source(0);
@@ -43,14 +43,14 @@ export default view(() =>
                     alignment: Alignment.Center,
                     children: [
                         Text({
-                            text: derive((g) => g(phase$)),
+                            text: derive((ctx) => ctx.get(phase$)),
                             queryKey: ["drag-phase"],
                         }),
                     ],
                 }),
             }),
             Text({
-                text: derive((g) => `${g(lastX$)},${g(lastY$)}`),
+                text: derive((ctx) => `${ctx.get(lastX$)},${ctx.get(lastY$)}`),
                 queryKey: ["drag-pos"],
             }),
         ],

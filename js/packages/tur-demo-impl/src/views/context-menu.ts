@@ -3,7 +3,7 @@ import {
     Condition,
     Container,
     derive,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     ImageEdgy,
@@ -18,7 +18,7 @@ import {
     SizedBox,
     Stack,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     closeContextMenu,
     contextMenuOpen$,
@@ -49,17 +49,14 @@ interface MenuItemSpec {
 
 /** Like a `cond` helper but for elements — render `child` only when `value`
  *  is defined. Used to optionally include an icon column. */
-function ifDefined<T>(
-    value: T | undefined,
-    build: (v: T) => EdgyElement,
-): EdgyElement {
+function ifDefined<T>(value: T | undefined, build: (v: T) => Element): Element {
     if (value === undefined) {
         return SizedBox({ width: 0, height: 0 });
     }
     return build(value);
 }
 
-function menuItem(spec: MenuItemSpec): EdgyElement {
+function menuItem(spec: MenuItemSpec): Element {
     // Cast zero-arg mutation → 1-arg. The runtime ignores the event arg.
     const click = spec.onClick as unknown as Mutation<
         [PointerInteractEvent],
@@ -113,7 +110,7 @@ function menuItem(spec: MenuItemSpec): EdgyElement {
     });
 }
 
-function menuItems(): EdgyElement {
+function menuItems(): Element {
     return Container({
         width: 200,
         padding: 4,
@@ -163,7 +160,7 @@ function menuItems(): EdgyElement {
 
 /** The overlay root — should be the last child of a Stack at the canvas
  *  root so it paints on top. Renders nothing when the menu is closed. */
-export function ContextMenuOverlay(): EdgyElement {
+export function ContextMenuOverlay(): Element {
     return Condition({
         condition: derive(() => get(contextMenuOpen$)),
         child: () =>

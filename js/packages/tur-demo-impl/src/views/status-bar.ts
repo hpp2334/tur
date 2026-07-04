@@ -2,14 +2,14 @@ import {
     Condition,
     Container,
     derive,
-    type EdgyElement,
+    type Element,
     get,
     MainAxisAlignment,
     MainAxisSize,
     Row,
     SizedBox,
     Text,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     autoRun$,
     edited$,
@@ -20,7 +20,7 @@ import {
 } from "../state";
 import { tokens } from "../theme/tokens";
 
-function StatusDot(): EdgyElement {
+function StatusDot(): Element {
     return Container({
         width: 6,
         height: 6,
@@ -33,7 +33,7 @@ function StatusDot(): EdgyElement {
     });
 }
 
-export function StatusBar(): EdgyElement {
+export function StatusBar(): Element {
     return Container({
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,

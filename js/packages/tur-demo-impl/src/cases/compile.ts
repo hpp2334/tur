@@ -1,46 +1,15 @@
+import type { Color, SpanData } from "builtin:tur/core";
+import * as Core from "builtin:tur/core";
+import type { AstNode, TokenSpan } from "builtin:tur/host";
+import * as Host from "builtin:tur/host";
+import * as Net from "builtin:tur/net";
+import * as Anim from "@tur/animation-ext";
 import { code } from "../theme/tokens";
-
-/** `__turHost` is registered by tur-wasm (swc-backed compiler services). */
-interface TurHost {
-    transpileTsx(src: string): string;
-    tokenizeTsx(src: string): TokenSpan[];
-    generateAst(src: string): AstNode[];
-}
-interface TokenSpan {
-    start: number;
-    end: number;
-    kind: number;
-}
-
-/** AST node returned by `generateAst`. Each node includes the exact source
- *  text (`text`) for that declaration, extracted by Rust — so no fragile
- *  position arithmetic on the JS side.  For export nodes, `body` contains
- *  the declaration text WITHOUT the `export`/`export default` keyword,
- *  also extracted by Rust from the inner declaration's span. */
-interface AstNode {
-    kind:
-        | "import"
-        | "exportDecl"
-        | "exportDefault"
-        | "exportNamed"
-        | "exportAll"
-        | "exportType"
-        | "statement";
-    text: string;
-    /** For export nodes: text without the `export` keyword. */
-    body?: string;
-    source?: string;
-    specifiers?: Array<{ local: string; imported: string }>;
-    names?: string[];
-}
-
-const host = (): TurHost =>
-    (globalThis as unknown as { __turHost: TurHost }).__turHost;
 
 /** Highlight palette indexed by token kind (see tur-wasm `highlight_tsx`).
  *  0–6 are lexical (lexer); 7–11 are AST-derived semantic categories.
  *  Pulled from `code.*` design tokens — see DESIGN-SYSTEM.md §1.1. */
-const KIND_COLOR: unknown[] = [
+const KIND_COLOR: Color[] = [
     code.fg, // 0 default
     code.keyword, // 1 keyword
     code.string, // 2 string
@@ -57,7 +26,7 @@ const KIND_COLOR: unknown[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** The case's default export — a view handle (`EdgyElement`). */
+    /** The case's default export — a view handle (`Element`). */
     view?: unknown;
 }
 
@@ -96,6 +65,24 @@ function fileKey(source: string): string {
     return name;
 }
 
+/** Map an import source to the expression the rewritten code destructures
+ *  from. `builtin:tur/*` resolve to the injected module namespace; relative
+ *  imports resolve to the local `__modules` registry. */
+function importTarget(source: string): string {
+    switch (source) {
+        case "builtin:tur/core":
+            return "Core";
+        case "@tur/animation-ext":
+            return "Anim";
+        case "builtin:tur/host":
+            return "Host";
+        case "builtin:tur/net":
+            return "Net";
+        default:
+            return `__modules["${moduleKey(source)}"]`;
+    }
+}
+
 /** Rewrite a transpiled JS string using AST metadata from `generateAst`.
  *  Returns the rewritten source and the list of exported names.
  *
@@ -106,7 +93,7 @@ function rewriteModule(transpiled: string): {
     source: string;
     exportedNames: string[];
 } {
-    const ast = host().generateAst(transpiled);
+    const ast = Host.generateAst(transpiled);
     const parts: string[] = [];
     const exportedNames: string[] = [];
 
@@ -115,13 +102,7 @@ function rewriteModule(transpiled: string): {
             case "import": {
                 const src = node.source ?? "";
                 const names = specNames(node.specifiers ?? []);
-                if (src === "@tur/edgy") {
-                    parts.push(`const {${names}} = globalThis.TurEdgy;`);
-                } else {
-                    parts.push(
-                        `const {${names}} = globalThis.__tur_modules["${moduleKey(src)}"];`,
-                    );
-                }
+                parts.push(`const {${names}} = ${importTarget(src)};`);
                 break;
             }
 
@@ -158,10 +139,10 @@ function rewriteModule(transpiled: string): {
 }
 
 /** Rewrite the entry file. Like `rewriteModule` but converts
- *  `export default X` → `globalThis.__tur_case = X` instead of
- *  `exports.default = X`, and drops other exports without tracking. */
+ *  `export default X` → `return X` (the entry factory's return value is the
+ *  case view), and drops other exports without tracking. */
 function rewriteEntry(transpiled: string): string {
-    const ast = host().generateAst(transpiled);
+    const ast = Host.generateAst(transpiled);
     const parts: string[] = [];
 
     for (const node of ast) {
@@ -169,13 +150,7 @@ function rewriteEntry(transpiled: string): string {
             case "import": {
                 const src = node.source ?? "";
                 const names = specNames(node.specifiers ?? []);
-                if (src === "@tur/edgy") {
-                    parts.push(`const {${names}} = globalThis.TurEdgy;`);
-                } else {
-                    parts.push(
-                        `const {${names}} = globalThis.__tur_modules["${moduleKey(src)}"];`,
-                    );
-                }
+                parts.push(`const {${names}} = ${importTarget(src)};`);
                 break;
             }
 
@@ -185,9 +160,7 @@ function rewriteEntry(transpiled: string): string {
             }
 
             case "exportDefault": {
-                parts.push(
-                    `globalThis.__tur_case = ${node.body ?? node.text};`,
-                );
+                parts.push(`return ${node.body ?? node.text};`);
                 break;
             }
 
@@ -211,21 +184,21 @@ function rewriteEntry(transpiled: string): string {
 // Compile
 // ---------------------------------------------------------------------------
 
+/** Evaluate rewritten case code in an isolated function scope with the
+ *  `builtin:tur/*` modules and the per-case `__modules` registry injected as
+ *  parameters (no `globalThis` pollution). Returns the function's value. */
+function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
+    const fn = new Function("Core", "Anim", "Host", "Net", "__modules", body);
+    return fn(Core, Anim, Host, Net, modules);
+}
+
 export function compileCase(files: Record<string, string>): CaseCompileResult {
     const entryFile = files["index.ts"] ?? Object.values(files)[0];
     if (!entryFile) {
         return { error: "case has no files" };
     }
 
-    const g = globalThis as unknown as {
-        __tur_case?: unknown;
-        __tur_modules?: Record<string, unknown>;
-        eval: (s: string) => void;
-    };
-    const evalInGlobal = g.eval;
-
-    g.__tur_modules = {};
-    g.__tur_case = undefined;
+    const modules: Record<string, unknown> = {};
 
     // Process non-entry files first, topologically sorted.
     const nonEntryFiles = Object.keys(files).filter(
@@ -236,7 +209,7 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
         const src = files[filename];
         let transpiled: string;
         try {
-            transpiled = host().transpileTsx(src);
+            transpiled = Host.transpileTsx(src);
         } catch (e) {
             return {
                 error: `transpile ${filename}: ${e instanceof Error ? e.message : String(e)}`,
@@ -252,18 +225,15 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
             };
         }
 
-        const moduleName = moduleKey(filename);
-        const wrappedJs = [
-            `globalThis.__tur_modules["${moduleName}"] = (function() {`,
-            `var exports = {};`,
+        const body = [
+            "var exports = {};",
             rewritten.source,
             ...rewritten.exportedNames.map((n) => `exports.${n} = ${n};`),
-            `return exports;`,
-            `})();`,
+            "return exports;",
         ].join("\n");
 
         try {
-            evalInGlobal(wrappedJs);
+            modules[moduleKey(filename)] = runCaseBody(body, modules);
         } catch (e) {
             return {
                 error: `eval ${filename}: ${e instanceof Error ? e.message : String(e)}`,
@@ -274,7 +244,7 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
     // Process entry file (index.ts).
     let transpiled: string;
     try {
-        transpiled = host().transpileTsx(entryFile);
+        transpiled = Host.transpileTsx(entryFile);
     } catch (e) {
         return {
             error: `transpile index.ts: ${e instanceof Error ? e.message : String(e)}`,
@@ -290,33 +260,31 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
         };
     }
 
+    let view: unknown;
     try {
-        evalInGlobal(entryJs);
+        view = runCaseBody(entryJs, modules);
     } catch (e) {
         return {
             error: `eval index.ts: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 
-    const comp = g.__tur_case;
-    if (comp == null) {
+    if (view == null) {
         return { error: "case has no default export view" };
     }
-    return { view: comp };
+    return { view };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */
-export function buildHighlightSpans(
-    source: string,
-): Array<{ content: string; color?: unknown }> {
+export function buildHighlightSpans(source: string): SpanData[] {
     let tokens: TokenSpan[] = [];
     try {
-        tokens = host().tokenizeTsx(source);
+        tokens = Host.tokenizeTsx(source);
     } catch {
         return [{ content: source, color: code.fg }];
     }
 
-    const spans: Array<{ content: string; color?: unknown }> = [];
+    const spans: SpanData[] = [];
     let pos = 0;
     for (const t of tokens) {
         if (t.start > pos) {
@@ -350,7 +318,7 @@ function topoSort(
         const src = allFiles[name] ?? "";
         const d = new Set<string>();
         try {
-            const ast = host().generateAst(src);
+            const ast = Host.generateAst(src);
             for (const node of ast) {
                 if (node.kind === "import" && node.source) {
                     const dep = fileKey(node.source);
@@ -379,3 +347,7 @@ function topoSort(
     }
     return result;
 }
+
+// Silence unused-import warnings for Net (referenced only inside generated
+// case bodies via the `runCaseBody` injection, not directly here).
+void Net;

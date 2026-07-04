@@ -109,11 +109,11 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.borrow_mut().app.load_js(&source)
+        self.inner.borrow_mut().app.load_module(&source)
     }
 
     pub fn load_bundle_raw(&self, source: &str) -> Result<(), TurError> {
-        self.inner.borrow_mut().app.load_js(source)
+        self.inner.borrow_mut().app.load_module(source)
     }
 
     pub fn element_tree(&self) -> NodeTree {

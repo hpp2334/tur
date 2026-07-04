@@ -7,15 +7,14 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-const T = globalThis.__tur;
-const ctx = T.__ctx;
+import { render, ScrollView, InputEdgy } from "builtin:tur/core";
 const lines = [];
 for (let i = 0; i < 30; i++) lines.push("line " + i);
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
-T.render(ctx, T.ScrollView(ctx, {
+render(ScrollView({
     queryKey: ["scroll"],
-    child: T.InputEdgy(ctx, {
+    child: InputEdgy({
         controller: globalThis.__ctrl,
         multiline: true,
         fontSize: 14,
@@ -35,7 +34,7 @@ fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
 #[test]
 fn caret_into_view_scrolls_to_caret() {
     let mut app = TurTestApp::new(300.0, 200.0).unwrap();
-    app.load_bundle_source(CARET_SCROLL_BUNDLE).unwrap();
+    app.eval_module_source(CARET_SCROLL_BUNDLE).unwrap();
     app.render();
 
     let sv_id = app.query_element(&["scroll"]).unwrap();

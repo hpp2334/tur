@@ -1,6 +1,6 @@
 // tur-demo — thin browser wrapper. Loads the tur WASM (which registers the
 // swc-backed `__turHost` compiler services on creation), then fetches the
-// `tur-demo-impl` bundle and evaluates it via `load_and_run_js`. The entire
+// `tur-demo-impl` bundle and evaluates it via `loadAndRunModule`. The entire
 // playground UI (sidebar / editor / viewer) lives in tur-demo-impl and is
 // rendered by tur itself.
 
@@ -64,7 +64,7 @@ async function main(): Promise<void> {
             throw new Error(`failed to fetch impl.js: ${resp.status}`);
         const bundle = await resp.text();
 
-        (app as { load_and_run_js: (s: string) => void }).load_and_run_js(
+        (app as { loadAndRunModule: (s: string) => void }).loadAndRunModule(
             bundle,
         );
         if (status) status.remove();

@@ -1,5 +1,6 @@
 import {
     BorderPosition,
+    type Brush,
     Color,
     Container,
     derive,
@@ -7,13 +8,13 @@ import {
     PointerInteract,
     source,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);
 const gray = Color.rgba(226, 232, 240, 255);
-const color$ = derive((g) => (g(checked$) ? green : undefined));
-const borderColor$ = derive((g) => (g(checked$) ? green : gray));
+const color$ = derive((ctx) => (ctx.get(checked$) ? green : undefined));
+const borderColor$ = derive((ctx) => (ctx.get(checked$) ? green : gray));
 
 export default view(() =>
     Container({
@@ -27,7 +28,7 @@ export default view(() =>
                     width: 40,
                     height: 40,
                     borderRadius: 8,
-                    color: color$,
+                    color: color$ as unknown as Brush,
                     borderWidth: 2,
                     borderColor: borderColor$,
                     borderPosition: BorderPosition.Center,

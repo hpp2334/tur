@@ -5,7 +5,7 @@ import {
     Expanded,
     Row,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // Test: Row with crossAlignment=Stretch should give non-flex children the
 // row's full height, even when those children have no explicit height prop.

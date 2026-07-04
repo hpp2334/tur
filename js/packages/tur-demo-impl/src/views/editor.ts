@@ -4,7 +4,7 @@ import {
     createScrollController,
     derive,
     Each,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     InputEdgy,
@@ -17,7 +17,7 @@ import {
     ScrollView,
     set,
     source,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import {
     editorCtrl,
     editorUndo,
@@ -27,7 +27,7 @@ import {
 } from "../state";
 import { tokens } from "../theme/tokens";
 
-const editorInput: EdgyElement = InputEdgy({
+const editorInput: Element = InputEdgy({
     controller: editorCtrl,
     undoController: editorUndo,
     multiline: true,
@@ -42,7 +42,7 @@ const editorInput: EdgyElement = InputEdgy({
 
 /** Per-instance hover state for the scrollbar — recreated every time the
  *  editor subtree rebuilds (so the source lives inside the factory). */
-function scrollableEditor(): EdgyElement {
+function scrollableEditor(): Element {
     // A fresh controller per build so it binds to the right scroll-view node
     // whenever the case (and thus the subtree) is rebuilt.
     const controller = createScrollController();
@@ -78,7 +78,7 @@ function scrollableEditor(): EdgyElement {
     });
 }
 
-export function Editor(): EdgyElement {
+export function Editor(): Element {
     return Container({
         color: tokens.bg.code,
         padding: 12,

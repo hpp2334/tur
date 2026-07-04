@@ -4,21 +4,21 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
-    type EdgyElement,
+    type Element,
     Expanded,
     Stack,
     Switch,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";
 import { hasHttp, view$ } from "./state";
 import { COLORS } from "./theme";
 
-/** Capability guard: under the native engine `__tur.request` is absent, so the
- *  whole viewer is replaced with a short notice. */
-function Unsupported(): EdgyElement {
+/** Capability guard: the viewer needs the playground's HTTP module; if it is
+ *  somehow absent the whole viewer is replaced with a short notice. */
+function Unsupported(): Element {
     return Container({
         padding: 40,
         alignment: Alignment.Center,
@@ -32,7 +32,7 @@ function Unsupported(): EdgyElement {
     });
 }
 
-function Body(): EdgyElement {
+function Body(): Element {
     return Switch({
         value: view$,
         cases: [

@@ -8,7 +8,7 @@ import {
     set,
     source,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // Reactive width of the outer container. Exposed to Rust tests via globalThis
 // so the test can change it without a click (a click would mark extra nodes

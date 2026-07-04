@@ -3,7 +3,7 @@ import {
     createTextEditingController,
     InputEdgy,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const ctrl = createTextEditingController({});
 

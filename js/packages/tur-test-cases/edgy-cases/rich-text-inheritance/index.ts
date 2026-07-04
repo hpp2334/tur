@@ -1,4 +1,4 @@
-import { Color, Text, view } from "@tur/edgy";
+import { Color, Text, view } from "builtin:tur/core";
 
 export default view(() =>
     Text({

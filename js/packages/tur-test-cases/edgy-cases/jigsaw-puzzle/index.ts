@@ -8,7 +8,7 @@ import {
     CrossAxisAlignment,
     createAnimationController,
     derive,
-    type EdgyElement,
+    type Element,
     Expanded,
     get,
     MainAxisAlignment,
@@ -24,7 +24,7 @@ import {
     Text,
     Transform,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.
@@ -144,7 +144,7 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-function pieceColor(slot: number, placed: boolean): unknown {
+function pieceColor(slot: number, placed: boolean): Color {
     const hue = (slot * 47) % 360;
     // Placed pieces are dimmer (lower saturation/lightness) so the user can
     // tell at a glance which pieces are locked in.
@@ -281,7 +281,7 @@ function pieceById(id: number): Piece {
     return get(pieces$)[id];
 }
 
-function makePiece(id: number): EdgyElement {
+function makePiece(id: number): Element {
     return Positioned({
         left: derive(() => pieceById(id).x),
         top: derive(() => pieceById(id).y),
@@ -335,7 +335,7 @@ function makePiece(id: number): EdgyElement {
     });
 }
 
-function slotGhost(slot: number): EdgyElement {
+function slotGhost(slot: number): Element {
     const pos = slotToPos(slot, BOARD_X, BOARD_Y);
     return Positioned({
         left: pos.x,
@@ -361,7 +361,7 @@ function slotGhost(slot: number): EdgyElement {
     });
 }
 
-function BoardBackground(): EdgyElement {
+function BoardBackground(): Element {
     return Positioned({
         left: BOARD_X - GAP / 2,
         top: BOARD_Y - GAP / 2,
@@ -381,7 +381,7 @@ function BoardBackground(): EdgyElement {
     });
 }
 
-function TrayBackground(): EdgyElement {
+function TrayBackground(): Element {
     return Positioned({
         left: TRAY_X - GAP / 2,
         top: TRAY_Y - GAP / 2,
@@ -398,7 +398,7 @@ function TrayBackground(): EdgyElement {
     });
 }
 
-function TopBar(): EdgyElement {
+function TopBar(): Element {
     // Single Positioned spans the full width; Row with SpaceBetween pushes
     // Shuffle to the left and the HUD counter to the right. (Positioned with
     // only `right` set is not honored by the engine — needs `left` too, so
@@ -455,7 +455,7 @@ function TopBar(): EdgyElement {
     });
 }
 
-function WinBanner(): EdgyElement {
+function WinBanner(): Element {
     return Positioned({
         left: 0,
         right: 0,

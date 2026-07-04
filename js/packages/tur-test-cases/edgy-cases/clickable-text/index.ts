@@ -7,7 +7,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const content$ = source("before");
 
@@ -18,7 +18,7 @@ export default view(() =>
             PointerInteract({
                 onClick: mutate(({ set }, _ev) => set(content$, "after")),
                 child: Text({
-                    text: derive((g) => g(content$)),
+                    text: derive((ctx) => ctx.get(content$)),
                     queryKey: ["click-text"],
                 }),
             }),

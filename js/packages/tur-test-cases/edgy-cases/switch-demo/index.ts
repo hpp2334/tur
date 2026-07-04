@@ -15,7 +15,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const tab$ = source("red");
 

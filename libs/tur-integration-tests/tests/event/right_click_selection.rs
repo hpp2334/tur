@@ -3,11 +3,11 @@ use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-    const ctx = globalThis.__tur.__ctx;
-    const controller = globalThis.__tur.createTextEditingController(ctx, {});
-    globalThis.__tur.render(ctx, globalThis.__tur.Container(ctx, {
+    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/core";
+    const controller = createTextEditingController({});
+    render(Container({
         children: [
-            globalThis.__tur.InputEdgy(ctx, {
+            InputEdgy({
                 controller: controller,
                 fontSize: 14,
                 width: 200,
@@ -60,7 +60,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 #[test]
 fn right_click_inside_selection_preserves_selection() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(INPUT_BUNDLE).unwrap();
+    app.eval_module_source(INPUT_BUNDLE).unwrap();
     app.render();
 
     let input_id = find_editable(&app);
@@ -108,7 +108,7 @@ fn right_click_inside_selection_preserves_selection() {
 #[test]
 fn right_click_outside_selection_moves_caret() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(INPUT_BUNDLE).unwrap();
+    app.eval_module_source(INPUT_BUNDLE).unwrap();
     app.render();
 
     let input_id = find_editable(&app);
@@ -155,7 +155,7 @@ fn right_click_outside_selection_moves_caret() {
 #[test]
 fn left_click_inside_selection_collapses() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(INPUT_BUNDLE).unwrap();
+    app.eval_module_source(INPUT_BUNDLE).unwrap();
     app.render();
 
     let input_id = find_editable(&app);

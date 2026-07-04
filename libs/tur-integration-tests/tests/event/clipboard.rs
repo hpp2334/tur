@@ -59,11 +59,11 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single InputEdgy at the top-left of the
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
-    const ctx = globalThis.__tur.__ctx;
-    const controller = globalThis.__tur.createTextEditingController(ctx, {});
-    globalThis.__tur.render(ctx, globalThis.__tur.Container(ctx, {
+    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/core";
+    const controller = createTextEditingController({});
+    render(Container({
         children: [
-            globalThis.__tur.InputEdgy(ctx, {
+            InputEdgy({
                 controller: controller,
                 fontSize: 14,
                 width: 200,
@@ -76,7 +76,7 @@ const INPUT_BUNDLE: &str = r#"
 
 fn setup_focused_input_with(text: &str) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle_source(INPUT_BUNDLE).unwrap();
+    app.eval_module_source(INPUT_BUNDLE).unwrap();
     app.render();
 
     let input_id = find_editable_under(&app, &["input"]);

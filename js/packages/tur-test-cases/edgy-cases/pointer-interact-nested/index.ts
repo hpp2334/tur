@@ -11,7 +11,7 @@ import {
     source,
     Text,
     view,
-} from "@tur/edgy";
+} from "builtin:tur/core";
 
 const outerClicks$ = source(0);
 const innerClicks$ = source(0);
@@ -87,14 +87,15 @@ export default view(() =>
             }),
             Text({
                 text: derive(
-                    (g) => `opaque:${g(outerClicks$)}/${g(innerClicks$)}`,
+                    (ctx) =>
+                        `opaque:${ctx.get(outerClicks$)}/${ctx.get(innerClicks$)}`,
                 ),
                 queryKey: ["result-opaque"],
             }),
             Text({
                 text: derive(
-                    (g) =>
-                        `translucent:${g(translucentOuterClicks$)}/${g(translucentInnerClicks$)}`,
+                    (ctx) =>
+                        `translucent:${ctx.get(translucentOuterClicks$)}/${ctx.get(translucentInnerClicks$)}`,
                 ),
                 queryKey: ["result-translucent"],
             }),

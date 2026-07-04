@@ -1,22 +1,15 @@
-import { Color, Column, Container, Expanded, Text, view } from "@tur/edgy";
-
-// `__turHost` is registered by tur-wasm (swc-backed). tur-engine provides the
-// generic `register_host_fn` hook; tur-wasm supplies the compiler impls.
-const host = (
-    globalThis as unknown as {
-        __turHost: {
-            transpileTsx(src: string): string;
-            tokenizeTsx(src: string): Array<{
-                start: number;
-                end: number;
-                kind: number;
-            }>;
-        };
-    }
-).__turHost;
+import {
+    Color,
+    Column,
+    Container,
+    Expanded,
+    Text,
+    view,
+} from "builtin:tur/core";
+import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
 
 const SRC = "const x: number = 42;";
-const OUT = host.transpileTsx(SRC);
+const OUT = transpileTsx(SRC);
 
 // Build colored spans from the tokenizer output.
 const HL = "const y = 1;";
@@ -31,7 +24,7 @@ const KIND_HEX = [
 ];
 const spans: Array<{ content: string; color?: unknown }> = [];
 let pos = 0;
-for (const t of host.tokenizeTsx(HL)) {
+for (const t of tokenizeTsx(HL)) {
     if (t.start > pos) {
         spans.push({ content: HL.slice(pos, t.start) });
     }
@@ -54,7 +47,7 @@ export default view(() =>
                 Column({
                     children: [
                         Text({
-                            text: "transpileTsx (via __turHost bridge):",
+                            text: "transpileTsx (via builtin:tur/host):",
                             fontSize: 13,
                             color: Color.hex("#848da5"),
                         }),
