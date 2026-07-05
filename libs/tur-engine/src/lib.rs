@@ -1,72 +1,46 @@
 pub mod core;
 pub mod elements;
-pub mod handlers;
 pub mod renderer;
 
 pub mod error;
 
+use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::FixedClock;
+use boa_engine::js_string;
+use boa_engine::object::JsObject;
+use boa_engine::property::Attribute;
 use boa_engine::Context;
+use boa_engine::NativeFunction;
 use boa_engine::Source;
-use std::path::Path;
+
 use error::TurError;
 
 use core::app::TurAppInternal;
-use core::bridge::init_bridge;
-use core::bridge::TurJobExecutor;
+use core::bridge::helpers::FnEntry;
+use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
+use core::bridge::{console, dev_tool, reactive, render, timer};
+use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader, TimerState};
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
-use core::platform_api::PlatformApi;
+use core::fonts::FontLoader;
+use core::plugin::{Plugin, PluginContext};
+use core::render::Renderer;
+
 #[cfg(feature = "trace")]
 use core::elements::NodeTreeData;
-use elements::editable_text::EditableTextElement;
 
 pub struct TurApp {
     boa_context: Context,
     internal: TurAppInternal,
     executor: Rc<TurJobExecutor>,
-    module_loader: Rc<core::bridge::TurModuleLoader>,
+    module_loader: Rc<TurModuleLoader>,
 }
 
 impl TurApp {
-    pub fn new(
-        renderer: Box<dyn core::render::Renderer>,
-        font_loader: Box<dyn core::fonts::FontLoader>,
-        platform_api: Box<dyn PlatformApi>,
-    ) -> Result<Self, TurError> {
-        let clock = Rc::new(FixedClock::from_millis(0));
-        let executor = Rc::new(TurJobExecutor::new());
-        let module_loader = core::bridge::TurModuleLoader::new();
-        let mut boa_context = Context::builder()
-            .clock(clock.clone())
-            .job_executor(executor.clone())
-            .module_loader(module_loader.clone())
-            .build()
-            .expect("failed to build boa context");
-
-        let BridgeResult { internal, executor } = init_bridge(
-            &mut boa_context,
-            renderer,
-            font_loader,
-            clock,
-            platform_api,
-            executor,
-            module_loader.clone(),
-        );
-
-        tracing::info!("TurApp initialized");
-
-        Ok(TurApp {
-            boa_context,
-            internal,
-            executor,
-            module_loader,
-        })
-    }
-
     pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
         self.boa_context
@@ -82,13 +56,6 @@ impl TurApp {
         Ok(())
     }
 
-    /// Evaluate `source` as an ES module: parse it, resolve imports via the
-    /// registered module loader (`builtin:tur/core`, `builtin:tur/std`, host modules, …),
-    /// link, evaluate, and drain pending jobs.
-    ///
-    /// Unlike [`load_js`](Self::load_js) (script mode), this supports real
-    /// `import` / `export` syntax — the replacement for the legacy
-    /// `globalThis.__tur` + hand-rewritten module shims.
     pub fn load_module(&mut self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
         let module = boa_engine::Module::parse(
@@ -110,10 +77,6 @@ impl TurApp {
         Ok(())
     }
 
-    /// Evaluate `source` as a short-lived ES module (used for one-off
-    /// snippets that `import` from `builtin:tur/*`). Returns nothing — modules have
-    /// no completion value; callers stash results on `globalThis` and read
-    /// them back via [`eval_js`](Self::eval_js).
     pub fn eval_module(&mut self, source: &str) -> Result<(), TurError> {
         let module = boa_engine::Module::parse(
             Source::from_bytes(source).with_path(Path::new("eval.mjs")),
@@ -146,9 +109,7 @@ impl TurApp {
 
     /// Register a synthetic ES module under `specifier` whose exports are the
     /// given native functions. Embedders (tur-wasm) use this to expose host
-    /// services as importable modules — e.g. `builtin:tur/host`, `builtin:tur/net` —
-    /// replacing the legacy `globalThis.__turHost` / `globalThis.__tur.*`
-    /// globals. JS then does `import { request } from "builtin:tur/net"`.
+    /// services as importable modules — e.g. `builtin:tur/host`.
     pub fn register_host_module(
         &mut self,
         specifier: &str,
@@ -158,10 +119,7 @@ impl TurApp {
             .iter()
             .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
             .collect();
-        let module = core::bridge::module_loader::build_fn_module(
-            &mut self.boa_context,
-            &owned,
-        );
+        let module = build_fn_module(&mut self.boa_context, &owned);
         self.module_loader.register(specifier, module);
         tracing::info!("registered host module {specifier} ({} exports)", owned.len());
         Ok(())
@@ -177,9 +135,6 @@ impl TurApp {
         Ok(())
     }
 
-    /// Briefly expose the boa context so embedder-side callbacks (e.g. the
-    /// resolved `clipboardReadText` callbacks) can be invoked. Used by
-    /// tur-wasm's frame loop after each `spawn_loop_once`.
     pub fn with_boa_context<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
         f(&mut self.boa_context)
     }
@@ -192,16 +147,12 @@ impl TurApp {
             .push(event);
     }
 
-    /// Structured dev-tool snapshot of the root node. Returns `None` if no
-    /// tree is mounted. Children are returned as bare ids; iterate with
-    /// `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
         let tree = self.internal.js_context.element_tree.borrow();
         let root_id = tree.root_element_id()?;
         tree.dev_tool_node(root_id.into())
     }
 
-    /// Structured dev-tool snapshot of an arbitrary node by id.
     pub fn dev_tool_get_element(
         &self,
         id: core::element::NodeId,
@@ -209,11 +160,6 @@ impl TurApp {
         self.internal.js_context.element_tree.borrow().dev_tool_node(id)
     }
 
-    /// Returns any text written to the clipboard via `AppEvent::ClipboardWrite`
-    /// since the last call. Embedders (tur-wasm) drain this each frame and
-    /// forward the text to the real system clipboard (e.g.
-    /// `navigator.clipboard.writeText`). `None` means no clipboard write is
-    /// pending.
     pub fn take_clipboard_write(&self) -> Option<String> {
         self.internal
             .app_context
@@ -262,20 +208,13 @@ impl TurApp {
 
         let node = tree.get_element(focused_id)?;
         let element = node.element.as_ref()?;
-        let editable_el = element.cast::<EditableTextElement>()?;
-        let layout_data = editable_el.cached_layout.as_ref()?;
-
-        let cursor_byte = editable_el.cursor_position();
-
-        let (cursor_x, _) = layout_data.cursor_xy_at(cursor_byte);
-        let line_idx = layout_data.line_index_for_byte(cursor_byte);
-        let line_info = &layout_data.line_infos[line_idx];
+        let (cx, cy, cw, ch) = element.cursor_rect_relative()?;
 
         Some((
-            abs_x + cursor_x as f64,
-            abs_y + line_info.top as f64,
-            2.0,
-            line_info.height as f64,
+            abs_x + cx,
+            abs_y + cy,
+            cw,
+            ch,
         ))
     }
 
@@ -296,4 +235,163 @@ impl TurApp {
     }
 }
 
-use core::bridge::BridgeResult;
+pub struct TurEngine;
+
+impl TurEngine {
+    pub fn builder() -> TurEngineBuilder {
+        TurEngineBuilder::new()
+    }
+}
+
+type HostExports = Vec<(String, NativeFunction, usize)>;
+
+pub struct TurEngineBuilder {
+    renderer: Option<Box<dyn Renderer>>,
+    font_loader: Option<Box<dyn FontLoader>>,
+    plugins: Vec<Box<dyn Plugin>>,
+    host_modules: Vec<(String, HostExports)>,
+}
+
+impl Default for TurEngineBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TurEngineBuilder {
+    pub fn new() -> Self {
+        Self {
+            renderer: None,
+            font_loader: None,
+            plugins: Vec::new(),
+            host_modules: Vec::new(),
+        }
+    }
+
+    pub fn renderer(mut self, renderer: Box<dyn Renderer>) -> Self {
+        self.renderer = Some(renderer);
+        self
+    }
+
+    pub fn font_loader(mut self, font_loader: Box<dyn FontLoader>) -> Self {
+        self.font_loader = Some(font_loader);
+        self
+    }
+
+    pub fn plugin<P: Plugin + 'static>(mut self, plugin: P) -> Self {
+        self.plugins.push(Box::new(plugin));
+        self
+    }
+
+    pub fn host_module(
+        mut self,
+        specifier: impl Into<String>,
+        exports: HostExports,
+    ) -> Self {
+        self.host_modules.push((specifier.into(), exports));
+        self
+    }
+
+    pub fn build(self) -> Result<TurApp, TurError> {
+        let renderer = self.renderer.expect("renderer must be set");
+        let font_loader = self
+            .font_loader
+            .expect("font_loader must be set");
+
+        let clock = Rc::new(FixedClock::from_millis(0));
+        let executor = Rc::new(TurJobExecutor::new());
+        let module_loader = TurModuleLoader::new();
+        let mut boa_context = Context::builder()
+            .clock(clock.clone())
+            .job_executor(executor.clone())
+            .module_loader(module_loader.clone())
+            .build()
+            .expect("failed to build boa context");
+
+        let internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock);
+
+        let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
+        let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
+
+        let mut core_fns: Vec<FnEntry> = Vec::new();
+        core_fns.extend(reactive::fns());
+        core_fns.extend(render::fns());
+        let core_module = build_native_module(
+            &mut boa_context,
+            opaque.object().clone().into(),
+            &core_fns,
+            &[],
+        );
+        module_loader.register("builtin:tur/core", core_module);
+
+        let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
+        let et_fn = bound_native(
+            &mut boa_context,
+            ctx_val.clone(),
+            dev_tool::tur_dev_tool_element_tree,
+            0,
+            "elementTree",
+        );
+        let ge_fn = bound_native(
+            &mut boa_context,
+            ctx_val.clone(),
+            dev_tool::tur_dev_tool_get_element,
+            1,
+            "getElement",
+        );
+        let _ = dt_obj.create_data_property(
+            js_string!("elementTree"),
+            boa_engine::JsValue::from(et_fn),
+            &mut boa_context,
+        );
+        let _ = dt_obj.create_data_property(
+            js_string!("getElement"),
+            boa_engine::JsValue::from(ge_fn),
+            &mut boa_context,
+        );
+        let _ = boa_context
+            .register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
+
+        let timer_state = Rc::new(RefCell::new(TimerState::new()));
+        timer::register_timer_globals(
+            &mut boa_context,
+            timer_state,
+            internal.needs_draw.clone(),
+        );
+        console::register_console_globals(&mut boa_context);
+
+        for (specifier, exports) in &self.host_modules {
+            let owned: Vec<(&str, NativeFunction, usize)> = exports
+                .iter()
+                .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
+                .collect();
+            let module = build_fn_module(&mut boa_context, &owned);
+            module_loader.register(specifier, module);
+            tracing::info!("registered host module {specifier} ({} exports)", owned.len());
+        }
+
+        for plugin in &self.plugins {
+            let mut plugin_ctx = PluginContext {
+                boa: &mut boa_context,
+                loader: module_loader.clone(),
+                js_ctx_value: ctx_val.clone(),
+                js_ctx: internal.js_context.clone(),
+                app: internal.app_context.clone(),
+                needs_draw: internal.needs_draw.clone(),
+            };
+            plugin.register(&mut plugin_ctx)?;
+            if let Some(f) = plugin.cursor_output() {
+                internal.app_context.borrow_mut().shell.set_cursor_output(f);
+            }
+        }
+
+        tracing::info!("TurApp initialized ({} plugins)", self.plugins.len());
+
+        Ok(TurApp {
+            boa_context,
+            internal,
+            executor,
+            module_loader,
+        })
+    }
+}

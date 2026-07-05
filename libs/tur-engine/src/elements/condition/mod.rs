@@ -1,4 +1,4 @@
 mod element;
-pub(crate) mod bridge;
+pub mod bridge;
 
 pub use element::{ConditionView, ConditionFragment, MountedBranch};

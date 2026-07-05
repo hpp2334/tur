@@ -12,13 +12,13 @@ use crate::core::element::ElementNodeId;
 use crate::core::view::{View, ViewHandle};
 
 /// Native function pointer type used by the bridge table.
-pub(crate) type Ptr = boa_engine::native_function::NativeFunctionPointer;
+pub type Ptr = boa_engine::native_function::NativeFunctionPointer;
 
 /// A bridge function table entry: `(js_name, length, native_fn_pointer)`.
-pub(crate) type FnEntry = (&'static str, usize, Ptr);
+pub type FnEntry = (&'static str, usize, Ptr);
 
 /// A constant module export entry: `(js_name, value)`.
-pub(crate) type ConstEntry = (&'static str, JsValue);
+pub type ConstEntry = (&'static str, JsValue);
 
 /// A JS-opaque handle wrapping an [`ElementNodeId`], used by controllers
 /// (`ScrollController`, `TextEditingController`, …) and `requestFocus` to
@@ -30,7 +30,7 @@ pub struct TurNodeHandle {
 }
 
 /// Decode the bound bridge ctx (prepended by `bound_native`) from `args[0]`.
-pub(crate) fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
+pub fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
     let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message("expected TurJsContext as first argument"))
     })?;
@@ -41,7 +41,7 @@ pub(crate) fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
 }
 
 /// Coerce `args[idx]` to a `JsObject`, treating `null`/`undefined` as `{}`.
-pub(crate) fn require_props_object(
+pub fn require_props_object(
     args: &[JsValue],
     idx: usize,
     context: &mut Context,
@@ -58,7 +58,7 @@ pub(crate) fn require_props_object(
 }
 
 /// Wrap a built `View` spec as a JS-opaque `ViewHandle` value.
-pub(crate) fn wrap_view(spec: Rc<dyn View>, context: &mut Context) -> JsValue {
+pub fn wrap_view(spec: Rc<dyn View>, context: &mut Context) -> JsValue {
     let opaque = BoaOpaque::new(ViewHandle::new(spec), context);
     opaque.object().clone().into()
 }

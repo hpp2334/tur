@@ -6,7 +6,7 @@ use boa_engine::{Context, JsResult, JsValue};
 
 use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![("MouseRegion", 2, tur_mouse_region as Ptr)]
 }
 

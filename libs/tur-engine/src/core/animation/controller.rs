@@ -27,7 +27,7 @@ pub enum AnimationStatus {
 /// `"infinite"`. Internally we model both as a single enum so the tick
 /// math has a single point that gates completion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RepeatMode {
+pub enum RepeatMode {
     /// Play exactly `n` iterations, then transition to `Completed`.
     Finite(u64),
     /// Loop forever. `tick_compute` never sets status to `Completed`;
@@ -45,23 +45,23 @@ impl Default for RepeatMode {
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct AnimationController {
-    pub(crate) duration_ms: u64,
-    pub(crate) curve: Curve,
-    pub(crate) value: f64,
-    pub(crate) status: AnimationStatus,
-    pub(crate) repeat_mode: RepeatMode,
-    pub(crate) current_iteration: u64,
+    pub duration_ms: u64,
+    pub curve: Curve,
+    pub value: f64,
+    pub status: AnimationStatus,
+    pub repeat_mode: RepeatMode,
+    pub current_iteration: u64,
     /// The `value` captured when this animation segment started (set by
     /// `forward`/`reverse`/`resume`/`seek`). Used by `tick` to compute the
     /// current value relative to the start, which makes `speed`, `seek`,
     /// and `pause`/`resume` work correctly.
-    pub(crate) value_at_start: f64,
+    pub value_at_start: f64,
     /// Time multiplier (default 1.0). Mutated by `set_speed`. Higher values
     /// play faster; 0.5 = half speed, 2.0 = double speed.
-    pub(crate) speed: f64,
+    pub speed: f64,
     /// The direction the controller was traveling before `pause()` — used
     /// by `resume()` to pick up where it left off.
-    pub(crate) paused_direction: Option<AnimationStatus>,
+    pub paused_direction: Option<AnimationStatus>,
     /// Atom-backed callback handle for `onTick`. Resolved via the reactive
     /// store at flush time (just like every other event handler), so the
     /// callback runs after all `RefMut` borrows are released.
@@ -171,7 +171,7 @@ impl AnimationController {
     ///
     /// Returns `true` if the controller ticked (active and had a start time),
     /// `false` if it was idle.
-    pub(crate) fn tick_compute(&mut self, now_ms: u64) -> bool {
+    pub fn tick_compute(&mut self, now_ms: u64) -> bool {
         if !self.is_active() {
             return false;
         }

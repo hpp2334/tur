@@ -1,4 +1,4 @@
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::focus::FocusManager;
 
@@ -15,11 +15,12 @@ pub fn find_focusable_in_path(tree: &NodeTreeData, path: &[ElementNodeId]) -> Op
     None
 }
 
-/// True if the currently-focused element is an `EditableTextElement`.
+/// True if the currently-focused element is an editable text element.
 /// Used to drive caret-blink redraws on idle frames and to expose IME state
 /// to the embedder.
 pub fn focused_is_editable(tree: &NodeTreeData, focus_manager: &FocusManager) -> bool {
-    use crate::elements::EditableTextElement;
+    static EDITABLE_TEXT_KIND: std::sync::LazyLock<ElementKind> =
+        std::sync::LazyLock::new(|| ElementKind::new("tur_editable_text"));
     let Some(focused_id) = focus_manager.focused() else {
         return false;
     };
@@ -29,5 +30,5 @@ pub fn focused_is_editable(tree: &NodeTreeData, focus_manager: &FocusManager) ->
     let Some(ref element) = node.element else {
         return false;
     };
-    element.cast::<EditableTextElement>().is_some()
+    element.kind() == *EDITABLE_TEXT_KIND
 }

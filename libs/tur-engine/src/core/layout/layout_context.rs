@@ -14,7 +14,7 @@ use crate::core::view::{PropValue, Val};
 use crate::elements::ExpandedElement;
 
 pub struct LayoutContext<'a, 'js> {
-    pub(crate) tree: &'a mut NodeTreeData,
+    pub tree: &'a mut NodeTreeData,
     node_id: ElementNodeId,
     font_manager: &'a mut FontManager,
     text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
@@ -24,20 +24,20 @@ pub struct LayoutContext<'a, 'js> {
     /// handle so controllers captured at build time can reach the tree at
     /// event time; `mutation_queue` / `dirty` let built views request
     /// redraws and enqueue mutations.
-    pub(crate) node_tree: NodeTree,
-    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-    pub(crate) dirty: Rc<Cell<bool>>,
+    pub node_tree: NodeTree,
+    pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    pub dirty: Rc<Cell<bool>>,
     /// Read-only JS engine face. Held so `read_val` can (lazily) recompute
     /// stale derived atoms; this is the only JS access layout has, and the face
     /// exposes **only** `read` — no `set` / mutation is reachable from layout.
     /// `'js` is the lifetime of the borrowed JS `Context` (independent of the
     /// tree/manager borrow `'a` so the face can be re-borrowed recursively).
-    pub(crate) js: &'a mut ReactiveReadJsContext<'js>,
+    pub js: &'a mut ReactiveReadJsContext<'js>,
 }
 
 impl<'a, 'js> LayoutContext<'a, 'js> {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub fn new(
         tree: &'a mut NodeTreeData,
         node_id: ElementNodeId,
         font_manager: &'a mut FontManager,

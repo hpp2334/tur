@@ -7,7 +7,7 @@ use tur_shared::Axis;
 
 use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![
         ("Column", 2, tur_column as Ptr),
         ("Row", 2, tur_row as Ptr),

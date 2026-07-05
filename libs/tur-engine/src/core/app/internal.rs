@@ -14,10 +14,10 @@ use crate::core::render::Renderer;
 use crate::error::TurError;
 
 pub struct TurAppInternal {
-    pub(crate) js_context: TurJsContext,
-    pub(crate) app_context: Rc<RefCell<TurAppContext>>,
-    pub(crate) needs_draw: Rc<Cell<bool>>,
-    pub(crate) executor: Rc<TurJobExecutor>,
+    pub js_context: TurJsContext,
+    pub app_context: Rc<RefCell<TurAppContext>>,
+    pub needs_draw: Rc<Cell<bool>>,
+    pub executor: Rc<TurJobExecutor>,
 }
 
 impl TurAppInternal {
@@ -26,7 +26,6 @@ impl TurAppInternal {
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<FixedClock>,
-        platform_api: Box<dyn crate::core::platform_api::PlatformApi>,
     ) -> Self {
         use crate::core::elements::NodeTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
@@ -59,7 +58,6 @@ impl TurAppInternal {
             renderer,
             font_loader,
             clock,
-            platform_api,
         );
 
         let needs_draw = Rc::new(Cell::new(false));

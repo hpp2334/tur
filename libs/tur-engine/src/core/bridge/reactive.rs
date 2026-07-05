@@ -8,7 +8,7 @@ use crate::core::bridge::BoaOpaque;
 use crate::core::reactive::{extract_handle, AtomHandle, AtomKind, Mutation, Source};
 
 /// Bridge function table entries for the reactive primitives domain.
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![
         ("source", 2, tur_source as Ptr),
         ("derive", 2, tur_derive as Ptr),

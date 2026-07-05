@@ -70,7 +70,7 @@ impl View for MouseRegionView {
 pub struct MouseRegionElement {
     pub view: MouseRegionView,
     behavior: HitTestBehavior,
-    pub(crate) cursor: Option<Cursor>,
+    pub cursor: Option<Cursor>,
 }
 
 impl MouseRegionElement {

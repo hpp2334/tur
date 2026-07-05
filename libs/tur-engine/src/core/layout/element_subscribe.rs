@@ -37,7 +37,7 @@ pub struct SubscribeCx {
 }
 
 impl SubscribeCx {
-    pub(crate) fn new(store: SubscriberIndexStore, node: SubscriberId) -> Self {
+    pub fn new(store: SubscriberIndexStore, node: SubscriberId) -> Self {
         SubscribeCx {
             store,
             node,

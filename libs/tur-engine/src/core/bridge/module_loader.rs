@@ -162,7 +162,7 @@ pub fn build_fn_module(
 
 /// Build a single bound native function object: `f(args...)` ≡
 /// `ptr(ctx_value, args...)`.
-pub(crate) fn bound_native(
+pub fn bound_native(
     context: &mut Context,
     ctx_value: JsValue,
     ptr: NativeFunctionPointer,

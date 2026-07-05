@@ -51,7 +51,7 @@ impl View for StackView {
 
 pub struct StackElement {
     pub view: StackView,
-    pub(crate) computed_size: Option<Size>,
+    pub computed_size: Option<Size>,
 }
 
 impl Lifecycle for StackElement {}

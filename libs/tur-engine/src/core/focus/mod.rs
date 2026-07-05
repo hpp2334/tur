@@ -40,13 +40,13 @@ impl EventArg for BlurEvent {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum FocusChange {
+pub enum FocusChange {
     Focus(ElementNodeId),
     Blur(ElementNodeId),
 }
 
 impl FocusChange {
-    pub(crate) fn id(&self) -> ElementNodeId {
+    pub fn id(&self) -> ElementNodeId {
         match self {
             FocusChange::Focus(id) | FocusChange::Blur(id) => *id,
         }
@@ -94,7 +94,7 @@ impl FocusManager {
         }
     }
 
-    pub(crate) fn drain_pending(&mut self) -> Vec<FocusChange> {
+    pub fn drain_pending(&mut self) -> Vec<FocusChange> {
         std::mem::take(&mut self.pending)
     }
 
@@ -107,7 +107,7 @@ impl FocusManager {
     /// `clear_focus`: those only record a pending `FocusChange` (so they stay
     /// free of tree/queue borrows and can run inside element gesture
     /// handlers); this method resolves the changes once per frame.
-    pub(crate) fn flush_pending(
+    pub fn flush_pending(
         &mut self,
         tree: &crate::core::elements::NodeTreeData,
         queue: &mut crate::core::edgy_event::PendingMutationInvocationQueue,

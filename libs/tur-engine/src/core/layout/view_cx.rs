@@ -24,15 +24,15 @@ use crate::core::view::ViewCx;
 // ---------------------------------------------------------------------------
 
 pub struct LayoutViewCx<'a> {
-    pub(crate) tree: &'a mut NodeTreeData,
-    pub(crate) node_tree: NodeTree,
-    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-    pub(crate) dirty: Rc<Cell<bool>>,
+    pub tree: &'a mut NodeTreeData,
+    pub node_tree: NodeTree,
+    pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    pub dirty: Rc<Cell<bool>>,
 }
 
 impl<'a> LayoutViewCx<'a> {
     #[allow(clippy::too_many_arguments, dead_code)]
-    pub(crate) fn new(
+    pub fn new(
         tree: &'a mut NodeTreeData,
         node_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
