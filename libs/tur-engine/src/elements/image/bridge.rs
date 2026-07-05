@@ -7,7 +7,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 use crate::core::resource::ImageResource;
 
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![
         ("ImageEdgy", 2, tur_image_edgy as Ptr),
         ("createImageResource", 2, tur_create_image_resource as Ptr),

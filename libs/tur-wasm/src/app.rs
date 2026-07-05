@@ -31,14 +31,13 @@ struct WasmState {
     _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
-/// Embedder-side `PlatformApi`: the engine pushes the resolved cursor here during
-/// `apply_changes`, and we apply it straight to the host canvas. This replaces
-/// the old per-frame `take_current_cursor` poll.
-struct WasmPlatformApi {
+/// Embedder-side `CursorPlatform`: the engine pushes the resolved cursor here
+/// during the frame loop, and we apply it to the host canvas.
+struct WasmCursorPlatform {
     canvas: web_sys::HtmlCanvasElement,
 }
 
-impl tur_engine::core::platform_api::PlatformApi for WasmPlatformApi {
+impl tur_std::CursorPlatform for WasmCursorPlatform {
     fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
@@ -543,37 +542,6 @@ fn build_file_io_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)>
     ]
 }
 
-/// Register host services as ES modules only (no globals).
-///
-/// - `builtin:tur/host`: swc compiler (`transpileTsx` / `tokenizeTsx` /
-///   `generateAst`), clipboard (`clipboardWriteText` / `clipboardReadText`),
-///   and file IO (`pickFile` / `saveFile`).
-/// - `builtin:tur/net`: HTTP `request` (reqwest-wasm).
-///
-/// JS imports them directly: `import { transpileTsx } from "builtin:tur/host"`.
-fn register_all_services(app: &mut TurApp) {
-    let host_fns = build_host_service_fns();
-    let file_fns = build_file_io_fns();
-    let net_fns = build_net_fns();
-
-    let host_exports: Vec<(String, boa_engine::NativeFunction, usize)> = host_fns
-        .into_iter()
-        .chain(file_fns)
-        .map(|(n, f, l)| (n.to_string(), f, l))
-        .collect();
-    if let Err(e) = app.register_host_module("builtin:tur/host", host_exports) {
-        tracing::error!("failed to register builtin:tur/host module: {e}");
-    }
-
-    let net_exports: Vec<(String, boa_engine::NativeFunction, usize)> = net_fns
-        .into_iter()
-        .map(|(n, f, l)| (n.to_string(), f, l))
-        .collect();
-    if let Err(e) = app.register_host_module("builtin:tur/net", net_exports) {
-        tracing::error!("failed to register builtin:tur/net module: {e}");
-    }
-}
-
 thread_local! {
     /// Pending (callback, resolved text) pairs queued by `clipboardReadText`.
     /// Drained by `TurWasmApp::drain_clipboard_reads` from within the frame
@@ -789,19 +757,34 @@ impl TurWasmApp {
                 dpr,
             );
 
-            let mut app = TurApp::new(
-                Box::new(renderer),
-                Box::new(PresetFontLoader::new()),
-                Box::new(WasmPlatformApi {
-                    canvas: canvas.clone(),
-                }),
-            )
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let host_fns = build_host_service_fns();
+            let file_fns = build_file_io_fns();
+            let net_fns = build_net_fns();
 
-            // Register host services (swc compiler, file IO, HTTP) both as
-            // the legacy `globalThis.__turHost.*` / `globalThis.__tur.request`
-            // globals AND as the `builtin:tur/host` / `builtin:tur/net` ES modules.
-            register_all_services(&mut app);
+            let host_exports: Vec<(String, boa_engine::NativeFunction, usize)> = host_fns
+                .into_iter()
+                .chain(file_fns)
+                .map(|(n, f, l)| (n.to_string(), f, l))
+                .collect();
+            let net_exports: Vec<(String, boa_engine::NativeFunction, usize)> = net_fns
+                .into_iter()
+                .map(|(n, f, l)| (n.to_string(), f, l))
+                .collect();
+
+            let mut app = tur_engine::TurEngine::builder()
+                .renderer(Box::new(renderer))
+                .font_loader(Box::new(PresetFontLoader::new()))
+                .plugin(
+                    tur_std::TurStdPlugin::builder()
+                        .cursor(WasmCursorPlatform {
+                            canvas: canvas.clone(),
+                        })
+                        .build(),
+                )
+                .host_module("builtin:tur/host", host_exports)
+                .host_module("builtin:tur/net", net_exports)
+                .build()
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
             app.push_event(AppEvent::Resize {
                 logical_width,

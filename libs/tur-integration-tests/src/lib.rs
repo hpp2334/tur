@@ -13,7 +13,8 @@ use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::TurApp;
+use tur_engine::{TurApp, TurEngine};
+use tur_std::{CursorPlatform, TurStdPlugin};
 use tur_shared::{Cursor, MouseButton, Offset};
 
 pub struct Rect {
@@ -31,8 +32,8 @@ impl Rect {
 
 pub struct TurTestApp {
     inner: TurApp,
-    /// Shared with the `RecordingPlatformApi` installed in the engine. The engine
-    /// pushes cursor changes here (via `PlatformApi::set_cursor`); the harness
+    /// Shared with the `RecordingCursorPlatform` installed in the engine. The engine
+    /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
     /// drains it through `take_current_cursor`.
     cursor_slot: Rc<Cell<Option<Cursor>>>,
     /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
@@ -46,13 +47,17 @@ pub struct TurTestApp {
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
-        let mut inner = TurApp::new(
-            Box::new(NoopRenderer::new()),
-            Box::new(PresetFontLoader::new()),
-            Box::new(RecordingPlatformApi {
-                last: cursor_slot.clone(),
-            }),
-        )?;
+        let mut inner = TurEngine::builder()
+            .renderer(Box::new(NoopRenderer::new()))
+            .font_loader(Box::new(PresetFontLoader::new()))
+            .plugin(
+                TurStdPlugin::builder()
+                    .cursor(RecordingCursorPlatform {
+                        last: cursor_slot.clone(),
+                    })
+                    .build(),
+            )
+            .build()?;
         inner.push_event(AppEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
@@ -377,7 +382,7 @@ impl TurTestApp {
     }
 
     /// Returns the most recent cursor pushed by the engine since the last
-    /// call. The engine pushes cursor changes through the `RecordingPlatformApi`
+    /// call. The engine pushes cursor changes through the `RecordingCursorPlatform`
     /// during `apply_changes`; this drains that recording.
     pub fn take_current_cursor(&self) -> Option<Cursor> {
         self.cursor_slot.take()
@@ -429,14 +434,15 @@ impl TurTestApp {
     }
 }
 
-/// Test `PlatformApi` that records the last cursor the engine pushed. Shares its
+/// Test `CursorPlatform` that records the last cursor the engine pushed. Shares its
 /// slot (via `Rc<Cell>`) with [`TurTestApp`], which drains it through
 /// `take_current_cursor`.
-struct RecordingPlatformApi {
+#[derive(Clone)]
+struct RecordingCursorPlatform {
     last: Rc<Cell<Option<Cursor>>>,
 }
 
-impl tur_engine::core::platform_api::PlatformApi for RecordingPlatformApi {
+impl CursorPlatform for RecordingCursorPlatform {
     fn set_cursor(&mut self, cursor: Cursor) {
         self.last.set(Some(cursor));
     }

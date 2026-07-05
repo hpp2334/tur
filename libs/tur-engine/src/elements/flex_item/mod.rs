@@ -1,6 +1,6 @@
 mod element;
 mod layout;
 mod render;
-pub(crate) mod bridge;
+pub mod bridge;
 
 pub use element::{ExpandedElement, ExpandedView};

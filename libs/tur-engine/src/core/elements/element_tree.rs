@@ -16,27 +16,27 @@ use crate::core::shell::PaintShell;
 use crate::core::resource::ResourceMap;
 
 pub struct NodeTreeData {
-    pub(crate) elements: HashMap<ElementNodeId, ElementObject>,
+    pub elements: HashMap<ElementNodeId, ElementObject>,
     /// Control-flow primitives (Each / Condition / Switch). Keyed by id (same
     /// counter as `elements`). Fragments have no `AnyElement` and are never laid
     /// out / painted directly — `flatten_children` splices their children into
     /// the enclosing flex's layout.
-    pub(crate) fragments: HashMap<FragmentNodeId, FragmentHost>,
-    pub(crate) root_id: Option<ElementNodeId>,
-    pub(crate) next_id: u64,
-    pub(crate) store: Store,
+    pub fragments: HashMap<FragmentNodeId, FragmentHost>,
+    pub root_id: Option<ElementNodeId>,
+    pub next_id: u64,
+    pub store: Store,
     /// Cached read-only reactive face; the layout driver wraps this in a
     /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
     /// read atoms, never `set` / mutate.
-    pub(crate) read_face: ReactiveReadStore,
+    pub read_face: ReactiveReadStore,
     /// Element ids inserted since the last lifecycle flush. Drained by the
     /// flush loop, which fires each element's `on_mounted` hook.
-    pub(crate) pending_mounted: Vec<ElementNodeId>,
+    pub pending_mounted: Vec<ElementNodeId>,
     /// Elements removed (taken out) since the last lifecycle flush. Drained by
     /// the flush loop, which fires each element's `before_destroy` hook before
     /// dropping it. Keeping them here (rather than dropping immediately) lets
     /// the hook run with a live element + mutation queue in scope.
-    pub(crate) pending_destroy: Vec<AnyElement>,
+    pub pending_destroy: Vec<AnyElement>,
 }
 
 
@@ -398,7 +398,7 @@ impl NodeTreeData {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn layout<'a, 'js>(
+    pub fn layout<'a, 'js>(
         &'a mut self,
         id: ElementNodeId,
         constraints: &Constraints,
@@ -491,7 +491,7 @@ impl NodeTreeData {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn paint_element(
+    pub fn paint_element(
         &self,
         id: ElementNodeId,
         canvas: &mut dyn Canvas,
@@ -825,7 +825,7 @@ impl fmt::Debug for NodeTreeData {
 
 #[derive(Clone)]
 pub struct NodeTree {
-    pub(crate) data: Rc<RefCell<NodeTreeData>>,
+    pub data: Rc<RefCell<NodeTreeData>>,
 }
 
 impl NodeTree {

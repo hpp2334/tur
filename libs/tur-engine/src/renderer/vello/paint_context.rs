@@ -6,7 +6,7 @@ use vello::peniko::{BlendMode, Brush as PenikoBrush, Fill, ImageData};
 use vello::Scene;
 
 use crate::core::render::Canvas;
-use crate::elements::text::text_layout::TextLayoutData;
+use crate::core::text::text_layout::TextLayoutData;
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,

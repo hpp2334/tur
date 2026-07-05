@@ -11,11 +11,14 @@ use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, Subscr
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
 use crate::core::event::AppImeEvent;
+use crate::core::focus::Focusable;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
+type CursorRectFn = fn(&dyn Any) -> Option<(f64, f64, f64, f64)>;
+type FocusableCastFn = fn(&dyn Any) -> Option<&dyn Focusable>;
 
 pub struct AnyElement {
     inner: Box<dyn Erased>,
@@ -23,7 +26,23 @@ pub struct AnyElement {
     on_gesture: Option<GestureFn>,
     on_wheel: Option<WheelFn>,
     on_ime: Option<ImeFn>,
+    cursor_rect_fn: Option<CursorRectFn>,
+    focusable_fn: Option<FocusableCastFn>,
     has_callbacks: bool,
+}
+
+pub trait ElementCursorRect {
+    fn cursor_rect_relative(&self) -> Option<(f64, f64, f64, f64)>;
+}
+
+fn cursor_rect_dispatch<E: ElementCursorRect + 'static>(
+    any: &dyn Any,
+) -> Option<(f64, f64, f64, f64)> {
+    any.downcast_ref::<E>().and_then(|e: &E| e.cursor_rect_relative())
+}
+
+fn focus_cast_dispatch<E: Focusable + 'static>(any: &dyn Any) -> Option<&dyn Focusable> {
+    any.downcast_ref::<E>().map(|e: &E| e as &dyn Focusable)
 }
 
 trait Erased: 'static {
@@ -206,6 +225,8 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: None,
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -228,6 +249,8 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -249,6 +272,8 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -270,6 +295,8 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: Some(wheel_dispatch::<E>),
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -291,6 +318,8 @@ impl AnyElement {
             on_gesture: None,
             on_wheel: None,
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -313,6 +342,8 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: None,
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
@@ -337,12 +368,24 @@ impl AnyElement {
             on_gesture: Some(gesture_dispatch::<E>),
             on_wheel: None,
             on_ime: Some(ime_dispatch::<E>),
+            cursor_rect_fn: None,
+            focusable_fn: None,
             has_callbacks: false,
         }
     }
 
     pub fn with_callbacks(mut self) -> Self {
         self.has_callbacks = true;
+        self
+    }
+
+    pub fn with_cursor_rect<E: ElementCursorRect + 'static>(mut self) -> Self {
+        self.cursor_rect_fn = Some(cursor_rect_dispatch::<E>);
+        self
+    }
+
+    pub fn with_focusable<E: Focusable + 'static>(mut self) -> Self {
+        self.focusable_fn = Some(focus_cast_dispatch::<E>);
         self
     }
 
@@ -485,5 +528,15 @@ impl AnyElement {
 
     pub fn has_focus(&self) -> bool {
         self.has_callbacks
+    }
+
+    pub fn cursor_rect_relative(&self) -> Option<(f64, f64, f64, f64)> {
+        let any = self.inner.as_any();
+        self.cursor_rect_fn.and_then(|f| f(any))
+    }
+
+    pub fn as_focusable(&self) -> Option<&dyn Focusable> {
+        let any = self.inner.as_any();
+        self.focusable_fn.and_then(|f| f(any))
     }
 }

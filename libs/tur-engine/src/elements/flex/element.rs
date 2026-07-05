@@ -8,7 +8,7 @@ use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::view::{ViewCx, val_from_js, Lifecycle, PropValue, View, Val};
 
-pub(crate) struct ChildData {
+pub struct ChildData {
     pub id: ElementNodeId,
     pub size: Size,
     pub is_flex: bool,
@@ -65,10 +65,10 @@ impl View for FlexView {
 
 pub struct FlexElement {
     pub view: FlexView,
-    pub(crate) child_data: Vec<ChildData>,
-    pub(crate) constraints: Option<Constraints>,
-    pub(crate) computed_size: Option<Size>,
-    pub(crate) overflow: f64,
+    pub child_data: Vec<ChildData>,
+    pub constraints: Option<Constraints>,
+    pub computed_size: Option<Size>,
+    pub overflow: f64,
 }
 
 impl Lifecycle for FlexElement {}

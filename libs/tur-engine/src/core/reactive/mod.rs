@@ -11,7 +11,7 @@ use boa_gc::{Finalize, Trace};
 mod store;
 
 pub use store::Store;
-pub(crate) use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, SubscriberIndexStore};
+pub use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, SubscriberIndexStore};
 
 /// Unique identifier for a reactive atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -68,10 +68,10 @@ pub enum AtomKind {
 // ---------------------------------------------------------------------------
 
 /// Handle for a source atom (writable, never stale).
-pub struct Source<T>(pub(crate) AtomId, PhantomData<fn() -> T>);
+pub struct Source<T>(pub AtomId, PhantomData<fn() -> T>);
 
 /// Handle for a derived atom (lazy, recomputes on read when stale).
-pub struct Derived<T>(pub(crate) AtomId, PhantomData<fn() -> T>);
+pub struct Derived<T>(pub AtomId, PhantomData<fn() -> T>);
 
 impl<T> Source<T> {
     #[inline]
@@ -79,7 +79,7 @@ impl<T> Source<T> {
         self.0
     }
 
-    pub(crate) fn from_id(id: AtomId) -> Self {
+    pub fn from_id(id: AtomId) -> Self {
         Source(id, PhantomData)
     }
 }
@@ -90,7 +90,7 @@ impl<T> Derived<T> {
         self.0
     }
 
-    pub(crate) fn from_id(id: AtomId) -> Self {
+    pub fn from_id(id: AtomId) -> Self {
         Derived(id, PhantomData)
     }
 }
@@ -151,7 +151,7 @@ impl<T> std::fmt::Debug for Derived<T> {
 
 /// Handle for a mutation atom (callable side-effect closure).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Mutation(pub(crate) AtomId);
+pub struct Mutation(pub AtomId);
 
 /// Read-only reference to either a [`Source<T>`] or a [`Derived<T>`].  Used by
 /// `Val<T>::Reactive`, `Store::read`, and the subscriber graph.
@@ -226,8 +226,8 @@ impl<T> From<Derived<T>> for Readable<T> {
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct AtomHandle {
-    pub(crate) id: AtomId,
-    pub(crate) kind: AtomKind,
+    pub id: AtomId,
+    pub kind: AtomKind,
 }
 
 impl AtomHandle {
@@ -289,7 +289,7 @@ pub fn extract_handle(value: &JsValue) -> Option<AtomHandle> {
 /// only ever call `read` / `set_source` / `invoke_mutation` (core-only), never
 /// the subscriber graph, so the independent `SubscriberGraph` need not be
 /// threaded in here.
-pub(crate) fn build_store_context_object(
+pub fn build_store_context_object(
     context: &mut Context,
     core: Rc<RefCell<ReactiveCore>>,
 ) -> JsResult<JsObject> {

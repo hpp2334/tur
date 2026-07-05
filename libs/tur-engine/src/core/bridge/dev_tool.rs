@@ -81,7 +81,7 @@ fn dev_node_to_js(node: DevNodeData, ctx: &mut Context) -> JsResult<JsValue> {
     Ok(obj.into())
 }
 
-pub(crate) fn tur_dev_tool_element_tree(
+pub fn tur_dev_tool_element_tree(
     _this: &JsValue,
     args: &[JsValue],
     ctx: &mut Context,
@@ -97,7 +97,7 @@ pub(crate) fn tur_dev_tool_element_tree(
     }
 }
 
-pub(crate) fn tur_dev_tool_get_element(
+pub fn tur_dev_tool_get_element(
     _this: &JsValue,
     args: &[JsValue],
     ctx: &mut Context,

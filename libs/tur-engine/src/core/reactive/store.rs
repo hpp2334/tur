@@ -89,7 +89,7 @@ impl FlushState {
 // operate on genuinely separate data — not a view over the core blob.
 // ---------------------------------------------------------------------------
 
-pub(crate) struct SubscriberGraph {
+pub struct SubscriberGraph {
     atom_to_subs: RefCell<HashMap<AtomId, HashSet<SubscriberId>>>,
     sub_to_atoms: RefCell<HashMap<SubscriberId, HashSet<AtomId>>>,
 }
@@ -171,7 +171,7 @@ impl SubscriberGraph {
 // deriveds.  This is the slimmed-down successor to `StoreInternal` (the
 // subscriber fields moved out into `SubscriberGraph`).
 //
-// Methods are `pub(crate)` because the `{get,set}` JS-context object built by
+// Methods are `pub` because the `{get,set}` JS-context object built by
 // [`super::build_store_context_object`] captures a clone of the core and calls
 // them from native closures during derived recompute.
 // ---------------------------------------------------------------------------
@@ -193,26 +193,26 @@ impl ReactiveCore {
         }
     }
 
-    pub(crate) fn source<T>(&self, value: JsValue) -> Source<T> {
+    pub fn source<T>(&self, value: JsValue) -> Source<T> {
         let id = self.atoms.alloc_id();
         self.atoms.values.borrow_mut().insert(id, value);
         Source(id, PhantomData)
     }
 
-    pub(crate) fn derive<T>(&self, closure: JsFunction) -> Derived<T> {
+    pub fn derive<T>(&self, closure: JsFunction) -> Derived<T> {
         let id = self.atoms.alloc_id();
         self.atoms.closures.borrow_mut().insert(id, closure);
         self.graph.stale_deriveds.borrow_mut().insert(id);
         Derived(id, PhantomData)
     }
 
-    pub(crate) fn mutate(&self, closure: JsFunction) -> Mutation {
+    pub fn mutate(&self, closure: JsFunction) -> Mutation {
         let id = self.atoms.alloc_id();
         self.atoms.closures.borrow_mut().insert(id, closure);
         Mutation(id)
     }
 
-    pub(crate) fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
+    pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
         let id = readable.id();
 
         if let Readable::Derived(_) = readable {
@@ -289,7 +289,7 @@ impl ReactiveCore {
             .unwrap_or(JsValue::undefined())
     }
 
-    pub(crate) fn set_source<T>(&self, source: Source<T>, value: JsValue) {
+    pub fn set_source<T>(&self, source: Source<T>, value: JsValue) {
         let id = source.0;
         let prev = self.atoms.values.borrow().get(&id).cloned();
         if prev.as_ref() == Some(&value) {
@@ -319,7 +319,7 @@ impl ReactiveCore {
         self.flush.host_dirty.set(true);
     }
 
-    pub(crate) fn invoke_mutation(
+    pub fn invoke_mutation(
         &self,
         mutation: Mutation,
         args: &[JsValue],
@@ -332,7 +332,7 @@ impl ReactiveCore {
         closure.call(&JsValue::undefined(), args, ctx)
     }
 
-    pub(crate) fn flush(&self) -> HashSet<AtomId> {
+    pub fn flush(&self) -> HashSet<AtomId> {
         if !self.flush.source_changed.get() {
             return HashSet::new();
         }
@@ -346,7 +346,7 @@ impl ReactiveCore {
         stale
     }
 
-    pub(crate) fn has_pending(&self) -> bool {
+    pub fn has_pending(&self) -> bool {
         self.flush.source_changed.get()
     }
 }
@@ -404,7 +404,7 @@ impl Store {
 
     /// Read-only view for business code: resolve atom values without the
     /// ability to create atoms, write, or touch the subscriber index / engine.
-    pub(crate) fn read_only(&self) -> ReactiveReadStore {
+    pub fn read_only(&self) -> ReactiveReadStore {
         ReactiveReadStore {
             core: self.core.clone(),
         }
@@ -413,7 +413,7 @@ impl Store {
     /// View over the atom↔subscriber index (the independent `SubscriberGraph`):
     /// declare a subscriber's deps and query which subscribers depend on a set
     /// of atoms. Held by `SubscribeCx` (write) and the layout driver (read).
-    pub(crate) fn subscriber_index(&self) -> SubscriberIndexStore {
+    pub fn subscriber_index(&self) -> SubscriberIndexStore {
         SubscriberIndexStore {
             graph: self.graph.clone(),
         }
@@ -421,7 +421,7 @@ impl Store {
 
     /// View over the stale/dirty engine: drain pending source changes and
     /// report whether any are pending. Held by the layout driver.
-    pub(crate) fn flush_engine(&self) -> FlushEngineStore {
+    pub fn flush_engine(&self) -> FlushEngineStore {
         FlushEngineStore {
             core: self.core.clone(),
         }
@@ -431,7 +431,7 @@ impl Store {
     /// closures receive. Wraps [`super::build_store_context_object`] with the
     /// core handle so callers never need the raw `Rc<RefCell<ReactiveCore>>`
     /// (which would otherwise expose `flush`/`has_pending`).
-    pub(crate) fn ctx_object(&self, ctx: &mut Context) -> JsResult<JsObject> {
+    pub fn ctx_object(&self, ctx: &mut Context) -> JsResult<JsObject> {
         super::build_store_context_object(ctx, self.core.clone())
     }
 
@@ -440,7 +440,7 @@ impl Store {
     /// building. This is the **only** way to mint atoms — `Store` itself no
     /// longer exposes creation, mirroring how `SubscriberIndexStore` is the only
     /// way to reach `set_subscriber_deps`.
-    pub(crate) fn bridge(&self) -> ReactiveBridgeStore {
+    pub fn bridge(&self) -> ReactiveBridgeStore {
         ReactiveBridgeStore {
             core: self.core.clone(),
         }
@@ -489,7 +489,7 @@ pub struct ReactiveReadJsContext<'a> {
 }
 
 impl<'a> ReactiveReadJsContext<'a> {
-    pub(crate) fn new(read: ReactiveReadStore, boa: &'a mut Context) -> Self {
+    pub fn new(read: ReactiveReadStore, boa: &'a mut Context) -> Self {
         ReactiveReadJsContext { read, boa }
     }
 
@@ -505,7 +505,7 @@ impl<'a> ReactiveReadJsContext<'a> {
     /// `ElementObject`s. The read-only guarantee is weakened only for code
     /// that chooses to call mutating JS.
     #[allow(dead_code)]
-    pub(crate) fn boa_mut(&mut self) -> &mut Context {
+    pub fn boa_mut(&mut self) -> &mut Context {
         self.boa
     }
 }

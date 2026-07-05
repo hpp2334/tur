@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true, features = ["trace"] }
+tur-std = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true }
 libc = "0.2"

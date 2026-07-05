@@ -19,7 +19,7 @@ pub struct PaintContext<'a> {
 }
 
 impl<'a> PaintContext<'a> {
-    pub(crate) fn new(
+    pub fn new(
         tree: &'a NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,

@@ -8,7 +8,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use crate::core::bridge::helpers::{extract_ctx, wrap_view, FnEntry, Ptr};
 use crate::core::view::View;
 
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![("lifecycleView", 1, tur_lifecycle_view as Ptr)]
 }
 

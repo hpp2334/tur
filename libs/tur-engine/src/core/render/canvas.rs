@@ -4,7 +4,7 @@ use tur_shared::{Brush, Color, Geometry, Offset, Size};
 use vello::kurbo::Affine;
 use vello::peniko::ImageData;
 
-use crate::elements::text::text_layout::TextLayoutData;
+use crate::core::text::text_layout::TextLayoutData;
 
 pub trait Canvas: fmt::Debug {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush);

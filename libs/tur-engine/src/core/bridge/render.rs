@@ -5,7 +5,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use crate::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 use crate::core::view::{extract_view, SharedViewCx, View};
 
-pub(crate) fn fns() -> Vec<FnEntry> {
+pub fn fns() -> Vec<FnEntry> {
     vec![("render", 2, tur_render as Ptr)]
 }
 

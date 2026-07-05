@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementNodeId, NodeId};
-use tur_engine::elements::ScrollViewElement;
+use tur_std::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
 fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {

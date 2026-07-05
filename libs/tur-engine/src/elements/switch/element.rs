@@ -49,7 +49,7 @@ pub struct SwitchView {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, PartialEq)]
-pub(crate) enum Mounted {
+pub enum Mounted {
     None,
     Case(SwitchKey),
     Fallback,
@@ -140,7 +140,7 @@ impl View for SwitchView {
 
 pub struct SwitchFragment {
     pub view: SwitchView,
-    pub(crate) mounted: Mounted,
+    pub mounted: Mounted,
 }
 
 impl SwitchFragment {

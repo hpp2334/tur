@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::elements::{EditableTextElement, ScrollViewElement};
+use tur_std::elements::{EditableTextElement, ScrollViewElement};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the

@@ -8,7 +8,8 @@ use tur_engine::core::event::AppEvent;
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
-use tur_engine::TurApp;
+use tur_engine::{TurApp, TurEngine};
+use tur_std::TurStdPlugin;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TurVelloError {
@@ -107,11 +108,11 @@ impl TurVelloApp {
             dpr,
         );
 
-        let mut app = TurApp::new(
-            Box::new(renderer),
-            Box::new(PresetFontLoader::new()),
-            Box::new(tur_engine::core::platform_api::NoopPlatformApi),
-        )?;
+        let mut app = TurEngine::builder()
+            .renderer(Box::new(renderer))
+            .font_loader(Box::new(PresetFontLoader::new()))
+            .plugin(TurStdPlugin::default())
+            .build()?;
         app.push_event(AppEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,

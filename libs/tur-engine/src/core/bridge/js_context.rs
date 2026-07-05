@@ -14,13 +14,13 @@ use crate::core::resource::ResourceMap;
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurJsContext {
-    pub(crate) element_tree: NodeTree,
-    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-    pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
-    pub(crate) dirty: Rc<Cell<bool>>,
-    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
-    pub(crate) animation_manager: Rc<RefCell<AnimationManager>>,
-    pub(crate) store: Store,
+    pub element_tree: NodeTree,
+    pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    pub focus_manager: Rc<RefCell<FocusManager>>,
+    pub dirty: Rc<Cell<bool>>,
+    pub resource_map: Rc<RefCell<ResourceMap>>,
+    pub animation_manager: Rc<RefCell<AnimationManager>>,
+    pub store: Store,
 }
 
 impl TurJsContext {

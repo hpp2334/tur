@@ -24,9 +24,9 @@ impl std::fmt::Debug for PendingMutationInvocationQueue {
     }
 }
 
-pub(crate) struct PendingMutationInvocation {
-    pub(crate) mutation: Mutation,
-    pub(crate) args: Box<dyn EventArg>,
+pub struct PendingMutationInvocation {
+    pub mutation: Mutation,
+    pub args: Box<dyn EventArg>,
 }
 
 impl Default for PendingMutationInvocationQueue {
@@ -51,7 +51,7 @@ impl PendingMutationInvocationQueue {
         });
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<PendingMutationInvocation> {
+    pub fn drain(&mut self) -> Vec<PendingMutationInvocation> {
         std::mem::take(&mut self.0)
     }
 }

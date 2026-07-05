@@ -127,7 +127,7 @@ pub fn read_atom_raw<T>(
 }
 
 /// Borrow the shared handles a controller needs, from a `TurJsContext`.
-pub(crate) fn controller_handles(
+pub fn controller_handles(
     js_ctx: &TurJsContext,
 ) -> (
     NodeTree,

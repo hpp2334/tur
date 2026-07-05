@@ -15,7 +15,7 @@ use crate::core::view::{ViewCx, View};
 /// The boa `Context` is passed alongside (not stored) so callers can reborrow
 /// freely while holding `&mut SharedViewCx` — same pattern as the old `EdgyContext`.
 pub struct SharedViewCx {
-    pub(crate) js_ctx: TurJsContext,
+    pub js_ctx: TurJsContext,
 }
 
 impl SharedViewCx {
@@ -42,7 +42,7 @@ impl SharedViewCx {
     /// Create a `SubscribeCx` scoped to a fragment, so the fragment can
     /// declare its reactive atom deps at build time. On drop, the deps are
     /// atomically swapped into the subscriber graph.
-    pub(crate) fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
+    pub fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
         let sub_index = self.js_ctx.store.subscriber_index();
         SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
     }
