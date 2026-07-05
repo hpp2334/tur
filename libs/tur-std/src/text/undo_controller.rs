@@ -11,10 +11,10 @@ use boa_gc::{Finalize, Trace};
 /// callback (e.g. via syntax-highlight re-tokenization) after a restore.
 #[derive(Clone, Debug, Default)]
 pub struct TextEditingValue {
-    pub text: String,
-    pub cursor_position: usize,
-    pub selection_anchor: usize,
-    pub selection_end: usize,
+    pub(crate) text: String,
+    pub(crate) cursor_position: usize,
+    pub(crate) selection_anchor: usize,
+    pub(crate) selection_end: usize,
 }
 
 impl TextEditingValue {

@@ -12,7 +12,7 @@ use super::EventArg;
 // ---------------------------------------------------------------------------
 
 pub struct EdgyMutation<E: EventArg> {
-    pub mutation: Mutation,
+    mutation: Mutation,
     _marker: PhantomData<fn() -> E>,
 }
 

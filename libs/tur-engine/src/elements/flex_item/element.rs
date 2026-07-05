@@ -15,8 +15,8 @@ use crate::core::view::{ViewCx, extract_view, val_from_js, Lifecycle, PropValue,
 
 #[derive(Clone)]
 pub struct ExpandedView {
-    pub flex: Option<Val<f64>>,
-    pub child: Rc<dyn View>,
+    pub(crate) flex: Option<Val<f64>>,
+    child: Rc<dyn View>,
 }
 
 impl View for ExpandedView {
@@ -35,7 +35,7 @@ impl View for ExpandedView {
 // ---------------------------------------------------------------------------
 
 pub struct ExpandedElement {
-    pub view: ExpandedView,
+    pub(crate) view: ExpandedView,
 }
 
 impl Lifecycle for ExpandedElement {}

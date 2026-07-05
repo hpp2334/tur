@@ -32,13 +32,13 @@ pub(crate) const DEFAULT_THICKNESS: f64 = 10.0;
 pub struct ScrollbarView {
     /// Shared `ScrollController` — provides offset/maxExtent/viewport and the
     /// bound scroll-view node id (for `ScrollTo` requests during drag).
-    pub controller: Option<JsObject>,
-    pub color: Option<Val<Brush>>,
-    pub track_color: Option<Val<Brush>>,
-    pub thumb_radius: Option<Val<f64>>,
+    pub(crate) controller: Option<JsObject>,
+    pub(crate) color: Option<Val<Brush>>,
+    pub(crate) track_color: Option<Val<Brush>>,
+    pub(crate) thumb_radius: Option<Val<f64>>,
     /// Track thickness (width for a vertical scrollbar). Defaults to 10.
-    pub thickness: Option<Val<f64>>,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) thickness: Option<Val<f64>>,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 #[derive(Clone, Copy)]
@@ -53,13 +53,13 @@ struct DragState {
 /// Resolved paint props (filled during layout). Paint reads these directly.
 #[derive(Default, Clone)]
 pub struct ScrollbarPainting {
-    pub track_color: Option<Brush>,
-    pub color: Option<Brush>,
-    pub thumb_radius: Option<f64>,
+    pub(crate) track_color: Option<Brush>,
+    pub(crate) color: Option<Brush>,
+    pub(crate) thumb_radius: Option<f64>,
 }
 
 pub struct ScrollbarElement {
-    pub view: ScrollbarView,
+    pub(crate) view: ScrollbarView,
     /// Last computed track size — used by the drag handler for offset math.
     pub(crate) cached_track: Size,
     /// Resolved paint props — filled in `perform_layout`.

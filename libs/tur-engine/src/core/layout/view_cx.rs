@@ -24,10 +24,10 @@ use crate::core::view::ViewCx;
 // ---------------------------------------------------------------------------
 
 pub struct LayoutViewCx<'a> {
-    pub tree: &'a mut NodeTreeData,
-    pub node_tree: NodeTree,
-    pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-    pub dirty: Rc<Cell<bool>>,
+    tree: &'a mut NodeTreeData,
+    node_tree: NodeTree,
+    mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    dirty: Rc<Cell<bool>>,
 }
 
 impl<'a> LayoutViewCx<'a> {

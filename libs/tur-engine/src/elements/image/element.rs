@@ -23,12 +23,12 @@ use crate::core::view::{
 
 #[derive(Clone)]
 pub struct ImageView {
-    pub resource_id: Option<Val<u64>>,
-    pub width: Option<Val<f64>>,
-    pub height: Option<Val<f64>>,
-    pub fit: Option<Val<BoxFit>>,
-    pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn View>>,
+    pub(crate) resource_id: Option<Val<u64>>,
+    pub(crate) width: Option<Val<f64>>,
+    pub(crate) height: Option<Val<f64>>,
+    pub(crate) fit: Option<Val<BoxFit>>,
+    pub(crate) query_key: Option<Vec<String>>,
+    pub(crate) child: Option<Rc<dyn View>>,
 }
 
 impl View for ImageView {
@@ -53,13 +53,13 @@ impl View for ImageView {
 /// Resolved paint props (filled during layout). Paint reads these directly.
 #[derive(Default, Clone)]
 pub struct ImagePainting {
-    pub resource_id: Option<u64>,
-    pub fit: Option<tur_shared::BoxFit>,
+    pub(crate) resource_id: Option<u64>,
+    pub(crate) fit: Option<tur_shared::BoxFit>,
 }
 
 pub struct ImageElement {
-    pub view: ImageView,
-    pub painting: ImagePainting,
+    pub(crate) view: ImageView,
+    pub(crate) painting: ImagePainting,
 }
 
 impl Lifecycle for ImageElement {}

@@ -43,8 +43,8 @@ pub trait Tween<T: Clone>: Clone {
 /// the universal numeric prop type in tur.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct NumTween {
-    pub begin: f64,
-    pub end: f64,
+    begin: f64,
+    end: f64,
 }
 
 impl NumTween {
@@ -66,8 +66,8 @@ impl Tween<f64> for NumTween {
 /// `end` are non-nullable (tur's `Color` is opaque).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColorTween {
-    pub begin: Color,
-    pub end: Color,
+    begin: Color,
+    end: Color,
 }
 
 impl ColorTween {

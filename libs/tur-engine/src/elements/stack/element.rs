@@ -15,10 +15,10 @@ use crate::core::view::{ViewCx, val_from_js, Lifecycle, PropValue, View, Val};
 
 #[derive(Clone)]
 pub struct StackView {
-    pub fit: Option<Val<StackFit>>,
-    pub alignment: Option<Val<Alignment>>,
-    pub children: Vec<Rc<dyn View>>,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) fit: Option<Val<StackFit>>,
+    pub(crate) alignment: Option<Val<Alignment>>,
+    pub(crate) children: Vec<Rc<dyn View>>,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for StackView {
@@ -50,8 +50,8 @@ impl View for StackView {
 // ---------------------------------------------------------------------------
 
 pub struct StackElement {
-    pub view: StackView,
-    pub computed_size: Option<Size>,
+    pub(crate) view: StackView,
+    pub(crate) computed_size: Option<Size>,
 }
 
 impl Lifecycle for StackElement {}

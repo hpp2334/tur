@@ -4,10 +4,10 @@ pub enum ScrollPhysics {
 }
 
 #[derive(Clone, Debug)]
-pub struct ScrollMetrics {
-    pub min_scroll_extent: f64,
-    pub max_scroll_extent: f64,
-    pub pixels: f64,
+struct ScrollMetrics {
+    min_scroll_extent: f64,
+    max_scroll_extent: f64,
+    pixels: f64,
 }
 
 impl Default for ScrollMetrics {

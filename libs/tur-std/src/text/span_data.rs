@@ -5,11 +5,11 @@ use tur_engine::core::bridge::color::extract_color;
 #[derive(Clone)]
 pub struct SpanData {
     pub text: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub font_size: Option<f64>,
-    pub color: Option<Color>,
+    pub(crate) bold: bool,
+    pub(crate) italic: bool,
+    pub(crate) underline: bool,
+    pub(crate) font_size: Option<f64>,
+    pub(crate) color: Option<Color>,
 }
 
 pub fn extract_spans_from_js(

@@ -28,9 +28,9 @@ use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
 
 #[derive(Clone)]
 pub struct EachView {
-    pub items: AnyReadable,
-    pub build: JsFunction,
-    pub query_key: Option<Vec<String>>,
+    items: AnyReadable,
+    build: JsFunction,
+    query_key: Option<Vec<String>>,
 }
 
 /// Invoke the JS `build(item, index)` closure, returning the produced spec.
@@ -119,7 +119,7 @@ impl View for EachView {
 // ---------------------------------------------------------------------------
 
 pub struct EachFragment {
-    pub view: EachView,
+    view: EachView,
 }
 
 impl FragmentKind for EachFragment {

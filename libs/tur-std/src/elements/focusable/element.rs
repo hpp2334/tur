@@ -16,11 +16,12 @@ use tur_engine::core::view::{ViewCx, extract_view, Lifecycle, View};
 
 #[derive(Clone)]
 pub struct FocusableView {
-    pub on_key_down: Option<EdgyMutation<KeydownEvent>>,
-    pub on_key_up: Option<EdgyMutation<KeyupEvent>>,
-    pub on_focus: Option<EdgyMutation<FocusEvent>>,
-    pub on_blur: Option<EdgyMutation<BlurEvent>>,
-    pub child: Option<Rc<dyn View>>,
+    pub(crate) on_key_down: Option<EdgyMutation<KeydownEvent>>,
+    #[allow(dead_code)]
+    pub(crate) on_key_up: Option<EdgyMutation<KeyupEvent>>,
+    pub(crate) on_focus: Option<EdgyMutation<FocusEvent>>,
+    pub(crate) on_blur: Option<EdgyMutation<BlurEvent>>,
+    pub(crate) child: Option<Rc<dyn View>>,
 }
 
 impl View for FocusableView {
@@ -49,7 +50,7 @@ impl View for FocusableView {
 // ---------------------------------------------------------------------------
 
 pub struct FocusableElement {
-    pub view: FocusableView,
+    pub(crate) view: FocusableView,
 }
 
 impl Focusable for FocusableElement {

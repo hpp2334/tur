@@ -38,10 +38,10 @@ impl PropValue for SwitchKey {
 
 #[derive(Clone)]
 pub struct SwitchView {
-    pub value: Val<SwitchKey>,
-    pub cases: Vec<(SwitchKey, Rc<dyn ViewFactory>)>,
-    pub fallback: Option<Rc<dyn ViewFactory>>,
-    pub query_key: Option<Vec<String>>,
+    value: Val<SwitchKey>,
+    cases: Vec<(SwitchKey, Rc<dyn ViewFactory>)>,
+    fallback: Option<Rc<dyn ViewFactory>>,
+    query_key: Option<Vec<String>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -139,8 +139,8 @@ impl View for SwitchView {
 // ---------------------------------------------------------------------------
 
 pub struct SwitchFragment {
-    pub view: SwitchView,
-    pub mounted: Mounted,
+    view: SwitchView,
+    mounted: Mounted,
 }
 
 impl SwitchFragment {

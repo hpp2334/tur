@@ -9,19 +9,19 @@ use tur_engine::core::edgy_event::EventArg;
 
 #[derive(Clone)]
 pub struct InputEvent {
-    pub value: String,
-    pub enter: bool,
+    pub(crate) value: String,
+    pub(crate) enter: bool,
 }
 
 #[derive(Clone)]
 pub struct CursorChangeEvent {
-    pub position: usize,
+    pub(crate) position: usize,
 }
 
 #[derive(Clone)]
 pub struct SelectionChangeEvent {
-    pub anchor: usize,
-    pub end: usize,
+    pub(crate) anchor: usize,
+    pub(crate) end: usize,
 }
 
 #[derive(Clone)]
@@ -29,12 +29,12 @@ pub struct CompositionStartEvent;
 
 #[derive(Clone)]
 pub struct CompositionUpdateEvent {
-    pub text: String,
+    pub(crate) text: String,
 }
 
 #[derive(Clone)]
 pub struct CompositionEndEvent {
-    pub text: String,
+    pub(crate) text: String,
 }
 
 impl EventArg for InputEvent {

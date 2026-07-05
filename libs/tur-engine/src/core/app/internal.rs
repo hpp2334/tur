@@ -14,10 +14,10 @@ use crate::core::render::Renderer;
 use crate::error::TurError;
 
 pub struct TurAppInternal {
-    pub js_context: TurJsContext,
-    pub app_context: Rc<RefCell<TurAppContext>>,
-    pub needs_draw: Rc<Cell<bool>>,
-    pub executor: Rc<TurJobExecutor>,
+    pub(crate) js_context: TurJsContext,
+    pub(crate) app_context: Rc<RefCell<TurAppContext>>,
+    pub(crate) needs_draw: Rc<Cell<bool>>,
+    pub(crate) executor: Rc<TurJobExecutor>,
 }
 
 impl TurAppInternal {

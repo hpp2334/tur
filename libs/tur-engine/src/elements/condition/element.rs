@@ -25,10 +25,10 @@ use crate::core::view::{
 
 #[derive(Clone)]
 pub struct ConditionView {
-    pub condition: Val<bool>,
-    pub then_child: Option<Rc<dyn ViewFactory>>,
-    pub else_child: Option<Rc<dyn ViewFactory>>,
-    pub query_key: Option<Vec<String>>,
+    condition: Val<bool>,
+    then_child: Option<Rc<dyn ViewFactory>>,
+    else_child: Option<Rc<dyn ViewFactory>>,
+    query_key: Option<Vec<String>>,
 }
 
 impl View for ConditionView {
@@ -94,8 +94,8 @@ pub enum MountedBranch {
 // ---------------------------------------------------------------------------
 
 pub struct ConditionFragment {
-    pub view: ConditionView,
-    pub mounted: MountedBranch,
+    view: ConditionView,
+    mounted: MountedBranch,
 }
 
 impl ConditionFragment {

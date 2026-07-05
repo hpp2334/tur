@@ -19,9 +19,9 @@ use crate::core::view::{
 
 #[derive(Clone)]
 pub struct OpacityView {
-    pub value: Option<Val<f32>>,
-    pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn View>>,
+    pub(crate) value: Option<Val<f32>>,
+    pub(crate) query_key: Option<Vec<String>>,
+    pub(crate) child: Option<Rc<dyn View>>,
 }
 
 impl View for OpacityView {
@@ -40,14 +40,14 @@ impl View for OpacityView {
 }
 
 pub struct OpacityElement {
-    pub view: OpacityView,
-    pub painting: OpacityPainting,
+    pub(crate) view: OpacityView,
+    pub(crate) painting: OpacityPainting,
 }
 
 /// Resolved paint prop (filled during layout). Paint reads it directly.
 #[derive(Clone)]
 pub struct OpacityPainting {
-    pub value: f32,
+    pub(crate) value: f32,
 }
 impl Default for OpacityPainting {
     fn default() -> Self {
@@ -128,14 +128,14 @@ impl OpacityView {
 
 #[derive(Clone, Default)]
 pub struct TransformView {
-    pub scale: Option<Val<f64>>,
-    pub scale_x: Option<Val<f64>>,
-    pub scale_y: Option<Val<f64>>,
-    pub rotate: Option<Val<f64>>,
-    pub translate_x: Option<Val<f64>>,
-    pub translate_y: Option<Val<f64>>,
-    pub query_key: Option<Vec<String>>,
-    pub child: Option<Rc<dyn View>>,
+    pub(crate) scale: Option<Val<f64>>,
+    pub(crate) scale_x: Option<Val<f64>>,
+    pub(crate) scale_y: Option<Val<f64>>,
+    pub(crate) rotate: Option<Val<f64>>,
+    pub(crate) translate_x: Option<Val<f64>>,
+    pub(crate) translate_y: Option<Val<f64>>,
+    pub(crate) query_key: Option<Vec<String>>,
+    pub(crate) child: Option<Rc<dyn View>>,
 }
 
 impl View for TransformView {
@@ -154,19 +154,19 @@ impl View for TransformView {
 }
 
 pub struct TransformElement {
-    pub view: TransformView,
-    pub painting: TransformPainting,
+    pub(crate) view: TransformView,
+    pub(crate) painting: TransformPainting,
 }
 
 /// Resolved paint props (filled during layout). Paint reads them directly.
 #[derive(Default, Clone)]
 pub struct TransformPainting {
-    pub scale: Option<f64>,
-    pub scale_x: Option<f64>,
-    pub scale_y: Option<f64>,
-    pub rotate: Option<f64>,
-    pub translate_x: Option<f64>,
-    pub translate_y: Option<f64>,
+    pub(crate) scale: Option<f64>,
+    pub(crate) scale_x: Option<f64>,
+    pub(crate) scale_y: Option<f64>,
+    pub(crate) rotate: Option<f64>,
+    pub(crate) translate_x: Option<f64>,
+    pub(crate) translate_y: Option<f64>,
 }
 
 impl Lifecycle for TransformElement {}

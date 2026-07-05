@@ -25,8 +25,8 @@ impl std::fmt::Debug for PendingMutationInvocationQueue {
 }
 
 pub struct PendingMutationInvocation {
-    pub mutation: Mutation,
-    pub args: Box<dyn EventArg>,
+    pub(crate) mutation: Mutation,
+    pub(crate) args: Box<dyn EventArg>,
 }
 
 impl Default for PendingMutationInvocationQueue {

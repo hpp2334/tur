@@ -226,8 +226,8 @@ impl<T> From<Derived<T>> for Readable<T> {
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct AtomHandle {
-    pub id: AtomId,
-    pub kind: AtomKind,
+    pub(crate) id: AtomId,
+    pub(crate) kind: AtomKind,
 }
 
 impl AtomHandle {
