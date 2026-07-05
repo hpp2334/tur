@@ -1,3 +1,5 @@
+import { saveFile } from "builtin:tur/host";
+import { request } from "builtin:tur/net";
 import {
     createAnimationController,
     createSvgResource,
@@ -9,9 +11,7 @@ import {
     type StoreCtx,
     set,
     source,
-} from "builtin:tur/core";
-import { saveFile } from "builtin:tur/host";
-import { request } from "builtin:tur/net";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // Types

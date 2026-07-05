@@ -24,7 +24,7 @@ import {
     Text,
     Transform,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.

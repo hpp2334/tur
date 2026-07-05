@@ -4,7 +4,7 @@ import {
     ScrollView,
     SizedBox,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 export default view(() =>
     ScrollView({

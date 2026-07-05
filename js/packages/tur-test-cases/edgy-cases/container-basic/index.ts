@@ -1,4 +1,4 @@
-import { Container, SizedBox, view } from "builtin:tur/core";
+import { Container, SizedBox, view } from "builtin:tur/std";
 
 export default view(() =>
     Container({

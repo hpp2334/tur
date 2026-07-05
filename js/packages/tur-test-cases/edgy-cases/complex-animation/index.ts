@@ -26,7 +26,7 @@ import {
     Text,
     Transform,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { ColorTween, Tween } from "@tur/animation-ext";
 
 // ---------------------------------------------------------------------------

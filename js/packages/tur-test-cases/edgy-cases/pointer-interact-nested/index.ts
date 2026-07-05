@@ -11,7 +11,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 const outerClicks$ = source(0);
 const innerClicks$ = source(0);

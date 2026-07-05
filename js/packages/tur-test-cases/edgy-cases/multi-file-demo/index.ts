@@ -9,7 +9,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { COLORS } from "./utils";
 
 const count$ = source(0);

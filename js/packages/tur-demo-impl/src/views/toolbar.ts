@@ -15,7 +15,7 @@ import {
     Stack,
     set,
     Text,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import {
     autoRun$,
     type LayoutMode,

@@ -12,6 +12,7 @@
     "dependencies": {
         "@tur/animation-ext": "workspace:*",
         "@tur/core": "workspace:*",
+        "@tur/std": "workspace:*",
         "@tur/host": "workspace:*",
         "@tur/net": "workspace:*"
     },

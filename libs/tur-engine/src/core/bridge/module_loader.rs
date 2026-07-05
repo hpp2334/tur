@@ -1,11 +1,13 @@
 //! Native ES module loader for the tur bridge.
 //!
 //! Replaces the old `globalThis.__tur` global object. Engine-owned bridge
-//! functions are exposed as a synthetic module (`builtin:tur/core`) that user
+//! functions are exposed as synthetic modules (`builtin:tur/core` for the
+//! reactive substrate, `builtin:tur/std` for the widget library) that user
 //! code imports directly:
 //!
 //! ```js
-//! import { source, Container, render, Color } from "builtin:tur/core";
+//! import { source, render } from "builtin:tur/core";
+//! import { Container, Color } from "builtin:tur/std";
 //! ```
 //!
 //! The loader keeps a registry of bare `builtin:tur/*` specifiers → pre-built
@@ -31,7 +33,7 @@ use boa_engine::module::Referrer;
 use boa_engine::module::SyntheticModuleInitializer;
 use boa_engine::object::FunctionObjectBuilder;
 
-/// A module loader that resolves registered bare specifiers (e.g. `builtin:tur/core`)
+/// A module loader that resolves registered bare specifiers (e.g. `builtin:tur/std`)
 /// to pre-built [`Module`]s. Unknown specifiers raise a `TypeError`.
 ///
 /// Held behind an `Rc` and shared between [`crate::TurApp`] (which wires it

@@ -4,7 +4,7 @@
         "rootDir": ".",
         "outDir": "dist",
         "noEmit": true,
-        "types": ["@tur/core"]
+        "types": ["@tur/core", "@tur/std"]
     },
     "include": ["src"]
 }

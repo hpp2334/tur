@@ -1,3 +1,4 @@
+import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
 import {
     Color,
     Column,
@@ -5,8 +6,7 @@ import {
     Expanded,
     Text,
     view,
-} from "builtin:tur/core";
-import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
+} from "builtin:tur/std";
 
 const SRC = "const x: number = 42;";
 const OUT = transpileTsx(SRC);

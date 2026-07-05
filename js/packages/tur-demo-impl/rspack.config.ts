@@ -9,7 +9,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // `builtin:tur/*` are external — resolved at run time by the engine's boa
 // module loader — so the bundle keeps its `import` statements. The
 // `@tur/animation-ext` workspace package is bundled in (only its
-// `builtin:tur/core` imports stay external). The bundle contains the Shell UI
+// `builtin:tur/std` imports stay external). The bundle contains the Shell UI
 // + inlined case sources; it sets `globalThis.TurEdgy` and calls
 // `render(Shell)` on evaluation.
 export default defineConfig({
@@ -24,7 +24,7 @@ export default defineConfig({
     },
     experiments: { outputModule: true },
     externals: {
-        "builtin:tur/core": "builtin:tur/core",
+        "builtin:tur/std": "builtin:tur/std",
         "builtin:tur/host": "builtin:tur/host",
         "builtin:tur/net": "builtin:tur/net",
     },

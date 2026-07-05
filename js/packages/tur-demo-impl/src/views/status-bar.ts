@@ -9,7 +9,7 @@ import {
     Row,
     SizedBox,
     Text,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import {
     autoRun$,
     edited$,

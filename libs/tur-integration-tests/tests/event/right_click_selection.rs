@@ -3,7 +3,7 @@ use tur_engine::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/core";
+    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/std";
     const controller = createTextEditingController({});
     render(Container({
         children: [

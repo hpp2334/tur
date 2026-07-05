@@ -1,8 +1,8 @@
-import type { Color, SpanData } from "builtin:tur/core";
-import * as Core from "builtin:tur/core";
 import type { AstNode, TokenSpan } from "builtin:tur/host";
 import * as Host from "builtin:tur/host";
 import * as Net from "builtin:tur/net";
+import type { Color, SpanData } from "builtin:tur/std";
+import * as Std from "builtin:tur/std";
 import * as Anim from "@tur/animation-ext";
 import { code } from "../theme/tokens";
 
@@ -70,8 +70,8 @@ function fileKey(source: string): string {
  *  imports resolve to the local `__modules` registry. */
 function importTarget(source: string): string {
     switch (source) {
-        case "builtin:tur/core":
-            return "Core";
+        case "builtin:tur/std":
+            return "Std";
         case "@tur/animation-ext":
             return "Anim";
         case "builtin:tur/host":
@@ -188,8 +188,8 @@ function rewriteEntry(transpiled: string): string {
  *  `builtin:tur/*` modules and the per-case `__modules` registry injected as
  *  parameters (no `globalThis` pollution). Returns the function's value. */
 function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
-    const fn = new Function("Core", "Anim", "Host", "Net", "__modules", body);
-    return fn(Core, Anim, Host, Net, modules);
+    const fn = new Function("Std", "Anim", "Host", "Net", "__modules", body);
+    return fn(Std, Anim, Host, Net, modules);
 }
 
 export function compileCase(files: Record<string, string>): CaseCompileResult {

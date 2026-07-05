@@ -5,7 +5,7 @@ import {
     mutate,
     type StoreCtx,
     source,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 export interface Task {
     title: string;

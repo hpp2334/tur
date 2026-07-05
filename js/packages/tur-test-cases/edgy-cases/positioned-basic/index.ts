@@ -1,4 +1,4 @@
-import { Positioned, SizedBox, Stack, view } from "builtin:tur/core";
+import { Positioned, SizedBox, Stack, view } from "builtin:tur/std";
 
 export default view(() =>
     Stack({

@@ -27,7 +27,7 @@ import {
     Text,
     type TextController,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // --- Light theme palette (slate + emerald accents) -----------------------
 

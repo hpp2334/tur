@@ -1,4 +1,4 @@
-import { Column, CrossAxisAlignment, Text, view } from "builtin:tur/core";
+import { Column, CrossAxisAlignment, Text, view } from "builtin:tur/std";
 
 export default view(() =>
     Column({

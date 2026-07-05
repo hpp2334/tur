@@ -1,4 +1,4 @@
-import { CrossAxisAlignment, Row, SizedBox, view } from "builtin:tur/core";
+import { CrossAxisAlignment, Row, SizedBox, view } from "builtin:tur/std";
 
 export default view(() =>
     Row({

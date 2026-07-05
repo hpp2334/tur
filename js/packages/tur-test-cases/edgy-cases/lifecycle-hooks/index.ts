@@ -20,7 +20,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 const count$ = source(0);
 const mountedCount$ = source(0);

@@ -1,4 +1,4 @@
-import { Axis, Color, Container, LazyList, view } from "builtin:tur/core";
+import { Axis, Color, Container, LazyList, view } from "builtin:tur/std";
 
 const ITEM_HEIGHT = 50;
 const ITEM_COUNT = 100;

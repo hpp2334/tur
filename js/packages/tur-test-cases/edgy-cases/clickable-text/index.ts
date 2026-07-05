@@ -7,7 +7,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 const content$ = source("before");
 

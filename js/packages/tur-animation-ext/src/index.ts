@@ -1,6 +1,6 @@
 /**
  * @tur/animation-ext — Flutter-style animation toolkit built on the
- * `builtin:tur/core` primitives.
+ * `builtin:tur/std` primitives.
  *
  * Provides `Tween` / `ColorTween` (mutable begin/end interpolation channels)
  * and the `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned`
@@ -35,7 +35,7 @@ import {
     set,
     source,
     type Val,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // Curve keyword (mirror of the engine-side curve enum string).
