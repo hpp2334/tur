@@ -1,8 +1,8 @@
-import type { Color, SpanData } from "builtin:tur/std";
-import * as Std from "builtin:tur/std";
 import type { AstNode, TokenSpan } from "builtin:tur/host";
 import * as Host from "builtin:tur/host";
 import * as Net from "builtin:tur/net";
+import type { Color, SpanData } from "builtin:tur/std";
+import * as Std from "builtin:tur/std";
 import * as Anim from "@tur/animation-ext";
 import { code } from "../theme/tokens";
 

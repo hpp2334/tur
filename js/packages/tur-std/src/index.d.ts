@@ -24,7 +24,7 @@ declare module "builtin:tur/std" {
     export * from "builtin:tur/core";
 
     // Core meta-types used by the prop interfaces below.
-    import type { Element, Val, Mutation, Readable } from "builtin:tur/core";
+    import type { Element, Mutation, Readable, Val } from "builtin:tur/core";
 
     // ---------------------------------------------------------------------------
     // Value types — Color / LinearGradient / Brush / SpanData
