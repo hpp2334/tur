@@ -12,7 +12,7 @@ use boa_engine::object::builtins::JsArray;
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsArgs, JsResult, JsValue};
 
-use crate::core::bridge::utils::extract_ctx;
+use crate::core::bridge::helpers::extract_ctx;
 use crate::core::elements::{DevNodeData, TraceValue};
 
 fn trace_value_to_js(v: &TraceValue) -> JsValue {

@@ -1,10 +1,63 @@
 use boa_engine::js_string;
+use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsValue};
 use boa_gc::{Finalize, Trace};
 use tur_shared::{Brush, Color, GradientStop};
 
+use crate::core::bridge::helpers::{ConstEntry, FnEntry, Ptr};
+use crate::core::bridge::module_loader::bound_native;
 use crate::core::bridge::BoaOpaque;
 use crate::core::view::val::PropValue;
+
+/// Bridge function table entries for the color domain.
+pub(crate) fn fns() -> Vec<FnEntry> {
+    vec![
+        ("createColor", 4, tur_create_color as Ptr),
+        ("colorLerp", 3, tur_color_lerp as Ptr),
+        ("createLinearGradient", 5, tur_create_linear_gradient as Ptr),
+    ]
+}
+
+/// Constant exports for the color domain: the `Color` and `LinearGradient`
+/// const-objects. Each is a namespace of bound native builders
+/// (`Color.rgb/rgba/hex`, `LinearGradient.create`) that forward to the
+/// ctx-first color bridge fns. Users never `new Color()`.
+pub(crate) fn consts(context: &mut Context, ctx_val: JsValue) -> Vec<ConstEntry> {
+    let color_obj = JsObject::with_object_proto(context.intrinsics());
+    let _ = color_obj.create_data_property(
+        js_string!("rgb"),
+        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_rgb, 3, "rgb")),
+        context,
+    );
+    let _ = color_obj.create_data_property(
+        js_string!("rgba"),
+        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_rgba, 4, "rgba")),
+        context,
+    );
+    let _ = color_obj.create_data_property(
+        js_string!("hex"),
+        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_hex, 1, "hex")),
+        context,
+    );
+
+    let linear_obj = JsObject::with_object_proto(context.intrinsics());
+    let _ = linear_obj.create_data_property(
+        js_string!("create"),
+        JsValue::from(bound_native(
+            context,
+            ctx_val,
+            tur_linear_gradient_create,
+            1,
+            "create",
+        )),
+        context,
+    );
+
+    vec![
+        ("Color", color_obj.into()),
+        ("LinearGradient", linear_obj.into()),
+    ]
+}
 
 // ---------------------------------------------------------------------------
 // Opaque wrappers for tur-shared color/brush types so they can be stored
@@ -46,7 +99,7 @@ impl PropValue for Brush {
 /// Bridge function `createColor(r, g, b, a)` → JS opaque wrapping `Color`.
 /// Called by the TS `Color` class so that Rust can read the value via
 /// `downcast_ref::<ColorOpaque>()` without needing a boa `Context`.
-pub(crate) fn tur_create_color(
+fn tur_create_color(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -64,7 +117,7 @@ pub(crate) fn tur_create_color(
 /// Bridge function `colorLerp(colorA, colorB, t)` → new `Color` opaque at
 /// the interpolated position. Backs the JS-facing `ColorTween.lerp`. Mirrors
 /// Flutter's `Color.lerp` (which `ColorTween` delegates to).
-pub(crate) fn tur_color_lerp(
+fn tur_color_lerp(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -83,7 +136,7 @@ pub(crate) fn tur_color_lerp(
 /// Bridge function `createLinearGradient(startX, startY, endX, endY, stops)`
 /// where stops is an array of `{offset, r, g, b, a}`. Returns JS opaque
 /// wrapping `Brush::LinearGradient`.
-pub(crate) fn tur_create_linear_gradient(
+fn tur_create_linear_gradient(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -128,7 +181,7 @@ pub(crate) fn tur_create_linear_gradient(
 
 /// `Color.rgb(r, g, b)` — bound method on the native `Color` const-object.
 /// `args = [ctx, r, g, b]`; forwards to `tur_create_color` with `a = 255`.
-pub(crate) fn tur_color_rgb(
+fn tur_color_rgb(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -145,7 +198,7 @@ pub(crate) fn tur_color_rgb(
 
 /// `Color.rgba(r, g, b, a)` — bound method. Same arg layout as
 /// `tur_create_color` (`[ctx, r, g, b, a]`), so it forwards verbatim.
-pub(crate) fn tur_color_rgba(
+fn tur_color_rgba(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -155,7 +208,7 @@ pub(crate) fn tur_color_rgba(
 
 /// `Color.hex("#RRGGBB[AA]" | "#RGB")` — bound method. Parses the hex string
 /// and forwards to `tur_create_color`.
-pub(crate) fn tur_color_hex(
+fn tur_color_hex(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -215,7 +268,7 @@ fn parse_hex_color(hex: &str) -> Option<(u8, u8, u8, u8)> {
 /// Each stop's `color` is decoded via `extract_color` (downcasts
 /// `ColorOpaque`), so it accepts Rust-owned `Color` handles directly — unlike
 /// the low-level `createLinearGradient` which takes `{r,g,b,a}` structs.
-pub(crate) fn tur_linear_gradient_create(
+fn tur_linear_gradient_create(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
