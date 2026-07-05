@@ -1,4 +1,4 @@
-import { type Atom, set, source } from "builtin:tur/core";
+import { type Atom, set, source } from "builtin:tur/std";
 import { CASE_SOURCES } from "../cases";
 import type { LayoutMode } from "./types";
 

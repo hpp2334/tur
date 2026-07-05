@@ -13,6 +13,7 @@
         "typescript": "^5.7.0"
     },
     "dependencies": {
-        "@tur/core": "workspace:*"
+        "@tur/core": "workspace:*",
+        "@tur/std": "workspace:*"
     }
 }

@@ -6,7 +6,7 @@ import {
     type KeyEvent,
     mutate,
     set,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { CASE_SOURCES, compileCase } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
 import {

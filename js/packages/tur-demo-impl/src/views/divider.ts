@@ -10,7 +10,7 @@ import {
     PointerInteract,
     set,
     source,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { tokens } from "../theme/tokens";
 
 // ---------------------------------------------------------------------------

@@ -25,7 +25,7 @@ fn find_text_width(tree: &NodeTreeData, id: ElementNodeId) -> Option<f64> {
 fn readable_subscribe_propagates_reactive_updates_to_child() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, render } from "builtin:tur/core";
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, render } from "builtin:tur/std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -51,7 +51,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     };
 
     // Flip the flag — the inner Text's derive must recompute → width changes.
-    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+    app.eval_module_source(r#"import { set } from "builtin:tur/std"; set(globalThis.__flag, true);"#)
         .unwrap();
     app.render();
 
@@ -74,7 +74,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 fn readable_subscribe_inside_stack_positioned_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, render } from "builtin:tur/core";
+        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, render } from "builtin:tur/std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -101,7 +101,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+    app.eval_module_source(r#"import { set } from "builtin:tur/std"; set(globalThis.__flag, true);"#)
         .unwrap();
     app.render();
 
@@ -125,7 +125,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 fn animated_container_pattern_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/core";
+        import { source, derive, Container, Text, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/std";
 
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
@@ -170,7 +170,7 @@ fn animated_container_pattern_inner_text_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+    app.eval_module_source(r#"import { set } from "builtin:tur/std"; set(globalThis.__flag, true);"#)
         .unwrap();
     app.render();
     // advance past the animation duration so retarget + tick have run
@@ -197,7 +197,7 @@ fn animated_container_pattern_inner_text_still_updates() {
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Opacity, Text, ReadableSubscribe, createAnimationController, mutate, render } from "builtin:tur/core";
+        import { source, derive, set, Container, Opacity, Text, ReadableSubscribe, createAnimationController, mutate, render } from "builtin:tur/std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         // Sink captures the cardText derive's recomputed value (ground truth,
@@ -234,17 +234,17 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
     .unwrap();
 
     app.render();
-    app.eval_module_source(r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#)
+    app.eval_module_source(r#"import { get } from "builtin:tur/std"; globalThis.__result = get(globalThis.__sink);"#)
         .unwrap();
     let v1: String = app.eval_js("globalThis.__result");
 
-    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__flag, true);"#)
+    app.eval_module_source(r#"import { set } from "builtin:tur/std"; set(globalThis.__flag, true);"#)
         .unwrap();
     app.render();
     app.advance(std::time::Duration::from_millis(300)).unwrap();
     app.render();
 
-    app.eval_module_source(r#"import { get } from "builtin:tur/core"; globalThis.__result = get(globalThis.__sink);"#)
+    app.eval_module_source(r#"import { get } from "builtin:tur/std"; globalThis.__result = get(globalThis.__sink);"#)
         .unwrap();
     let v2: String = app.eval_js("globalThis.__result");
     assert_eq!(
@@ -266,7 +266,7 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/core";
+        import { source, derive, Container, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/std";
         globalThis.__target = source(100);
         const target = globalThis.__target;
         const progress = source(1.0);
@@ -312,7 +312,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
     assert_eq!(width_at(&app), 100.0, "initial width should be 100");
 
     // Flip the target -> on_updated -> retarget (begin=100, end=200) + forward.
-    app.eval_module_source(r#"import { set } from "builtin:tur/core"; set(globalThis.__target, 200);"#)
+    app.eval_module_source(r#"import { set } from "builtin:tur/std"; set(globalThis.__target, 200);"#)
         .unwrap();
     app.render();
     // ctrl.forward() resets progress to 0 then advances; after a tiny advance

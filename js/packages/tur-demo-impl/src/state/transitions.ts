@@ -5,7 +5,7 @@ import {
     Opacity,
     set,
     source,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // FadeIn — opacity transition used when the playground's active case content

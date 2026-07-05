@@ -17,7 +17,7 @@ const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
     virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../edgy-cases/${name}/index";\nimport { render } from "builtin:tur/core";\nrender(Case);\n`;
+        `import Case from "../edgy-cases/${name}/index";\nimport { render } from "builtin:tur/std";\nrender(Case);\n`;
     entries[name] = `./virtual-entries/${name}.ts`;
 }
 
@@ -38,10 +38,10 @@ export default defineConfig({
     // `builtin:tur/*` capability modules are provided at run time by the
     // engine's boa module loader, so keep the imports rather than bundling
     // them. `@tur/animation-ext` is a real workspace package and IS bundled
-    // (only its `builtin:tur/core` imports stay external). Each case dist is an
+    // (only its `builtin:tur/std` imports stay external). Each case dist is an
     // ES module loaded via `load_module`.
     externals: {
-        "builtin:tur/core": "builtin:tur/core",
+        "builtin:tur/std": "builtin:tur/std",
         "builtin:tur/host": "builtin:tur/host",
         "builtin:tur/net": "builtin:tur/net",
     },

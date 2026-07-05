@@ -9,7 +9,7 @@ import {
     MainAxisAlignment,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // A controller pre-populated with a code-like snippet, split into spans whose
 // colors simulate syntax highlighting (keyword / identifier / number / punct).

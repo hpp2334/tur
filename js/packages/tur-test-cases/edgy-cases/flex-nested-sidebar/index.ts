@@ -6,7 +6,7 @@ import {
     Row,
     SizedBox,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 export default view(() =>
     Row({

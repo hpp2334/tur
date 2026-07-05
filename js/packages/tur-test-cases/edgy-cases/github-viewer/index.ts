@@ -10,7 +10,7 @@ import {
     Switch,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";
 import { hasHttp, view$ } from "./state";

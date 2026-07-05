@@ -59,7 +59,7 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single InputEdgy at the top-left of the
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/core";
+    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/std";
     const controller = createTextEditingController({});
     render(Container({
         children: [

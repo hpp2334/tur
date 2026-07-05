@@ -1,4 +1,4 @@
-import { Alignment, Color, Container, Text, view } from "builtin:tur/core";
+import { Alignment, Color, Container, Text, view } from "builtin:tur/std";
 
 export default view(() =>
     Container({

@@ -9,7 +9,7 @@ import {
     set,
     source,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // A reactive cursor driven by a source, so Rust tests can flip it via
 // `globalThis.__setCursor` and assert the host cursor updates after a flush.

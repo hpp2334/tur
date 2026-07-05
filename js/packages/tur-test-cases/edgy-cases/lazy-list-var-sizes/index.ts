@@ -21,7 +21,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // "Variable width + height LazyList" — items with DIFFERENT main-axis extents

@@ -7,7 +7,7 @@ use tur_integration_tests::TurTestApp;
 fn animation_controller_forward_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -63,7 +63,7 @@ fn animation_controller_forward_with_on_tick() {
 fn animation_controller_reverse_with_on_tick() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(200);
         const container = Container({ width: width$ });
         render(container);
@@ -110,7 +110,7 @@ fn animation_controller_reverse_with_on_tick() {
 fn animation_controller_stop_freezes_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -163,7 +163,7 @@ fn animation_controller_stop_freezes_value() {
 fn animation_controller_repeats() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -212,7 +212,7 @@ fn animation_controller_repeats() {
 fn animation_controller_status_transitions() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController } from "builtin:tur/core";
+        import { Container, render, createAnimationController } from "builtin:tur/std";
         const container = Container({});
         render(container);
 
@@ -248,7 +248,7 @@ fn animation_controller_status_transitions() {
 fn animation_controller_on_end_callback() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         const container = Container({});
         render(container);
 
@@ -276,7 +276,7 @@ fn animation_controller_on_end_callback() {
 fn animation_controller_ease_in_curve() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(0);
         const container = Container({ width: width$ });
         render(container);
@@ -313,7 +313,7 @@ fn animation_controller_ease_in_curve() {
 fn animation_controller_pause_freezes_and_resume_continues() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -383,7 +383,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 fn animation_controller_seek_jumps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -435,7 +435,7 @@ fn animation_controller_seek_jumps_value() {
 fn animation_controller_set_speed_scales_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/core";
+        import { source, Container, render, createAnimationController, mutate, set } from "builtin:tur/std";
         const width$ = source(100);
         const container = Container({ width: width$ });
         render(container);
@@ -507,7 +507,7 @@ fn controller_on_tick_can_read_status_from_forward() {
     // while holding the RefMut.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         const container = Container({});
         render(container);
 
@@ -536,7 +536,7 @@ fn controller_on_end_can_read_status_after_complete() {
     // onEnd callback reads ctrl.status after the animation completes.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         const container = Container({});
         render(container);
 
@@ -567,7 +567,7 @@ fn controller_on_tick_can_read_value_during_forward() {
     // downcast_mut was still held.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         const container = Container({});
         render(container);
 
@@ -606,7 +606,7 @@ fn controller_on_tick_can_read_value_during_forward() {
 fn controller_infinite_does_not_complete_after_many_iterations() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         globalThis.__tick_count = 0;
         globalThis.__end_count = 0;
         globalThis.__last_tick_value = -1;
@@ -661,7 +661,7 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
 fn controller_infinite_reverse_cycles_back_to_zero() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         globalThis.__tick_values = [];
         const container = Container({});
         render(container);
@@ -709,7 +709,7 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
 fn controller_repeat_three_then_completes() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { Container, render, createAnimationController, mutate } from "builtin:tur/core";
+        import { Container, render, createAnimationController, mutate } from "builtin:tur/std";
         globalThis.__end_count = 0;
         const container = Container({});
         render(container);

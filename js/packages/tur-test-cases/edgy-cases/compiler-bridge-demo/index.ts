@@ -5,7 +5,7 @@ import {
     Expanded,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
 
 const SRC = "const x: number = 42;";

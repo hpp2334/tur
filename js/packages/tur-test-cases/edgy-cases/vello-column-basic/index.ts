@@ -1,4 +1,4 @@
-import { Column, Container, view } from "builtin:tur/core";
+import { Column, Container, view } from "builtin:tur/std";
 
 export default view(() =>
     Column({

@@ -83,7 +83,7 @@ impl TurApp {
     }
 
     /// Evaluate `source` as an ES module: parse it, resolve imports via the
-    /// registered module loader (`builtin:tur/core`, host modules, …),
+    /// registered module loader (`builtin:tur/core`, `builtin:tur/std`, host modules, …),
     /// link, evaluate, and drain pending jobs.
     ///
     /// Unlike [`load_js`](Self::load_js) (script mode), this supports real

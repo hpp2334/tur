@@ -41,11 +41,11 @@ fn reentrant_module_load_via_host_fn() {
     });
 
     // Outer module calls `loadModule(innerSrc)` during its own evaluation.
-    // `innerSrc` imports `builtin:tur/core` (already registered) and stashes a value.
+    // `innerSrc` imports `builtin:tur/std` (already registered) and stashes a value.
     app.eval_module_source(
         r#"
             import { loadModule } from "builtin:tur/cases";
-            const inner = "import { source } from \"builtin:tur/core\"; globalThis.__inner = typeof source;";
+            const inner = "import { source } from \"builtin:tur/std\"; globalThis.__inner = typeof source;";
             loadModule(inner);
             globalThis.__outer = "ran";
         "#,

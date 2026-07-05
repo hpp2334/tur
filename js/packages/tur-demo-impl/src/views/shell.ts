@@ -12,7 +12,7 @@ import {
     Switch,
     set,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
 import { tokens } from "../theme/tokens";
 import { ContextMenuOverlay } from "./context-menu";

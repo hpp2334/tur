@@ -15,7 +15,7 @@ import {
     type StoreCtx,
     Text,
     type TextController,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { COLORS } from "./theme";
 
 /** Standard text / accent button. `onClick` runs within a mutation context. */

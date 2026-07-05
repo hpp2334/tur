@@ -25,7 +25,7 @@ import {
     source,
     Text,
     Transform,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import {
     type DirEntry,
     doDownload,

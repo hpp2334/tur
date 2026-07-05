@@ -1,4 +1,4 @@
-import { Color, Text, view } from "builtin:tur/core";
+import { Color, Text, view } from "builtin:tur/std";
 
 export default view(() =>
     Text({

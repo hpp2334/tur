@@ -9,7 +9,7 @@ import {
     type StoreCtx,
     set,
     source,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { saveFile } from "builtin:tur/host";
 import { request } from "builtin:tur/net";
 

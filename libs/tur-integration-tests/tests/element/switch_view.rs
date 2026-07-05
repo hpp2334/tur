@@ -1,7 +1,7 @@
 use tur_integration_tests::TurTestApp;
 
 const RUNTIME: &str = r#"
-import { source, Switch, Text, render } from "builtin:tur/core";
+import { source, Switch, Text, render } from "builtin:tur/std";
 globalThis.__key = source("a");
 const root = Switch({
     value: globalThis.__key,
@@ -39,7 +39,7 @@ fn switch_swaps_branch_on_value_change() {
 
     // Flip the value atom to "b".
     app.eval_module_source(
-        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "b");"#,
+        r#"import { set } from "builtin:tur/std"; set(globalThis.__key, "b");"#,
     )
     .unwrap();
     app.render();
@@ -59,7 +59,7 @@ fn switch_uses_fallback_when_no_case_matches() {
 
     // Value with no matching case → fallback branch.
     app.eval_module_source(
-        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "zzz");"#,
+        r#"import { set } from "builtin:tur/std"; set(globalThis.__key, "zzz");"#,
     )
     .unwrap();
     app.render();
@@ -81,7 +81,7 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
     app.eval_module_source(
-        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "a");"#,
+        r#"import { set } from "builtin:tur/std"; set(globalThis.__key, "a");"#,
     )
     .unwrap();
     app.render();
@@ -90,7 +90,7 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 }
 
 const DERIVED_RUNTIME: &str = r#"
-import { source, derive, get, Switch, Text, render } from "builtin:tur/core";
+import { source, derive, get, Switch, Text, render } from "builtin:tur/std";
 globalThis.__key = source("a");
 globalThis.__derived = derive(() => get(globalThis.__key));
 const root = Switch({
@@ -118,7 +118,7 @@ fn switch_swaps_branch_on_derived_value_change() {
     // Flip the source atom — the derived should go stale and the Switch
     // should swap via the subscriber graph (not a full-scan try_rebuild).
     app.eval_module_source(
-        r#"import { set } from "builtin:tur/core"; set(globalThis.__key, "b");"#,
+        r#"import { set } from "builtin:tur/std"; set(globalThis.__key, "b");"#,
     )
     .unwrap();
     app.render();

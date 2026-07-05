@@ -1,3 +1,3 @@
-import { PointerInteract, view } from "builtin:tur/core";
+import { PointerInteract, view } from "builtin:tur/std";
 
 export default view(() => PointerInteract({}));

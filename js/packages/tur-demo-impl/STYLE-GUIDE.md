@@ -214,13 +214,13 @@ Each view is one file, one default export, no side effects at module load.
 ### 4.1 Import order
 
 ```ts
-// 1. builtin:tur/core primitives
-import { Color, Column, Container, /* ... */ } from "builtin:tur/core";
+// 1. builtin:tur/std primitives
+import { Color, Column, Container, /* ... */ } from "builtin:tur/std";
 // 2. Local utilities
 import { tokens } from "./tokens";
 import { Button } from "./views/Button";
 // 3. Types (type-only import)
-import type { Element } from "builtin:tur/core";
+import type { Element } from "builtin:tur/std";
 ```
 
 ### 4.2 The no-hex lint rule
@@ -251,7 +251,7 @@ This makes any new `Color.hex("...")` outside `tokens.ts` a lint error. The toke
 import {
     type Element, Container, PointerInteract, Row, Text,
     derive, get, mutate, set, source,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import { tokens } from "../tokens";
 
 export interface ButtonProps {

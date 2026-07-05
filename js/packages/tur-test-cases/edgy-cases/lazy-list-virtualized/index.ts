@@ -14,7 +14,7 @@ import {
     SizedBox,
     Text,
     view,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------
 // "10,000-item Contact List" — a demo of tur's (now actually lazy) LazyList.

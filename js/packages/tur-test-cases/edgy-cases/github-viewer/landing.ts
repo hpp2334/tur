@@ -17,7 +17,7 @@ import {
     SizedBox,
     type StoreCtx,
     Text,
-} from "builtin:tur/core";
+} from "builtin:tur/std";
 import {
     getIcon,
     openRepo,

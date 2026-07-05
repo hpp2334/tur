@@ -82,47 +82,58 @@ pub fn init_bridge(
     let opaque = BoaOpaque::new(internal.js_context.clone(), context);
     let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
 
-    // Aggregate every domain's bridge function table + constant exports.
-    // Each element owns its `bridge.rs`; core subsystems (reactive, color,
-    // animation, render) own theirs. Enums live centrally in `enums.rs`.
-    let mut all_fns: Vec<FnEntry> = Vec::new();
-    all_fns.extend(reactive::fns());
-    all_fns.extend(color::fns());
-    all_fns.extend(crate::elements::container::bridge::fns());
-    all_fns.extend(crate::elements::flex::bridge::fns());
-    all_fns.extend(crate::elements::flex_item::bridge::fns());
-    all_fns.extend(crate::elements::stack::bridge::fns());
-    all_fns.extend(crate::elements::positioned::bridge::fns());
-    all_fns.extend(crate::elements::paragraph::bridge::fns());
-    all_fns.extend(crate::elements::editable_text::bridge::fns());
-    all_fns.extend(crate::elements::image::bridge::fns());
-    all_fns.extend(crate::elements::pointer_interact::bridge::fns());
-    all_fns.extend(crate::elements::mouse_region::bridge::fns());
-    all_fns.extend(crate::elements::condition::bridge::fns());
-    all_fns.extend(crate::elements::switch::bridge::fns());
-    all_fns.extend(crate::elements::each::bridge::fns());
-    all_fns.extend(crate::elements::lazy_list::bridge::fns());
-    all_fns.extend(crate::elements::scroll_view::bridge::fns());
-    all_fns.extend(crate::elements::scrollbar::bridge::fns());
-    all_fns.extend(crate::elements::fragment::bridge::fns());
-    all_fns.extend(crate::elements::focusable::bridge::fns());
-    all_fns.extend(crate::elements::effects::bridge::fns());
-    all_fns.extend(crate::elements::lifecycle::bridge::fns());
-    all_fns.extend(crate::elements::readable_subscribe::bridge::fns());
-    all_fns.extend(animation::fns());
-    all_fns.extend(render::fns());
-
-    let mut all_consts: Vec<ConstEntry> = Vec::new();
-    all_consts.extend(enums::consts(context));
-    all_consts.extend(color::consts(context, ctx_val.clone()));
-
+    // `builtin:tur/core` — the reactive core: atom primitives + event framework
+    // (`mutate`/`set`) + `render`. No value types, no views, no consts.
+    let mut core_fns: Vec<FnEntry> = Vec::new();
+    core_fns.extend(reactive::fns());
+    core_fns.extend(render::fns());
     let core_module = module_loader::build_native_module(
         context,
         opaque.object().clone().into(),
-        &all_fns,
-        &all_consts,
+        &core_fns,
+        &[],
     );
     loader.register("builtin:tur/core", core_module);
+
+    // `builtin:tur/std` — the widget library + value types + event details.
+    // Re-exports everything in core, then adds color, animation, all element
+    // view factories/controllers/resources, and the enum + color const-objects.
+    let mut std_fns = core_fns.clone();
+    std_fns.extend(color::fns());
+    std_fns.extend(animation::fns());
+    std_fns.extend(crate::elements::container::bridge::fns());
+    std_fns.extend(crate::elements::flex::bridge::fns());
+    std_fns.extend(crate::elements::flex_item::bridge::fns());
+    std_fns.extend(crate::elements::stack::bridge::fns());
+    std_fns.extend(crate::elements::positioned::bridge::fns());
+    std_fns.extend(crate::elements::paragraph::bridge::fns());
+    std_fns.extend(crate::elements::editable_text::bridge::fns());
+    std_fns.extend(crate::elements::image::bridge::fns());
+    std_fns.extend(crate::elements::pointer_interact::bridge::fns());
+    std_fns.extend(crate::elements::mouse_region::bridge::fns());
+    std_fns.extend(crate::elements::condition::bridge::fns());
+    std_fns.extend(crate::elements::switch::bridge::fns());
+    std_fns.extend(crate::elements::each::bridge::fns());
+    std_fns.extend(crate::elements::lazy_list::bridge::fns());
+    std_fns.extend(crate::elements::scroll_view::bridge::fns());
+    std_fns.extend(crate::elements::scrollbar::bridge::fns());
+    std_fns.extend(crate::elements::fragment::bridge::fns());
+    std_fns.extend(crate::elements::focusable::bridge::fns());
+    std_fns.extend(crate::elements::effects::bridge::fns());
+    std_fns.extend(crate::elements::lifecycle::bridge::fns());
+    std_fns.extend(crate::elements::readable_subscribe::bridge::fns());
+
+    let mut std_consts: Vec<ConstEntry> = Vec::new();
+    std_consts.extend(color::consts(context, ctx_val.clone()));
+    std_consts.extend(enums::consts(context));
+
+    let std_module = module_loader::build_native_module(
+        context,
+        opaque.object().clone().into(),
+        &std_fns,
+        &std_consts,
+    );
+    loader.register("builtin:tur/std", std_module);
 
     // Register the public `turDevTool` global — a plain object whose methods
     // are the dev-tool natives bound to the bridge ctx (ctx-free surface).
