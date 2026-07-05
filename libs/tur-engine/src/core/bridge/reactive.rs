@@ -3,25 +3,20 @@ use std::rc::Rc;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsArgs, JsResult, JsValue};
 
-use crate::core::bridge::{BoaOpaque, TurJsContext};
-use crate::core::reactive::{
-    extract_handle, AtomHandle, AtomKind, Mutation, Source,
-};
+use crate::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
+use crate::core::bridge::BoaOpaque;
+use crate::core::reactive::{extract_handle, AtomHandle, AtomKind, Mutation, Source};
 
-fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
-    let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("expected TurJsContext as first argument"),
-        )
-    })?;
-    let ctx_ref = BoaOpaque::<TurJsContext>::wrap(&obj).ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("expected TurJsContext as first argument"),
-        )
-    })?;
-    Ok(ctx_ref.clone())
+/// Bridge function table entries for the reactive primitives domain.
+pub(crate) fn fns() -> Vec<FnEntry> {
+    vec![
+        ("source", 2, tur_source as Ptr),
+        ("derive", 2, tur_derive as Ptr),
+        ("mutate", 2, tur_mutate as Ptr),
+        ("get", 2, tur_get as Ptr),
+        ("set", 3, tur_set as Ptr),
+        ("view", 1, tur_view as Ptr),
+    ]
 }
 
 fn require_callable(args: &[JsValue], idx: usize) -> JsResult<JsFunction> {
@@ -38,7 +33,7 @@ fn require_callable(args: &[JsValue], idx: usize) -> JsResult<JsFunction> {
     })
 }
 
-pub(crate) fn tur_source(
+fn tur_source(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -50,7 +45,7 @@ pub(crate) fn tur_source(
     Ok(opaque.object().clone().into())
 }
 
-pub(crate) fn tur_derive(
+fn tur_derive(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -62,7 +57,7 @@ pub(crate) fn tur_derive(
     Ok(opaque.object().clone().into())
 }
 
-pub(crate) fn tur_mutate(
+fn tur_mutate(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -74,7 +69,7 @@ pub(crate) fn tur_mutate(
     Ok(opaque.object().clone().into())
 }
 
-pub(crate) fn tur_get(
+fn tur_get(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -84,7 +79,7 @@ pub(crate) fn tur_get(
     Ok(js_ctx.store.bridge().read(readable, context))
 }
 
-pub(crate) fn tur_set(
+fn tur_set(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,
@@ -117,10 +112,10 @@ pub(crate) fn tur_set(
     }
 }
 
-/// `view(factory)` — wrap a JS thunk `() => EdgyElement` as a `JsView`
+/// `view(factory)` — wrap a JS thunk `() => Element` as a `JsView`
 /// (a View) and return it as a `ViewHandle`. The thunk is invoked
 /// lazily when the view is built (transparent pass-through).
-pub(crate) fn tur_view(
+fn tur_view(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,

@@ -1,6 +1,7 @@
 mod element;
 mod layout;
 mod render;
+pub(crate) mod bridge;
 mod scroll_position;
 
 pub use element::{ScrollViewElement, ScrollViewView};
