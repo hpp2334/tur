@@ -7,7 +7,9 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsResult, JsValue};
 
-use super::{AtomId, Derived, Mutation, Readable, Source, SubscriberId};
+use super::atom_id_of;
+use super::any_readable_of;
+use super::{AnyReadable, AtomId, Derived, Mutation, Readable, Source, SubscriberId};
 
 // ---------------------------------------------------------------------------
 // Data sub-structs.  Each is a by-value group inside `ReactiveCore`; fields
@@ -117,9 +119,9 @@ impl SubscriberGraph {
 
     /// Atomically replace a subscriber's dependency set. Removes edges that are
     /// no longer present and adds new ones, diffing against the previous set.
-    /// This is the single explicit write entry point for the atom↔subscriber
+    /// This is the single explicit write entry point for the atom<->subscriber
     /// index (replacing the old `clear_subscriber` + ambient auto-subscribe).
-    pub fn set_subscriber_deps(&self, sub: SubscriberId, deps: HashSet<AtomId>) {
+    fn set_subscriber_deps(&self, sub: SubscriberId, deps: HashSet<AtomId>) {
         let old = self
             .sub_to_atoms
             .borrow_mut()
@@ -152,7 +154,7 @@ impl SubscriberGraph {
         }
     }
 
-    pub fn dirty_subscribers(&self, atoms: &HashSet<AtomId>) -> HashSet<SubscriberId> {
+    fn dirty_subscribers(&self, atoms: &HashSet<AtomId>) -> HashSet<SubscriberId> {
         let mut out = HashSet::new();
         for atom in atoms {
             if let Some(subs) = self.atom_to_subs.borrow().get(atom) {
@@ -332,7 +334,7 @@ impl ReactiveCore {
         closure.call(&JsValue::undefined(), args, ctx)
     }
 
-    pub fn flush(&self) -> HashSet<AtomId> {
+    fn flush(&self) -> HashSet<AtomId> {
         if !self.flush.source_changed.get() {
             return HashSet::new();
         }
@@ -346,7 +348,7 @@ impl ReactiveCore {
         stale
     }
 
-    pub fn has_pending(&self) -> bool {
+    fn has_pending(&self) -> bool {
         self.flush.source_changed.get()
     }
 }
@@ -523,12 +525,14 @@ pub struct SubscriberIndexStore {
 }
 
 impl SubscriberIndexStore {
-    pub fn set_subscriber_deps(&self, sub: SubscriberId, deps: HashSet<AtomId>) {
+    pub fn set_subscriber_deps(&self, sub: SubscriberId, deps: HashSet<AnyReadable>) {
+        let deps: HashSet<AtomId> = deps.into_iter().map(atom_id_of).collect();
         self.graph.borrow().set_subscriber_deps(sub, deps);
     }
 
-    pub fn dirty_subscribers(&self, atoms: &HashSet<AtomId>) -> HashSet<SubscriberId> {
-        self.graph.borrow().dirty_subscribers(atoms)
+    pub fn dirty_subscribers(&self, atoms: &HashSet<AnyReadable>) -> HashSet<SubscriberId> {
+        let ids: HashSet<AtomId> = atoms.iter().copied().map(atom_id_of).collect();
+        self.graph.borrow().dirty_subscribers(&ids)
     }
 }
 
@@ -544,8 +548,13 @@ pub struct FlushEngineStore {
 }
 
 impl FlushEngineStore {
-    pub fn flush(&self) -> HashSet<AtomId> {
-        self.core.borrow().flush()
+    pub fn flush(&self) -> HashSet<AnyReadable> {
+        self.core
+            .borrow()
+            .flush()
+            .into_iter()
+            .map(any_readable_of)
+            .collect()
     }
 
     pub fn has_pending(&self) -> bool {

@@ -8,7 +8,7 @@ use boa_engine::{Context, JsValue};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::reactive::{extract_readable, AnyReadable};
+use crate::core::reactive::{AnyReadable, FromBoaJsValue};
 use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
 
 // ---------------------------------------------------------------------------
@@ -136,7 +136,7 @@ impl FragmentKind for EachFragment {
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
-        cx.subscribe_atom(self.view.items.id());
+        cx.subscribe_readable(self.view.items);
     }
 
     fn perform_update(
@@ -181,7 +181,7 @@ fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<
 fn prop_items(props: &JsObject, key: &str, ctx: &mut Context) -> Option<AnyReadable> {
     use boa_engine::js_string;
     let v = props.get(js_string!(key), ctx).ok()?;
-    extract_readable::<JsValue>(&v)
+    AnyReadable::from_js(&v)
 }
 
 fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {

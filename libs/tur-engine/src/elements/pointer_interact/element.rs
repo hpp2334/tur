@@ -18,7 +18,7 @@ use crate::core::view::{
 // PointerInteractView — the user's declaration. Pure Rust, no JsValues.
 //
 // Callbacks are mutation atoms typed as `EdgyMutation<E>`. The JS bridge
-// wraps user callbacks as mutation atoms and passes the `AtomHandle` as the
+// wraps user callbacks as mutation atoms and passes the `Mutation` handle as the
 // prop value. At event time the gesture handler resolves these and pushes
 // invocations onto the pending-mutation queue.
 //

@@ -1,7 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
-use crate::core::reactive::extract_mutation;
+use crate::core::reactive::{FromBoaJsValue, Mutation};
 
 use super::mutation::EdgyMutation;
 
@@ -32,7 +32,7 @@ impl EventArg for () {
 // ---------------------------------------------------------------------------
 
 pub fn edgy_mutation_from_js<E: EventArg>(v: &JsValue) -> Option<EdgyMutation<E>> {
-    extract_mutation(v).map(EdgyMutation::new)
+    Mutation::from_js(v).map(EdgyMutation::new)
 }
 
 pub fn extract_mutation_from_opts<E: EventArg>(
