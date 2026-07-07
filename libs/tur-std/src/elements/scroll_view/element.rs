@@ -29,13 +29,13 @@ use super::scroll_position::ScrollPosition;
 
 #[derive(Clone)]
 pub struct ScrollViewView {
-    pub axis: Option<Val<Axis>>,
-    pub padding: Option<Val<f64>>,
-    pub color: Option<Val<Brush>>,
+    pub(crate) axis: Option<Val<Axis>>,
+    pub(crate) padding: Option<Val<f64>>,
+    pub(crate) color: Option<Val<Brush>>,
     /// JS `ScrollController` opaque — parsed eagerly (not reactive).
-    pub controller: Option<JsObject>,
-    pub query_key: Option<Vec<String>>,
-    pub child: Rc<dyn View>,
+    pub(crate) controller: Option<JsObject>,
+    pub(crate) query_key: Option<Vec<String>>,
+    pub(crate) child: Rc<dyn View>,
 }
 
 impl View for ScrollViewView {
@@ -87,14 +87,14 @@ impl View for ScrollViewView {
 /// Resolved paint props (filled during layout). Paint reads these directly.
 #[derive(Default, Clone)]
 pub struct ScrollViewPainting {
-    pub color: Option<Brush>,
+    pub(crate) color: Option<Brush>,
 }
 
 pub struct ScrollViewElement {
-    pub view: ScrollViewView,
-    pub axis: Axis,
-    pub position: ScrollPosition,
-    pub painting: ScrollViewPainting,
+    pub(crate) view: ScrollViewView,
+    pub(crate) axis: Axis,
+    pub(crate) position: ScrollPosition,
+    pub(crate) painting: ScrollViewPainting,
 }
 
 impl ScrollViewElement {

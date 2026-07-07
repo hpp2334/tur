@@ -13,10 +13,11 @@ pub struct ElementObject {
     pub children: Vec<NodeId>,
     pub parent: Option<NodeId>,
     pub computed_layout: ComputedLayout,
-    pub query_key: Option<Vec<String>>,
-    pub handle: BoaOpaque<TurNodeHandle>,
-    pub dirty_layout: bool,
-    pub last_constraints: Option<Constraints>,
+    pub(crate) query_key: Option<Vec<String>>,
+    #[allow(dead_code)]
+    handle: BoaOpaque<TurNodeHandle>,
+    pub(crate) dirty_layout: bool,
+    pub(crate) last_constraints: Option<Constraints>,
 }
 
 impl fmt::Debug for ElementObject {

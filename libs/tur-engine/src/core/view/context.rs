@@ -15,7 +15,7 @@ use crate::core::view::{ViewCx, View};
 /// The boa `Context` is passed alongside (not stored) so callers can reborrow
 /// freely while holding `&mut SharedViewCx` — same pattern as the old `EdgyContext`.
 pub struct SharedViewCx {
-    pub js_ctx: TurJsContext,
+    js_ctx: TurJsContext,
 }
 
 impl SharedViewCx {

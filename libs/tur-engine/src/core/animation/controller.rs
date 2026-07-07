@@ -45,23 +45,23 @@ impl Default for RepeatMode {
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct AnimationController {
-    pub duration_ms: u64,
-    pub curve: Curve,
-    pub value: f64,
-    pub status: AnimationStatus,
-    pub repeat_mode: RepeatMode,
-    pub current_iteration: u64,
+    duration_ms: u64,
+    curve: Curve,
+    value: f64,
+    status: AnimationStatus,
+    repeat_mode: RepeatMode,
+    current_iteration: u64,
     /// The `value` captured when this animation segment started (set by
     /// `forward`/`reverse`/`resume`/`seek`). Used by `tick` to compute the
     /// current value relative to the start, which makes `speed`, `seek`,
     /// and `pause`/`resume` work correctly.
-    pub value_at_start: f64,
+    value_at_start: f64,
     /// Time multiplier (default 1.0). Mutated by `set_speed`. Higher values
     /// play faster; 0.5 = half speed, 2.0 = double speed.
-    pub speed: f64,
+    speed: f64,
     /// The direction the controller was traveling before `pause()` — used
     /// by `resume()` to pick up where it left off.
-    pub paused_direction: Option<AnimationStatus>,
+    paused_direction: Option<AnimationStatus>,
     /// Atom-backed callback handle for `onTick`. Resolved via the reactive
     /// store at flush time (just like every other event handler), so the
     /// callback runs after all `RefMut` borrows are released.

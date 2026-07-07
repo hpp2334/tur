@@ -4,8 +4,8 @@ use tur_shared::Size;
 use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 
 pub struct ImageResource {
-    pub peniko_image: ImageData,
-    pub natural_size: Size,
+    pub(crate) peniko_image: ImageData,
+    pub(crate) natural_size: Size,
 }
 
 impl ImageResource {

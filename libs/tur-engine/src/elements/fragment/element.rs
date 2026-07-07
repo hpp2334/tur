@@ -15,8 +15,9 @@ use crate::core::view::{ViewCx, extract_view, Lifecycle, View};
 
 #[derive(Clone)]
 pub struct FragmentView {
-    pub children: Vec<Rc<dyn View>>,
-    pub query_key: Option<Vec<String>>,
+    children: Vec<Rc<dyn View>>,
+    #[allow(dead_code)]
+    query_key: Option<Vec<String>>,
 }
 
 impl View for FragmentView {
@@ -39,7 +40,8 @@ impl View for FragmentView {
 // ---------------------------------------------------------------------------
 
 pub struct FragmentElement {
-    pub view: FragmentView,
+    #[allow(dead_code)]
+    pub(crate) view: FragmentView,
 }
 
 impl crate::core::layout::ElementSubscribe for FragmentElement {}

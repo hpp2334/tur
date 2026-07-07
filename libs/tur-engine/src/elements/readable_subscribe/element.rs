@@ -21,9 +21,9 @@ use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 
 #[derive(Clone)]
 pub struct ReadableSubscribeView {
-    pub readables: Vec<AtomId>,
-    pub on_update: Option<EdgyMutation<()>>,
-    pub child: Option<Rc<dyn View>>,
+    readables: Vec<AtomId>,
+    on_update: Option<EdgyMutation<()>>,
+    child: Option<Rc<dyn View>>,
 }
 
 impl View for ReadableSubscribeView {
@@ -46,8 +46,8 @@ impl View for ReadableSubscribeView {
 }
 
 pub struct ReadableSubscribeElement {
-    pub readables: Vec<AtomId>,
-    pub on_update: Option<EdgyMutation<()>>,
+    readables: Vec<AtomId>,
+    on_update: Option<EdgyMutation<()>>,
 }
 
 impl ElementSubscribe for ReadableSubscribeElement {

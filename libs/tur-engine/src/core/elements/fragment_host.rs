@@ -24,7 +24,7 @@ use crate::core::view::ViewCx;
 /// branch/items. The real ancestor is marked dirty so the enclosing flex
 /// re-lays-out with the new flattened children in the same flush iteration.
 pub struct FragmentHost {
-    pub id: FragmentNodeId,
+    pub(crate) id: FragmentNodeId,
     /// The nearest **real** element ancestor — used by `mark_dirty` so the
     /// parent flex is re-laid-out when this fragment's children change.
     pub parent: NodeId,
@@ -33,8 +33,8 @@ pub struct FragmentHost {
     /// The primitive-specific state + rebuild logic. `Option` so it can be
     /// taken out during the effect pass (mirrors `node.element.take()`),
     /// letting the host stay in the tree so children can auto-link.
-    pub kind: Option<Box<dyn FragmentKind>>,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) kind: Option<Box<dyn FragmentKind>>,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl FragmentHost {

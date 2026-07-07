@@ -19,20 +19,20 @@ use crate::elements::scroll_view::ScrollViewElement;
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct ScrollController {
-    pub offset: f64,
-    pub max_scroll_extent: f64,
-    pub viewport_dimension: f64,
-    pub on_scroll: Option<EdgyMutation<ScrollEvent>>,
-    pub handle: Option<JsObject>,
+    pub(crate) offset: f64,
+    pub(crate) max_scroll_extent: f64,
+    pub(crate) viewport_dimension: f64,
+    pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
+    pub(crate) handle: Option<JsObject>,
     /// The scroll-view node this controller is bound to. Set at build time by
     /// `ScrollViewView::build` (the `_attach` JS path is the legacy
     /// fallback). `jumpTo`/drag use this to locate the scroll element.
-    pub bound_node: Option<ElementNodeId>,
-    pub element_tree:
+    pub(crate) bound_node: Option<ElementNodeId>,
+    pub(crate) element_tree:
         Option<tur_engine::core::elements::NodeTree>,
-    pub mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
-    pub dirty_flag: Option<Rc<Cell<bool>>>,
-    pub pending_initial_offset: Option<f64>,
+    pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
+    pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
+    pub(crate) pending_initial_offset: Option<f64>,
 }
 
 impl ScrollController {

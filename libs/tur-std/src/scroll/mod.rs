@@ -13,9 +13,9 @@ use tur_engine::core::edgy_event::EventArg;
 
 #[derive(Clone)]
 pub struct ScrollEvent {
-    pub offset: f64,
-    pub max_extent: f64,
-    pub viewport_dimension: f64,
+    pub(crate) offset: f64,
+    pub(crate) max_extent: f64,
+    pub(crate) viewport_dimension: f64,
 }
 
 impl EventArg for ScrollEvent {

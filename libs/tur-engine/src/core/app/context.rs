@@ -20,25 +20,25 @@ use crate::core::resource::ResourceMap;
 use crate::core::shell::Shell;
 
 pub struct TurAppContext {
-    pub element_tree: NodeTree,
-    pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
-    pub focus_manager: Rc<RefCell<FocusManager>>,
-    pub resource_map: Rc<RefCell<ResourceMap>>,
-    pub renderer: Box<dyn Renderer>,
-    pub font_manager: FontManager,
-    pub text_layout_cx: ParleyLayoutContext<[u8; 4]>,
-    pub size: (f64, f64),
-    pub gesture_composer: GestureEventComposer,
-    pub event_queue: AppEventQueue,
-    pub handlers: Vec<Box<dyn AppHandler>>,
+    pub(crate) element_tree: NodeTree,
+    pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
+    pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
+    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
+    pub(crate) renderer: Box<dyn Renderer>,
+    pub(crate) font_manager: FontManager,
+    pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
+    pub(crate) size: (f64, f64),
+    pub(crate) gesture_composer: GestureEventComposer,
+    pub(crate) event_queue: AppEventQueue,
+    pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
     /// shared with the boa `Context`. See [`Shell`].
-    pub shell: Shell,
+    pub(crate) shell: Shell,
     /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
     /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
     /// `TurApp::take_clipboard_write()` once per frame.
-    pub pending_clipboard_write: Rc<RefCell<Option<String>>>,
+    pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
 }
 
 impl fmt::Debug for TurAppContext {

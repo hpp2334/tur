@@ -11,16 +11,16 @@ use tur_engine::core::keyboard::Modifiers;
 
 #[derive(Clone)]
 pub struct KeydownEvent {
-    pub key: String,
-    pub code: String,
-    pub modifiers: Modifiers,
+    pub(crate) key: String,
+    pub(crate) code: String,
+    pub(crate) modifiers: Modifiers,
 }
 
 #[derive(Clone)]
 pub struct KeyupEvent {
-    pub key: String,
-    pub code: String,
-    pub modifiers: Modifiers,
+    pub(crate) key: String,
+    pub(crate) code: String,
+    pub(crate) modifiers: Modifiers,
 }
 
 impl EventArg for KeydownEvent {

@@ -84,22 +84,22 @@ impl LineNavInfo {
 
 #[derive(Clone)]
 pub struct EditableTextView {
-    pub controller: Option<JsObject>,
-    pub controller_atom: Option<AnyReadable>,
+    pub(crate) controller: Option<JsObject>,
+    pub(crate) controller_atom: Option<AnyReadable>,
     /// Optional `UndoController` for Cmd/Ctrl+Z + Cmd/Ctrl+Shift+Z support.
     /// When `Some`, text-mutating keystrokes push a prior-state snapshot
     /// onto the undo stack, and `handle_key_event` intercepts `"z"` / `"y"`
     /// with the appropriate modifiers.
-    pub undo_controller: Option<JsObject>,
-    pub placeholder: Option<Val<String>>,
-    pub color: Option<Val<Color>>,
-    pub placeholder_color: Option<Val<Color>>,
-    pub cursor_color: Option<Val<Color>>,
-    pub font_size: Option<Val<f64>>,
-    pub font_family: Option<Val<String>>,
-    pub multiline: Option<Val<bool>>,
-    pub on_context_menu: Option<EdgyMutation<ContextMenuEvent>>,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) undo_controller: Option<JsObject>,
+    pub(crate) placeholder: Option<Val<String>>,
+    pub(crate) color: Option<Val<Color>>,
+    pub(crate) placeholder_color: Option<Val<Color>>,
+    pub(crate) cursor_color: Option<Val<Color>>,
+    pub(crate) font_size: Option<Val<f64>>,
+    pub(crate) font_family: Option<Val<String>>,
+    pub(crate) multiline: Option<Val<bool>>,
+    pub(crate) on_context_menu: Option<EdgyMutation<ContextMenuEvent>>,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for EditableTextView {
@@ -169,15 +169,15 @@ impl View for EditableTextView {
 /// Resolved paint props (filled during layout). Paint reads these directly.
 #[derive(Default, Clone)]
 pub struct EditableTextPainting {
-    pub color: Option<Color>,
-    pub cursor_color: Option<Color>,
+    pub(crate) color: Option<Color>,
+    pub(crate) cursor_color: Option<Color>,
 }
 
 pub struct EditableTextElement {
-    pub view: EditableTextView,
-    pub cached_layout: Option<TextLayoutData>,
-    pub resolved_multiline: bool,
-    pub painting: EditableTextPainting,
+    pub(crate) view: EditableTextView,
+    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) resolved_multiline: bool,
+    pub(crate) painting: EditableTextPainting,
 }
 
 impl tur_engine::core::elements::ElementCursorRect for EditableTextElement {
@@ -653,8 +653,8 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
 
 #[derive(Clone)]
 pub struct ContextMenuEvent {
-    pub local: tur_shared::Offset,
-    pub global: tur_shared::Offset,
+    local: tur_shared::Offset,
+    global: tur_shared::Offset,
 }
 
 impl EventArg for ContextMenuEvent {

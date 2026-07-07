@@ -37,16 +37,16 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 
 #[derive(Clone)]
 pub struct LazyListView {
-    pub axis: Option<Val<Axis>>,
-    pub item_count: Val<u64>,
-    pub overscan: Option<Val<u64>>,
+    pub(crate) axis: Option<Val<Axis>>,
+    pub(crate) item_count: Val<u64>,
+    pub(crate) overscan: Option<Val<u64>>,
     /// Optional fixed extent (size along the main axis) for every item.
     /// When provided, the visible-range math is exact and we never need to
     /// measure items off-screen to know the total content length. When
     /// absent, the average of measured children is used as a fallback.
-    pub item_extent: Option<Val<f64>>,
-    pub builder: JsFunction,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) item_extent: Option<Val<f64>>,
+    pub(crate) builder: JsFunction,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for LazyListView {
@@ -142,7 +142,7 @@ fn build_item_spec(
 // ---------------------------------------------------------------------------
 
 pub struct LazyListElement {
-    pub view: LazyListView,
+    pub(crate) view: LazyListView,
     pub(crate) node_id: ElementNodeId,
     pub(crate) axis: Axis,
     pub(crate) overscan: u64,
@@ -628,8 +628,8 @@ impl LazyListView {
 
 #[derive(Clone)]
 pub struct VisibleRangeChangeEvent {
-    pub start_index: u64,
-    pub end_index: u64,
+    pub(crate) start_index: u64,
+    pub(crate) end_index: u64,
 }
 
 impl EventArg for VisibleRangeChangeEvent {

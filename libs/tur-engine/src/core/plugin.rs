@@ -50,12 +50,12 @@ pub trait Plugin {
 /// and global properties. Each `register_*` method is self-contained: call them
 /// sequentially within `register`.
 pub struct PluginContext<'a> {
-    pub boa: &'a mut Context,
-    pub loader: Rc<TurModuleLoader>,
+    pub(crate) boa: &'a mut Context,
+    pub(crate) loader: Rc<TurModuleLoader>,
     pub js_ctx_value: JsValue,
-    pub js_ctx: TurJsContext,
-    pub app: Rc<RefCell<TurAppContext>>,
-    pub needs_draw: Rc<Cell<bool>>,
+    pub(crate) js_ctx: TurJsContext,
+    pub(crate) app: Rc<RefCell<TurAppContext>>,
+    pub(crate) needs_draw: Rc<Cell<bool>>,
 }
 
 impl<'a> PluginContext<'a> {

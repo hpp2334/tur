@@ -9,10 +9,10 @@ use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::view::{ViewCx, val_from_js, Lifecycle, PropValue, View, Val};
 
 pub struct ChildData {
-    pub id: ElementNodeId,
-    pub size: Size,
-    pub is_flex: bool,
-    pub flex: f64,
+    pub(crate) id: ElementNodeId,
+    pub(crate) size: Size,
+    pub(crate) is_flex: bool,
+    pub(crate) flex: f64,
 }
 
 // ---------------------------------------------------------------------------
@@ -25,12 +25,12 @@ pub struct ChildData {
 
 #[derive(Clone)]
 pub struct FlexView {
-    pub direction: Option<Axis>,
-    pub main_alignment: Option<Val<MainAxisAlignment>>,
-    pub cross_alignment: Option<Val<CrossAxisAlignment>>,
-    pub main_axis_size: Option<Val<MainAxisSize>>,
-    pub children: Vec<Rc<dyn View>>,
-    pub query_key: Option<Vec<String>>,
+    pub(crate) direction: Option<Axis>,
+    pub(crate) main_alignment: Option<Val<MainAxisAlignment>>,
+    pub(crate) cross_alignment: Option<Val<CrossAxisAlignment>>,
+    pub(crate) main_axis_size: Option<Val<MainAxisSize>>,
+    pub(crate) children: Vec<Rc<dyn View>>,
+    pub(crate) query_key: Option<Vec<String>>,
 }
 
 impl View for FlexView {
@@ -64,11 +64,11 @@ impl View for FlexView {
 // ---------------------------------------------------------------------------
 
 pub struct FlexElement {
-    pub view: FlexView,
-    pub child_data: Vec<ChildData>,
-    pub constraints: Option<Constraints>,
-    pub computed_size: Option<Size>,
-    pub overflow: f64,
+    pub(crate) view: FlexView,
+    pub(crate) child_data: Vec<ChildData>,
+    pub(crate) constraints: Option<Constraints>,
+    pub(crate) computed_size: Option<Size>,
+    pub(crate) overflow: f64,
 }
 
 impl Lifecycle for FlexElement {}

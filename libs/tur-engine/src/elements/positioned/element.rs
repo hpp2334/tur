@@ -19,13 +19,13 @@ use crate::core::view::{ViewCx, extract_view, val_from_js, Lifecycle, PropValue,
 
 #[derive(Clone)]
 pub struct PositionedView {
-    pub left: Option<Val<f64>>,
-    pub top: Option<Val<f64>>,
-    pub right: Option<Val<f64>>,
-    pub bottom: Option<Val<f64>>,
-    pub width: Option<Val<f64>>,
-    pub height: Option<Val<f64>>,
-    pub child: Rc<dyn View>,
+    pub(crate) left: Option<Val<f64>>,
+    pub(crate) top: Option<Val<f64>>,
+    pub(crate) right: Option<Val<f64>>,
+    pub(crate) bottom: Option<Val<f64>>,
+    pub(crate) width: Option<Val<f64>>,
+    pub(crate) height: Option<Val<f64>>,
+    pub(crate) child: Rc<dyn View>,
 }
 
 impl View for PositionedView {
@@ -44,7 +44,7 @@ impl View for PositionedView {
 // ---------------------------------------------------------------------------
 
 pub struct PositionedElement {
-    pub view: PositionedView,
+    pub(crate) view: PositionedView,
 }
 
 impl Lifecycle for PositionedElement {}

@@ -3,8 +3,8 @@ use std::collections::HashSet;
 use tur_engine::core::element::ElementNodeId;
 
 pub struct PointerRegionDiff {
-    pub entered: Vec<ElementNodeId>,
-    pub exited: Vec<ElementNodeId>,
+    pub(crate) entered: Vec<ElementNodeId>,
+    pub(crate) exited: Vec<ElementNodeId>,
 }
 
 pub struct PointerRegionTracker {

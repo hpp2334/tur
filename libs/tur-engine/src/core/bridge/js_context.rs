@@ -18,9 +18,9 @@ pub struct TurJsContext {
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub dirty: Rc<Cell<bool>>,
-    pub resource_map: Rc<RefCell<ResourceMap>>,
+    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub animation_manager: Rc<RefCell<AnimationManager>>,
-    pub store: Store,
+    pub(crate) store: Store,
 }
 
 impl TurJsContext {

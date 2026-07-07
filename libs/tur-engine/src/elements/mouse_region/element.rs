@@ -26,11 +26,11 @@ use crate::core::view::{
 
 #[derive(Clone)]
 pub struct MouseRegionView {
-    pub behavior: Option<Val<HitTestBehavior>>,
-    pub cursor: Option<Val<Cursor>>,
+    pub(crate) behavior: Option<Val<HitTestBehavior>>,
+    pub(crate) cursor: Option<Val<Cursor>>,
     pub on_enter: Option<EdgyMutation<PointerRegionEvent>>,
     pub on_exit: Option<EdgyMutation<PointerRegionEvent>>,
-    pub child: Option<Rc<dyn View>>,
+    pub(crate) child: Option<Rc<dyn View>>,
 }
 
 impl View for MouseRegionView {
@@ -69,8 +69,8 @@ impl View for MouseRegionView {
 
 pub struct MouseRegionElement {
     pub view: MouseRegionView,
-    behavior: HitTestBehavior,
-    pub cursor: Option<Cursor>,
+    pub(crate) behavior: HitTestBehavior,
+    pub(crate) cursor: Option<Cursor>,
 }
 
 impl MouseRegionElement {

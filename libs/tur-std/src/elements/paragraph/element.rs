@@ -28,19 +28,19 @@ use tur_shared::Color;
 
 #[derive(Clone)]
 pub struct TextView {
-    pub text: Option<Val<String>>,
-    pub font_size: Option<Val<f64>>,
+    pub(crate) text: Option<Val<String>>,
+    pub(crate) font_size: Option<Val<f64>>,
     /// Default color applied to the anonymous span in the plain-text case.
-    pub color: Option<Val<Color>>,
+    pub(crate) color: Option<Val<Color>>,
     /// Parsed eagerly at factory time (not reactive).
-    pub spans: Option<Vec<SpanData>>,
-    pub query_key: Option<Vec<String>>,
-    pub on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
+    pub(crate) spans: Option<Vec<SpanData>>,
+    pub(crate) query_key: Option<Vec<String>>,
+    pub(crate) on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
     /// When `true`, the text can be drag-selected. Defaults to `false`
     /// (read-only, non-selectable) — matches the browser convention for
     /// `<span>`/`<div>` text. Read directly from the spec by the gesture
     /// handler (no reactivity — toggle by rebuilding the element).
-    pub selectable: bool,
+    pub(crate) selectable: bool,
 }
 
 impl View for TextView {
@@ -67,11 +67,11 @@ impl View for TextView {
 // ---------------------------------------------------------------------------
 
 pub struct TextElement {
-    pub view: TextView,
-    pub cached_layout: Option<TextLayoutData>,
-    pub cached_spans: Vec<SpanData>,
-    pub selection_anchor: usize,
-    pub selection_end: usize,
+    pub(crate) view: TextView,
+    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) cached_spans: Vec<SpanData>,
+    pub(crate) selection_anchor: usize,
+    pub(crate) selection_end: usize,
 }
 
 impl TextElement {

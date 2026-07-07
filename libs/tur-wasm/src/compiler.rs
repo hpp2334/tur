@@ -26,9 +26,9 @@ use swc_ecma_visit::{Visit, VisitWith};
 /// access `.prop`).
 #[derive(Clone, Copy, Debug)]
 pub struct TokenSpan {
-    pub start: usize,
-    pub end: usize,
-    pub kind: u8,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) kind: u8,
 }
 
 fn tsx_syntax() -> Syntax {
@@ -431,9 +431,10 @@ fn template_contains(templates: &[(usize, usize)], tok: &TokenSpan) -> bool {
 
 /// Import specifier: `{ X }` → local=X, imported=X; `{ X as Y }` → local=Y, imported=X.
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct ImportSpecifierInfo {
-    pub local: String,
-    pub imported: String,
+    pub(crate) local: String,
+    pub(crate) imported: String,
 }
 
 /// Metadata for a single top-level declaration in a module.
@@ -459,16 +460,17 @@ pub enum AstNodeKind {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct AstNode {
-    pub kind: AstNodeKind,
+    pub(crate) kind: AstNodeKind,
     /// Source text of this node, extracted from the original string.
     /// The JS side uses this instead of position-based slicing.
-    pub text: String,
+    pub(crate) text: String,
     /// For export nodes: the declaration text WITHOUT the `export`/`export
     /// default` keyword, extracted from the inner declaration's span.  `None`
     /// for non-export nodes (import, statement).  This lets the JS rewriter
     /// avoid any regex — it just uses `node.body` directly.
-    pub body: Option<String>,
+    pub(crate) body: Option<String>,
 }
 
 /// Parse TS/TSX source and return structured metadata for each top-level

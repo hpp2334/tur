@@ -19,20 +19,20 @@ use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_
 
 #[derive(Clone)]
 pub struct InputView {
-    pub width: Option<Val<f64>>,
-    pub height: Option<Val<f64>>,
-    pub controller: Option<JsObject>,
-    pub controller_atom: Option<AnyReadable>,
-    pub undo_controller: Option<JsObject>,
-    pub placeholder: Option<Val<String>>,
-    pub color: Option<Val<Color>>,
-    pub placeholder_color: Option<Val<Color>>,
-    pub cursor_color: Option<Val<Color>>,
-    pub font_size: Option<Val<f64>>,
-    pub font_family: Option<Val<String>>,
-    pub multiline: Option<Val<bool>>,
-    pub on_context_menu: Option<tur_engine::core::edgy_event::EdgyMutation<ContextMenuEvent>>,
-    pub query_key: Option<Vec<String>>,
+    width: Option<Val<f64>>,
+    height: Option<Val<f64>>,
+    controller: Option<JsObject>,
+    controller_atom: Option<AnyReadable>,
+    undo_controller: Option<JsObject>,
+    placeholder: Option<Val<String>>,
+    color: Option<Val<Color>>,
+    placeholder_color: Option<Val<Color>>,
+    cursor_color: Option<Val<Color>>,
+    font_size: Option<Val<f64>>,
+    font_family: Option<Val<String>>,
+    multiline: Option<Val<bool>>,
+    on_context_menu: Option<tur_engine::core::edgy_event::EdgyMutation<ContextMenuEvent>>,
+    query_key: Option<Vec<String>>,
 }
 
 impl View for InputView {

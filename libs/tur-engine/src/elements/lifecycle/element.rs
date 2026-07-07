@@ -18,7 +18,7 @@ use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 // ---------------------------------------------------------------------------
 
 pub struct LifecycleView {
-    pub factory: JsFunction,
+    pub(crate) factory: JsFunction,
 }
 
 impl View for LifecycleView {
@@ -63,8 +63,8 @@ impl View for LifecycleView {
 }
 
 pub struct LifecycleElement {
-    pub on_mounted: Option<EdgyMutation<()>>,
-    pub before_destroy: Option<EdgyMutation<()>>,
+    on_mounted: Option<EdgyMutation<()>>,
+    before_destroy: Option<EdgyMutation<()>>,
 }
 
 impl ElementTrace for LifecycleElement {

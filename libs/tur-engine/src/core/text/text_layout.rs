@@ -11,18 +11,18 @@ use parley::layout::PositionedLayoutItem;
 pub struct LineGlyphStop {
     pub byte: usize,
     pub x: f32,
-    pub y: f32,
-    pub advance: f32,
+    y: f32,
+    advance: f32,
 }
 
 pub struct LineInfo {
     pub top: f32,
     pub height: f32,
     #[allow(dead_code)]
-    pub baseline: f32,
+    baseline: f32,
     /// Byte offset of the first character of this line (after the previous
     /// line's terminating `\n`, or 0 for the first line).
-    pub start_byte: usize,
+    start_byte: usize,
     /// Byte offset of the cursor sitting at the END of this line's visible
     /// text — i.e. just past the last non-newline character. For a line ended
     /// by `\n`, this points AT the `\n` (cursor before it). For the final
@@ -36,28 +36,28 @@ pub struct LineInfo {
 }
 
 pub struct TextLayoutData {
-    pub runs: Vec<TextRunData>,
+    pub(crate) runs: Vec<TextRunData>,
     pub line_infos: Vec<LineInfo>,
     pub _width: f32,
     pub _height: f32,
 }
 
 pub struct TextRunData {
-    pub font: parley::FontData,
-    pub font_size: f32,
-    pub normalized_coords: Vec<i16>,
-    pub glyphs: Vec<TextGlyph>,
-    pub brush: [u8; 4],
-    pub underline: bool,
+    pub(crate) font: parley::FontData,
+    pub(crate) font_size: f32,
+    pub(crate) normalized_coords: Vec<i16>,
+    pub(crate) glyphs: Vec<TextGlyph>,
+    pub(crate) brush: [u8; 4],
+    pub(crate) underline: bool,
     #[allow(dead_code)]
-    pub line_index: usize,
+    pub(crate) line_index: usize,
 }
 
 pub struct TextGlyph {
-    pub id: u32,
-    pub x: f32,
-    pub y: f32,
-    pub advance: f32,
+    pub(crate) id: u32,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+    pub(crate) advance: f32,
 }
 
 impl TextLayoutData {

@@ -21,11 +21,11 @@ pub struct HandlerContext<'a> {
     pub gesture_composer: &'a mut GestureEventComposer,
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
-    pub needs_draw: &'a Cell<bool>,
+    pub(crate) needs_draw: &'a Cell<bool>,
     /// Slot for `AppEvent::ClipboardWrite` payloads — `ClipboardWriteHandler`
     /// pushes the text here, and the embedder drains it via
     /// `TurApp::take_clipboard_write()` once per frame.
-    pub pending_clipboard_write: Rc<RefCell<Option<String>>>,
+    pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
 }
 
 impl<'a> HandlerContext<'a> {

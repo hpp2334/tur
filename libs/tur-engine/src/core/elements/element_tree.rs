@@ -16,27 +16,27 @@ use crate::core::shell::PaintShell;
 use crate::core::resource::ResourceMap;
 
 pub struct NodeTreeData {
-    pub elements: HashMap<ElementNodeId, ElementObject>,
+    pub(crate) elements: HashMap<ElementNodeId, ElementObject>,
     /// Control-flow primitives (Each / Condition / Switch). Keyed by id (same
     /// counter as `elements`). Fragments have no `AnyElement` and are never laid
     /// out / painted directly — `flatten_children` splices their children into
     /// the enclosing flex's layout.
-    pub fragments: HashMap<FragmentNodeId, FragmentHost>,
-    pub root_id: Option<ElementNodeId>,
-    pub next_id: u64,
-    pub store: Store,
+    fragments: HashMap<FragmentNodeId, FragmentHost>,
+    root_id: Option<ElementNodeId>,
+    next_id: u64,
+    pub(crate) store: Store,
     /// Cached read-only reactive face; the layout driver wraps this in a
     /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
     /// read atoms, never `set` / mutate.
-    pub read_face: ReactiveReadStore,
+    pub(crate) read_face: ReactiveReadStore,
     /// Element ids inserted since the last lifecycle flush. Drained by the
     /// flush loop, which fires each element's `on_mounted` hook.
-    pub pending_mounted: Vec<ElementNodeId>,
+    pending_mounted: Vec<ElementNodeId>,
     /// Elements removed (taken out) since the last lifecycle flush. Drained by
     /// the flush loop, which fires each element's `before_destroy` hook before
     /// dropping it. Keeping them here (rather than dropping immediately) lets
     /// the hook run with a live element + mutation queue in scope.
-    pub pending_destroy: Vec<AnyElement>,
+    pending_destroy: Vec<AnyElement>,
 }
 
 
@@ -785,15 +785,15 @@ impl NodeTreeData {
 
 /// Structured snapshot of a single node for the `turDevTool` API.
 pub struct DevNodeData {
-    pub id: NodeId,
+    pub(crate) id: NodeId,
     pub name: &'static str,
-    pub label: String,
-    pub props: Vec<(&'static str, TraceValue)>,
+    pub(crate) label: String,
+    pub(crate) props: Vec<(&'static str, TraceValue)>,
     pub layout_extra: Vec<(&'static str, TraceValue)>,
-    pub relative: (f64, f64),
-    pub absolute: (f64, f64),
-    pub size: (f64, f64),
-    pub query_key: Option<Vec<String>>,
+    pub(crate) relative: (f64, f64),
+    pub(crate) absolute: (f64, f64),
+    pub(crate) size: (f64, f64),
+    pub(crate) query_key: Option<Vec<String>>,
     pub children: Vec<NodeId>,
 }
 
@@ -825,7 +825,7 @@ impl fmt::Debug for NodeTreeData {
 
 #[derive(Clone)]
 pub struct NodeTree {
-    pub data: Rc<RefCell<NodeTreeData>>,
+    data: Rc<RefCell<NodeTreeData>>,
 }
 
 impl NodeTree {

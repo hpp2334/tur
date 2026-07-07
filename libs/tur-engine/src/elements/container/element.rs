@@ -62,18 +62,18 @@ impl View for ContainerView {
 /// reads these fields directly and never touches the reactive store.
 #[derive(Default, Clone)]
 pub struct ContainerPainting {
-    pub shadow_blur: Option<f64>,
-    pub shadow_color: Option<Color>,
-    pub color: Option<Brush>,
-    pub border_color: Option<Color>,
-    pub border_width: Option<f64>,
-    pub border_radius: Option<f64>,
-    pub border_position: BorderPosition,
+    pub(crate) shadow_blur: Option<f64>,
+    pub(crate) shadow_color: Option<Color>,
+    pub(crate) color: Option<Brush>,
+    pub(crate) border_color: Option<Color>,
+    pub(crate) border_width: Option<f64>,
+    pub(crate) border_radius: Option<f64>,
+    pub(crate) border_position: BorderPosition,
 }
 
 pub struct ContainerElement {
-    pub view: ContainerView,
-    pub painting: ContainerPainting,
+    pub(crate) view: ContainerView,
+    pub(crate) painting: ContainerPainting,
 }
 
 fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
