@@ -7,7 +7,7 @@ use tur_shared::{
     HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
 };
 
-use crate::core::reactive::{extract_readable, AtomId, Readable};
+use crate::core::reactive::{AnyReadable, FromBoaJsValue, Readable};
 
 // ---------------------------------------------------------------------------
 // PropValue — trait for types that can be decoded from a JsValue WITHOUT a
@@ -116,8 +116,8 @@ impl_prop_value_enum!(
 // ---------------------------------------------------------------------------
 
 impl<T> Readable<T> {
-    pub fn is_dirty(&self, dirties: &HashSet<AtomId>) -> bool {
-        dirties.contains(&self.id())
+    pub fn is_dirty(&self, dirties: &HashSet<AnyReadable>) -> bool {
+        dirties.contains(&self.to_any())
     }
 }
 
@@ -132,10 +132,10 @@ pub enum Val<T: PropValue> {
 }
 
 impl<T: PropValue> Val<T> {
-    /// Returns the atom id if this is a reactive val.
-    pub fn atom(&self) -> Option<AtomId> {
+    /// Returns the atom as an erased handle if this is a reactive val.
+    pub fn atom(&self) -> Option<AnyReadable> {
         match self {
-            Val::Reactive(r) => Some(r.id()),
+            Val::Reactive(r) => Some(r.to_any()),
             _ => None,
         }
     }
@@ -149,9 +149,9 @@ impl<T: PropValue> Val<T> {
     }
 
     /// Returns `true` if this is a reactive val whose atom is in `dirties`.
-    pub fn is_dirty(&self, dirties: &HashSet<AtomId>) -> bool {
+    pub fn is_dirty(&self, dirties: &HashSet<AnyReadable>) -> bool {
         match self {
-            Val::Reactive(r) => dirties.contains(&r.id()),
+            Val::Reactive(r) => dirties.contains(&r.to_any()),
             _ => false,
         }
     }
@@ -165,7 +165,7 @@ pub fn val_from_js<T: PropValue>(v: &JsValue) -> Option<Val<T>> {
     if v.is_undefined() || v.is_null() {
         return None;
     }
-    match extract_readable::<T>(v) {
+    match Readable::<T>::from_js(v) {
         Some(readable) => Some(Val::Reactive(readable)),
         None => T::from_js(v).map(Val::Static),
     }

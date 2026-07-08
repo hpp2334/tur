@@ -1042,8 +1042,9 @@ pub(super) fn prop_controller_atom(
     ctx: &mut Context,
 ) -> Option<AnyReadable> {
     use boa_engine::js_string;
+    use tur_engine::core::reactive::FromBoaJsValue;
     let v = props.get(js_string!(key), ctx).ok()?;
-    tur_engine::core::reactive::extract_readable::<JsValue>(&v)
+    AnyReadable::from_js(&v)
 }
 
 pub fn prop_mutation<E: EventArg>(

@@ -120,7 +120,7 @@ impl AnimationController {
     /// callback fires during the next `flush_pending_mutations` pass, after
     /// any active `RefMut` borrow on this controller (or any other) is
     /// released. Safe to call while holding a `RefMut` — this only clones
-    /// an `AtomId` and pushes a `Box<dyn EventArg>` onto a separate `RefCell`.
+    /// a `Mutation` handle and pushes a `Box<dyn EventArg>` onto a separate `RefCell`.
     fn enqueue_tick(&self, eased_t: f64) {
         if let (Some(queue), Some(m)) = (&self.mutation_queue, self.on_tick) {
             queue.borrow_mut().push(m, AnimationTickEvent(eased_t));

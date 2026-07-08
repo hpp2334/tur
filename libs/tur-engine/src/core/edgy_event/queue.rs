@@ -10,7 +10,7 @@ use super::mutation::EdgyMutation;
 // Elements/controllers/handlers call `push(mutation, event)` at event time;
 // the flush loop drains it and invokes each mutation via the reactive store
 // (prepending the `{get, set}` context object). No `NodeId` is needed:
-// a mutation is a self-contained `AtomId`, so dispatch is resolved at push
+// a mutation is a self-contained `Mutation` handle, so dispatch is resolved at push
 // time, not flush time.
 // ---------------------------------------------------------------------------
 

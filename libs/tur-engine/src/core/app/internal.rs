@@ -366,7 +366,7 @@ impl TurAppInternal {
 
     /// Drain the pending-mutation queue and invoke each mutation via the
     /// reactive store, prepending the `{get, set}` context object. No element
-    /// tree access is needed: every entry is a self-contained `(AtomId, args)`.
+    /// tree access is needed: every entry is a self-contained `(Mutation, args)`.
     fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let invs = self.js_context.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {

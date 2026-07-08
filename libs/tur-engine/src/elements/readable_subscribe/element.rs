@@ -8,7 +8,7 @@ use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::reactive::{extract_handle, AtomId};
+use crate::core::reactive::{AnyReadable, FromBoaJsValue};
 use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 
 // ---------------------------------------------------------------------------
@@ -21,7 +21,7 @@ use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 
 #[derive(Clone)]
 pub struct ReadableSubscribeView {
-    readables: Vec<AtomId>,
+    readables: Vec<AnyReadable>,
     on_update: Option<EdgyMutation<()>>,
     child: Option<Rc<dyn View>>,
 }
@@ -46,14 +46,14 @@ impl View for ReadableSubscribeView {
 }
 
 pub struct ReadableSubscribeElement {
-    readables: Vec<AtomId>,
+    readables: Vec<AnyReadable>,
     on_update: Option<EdgyMutation<()>>,
 }
 
 impl ElementSubscribe for ReadableSubscribeElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         for atom in &self.readables {
-            cx.subscribe_atom(*atom);
+            cx.subscribe_readable(*atom);
         }
     }
 }
@@ -82,7 +82,7 @@ fn prop_mutation(props: &JsObject, key: &str, ctx: &mut Context) -> Option<EdgyM
     edgy_mutation_from_js(&v)
 }
 
-fn prop_readables(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<AtomId> {
+fn prop_readables(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<AnyReadable> {
     use boa_engine::js_string;
     let Ok(v) = props.get(js_string!(key), ctx) else {
         return Vec::new();
@@ -99,8 +99,8 @@ fn prop_readables(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<AtomId>
     let mut out = Vec::with_capacity(len as usize);
     for i in 0..len {
         if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(h) = extract_handle(&item) {
-                out.push(h.id);
+            if let Some(readable) = AnyReadable::from_js(&item) {
+                out.push(readable);
             }
         }
     }

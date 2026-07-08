@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::core::reactive::{AtomId, SubscriberId, SubscriberIndexStore};
+use crate::core::reactive::{AnyReadable, SubscriberId, SubscriberIndexStore};
 use crate::core::view::{PropValue, Val};
 
 // ---------------------------------------------------------------------------
@@ -33,7 +33,7 @@ pub trait ElementSubscribe {
 pub struct SubscribeCx {
     store: SubscriberIndexStore,
     node: SubscriberId,
-    new_deps: HashSet<AtomId>,
+    new_deps: HashSet<AnyReadable>,
 }
 
 impl SubscribeCx {
@@ -55,7 +55,7 @@ impl SubscribeCx {
 
     /// Declare a raw atom dependency (for fragments that hold an `AnyReadable`
     /// rather than a `Val<T>`).
-    pub fn subscribe_atom(&mut self, atom: AtomId) {
+    pub fn subscribe_readable(&mut self, atom: AnyReadable) {
         self.new_deps.insert(atom);
     }
 }

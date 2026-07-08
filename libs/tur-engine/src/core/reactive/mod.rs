@@ -13,20 +13,30 @@ mod store;
 pub use store::Store;
 pub use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, SubscriberIndexStore};
 
-/// Unique identifier for a reactive atom.
+/// Unique identifier for a reactive atom. Private to the reactive module —
+/// all biz code addresses atoms via the typed handles (`Source<T>`,
+/// `Derived<T>`, `Mutation`, `Readable<T>`) or the erased `AnyReadable`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct AtomId(pub u32);
+struct AtomId(u32);
 
-impl AtomId {
-    #[inline]
-    pub fn new(id: u32) -> Self {
-        AtomId(id)
-    }
+// ---------------------------------------------------------------------------
+// JsValue marshaling traits.
+//
+// Reactive handles cross the JS<->Rust boundary as boa opaque objects whose
+// `JsData` payload *is* the handle itself (`Source<JsValue>` /
+// `Derived<JsValue>` / `Mutation`).  The concrete type distinguishes the atom
+// kind, so no separate kind tag is needed.  These traits encapsulate the
+// wrap/unwrap.
+// ---------------------------------------------------------------------------
 
-    #[inline]
-    pub fn get(self) -> u32 {
-        self.0
-    }
+/// Extract a value from a `JsValue` by downcasting the opaque payload.
+pub trait FromBoaJsValue: Sized {
+    fn from_js(value: &JsValue) -> Option<Self>;
+}
+
+/// Wrap a value as a boa JS opaque object.
+pub trait IntoBoaJsValue {
+    fn into_js(self, ctx: &mut Context) -> JsValue;
 }
 
 /// Opaque identifier for an external subscriber (e.g. an `NodeId`)
@@ -49,48 +59,44 @@ impl SubscriberId {
     }
 }
 
-/// Kind tag stored inside [`AtomHandle`] so the JS→Rust extraction boundary
-/// can recover the typed handle.  The Store itself does **not** track kinds —
-/// the Rust type system carries them via `Source`, `Derived`, `Mutation`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AtomKind {
-    Source,
-    Derived,
-    Mutation,
-}
-
 // ---------------------------------------------------------------------------
 // Typed atom handles — the Rust type system encodes the atom kind.
 //
 // `T` is a phantom type parameter: it exists only for compile-time type
 // safety.  The Store stores `JsValue` for all atoms; `T` is erased to
 // `PhantomData<fn() -> T>` (covariant, no Send/Sync/'static overhead).
+//
+// The inner `AtomId` and the `.id()` / `from_id` accessors are module-private:
+// external code addresses handles opaquely (passing them to store methods) or
+// converts to `AnyReadable` for the dependency-tracking layer.
 // ---------------------------------------------------------------------------
 
 /// Handle for a source atom (writable, never stale).
-pub struct Source<T>(pub AtomId, PhantomData<fn() -> T>);
+#[derive(Debug)]
+pub struct Source<T>(AtomId, PhantomData<fn() -> T>);
 
 /// Handle for a derived atom (lazy, recomputes on read when stale).
-pub struct Derived<T>(pub AtomId, PhantomData<fn() -> T>);
+#[derive(Debug)]
+pub struct Derived<T>(AtomId, PhantomData<fn() -> T>);
 
 impl<T> Source<T> {
     #[inline]
-    pub fn id(&self) -> AtomId {
+    fn id(&self) -> AtomId {
         self.0
     }
 
-    pub fn from_id(id: AtomId) -> Self {
+    fn from_id(id: AtomId) -> Self {
         Source(id, PhantomData)
     }
 }
 
 impl<T> Derived<T> {
     #[inline]
-    pub fn id(&self) -> AtomId {
+    fn id(&self) -> AtomId {
         self.0
     }
 
-    pub fn from_id(id: AtomId) -> Self {
+    fn from_id(id: AtomId) -> Self {
         Derived(id, PhantomData)
     }
 }
@@ -117,11 +123,6 @@ impl<T> Hash for Source<T> {
         self.0.hash(state);
     }
 }
-impl<T> std::fmt::Debug for Source<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Source").field(&self.0).finish()
-    }
-}
 
 impl<T> Clone for Derived<T> {
     #[inline]
@@ -143,15 +144,10 @@ impl<T> Hash for Derived<T> {
         self.0.hash(state);
     }
 }
-impl<T> std::fmt::Debug for Derived<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Derived").field(&self.0).finish()
-    }
-}
 
 /// Handle for a mutation atom (callable side-effect closure).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Mutation(pub AtomId);
+pub struct Mutation(AtomId);
 
 /// Read-only reference to either a [`Source<T>`] or a [`Derived<T>`].  Used by
 /// `Val<T>::Reactive`, `Store::read`, and the subscriber graph.
@@ -162,10 +158,21 @@ pub enum Readable<T> {
 
 impl<T> Readable<T> {
     #[inline]
-    pub fn id(&self) -> AtomId {
+    fn id(&self) -> AtomId {
         match self {
             Readable::Source(s) => s.0,
             Readable::Derived(d) => d.0,
+        }
+    }
+
+    /// Erase the phantom type parameter, yielding an [`AnyReadable`].
+    /// Used by the dependency-tracking layer (which works with erased
+    /// identities, since a subscriber may depend on atoms of mixed `T`).
+    #[inline]
+    pub fn to_any(&self) -> AnyReadable {
+        match self {
+            Readable::Source(s) => Readable::Source(Source::from_id(s.0)),
+            Readable::Derived(d) => Readable::Derived(Derived::from_id(d.0)),
         }
     }
 }
@@ -218,70 +225,101 @@ impl<T> From<Derived<T>> for Readable<T> {
 }
 
 // ---------------------------------------------------------------------------
-// AtomHandle — opaque JS wrapper carrying the kind tag.
+// JsValue marshaling impls.
+//
+// Handles cross the JS<->Rust boundary as boa opaques.  Because the handles
+// themselves must stay `Copy` (they are passed around extensively in Rust) but
+// `JsData` types cannot be `Copy`, the opaque payload is a tiny private
+// non-`Copy` wrapper (`JsSource` / `JsDerived` / `JsMutation`) carrying just
+// the `AtomId`.  The wrapper type distinguishes the atom kind, so no separate
+// kind tag is needed.  All wrap/unwrap goes through the `IntoBoaJsValue` /
+// `FromBoaJsValue` traits below — the wrappers are never named outside this
+// module.
 // ---------------------------------------------------------------------------
 
-/// Opaque handle returned to JS for an atom.  Carries an [`AtomKind`] tag so
-/// the extraction boundary can produce the correct typed handle.
 #[derive(Debug, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
-pub struct AtomHandle {
-    pub(crate) id: AtomId,
-    pub(crate) kind: AtomKind,
+struct JsSource(AtomId);
+
+#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+struct JsDerived(AtomId);
+
+#[derive(Debug, Trace, Finalize, boa_engine::JsData)]
+#[boa_gc(unsafe_empty_trace)]
+struct JsMutation(AtomId);
+
+fn wrap_opaque<T: boa_engine::object::NativeObject>(
+    data: T,
+    ctx: &mut Context,
+) -> JsValue {
+    let proto = ctx.intrinsics().constructors().object().prototype();
+    JsObject::from_proto_and_data(proto, data).into()
 }
 
-impl AtomHandle {
-    pub fn new(id: AtomId, kind: AtomKind) -> Self {
-        AtomHandle { id, kind }
+impl<T> IntoBoaJsValue for Source<T> {
+    fn into_js(self, ctx: &mut Context) -> JsValue {
+        wrap_opaque(JsSource(self.id()), ctx)
     }
 }
 
-/// Extract a [`Readable<T>`] (Source or Derived) from a JS value.  Returns
-/// `None` for mutations or non-handle values.
-pub fn extract_readable<T>(value: &JsValue) -> Option<Readable<T>> {
-    let obj = value.as_object()?;
-    let h = obj.downcast_ref::<AtomHandle>()?;
-    match h.kind {
-        AtomKind::Source => Some(Readable::Source(Source::from_id(h.id))),
-        AtomKind::Derived => Some(Readable::Derived(Derived::from_id(h.id))),
-        AtomKind::Mutation => None,
+impl<T> IntoBoaJsValue for Derived<T> {
+    fn into_js(self, ctx: &mut Context) -> JsValue {
+        wrap_opaque(JsDerived(self.id()), ctx)
     }
 }
 
-/// Extract a [`Readable<T>`] or raise a TypeError.
-pub fn require_readable<T>(args: &[JsValue], idx: usize) -> JsResult<Readable<T>> {
-    extract_readable(args.get_or_undefined(idx)).ok_or_else(|| {
-        JsError::from(
-            JsNativeError::typ()
-                .with_message("expected a source or derived atom handle"),
-        )
-    })
-}
-
-/// Extract a [`Mutation`] from a JS value.
-pub fn extract_mutation(value: &JsValue) -> Option<Mutation> {
-    let obj = value.as_object()?;
-    let h = obj.downcast_ref::<AtomHandle>()?;
-    match h.kind {
-        AtomKind::Mutation => Some(Mutation(h.id)),
-        _ => None,
+impl IntoBoaJsValue for Mutation {
+    fn into_js(self, ctx: &mut Context) -> JsValue {
+        wrap_opaque(JsMutation(self.0), ctx)
     }
 }
 
-/// Extract a [`Mutation`] or raise a TypeError.
-pub fn require_mutation(args: &[JsValue], idx: usize) -> JsResult<Mutation> {
-    extract_mutation(args.get_or_undefined(idx)).ok_or_else(|| {
-        JsError::from(
-            JsNativeError::typ().with_message("expected a mutation atom handle"),
-        )
-    })
+impl FromBoaJsValue for Source<JsValue> {
+    fn from_js(value: &JsValue) -> Option<Self> {
+        Some(Source::from_id(value.as_object()?.downcast_ref::<JsSource>()?.0))
+    }
 }
 
-/// Extract the raw [`AtomHandle`] (id + kind) from a JS value.
-pub fn extract_handle(value: &JsValue) -> Option<AtomHandle> {
-    let obj = value.as_object()?;
-    let h = obj.downcast_ref::<AtomHandle>()?;
-    Some(AtomHandle { id: h.id, kind: h.kind })
+impl FromBoaJsValue for Derived<JsValue> {
+    fn from_js(value: &JsValue) -> Option<Self> {
+        Some(Derived::from_id(value.as_object()?.downcast_ref::<JsDerived>()?.0))
+    }
+}
+
+impl FromBoaJsValue for Mutation {
+    fn from_js(value: &JsValue) -> Option<Self> {
+        Some(Mutation(value.as_object()?.downcast_ref::<JsMutation>()?.0))
+    }
+}
+
+impl<T> FromBoaJsValue for Readable<T> {
+    fn from_js(value: &JsValue) -> Option<Self> {
+        let obj = value.as_object()?;
+        if let Some(s) = obj.downcast_ref::<JsSource>() {
+            return Some(Readable::Source(Source::from_id(s.0)));
+        }
+        if let Some(d) = obj.downcast_ref::<JsDerived>() {
+            return Some(Readable::Derived(Derived::from_id(d.0)));
+        }
+        None
+    }
+}
+
+/// Recover the private `AtomId` of an `AnyReadable`. Module-private; used by
+/// the store capability faces to bridge erased handles to the internal
+/// id-keyed maps.
+fn atom_id_of(readable: AnyReadable) -> AtomId {
+    readable.id()
+}
+
+/// Build an `AnyReadable` from a private id (used by the flush engine, which
+/// produces stale ids internally and must surface them as erased handles).
+fn any_readable_of(id: AtomId) -> AnyReadable {
+    // Stale atoms from the flush engine are sources or deriveds — neither
+    // kind nor value is recoverable from the id alone, and the dirty-
+    // subscriber lookup only needs identity, so encode as a Source variant.
+    Readable::Source(Source::from_id(id))
 }
 
 /// Build the per-store `{ get, set }` JS context object that closures receive
@@ -299,7 +337,12 @@ pub fn build_store_context_object(
     let core_for_get = core.clone();
     let get_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let readable = require_readable::<JsValue>(args, 0)?;
+            let readable = AnyReadable::from_js(args.get_or_undefined(0)).ok_or_else(|| {
+                JsError::from(
+                    JsNativeError::typ()
+                        .with_message("expected a source or derived atom handle"),
+                )
+            })?;
             Ok(core_for_get.borrow().read(readable, ctx))
         })
     };
@@ -318,33 +361,33 @@ pub fn build_store_context_object(
     let core_for_set = core.clone();
     let set_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let handle = extract_handle(args.get_or_undefined(0)).ok_or_else(|| {
-                JsError::from(
-                    JsNativeError::typ().with_message("expected an atom handle"),
-                )
-            })?;
-            match handle.kind {
-                AtomKind::Mutation => {
-                    let mutation = Mutation(handle.id);
-                    let ctx_obj = build_store_context_object(ctx, core_for_set.clone())?;
-                    let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
-                    invoke_args.push(ctx_obj.into());
-                    if let Some(extra) = args.get(1..) {
-                        invoke_args.extend_from_slice(extra);
-                    }
-                    core_for_set.borrow().invoke_mutation(mutation, &invoke_args, ctx)
+            let v = args.get_or_undefined(0);
+            if let Some(mutation) = Mutation::from_js(v) {
+                let ctx_obj = build_store_context_object(ctx, core_for_set.clone())?;
+                let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
+                invoke_args.push(ctx_obj.into());
+                if let Some(extra) = args.get(1..) {
+                    invoke_args.extend_from_slice(extra);
                 }
-                AtomKind::Source => {
-                    let value = args.get_or_undefined(1).clone();
-                    core_for_set
-                        .borrow()
-                        .set_source(Source::<JsValue>::from_id(handle.id), value);
-                    Ok(JsValue::undefined())
-                }
-                AtomKind::Derived => Err(JsError::from(
-                    JsNativeError::typ().with_message("cannot set a derived atom"),
-                )),
+                return core_for_set
+                    .borrow()
+                    .invoke_mutation(mutation, &invoke_args, ctx);
             }
+            if let Some(readable) = AnyReadable::from_js(v) {
+                return match readable {
+                    AnyReadable::Source(source) => {
+                        let value = args.get_or_undefined(1).clone();
+                        core_for_set.borrow().set_source(source, value);
+                        Ok(JsValue::undefined())
+                    }
+                    AnyReadable::Derived(_) => Err(JsError::from(
+                        JsNativeError::typ().with_message("cannot set a derived atom"),
+                    )),
+                };
+            }
+            Err(JsError::from(
+                JsNativeError::typ().with_message("expected an atom handle"),
+            ))
         })
     };
     let set_obj = boa_engine::object::FunctionObjectBuilder::new(context.realm(), set_fn)
