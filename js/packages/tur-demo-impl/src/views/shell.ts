@@ -13,11 +13,18 @@ import {
     set,
     view,
 } from "builtin:tur/std";
-import { editorWidth$, layoutMode$, sidebarWidth$ } from "../state";
+import {
+    editorWidth$,
+    isMobile$,
+    layoutMode$,
+    mobileTab$,
+    sidebarWidth$,
+} from "../state";
 import { tokens } from "../theme/tokens";
 import { ContextMenuOverlay } from "./context-menu";
 import { VDivider } from "./divider";
 import { Editor } from "./editor";
+import { MobileTabBar } from "./mobile-tab-bar";
 import { Sidebar } from "./sidebar";
 import { StatusBar } from "./status-bar";
 import { Toolbar } from "./toolbar";
@@ -91,34 +98,79 @@ export const Shell: Element = view(() =>
         children: [
             Stack({
                 children: [
-                    Column({
-                        crossAlignment: CrossAxisAlignment.Stretch,
-                        children: [
-                            Toolbar(),
-                            Expanded({
-                                child: Row({
-                                    crossAlignment: CrossAxisAlignment.Stretch,
-                                    children: [
-                                        Sidebar(),
-                                        VDivider({
-                                            onDrag: (ev) => {
-                                                const next = Math.max(
-                                                    120,
-                                                    Math.min(
-                                                        480,
-                                                        get(sidebarWidth$) +
-                                                            ev.deltaFromLast.x,
-                                                    ),
-                                                );
-                                                set(sidebarWidth$, next);
-                                            },
+                    Condition({
+                        condition: isMobile$,
+                        // Mobile: one full-width pane at a time, switched via
+                        // the bottom tab bar. No dividers — each pane fills.
+                        child: () =>
+                            Column({
+                                crossAlignment: CrossAxisAlignment.Stretch,
+                                children: [
+                                    Toolbar(),
+                                    Expanded({
+                                        child: Switch({
+                                            value: derive(() =>
+                                                get(mobileTab$),
+                                            ),
+                                            cases: [
+                                                {
+                                                    key: "cases",
+                                                    child: () => Sidebar(),
+                                                },
+                                                {
+                                                    key: "edit",
+                                                    child: () => Editor(),
+                                                },
+                                            ],
+                                            fallback: () => Viewer(),
                                         }),
-                                        Expanded({ child: EditorAndViewer() }),
-                                    ],
-                                }),
+                                    }),
+                                    MobileTabBar(),
+                                    StatusBar(),
+                                ],
                             }),
-                            StatusBar(),
-                        ],
+                        // Desktop: 3-pane layout (sidebar | editor | viewer)
+                        // with draggable dividers.
+                        elseChild: () =>
+                            Column({
+                                crossAlignment: CrossAxisAlignment.Stretch,
+                                children: [
+                                    Toolbar(),
+                                    Expanded({
+                                        child: Row({
+                                            crossAlignment:
+                                                CrossAxisAlignment.Stretch,
+                                            children: [
+                                                Sidebar(),
+                                                VDivider({
+                                                    onDrag: (ev) => {
+                                                        const next = Math.max(
+                                                            120,
+                                                            Math.min(
+                                                                480,
+                                                                get(
+                                                                    sidebarWidth$,
+                                                                ) +
+                                                                    ev
+                                                                        .deltaFromLast
+                                                                        .x,
+                                                            ),
+                                                        );
+                                                        set(
+                                                            sidebarWidth$,
+                                                            next,
+                                                        );
+                                                    },
+                                                }),
+                                                Expanded({
+                                                    child: EditorAndViewer(),
+                                                }),
+                                            ],
+                                        }),
+                                    }),
+                                    StatusBar(),
+                                ],
+                            }),
                     }),
                     // Context-menu overlay — paints on top of everything
                     // when open. Lives at the canvas root so it can be

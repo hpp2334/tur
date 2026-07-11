@@ -1,4 +1,5 @@
 import {
+    Condition,
     Container,
     derive,
     type Element,
@@ -18,6 +19,7 @@ import {
 } from "builtin:tur/std";
 import {
     autoRun$,
+    isMobile$,
     type LayoutMode,
     layoutHovered$,
     layoutMode$,
@@ -215,6 +217,7 @@ function LayoutControl(): Element {
 // --- Toolbar (composite) ---------------------------------------------------
 
 export function Toolbar(): Element {
+    const pad = (): number => (get(isMobile$) ? 8 : 12);
     return Container({
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,
@@ -224,7 +227,7 @@ export function Toolbar(): Element {
                 children: [
                     // Brand.
                     Container({
-                        padding: 12,
+                        padding: derive(pad),
                         children: [
                             Row({
                                 mainAxisSize: MainAxisSize.Min,
@@ -234,11 +237,26 @@ export function Toolbar(): Element {
                                         fontSize: 14,
                                         color: tokens.accent.solid,
                                     }),
-                                    SizedBox({ width: 4 }),
-                                    Text({
-                                        text: "playground",
-                                        fontSize: 11,
-                                        color: tokens.text.secondary,
+                                    // "playground" subtitle — hidden on mobile
+                                    // to reclaim horizontal space.
+                                    Condition({
+                                        condition: derive(
+                                            () => !get(isMobile$),
+                                        ),
+                                        child: () =>
+                                            Row({
+                                                mainAxisSize: MainAxisSize.Min,
+                                                children: [
+                                                    SizedBox({ width: 4 }),
+                                                    Text({
+                                                        text: "playground",
+                                                        fontSize: 11,
+                                                        color: tokens.text
+                                                            .secondary,
+                                                    }),
+                                                ],
+                                            }),
+                                        elseChild: () => SizedBox({ width: 0 }),
                                     }),
                                 ],
                             }),
@@ -247,7 +265,7 @@ export function Toolbar(): Element {
                     // Case name (center, expands).
                     Expanded({
                         child: Container({
-                            padding: 12,
+                            padding: derive(pad),
                             children: [
                                 Text({
                                     text: derive(() => get(selectedCase$)),
@@ -259,7 +277,7 @@ export function Toolbar(): Element {
                     }),
                     // Actions.
                     Container({
-                        padding: 12,
+                        padding: derive(pad),
                         children: [
                             Row({
                                 mainAxisSize: MainAxisSize.Min,
@@ -269,8 +287,22 @@ export function Toolbar(): Element {
                                     ResetButton(),
                                     SizedBox({ width: 12 }),
                                     AutoRunToggle(),
-                                    SizedBox({ width: 12 }),
-                                    LayoutControl(),
+                                    // Layout segmented control — desktop only
+                                    // (mobile uses the bottom tab bar).
+                                    Condition({
+                                        condition: derive(
+                                            () => !get(isMobile$),
+                                        ),
+                                        child: () =>
+                                            Row({
+                                                mainAxisSize: MainAxisSize.Min,
+                                                children: [
+                                                    SizedBox({ width: 12 }),
+                                                    LayoutControl(),
+                                                ],
+                                            }),
+                                        elseChild: () => SizedBox({ width: 0 }),
+                                    }),
                                 ],
                             }),
                         ],

@@ -1,6 +1,14 @@
-import { type Atom, set, source } from "builtin:tur/std";
+import {
+    type Atom,
+    derive,
+    get,
+    set,
+    source,
+    type ViewportSize,
+    viewportSize$,
+} from "builtin:tur/std";
 import { CASE_SOURCES } from "../cases";
-import type { LayoutMode } from "./types";
+import type { LayoutMode, MobileTab } from "./types";
 
 // ---------------------------------------------------------------------------
 // Whitelist & case ordering
@@ -51,6 +59,16 @@ export const layoutHovered$ = source<string | null>(null);
 // User preferences.
 export const autoRun$ = source(true);
 export const layoutMode$ = source<LayoutMode>("split");
+
+// Responsive layout. `viewportSize$` is engine-owned (synced each frame from
+// the canvas resize handler). Below 720px CSS width the playground switches to
+// the mobile single-pane + bottom-tab layout (see views/shell.ts).
+export const isMobile$ = derive(
+    () => get<ViewportSize>(viewportSize$).width < 720,
+);
+
+// Active pane on mobile (bottom tab bar). Desktop uses `layoutMode$` instead.
+export const mobileTab$ = source<MobileTab>("edit");
 
 // Draggable divider widths (pixel-based for 1:1 mouse tracking).
 // `sidebarWidth$` is the sidebar's pixel width; `editorWidth$` is the editor

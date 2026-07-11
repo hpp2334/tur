@@ -16,7 +16,9 @@ import {
     edited$,
     errorMsg$,
     INITIAL_CASE,
+    isMobile$,
     lastCompiledAtMs$,
+    mobileTab$,
     selectedCase$,
     selectedFile$,
     status$,
@@ -111,6 +113,12 @@ export function loadCase(name: string): void {
     if (!CASE_SOURCES[name]) return;
     set(selectedCase$, name);
     set(selectedFile$, "index.ts");
+
+    // On mobile, jump to the viewer so the user sees the rendered case right
+    // after picking it from the Cases tab.
+    if (get(isMobile$)) {
+        set(mobileTab$, "view");
+    }
 
     // Ensure file cache is populated.
     if (!caseFileCache.has(name)) {

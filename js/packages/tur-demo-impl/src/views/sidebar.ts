@@ -19,6 +19,7 @@ import {
     SizedBox,
     set,
     Text,
+    type Val,
 } from "builtin:tur/std";
 import {
     CASE_NAMES,
@@ -26,6 +27,7 @@ import {
     getCaseFileNames,
     hoveredCase$,
     hoveredFile$,
+    isMobile$,
     loadCase,
     selectedCase$,
     selectedFile$,
@@ -280,7 +282,13 @@ function FileItem(filename: string): Element {
 
 export function Sidebar(): Element {
     return Container({
-        width: derive(() => get(sidebarWidth$)),
+        // On mobile the sidebar fills the pane (no fixed width). Returning
+        // `null` resolves to `None` at layout time → the container fills its
+        // parent's main axis. The cast escapes the `number | null` type since
+        // `Val<number>` isn't nullable in the prop signature.
+        width: derive(() =>
+            get(isMobile$) ? null : get(sidebarWidth$),
+        ) as unknown as Val<number>,
         color: tokens.bg.panel,
         children: [
             Column({

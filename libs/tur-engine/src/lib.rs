@@ -28,6 +28,7 @@ use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
 use core::plugin::{Plugin, PluginContext};
+use core::reactive::IntoBoaJsValue;
 use core::render::Renderer;
 
 #[cfg(feature = "trace")]
@@ -308,10 +309,26 @@ impl TurEngineBuilder {
             .build()
             .expect("failed to build boa context");
 
-        let internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock);
+        let mut internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock);
 
         let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
         let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
+
+        // Engine-owned `viewportSize$` reactive source. Created here (needs
+        // `&mut Context` for the initial `{width,height}` value + the opaque
+        // wrap) and synced each frame in `TurAppInternal::flush`. The handle
+        // (`Source<JsValue>`, a `Copy` `AtomId`) lives on `internal`; the
+        // `JsValue` opaque is handed to plugins so `tur-std` can export it as
+        // the `viewportSize$` const in `builtin:tur/std`.
+        let viewport_size_js: boa_engine::JsValue = {
+            let (w, h) = internal.app_context.borrow().size;
+            let init = TurAppInternal::viewport_js(&mut boa_context, w, h);
+            let src: core::reactive::Source<boa_engine::JsValue> =
+                internal.js_context.store.bridge().source(init);
+            internal.viewport_size = Some(src);
+            internal.last_viewport.set((w, h));
+            src.into_js(&mut boa_context)
+        };
 
         let mut core_fns: Vec<FnEntry> = Vec::new();
         core_fns.extend(reactive::fns());
@@ -378,6 +395,7 @@ impl TurEngineBuilder {
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
                 needs_draw: internal.needs_draw.clone(),
+                viewport_size: viewport_size_js.clone(),
             };
             plugin.register(&mut plugin_ctx)?;
             if let Some(f) = plugin.cursor_output() {

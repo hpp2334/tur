@@ -22,6 +22,9 @@ struct WasmState {
     _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _wheel_closure: Closure<dyn Fn(web_sys::WheelEvent)>,
     _context_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _touch_start_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
+    _touch_move_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
+    _touch_end_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _compositionstart_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
@@ -639,6 +642,16 @@ impl TurWasmApp {
                     .err_to_jsval()?;
             }
 
+            // Claim touch gestures for the app. With `touch-action: none` the
+            // browser will not pan/zoom the page on touch-drag (we translate
+            // touchmove → AppEvent::Wheel below). Taps still synthesize
+            // mousedown/click for caret placement, buttons, and the soft
+            // keyboard via the hidden textarea.
+            canvas
+                .style()
+                .set_property("touch-action", "none")
+                .err_to_jsval()?;
+
             let textarea = document
                 .create_element("textarea")
                 .err_to_jsval()?
@@ -895,6 +908,158 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
+            // Touch handling for mobile. Two goals:
+            //
+            // 1. **Scrolling**: `ScrollView`/`LazyList` only consume `Wheel`
+            //    events. Browsers do not synthesize continuous `mousemove`
+            //    during a touch-drag, so we translate touch-move deltas into
+            //    `AppEvent::Wheel` (natural direct-manipulation: drag finger
+            //    up → scroll down).
+            //
+            // 2. **Drag-and-drop**: `PointerInteract` elements (e.g.
+            //    jigsaw-puzzle pieces) need `PointerDown` → `PointerMove` →
+            //    `PointerUp` to drag. Because `touchmove` calls
+            //    `preventDefault` (to suppress browser panning), the browser
+            //    cancels mouse-event synthesis for the entire touch sequence —
+            //    so `mousedown`/`mousemove`/`mouseup` are never fired for a
+            //    drag. We manually dispatch `PointerDown` on the first
+            //    `touchmove` (at the touchstart position), then
+            //    `PointerMove` on every subsequent `touchmove`, and
+            //    `PointerUp` on `touchend`.
+            //
+            // **Tap** (touchstart → touchend with no significant move):
+            // `touchmove` never fires, so `touch_drag_active` stays false and
+            // no manual pointer events are dispatched. The browser synthesizes
+            // `mousedown`/`mouseup`/`click` naturally (touchstart does NOT
+            // preventDefault), preserving caret placement, button clicks, and
+            // soft-keyboard focus via the hidden textarea.
+            let last_touch = Rc::new(Cell::new(Option::<(f64, f64)>::None));
+            let touch_drag_active = Rc::new(Cell::new(false));
+
+            let touch_start_state = state_clone.clone();
+            let touch_start_last = last_touch.clone();
+            let touch_start_drag = touch_drag_active.clone();
+            let touch_start_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    let Some(t) = event.touches().get(0) else {
+                        return;
+                    };
+                    let guard = touch_start_state.borrow();
+                    let Some(s) = guard.as_ref() else {
+                        return;
+                    };
+                    let rect = s._canvas.get_bounding_client_rect();
+                    let x = t.client_x() as f64 - rect.left();
+                    let y = t.client_y() as f64 - rect.top();
+                    touch_start_last.set(Some((x, y)));
+                    touch_start_drag.set(false);
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchstart",
+                    touch_start_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let touch_move_state = state_clone.clone();
+            let touch_move_last = last_touch.clone();
+            let touch_move_drag = touch_drag_active.clone();
+            let touch_move_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    let Some(t) = event.touches().get(0) else {
+                        return;
+                    };
+                    event.prevent_default();
+                    let guard = touch_move_state.borrow();
+                    let Some(s) = guard.as_ref() else {
+                        return;
+                    };
+                    let rect = s._canvas.get_bounding_client_rect();
+                    let x = t.client_x() as f64 - rect.left();
+                    let y = t.client_y() as f64 - rect.top();
+                    let time_ms = event.time_stamp() as u64;
+
+                    // On the first touchmove, dispatch PointerDown at the
+                    // touchstart position. This starts the engine's gesture
+                    // capture so subsequent PointerMove events are routed to
+                    // the dragged element. For taps (no touchmove), the
+                    // browser synthesizes mousedown instead — so we don't
+                    // double-dispatch.
+                    if !touch_move_drag.get() {
+                        if let Some((sx, sy)) = touch_move_last.get() {
+                            s.app.push_event(AppEvent::Gesture(
+                                AppGestureEvent::PointerDown {
+                                    position: Offset::new(sx, sy),
+                                    button: tur_shared::MouseButton::Left,
+                                    time_ms,
+                                },
+                            ));
+                        }
+                        touch_move_drag.set(true);
+                    }
+
+                    // Dispatch PointerMove for drag-and-drop.
+                    s.app.push_event(AppEvent::Gesture(
+                        AppGestureEvent::PointerMove {
+                            position: Offset::new(x, y),
+                        },
+                    ));
+
+                    // Also dispatch Wheel for scrolling (ScrollView/LazyList).
+                    if let Some((lx, ly)) = touch_move_last.get() {
+                        let dx = lx - x;
+                        let dy = ly - y;
+                        if dx != 0.0 || dy != 0.0 {
+                            s.app.push_event(AppEvent::Wheel {
+                                delta_x: dx,
+                                delta_y: dy,
+                                position: Offset::new(x, y),
+                            });
+                        }
+                    }
+                    touch_move_last.set(Some((x, y)));
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchmove",
+                    touch_move_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let touch_end_state = state_clone.clone();
+            let touch_end_last = last_touch.clone();
+            let touch_end_drag = touch_drag_active.clone();
+            let touch_end_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
+                    // If a drag was in progress, dispatch PointerUp to
+                    // release the gesture capture. For taps, the browser
+                    // synthesizes mouseup naturally.
+                    if touch_end_drag.get() {
+                        let guard = touch_end_state.borrow();
+                        if let Some(s) = guard.as_ref() {
+                            if let Some((lx, ly)) = touch_end_last.get() {
+                                s.app.push_event(AppEvent::Gesture(
+                                    AppGestureEvent::PointerUp {
+                                        position: Offset::new(lx, ly),
+                                        button: tur_shared::MouseButton::Left,
+                                    },
+                                ));
+                            }
+                        }
+                    }
+                    touch_end_last.set(None);
+                    touch_end_drag.set(false);
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchend",
+                    touch_end_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
             // Context menu (right-click) listener. We prevent the default
             // browser menu and forward the click position to the engine,
             // which dispatches a `ContextMenu` gesture to every element in
@@ -1105,6 +1270,9 @@ impl TurWasmApp {
                 _pointer_move_closure: pointer_move_closure,
                 _wheel_closure: wheel_closure,
                 _context_closure: context_closure,
+                _touch_start_closure: touch_start_closure,
+                _touch_move_closure: touch_move_closure,
+                _touch_end_closure: touch_end_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
                 _compositionstart_closure: compositionstart_closure,
