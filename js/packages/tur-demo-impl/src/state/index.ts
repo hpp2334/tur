@@ -34,9 +34,11 @@ export {
     hoveredCase$,
     hoveredFile$,
     INITIAL_CASE,
+    isMobile$,
     lastCompiledAtMs$,
     layoutHovered$,
     layoutMode$,
+    mobileTab$,
     now$,
     resetHovered$,
     runHovered$,
@@ -45,4 +47,4 @@ export {
     sidebarWidth$,
     status$,
 } from "./sources";
-export type { EditorController, LayoutMode } from "./types";
+export type { EditorController, LayoutMode, MobileTab } from "./types";

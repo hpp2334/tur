@@ -6,7 +6,6 @@ use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTreeData;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::focus::FocusManager;
-use crate::core::gesture::GestureEventComposer;
 use crate::core::render::Renderer;
 
 pub trait AppHandler {
@@ -18,7 +17,6 @@ pub struct HandlerContext<'a> {
     pub focus_manager: &'a mut FocusManager,
     pub mutation_queue: &'a mut PendingMutationInvocationQueue,
     pub event_queue: &'a mut AppEventQueue,
-    pub gesture_composer: &'a mut GestureEventComposer,
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
     pub(crate) needs_draw: &'a Cell<bool>,

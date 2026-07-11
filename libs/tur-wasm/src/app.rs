@@ -17,11 +17,16 @@ struct WasmState {
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
     _resize_closure: Closure<dyn Fn()>,
+    _resize_observer: web_sys::ResizeObserver,
     _pointer_down_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_up_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _pointer_move_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
     _wheel_closure: Closure<dyn Fn(web_sys::WheelEvent)>,
     _context_closure: Closure<dyn Fn(web_sys::MouseEvent)>,
+    _touch_start_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
+    _touch_move_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
+    _touch_end_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
+    _touch_cancel_closure: Closure<dyn Fn(web_sys::TouchEvent)>,
     _keydown_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _keyup_closure: Closure<dyn Fn(web_sys::KeyboardEvent)>,
     _compositionstart_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
@@ -602,9 +607,8 @@ impl TurWasmApp {
                 document.body().ok_or_else(|| JsValue::from_str("no body"))?
             };
 
-            container.append_child(&canvas).err_to_jsval()?;
-
             if container_id.is_some() {
+                container.append_child(&canvas).err_to_jsval()?;
                 canvas
                     .style()
                     .set_property("width", "100%")
@@ -618,13 +622,47 @@ impl TurWasmApp {
                     .set_property("display", "block")
                     .err_to_jsval()?;
             } else {
+                // Full-viewport mode: wrap the canvas in a div that owns the
+                // safe, visible viewport. The wrapper is sized in dynamic
+                // viewport units (`100dvw`/`100dvh` — fall back to `vw`/`vh`
+                // where unsupported) so it shrinks with the mobile browser's
+                // sliding URL bar, and its `env(safe-area-inset-*)` padding
+                // (`box-sizing: border-box`) insets the content box past the
+                // device notch / home indicator. The canvas fills the content
+                // box, so the engine viewport == the non-occluded render area
+                // — safe-area stays transparent to the app.
+                let wrapper = document
+                    .create_element("div")
+                    .err_to_jsval()?
+                    .dyn_into::<web_sys::HtmlElement>()
+                    .err_to_jsval()?;
+                let ws = wrapper.style();
+                ws.set_property("position", "fixed").err_to_jsval()?;
+                ws.set_property("top", "0").err_to_jsval()?;
+                ws.set_property("left", "0").err_to_jsval()?;
+                ws.set_property("width", "100vw").err_to_jsval()?;
+                ws.set_property("width", "100dvw").err_to_jsval()?;
+                ws.set_property("height", "100vh").err_to_jsval()?;
+                ws.set_property("height", "100dvh").err_to_jsval()?;
+                ws.set_property("box-sizing", "border-box").err_to_jsval()?;
+                ws.set_property("padding-top", "env(safe-area-inset-top)")
+                    .err_to_jsval()?;
+                ws.set_property("padding-right", "env(safe-area-inset-right)")
+                    .err_to_jsval()?;
+                ws.set_property("padding-bottom", "env(safe-area-inset-bottom)")
+                    .err_to_jsval()?;
+                ws.set_property("padding-left", "env(safe-area-inset-left)")
+                    .err_to_jsval()?;
+                // Match the app background (#fbfcfd = tokens.bg.app) so the
+                // safe-area strip is seamless with the rendered canvas.
+                ws.set_property("background", "#fbfcfd").err_to_jsval()?;
                 canvas
                     .style()
-                    .set_property("width", "100vw")
+                    .set_property("width", "100%")
                     .err_to_jsval()?;
                 canvas
                     .style()
-                    .set_property("height", "100vh")
+                    .set_property("height", "100%")
                     .err_to_jsval()?;
                 canvas
                     .style()
@@ -637,7 +675,19 @@ impl TurWasmApp {
                 body.style()
                     .set_property("overflow", "hidden")
                     .err_to_jsval()?;
+                body.append_child(&wrapper).err_to_jsval()?;
+                wrapper.append_child(&canvas).err_to_jsval()?;
             }
+
+            // Claim touch gestures for the app. With `touch-action: none` the
+            // browser will not pan/zoom the page on touch-drag (we translate
+            // touchmove → AppEvent::Wheel below). Taps still synthesize
+            // mousedown/click for caret placement, buttons, and the soft
+            // keyboard via the hidden textarea.
+            canvas
+                .style()
+                .set_property("touch-action", "none")
+                .err_to_jsval()?;
 
             let textarea = document
                 .create_element("textarea")
@@ -691,21 +741,17 @@ impl TurWasmApp {
                 .err_to_jsval()?;
             document.body().ok_or_else(|| JsValue::from_str("no body"))?.append_child(&textarea).err_to_jsval()?;
 
+            // Measure the canvas's own rendered rect (CSS px). For full-viewport
+            // mode this equals the wrapper's content box = the safe, visible
+            // area (dvh minus safe-area padding); for container mode it's the
+            // container's box. Either way the canvas — not `window.innerWidth` —
+            // is the authoritative viewport.
             let (logical_width, logical_height) = if container_id.is_some() {
                 let rect = container.get_bounding_client_rect();
                 (rect.width() as u32, rect.height() as u32)
             } else {
-                let w = window
-                    .inner_width()
-                    .err_to_jsval()?
-                    .as_f64()
-                    .unwrap_or(800.0) as u32;
-                let h = window
-                    .inner_height()
-                    .err_to_jsval()?
-                    .as_f64()
-                    .unwrap_or(600.0) as u32;
-                (w, h)
+                let rect = canvas.get_bounding_client_rect();
+                (rect.width() as u32, rect.height() as u32)
             };
             let dpr = window.device_pixel_ratio();
 
@@ -773,9 +819,10 @@ impl TurWasmApp {
                             return;
                         }
                     } else {
-                        let w = window.inner_width().unwrap().as_f64().unwrap_or(800.0) as u32;
-                        let h = window.inner_height().unwrap().as_f64().unwrap_or(600.0) as u32;
-                        (w, h)
+                        // Full-viewport mode: measure the canvas (== wrapper
+                        // content box = safe area), not `window.innerHeight`.
+                        let rect = s._canvas.get_bounding_client_rect();
+                        (rect.width() as u32, rect.height() as u32)
                     };
                     let physical_width = (logical_width as f64 * dpr) as u32;
                     let physical_height = (logical_height as f64 * dpr) as u32;
@@ -789,9 +836,17 @@ impl TurWasmApp {
                 }
             });
 
-            window
-                .add_event_listener_with_callback("resize", resize_closure.as_ref().unchecked_ref())
-                .err_to_jsval()?;
+            // Observe the canvas directly. `ResizeObserver` fires whenever the
+            // canvas border-box changes — covering window resize, orientation
+            // change, *and* the mobile URL-bar slide (the wrapper's `dvh` height
+            // changes → canvas resizes). `window` "resize" alone does not fire
+            // on the URL-bar slide, so it is not used. The callback ignores its
+            // entries argument and re-measures the canvas rect.
+            let resize_observer = web_sys::ResizeObserver::new(
+                resize_closure.as_ref().unchecked_ref(),
+            )
+            .err_to_jsval()?;
+            resize_observer.observe(canvas.as_ref());
 
             let pointer_down_state = state_clone.clone();
             let pointer_down_closure =
@@ -811,6 +866,7 @@ impl TurWasmApp {
                                 position: Offset::new(x, y),
                                 button,
                                 time_ms,
+                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -836,6 +892,7 @@ impl TurWasmApp {
                             AppGestureEvent::PointerUp {
                                 position: Offset::new(x, y),
                                 button,
+                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -859,6 +916,7 @@ impl TurWasmApp {
                         s.app.push_event(AppEvent::Gesture(
                             AppGestureEvent::PointerMove {
                                 position: Offset::new(x, y),
+                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -892,6 +950,153 @@ impl TurWasmApp {
                 .add_event_listener_with_callback(
                     "wheel",
                     wheel_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            // Touch handling for mobile. Touch events are dispatched as
+            // native touch pointer events (`device: Touch`) into the
+            // engine's gesture arena, which resolves drag-vs-scroll
+            // competition using a slop threshold (18px, matching Flutter's
+            // `kTouchSlop`).
+            //
+            // - **touchstart**: push `PointerDown { device: Touch }`. The
+            //   arena collects candidates from the hit-path but does NOT
+            //   dispatch to elements yet. We do NOT `preventDefault` so
+            //   that pure taps (no touchmove) still get browser-synthesized
+            //   `mousedown`→`mouseup`→`click` for caret placement, button
+            //   clicks, and soft-keyboard focus.
+            //
+            // - **touchmove**: `preventDefault` (stops browser panning AND
+            //   mouse-event synthesis for the entire touch sequence). Push
+            //   `PointerMove { device: Touch }`. The arena checks slop:
+            //   if movement < 18px → no dispatch (still ambiguous); if ≥18px
+            //   → resolve to drag winner (dispatch PointerDown+PointerMove)
+            //   or scroll winner (dispatch Wheel).
+            //
+            // - **touchend**: push `PointerUp { device: Touch }`. If the
+            //   arena resolved a drag → dispatch PointerUp to release
+            //   capture. If not resolved but touchmove was seen (small
+            //   movement) → synthesize a mouse click. If not resolved and
+            //   no touchmove → do nothing (browser click handles it).
+            //
+            // - **touchcancel**: push `PointerCancel { device: Touch }`.
+            //   The arena releases any captured drag without firing a click.
+            let touch_start_state = state_clone.clone();
+            let touch_start_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    let Some(t) = event.touches().get(0) else {
+                        return;
+                    };
+                    let guard = touch_start_state.borrow();
+                    let Some(s) = guard.as_ref() else {
+                        return;
+                    };
+                    let rect = s._canvas.get_bounding_client_rect();
+                    let x = t.client_x() as f64 - rect.left();
+                    let y = t.client_y() as f64 - rect.top();
+                    let time_ms = event.time_stamp() as u64;
+                    s.app.push_event(AppEvent::Gesture(
+                        AppGestureEvent::PointerDown {
+                            position: Offset::new(x, y),
+                            button: tur_shared::MouseButton::Left,
+                            time_ms,
+                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                        },
+                    ));
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchstart",
+                    touch_start_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let touch_move_state = state_clone.clone();
+            let touch_move_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    let Some(t) = event.touches().get(0) else {
+                        return;
+                    };
+                    event.prevent_default();
+                    let guard = touch_move_state.borrow();
+                    let Some(s) = guard.as_ref() else {
+                        return;
+                    };
+                    let rect = s._canvas.get_bounding_client_rect();
+                    let x = t.client_x() as f64 - rect.left();
+                    let y = t.client_y() as f64 - rect.top();
+                    s.app.push_event(AppEvent::Gesture(
+                        AppGestureEvent::PointerMove {
+                            position: Offset::new(x, y),
+                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                        },
+                    ));
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchmove",
+                    touch_move_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let touch_end_state = state_clone.clone();
+            let touch_end_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    let Some(t) = event.changed_touches().get(0) else {
+                        let guard = touch_end_state.borrow();
+                        if let Some(s) = guard.as_ref() {
+                            s.app.push_event(AppEvent::Gesture(
+                                AppGestureEvent::PointerUp {
+                                    position: Offset::new(0.0, 0.0),
+                                    button: tur_shared::MouseButton::Left,
+                                    device: tur_engine::core::event::PointerDeviceKind::Touch,
+                                },
+                            ));
+                        }
+                        return;
+                    };
+                    let guard = touch_end_state.borrow();
+                    let Some(s) = guard.as_ref() else {
+                        return;
+                    };
+                    let rect = s._canvas.get_bounding_client_rect();
+                    let x = t.client_x() as f64 - rect.left();
+                    let y = t.client_y() as f64 - rect.top();
+                    s.app.push_event(AppEvent::Gesture(
+                        AppGestureEvent::PointerUp {
+                            position: Offset::new(x, y),
+                            button: tur_shared::MouseButton::Left,
+                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                        },
+                    ));
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchend",
+                    touch_end_closure.as_ref().unchecked_ref(),
+                )
+                .err_to_jsval()?;
+
+            let touch_cancel_state = state_clone.clone();
+            let touch_cancel_closure =
+                Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
+                    let guard = touch_cancel_state.borrow();
+                    if let Some(s) = guard.as_ref() {
+                        s.app.push_event(AppEvent::Gesture(
+                            AppGestureEvent::PointerCancel {
+                                device: tur_engine::core::event::PointerDeviceKind::Touch,
+                            },
+                        ));
+                    }
+                });
+
+            canvas
+                .add_event_listener_with_callback(
+                    "touchcancel",
+                    touch_cancel_closure.as_ref().unchecked_ref(),
                 )
                 .err_to_jsval()?;
 
@@ -1100,11 +1305,16 @@ impl TurWasmApp {
                 textarea,
                 is_composing: Cell::new(false),
                 _resize_closure: resize_closure,
+                _resize_observer: resize_observer,
                 _pointer_down_closure: pointer_down_closure,
                 _pointer_up_closure: pointer_up_closure,
                 _pointer_move_closure: pointer_move_closure,
                 _wheel_closure: wheel_closure,
                 _context_closure: context_closure,
+                _touch_start_closure: touch_start_closure,
+                _touch_move_closure: touch_move_closure,
+                _touch_end_closure: touch_end_closure,
+                _touch_cancel_closure: touch_cancel_closure,
                 _keydown_closure: keydown_closure,
                 _keyup_closure: keyup_closure,
                 _compositionstart_closure: compositionstart_closure,

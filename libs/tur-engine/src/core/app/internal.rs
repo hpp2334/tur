@@ -2,8 +2,11 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use boa_engine::context::time::FixedClock;
+use boa_engine::object::JsObject;
+use boa_engine::{js_string, JsValue};
 
 use crate::core::app::TurAppContext;
+use crate::core::reactive::Source;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
@@ -18,6 +21,14 @@ pub struct TurAppInternal {
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) needs_draw: Rc<Cell<bool>>,
     pub(crate) executor: Rc<TurJobExecutor>,
+    /// Engine-owned `viewportSize$` reactive source handle. `None` only until
+    /// `TurEngineBuilder::build` creates it (right after `new`). Synced each
+    /// frame in `flush` from `app_context.size`.
+    pub(crate) viewport_size: Option<Source<JsValue>>,
+    /// Last `(width, height)` pushed into `viewport_size` — guards against
+    /// spurious stale marking (`set_source` compares `JsValue` by object
+    /// identity, so a fresh `{w,h}` object would otherwise dirty every frame).
+    pub(crate) last_viewport: Cell<(f64, f64)>,
 }
 
 impl TurAppInternal {
@@ -67,6 +78,8 @@ impl TurAppInternal {
             app_context: Rc::new(RefCell::new(app_context)),
             needs_draw,
             executor,
+            viewport_size: None,
+            last_viewport: Cell::new((-1.0, -1.0)),
         }
     }
 
@@ -79,6 +92,11 @@ impl TurAppInternal {
 
         loop {
             let handled_events = self.flush_app_events();
+
+            // Keep the engine-owned `viewportSize$` atom in sync with the
+            // current canvas size (updated by `ResizeHandler` via `cx.size`).
+            // Runs before `flush_reactive` so subscribers re-layout in-frame.
+            self.sync_viewport_size(boa_context);
 
             let animation_did_update = if !animation_ticked {
                 animation_ticked = true;
@@ -150,6 +168,38 @@ impl TurAppInternal {
         let tree = self.js_context.element_tree.borrow();
         let focus = self.js_context.focus_manager.borrow();
         helper::focused_is_editable(&tree, &focus)
+    }
+
+    /// Build a `{width, height}` JS object (CSS pixels) — the value shape of
+    /// the `viewportSize$` atom. Consumed by `build` (initial value) and
+    /// `sync_viewport_size` (per-resize update).
+    pub(crate) fn viewport_js(
+        boa: &mut boa_engine::Context,
+        width: f64,
+        height: f64,
+    ) -> JsValue {
+        let obj = JsObject::with_object_proto(boa.intrinsics());
+        let _ = obj.create_data_property(js_string!("width"), JsValue::from(width), boa);
+        let _ = obj.create_data_property(js_string!("height"), JsValue::from(height), boa);
+        obj.into()
+    }
+
+    /// Push the current canvas size into the `viewportSize$` atom if it has
+    /// changed since the last sync. The `last_viewport` guard is essential:
+    /// `set_source` compares `JsValue` by object identity, so rebuilding the
+    /// `{width, height}` object every frame would mark the atom stale and
+    /// trigger a spurious re-layout on every frame.
+    fn sync_viewport_size(&self, boa: &mut boa_engine::Context) {
+        let Some(src) = self.viewport_size else {
+            return;
+        };
+        let (width, height) = self.app_context.borrow().size;
+        if (width, height) == self.last_viewport.get() {
+            return;
+        }
+        self.last_viewport.set((width, height));
+        let value = Self::viewport_js(boa, width, height);
+        self.js_context.store.bridge().set_source(src, value);
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the

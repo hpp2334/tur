@@ -14,7 +14,7 @@ use crate::core::event::AppImeEvent;
 use crate::core::focus::Focusable;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
-type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent) -> bool;
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
 type CursorRectFn = fn(&dyn Any) -> Option<(f64, f64, f64, f64)>;
@@ -102,9 +102,9 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnGestureContext,
     event: &ComposedGestureEvent,
-) {
+) -> bool {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, cx, event);
+    ElementOnGesture::on_gesture_event(element, cx, event)
 }
 
 fn wheel_dispatch<E: ElementOnWheel + 'static>(
@@ -494,9 +494,11 @@ impl AnyElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
+    ) -> bool {
         if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), cx, event);
+            handler(self.inner.as_any_mut(), cx, event)
+        } else {
+            false
         }
     }
 
@@ -514,6 +516,10 @@ impl AnyElement {
 
     pub fn has_on_wheel(&self) -> bool {
         self.on_wheel.is_some()
+    }
+
+    pub fn has_on_gesture(&self) -> bool {
+        self.on_gesture.is_some()
     }
 
     pub fn on_ime_event(

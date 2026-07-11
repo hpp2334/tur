@@ -57,8 +57,7 @@ impl Plugin for TurStdPlugin {
         ctx.register_class::<AnimationController>()
             .expect("failed to register AnimationController");
 
-        ctx.register_handler(Box::new(handlers::text_edit_focus::TextEditFocusAppHandler));
-        ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler));
+        ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler::new()));
         ctx.register_handler(Box::new(handlers::keyboard::KeyboardAppHandler));
         ctx.register_handler(Box::new(handlers::ime::ImeAppHandler));
         ctx.register_handler(Box::new(handlers::resize::ResizeHandler));
@@ -100,6 +99,10 @@ impl Plugin for TurStdPlugin {
         let js_ctx_value = ctx.js_ctx_value.clone();
         std_consts.extend(bridge::color::consts(ctx.boa_mut(), js_ctx_value));
         std_consts.extend(bridge::enums::consts(ctx.boa_mut()));
+        // Engine-owned reactive source exposing the live canvas size as
+        // `{width, height}` (CSS pixels). The engine syncs it each frame in
+        // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
+        std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
         ctx.register_module("builtin:tur/std", std_fns, std_consts);
 

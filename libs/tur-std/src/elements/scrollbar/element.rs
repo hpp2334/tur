@@ -152,23 +152,22 @@ impl ElementOnGesture for ScrollbarElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
+    ) -> bool {
         let track = self.cached_track.height;
         if track <= 0.0 {
-            return;
+            return true;
         }
         let (node, _offset, max_extent, viewport) = match self.metrics() {
             Some(v) => v,
-            None => return,
+            None => return true,
         };
-        // Nothing to scroll (content fits the viewport).
         if max_extent <= 0.0 {
-            return;
+            return true;
         }
         let thumb = Self::thumb_height(track, max_extent, viewport);
         let thumb_range = track - thumb;
         if thumb_range <= 0.0 {
-            return;
+            return true;
         }
 
         match event {
@@ -176,21 +175,15 @@ impl ElementOnGesture for ScrollbarElement {
                 cx.request_own_focus();
                 let (_, current_offset, _, _) = self.metrics().unwrap();
 
-                // Compute the thumb's current top edge in track-local pixels.
                 let thumb_top = (current_offset / max_extent) * thumb_range;
                 let on_thumb = local.y >= thumb_top && local.y <= thumb_top + thumb;
 
                 if on_thumb {
-                    // Click landed on the thumb: do NOT jump. Drag the thumb
-                    // 1:1 with pointer movement from its current position.
                     self.drag = Some(DragState {
                         start_y: local.y,
                         start_offset: current_offset,
                     });
                 } else {
-                    // Click landed on the track (above or below the thumb):
-                    // jump so the thumb's center sits under the pointer, then
-                    // drag relative to that post-jump position.
                     let target = ((local.y - thumb / 2.0) / thumb_range * max_extent)
                         .clamp(0.0, max_extent);
                     cx.request_scroll_to(node, target);
@@ -201,20 +194,21 @@ impl ElementOnGesture for ScrollbarElement {
                 }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
-                let Some(d) = self.drag else { return; };
+                let Some(d) = self.drag else { return true; };
                 let delta = local.y - d.start_y;
                 let new_offset =
                     (d.start_offset + delta * max_extent / thumb_range).clamp(0.0, max_extent);
                 cx.request_scroll_to(node, new_offset);
             }
             ComposedGestureEvent::PointerUp { .. } => {
-                // Drag ends — clear drag state so the next drag starts fresh.
                 self.drag = None;
             }
             ComposedGestureEvent::PointerDoubleDown { .. } => {}
             ComposedGestureEvent::PointerTripleDown { .. } => {}
+            ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
+        true
     }
 }
 

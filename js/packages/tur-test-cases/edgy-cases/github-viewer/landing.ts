@@ -17,6 +17,8 @@ import {
     SizedBox,
     type StoreCtx,
     Text,
+    type ViewportSize,
+    viewportSize$,
 } from "builtin:tur/std";
 import {
     getIcon,
@@ -32,7 +34,7 @@ import { Button, Field } from "./ui";
 
 // Quick-pick suggestions — all under jsDelivr's 50 MB tree cap (verified).
 // Clicking one opens the repo directly. Kept short so all three fit on one
-// row inside the 440px card.
+// row inside the 440px card (desktop); on mobile they stack vertically.
 const SUGGESTIONS: Repo[] = [
     { owner: "facebook", repo: "react", fullName: "facebook/react" },
     {
@@ -42,6 +44,14 @@ const SUGGESTIONS: Repo[] = [
     },
     { owner: "vuejs", repo: "core", fullName: "vuejs/core" },
 ];
+
+// Responsive: cap the card to the available width (viewport minus the outer
+// padding from index.ts) so it never overflows on mobile. Desktop viewports
+// are wide enough that this stays at 440.
+const isMobile = derive(() => get<ViewportSize>(viewportSize$).width < 720);
+const cardWidth = derive(() =>
+    Math.min(440, get<ViewportSize>(viewportSize$).width - 44),
+);
 
 function Suggestion({ repo }: { repo: Repo }): Element {
     return MouseRegion({
@@ -74,7 +84,7 @@ export function LandingScreen(): Element {
         alignment: Alignment.Center,
         children: [
             Container({
-                width: 440,
+                width: cardWidth,
                 padding: 34,
                 borderRadius: 14,
                 color: COLORS.panel,
@@ -166,14 +176,38 @@ export function LandingScreen(): Element {
                                 color: COLORS.textSubtle,
                             }),
                             SizedBox({ height: 8 }),
-                            Row({
-                                mainAxisSize: MainAxisSize.Min,
-                                children: SUGGESTIONS.flatMap((repo, i) => [
-                                    ...(i === 0
-                                        ? []
-                                        : [SizedBox({ width: 6 })]),
-                                    Suggestion({ repo }),
-                                ]),
+                            Condition({
+                                condition: isMobile,
+                                child: () =>
+                                    Column({
+                                        mainAxisSize: MainAxisSize.Min,
+                                        crossAlignment:
+                                            CrossAxisAlignment.Start,
+                                        children: SUGGESTIONS.flatMap(
+                                            (repo, i) => [
+                                                ...(i === 0
+                                                    ? []
+                                                    : [
+                                                          SizedBox({
+                                                              height: 6,
+                                                          }),
+                                                      ]),
+                                                Suggestion({ repo }),
+                                            ],
+                                        ),
+                                    }),
+                                elseChild: () =>
+                                    Row({
+                                        mainAxisSize: MainAxisSize.Min,
+                                        children: SUGGESTIONS.flatMap(
+                                            (repo, i) => [
+                                                ...(i === 0
+                                                    ? []
+                                                    : [SizedBox({ width: 6 })]),
+                                                Suggestion({ repo }),
+                                            ],
+                                        ),
+                                    }),
                             }),
                         ],
                     }),

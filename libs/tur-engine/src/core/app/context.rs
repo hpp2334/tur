@@ -10,10 +10,9 @@ use tur_shared::Constraints;
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::event::queue::AppEventQueue;
-use crate::core::event::{AppEvent, AppGestureEvent};
+use crate::core::event::{AppEvent, AppGestureEvent, PointerDeviceKind};
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
-use crate::core::gesture::GestureEventComposer;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::render::Renderer;
 use crate::core::resource::ResourceMap;
@@ -28,7 +27,6 @@ pub struct TurAppContext {
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) size: (f64, f64),
-    pub(crate) gesture_composer: GestureEventComposer,
     pub(crate) event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
@@ -70,7 +68,6 @@ impl TurAppContext {
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             size: (400.0, 600.0),
-            gesture_composer: GestureEventComposer::new(),
             event_queue: AppEventQueue::new(),
             handlers: vec![],
             shell: Shell::new(clock),
@@ -86,7 +83,12 @@ impl TurAppContext {
         // Track the last pointer position so the paint pass can hit-test
         // MouseRegions for cursor resolution. A move must trigger a render
         // because the cursor is now computed during paint (not in a handler).
-        if let AppEvent::Gesture(AppGestureEvent::PointerMove { position }) = event {
+        // Only mouse moves update the cursor position — touch has no cursor.
+        if let AppEvent::Gesture(AppGestureEvent::PointerMove {
+            position,
+            device: PointerDeviceKind::Mouse,
+        }) = event
+        {
             self.shell.set_pointer_position(Some(*position));
             needs_draw.set(true);
         }
@@ -99,7 +101,6 @@ impl TurAppContext {
             focus_manager: &mut focus,
             mutation_queue: &mut mq,
             event_queue: &mut self.event_queue,
-            gesture_composer: &mut self.gesture_composer,
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,

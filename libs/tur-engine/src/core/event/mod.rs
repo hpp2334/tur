@@ -4,6 +4,16 @@ use crate::core::element::ElementNodeId;
 use crate::core::keyboard::AppKeyEvent;
 use tur_shared::{MouseButton, Offset};
 
+/// The physical input device that produced a pointer event. Used by the
+/// gesture arena to apply different disambiguation rules for touch vs
+/// mouse — touch drags go through slop-based arena resolution (scroll
+/// vs drag), while mouse events are dispatched immediately.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PointerDeviceKind {
+    Mouse,
+    Touch,
+}
+
 pub enum AppEvent {
     Resize {
         logical_width: u32,
@@ -46,9 +56,27 @@ pub enum AppEvent {
 }
 
 pub enum AppGestureEvent {
-    PointerDown { position: Offset, button: MouseButton, time_ms: u64 },
-    PointerUp { position: Offset, button: MouseButton },
-    PointerMove { position: Offset },
+    PointerDown {
+        position: Offset,
+        button: MouseButton,
+        time_ms: u64,
+        device: PointerDeviceKind,
+    },
+    PointerUp {
+        position: Offset,
+        button: MouseButton,
+        device: PointerDeviceKind,
+    },
+    PointerMove {
+        position: Offset,
+        device: PointerDeviceKind,
+    },
+    /// The platform cancelled an in-progress pointer sequence (e.g.
+    /// `touchcancel` from the browser). The arena should release any
+    /// captured drag without firing a click.
+    PointerCancel {
+        device: PointerDeviceKind,
+    },
     /// Right-click / context-menu request from the host. Carries the canvas
     /// position of the click. Dispatched to the deepest element under the
     /// cursor that has an `onContextMenu` mutation, mirroring how the web

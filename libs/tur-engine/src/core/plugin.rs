@@ -56,6 +56,11 @@ pub struct PluginContext<'a> {
     pub(crate) js_ctx: TurJsContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
     pub(crate) needs_draw: Rc<Cell<bool>>,
+    /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
+    /// a `Source<JsValue>`). Plugins export this as a const so JS can
+    /// `import { viewportSize$ } from "builtin:tur/std"` and read the live
+    /// canvas size via `get`. The engine updates it each frame in `flush`.
+    pub viewport_size: JsValue,
 }
 
 impl<'a> PluginContext<'a> {
