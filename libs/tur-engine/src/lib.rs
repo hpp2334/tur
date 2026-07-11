@@ -20,6 +20,7 @@ use boa_engine::Source;
 use error::TurError;
 
 use core::app::TurAppInternal;
+use core::async_::AsyncRuntime;
 use core::bridge::helpers::FnEntry;
 use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
 use core::bridge::{console, dev_tool, reactive, render, timer};
@@ -161,15 +162,6 @@ impl TurApp {
         self.internal.js_context.element_tree.borrow().dev_tool_node(id)
     }
 
-    pub fn take_clipboard_write(&self) -> Option<String> {
-        self.internal
-            .app_context
-            .borrow()
-            .pending_clipboard_write
-            .borrow_mut()
-            .take()
-    }
-
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.internal
             .js_context
@@ -249,6 +241,7 @@ type HostExports = Vec<(String, NativeFunction, usize)>;
 pub struct TurEngineBuilder {
     renderer: Option<Box<dyn Renderer>>,
     font_loader: Option<Box<dyn FontLoader>>,
+    async_runtime: Option<Rc<dyn AsyncRuntime>>,
     plugins: Vec<Box<dyn Plugin>>,
     host_modules: Vec<(String, HostExports)>,
 }
@@ -264,6 +257,7 @@ impl TurEngineBuilder {
         Self {
             renderer: None,
             font_loader: None,
+            async_runtime: None,
             plugins: Vec::new(),
             host_modules: Vec::new(),
         }
@@ -276,6 +270,15 @@ impl TurEngineBuilder {
 
     pub fn font_loader(mut self, font_loader: Box<dyn FontLoader>) -> Self {
         self.font_loader = Some(font_loader);
+        self
+    }
+
+    /// Provide the async runtime (wall-clock source for the engine-owned
+    /// [`AsyncExecutor`]). Required — every backend must supply one:
+    /// `WasmRuntime` for wasm (`Performance::now()`), `TestRuntime` for
+    /// integration tests (deterministic clock).
+    pub fn async_runtime(mut self, runtime: Rc<dyn AsyncRuntime>) -> Self {
+        self.async_runtime = Some(runtime);
         self
     }
 
@@ -298,6 +301,9 @@ impl TurEngineBuilder {
         let font_loader = self
             .font_loader
             .expect("font_loader must be set");
+        let async_runtime = self
+            .async_runtime
+            .expect("async_runtime must be set (use TurEngineBuilder::async_runtime)");
 
         let clock = Rc::new(FixedClock::from_millis(0));
         let executor = Rc::new(TurJobExecutor::new());
@@ -309,7 +315,13 @@ impl TurEngineBuilder {
             .build()
             .expect("failed to build boa context");
 
-        let mut internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock);
+        let mut internal = TurAppInternal::new(
+            renderer,
+            font_loader,
+            executor.clone(),
+            clock,
+            async_runtime,
+        );
 
         let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
         let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
@@ -337,6 +349,7 @@ impl TurEngineBuilder {
             &mut boa_context,
             opaque.object().clone().into(),
             &core_fns,
+            &[],
             &[],
         );
         module_loader.register("builtin:tur/core", core_module);
@@ -395,6 +408,7 @@ impl TurEngineBuilder {
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
                 needs_draw: internal.needs_draw.clone(),
+                async_executor: internal.async_executor.clone(),
                 viewport_size: viewport_size_js.clone(),
             };
             plugin.register(&mut plugin_ctx)?;

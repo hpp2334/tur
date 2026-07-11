@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -9,6 +10,7 @@ use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
+use tur_integration_tests::TestRuntime;
 use tur_std::TurStdPlugin;
 
 #[derive(Debug, thiserror::Error)]
@@ -111,6 +113,7 @@ impl TurVelloApp {
         let mut app = TurEngine::builder()
             .renderer(Box::new(renderer))
             .font_loader(Box::new(PresetFontLoader::new()))
+            .async_runtime(Rc::new(TestRuntime))
             .plugin(TurStdPlugin::default())
             .build()?;
         app.push_event(AppEvent::Resize {

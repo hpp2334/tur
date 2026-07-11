@@ -20,6 +20,7 @@ webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 
 [dependencies]
 tur-shared = { workspace = true }
+tur-async = { workspace = true }
 image = { workspace = true }
 resvg = { workspace = true }
 usvg = { workspace = true }

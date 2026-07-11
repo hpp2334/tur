@@ -1,6 +1,6 @@
 [package]
 name = "tur-net"
-description = "HTTP networking plugin for tur"
+description = "HTTP networking plugin for tur (Http trait + builtin:tur/net bridge)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

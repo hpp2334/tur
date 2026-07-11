@@ -12,12 +12,12 @@ use boa_engine::NativeFunction;
 use tur_shared::Cursor;
 
 use crate::core::app::TurAppContext;
+use crate::core::async_::AsyncExecutor;
 use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 use crate::core::bridge::module_loader::{build_fn_module, build_native_module};
 use crate::core::bridge::{TurJsContext, TurModuleLoader};
 use crate::core::handler::AppHandler;
 use crate::error::TurError;
-
 /// A plugin that extends the engine with elements, bridge modules, handlers,
 /// and/or platform capabilities.
 ///
@@ -56,6 +56,10 @@ pub struct PluginContext<'a> {
     pub(crate) js_ctx: TurJsContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
     pub(crate) needs_draw: Rc<Cell<bool>>,
+    /// Engine-owned async executor. Plugins use this to spawn Rust futures
+    /// (clipboard/http work, etc.) — see [`AsyncExecutor::spawn`] and
+    /// [`AsyncExecutor::spawn_detached`].
+    pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
     /// `import { viewportSize$ } from "builtin:tur/std"` and read the live
@@ -65,17 +69,28 @@ pub struct PluginContext<'a> {
 
 impl<'a> PluginContext<'a> {
     /// Register a ctx-bound native module (bridge fns that receive `TurJsContext`
-    /// as their first argument). Used for `builtin:tur/std` and similar.
+    /// as their first argument) plus optional free-form closure exports. Used
+    /// for `builtin:tur/std` and similar.
+    ///
+    /// `closures` is for bridge fns that capture state which can't live on
+    /// `TurJsContext` (e.g. a `Clipboard` impl provided by a plugin). Each
+    /// closure is registered as-is, with no ctx binding.
     pub fn register_module(
         &mut self,
         specifier: &str,
         fns: Vec<FnEntry>,
+        closures: Vec<(&str, usize, NativeFunction)>,
         consts: Vec<ConstEntry>,
     ) {
         let module =
-            build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &consts);
+            build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &closures, &consts);
         self.loader.register(specifier, module);
-        tracing::info!("registered module {specifier} ({} fns, {} consts)", fns.len(), consts.len());
+        tracing::info!(
+            "registered module {specifier} ({} fns, {} closures, {} consts)",
+            fns.len(),
+            closures.len(),
+            consts.len()
+        );
     }
 
     /// Register a ctx-free native module (host fns that don't need `TurJsContext`).
@@ -124,5 +139,13 @@ impl<'a> PluginContext<'a> {
     /// The `needs_draw` flag — setting it triggers a re-layout on the next frame.
     pub fn needs_draw(&self) -> &Rc<Cell<bool>> {
         &self.needs_draw
+    }
+
+    /// The engine-owned async executor. Plugins call `spawn_detached(...)` to
+    /// run Rust futures (clipboard/http/etc.); futures push completion
+    /// closures via `complete(...)` that settle JsPromises under `&mut
+    /// Context` during the next `flush`.
+    pub fn async_executor(&self) -> &Rc<AsyncExecutor> {
+        &self.async_executor
     }
 }

@@ -52,15 +52,6 @@ declare module "builtin:tur/host" {
     /** Parse source into top-level AST nodes. */
     export function generateAst(src: string): AstNode[];
 
-    // --- Clipboard -------------------------------------------------------------
-
-    /** Write `text` to the system clipboard (fire-and-forget). */
-    export function clipboardWriteText(text: string): void;
-
-    /** Read the system clipboard; `callback(text)` is invoked asynchronously
-     *  (resolves with an empty string if the browser denies the read). */
-    export function clipboardReadText(callback: (text: string) => void): void;
-
     // --- File IO ---------------------------------------------------------------
 
     /** Result of a successful file pick: file name + raw bytes. */

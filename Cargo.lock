@@ -3711,6 +3711,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-async"
+version = "0.1.0"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "tur-engine"
 version = "0.1.0"
 dependencies = [
@@ -3723,6 +3730,7 @@ dependencies = [
  "resvg",
  "thiserror",
  "tracing",
+ "tur-async",
  "tur-shared",
  "unicode-segmentation",
  "usvg",
@@ -3743,6 +3751,7 @@ dependencies = [
  "raw-window-handle",
  "thiserror",
  "tur-engine",
+ "tur-net",
  "tur-shared",
  "tur-std",
  "wgpu",
@@ -3802,6 +3811,7 @@ dependencies = [
  "tracing",
  "tracing-wasm",
  "tur-engine",
+ "tur-net",
  "tur-shared",
  "tur-std",
  "wasm-bindgen",

@@ -16,12 +16,11 @@ use tur_engine::core::bridge::{reactive, render};
 use tur_engine::error::TurError;
 use tur_shared::Cursor;
 
-pub use platform::{ClipboardPlatform, CursorPlatform, NoopClipboardPlatform, NoopCursorPlatform};
+pub use platform::{Clipboard, CursorPlatform, NoopClipboard, NoopCursorPlatform};
 
 pub struct TurStdPlugin {
     cursor: Rc<RefCell<dyn CursorPlatform>>,
-    #[allow(dead_code)]
-    clipboard: Rc<RefCell<dyn ClipboardPlatform>>,
+    clipboard: Rc<dyn Clipboard>,
 }
 
 impl TurStdPlugin {
@@ -34,7 +33,7 @@ impl Default for TurStdPlugin {
     fn default() -> Self {
         Self {
             cursor: Rc::new(RefCell::new(NoopCursorPlatform)),
-            clipboard: Rc::new(RefCell::new(NoopClipboardPlatform)),
+            clipboard: Rc::new(NoopClipboard),
         }
     }
 }
@@ -66,7 +65,10 @@ impl Plugin for TurStdPlugin {
         ctx.register_handler(Box::new(handlers::scroll_chaining::ScrollChainingHandler));
         ctx.register_handler(Box::new(handlers::scroll_to::ScrollToHandler));
         ctx.register_handler(Box::new(handlers::clipboard::ClipboardPasteHandler));
-        ctx.register_handler(Box::new(handlers::clipboard::ClipboardWriteHandler));
+        ctx.register_handler(Box::new(handlers::clipboard::ClipboardWriteHandler::new(
+            self.clipboard.clone(),
+            ctx.async_executor().clone(),
+        )));
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
         std_fns.extend(reactive::fns());
@@ -95,6 +97,13 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::lifecycle::bridge::fns());
         std_fns.extend(tur_engine::elements::readable_subscribe::bridge::fns());
 
+        // Clipboard bridge: Promise-returning closures that capture the
+        // injected `Rc<dyn Clipboard>` and the engine's `AsyncExecutor`.
+        // Registered as free-form closures (not ctx-bound fn pointers)
+        // because their state can't live on `TurJsContext`.
+        let clipboard_closures =
+            bridge::clipboard::closures(self.clipboard.clone(), ctx.async_executor().clone());
+
         let mut std_consts: Vec<ConstEntry> = Vec::new();
         let js_ctx_value = ctx.js_ctx_value.clone();
         std_consts.extend(bridge::color::consts(ctx.boa_mut(), js_ctx_value));
@@ -104,7 +113,7 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
-        ctx.register_module("builtin:tur/std", std_fns, std_consts);
+        ctx.register_module("builtin:tur/std", std_fns, clipboard_closures, std_consts);
 
         Ok(())
     }
@@ -117,8 +126,7 @@ impl Plugin for TurStdPlugin {
 
 pub struct TurStdPluginBuilder {
     cursor: Rc<RefCell<dyn CursorPlatform>>,
-    #[allow(dead_code)]
-    clipboard: Rc<RefCell<dyn ClipboardPlatform>>,
+    clipboard: Rc<dyn Clipboard>,
 }
 
 impl Default for TurStdPluginBuilder {
@@ -131,7 +139,7 @@ impl TurStdPluginBuilder {
     pub fn new() -> Self {
         Self {
             cursor: Rc::new(RefCell::new(NoopCursorPlatform)),
-            clipboard: Rc::new(RefCell::new(NoopClipboardPlatform)),
+            clipboard: Rc::new(NoopClipboard),
         }
     }
 
@@ -140,8 +148,8 @@ impl TurStdPluginBuilder {
         self
     }
 
-    pub fn clipboard<P: ClipboardPlatform + 'static>(mut self, platform: P) -> Self {
-        self.clipboard = Rc::new(RefCell::new(platform));
+    pub fn clipboard<P: Clipboard + 'static>(mut self, platform: P) -> Self {
+        self.clipboard = Rc::new(platform);
         self
     }
 

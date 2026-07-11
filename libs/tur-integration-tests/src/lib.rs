@@ -1,9 +1,13 @@
 use std::cell::Cell;
 use std::cell::Ref;
+use std::cell::RefCell;
+use std::future::Future;
 use std::path::Path;
+use std::pin::Pin;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
@@ -14,8 +18,136 @@ use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{TurApp, TurEngine};
-use tur_std::{CursorPlatform, TurStdPlugin};
+use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
+use tur_std::{Clipboard, CursorPlatform, TurStdPlugin};
 use tur_shared::{Cursor, MouseButton, Offset};
+
+/// Wall-clock `AsyncRuntime` for tests. Uses real `Instant::now()` —
+/// deterministic timing belongs to boa's `FixedClock` (advanced manually);
+/// this is just for wall-clock reads from spawned futures (rare in tests).
+#[derive(Default, Clone)]
+pub struct TestRuntime;
+
+impl AsyncRuntime for TestRuntime {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+}
+
+/// `Clipboard` impl for tests. Reads return a pre-canned value (set via
+/// [`Self::set_next_read`]); writes are appended to a log drainable via
+/// [`Self::take_writes`] / [`Self::last_write`]. Both resolve eagerly
+/// (`std::future::ready`), so the engine's `tick` polls them to completion
+/// inside a single `flush` iteration — tests stay deterministic.
+#[derive(Default, Clone)]
+pub struct RecordingClipboard {
+    inner: Rc<RecordingClipboardInner>,
+}
+
+#[derive(Default)]
+struct RecordingClipboardInner {
+    next_read: RefCell<String>,
+    writes: RefCell<Vec<String>>,
+}
+
+impl RecordingClipboard {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Pre-canned text returned by the next `clipboard.read_text().await`.
+    pub fn set_next_read(&self, s: impl Into<String>) {
+        *self.inner.next_read.borrow_mut() = s.into();
+    }
+
+    /// Drain all writes logged so far, in insertion order.
+    pub fn take_writes(&self) -> Vec<String> {
+        std::mem::take(&mut *self.inner.writes.borrow_mut())
+    }
+
+    /// Drain all writes and return the last one (matches the old
+    /// `take_clipboard_write` slot semantics).
+    pub fn last_write(&self) -> Option<String> {
+        self.take_writes().pop()
+    }
+}
+
+impl Clipboard for RecordingClipboard {
+    fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
+        let s = self.inner.next_read.borrow().clone();
+        Box::pin(std::future::ready(s))
+    }
+    fn write_text(&self, text: String) -> Pin<Box<dyn Future<Output = ()>>> {
+        self.inner.writes.borrow_mut().push(text);
+        Box::pin(std::future::ready(()))
+    }
+}
+
+/// `Http` impl for tests. Returns a pre-canned [`HttpOutcome`] (set via
+/// [`Self::set_next_response`]); logs each incoming [`RequestOpts`] for
+/// assertion via [`Self::last_request`]. Resolves eagerly so tests stay
+/// deterministic.
+#[derive(Default, Clone)]
+pub struct RecordingHttp {
+    inner: Rc<RecordingHttpInner>,
+}
+
+#[derive(Default)]
+struct RecordingHttpInner {
+    next_response: RefCell<Option<HttpOutcome>>,
+    last_request: RefCell<Option<RecordedRequest>>,
+}
+
+/// Simplified view of an HTTP request captured by [`RecordingHttp`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedRequest {
+    pub url: String,
+    pub method: String,
+}
+
+impl RecordingHttp {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Pre-canned response returned by the next `request(opts).await`. If
+    /// `None`, the request resolves to `HttpOutcome::Err("no canned response")`.
+    pub fn set_next_response(&self, outcome: HttpOutcome) {
+        *self.inner.next_response.borrow_mut() = Some(outcome);
+    }
+
+    /// The most recent request seen by the recording (or `None` if no
+    /// request has been issued).
+    pub fn last_request(&self) -> Option<RecordedRequest> {
+        self.inner.last_request.borrow().clone()
+    }
+}
+
+impl Http for RecordingHttp {
+    fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>> {
+        *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
+            url: opts.url.clone(),
+            method: opts.method.clone(),
+        });
+        let outcome = self
+            .inner
+            .next_response
+            .borrow()
+            .clone()
+            .unwrap_or_else(|| HttpOutcome::Err("no canned response".to_string()));
+        Box::pin(std::future::ready(outcome))
+    }
+}
+
+/// Helper to build a canned text response.
+pub fn text_response(status: u16, body: impl Into<String>) -> HttpOutcome {
+    HttpOutcome::Ok {
+        status,
+        status_text: "OK".to_string(),
+        headers: Vec::new(),
+        body: HttpBody::Text(body.into()),
+    }
+}
 
 pub struct Rect {
     pub left: f64,
@@ -36,6 +168,14 @@ pub struct TurTestApp {
     /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
     /// drains it through `take_current_cursor`.
     cursor_slot: Rc<Cell<Option<Cursor>>>,
+    /// Shared with the `RecordingClipboard` installed in the engine. Tests
+    /// pre-canned reads via `set_clipboard_read`; assert writes via
+    /// `take_clipboard_write`.
+    clipboard: RecordingClipboard,
+    /// Shared with the `RecordingHttp` installed in the engine (only when
+    /// constructed via [`Self::new_with_http`]). `None` for the default
+    /// constructor — those tests don't register `builtin:tur/net`.
+    http: Option<RecordingHttp>,
     /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
     /// steps (well under the 500 ms threshold) on each pointer-down so
@@ -46,18 +186,40 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
+        Self::build(width, height, None)
+    }
+
+    /// Construct with `TurNetPlugin` registered against a fresh
+    /// [`RecordingHttp`], so tests can drive `request()` from JS. Pre-canned
+    /// responses via [`Self::set_http_response`]; capture requests via
+    /// [`Self::last_http_request`].
+    pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
+        Self::build(width, height, Some(RecordingHttp::new()))
+    }
+
+    fn build(
+        width: f64,
+        height: f64,
+        http: Option<RecordingHttp>,
+    ) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
-        let mut inner = TurEngine::builder()
+        let clipboard = RecordingClipboard::new();
+        let mut builder = TurEngine::builder()
             .renderer(Box::new(NoopRenderer::new()))
             .font_loader(Box::new(PresetFontLoader::new()))
+            .async_runtime(Rc::new(TestRuntime))
             .plugin(
                 TurStdPlugin::builder()
                     .cursor(RecordingCursorPlatform {
                         last: cursor_slot.clone(),
                     })
+                    .clipboard(clipboard.clone())
                     .build(),
-            )
-            .build()?;
+            );
+        if let Some(http_impl) = http.clone() {
+            builder = builder.plugin(TurNetPlugin::builder().http(http_impl).build());
+        }
+        let mut inner = builder.build()?;
         inner.push_event(AppEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
@@ -67,6 +229,8 @@ impl TurTestApp {
         Ok(Self {
             inner,
             cursor_slot,
+            clipboard,
+            http,
             synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
         })
     }
@@ -318,7 +482,10 @@ impl TurTestApp {
         self.ensure_flushed();
     }
 
-    fn ensure_flushed(&mut self) {
+    /// Drive `spawn_loop_once` for a few iterations to settle cascading
+    /// reactive updates, async completions, and PromiseJobs. Public so
+    /// external tests (e.g. async bridge tests) can use the same pattern.
+    pub fn ensure_flushed(&mut self) {
         for _ in 0..6 {
             let _ = self.inner.spawn_loop_once(Duration::from_millis(3));
         }
@@ -400,9 +567,41 @@ impl TurTestApp {
 
     /// Drain any text written to the clipboard via `AppEvent::ClipboardWrite`
     /// (e.g. EditableText's Cmd+C / Cmd+X handling) since the last call.
-    /// Mirrors the embedder's per-frame clipboard-write poll.
+    /// Returns the latest write (the `RecordingClipboard` logs every write;
+    /// this drains all and returns the last, matching the old slot semantics).
     pub fn take_clipboard_write(&self) -> Option<String> {
-        self.inner.take_clipboard_write()
+        self.clipboard.last_write()
+    }
+
+    /// Pre-canned text returned by the next `clipboardReadText()` call from
+    /// JS, or `set_source` on a reactive atom driven by it. Useful for
+    /// testing paste-via-read flows.
+    pub fn set_clipboard_read(&self, s: impl Into<String>) {
+        self.clipboard.set_next_read(s);
+    }
+
+    /// Access the raw recording for advanced assertions (e.g. asserting
+    /// multiple writes happen in order).
+    pub fn clipboard(&self) -> &RecordingClipboard {
+        &self.clipboard
+    }
+
+    /// Pre-canned response for the next `request(opts).await` from JS.
+    /// Panics if this app wasn't constructed via [`Self::new_with_http`].
+    pub fn set_http_response(&self, outcome: HttpOutcome) {
+        self.http
+            .as_ref()
+            .expect("TurTestApp::set_http_response requires new_with_http")
+            .set_next_response(outcome);
+    }
+
+    /// The most recent request seen by the recording, or `None` if no
+    /// request has been issued. Panics if not constructed with http.
+    pub fn last_http_request(&self) -> Option<RecordedRequest> {
+        self.http
+            .as_ref()
+            .expect("TurTestApp::last_http_request requires new_with_http")
+            .last_request()
     }
 
     /// Push a synthetic paste event — equivalent to the embedder firing
