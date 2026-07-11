@@ -230,7 +230,7 @@ dependencies = [
  "futures-concurrency",
  "futures-lite",
  "getrandom",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "icu_calendar",
  "icu_normalizer",
  "indexmap",
@@ -270,7 +270,7 @@ dependencies = [
  "arrayvec",
  "boa_macros",
  "boa_string",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "thin-vec",
 ]
 
@@ -281,7 +281,7 @@ source = "git+https://github.com/hpp2334/boa.git?rev=7addeb39597f60156cd35502219
 dependencies = [
  "boa_gc",
  "boa_macros",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "indexmap",
  "once_cell",
  "phf 0.13.1",
@@ -451,6 +451,9 @@ name = "color"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ec7c5eb7a16992b1904d76c517d170ab353b0e0b3d5a0c81a8a0cd1037893cf"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "color_quant"
@@ -767,6 +770,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fearless_simd"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -860,7 +869,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c20b425addb8661e97fe1d51c4d8bcec3ec29ed6ad0db983976a7521276b8f7"
 dependencies = [
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "linebender_resource_handle",
  "memmap2",
  "parlance",
@@ -940,17 +949,6 @@ dependencies = [
  "futures-core",
  "futures-task",
  "futures-util",
-]
-
-[[package]]
-name = "futures-intrusive"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d930c203dd0b6ff06e0201a4a2fe9149b43c684fd4420555b26d21b1a02956f"
-dependencies = [
- "futures-core",
- "lock_api",
- "parking_lot",
 ]
 
 [[package]]
@@ -1060,6 +1058,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "glifo"
+version = "0.1.1"
+source = "git+https://github.com/linebender/vello.git?rev=cd852dc06bc0f9011385fc63a4852b0fc853f4b1#cd852dc06bc0f9011385fc63a4852b0fc853f4b1"
+dependencies = [
+ "bytemuck",
+ "foldhash 0.2.0",
+ "hashbrown 0.17.1",
+ "log",
+ "peniko",
+ "skrifa",
+ "smallvec",
+ "vello_common",
+]
+
+[[package]]
 name = "glow"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1121,7 +1134,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b17e70c989c36bad147b27a58d148c0741c51448aa5653436547323e524d0ab"
 dependencies = [
  "euclid",
- "svg_fmt",
 ]
 
 [[package]]
@@ -1200,9 +1212,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.17.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "allocator-api2",
  "equivalent",
@@ -1515,7 +1527,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "serde",
  "serde_core",
 ]
@@ -2129,7 +2141,7 @@ checksum = "8fad031076f48f0d4d85ce1aea9b94b4e715a4d636a030a123038f8f5b5e4343"
 dependencies = [
  "fontique",
  "harfrust",
- "hashbrown 0.17.0",
+ "hashbrown 0.17.1",
  "icu_normalizer",
  "icu_properties",
  "icu_segmenter",
@@ -2160,6 +2172,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "839c8299360d2e998bdb106dc0a6cd71dcc5f4df51df1b620361bf50e283cca6"
 dependencies = [
+ "bytemuck",
  "color",
  "kurbo",
  "linebender_resource_handle",
@@ -3029,12 +3042,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "svg_fmt"
-version = "0.4.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0193cc4331cfd2f3d2011ef287590868599a2f33c3e69bc22c1a3d3acf9e02fb"
-
-[[package]]
 name = "svgtypes"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3709,6 +3716,7 @@ version = "0.1.0"
 dependencies = [
  "boa_engine",
  "boa_gc",
+ "glifo",
  "image",
  "num-traits",
  "parley",
@@ -3718,7 +3726,10 @@ dependencies = [
  "tur-shared",
  "unicode-segmentation",
  "usvg",
- "vello",
+ "vello_common",
+ "vello_hybrid",
+ "web-sys",
+ "wgpu",
 ]
 
 [[package]]
@@ -3734,7 +3745,7 @@ dependencies = [
  "tur-engine",
  "tur-shared",
  "tur-std",
- "vello",
+ "wgpu",
 ]
 
 [[package]]
@@ -3793,11 +3804,9 @@ dependencies = [
  "tur-engine",
  "tur-shared",
  "tur-std",
- "vello",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "wgpu",
 ]
 
 [[package]]
@@ -3925,48 +3934,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 
 [[package]]
-name = "vello"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261359dbef879f8110ef7e1c442246c838d33d3d91cb05e0ea9288d432760c9f"
+name = "vello_common"
+version = "0.0.9"
+source = "git+https://github.com/linebender/vello.git?rev=cd852dc06bc0f9011385fc63a4852b0fc853f4b1#cd852dc06bc0f9011385fc63a4852b0fc853f4b1"
 dependencies = [
  "bytemuck",
- "futures-intrusive",
+ "fearless_simd",
+ "guillotiere",
+ "hashbrown 0.17.1",
  "log",
  "peniko",
- "png",
- "skrifa",
- "static_assertions",
+ "smallvec",
  "thiserror",
- "vello_encoding",
- "vello_shaders",
+]
+
+[[package]]
+name = "vello_hybrid"
+version = "0.0.9"
+source = "git+https://github.com/linebender/vello.git?rev=cd852dc06bc0f9011385fc63a4852b0fc853f4b1#cd852dc06bc0f9011385fc63a4852b0fc853f4b1"
+dependencies = [
+ "bytemuck",
+ "glifo",
+ "hashbrown 0.17.1",
+ "js-sys",
+ "log",
+ "thiserror",
+ "vello_common",
+ "vello_sparse_shaders",
+ "web-sys",
  "wgpu",
 ]
 
 [[package]]
-name = "vello_encoding"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2346f5f0d7dccb3582fcd397b4a57b43165209f1424e0d76e85dd814db164af7"
+name = "vello_sparse_shaders"
+version = "0.0.9"
+source = "git+https://github.com/linebender/vello.git?rev=cd852dc06bc0f9011385fc63a4852b0fc853f4b1#cd852dc06bc0f9011385fc63a4852b0fc853f4b1"
 dependencies = [
- "bytemuck",
- "guillotiere",
- "peniko",
- "skrifa",
- "smallvec",
-]
-
-[[package]]
-name = "vello_shaders"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dd38937516fa4b47423d9255bb5e4a65e839ec9d57c38c4af6189ce56bf46b7"
-dependencies = [
- "bytemuck",
- "log",
  "naga",
- "thiserror",
- "vello_encoding",
 ]
 
 [[package]]

@@ -53,11 +53,11 @@ impl TurVelloApp {
         )
         .map_err(|e| TurVelloError::Window(e.to_string()))?;
 
-        let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
-            backends: vello::wgpu::Backends::all(),
-            flags: vello::wgpu::InstanceFlags::default(),
-            memory_budget_thresholds: vello::wgpu::MemoryBudgetThresholds::default(),
-            backend_options: vello::wgpu::BackendOptions::default(),
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::all(),
+            flags: wgpu::InstanceFlags::default(),
+            memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+            backend_options: wgpu::BackendOptions::default(),
             display: None,
         });
 
@@ -70,7 +70,7 @@ impl TurVelloApp {
 
         let surface = unsafe {
             instance
-                .create_surface_unsafe(vello::wgpu::SurfaceTargetUnsafe::RawHandle {
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
                     raw_display_handle: Some(raw_display.as_raw()),
                     raw_window_handle: raw_window.as_raw(),
                 })
@@ -78,8 +78,8 @@ impl TurVelloApp {
         };
 
         let adapter = instance
-            .request_adapter(&vello::wgpu::RequestAdapterOptions {
-                power_preference: vello::wgpu::PowerPreference::HighPerformance,
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
             })
@@ -87,13 +87,13 @@ impl TurVelloApp {
             .map_err(|e| TurVelloError::WgpuAdapter(e.to_string()))?;
 
         let (device, queue) = adapter
-            .request_device(&vello::wgpu::DeviceDescriptor {
+            .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: vello::wgpu::Features::empty(),
-                required_limits: vello::wgpu::Limits::default(),
-                experimental_features: vello::wgpu::ExperimentalFeatures::default(),
-                memory_hints: vello::wgpu::MemoryHints::Performance,
-                trace: vello::wgpu::Trace::default(),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+                memory_hints: wgpu::MemoryHints::Performance,
+                trace: wgpu::Trace::default(),
             })
             .await
             .map_err(|e| TurVelloError::WgpuDevice(e.to_string()))?;

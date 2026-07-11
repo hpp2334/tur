@@ -18,7 +18,7 @@ repository = "https://github.com/hpp2334/tur"
 
 [workspace.dependencies]
 tur-shared = { path = "libs/tur-shared" }
-tur-engine = { path = "libs/tur-engine" }
+tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-std = { path = "libs/tur-std" }
 tur-net = { path = "libs/tur-net" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
@@ -27,7 +27,7 @@ num-derive = "0.4"
 num-traits = "0.2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
-vello = "0.9"
+wgpu = "29"
 boa_engine = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
 boa_gc = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

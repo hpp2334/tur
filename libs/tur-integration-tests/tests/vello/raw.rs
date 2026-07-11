@@ -74,3 +74,26 @@ pub fn vello_dpr_2_renders_colors() {
 pub fn vello_dpr_3_renders_colors() {
     test_dpr_render(3.0);
 }
+
+/// Verify that an `Image` element renders its uploaded pixels (the
+/// `image-basic` case is a semi-transparent yellow 1x1 PNG stretched over the
+/// canvas, which blends to pale yellow on the white background).
+pub fn vello_image_renders() {
+    let app = TurVelloApp::new(200.0, 100.0, 1.0).unwrap();
+    app.load_bundle("image-basic").unwrap();
+    app.render();
+
+    let pixels = app.render_to_pixels();
+    // Sample the centre pixel.
+    let cx = 100u32;
+    let cy = 50u32;
+    let phys_w = 200u32;
+    let (r, g, b, _a) = get_pixel(&pixels, phys_w, cx, cy);
+    // The image is yellow (#ffff00) at ~50% alpha over a white background, so
+    // the result must be pale yellow: red and green high, blue low. This proves
+    // an image (not the white background) was drawn.
+    assert!(
+        r > 200 && g > 200 && b < 200,
+        "image did not render: centre pixel was ({r},{g},{b}), expected pale yellow"
+    );
+}

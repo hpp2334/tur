@@ -1,31 +1,54 @@
 use std::fmt;
 
+use glifo::Glyph;
+use std::collections::HashMap;
 use tur_shared::{Brush, Color, Geometry, Offset, Size};
-use vello::kurbo::{Affine, Rect, Stroke};
-use vello::peniko::{BlendMode, Brush as PenikoBrush, Fill, ImageData};
-use vello::Scene;
+use vello_common::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Shape, Stroke};
+use vello_common::paint::{Image, ImageId, ImageSource, PaintType};
+use vello_common::peniko::{BlendMode, Color as PenikoColor, Fill, Gradient};
+use vello_hybrid::{Resources, Scene};
 
 use crate::core::render::Canvas;
+use crate::core::resource::ResourceId;
 use crate::core::text::text_layout::TextLayoutData;
+
+/// Tolerance used when converting non-rectangular shapes (rounded rects,
+/// circles) into Bézier paths for the hybrid renderer.
+const TOLERANCE: f64 = 0.1;
 
 pub struct VelloPaintContext<'a> {
     scene: &'a mut Scene,
+    resources: &'a mut Resources,
+    /// Maps each image resource id to its uploaded hybrid `ImageId`. The WebGPU
+    /// backend only supports `ImageSource::OpaqueId`.
+    image_uploads: &'a HashMap<ResourceId, ImageId>,
     /// Accumulated affine transform applied to every draw call.
     ///
-    /// Vello's `push_layer` transform only applies to the clip shape, not to
-    /// the content drawn within the layer (see vello docs: "the transforms
-    /// are _not_ saved or modified by the layer stack"). So to actually
-    /// transform a subtree, we must bake the affine into each draw call's own
-    /// transform. This stack holds the running product; `push_transform`
+    /// Vello Hybrid's `push_layer` only applies a transform to the clip shape,
+    /// not to the content drawn within the layer (the scene has a single global
+    /// `set_transform` state that layers do not save/restore). So to actually
+    /// transform a subtree, we bake the affine into each draw call via
+    /// `set_transform`. This stack holds the running product; `push_transform`
     /// composes onto it, and every draw/clip/opacity op premultiplies by it.
     transform_stack: Vec<Affine>,
 }
 
 impl<'a> VelloPaintContext<'a> {
-    pub fn new(scene: &'a mut Scene) -> Self {
+    pub fn new(
+        scene: &'a mut Scene,
+        resources: &'a mut Resources,
+        root_transform: Affine,
+        image_uploads: &'a HashMap<ResourceId, ImageId>,
+    ) -> Self {
+        // Seed the transform stack with the root transform (the dpr scale). The
+        // hybrid scene has a single global transform state that layers do not
+        // save/restore, so every draw call bakes `current_transform()` into its
+        // own `set_transform`.
         VelloPaintContext {
             scene,
-            transform_stack: Vec::new(),
+            resources,
+            image_uploads,
+            transform_stack: vec![root_transform],
         }
     }
 
@@ -45,73 +68,70 @@ impl fmt::Debug for VelloPaintContext<'_> {
     }
 }
 
-fn fill_shape(scene: &mut Scene, transform: Affine, geometry: &Geometry, brush: &PenikoBrush) {
-    match geometry {
-        Geometry::Rect(size) => {
-            scene.fill(
-                Fill::NonZero,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-            );
-        }
-        Geometry::RoundedRect { size, radius } => {
-            scene.fill(
-                Fill::NonZero,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
-            );
-        }
-        Geometry::Circle { radius } => {
-            scene.fill(
-                Fill::NonZero,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::Circle::new((0.0, 0.0), *radius),
-            );
+/// Build the hybrid `PaintType` for a tur `Brush`.
+fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
+    match brush {
+        Brush::SolidColor(color) => PaintType::Solid(to_peniko_color(color)),
+        Brush::LinearGradient {
+            start,
+            end,
+            stops,
+        } => {
+            let size = geometry_size(geometry);
+            let x0 = start.0 * size.width;
+            let y0 = start.1 * size.height;
+            let x1 = end.0 * size.width;
+            let y1 = end.1 * size.height;
+            let peniko_stops: Vec<(f32, PenikoColor)> = stops
+                .iter()
+                .map(|s| (s.offset, to_peniko_color(&s.color)))
+                .collect();
+            let gradient = Gradient::new_linear((x0, y0), (x1, y1)).with_stops(peniko_stops.as_slice());
+            PaintType::Gradient(gradient)
         }
     }
 }
 
-fn stroke_shape(
+fn fill_geometry(scene: &mut Scene, transform: Affine, geometry: &Geometry, paint: &PaintType) {
+    scene.set_transform(transform);
+    scene.set_paint(paint.clone());
+    scene.set_fill_rule(Fill::NonZero);
+    match geometry {
+        Geometry::Rect(size) => {
+            scene.fill_rect(&Rect::new(0.0, 0.0, size.width, size.height));
+        }
+        Geometry::RoundedRect { size, radius } => {
+            let path = RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
+            scene.fill_path(&path);
+        }
+        Geometry::Circle { radius } => {
+            let path = Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE);
+            scene.fill_path(&path);
+        }
+    }
+}
+
+fn stroke_geometry(
     scene: &mut Scene,
     transform: Affine,
     geometry: &Geometry,
-    brush: &PenikoBrush,
+    paint: &PaintType,
     stroke_width: f64,
 ) {
-    let stroke = Stroke::new(stroke_width);
+    scene.set_transform(transform);
+    scene.set_paint(paint.clone());
+    scene.set_stroke(Stroke::new(stroke_width));
     match geometry {
         Geometry::Rect(size) => {
-            scene.stroke(
-                &stroke,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height),
-            );
+            scene.stroke_rect(&Rect::new(0.0, 0.0, size.width, size.height));
         }
         Geometry::RoundedRect { size, radius } => {
-            scene.stroke(
-                &stroke,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::RoundedRect::new(0.0, 0.0, size.width, size.height, *radius),
-            );
+            let path = RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
+            scene.stroke_path(&path);
         }
         Geometry::Circle { radius } => {
-            scene.stroke(
-                &stroke,
-                transform,
-                brush,
-                None,
-                &vello::kurbo::Circle::new((0.0, 0.0), *radius),
-            );
+            let path = Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE);
+            scene.stroke_path(&path);
         }
     }
 }
@@ -127,57 +147,35 @@ fn geometry_size(geometry: &Geometry) -> Size {
 impl Canvas for VelloPaintContext<'_> {
     fn fill_geometry(&mut self, offset: Offset, geometry: &Geometry, brush: &Brush) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        match brush {
-            Brush::SolidColor(color) => {
-                let peniko_color = to_peniko_color(color);
-                let peniko_brush = PenikoBrush::Solid(peniko_color);
-                fill_shape(self.scene, transform, geometry, &peniko_brush);
-            }
-            Brush::LinearGradient {
-                start,
-                end,
-                stops,
-            } => {
-                let size = geometry_size(geometry);
-                let x0 = start.0 * size.width;
-                let y0 = start.1 * size.height;
-                let x1 = end.0 * size.width;
-                let y1 = end.1 * size.height;
-                let peniko_stops: Vec<(f32, vello::peniko::Color)> = stops
-                    .iter()
-                    .map(|s| (s.offset, to_peniko_color(&s.color)))
-                    .collect();
-                let gradient =
-                    vello::peniko::Gradient::new_linear((x0, y0), (x1, y1))
-                        .with_stops(peniko_stops.as_slice());
-                fill_shape(self.scene, transform, geometry, &PenikoBrush::Gradient(gradient));
-            }
-        }
+        let paint = to_paint(brush, geometry);
+        fill_geometry(self.scene, transform, geometry, &paint);
     }
 
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         for run in &layout.runs {
-            let brush_color = vello::peniko::Color::from_rgba8(
+            let brush_color = PenikoColor::from_rgba8(
                 run.brush[0],
                 run.brush[1],
                 run.brush[2],
                 run.brush[3],
             );
-            self.scene
-                .draw_glyphs(&run.font)
-                .brush(&PenikoBrush::Solid(brush_color))
+            // Text color comes from the scene's current paint.
+            self.scene.set_transform(transform);
+            self.scene.set_paint(PaintType::Solid(brush_color));
+            self.scene.set_fill_rule(Fill::NonZero);
+
+            let scene = &mut self.scene;
+            let resources = &mut self.resources;
+            let builder = scene.glyph_run(resources, &run.font);
+            builder
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
-                .transform(transform)
-                .draw(
-                    Fill::NonZero,
-                    run.glyphs.iter().map(|g| vello::Glyph {
-                        id: g.id,
-                        x: g.x,
-                        y: g.y,
-                    }),
+                .fill_glyphs(
+                    run.glyphs
+                        .iter()
+                        .map(|g| Glyph { id: g.id, x: g.x, y: g.y }),
                 );
 
             if run.underline {
@@ -188,25 +186,32 @@ impl Canvas for VelloPaintContext<'_> {
                         .map(|g| g.x + g.advance)
                         .unwrap_or(first.x + first.advance);
                     let underline_y = first.y + run.font_size * 0.15;
-                    let underline_brush = PenikoBrush::Solid(brush_color);
-                    self.scene.stroke(
-                        &Stroke::new(1.0),
-                        transform,
-                        &underline_brush,
-                        None,
-                        &vello::kurbo::Line::new(
+                    self.scene.set_stroke(Stroke::new(1.0));
+                    self.scene.stroke_path(
+                        &Line::new(
                             (first.x as f64, underline_y as f64),
                             (last_x as f64, underline_y as f64),
-                        ),
+                        )
+                        .to_path(TOLERANCE),
                     );
                 }
             }
         }
     }
 
-    fn draw_image(&mut self, image: &ImageData, transform: Affine) {
+    fn draw_image(&mut self, resource_id: ResourceId, natural_size: Size, transform: Affine) {
+        let Some(&image_id) = self.image_uploads.get(&resource_id) else {
+            return;
+        };
         let transform = self.current_transform() * transform;
-        self.scene.draw_image(image, transform);
+        let image_brush = Image {
+            image: ImageSource::opaque_id(image_id),
+            sampler: Default::default(),
+        };
+        self.scene.set_transform(transform);
+        self.scene.set_paint(PaintType::Image(image_brush));
+        self.scene.set_fill_rule(Fill::NonZero);
+        self.scene.fill_rect(&Rect::new(0.0, 0.0, natural_size.width, natural_size.height));
     }
 
     fn stroke_geometry(
@@ -218,8 +223,8 @@ impl Canvas for VelloPaintContext<'_> {
     ) {
         let peniko_color = to_peniko_color(color);
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        let brush = PenikoBrush::Solid(peniko_color);
-        stroke_shape(self.scene, transform, geometry, &brush, stroke_width);
+        let paint = PaintType::Solid(peniko_color);
+        stroke_geometry(self.scene, transform, geometry, &paint, stroke_width);
     }
 
     fn draw_shadow(
@@ -233,24 +238,21 @@ impl Canvas for VelloPaintContext<'_> {
     ) {
         let peniko_color = to_peniko_color(color);
         let transform = self.current_transform()
-            * Affine::translate((
-                offset.x + shadow_offset.0,
-                offset.y + shadow_offset.1,
-            ));
-        let rect = vello::kurbo::Rect::new(0.0, 0.0, size.width, size.height);
-        self.scene.draw_blurred_rounded_rect(
-            transform,
-            rect,
-            peniko_color,
-            border_radius,
-            blur,
-        );
+            * Affine::translate((offset.x + shadow_offset.0, offset.y + shadow_offset.1));
+        let rect = Rect::new(0.0, 0.0, size.width, size.height);
+        // `fill_blurred_rounded_rect` uses the current (solid) paint.
+        self.scene.set_transform(transform);
+        self.scene.set_paint(PaintType::Solid(peniko_color));
+        self.scene
+            .fill_blurred_rounded_rect(&rect, border_radius as f32, blur as f32, false);
     }
 
     fn push_clip(&mut self, offset: Offset, size: Size) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
-        let clip = Rect::new(0.0, 0.0, size.width, size.height);
-        self.scene.push_layer(Fill::NonZero, BlendMode::default(), 1.0, transform, &clip);
+        let clip = Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE);
+        self.scene.set_transform(transform);
+        self.scene
+            .push_layer(Some(&clip), None, None, None, None);
     }
 
     fn pop_clip(&mut self) {
@@ -258,21 +260,10 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn push_opacity(&mut self, opacity: f32) {
-        // Push a layer with a near-infinite clip and reduced alpha. Vello
-        // composites the layer contents with the given opacity when
-        // pop_layer is called. The clip transform carries the current
-        // transform so the (near-infinite) clip stays aligned with content
-        // drawn inside a transform subtree.
+        // Push a layer with reduced alpha and no clip (infinite extent).
         let opacity = opacity.clamp(0.0, 1.0);
-        let transform = self.current_transform();
-        let huge_clip = Rect::new(-1e6, -1e6, 1e6, 1e6);
-        self.scene.push_layer(
-            Fill::NonZero,
-            BlendMode::default(),
-            opacity,
-            transform,
-            &huge_clip,
-        );
+        self.scene
+            .push_layer(None, Some(BlendMode::default()), Some(opacity), None, None);
     }
 
     fn pop_opacity(&mut self) {
@@ -280,10 +271,10 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn push_transform(&mut self, transform: Affine) {
-        // Vello layers do not transform their content (only their clip), so
-        // we compose the affine onto an internal stack and bake it into each
-        // subsequent draw call's own transform. No push_layer is needed for a
-        // pure affine — vector content renders correctly per-draw.
+        // Vello Hybrid layers do not transform their content (only their clip),
+        // so we compose the affine onto an internal stack and bake it into each
+        // subsequent draw call's own transform via `set_transform`. No
+        // push_layer is needed for a pure affine.
         let next = self.current_transform() * transform;
         self.transform_stack.push(next);
     }
@@ -293,6 +284,6 @@ impl Canvas for VelloPaintContext<'_> {
     }
 }
 
-fn to_peniko_color(color: &Color) -> vello::peniko::Color {
-    vello::peniko::Color::from_rgba8(color.r(), color.g(), color.b(), color.a())
+fn to_peniko_color(color: &Color) -> PenikoColor {
+    PenikoColor::from_rgba8(color.r(), color.g(), color.b(), color.a())
 }

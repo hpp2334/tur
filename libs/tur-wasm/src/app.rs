@@ -4,7 +4,7 @@ use tur_engine::TurApp;
 use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
-use tur_engine::renderer::vello::VelloRenderer;
+use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_shared::Offset;
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
@@ -714,44 +714,8 @@ impl TurWasmApp {
             canvas.set_width(physical_width);
             canvas.set_height(physical_height);
 
-            let instance = vello::wgpu::Instance::new(vello::wgpu::InstanceDescriptor {
-                backends: vello::wgpu::Backends::BROWSER_WEBGPU,
-                flags: vello::wgpu::InstanceFlags::default(),
-                memory_budget_thresholds: vello::wgpu::MemoryBudgetThresholds::default(),
-                backend_options: vello::wgpu::BackendOptions::default(),
-                display: None,
-            });
-
-            let surface = instance
-                .create_surface(vello::wgpu::SurfaceTarget::Canvas(canvas.clone()))
-                .map_err(|e| JsValue::from_str(&format!("failed to create surface: {e}")))?;
-
-            let adapter = instance
-                .request_adapter(&vello::wgpu::RequestAdapterOptions {
-                    power_preference: vello::wgpu::PowerPreference::HighPerformance,
-                    compatible_surface: Some(&surface),
-                    force_fallback_adapter: false,
-                })
-                .await
-                .map_err(|e| JsValue::from_str(&format!("failed to request adapter: {e}")))?;
-
-            let (device, queue) = adapter
-                .request_device(&vello::wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: vello::wgpu::Features::empty(),
-                    required_limits: vello::wgpu::Limits::default(),
-                    experimental_features: vello::wgpu::ExperimentalFeatures::default(),
-                    memory_hints: vello::wgpu::MemoryHints::Performance,
-                    trace: vello::wgpu::Trace::default(),
-                })
-                .await
-                .map_err(|e| JsValue::from_str(&format!("failed to request device: {e}")))?;
-
-            let renderer = VelloRenderer::init_surface(
-                &adapter,
-                device,
-                queue,
-                surface,
+            let renderer = WebGlVelloRenderer::new(
+                canvas.clone(),
                 logical_width,
                 logical_height,
                 dpr,
