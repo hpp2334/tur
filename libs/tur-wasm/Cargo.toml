@@ -48,6 +48,7 @@ web-sys = { workspace = true, features = [
     "FileList",
     "HtmlInputElement",
     "HtmlAnchorElement",
+    "ResizeObserver",
     "Url",
 ] }
 js-sys = "0.3"

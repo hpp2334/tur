@@ -14,6 +14,7 @@ use tur_engine::core::elements::{
     ElementOnKeyboardContext, ElementTrace, TraceValue,
 };
 use tur_engine::core::event::AppImeEvent;
+use tur_engine::core::event::PointerDeviceKind;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType};
 use crate::keyboard::KeydownEvent;
 use crate::text::TextEditingController;
@@ -739,8 +740,14 @@ impl ElementOnGesture for EditableTextElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
+    ) -> bool {
         match event {
+            // Touch drag should scroll the enclosing ScrollView, not select
+            // text. Reject touch PointerDown so the arena falls through to
+            // the nearest scroll-capable ancestor.
+            ComposedGestureEvent::PointerDown { device: PointerDeviceKind::Touch, .. } => {
+                return false;
+            }
             ComposedGestureEvent::PointerDoubleDown { local, .. } => {
                 cx.request_own_focus();
                 let byte_pos = self.char_index_at(local);
@@ -820,6 +827,7 @@ impl ElementOnGesture for EditableTextElement {
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}
+            ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { local, global } => {
                 if let Some(m) = self.view.on_context_menu {
                     cx.push_event(
@@ -829,6 +837,7 @@ impl ElementOnGesture for EditableTextElement {
                 }
             }
         }
+        true
     }
 }
 

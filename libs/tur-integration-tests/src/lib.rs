@@ -7,7 +7,7 @@ use std::time::Duration;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
+use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent, PointerDeviceKind};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -145,12 +145,14 @@ impl TurTestApp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
+                device: PointerDeviceKind::Mouse,
             }));
         self.ensure_flushed();
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                device: PointerDeviceKind::Mouse,
             }));
         self.ensure_flushed();
     }
@@ -198,6 +200,7 @@ impl TurTestApp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
+                device: PointerDeviceKind::Mouse,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -223,6 +226,7 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
                 position: Offset::new(x, y),
+                device: PointerDeviceKind::Mouse,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -232,6 +236,7 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                device: PointerDeviceKind::Mouse,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -245,6 +250,7 @@ impl TurTestApp {
                 position: Offset::new(x, y),
                 button,
                 time_ms,
+                device: PointerDeviceKind::Mouse,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -254,6 +260,7 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
                 button,
+                device: PointerDeviceKind::Mouse,
             }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
@@ -280,6 +287,7 @@ impl TurTestApp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
+                device: PointerDeviceKind::Mouse,
             }));
     }
 
@@ -287,6 +295,7 @@ impl TurTestApp {
         self.inner
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
                 position: Offset::new(x, y),
+                device: PointerDeviceKind::Mouse,
             }));
     }
 
@@ -295,6 +304,7 @@ impl TurTestApp {
             .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
+                device: PointerDeviceKind::Mouse,
             }));
     }
 

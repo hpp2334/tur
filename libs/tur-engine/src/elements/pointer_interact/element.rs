@@ -109,31 +109,31 @@ impl ElementOnGesture for PointerInteractElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
+    ) -> bool {
         let (mutation, payload) = match event {
             ComposedGestureEvent::PointerDown { local, global, .. } => {
                 let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            // Multi-click variants also fire `on_pointer_down` — matches
-            // the DOM convention where `mousedown` is dispatched on every
-            // click of a multi-click sequence. (`dblclick` is a separate
-            // event there; elements that care about double-click as a
-            // distinct gesture implement `ElementOnGesture` directly.)
             ComposedGestureEvent::PointerDoubleDown { local, global, .. }
             | ComposedGestureEvent::PointerTripleDown { local, global, .. } => {
                 let m = self.view.on_pointer_down;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            ComposedGestureEvent::PointerMove { local, global } => {
+            ComposedGestureEvent::PointerMove { local, global, .. } => {
                 let m = self.view.on_pointer_move;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
             ComposedGestureEvent::PointerUp { local, global, .. } => {
                 let m = self.view.on_pointer_up;
+                let ev = PointerInteractEvent { local: *local, global: *global };
+                (m, ev)
+            }
+            ComposedGestureEvent::Click { local, global } => {
+                let m = self.view.on_click;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
@@ -146,6 +146,7 @@ impl ElementOnGesture for PointerInteractElement {
         if let Some(m) = mutation {
             cx.push_event(m, payload);
         }
+        true
     }
 }
 

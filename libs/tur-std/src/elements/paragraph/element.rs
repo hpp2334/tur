@@ -156,11 +156,9 @@ impl ElementOnGesture for TextElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) {
-        // Plain Text is non-selectable by default (browser-like). Selection
-        // gestures only run when the `selectable` prop was truthy.
+    ) -> bool {
         if !self.view.selectable {
-            return;
+            return true;
         }
         match event {
             ComposedGestureEvent::PointerDown { local, .. } => {
@@ -190,8 +188,10 @@ impl ElementOnGesture for TextElement {
             ComposedGestureEvent::PointerUp { .. } => {}
             ComposedGestureEvent::PointerDoubleDown { .. } => {}
             ComposedGestureEvent::PointerTripleDown { .. } => {}
+            ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
+        true
     }
 }
 

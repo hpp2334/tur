@@ -57,8 +57,7 @@ impl Plugin for TurStdPlugin {
         ctx.register_class::<AnimationController>()
             .expect("failed to register AnimationController");
 
-        ctx.register_handler(Box::new(handlers::text_edit_focus::TextEditFocusAppHandler));
-        ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler));
+        ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler::new()));
         ctx.register_handler(Box::new(handlers::keyboard::KeyboardAppHandler));
         ctx.register_handler(Box::new(handlers::ime::ImeAppHandler));
         ctx.register_handler(Box::new(handlers::resize::ResizeHandler));

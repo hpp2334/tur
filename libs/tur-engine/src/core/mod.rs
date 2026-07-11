@@ -7,7 +7,6 @@ pub mod elements;
 pub mod event;
 pub mod focus;
 pub mod fonts;
-pub mod gesture;
 pub mod handler;
 pub mod hit_test;
 pub mod plugin;

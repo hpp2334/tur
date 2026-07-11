@@ -1,7 +1,7 @@
 use tur_engine::core::edgy_event::EdgyMutation;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppGestureEvent};
+use tur_engine::core::event::{AppEvent, AppGestureEvent, PointerDeviceKind};
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 use tur_engine::core::hit_test::HitTest;
 use tur_engine::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
@@ -33,7 +33,11 @@ impl PointerRegionAppHandler {
 
 impl AppHandler for PointerRegionAppHandler {
     fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Gesture(AppGestureEvent::PointerMove { position }) = event else {
+        let AppEvent::Gesture(AppGestureEvent::PointerMove {
+            position,
+            device: PointerDeviceKind::Mouse,
+        }) = event
+        else {
             return;
         };
         let position = *position;
@@ -114,7 +118,7 @@ fn filter_opaque_path(path: &[ElementNodeId], tree: &NodeTreeData) -> Vec<Elemen
 /// Compute a position relative to the element's top-left by walking parents
 /// and subtracting each one's layout offset. Hops through fragment ancestors
 /// transparently (fragments have zero offset, so they're skipped without
-/// affecting the sum). Mirrors the helper in `handlers/gesture.rs`; kept
+/// affecting the sum). Mirrors the helper in `handlers/gesture/mod.rs`; kept
 /// local to avoid coupling.
 fn local_position(tree: &NodeTreeData, node_id: ElementNodeId, global: Offset) -> Offset {
     let mut abs_x = 0.0f64;
