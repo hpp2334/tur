@@ -1,44 +1,48 @@
-use std::num::NonZeroUsize;
+//! wgpu-backed vello-hybrid renderer (native + WebGPU targets).
+//!
+//! This module is only compiled when the `wgpu-backend` feature is active.
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
 use crate::core::render::Renderer as TurRenderer;
-use crate::core::resource::ResourceMap;
+use crate::core::resource::{ResourceId, ResourceMap};
 use crate::core::shell::PaintShell;
-use crate::renderer::vello::paint_context::VelloPaintContext;
-use vello::kurbo::Affine;
-use vello::peniko::Color;
-use vello::wgpu::util::TextureBlitter;
-use vello::wgpu::{SurfaceConfiguration, TextureUsages};
-use vello::{AaConfig, AaSupport, RenderParams, Renderer, RendererOptions, Scene};
+use crate::renderer::vello::scene_paint::{new_scene, paint_tree_to_scene};
+use std::collections::HashMap;
+use vello_common::paint::{ImageId, ImageSource};
+use vello_hybrid::{RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TextureBindings};
 
 #[derive(Debug, thiserror::Error)]
 pub enum VelloRendererError {
     #[error("vello render failed: {0}")]
-    Render(#[source] vello::Error),
+    Render(#[source] vello_hybrid::RenderError),
 }
 
 pub struct VelloRenderer {
     renderer: Renderer,
     scene: Scene,
-    device: vello::wgpu::Device,
-    queue: vello::wgpu::Queue,
-    surface: vello::wgpu::Surface<'static>,
-    config: SurfaceConfiguration,
-    intermediate_texture: vello::wgpu::Texture,
-    blitter: TextureBlitter,
+    resources: Resources,
+    texture_bindings: TextureBindings,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
     dpr: f64,
     physical_width: u32,
     physical_height: u32,
     max_texture_dimension: u32,
+    /// Cache mapping each registered image resource to its uploaded hybrid
+    /// `ImageId`. The WebGPU backend only supports `ImageSource::OpaqueId`, so
+    /// every image must be uploaded to the atlas before painting.
+    image_uploads: HashMap<ResourceId, ImageId>,
 }
 
 impl VelloRenderer {
     pub fn init_surface(
-        adapter: &vello::wgpu::Adapter,
-        device: vello::wgpu::Device,
-        queue: vello::wgpu::Queue,
-        surface: vello::wgpu::Surface<'static>,
+        adapter: &wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        surface: wgpu::Surface<'static>,
         logical_width: u32,
         logical_height: u32,
         dpr: f64,
@@ -58,8 +62,7 @@ impl VelloRenderer {
                 .find(|f| {
                     matches!(
                         f,
-                        vello::wgpu::TextureFormat::Rgba8Unorm
-                            | vello::wgpu::TextureFormat::Bgra8Unorm
+                        wgpu::TextureFormat::Rgba8Unorm | wgpu::TextureFormat::Bgra8Unorm
                     )
                 })
                 .or_else(|| caps.formats.iter().find(|f| f.is_srgb()))
@@ -72,56 +75,34 @@ impl VelloRenderer {
                 })
         };
         config.format = surface_format;
-        config.usage = TextureUsages::RENDER_ATTACHMENT;
+        config.usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
 
         surface.configure(&device, &config);
 
-        let options = RendererOptions {
-            use_cpu: false,
-            antialiasing_support: AaSupport::all(),
-            num_init_threads: NonZeroUsize::new(1),
-            pipeline_cache: None,
+        let render_target_config = RenderTargetConfig {
+            format: surface_format,
+            width: physical_width,
+            height: physical_height,
         };
-        let renderer = Renderer::new(&device, options).expect("failed to create vello Renderer");
+        let renderer = Renderer::new(&device, &render_target_config);
 
-        let intermediate_texture = Self::create_intermediate_texture(&device, physical_width, physical_height);
-        let blitter = TextureBlitter::new(&device, surface_format);
+        let scene = new_scene(physical_width, physical_height);
 
         VelloRenderer {
             renderer,
-            scene: Scene::new(),
+            scene,
+            resources: Resources::new(),
+            texture_bindings: TextureBindings::new(),
             device,
             queue,
             surface,
             config,
-            intermediate_texture,
-            blitter,
             dpr,
             physical_width,
             physical_height,
             max_texture_dimension,
+            image_uploads: HashMap::new(),
         }
-    }
-
-    fn create_intermediate_texture(
-        device: &vello::wgpu::Device,
-        width: u32,
-        height: u32,
-    ) -> vello::wgpu::Texture {
-        device.create_texture(&vello::wgpu::TextureDescriptor {
-            label: Some("vello intermediate"),
-            size: vello::wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: vello::wgpu::TextureDimension::D2,
-            format: vello::wgpu::TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::STORAGE_BINDING | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC,
-            view_formats: &[],
-        })
     }
 
     pub fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
@@ -133,11 +114,10 @@ impl VelloRenderer {
         self.config.width = self.physical_width;
         self.config.height = self.physical_height;
         self.surface.configure(&self.device, &self.config);
-        self.intermediate_texture = Self::create_intermediate_texture(
-            &self.device,
-            self.physical_width,
-            self.physical_height,
-        );
+
+        // The hybrid `Scene` is created with fixed pixel dimensions, so it must be
+        // recreated on resize.
+        self.scene = new_scene(self.physical_width, self.physical_height);
     }
 
     pub fn render_to_scene(
@@ -147,22 +127,71 @@ impl VelloRenderer {
         resource_map: &ResourceMap,
         shell: PaintShell<'_>,
     ) {
-        self.scene.reset();
-        let mut fragment = Scene::new();
-        let mut ctx = VelloPaintContext::new(&mut fragment);
-        tree.paint(&mut ctx, focused_node_id, resource_map, shell);
-        self.scene.append(&fragment, Some(Affine::scale(self.dpr)));
+        // The WebGPU backend only supports `ImageSource::OpaqueId`, so upload
+        // any image resources that are not yet cached before painting.
+        self.upload_images(resource_map);
+
+        paint_tree_to_scene(
+            &mut self.scene,
+            &mut self.resources,
+            &self.image_uploads,
+            self.physical_width,
+            self.physical_height,
+            self.dpr,
+            tree,
+            focused_node_id,
+            resource_map,
+            shell,
+        );
+    }
+
+    /// Upload any new image resources to the hybrid image cache (atlas),
+    /// caching their `ImageId` keyed by `ResourceId`. Stale entries (images no
+    /// longer in the resource map) are pruned from the cache.
+    fn upload_images(&mut self, resource_map: &ResourceMap) {
+        let VelloRenderer {
+            renderer,
+            resources,
+            device,
+            queue,
+            image_uploads,
+            ..
+        } = self;
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("image upload"),
+        });
+        let mut uploaded_any = false;
+        for (rid, img_res) in resource_map.iter_images() {
+            if image_uploads.contains_key(&rid) {
+                continue;
+            }
+            let source = ImageSource::from_peniko_image_data(&img_res.peniko_image);
+            let pixmap = match source {
+                ImageSource::Pixmap(p) => p,
+                // Only inline pixmap sources are produced from decoded image data.
+                _ => continue,
+            };
+            let image_id = renderer.upload_image(resources, device, queue, &mut encoder, &pixmap);
+            image_uploads.insert(rid, image_id);
+            uploaded_any = true;
+        }
+        // Prune stale entries so removed images don't keep atlas slots forever.
+        image_uploads.retain(|rid, _| resource_map.has_image(*rid));
+
+        if uploaded_any {
+            queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
         let output = match self.surface.get_current_texture() {
-            vello::wgpu::CurrentSurfaceTexture::Success(t)
-            | vello::wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
-            vello::wgpu::CurrentSurfaceTexture::Timeout => {
+            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Timeout => {
                 tracing::warn!("present: get_current_texture timed out");
                 return Ok(());
             }
-            vello::wgpu::CurrentSurfaceTexture::Outdated => {
+            wgpu::CurrentSurfaceTexture::Outdated => {
                 tracing::warn!("present: get_current_texture outdated, reconfiguring surface");
                 self.surface.configure(&self.device, &self.config);
                 return Ok(());
@@ -173,41 +202,36 @@ impl VelloRenderer {
             }
         };
 
-        let intermediate_view = self
-            .intermediate_texture
-            .create_view(&vello::wgpu::TextureViewDescriptor::default());
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let params = RenderParams {
-            base_color: Color::from_rgba8(255, 255, 255, 255),
+        let render_size = RenderSize {
             width: self.physical_width,
             height: self.physical_height,
-            antialiasing_method: AaConfig::Msaa8,
         };
-
-        self.renderer
-            .render_to_texture(&self.device, &self.queue, &self.scene, &intermediate_view, &params)
-            .map_err(|e| {
-                tracing::error!("present: render_to_texture failed: {e}");
-                VelloRendererError::Render(e)
-            })?;
-
-        let surface_view = output
-            .texture
-            .create_view(&vello::wgpu::TextureViewDescriptor::default());
 
         let mut encoder = self
             .device
-            .create_command_encoder(&vello::wgpu::CommandEncoderDescriptor {
-                label: Some("blit encoder"),
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vello hybrid render"),
             });
-        self.blitter.copy(
-            &self.device,
-            &mut encoder,
-            &intermediate_view,
-            &surface_view,
-        );
-        self.queue.submit(std::iter::once(encoder.finish()));
 
+        if let Err(e) = self.renderer.render(
+            &self.scene,
+            &mut self.resources,
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &render_size,
+            &view,
+            &self.texture_bindings,
+        ) {
+            tracing::error!("present: vello hybrid render failed: {e}");
+            return Err(VelloRendererError::Render(e));
+        }
+
+        self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
     }
@@ -217,55 +241,76 @@ impl VelloRenderer {
     }
 
     pub fn render_to_pixels(&mut self) -> Vec<u8> {
-        let intermediate_view = self
-            .intermediate_texture
-            .create_view(&vello::wgpu::TextureViewDescriptor::default());
+        // The hybrid renderer is bound to one target format (the surface
+        // format), so the offscreen texture must use that same format. The
+        // result is converted to RGBA8 byte order for consumers.
+        let format = self.config.format;
+        let target = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("vello hybrid readback"),
+            size: wgpu::Extent3d {
+                width: self.physical_width,
+                height: self.physical_height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        });
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
-        let params = RenderParams {
-            base_color: Color::from_rgba8(255, 255, 255, 255),
+        let render_size = RenderSize {
             width: self.physical_width,
             height: self.physical_height,
-            antialiasing_method: AaConfig::Msaa8,
         };
 
-        if let Err(e) = self
-            .renderer
-            .render_to_texture(&self.device, &self.queue, &self.scene, &intermediate_view, &params)
-        {
-            tracing::error!("render_to_pixels: render_to_texture failed: {e}");
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("vello hybrid readback"),
+            });
+
+        if let Err(e) = self.renderer.render(
+            &self.scene,
+            &mut self.resources,
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &render_size,
+            &view,
+            &self.texture_bindings,
+        ) {
+            tracing::error!("render_to_pixels: vello hybrid render failed: {e}");
             return Vec::new();
         }
 
         let bytes_per_row_aligned = ((self.physical_width * 4).div_ceil(256)) * 256;
         let buffer_size = (bytes_per_row_aligned as u64) * (self.physical_height as u64);
-        let readback_buffer = self.device.create_buffer(&vello::wgpu::BufferDescriptor {
+        let readback_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("readback buffer"),
             size: buffer_size,
-            usage: vello::wgpu::BufferUsages::COPY_DST | vello::wgpu::BufferUsages::MAP_READ,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&vello::wgpu::CommandEncoderDescriptor {
-                label: Some("readback encoder"),
-            });
         encoder.copy_texture_to_buffer(
-            vello::wgpu::TexelCopyTextureInfo {
-                texture: &self.intermediate_texture,
+            wgpu::TexelCopyTextureInfo {
+                texture: &target,
                 mip_level: 0,
-                origin: vello::wgpu::Origin3d::ZERO,
-                aspect: vello::wgpu::TextureAspect::All,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
-            vello::wgpu::TexelCopyBufferInfo {
+            wgpu::TexelCopyBufferInfo {
                 buffer: &readback_buffer,
-                layout: vello::wgpu::TexelCopyBufferLayout {
+                layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(bytes_per_row_aligned),
                     rows_per_image: Some(self.physical_height),
                 },
             },
-            vello::wgpu::Extent3d {
+            wgpu::Extent3d {
                 width: self.physical_width,
                 height: self.physical_height,
                 depth_or_array_layers: 1,
@@ -274,14 +319,25 @@ impl VelloRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         let slice = readback_buffer.slice(..);
-        slice.map_async(vello::wgpu::MapMode::Read, |_| {});
-        self.device.poll(vello::wgpu::PollType::wait_indefinitely()).unwrap();
+        slice.map_async(wgpu::MapMode::Read, |_| {});
+        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
         let data = slice.get_mapped_range();
+        let swap_red_blue = matches!(
+            format,
+            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
+        );
         let mut pixels = Vec::with_capacity((self.physical_width * self.physical_height * 4) as usize);
         for row in 0..self.physical_height {
             let offset = row as usize * bytes_per_row_aligned as usize;
-            pixels.extend_from_slice(&data[offset..offset + (self.physical_width * 4) as usize]);
+            let row_end = offset + (self.physical_width * 4) as usize;
+            if swap_red_blue {
+                for chunk in data[offset..row_end].chunks_exact(4) {
+                    pixels.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
+                }
+            } else {
+                pixels.extend_from_slice(&data[offset..row_end]);
+            }
         }
         pixels
     }

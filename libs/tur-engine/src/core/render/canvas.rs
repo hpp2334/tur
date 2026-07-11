@@ -1,9 +1,9 @@
 use std::fmt;
 
 use tur_shared::{Brush, Color, Geometry, Offset, Size};
-use vello::kurbo::Affine;
-use vello::peniko::ImageData;
+use vello_common::kurbo::Affine;
 
+use crate::core::resource::ResourceId;
 use crate::core::text::text_layout::TextLayoutData;
 
 pub trait Canvas: fmt::Debug {
@@ -17,7 +17,7 @@ pub trait Canvas: fmt::Debug {
     );
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData);
-    fn draw_image(&mut self, image: &ImageData, transform: Affine);
+    fn draw_image(&mut self, resource_id: ResourceId, natural_size: Size, transform: Affine);
     fn draw_shadow(
         &mut self,
         offset: Offset,
@@ -59,7 +59,7 @@ impl Canvas for NullCanvas {
     }
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, _offset: Offset, _layout: &TextLayoutData) {}
-    fn draw_image(&mut self, _image: &ImageData, _transform: Affine) {}
+    fn draw_image(&mut self, _resource_id: ResourceId, _natural_size: Size, _transform: Affine) {}
     fn draw_shadow(
         &mut self,
         _offset: Offset,

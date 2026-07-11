@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tur-engine = { workspace = true, features = ["trace"] }
+tur-engine = { workspace = true, features = ["wgpu-backend", "trace"] }
 tur-std = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true }
@@ -18,7 +18,7 @@ minifb = "0.28"
 pollster = "0.4"
 raw-window-handle = "0.6"
 thiserror = { workspace = true }
-vello = { workspace = true, features = ["wgpu"] }
+wgpu = { workspace = true }
 
 [[test]]
 name = "vello"

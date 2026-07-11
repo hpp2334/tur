@@ -1,6 +1,6 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
+A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
 
 ## Architecture
 
@@ -42,7 +42,7 @@ A JavaScript rendering engine built with winit, vello, and boa_engine. Renders R
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-wasm                                        │
-│  (wasm binary via wasm-pack: boajs + vello)           │
+│  (wasm binary via wasm-pack: boajs + vello-hybrid)     │
 │  TurWasmApp::create() — full viewport                 │
 │  TurWasmApp::create_in(id) — embed in container       │
 │  clear_and_run_js() — clear tree + evaluate new JS    │
@@ -101,7 +101,7 @@ libs/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
   tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
-  tur-wasm/                  # wasm binary (boa_engine + vello + tur-engine)
+  tur-wasm/                  # wasm binary (boa_engine + vello-hybrid + tur-engine)
 js/
   packages/
     tur-edgy/                # Flutter-like component wrappers + reactivity (Column, Row, Match, Dynamic, ...)
@@ -169,7 +169,7 @@ cd js/packages/tur-test-cases && pnpm build
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: biome
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
-- Rendering: vello (GPU vector graphics via wgpu), or noop renderer (logs tree stats)
+- Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlVelloRenderer`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`VelloRenderer`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint the element tree into a vello-hybrid `Scene`; each backend wraps it with its own renderer + `Renderer` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
 - When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.

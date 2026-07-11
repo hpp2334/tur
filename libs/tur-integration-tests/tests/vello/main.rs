@@ -8,6 +8,7 @@ fn main() {
         ("vello_dpr_1_5_renders_colors", raw::vello_dpr_1_5_renders_colors),
         ("vello_dpr_2_renders_colors", raw::vello_dpr_2_renders_colors),
         ("vello_dpr_3_renders_colors", raw::vello_dpr_3_renders_colors),
+        ("vello_image_renders", raw::vello_image_renders),
     ];
 
     let mut passed = 0;

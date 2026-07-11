@@ -7,7 +7,16 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
+default = ["wgpu-backend"]
 trace = []
+# wgpu backend (native Vulkan/Metal/DX12 + browser WebGPU). Activates the
+# `wgpu` optional dependency and vello-hybrid's wgpu renderer.
+wgpu-backend = ["dep:wgpu", "vello_hybrid/wgpu", "vello_hybrid/wgpu_default"]
+# WebGL2 backend for browsers. Uses vello-hybrid's native WebGL renderer — no
+# wgpu dependency, ~3MB smaller wasm binary. Mutually exclusive in practice:
+# builds that enable `webgl` should disable default features (`default-features
+# = false, features = ["webgl"]`).
+webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 
 [dependencies]
 tur-shared = { workspace = true }
@@ -16,7 +25,11 @@ resvg = { workspace = true }
 usvg = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
-vello = { workspace = true }
+vello_hybrid = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["text"] }
+vello_common = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
+glifo = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
+wgpu = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = ["HtmlCanvasElement"] }
 num-traits = { workspace = true }
 parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }

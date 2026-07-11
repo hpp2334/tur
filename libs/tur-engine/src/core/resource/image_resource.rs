@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tur_shared::Size;
-use vello::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
+use vello_common::peniko::{Blob, ImageAlphaType, ImageData, ImageFormat};
 
 pub struct ImageResource {
     pub(crate) peniko_image: ImageData,

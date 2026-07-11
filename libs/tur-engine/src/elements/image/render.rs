@@ -53,12 +53,12 @@ impl ElementRender for ImageElement {
             let scale_x = draw_w / natural_w;
             let scale_y = draw_h / natural_h;
 
-            let transform = vello::kurbo::Affine::translate((
+            let transform = vello_common::kurbo::Affine::translate((
                 offset.x + offset_x,
                 offset.y + offset_y,
-            )) * vello::kurbo::Affine::scale_non_uniform(scale_x, scale_y);
+            )) * vello_common::kurbo::Affine::scale_non_uniform(scale_x, scale_y);
 
-            canvas.draw_image(&img_res.peniko_image, transform);
+            canvas.draw_image(rid, img_res.natural_size, transform);
         }
 
         for &child_id in children {

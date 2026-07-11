@@ -49,4 +49,16 @@ impl ResourceMap {
             Resource::Image(img) => Some(img),
         }
     }
+
+    /// Iterate over all registered image resources with their ids.
+    pub fn iter_images(&self) -> impl Iterator<Item = (ResourceId, &ImageResource)> {
+        self.resources.iter().map(|(id, resource)| match resource {
+            Resource::Image(img) => (*id, img),
+        })
+    }
+
+    /// Whether an image resource with the given id is registered.
+    pub fn has_image(&self, id: ResourceId) -> bool {
+        matches!(self.resources.get(&id), Some(Resource::Image(_)))
+    }
 }
