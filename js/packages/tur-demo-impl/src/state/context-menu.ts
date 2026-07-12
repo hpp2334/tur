@@ -1,4 +1,4 @@
-import { clipboardReadText, clipboardWriteText } from "builtin:tur/host";
+import { clipboard } from "builtin:tur/clipboard";
 import { mutate, set, source } from "builtin:tur/std";
 import { editorCtrl } from "./case-store";
 
@@ -45,12 +45,14 @@ export const closeContextMenu = mutate(() => {
 
 /** Cut: copy selection to clipboard then delete it. The actual clipboard
  *  write is performed by the engine when Cmd+X is pressed; for the menu
- *  action we simulate by calling `clipboardWriteText` directly. */
+ *  action we simulate by calling `clipboard.writeText` directly. */
 export const cutSelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         editorCtrl.deleteSelection();
-        clipboardWriteText(text);
+        // Fire-and-forget the Promise — the editor state has already been
+        // updated synchronously.
+        void clipboard.writeText(text);
     }
     set(contextMenuOpen$, false);
 });
@@ -58,18 +60,17 @@ export const cutSelection = mutate(() => {
 export const copySelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
-        clipboardWriteText(text);
+        void clipboard.writeText(text);
     }
     set(contextMenuOpen$, false);
 });
 
 export const pasteFromClipboard = mutate(() => {
-    // Paste via the host's clipboard-read bridge. The engine handles Cmd+V
-    // natively via the paste event on the hidden textarea, but the
-    // context-menu action needs an explicit call. `clipboardReadText` is
-    // callback-based (the host resolves it on the next frame from within
-    // the boa context, where a &mut Context is available).
-    clipboardReadText((text) => {
+    // Paste via the clipboard bridge. The engine handles Cmd+V natively
+    // via the paste event on the hidden textarea, but the context-menu
+    // action needs an explicit call. `clipboard.readText` returns a
+    // Promise; `.then` runs as a PromiseJob on the next flush.
+    void clipboard.readText().then((text) => {
         if (text.length > 0) editorCtrl.insertText(text);
     });
     set(contextMenuOpen$, false);

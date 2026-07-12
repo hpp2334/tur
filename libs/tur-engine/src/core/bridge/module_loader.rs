@@ -84,25 +84,40 @@ impl ModuleLoader for TurModuleLoader {
 
 /// Build a synthetic module whose exports are native bridge functions.
 ///
-/// Each `(name, length, ptr)` becomes an export named `name`. The exported
-/// function is a thin wrapper that prepends `ctx_value` to the JS arguments
-/// and forwards to `ptr` — so the existing ctx-first native implementations
+/// Each `(name, length, ptr)` in `fns` becomes a *ctx-bound* export: a thin
+/// wrapper that prepends `ctx_value` to the JS arguments and forwards to the
+/// fn pointer — so the existing ctx-first native implementations
 /// (`tur_source(ctx, value)`, `tur_container(ctx, props)`, …) are reused
 /// verbatim, while JS callers get a ctx-free surface
 /// (`source(value)`, `Container(props)`).
+///
+/// Each `(name, length, nf)` in `closures` becomes a *free-form* export: the
+/// `NativeFunction` is registered as-is, with no ctx prepending. Used for
+/// bridge fns that need to capture state that can't live on `TurJsContext`
+/// (e.g. clipboard/http impls from outside tur-engine).
+///
+/// Each `(name, val)` in `consts` becomes a constant export.
 pub fn build_native_module(
     context: &mut Context,
     ctx_value: JsValue,
     fns: &[(&str, usize, NativeFunctionPointer)],
+    closures: &[(&str, usize, NativeFunction)],
     consts: &[(&str, JsValue)],
 ) -> Module {
-    // Collect every export as a (name, value) pair: bound native fns first,
-    // then constant values (enum objects, etc.). A single flat list keeps the
-    // synthetic-module initializer trivial.
+    // Collect every export as a (name, value) pair: bound native fns, closure
+    // fns, then constant values (enum objects, etc.). A single flat list
+    // keeps the synthetic-module initializer trivial.
     let mut exports: Vec<(boa_engine::JsString, JsValue)> =
-        Vec::with_capacity(fns.len() + consts.len());
+        Vec::with_capacity(fns.len() + closures.len() + consts.len());
     for (name, length, ptr) in fns {
         let f = bound_native(context, ctx_value.clone(), *ptr, *length, name);
+        exports.push((js_string!(*name), f.into()));
+    }
+    for (name, length, nf) in closures {
+        let f = FunctionObjectBuilder::new(context.realm(), nf.clone())
+            .length(*length)
+            .name(js_string!(*name))
+            .build();
         exports.push((js_string!(*name), f.into()));
     }
     for (name, val) in consts {

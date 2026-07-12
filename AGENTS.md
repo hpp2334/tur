@@ -225,3 +225,13 @@ rm -f *.png  # only stray workspace-root screenshots; safe since no PNGs are tra
 
 Verify with `git status` — only the intended source changes should remain. Never commit a screenshot.
 
+## Invoking the git-end subagent
+
+When the user asks to commit/push/PR (e.g. `@git-end`, "commit and push", "open a PR"), dispatch the **git-end** subagent via the Task tool with `subagent_type: "git-end"` — but **do NOT pass any prompt**. The agent is hard-coded to ignore prompt contents and follow only its own workflow (rebase → commit → push → create/update PR → run local CI). It derives the commit message and PR title/body directly from `git diff` and `git diff main...HEAD --stat`, so a prompt is at best redundant and at worst misleading.
+
+Concretely:
+- Pass an empty/minimal `prompt` (e.g. the empty string or a single space — the field is required by the tool schema, but the agent discards it).
+- Do **not** pre-stage files, write the commit message, draft the PR body, or summarize "what we did" in the prompt — git-end inspects the tree itself.
+- The agent's full workflow lives in `.opencode/agents/git-end.md`.
+
+

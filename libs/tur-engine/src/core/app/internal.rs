@@ -6,6 +6,7 @@ use boa_engine::object::JsObject;
 use boa_engine::{js_string, JsValue};
 
 use crate::core::app::TurAppContext;
+use crate::core::async_::{AsyncExecutor, AsyncRuntime};
 use crate::core::reactive::Source;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
@@ -21,6 +22,19 @@ pub struct TurAppInternal {
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) needs_draw: Rc<Cell<bool>>,
     pub(crate) executor: Rc<TurJobExecutor>,
+    /// Engine-owned async executor. Drives spawned Rust futures via
+    /// [`AsyncExecutor::tick`] inside `flush`, with real wakers (backed by
+    /// `async_task`). Used by host bridge fns (clipboard, http) and by
+    /// `ClipboardWriteHandler` to perform async platform work without
+    /// blocking the sync flush loop.
+    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Portable async-runtime hooks (wall-clock `now()`, future
+    /// `spawn_blocking`/`timer`). Injected by the embedder via
+    /// `TurEngineBuilder::async_runtime`. Held here for future use
+    /// (timer scheduling, wall-clock timestamps); the current
+    /// clipboard/http bridge fns don't need it.
+    #[allow(dead_code)]
+    pub(crate) async_runtime: Rc<dyn AsyncRuntime>,
     /// Engine-owned `viewportSize$` reactive source handle. `None` only until
     /// `TurEngineBuilder::build` creates it (right after `new`). Synced each
     /// frame in `flush` from `app_context.size`.
@@ -37,6 +51,7 @@ impl TurAppInternal {
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<FixedClock>,
+        async_runtime: Rc<dyn AsyncRuntime>,
     ) -> Self {
         use crate::core::elements::NodeTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
@@ -73,11 +88,23 @@ impl TurAppInternal {
 
         let needs_draw = Rc::new(Cell::new(false));
 
+        let async_executor = Rc::new(AsyncExecutor::new());
+
+        // Expose the engine's async executor as a capability so capability-
+        // using bridge fns (tur-net's `request`, tur-clipboard's read/write)
+        // can spawn futures without capturing state in `unsafe` closures.
+        // Plugins that inject their own capabilities (Http, Clipboard) sit
+        // on top of this; the executor is engine-owned and always present.
+        js_context
+            .insert_capability::<Rc<AsyncExecutor>>(async_executor.clone());
+
         Self {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
             needs_draw,
             executor,
+            async_executor,
+            async_runtime,
             viewport_size: None,
             last_viewport: Cell::new((-1.0, -1.0)),
         }
@@ -91,6 +118,13 @@ impl TurAppInternal {
         let mut animation_ticked = false;
 
         loop {
+            // Drive spawned Rust futures one poll step. Completions they
+            // produce (settle-JsPromise closures) are drained right after,
+            // before boa's microtask drain — so PromiseJobs enqueued by
+            // `resolvers.resolve.call(...)` run in the same iteration.
+            let async_progress = self.async_executor.tick();
+            self.async_executor.drain_completions(boa_context);
+
             let handled_events = self.flush_app_events();
 
             // Keep the engine-owned `viewportSize$` atom in sync with the
@@ -128,9 +162,26 @@ impl TurAppInternal {
         self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
         self.flush_focus_notifications();
         let handled_mutations = self.flush_pending_mutations(boa_context);
-            let _ = self.executor.drain(boa_context);
+            // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
+            // ClockJobs). PromiseJobs fire `.then` callbacks which may call
+            // bridge fns that `spawn_detached` more Rust futures — those
+            // land in `async_executor.ready` and are caught by the
+            // `has_pending`/`async_progress` termination check, keeping
+            // the fixed-point loop alive.
+            let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
-            if !handled_events && !handled_mutations && !new_dirty {
+            let async_pending = self.async_executor.has_pending();
+            // Quiescence requires: no events handled, no mutations handled,
+            // no reactive dirty, no microtasks just ran (pre-existing latent
+            // bug — a microtask that enqueues another without doing set/event
+            // would terminate early), and no pending async work.
+            if !handled_events
+                && !handled_mutations
+                && !new_dirty
+                && !async_progress
+                && jobs_run == 0
+                && !async_pending
+            {
                 break;
             }
         }

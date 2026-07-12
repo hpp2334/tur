@@ -1,6 +1,6 @@
 [package]
-name = "tur-net"
-description = "HTTP networking plugin for tur (Http trait + builtin:tur/net bridge)"
+name = "tur-clipboard"
+description = "Async clipboard plugin for tur (Clipboard bridge as builtin:tur/clipboard)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,6 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true }
-tur-shared = { workspace = true }
+tur-std = { workspace = true }
 boa_engine = { workspace = true }
 tracing = { workspace = true }

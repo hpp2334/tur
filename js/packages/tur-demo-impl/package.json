@@ -14,6 +14,7 @@
         "@tur/core": "workspace:*",
         "@tur/std": "workspace:*",
         "@tur/host": "workspace:*",
+        "@tur/clipboard": "workspace:*",
         "@tur/net": "workspace:*"
     },
     "devDependencies": {

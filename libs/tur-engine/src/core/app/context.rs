@@ -33,10 +33,6 @@ pub struct TurAppContext {
     /// embedder via a callback installed by a plugin). Owns the time source
     /// shared with the boa `Context`. See [`Shell`].
     pub(crate) shell: Shell,
-    /// Text written to the clipboard via `AppEvent::ClipboardWrite` since the
-    /// last poll. `ClipboardWriteHandler` pushes here; embedders drain via
-    /// `TurApp::take_clipboard_write()` once per frame.
-    pub(crate) pending_clipboard_write: Rc<RefCell<Option<String>>>,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -71,7 +67,6 @@ impl TurAppContext {
             event_queue: AppEventQueue::new(),
             handlers: vec![],
             shell: Shell::new(clock),
-            pending_clipboard_write: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -104,7 +99,6 @@ impl TurAppContext {
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,
-            pending_clipboard_write: self.pending_clipboard_write.clone(),
         };
         for handler in &mut self.handlers {
             handler.handle_event(&mut cx, event);

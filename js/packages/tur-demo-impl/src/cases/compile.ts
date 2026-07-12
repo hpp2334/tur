@@ -1,3 +1,4 @@
+import * as Clipboard from "builtin:tur/clipboard";
 import type { AstNode, TokenSpan } from "builtin:tur/host";
 import * as Host from "builtin:tur/host";
 import * as Net from "builtin:tur/net";
@@ -78,6 +79,8 @@ function importTarget(source: string): string {
             return "Host";
         case "builtin:tur/net":
             return "Net";
+        case "builtin:tur/clipboard":
+            return "Clipboard";
         default:
             return `__modules["${moduleKey(source)}"]`;
     }
@@ -188,8 +191,16 @@ function rewriteEntry(transpiled: string): string {
  *  `builtin:tur/*` modules and the per-case `__modules` registry injected as
  *  parameters (no `globalThis` pollution). Returns the function's value. */
 function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
-    const fn = new Function("Std", "Anim", "Host", "Net", "__modules", body);
-    return fn(Std, Anim, Host, Net, modules);
+    const fn = new Function(
+        "Std",
+        "Anim",
+        "Host",
+        "Net",
+        "Clipboard",
+        "__modules",
+        body,
+    );
+    return fn(Std, Anim, Host, Net, Clipboard, modules);
 }
 
 export function compileCase(files: Record<string, string>): CaseCompileResult {
@@ -348,6 +359,8 @@ function topoSort(
     return result;
 }
 
-// Silence unused-import warnings for Net (referenced only inside generated
-// case bodies via the `runCaseBody` injection, not directly here).
+// Silence unused-import warnings for Net and Clipboard (referenced only
+// inside generated case bodies via the `runCaseBody` injection, not directly
+// here).
 void Net;
+void Clipboard;

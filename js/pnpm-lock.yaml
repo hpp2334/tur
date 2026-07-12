@@ -40,6 +40,8 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/tur-clipboard: {}
+
   packages/tur-core: {}
 
   packages/tur-demo:
@@ -59,6 +61,9 @@ importers:
       '@tur/animation-ext':
         specifier: workspace:*
         version: link:../tur-animation-ext
+      '@tur/clipboard':
+        specifier: workspace:*
+        version: link:../tur-clipboard
       '@tur/core':
         specifier: workspace:*
         version: link:../tur-core
