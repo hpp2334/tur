@@ -1,4 +1,4 @@
-use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
+use crate::core::edgy_event::{EdgyMutation, IntoJsArgs, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
 use crate::core::event::AppImeEvent;
@@ -19,7 +19,7 @@ impl<'a> ElementOnImeContext<'a> {
         }
     }
 
-    pub fn push_event<E: EventArg>(&mut self, mutation: EdgyMutation<E>, event: E) {
+    pub fn push_event<E: IntoJsArgs>(&mut self, mutation: EdgyMutation<E>, event: E) {
         self.mutation_queue.push(mutation, event);
     }
 

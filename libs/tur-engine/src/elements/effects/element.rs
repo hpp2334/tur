@@ -6,10 +6,8 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::view::{
-    ViewCx,
-    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
-};
+use crate::core::bridge::JsProps;
+use crate::core::view::{ViewCx, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // OpacityView — applies an alpha multiplier to its child subtree.
@@ -79,42 +77,13 @@ impl ElementTrace for OpacityElement {
 // Factory
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl OpacityView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         OpacityView {
-            value: prop_val::<f32>(props, "value", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
-            child: prop_child(props, "child", ctx),
+            value: p.val::<f32>("value"),
+            query_key: p.query_key("queryKey"),
+            child: p.child("child"),
         }
     }
 }
@@ -194,15 +163,16 @@ impl ElementTrace for TransformElement {
 
 impl TransformView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         TransformView {
-            scale: prop_val::<f64>(props, "scale", ctx),
-            scale_x: prop_val::<f64>(props, "scaleX", ctx),
-            scale_y: prop_val::<f64>(props, "scaleY", ctx),
-            rotate: prop_val::<f64>(props, "rotate", ctx),
-            translate_x: prop_val::<f64>(props, "translateX", ctx),
-            translate_y: prop_val::<f64>(props, "translateY", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
-            child: prop_child(props, "child", ctx),
+            scale: p.val::<f64>("scale"),
+            scale_x: p.val::<f64>("scaleX"),
+            scale_y: p.val::<f64>("scaleY"),
+            rotate: p.val::<f64>("rotate"),
+            translate_x: p.val::<f64>("translateX"),
+            translate_y: p.val::<f64>("translateY"),
+            query_key: p.query_key("queryKey"),
+            child: p.child("child"),
         }
     }
 }

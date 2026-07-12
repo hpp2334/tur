@@ -9,7 +9,7 @@ use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
 use crate::core::layout::SubscribeCx;
 use crate::core::reactive::{Readable, ReactiveReadStore};
-use crate::core::view::{PropValue, Val};
+use crate::core::view::{FromJs, Val};
 
 // ---------------------------------------------------------------------------
 // ViewCx — the build capability a `View::build` impl needs to mount itself
@@ -92,7 +92,7 @@ pub trait ViewCx {
 
 /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom is
 /// lazily read from the store (untracked).
-pub fn read_val<T: PropValue>(
+pub fn read_val<T: FromJs + Clone + 'static>(
     cx: &dyn ViewCx,
     val: &Val<T>,
     boa: &mut Context,
@@ -102,13 +102,13 @@ pub fn read_val<T: PropValue>(
         Val::Reactive(readable) => {
             let store = cx.store_read_only();
             let js = store.read(*readable, boa);
-            T::from_js(&js)
+            T::from_js(&js).ok()
         }
     }
 }
 
 /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
-pub fn read_val_opt<T: PropValue>(
+pub fn read_val_opt<T: FromJs + Clone + 'static>(
     cx: &dyn ViewCx,
     val: Option<&Val<T>>,
     boa: &mut Context,

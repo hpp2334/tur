@@ -8,6 +8,8 @@ use boa_engine::property::PropertyDescriptor;
 use boa_engine::{js_string, Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
+use crate::core::js_value::{FromJs, IntoJs};
+
 mod store;
 
 pub use store::Store;
@@ -20,24 +22,15 @@ pub use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, Subscrib
 struct AtomId(u32);
 
 // ---------------------------------------------------------------------------
-// JsValue marshaling traits.
+// JsValue marshaling.
 //
 // Reactive handles cross the JS<->Rust boundary as boa opaque objects whose
 // `JsData` payload *is* the handle itself (`Source<JsValue>` /
 // `Derived<JsValue>` / `Mutation`).  The concrete type distinguishes the atom
-// kind, so no separate kind tag is needed.  These traits encapsulate the
-// wrap/unwrap.
+// kind, so no separate kind tag is needed.  Wrap/unwrap goes through the
+// unified [`crate::core::js_value::FromJs`] / [`crate::core::js_value::IntoJs`]
+// traits; the private opaque wrappers are never named outside this module.
 // ---------------------------------------------------------------------------
-
-/// Extract a value from a `JsValue` by downcasting the opaque payload.
-pub trait FromBoaJsValue: Sized {
-    fn from_js(value: &JsValue) -> Option<Self>;
-}
-
-/// Wrap a value as a boa JS opaque object.
-pub trait IntoBoaJsValue {
-    fn into_js(self, ctx: &mut Context) -> JsValue;
-}
 
 /// Opaque identifier for an external subscriber (e.g. an `NodeId`)
 /// that reads a reactive atom during layout.  The store records atom→subscriber
@@ -207,7 +200,7 @@ impl<T> std::fmt::Debug for Readable<T> {
 }
 
 /// Untyped readable — carries a raw `JsValue` (e.g. a JS array or object)
-/// that is not decoded via `PropValue`.
+/// that is not decoded via [`FromJs`](crate::core::js_value::FromJs).
 pub type AnyReadable = Readable<JsValue>;
 
 impl<T> From<Source<T>> for Readable<T> {
@@ -232,8 +225,8 @@ impl<T> From<Derived<T>> for Readable<T> {
 // `JsData` types cannot be `Copy`, the opaque payload is a tiny private
 // non-`Copy` wrapper (`JsSource` / `JsDerived` / `JsMutation`) carrying just
 // the `AtomId`.  The wrapper type distinguishes the atom kind, so no separate
-// kind tag is needed.  All wrap/unwrap goes through the `IntoBoaJsValue` /
-// `FromBoaJsValue` traits below — the wrappers are never named outside this
+// kind tag is needed.  All wrap/unwrap goes through the `IntoJs` /
+// `FromJs` traits below — the wrappers are never named outside this
 // module.
 // ---------------------------------------------------------------------------
 
@@ -257,52 +250,77 @@ fn wrap_opaque<T: boa_engine::object::NativeObject>(
     JsObject::from_proto_and_data(proto, data).into()
 }
 
-impl<T> IntoBoaJsValue for Source<T> {
+impl<T> IntoJs for Source<T> {
     fn into_js(self, ctx: &mut Context) -> JsValue {
         wrap_opaque(JsSource(self.id()), ctx)
     }
 }
 
-impl<T> IntoBoaJsValue for Derived<T> {
+impl<T> IntoJs for Derived<T> {
     fn into_js(self, ctx: &mut Context) -> JsValue {
         wrap_opaque(JsDerived(self.id()), ctx)
     }
 }
 
-impl IntoBoaJsValue for Mutation {
+impl IntoJs for Mutation {
     fn into_js(self, ctx: &mut Context) -> JsValue {
         wrap_opaque(JsMutation(self.0), ctx)
     }
 }
 
-impl FromBoaJsValue for Source<JsValue> {
-    fn from_js(value: &JsValue) -> Option<Self> {
-        Some(Source::from_id(value.as_object()?.downcast_ref::<JsSource>()?.0))
+impl FromJs for Source<JsValue> {
+    fn from_js(value: &JsValue) -> Result<Self, JsError> {
+        let obj = value.as_object().ok_or_else(|| {
+            crate::core::js_value::type_error("a source atom handle")
+        })?;
+        let id = obj
+            .downcast_ref::<JsSource>()
+            .map(|s| s.0)
+            .ok_or_else(|| crate::core::js_value::type_error("a source atom handle"))?;
+        Ok(Source::from_id(id))
     }
 }
 
-impl FromBoaJsValue for Derived<JsValue> {
-    fn from_js(value: &JsValue) -> Option<Self> {
-        Some(Derived::from_id(value.as_object()?.downcast_ref::<JsDerived>()?.0))
+impl FromJs for Derived<JsValue> {
+    fn from_js(value: &JsValue) -> Result<Self, JsError> {
+        let obj = value.as_object().ok_or_else(|| {
+            crate::core::js_value::type_error("a derived atom handle")
+        })?;
+        let id = obj
+            .downcast_ref::<JsDerived>()
+            .map(|d| d.0)
+            .ok_or_else(|| crate::core::js_value::type_error("a derived atom handle"))?;
+        Ok(Derived::from_id(id))
     }
 }
 
-impl FromBoaJsValue for Mutation {
-    fn from_js(value: &JsValue) -> Option<Self> {
-        Some(Mutation(value.as_object()?.downcast_ref::<JsMutation>()?.0))
+impl FromJs for Mutation {
+    fn from_js(value: &JsValue) -> Result<Self, JsError> {
+        let obj = value.as_object().ok_or_else(|| {
+            crate::core::js_value::type_error("a mutation atom handle")
+        })?;
+        let id = obj
+            .downcast_ref::<JsMutation>()
+            .map(|m| m.0)
+            .ok_or_else(|| crate::core::js_value::type_error("a mutation atom handle"))?;
+        Ok(Mutation(id))
     }
 }
 
-impl<T> FromBoaJsValue for Readable<T> {
-    fn from_js(value: &JsValue) -> Option<Self> {
-        let obj = value.as_object()?;
+impl<T> FromJs for Readable<T> {
+    fn from_js(value: &JsValue) -> Result<Self, JsError> {
+        let obj = value.as_object().ok_or_else(|| {
+            crate::core::js_value::type_error("a source or derived atom handle")
+        })?;
         if let Some(s) = obj.downcast_ref::<JsSource>() {
-            return Some(Readable::Source(Source::from_id(s.0)));
+            return Ok(Readable::Source(Source::from_id(s.0)));
         }
         if let Some(d) = obj.downcast_ref::<JsDerived>() {
-            return Some(Readable::Derived(Derived::from_id(d.0)));
+            return Ok(Readable::Derived(Derived::from_id(d.0)));
         }
-        None
+        Err(crate::core::js_value::type_error(
+            "a source or derived atom handle",
+        ))
     }
 }
 
@@ -337,12 +355,7 @@ pub fn build_store_context_object(
     let core_for_get = core.clone();
     let get_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
-            let readable = AnyReadable::from_js(args.get_or_undefined(0)).ok_or_else(|| {
-                JsError::from(
-                    JsNativeError::typ()
-                        .with_message("expected a source or derived atom handle"),
-                )
-            })?;
+            let readable = AnyReadable::from_js(args.get_or_undefined(0))?;
             Ok(core_for_get.borrow().read(readable, ctx))
         })
     };
@@ -362,7 +375,7 @@ pub fn build_store_context_object(
     let set_fn = unsafe {
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let v = args.get_or_undefined(0);
-            if let Some(mutation) = Mutation::from_js(v) {
+            if let Ok(mutation) = Mutation::from_js(v) {
                 let ctx_obj = build_store_context_object(ctx, core_for_set.clone())?;
                 let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
                 invoke_args.push(ctx_obj.into());
@@ -373,7 +386,7 @@ pub fn build_store_context_object(
                     .borrow()
                     .invoke_mutation(mutation, &invoke_args, ctx);
             }
-            if let Some(readable) = AnyReadable::from_js(v) {
+            if let Ok(readable) = AnyReadable::from_js(v) {
                 return match readable {
                     AnyReadable::Source(source) => {
                         let value = args.get_or_undefined(1).clone();

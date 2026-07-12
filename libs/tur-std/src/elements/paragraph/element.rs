@@ -1,7 +1,8 @@
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use tur_engine::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::edgy_event::EdgyMutation;
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
 use tur_engine::core::elements::{
@@ -9,10 +10,7 @@ use tur_engine::core::elements::{
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::text::SelectionChangeEvent;
-use tur_engine::core::view::{
-    ViewCx,
-    val_from_js, Lifecycle, PropValue, View, Val,
-};
+use tur_engine::core::view::{ViewCx, Lifecycle, Val, View};
 use crate::elements::text::span_data::SpanData;
 use tur_engine::core::text::text_layout::TextLayoutData;
 use tur_shared::Color;
@@ -199,32 +197,6 @@ impl ElementOnGesture for TextElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-/// Extract a `Val<T>` prop from a JS props object.
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
 /// Extract the `spans` array — parsed eagerly into `Vec<SpanData>`.
 fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<SpanData>> {
     use boa_engine::js_string;
@@ -239,22 +211,21 @@ fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<Span
 impl TextView {
     /// Build a `TextView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
-        use boa_engine::js_string;
-        let on_selection_change = props
-            .get(js_string!("onSelectionChange"), ctx)
-            .ok()
-            .and_then(|v| edgy_mutation_from_js(&v));
-        let selectable = props
-            .get(js_string!("selectable"), ctx)
-            .ok()
-            .and_then(|v| v.as_boolean())
-            .unwrap_or(false);
+        let (on_selection_change, selectable) = {
+            let mut p = JsProps::new(props, ctx);
+            (
+                p.mutation::<SelectionChangeEvent>("onSelectionChange"),
+                p.opt::<bool>("selectable").unwrap_or(false),
+            )
+        };
+        let spans = prop_spans(props, "spans", ctx);
+        let mut p = JsProps::new(props, ctx);
         TextView {
-            text: prop_val::<String>(props, "text", ctx),
-            font_size: prop_val::<f64>(props, "fontSize", ctx),
-            color: prop_val::<Color>(props, "color", ctx),
-            spans: prop_spans(props, "spans", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            text: p.val::<String>("text"),
+            font_size: p.val::<f64>("fontSize"),
+            color: p.val::<Color>("color"),
+            spans,
+            query_key: p.query_key("queryKey"),
             on_selection_change,
             selectable,
         }

@@ -28,7 +28,7 @@ use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
 use core::plugin::{Plugin, PluginContext};
-use core::reactive::IntoBoaJsValue;
+use core::js_value::IntoJs;
 use core::render::Renderer;
 
 #[cfg(feature = "trace")]

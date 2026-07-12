@@ -5,17 +5,14 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::Axis;
 
-use tur_engine::core::edgy_event::EventArg;
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::edgy_event::IntoJsArgs;
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
 };
-use tur_engine::core::view::{
-    ViewCx,
-    read_val,
-    extract_view, val_from_js, PropValue, View, Val,
-};
+use tur_engine::core::view::{ViewCx, read_val, Val, View, extract_view};
 
 use crate::elements::lazy_list::controller::LazyListController;
 use crate::elements::scroll_view::ScrollPosition;
@@ -574,49 +571,20 @@ impl ElementOnWheel for LazyListElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    v.as_object().and_then(JsFunction::from_object)
-}
-
 impl LazyListView {
     /// Build a `LazyListView` from a JS props object. Returns `None` when a
     /// required prop (`itemCount`, `builder`) is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let item_count = prop_val::<u64>(props, "itemCount", ctx)?;
-        let builder = prop_builder(props, "builder", ctx)?;
+        let mut p = JsProps::new(props, ctx);
+        let item_count = p.val::<u64>("itemCount")?;
+        let builder = p.function("builder")?;
         Some(LazyListView {
-            axis: prop_val::<Axis>(props, "axis", ctx),
+            axis: p.val::<Axis>("axis"),
             item_count,
-            overscan: prop_val::<u64>(props, "overscan", ctx),
-            item_extent: prop_val::<f64>(props, "itemExtent", ctx),
+            overscan: p.val::<u64>("overscan"),
+            item_extent: p.val::<f64>("itemExtent"),
             builder,
-            query_key: prop_query_key(props, "queryKey", ctx),
+            query_key: p.query_key("queryKey"),
         })
     }
 }
@@ -632,7 +600,7 @@ pub struct VisibleRangeChangeEvent {
     pub(crate) end_index: u64,
 }
 
-impl EventArg for VisibleRangeChangeEvent {
+impl IntoJsArgs for VisibleRangeChangeEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![
             JsValue::from(self.start_index as f64),

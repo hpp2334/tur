@@ -6,7 +6,7 @@
 // `style.cursor`, or a host-native cursor icon).
 //
 // Unknown keyword strings from JS decode to [`Cursor::Default`] (see the
-// `PropValue` impl in tur-engine), matching the previous pass-through behavior
+// `FromJs` impl in tur-engine), matching the previous pass-through behavior
 // where the host silently ignores unrecognized cursor names.
 // ---------------------------------------------------------------------------
 

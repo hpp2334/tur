@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::core::reactive::Mutation;
 
-use super::EventArg;
+use super::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // EdgyMutation<E> — atom-backed callback handle (Copy, no JsValues).
@@ -11,12 +11,12 @@ use super::EventArg;
 // `Store`'s closures map and is resolved at flush time via `invoke_mutation`.
 // ---------------------------------------------------------------------------
 
-pub struct EdgyMutation<E: EventArg> {
+pub struct EdgyMutation<E: IntoJsArgs> {
     mutation: Mutation,
     _marker: PhantomData<fn() -> E>,
 }
 
-impl<E: EventArg> EdgyMutation<E> {
+impl<E: IntoJsArgs> EdgyMutation<E> {
     pub fn new(mutation: Mutation) -> Self {
         EdgyMutation { mutation, _marker: PhantomData }
     }
@@ -26,10 +26,10 @@ impl<E: EventArg> EdgyMutation<E> {
     }
 }
 
-impl<E: EventArg> Clone for EdgyMutation<E> {
+impl<E: IntoJsArgs> Clone for EdgyMutation<E> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<E: EventArg> Copy for EdgyMutation<E> {}
+impl<E: IntoJsArgs> Copy for EdgyMutation<E> {}

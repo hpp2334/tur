@@ -7,10 +7,8 @@ use tur_shared::BoxFit;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{
-    ViewCx,
-    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
-};
+use crate::core::bridge::JsProps;
+use crate::core::view::{ViewCx, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // ImageView — the user's declaration. Pure Rust, no JsValues.
@@ -115,49 +113,17 @@ impl ElementTrace for ImageElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-/// Extract a `Val<T>` prop from a JS props object.
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-/// Extract the optional child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl ImageView {
     /// Build an `ImageView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         ImageView {
-            resource_id: prop_val::<u64>(props, "resourceId", ctx),
-            width: prop_val::<f64>(props, "width", ctx),
-            height: prop_val::<f64>(props, "height", ctx),
-            fit: prop_val::<BoxFit>(props, "fit", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
-            child: prop_child(props, "child", ctx),
+            resource_id: p.val::<u64>("resourceId"),
+            width: p.val::<f64>("width"),
+            height: p.val::<f64>("height"),
+            fit: p.val::<BoxFit>("fit"),
+            query_key: p.query_key("queryKey"),
+            child: p.child("child"),
         }
     }
 }

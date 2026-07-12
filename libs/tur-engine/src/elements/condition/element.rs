@@ -6,11 +6,8 @@ use boa_engine::Context;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{
-    ViewCx,
-    read_val,
-    val_from_js, View, ViewFactory, JsViewFactory, PropValue, Val,
-};
+use crate::core::bridge::JsProps;
+use crate::core::view::{Val, View, ViewFactory, ViewCx, read_val};
 
 // ---------------------------------------------------------------------------
 // ConditionView — the user's declaration. Pure Rust, no JsValues.
@@ -174,55 +171,18 @@ impl FragmentKind for ConditionFragment {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-/// Extract an optional branch factory from a JS props object. The prop value
-/// is a JS thunk `() => EdgyElement`; it is wrapped in a `JsViewFactory`.
-fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ViewFactory>> {
-    use boa_engine::js_string;
-    use boa_engine::object::builtins::JsFunction;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    if v.is_undefined() || v.is_null() {
-        return None;
-    }
-    let f = v.as_object().and_then(JsFunction::from_object)?;
-    Some(Rc::new(JsViewFactory(f)))
-}
-
 impl ConditionView {
     /// Build a `ConditionView` from a JS props object.
     ///
     /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
     /// the JS `ConditionProps` interface). Both are thunks `() => EdgyElement`.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         ConditionView {
-            condition: prop_val::<bool>(props, "condition", ctx)
-                .unwrap_or(Val::Static(false)),
-            then_child: prop_factory(props, "child", ctx),
-            else_child: prop_factory(props, "elseChild", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            condition: p.val::<bool>("condition").unwrap_or(Val::Static(false)),
+            then_child: p.factory("child"),
+            else_child: p.factory("elseChild"),
+            query_key: p.query_key("queryKey"),
         }
     }
 }

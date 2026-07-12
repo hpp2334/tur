@@ -1,6 +1,6 @@
 use boa_engine::{js_string, Context, JsValue};
 
-use tur_engine::core::edgy_event::EventArg;
+use tur_engine::core::edgy_event::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Text-editing event payloads — JS callback arguments emitted via
@@ -37,7 +37,7 @@ pub struct CompositionEndEvent {
     pub(crate) text: String,
 }
 
-impl EventArg for InputEvent {
+impl IntoJsArgs for InputEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![
             JsValue::from(js_string!(self.value.as_str())),
@@ -46,13 +46,13 @@ impl EventArg for InputEvent {
     }
 }
 
-impl EventArg for CursorChangeEvent {
+impl IntoJsArgs for CursorChangeEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![JsValue::from(self.position as f64)]
     }
 }
 
-impl EventArg for SelectionChangeEvent {
+impl IntoJsArgs for SelectionChangeEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![
             JsValue::from(self.anchor as f64),
@@ -61,19 +61,19 @@ impl EventArg for SelectionChangeEvent {
     }
 }
 
-impl EventArg for CompositionStartEvent {
+impl IntoJsArgs for CompositionStartEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         Vec::new()
     }
 }
 
-impl EventArg for CompositionUpdateEvent {
+impl IntoJsArgs for CompositionUpdateEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![JsValue::from(js_string!(self.text.as_str()))]
     }
 }
 
-impl EventArg for CompositionEndEvent {
+impl IntoJsArgs for CompositionEndEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![JsValue::from(js_string!(self.text.as_str()))]
     }

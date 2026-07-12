@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsValue};
 
-use crate::core::edgy_event::EventArg;
+use crate::core::edgy_event::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Animation callback payloads — JS callback arguments for onTick / onEnd.
@@ -18,7 +18,7 @@ use crate::core::edgy_event::EventArg;
 #[derive(Clone, Copy)]
 pub struct AnimationTickEvent(pub f64);
 
-impl EventArg for AnimationTickEvent {
+impl IntoJsArgs for AnimationTickEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         vec![JsValue::from(self.0)]
     }
@@ -27,7 +27,7 @@ impl EventArg for AnimationTickEvent {
 #[derive(Clone, Copy)]
 pub struct AnimationEndEvent;
 
-impl EventArg for AnimationEndEvent {
+impl IntoJsArgs for AnimationEndEvent {
     fn to_js_args(&self, _ctx: &mut Context) -> Vec<JsValue> {
         Vec::new()
     }

@@ -1,6 +1,6 @@
 use tur_shared::Color;
 
-use tur_engine::core::bridge::color::extract_color;
+use tur_engine::core::js_value::FromJs;
 
 #[derive(Clone)]
 pub struct SpanData {
@@ -65,11 +65,10 @@ pub fn extract_spans_from_js(
             .ok()
             .and_then(|v| v.as_number());
 
-        let color =
-            span_obj
-                .get(boa_engine::js_string!("color"), context)
-                .ok()
-                .and_then(|v| extract_color(&v, context));
+        let color = span_obj
+            .get(boa_engine::js_string!("color"), context)
+            .ok()
+            .and_then(|v| Color::from_js(&v).ok());
 
         spans.push(SpanData {
             text: content,

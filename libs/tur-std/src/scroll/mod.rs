@@ -5,7 +5,7 @@ pub use controller::ScrollController;
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsValue};
 
-use tur_engine::core::edgy_event::EventArg;
+use tur_engine::core::edgy_event::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Scroll event payload — JS callback arguments for onScroll.
@@ -18,7 +18,7 @@ pub struct ScrollEvent {
     pub(crate) viewport_dimension: f64,
 }
 
-impl EventArg for ScrollEvent {
+impl IntoJsArgs for ScrollEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         let proto = ctx.intrinsics().constructors().object().prototype();
         let obj = JsObject::from_proto_and_data(proto, ());

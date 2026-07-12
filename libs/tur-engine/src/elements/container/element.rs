@@ -1,14 +1,13 @@
 use std::rc::Rc;
 
+use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Alignment, BorderPosition, Brush, Color};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{
-    ViewCx,
-    val_from_js, Lifecycle, PropValue, View, Val,
-};
+use crate::core::bridge::JsProps;
+use crate::core::view::{ViewCx, Lifecycle, Val, View};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 
 // ---------------------------------------------------------------------------
@@ -186,104 +185,25 @@ impl ElementTrace for ContainerElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-/// Extract a `Val<T>` prop from a JS props object.
-fn prop_val<T: PropValue>(
-    props: &boa_engine::object::JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-/// Extract a `(f64, f64)` offset prop (shadowOffset) — parsed eagerly.
-fn prop_offset(
-    props: &boa_engine::object::JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<(f64, f64)> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let x = arr.at(0, ctx).ok()?.as_number()?;
-    let y = arr.at(1, ctx).ok()?.as_number()?;
-    Some((x, y))
-}
-
-/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
-fn prop_query_key(
-    props: &boa_engine::object::JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-/// Extract child specs from a JS array of ComponentHandle opaques.
-fn prop_children(
-    props: &boa_engine::object::JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Vec<Rc<dyn View>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    use crate::core::view::extract_view;
-    let Ok(v) = props.get(js_string!(key), ctx) else {
-        return Vec::new();
-    };
-    let Some(obj) = v.as_object() else {
-        return Vec::new();
-    };
-    let Ok(arr) = JsArray::from_object(obj.clone()) else {
-        return Vec::new();
-    };
-    let len = arr.length(ctx).unwrap_or(0);
-    let mut out = Vec::with_capacity(len as usize);
-    for i in 0..len {
-        if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(spec) = extract_view(&item) {
-                out.push(spec);
-            }
-        }
-    }
-    out
-}
-
 impl ContainerView {
     /// Build a `ContainerView` from a JS props object.
-    pub fn from_js(props: &boa_engine::object::JsObject, ctx: &mut Context) -> Self {
+    pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         ContainerView {
-            width: prop_val::<f64>(props, "width", ctx),
-            height: prop_val::<f64>(props, "height", ctx),
-            padding: prop_val::<f64>(props, "padding", ctx),
-            color: prop_val::<Brush>(props, "color", ctx),
-            border_color: prop_val::<Color>(props, "borderColor", ctx),
-            border_width: prop_val::<f64>(props, "borderWidth", ctx),
-            border_radius: prop_val::<f64>(props, "borderRadius", ctx),
-            border_position: prop_val::<BorderPosition>(props, "borderPosition", ctx),
-            shadow_color: prop_val::<Color>(props, "shadowColor", ctx),
-            shadow_blur: prop_val::<f64>(props, "shadowBlur", ctx),
-            alignment: prop_val::<Alignment>(props, "alignment", ctx),
-            shadow_offset: prop_offset(props, "shadowOffset", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
-            children: prop_children(props, "children", ctx),
+            width: p.val::<f64>("width"),
+            height: p.val::<f64>("height"),
+            padding: p.val::<f64>("padding"),
+            color: p.val::<Brush>("color"),
+            border_color: p.val::<Color>("borderColor"),
+            border_width: p.val::<f64>("borderWidth"),
+            border_radius: p.val::<f64>("borderRadius"),
+            border_position: p.val::<BorderPosition>("borderPosition"),
+            shadow_color: p.val::<Color>("shadowColor"),
+            shadow_blur: p.val::<f64>("shadowBlur"),
+            alignment: p.val::<Alignment>("alignment"),
+            shadow_offset: p.offset("shadowOffset"),
+            query_key: p.query_key("queryKey"),
+            children: p.children("children"),
         }
     }
 }

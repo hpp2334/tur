@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsArray;
-use boa_engine::object::builtins::JsFunction;
+use boa_engine::object::builtins::{JsArray, JsFunction};
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
+use crate::core::bridge::JsProps;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::reactive::{AnyReadable, FromBoaJsValue};
+use crate::core::reactive::AnyReadable;
 use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
 
 // ---------------------------------------------------------------------------
@@ -156,46 +156,13 @@ impl FragmentKind for EachFragment {
 // Factory — parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
-fn prop_items(props: &JsObject, key: &str, ctx: &mut Context) -> Option<AnyReadable> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    AnyReadable::from_js(&v)
-}
-
-fn prop_builder(props: &JsObject, key: &str, ctx: &mut Context) -> Option<JsFunction> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    v.as_object().and_then(JsFunction::from_object)
-}
-
 impl EachView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
+        let mut p = JsProps::new(props, ctx);
         Some(EachView {
-            items: prop_items(props, "items", ctx)?,
-            build: prop_builder(props, "build", ctx)?,
-            query_key: prop_query_key(props, "queryKey", ctx),
+            items: p.readable("items")?,
+            build: p.function("build")?,
+            query_key: p.query_key("queryKey"),
         })
     }
 }

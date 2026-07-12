@@ -4,12 +4,14 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::Color;
 
+use tur_engine::core::bridge::JsProps;
 use tur_engine::core::element::NodeId;
 use tur_engine::core::view::{ViewCx, View, Val};
 use tur_engine::core::reactive::AnyReadable;
 use tur_engine::elements::ContainerView;
 
-use super::element::{prop_controller, prop_controller_atom, prop_mutation, prop_query_key, prop_undo_controller, prop_val, ContextMenuEvent, EditableTextView};
+use super::element::{ContextMenuEvent, EditableTextView};
+use crate::text::{TextEditingController, UndoController};
 
 // ---------------------------------------------------------------------------
 // InputView — composes a ContainerElement (sizing/border wrapper) with a single
@@ -65,21 +67,22 @@ impl View for InputView {
 impl InputView {
     /// Build an `InputView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         InputView {
-            width: prop_val::<f64>(props, "width", ctx),
-            height: prop_val::<f64>(props, "height", ctx),
-            controller: prop_controller(props, "controller", ctx),
-            controller_atom: prop_controller_atom(props, "controller", ctx),
-            undo_controller: prop_undo_controller(props, "undoController", ctx),
-            placeholder: prop_val::<String>(props, "placeholder", ctx),
-            color: prop_val::<Color>(props, "color", ctx),
-            placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
-            cursor_color: prop_val::<Color>(props, "cursorColor", ctx),
-            font_size: prop_val::<f64>(props, "fontSize", ctx),
-            font_family: prop_val::<String>(props, "fontFamily", ctx),
-            multiline: prop_val::<bool>(props, "multiline", ctx),
-            on_context_menu: prop_mutation::<ContextMenuEvent>(props, "onContextMenu", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            width: p.val::<f64>("width"),
+            height: p.val::<f64>("height"),
+            controller: p.opaque::<TextEditingController>("controller"),
+            controller_atom: p.readable("controller"),
+            undo_controller: p.opaque::<UndoController>("undoController"),
+            placeholder: p.val::<String>("placeholder"),
+            color: p.val::<Color>("color"),
+            placeholder_color: p.val::<Color>("placeholderColor"),
+            cursor_color: p.val::<Color>("cursorColor"),
+            font_size: p.val::<f64>("fontSize"),
+            font_family: p.val::<String>("fontFamily"),
+            multiline: p.val::<bool>("multiline"),
+            on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
+            query_key: p.query_key("queryKey"),
         }
     }
 }
