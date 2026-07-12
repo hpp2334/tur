@@ -2,7 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{js_string, Context, JsValue};
 
-use tur_engine::core::edgy_event::EventArg;
+use tur_engine::core::edgy_event::IntoJsArgs;
 use tur_engine::core::keyboard::Modifiers;
 
 // ---------------------------------------------------------------------------
@@ -23,13 +23,13 @@ pub struct KeyupEvent {
     pub(crate) modifiers: Modifiers,
 }
 
-impl EventArg for KeydownEvent {
+impl IntoJsArgs for KeydownEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         build_key_event_object(&self.key, &self.code, &self.modifiers, ctx)
     }
 }
 
-impl EventArg for KeyupEvent {
+impl IntoJsArgs for KeyupEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         build_key_event_object(&self.key, &self.code, &self.modifiers, ctx)
     }

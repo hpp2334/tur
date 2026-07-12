@@ -5,9 +5,8 @@
 // `Cursor` back to its keyword via [`Cursor::as_str`] (e.g. for the web canvas
 // `style.cursor`, or a host-native cursor icon).
 //
-// Unknown keyword strings from JS decode to [`Cursor::Default`] (see the
-// `PropValue` impl in tur-engine), matching the previous pass-through behavior
-// where the host silently ignores unrecognized cursor names.
+// Unrecognized keyword strings fail `FromJs` decode (see the `FromJs` impl in
+// tur-engine); callers that want to tolerate them must opt in.
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

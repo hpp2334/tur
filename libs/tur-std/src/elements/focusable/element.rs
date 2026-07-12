@@ -3,12 +3,13 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use tur_engine::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::edgy_event::EdgyMutation;
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::keyboard::{KeydownEvent, KeyupEvent};
-use tur_engine::core::view::{ViewCx, extract_view, Lifecycle, View};
+use tur_engine::core::view::{ViewCx, Lifecycle, View};
 
 // ---------------------------------------------------------------------------
 // FocusableView — wraps a child and provides keyboard / focus callbacks.
@@ -75,30 +76,15 @@ impl ElementOnFocus for FocusableElement {}
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-fn prop_mutation<E: EventArg>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<EdgyMutation<E>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
-}
-
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl FocusableView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         FocusableView {
-            on_key_down: prop_mutation::<KeydownEvent>(props, "onKeyDown", ctx),
-            on_key_up: prop_mutation::<KeyupEvent>(props, "onKeyUp", ctx),
-            on_focus: prop_mutation::<FocusEvent>(props, "onFocus", ctx),
-            on_blur: prop_mutation::<BlurEvent>(props, "onBlur", ctx),
-            child: prop_child(props, "child", ctx),
+            on_key_down: p.mutation::<KeydownEvent>("onKeyDown"),
+            on_key_up: p.mutation::<KeyupEvent>("onKeyUp"),
+            on_focus: p.mutation::<FocusEvent>("onFocus"),
+            on_blur: p.mutation::<BlurEvent>("onBlur"),
+            child: p.child("child"),
         }
     }
 }

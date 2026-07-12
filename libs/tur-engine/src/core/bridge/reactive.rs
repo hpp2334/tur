@@ -5,9 +5,8 @@ use boa_engine::{Context, JsArgs, JsResult, JsValue};
 
 use crate::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 use crate::core::bridge::BoaOpaque;
-use crate::core::reactive::{
-    AnyReadable, Derived, FromBoaJsValue, IntoBoaJsValue, Mutation, Readable, Source,
-};
+use crate::core::js_value::{FromJs, IntoJs};
+use crate::core::reactive::{AnyReadable, Derived, Mutation, Readable, Source};
 
 /// Bridge function table entries for the reactive primitives domain.
 pub fn fns() -> Vec<FnEntry> {
@@ -74,12 +73,7 @@ fn tur_get(
     context: &mut Context,
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let readable = AnyReadable::from_js(args.get_or_undefined(1)).ok_or_else(|| {
-        boa_engine::JsError::from(
-            boa_engine::JsNativeError::typ()
-                .with_message("expected a source or derived atom handle"),
-        )
-    })?;
+    let readable = AnyReadable::from_js(args.get_or_undefined(1))?;
     Ok(js_ctx.store.bridge().read(readable, context))
 }
 
@@ -91,7 +85,7 @@ fn tur_set(
     let js_ctx = extract_ctx(args)?;
     let bridge = js_ctx.store.bridge();
     let v = args.get_or_undefined(1);
-    if let Some(mutation) = Mutation::from_js(v) {
+    if let Ok(mutation) = Mutation::from_js(v) {
         let ctx_obj = bridge.ctx_object(context)?;
         let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
         invoke_args.push(ctx_obj.into());
@@ -100,7 +94,7 @@ fn tur_set(
         }
         return bridge.invoke_mutation(mutation, &invoke_args, context);
     }
-    if let Some(readable) = AnyReadable::from_js(v) {
+    if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {
             Readable::Source(source) => {
                 let value = args.get_or_undefined(2).clone();

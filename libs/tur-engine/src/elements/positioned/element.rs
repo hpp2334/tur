@@ -6,7 +6,8 @@ use boa_engine::Context;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::view::{ViewCx, extract_view, val_from_js, Lifecycle, PropValue, View, Val};
+use crate::core::bridge::JsProps;
+use crate::core::view::{ViewCx, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // PositionedView — the user's declaration. Pure Rust, no JsValues.
@@ -102,32 +103,19 @@ impl ElementTrace for PositionedElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-/// Extract a `Val<T>` prop from a JS props object.
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-/// Extract the single child spec from a JS props object.
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl PositionedView {
     /// Build a `PositionedView` from a JS props object. Returns `None` when
     /// the required `child` prop is missing.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
-        let child = prop_child(props, "child", ctx)?;
+        let mut p = JsProps::new(props, ctx);
+        let child = p.child("child")?;
         Some(PositionedView {
-            left: prop_val::<f64>(props, "left", ctx),
-            top: prop_val::<f64>(props, "top", ctx),
-            right: prop_val::<f64>(props, "right", ctx),
-            bottom: prop_val::<f64>(props, "bottom", ctx),
-            width: prop_val::<f64>(props, "width", ctx),
-            height: prop_val::<f64>(props, "height", ctx),
+            left: p.val::<f64>("left"),
+            top: p.val::<f64>("top"),
+            right: p.val::<f64>("right"),
+            bottom: p.val::<f64>("bottom"),
+            width: p.val::<f64>("width"),
+            height: p.val::<f64>("height"),
             child,
         })
     }

@@ -12,6 +12,7 @@ use tur_shared::Curve;
 use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::core::animation::AnimationManager;
 use crate::core::edgy_event::{EdgyMutation, PendingMutationInvocationQueue, extract_mutation_from_opts};
+use crate::core::js_value::{type_error, FromJs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationStatus {
@@ -39,6 +40,31 @@ pub enum RepeatMode {
 impl Default for RepeatMode {
     fn default() -> Self {
         RepeatMode::Finite(1)
+    }
+}
+
+/// Decode a `RepeatMode` from a JS value. Accepts:
+///   - The string `"infinite"` → `Infinite`
+///   - A positive finite number → `Finite(n)`
+///
+/// Anything else (non-`"infinite"` string, `≤0` / non-finite number, wrong
+/// type) is a hard error — callers that want a default for an *absent* prop
+/// must check `is_undefined()` / `is_null()` themselves before decoding.
+impl FromJs for RepeatMode {
+    fn from_js(val: &JsValue) -> Result<Self, boa_engine::JsError> {
+        if let Some(s) = val.as_string() {
+            if s.to_std_string_escaped() == "infinite" {
+                return Ok(RepeatMode::Infinite);
+            }
+            return Err(type_error("the string \"infinite\" for repeat"));
+        }
+        if let Some(n) = val.as_number() {
+            if n <= 0.0 || !n.is_finite() {
+                return Err(type_error("a positive finite repeat count"));
+            }
+            return Ok(RepeatMode::Finite(n as u64));
+        }
+        Err(type_error("a repeat count (positive number) or \"infinite\""))
     }
 }
 
@@ -120,7 +146,7 @@ impl AnimationController {
     /// callback fires during the next `flush_pending_mutations` pass, after
     /// any active `RefMut` borrow on this controller (or any other) is
     /// released. Safe to call while holding a `RefMut` — this only clones
-    /// a `Mutation` handle and pushes a `Box<dyn EventArg>` onto a separate `RefCell`.
+    /// a `Mutation` handle and pushes a `Box<dyn IntoJsArgs>` onto a separate `RefCell`.
     fn enqueue_tick(&self, eased_t: f64) {
         if let (Some(queue), Some(m)) = (&self.mutation_queue, self.on_tick) {
             queue.borrow_mut().push(m, AnimationTickEvent(eased_t));
@@ -273,7 +299,9 @@ impl Class for AnimationController {
                 }
             }
             if let Ok(val) = opts.get(js_string!("repeat"), ctx) {
-                repeat_mode = parse_repeat_value(&val);
+                if !val.is_undefined() && !val.is_null() {
+                    repeat_mode = RepeatMode::from_js(&val)?;
+                }
             }
             on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
             on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
@@ -555,7 +583,7 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.repeat_mode = parse_repeat_value(args.get_or_undefined(0));
+                ctrl.repeat_mode = RepeatMode::from_js(args.get_or_undefined(0))?;
                 ctrl.current_iteration = 0;
 
                 Ok(JsValue::undefined())
@@ -564,24 +592,4 @@ impl Class for AnimationController {
 
         Ok(())
     }
-}
-
-/// Parse a JS value into a `RepeatMode`. Accepts:
-///   - A positive number → `Finite(n)` (0 / negative clamped to 1)
-///   - The string `"infinite"` → `Infinite`
-///   - `undefined` / `null` / unrecognized → `Finite(1)` (default)
-fn parse_repeat_value(val: &JsValue) -> RepeatMode {
-    if let Some(s) = val.as_string() {
-        if s.to_std_string_escaped() == "infinite" {
-            return RepeatMode::Infinite;
-        }
-        return RepeatMode::default();
-    }
-    if let Some(n) = val.as_number() {
-        if n <= 0.0 || !n.is_finite() {
-            return RepeatMode::Finite(1);
-        }
-        return RepeatMode::Finite(n as u64);
-    }
-    RepeatMode::default()
 }

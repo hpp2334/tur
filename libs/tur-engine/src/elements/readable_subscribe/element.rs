@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsArray;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
+use crate::core::bridge::JsProps;
+use crate::core::edgy_event::EdgyMutation;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::reactive::{AnyReadable, FromBoaJsValue};
-use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
+use crate::core::reactive::AnyReadable;
+use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // ReadableSubscribeView — subscribes to a list of readable atoms and fires an
@@ -76,49 +76,13 @@ impl Lifecycle for ReadableSubscribeElement {
 // Factory
 // ---------------------------------------------------------------------------
 
-fn prop_mutation(props: &JsObject, key: &str, ctx: &mut Context) -> Option<EdgyMutation<()>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
-}
-
-fn prop_readables(props: &JsObject, key: &str, ctx: &mut Context) -> Vec<AnyReadable> {
-    use boa_engine::js_string;
-    let Ok(v) = props.get(js_string!(key), ctx) else {
-        return Vec::new();
-    };
-    let Some(obj) = v.as_object() else {
-        return Vec::new();
-    };
-    let Ok(arr) = JsArray::from_object(obj.clone()) else {
-        return Vec::new();
-    };
-    let Ok(len) = arr.length(ctx) else {
-        return Vec::new();
-    };
-    let mut out = Vec::with_capacity(len as usize);
-    for i in 0..len {
-        if let Ok(item) = arr.at(i as i64, ctx) {
-            if let Some(readable) = AnyReadable::from_js(&item) {
-                out.push(readable);
-            }
-        }
-    }
-    out
-}
-
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl ReadableSubscribeView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         ReadableSubscribeView {
-            readables: prop_readables(props, "readables", ctx),
-            on_update: prop_mutation(props, "onUpdate$", ctx),
-            child: prop_child(props, "child", ctx),
+            readables: p.readables("readables"),
+            on_update: p.mutation::<()>("onUpdate$"),
+            child: p.child("child"),
         }
     }
 }

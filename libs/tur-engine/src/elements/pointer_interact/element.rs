@@ -4,15 +4,12 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::{HitTestBehavior, Offset};
 
-use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
+use crate::core::bridge::JsProps;
+use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::view::{
-    ViewCx,
-    read_val,
-    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
-};
+use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // PointerInteractView — the user's declaration. Pure Rust, no JsValues.
@@ -154,56 +151,18 @@ impl ElementOnGesture for PointerInteractElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_mutation<E: EventArg>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<EdgyMutation<E>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
-}
-
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        let s = arr.get(i, ctx).ok()?;
-        if let Some(s) = s.as_string() {
-            out.push(s.to_std_string_escaped());
-        }
-    }
-    Some(out)
-}
-
 impl PointerInteractView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         PointerInteractView {
-            behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
-            on_click: prop_mutation::<PointerInteractEvent>(props, "onClick", ctx),
-            on_pointer_down: prop_mutation::<PointerInteractEvent>(props, "onPointerDown", ctx),
-            on_pointer_move: prop_mutation::<PointerInteractEvent>(props, "onPointerMove", ctx),
-            on_pointer_up: prop_mutation::<PointerInteractEvent>(props, "onPointerUp", ctx),
-            on_context_menu: prop_mutation::<PointerInteractEvent>(props, "onContextMenu", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
-            child: prop_child(props, "child", ctx),
+            behavior: p.val::<HitTestBehavior>("behavior"),
+            on_click: p.mutation::<PointerInteractEvent>("onClick"),
+            on_pointer_down: p.mutation::<PointerInteractEvent>("onPointerDown"),
+            on_pointer_move: p.mutation::<PointerInteractEvent>("onPointerMove"),
+            on_pointer_up: p.mutation::<PointerInteractEvent>("onPointerUp"),
+            on_context_menu: p.mutation::<PointerInteractEvent>("onContextMenu"),
+            query_key: p.query_key("queryKey"),
+            child: p.child("child"),
         }
     }
 }
@@ -220,7 +179,7 @@ pub struct PointerInteractEvent {
     pub global: Offset,
 }
 
-impl EventArg for PointerInteractEvent {
+impl IntoJsArgs for PointerInteractEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;
         use boa_engine::object::JsObject;

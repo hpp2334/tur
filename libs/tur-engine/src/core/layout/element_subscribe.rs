@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use crate::core::reactive::{AnyReadable, SubscriberId, SubscriberIndexStore};
-use crate::core::view::{PropValue, Val};
+use crate::core::view::{FromJs, Val};
 
 // ---------------------------------------------------------------------------
 // ElementSubscribe — explicit declaration of which reactive atoms a node
@@ -47,7 +47,7 @@ impl SubscribeCx {
 
     /// Declare a reactive dependency for the current node. No-op for static
     /// vals. The element unwraps `Option<Val<T>>` itself before calling this.
-    pub fn subscribe_val<T: PropValue>(&mut self, val: &Val<T>) {
+    pub fn subscribe_val<T: FromJs + Clone + 'static>(&mut self, val: &Val<T>) {
         if let Some(atom) = val.atom() {
             self.new_deps.insert(atom);
         }

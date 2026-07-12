@@ -50,7 +50,7 @@ impl SharedViewCx {
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
     /// atom is lazily read from the store (untracked).  Used during the effect
     /// phase; layout uses `LayoutContext::read_val` (with subscriber tracking).
-    pub fn read_val<T: crate::core::view::PropValue>(
+    pub fn read_val<T: crate::core::view::FromJs + Clone + 'static>(
         &self,
         val: &crate::core::view::Val<T>,
         boa: &mut Context,
@@ -60,7 +60,7 @@ impl SharedViewCx {
             Val::Static(t) => Some(t.clone()),
             Val::Reactive(readable) => {
                 let js = self.js_ctx.store.read_only().read(*readable, boa);
-                T::from_js(&js)
+                T::from_js(&js).ok()
             }
         }
     }

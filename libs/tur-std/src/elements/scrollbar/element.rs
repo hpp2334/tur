@@ -2,6 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::{Brush, Size};
 
+use tur_engine::core::bridge::JsProps;
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
 use tur_engine::core::elements::{
@@ -9,10 +10,7 @@ use tur_engine::core::elements::{
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
 use crate::scroll::ScrollController;
-use tur_engine::core::view::{
-    ViewCx,
-    val_from_js, Lifecycle, PropValue, View, Val,
-};
+use tur_engine::core::view::{ViewCx, Lifecycle, Val, View};
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
 pub(crate) const MIN_THUMB: f64 = 24.0;
@@ -216,60 +214,21 @@ impl ElementOnGesture for ScrollbarElement {
 // Factory helpers — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-pub(super) fn prop_val<T: PropValue>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-pub(super) fn prop_controller(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsObject> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    v.as_object().filter(|obj| {
-        obj.downcast_ref::<ScrollController>().is_some()
-    })
-}
-
-pub(super) fn prop_query_key(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Vec<String>> {
-    use boa_engine::js_string;
-    use boa_engine::object::builtins::JsArray;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
 impl ScrollbarView {
     /// Build a `ScrollbarView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
+        let controller = p
+            .raw_opt("controller")
+            .and_then(|v| v.as_object())
+            .filter(|obj| obj.downcast_ref::<ScrollController>().is_some());
         ScrollbarView {
-            controller: prop_controller(props, "controller", ctx),
-            color: prop_val::<Brush>(props, "color", ctx),
-            track_color: prop_val::<Brush>(props, "trackColor", ctx),
-            thumb_radius: prop_val::<f64>(props, "thumbRadius", ctx),
-            thickness: prop_val::<f64>(props, "thickness", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            controller,
+            color: p.val::<Brush>("color"),
+            track_color: p.val::<Brush>("trackColor"),
+            thumb_radius: p.val::<f64>("thumbRadius"),
+            thickness: p.val::<f64>("thickness"),
+            query_key: p.query_key("queryKey"),
         }
     }
 }

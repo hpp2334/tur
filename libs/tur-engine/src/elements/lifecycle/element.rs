@@ -1,8 +1,8 @@
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
-use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation};
+use crate::core::bridge::JsProps;
+use crate::core::edgy_event::EdgyMutation;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::ElementSubscribe;
@@ -35,15 +35,14 @@ impl View for LifecycleView {
             return parent;
         };
 
-        let element_view = {
-            let v = obj
-                .get(boa_engine::js_string!("element"), boa)
-                .ok()
-                .unwrap_or(JsValue::undefined());
-            extract_view(&v)
+        let (element_view, on_mounted, before_destroy) = {
+            let mut p = JsProps::new(&obj, boa);
+            let element_view = {
+                let v = p.raw_opt("element").unwrap_or(JsValue::undefined());
+                extract_view(&v)
+            };
+            (element_view, p.mutation::<()>("onMounted$"), p.mutation::<()>("beforeDestroy$"))
         };
-        let on_mounted = prop_mutation(&obj, "onMounted$", boa);
-        let before_destroy = prop_mutation(&obj, "beforeDestroy$", boa);
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
@@ -88,10 +87,4 @@ impl Lifecycle for LifecycleElement {
             cx.mutation_queue().borrow_mut().push(m, ());
         }
     }
-}
-
-fn prop_mutation(obj: &JsObject, key: &str, ctx: &mut Context) -> Option<EdgyMutation<()>> {
-    use boa_engine::js_string;
-    let v = obj.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
 }

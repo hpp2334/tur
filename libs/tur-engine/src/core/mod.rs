@@ -9,6 +9,7 @@ pub mod focus;
 pub mod fonts;
 pub mod handler;
 pub mod hit_test;
+pub mod js_value;
 pub mod plugin;
 pub mod keyboard;
 pub mod layout;

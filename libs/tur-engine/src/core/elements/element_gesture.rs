@@ -1,7 +1,7 @@
 use tur_shared::{MouseButton, Offset};
 
 use crate::core::element::ElementNodeId;
-use crate::core::edgy_event::{EdgyMutation, EventArg, PendingMutationInvocationQueue};
+use crate::core::edgy_event::{EdgyMutation, IntoJsArgs, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::{AppEvent, PointerDeviceKind};
 use crate::core::focus::FocusManager;
@@ -69,7 +69,7 @@ impl<'a> ElementOnGestureContext<'a> {
         self.focus_manager.set_focus(self.node_id);
     }
 
-    pub fn push_event<E: EventArg>(&mut self, mutation: EdgyMutation<E>, event: E) {
+    pub fn push_event<E: IntoJsArgs>(&mut self, mutation: EdgyMutation<E>, event: E) {
         self.mutation_queue.push(mutation, event);
     }
 }

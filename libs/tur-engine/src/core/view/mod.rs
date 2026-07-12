@@ -12,7 +12,8 @@ pub mod val;
 
 pub use build_cx::{read_atom_raw, read_val, read_val_opt, ViewCx};
 pub use context::SharedViewCx;
-pub use val::{val_from_js, PropValue, Val};
+pub use crate::core::js_value::{FromJs, IntoJs};
+pub use val::{val_from_js, Val};
 
 // ---------------------------------------------------------------------------
 // View — the user's declaration of a view.

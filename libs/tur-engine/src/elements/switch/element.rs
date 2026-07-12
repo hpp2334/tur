@@ -6,10 +6,9 @@ use boa_engine::{Context, JsValue};
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
 use crate::core::layout::SubscribeCx;
+use crate::core::bridge::JsProps;
 use crate::core::view::{
-    ViewCx,
-    read_val,
-    val_from_js, View, ViewFactory, JsViewFactory, PropValue, Val,
+    FromJs, JsViewFactory, Val, View, ViewFactory, ViewCx, read_val,
 };
 
 // ---------------------------------------------------------------------------
@@ -22,9 +21,9 @@ use crate::core::view::{
 #[derive(Clone, Debug, PartialEq)]
 pub struct SwitchKey(pub JsValue);
 
-impl PropValue for SwitchKey {
-    fn from_js(v: &JsValue) -> Option<Self> {
-        Some(SwitchKey(v.clone()))
+impl FromJs for SwitchKey {
+    fn from_js(v: &JsValue) -> Result<Self, boa_engine::JsError> {
+        Ok(SwitchKey(v.clone()))
     }
 }
 
@@ -205,46 +204,6 @@ impl FragmentKind for SwitchFragment {
 // Factory — parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_query_key(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
-/// Extract an optional branch factory from a JS props object.
-fn prop_factory(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn ViewFactory>> {
-    use boa_engine::js_string;
-    use boa_engine::object::builtins::JsFunction;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    if v.is_undefined() || v.is_null() {
-        return None;
-    }
-    let f = v.as_object().and_then(JsFunction::from_object)?;
-    Some(Rc::new(JsViewFactory(f)))
-}
-
 /// Parse `cases` — a JS array of `{ key, child }` entries.
 fn prop_cases(
     props: &JsObject,
@@ -292,12 +251,20 @@ fn prop_cases(
 
 impl SwitchView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let (value, fallback, query_key) = {
+            let mut p = JsProps::new(props, ctx);
+            (
+                p.val::<SwitchKey>("value")
+                    .unwrap_or_else(|| Val::Static(SwitchKey(JsValue::undefined()))),
+                p.factory("fallback"),
+                p.query_key("queryKey"),
+            )
+        };
         SwitchView {
-            value: prop_val::<SwitchKey>(props, "value", ctx)
-                .unwrap_or_else(|| Val::Static(SwitchKey(JsValue::undefined()))),
+            value,
             cases: prop_cases(props, "cases", ctx),
-            fallback: prop_factory(props, "fallback", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            fallback,
+            query_key,
         }
     }
 }

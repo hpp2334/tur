@@ -4,15 +4,12 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::{Cursor, HitTestBehavior, Offset};
 
-use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
+use crate::core::bridge::JsProps;
+use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{
-    ViewCx,
-    read_val,
-    extract_view, val_from_js, Lifecycle, PropValue, View, Val,
-};
+use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // MouseRegionView — the user's declaration. Pure Rust, no JsValues.
@@ -116,36 +113,15 @@ impl ElementTrace for MouseRegionElement {
 // Factory — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-fn prop_val<T: PropValue>(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-fn prop_mutation<E: EventArg>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<EdgyMutation<E>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
-}
-
-fn prop_child(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Rc<dyn View>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    extract_view(&v)
-}
-
 impl MouseRegionView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         MouseRegionView {
-            behavior: prop_val::<HitTestBehavior>(props, "behavior", ctx),
-            cursor: prop_val::<Cursor>(props, "cursor", ctx),
-            on_enter: prop_mutation::<PointerRegionEvent>(props, "onEnter", ctx),
-            on_exit: prop_mutation::<PointerRegionEvent>(props, "onExit", ctx),
-            child: prop_child(props, "child", ctx),
+            behavior: p.val::<HitTestBehavior>("behavior"),
+            cursor: p.val::<Cursor>("cursor"),
+            on_enter: p.mutation::<PointerRegionEvent>("onEnter"),
+            on_exit: p.mutation::<PointerRegionEvent>("onExit"),
+            child: p.child("child"),
         }
     }
 }
@@ -161,7 +137,7 @@ pub struct PointerRegionEvent {
     pub global: Offset,
 }
 
-impl EventArg for PointerRegionEvent {
+impl IntoJsArgs for PointerRegionEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;
         use boa_engine::object::JsObject;

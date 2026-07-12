@@ -4,7 +4,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use tur_engine::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, EventArg};
+use tur_engine::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
@@ -22,7 +22,8 @@ use crate::text::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use tur_engine::core::view::{ViewCx, read_atom_raw, val_from_js, Lifecycle, PropValue, View, Val};
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::view::{ViewCx, read_atom_raw, Lifecycle, Val, View};
 use tur_engine::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use tur_engine::core::text::text_layout::TextLayoutData;
@@ -658,7 +659,7 @@ pub struct ContextMenuEvent {
     global: tur_shared::Offset,
 }
 
-impl EventArg for ContextMenuEvent {
+impl IntoJsArgs for ContextMenuEvent {
     fn to_js_args(&self, ctx: &mut Context) -> Vec<JsValue> {
         use boa_engine::js_string;
         use boa_engine::object::JsObject;
@@ -975,113 +976,23 @@ impl ElementOnIme for EditableTextElement {
 // Factory helpers — called from the JS bridge to parse props into a spec.
 // ---------------------------------------------------------------------------
 
-/// Extract a `Val<T>` prop from a JS props object.
-pub(super) fn prop_val<T: PropValue>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Val<T>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    val_from_js(&v)
-}
-
-/// Extract a `Vec<String>` prop (queryKey) — parsed eagerly.
-pub(super) fn prop_query_key(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<Vec<String>> {
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    let arr = JsArray::from_object(obj.clone()).ok()?;
-    let len = arr.length(ctx).ok()? as usize;
-    let mut out = Vec::with_capacity(len);
-    for i in 0..len {
-        if let Ok(val) = arr.at(i as i64, ctx) {
-            if let Some(s) = val.as_string() {
-                out.push(s.to_std_string_escaped());
-            }
-        }
-    }
-    if out.is_empty() { None } else { Some(out) }
-}
-
-/// Extract the `controller` prop — a TextEditingController class instance
-/// (opaque JsObject). Parsed eagerly (not reactive).
-pub(super) fn prop_controller(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsObject> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    if obj.downcast_ref::<TextEditingController>().is_some() {
-        Some(obj.clone())
-    } else {
-        None
-    }
-}
-
-/// Extract the `undoController` prop. Typed separately from
-/// `prop_controller` because the JsObject filter is controller-specific.
-pub(super) fn prop_undo_controller(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<JsObject> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    let obj = v.as_object()?;
-    if obj.downcast_ref::<crate::text::UndoController>().is_some() {
-        Some(obj.clone())
-    } else {
-        None
-    }
-}
-
-/// Extract the controller atom from the controller prop (if it was passed
-/// reactively).  Returns a typed handle to the reactive atom.
-pub(super) fn prop_controller_atom(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<AnyReadable> {
-    use boa_engine::js_string;
-    use tur_engine::core::reactive::FromBoaJsValue;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    AnyReadable::from_js(&v)
-}
-
-pub fn prop_mutation<E: EventArg>(
-    props: &JsObject,
-    key: &str,
-    ctx: &mut Context,
-) -> Option<EdgyMutation<E>> {
-    use boa_engine::js_string;
-    let v = props.get(js_string!(key), ctx).ok()?;
-    edgy_mutation_from_js(&v)
-}
-
 impl EditableTextView {
     /// Build an `EditableTextView` from a JS props object.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
+        let mut p = JsProps::new(props, ctx);
         EditableTextView {
-            controller: prop_controller(props, "controller", ctx),
-            controller_atom: prop_controller_atom(props, "controller", ctx),
-            undo_controller: prop_undo_controller(props, "undoController", ctx),
-            placeholder: prop_val::<String>(props, "placeholder", ctx),
-            color: prop_val::<Color>(props, "color", ctx),
-            placeholder_color: prop_val::<Color>(props, "placeholderColor", ctx),
-            cursor_color: prop_val::<Color>(props, "cursorColor", ctx),
-            font_size: prop_val::<f64>(props, "fontSize", ctx),
-            font_family: prop_val::<String>(props, "fontFamily", ctx),
-            multiline: prop_val::<bool>(props, "multiline", ctx),
-            on_context_menu: prop_mutation::<ContextMenuEvent>(props, "onContextMenu", ctx),
-            query_key: prop_query_key(props, "queryKey", ctx),
+            controller: p.opaque::<TextEditingController>("controller"),
+            controller_atom: p.readable("controller"),
+            undo_controller: p.opaque::<crate::text::UndoController>("undoController"),
+            placeholder: p.val::<String>("placeholder"),
+            color: p.val::<Color>("color"),
+            placeholder_color: p.val::<Color>("placeholderColor"),
+            cursor_color: p.val::<Color>("cursorColor"),
+            font_size: p.val::<f64>("fontSize"),
+            font_family: p.val::<String>("fontFamily"),
+            multiline: p.val::<bool>("multiline"),
+            on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
+            query_key: p.query_key("queryKey"),
         }
     }
 }
