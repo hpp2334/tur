@@ -112,14 +112,15 @@ impl FromJs for String {
     }
 }
 
-// --- Cursor: decoded from a CSS keyword string (unknown keyword -> Default) ---
+// --- Cursor: decoded from a CSS keyword string (unrecognized keyword -> Err) ---
 
 impl FromJs for Cursor {
     fn from_js(v: &JsValue) -> Result<Self, JsError> {
         let s = v
             .as_string()
             .ok_or_else(|| type_error("a cursor keyword string"))?;
-        Ok(Cursor::from_keyword(&s.to_std_string_escaped()).unwrap_or_default())
+        Cursor::from_keyword(&s.to_std_string_escaped())
+            .ok_or_else(|| type_error("a recognized cursor keyword"))
     }
 }
 

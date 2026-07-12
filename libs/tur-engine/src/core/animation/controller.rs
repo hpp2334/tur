@@ -12,7 +12,7 @@ use tur_shared::Curve;
 use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::core::animation::AnimationManager;
 use crate::core::edgy_event::{EdgyMutation, PendingMutationInvocationQueue, extract_mutation_from_opts};
-use crate::core::js_value::FromJs;
+use crate::core::js_value::{type_error, FromJs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationStatus {
@@ -45,23 +45,26 @@ impl Default for RepeatMode {
 
 /// Decode a `RepeatMode` from a JS value. Accepts:
 ///   - The string `"infinite"` → `Infinite`
-///   - A positive finite number → `Finite(n)` (0 / negative clamped to 1)
-///   - `undefined` / `null` / unrecognized → `Finite(1)` (default)
+///   - A positive finite number → `Finite(n)`
+///
+/// Anything else (non-`"infinite"` string, `≤0` / non-finite number, wrong
+/// type) is a hard error — callers that want a default for an *absent* prop
+/// must check `is_undefined()` / `is_null()` themselves before decoding.
 impl FromJs for RepeatMode {
     fn from_js(val: &JsValue) -> Result<Self, boa_engine::JsError> {
         if let Some(s) = val.as_string() {
             if s.to_std_string_escaped() == "infinite" {
                 return Ok(RepeatMode::Infinite);
             }
-            return Ok(RepeatMode::default());
+            return Err(type_error("the string \"infinite\" for repeat"));
         }
         if let Some(n) = val.as_number() {
             if n <= 0.0 || !n.is_finite() {
-                return Ok(RepeatMode::Finite(1));
+                return Err(type_error("a positive finite repeat count"));
             }
             return Ok(RepeatMode::Finite(n as u64));
         }
-        Ok(RepeatMode::default())
+        Err(type_error("a repeat count (positive number) or \"infinite\""))
     }
 }
 
@@ -296,7 +299,9 @@ impl Class for AnimationController {
                 }
             }
             if let Ok(val) = opts.get(js_string!("repeat"), ctx) {
-                repeat_mode = RepeatMode::from_js(&val).unwrap_or_default();
+                if !val.is_undefined() && !val.is_null() {
+                    repeat_mode = RepeatMode::from_js(&val)?;
+                }
             }
             on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
             on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
@@ -578,8 +583,7 @@ impl Class for AnimationController {
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                ctrl.repeat_mode = RepeatMode::from_js(args.get_or_undefined(0))
-                    .unwrap_or_default();
+                ctrl.repeat_mode = RepeatMode::from_js(args.get_or_undefined(0))?;
                 ctrl.current_iteration = 0;
 
                 Ok(JsValue::undefined())
