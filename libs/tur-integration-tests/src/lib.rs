@@ -20,6 +20,7 @@ use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{TurApp, TurEngine};
 use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
 use tur_std::{Clipboard, CursorPlatform, TurStdPlugin};
+use tur_clipboard::TurClipboardPlugin;
 use tur_shared::{Cursor, MouseButton, Offset};
 
 /// Wall-clock `AsyncRuntime` for tests. Uses real `Instant::now()` —
@@ -213,6 +214,11 @@ impl TurTestApp {
                     .cursor(RecordingCursorPlatform {
                         last: cursor_slot.clone(),
                     })
+                    .clipboard(clipboard.clone())
+                    .build(),
+            )
+            .plugin(
+                TurClipboardPlugin::builder()
                     .clipboard(clipboard.clone())
                     .build(),
             );

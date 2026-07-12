@@ -3,9 +3,9 @@
 //! Validates the full spawn → tick → complete → drain → PromiseJob →
 //! reactive-set path end-to-end:
 //!
-//! 1. JS calls `clipboardReadText()` / `request()` (free-form closures
-//!    registered by the tur-std / tur-net plugins).
-//! 2. The closure creates a pending `JsPromise`, spawns a future via the
+//! 1. JS calls `clipboard.readText()` / `request()` (ctx-bound fn pointers
+//!    registered by the tur-clipboard / tur-net plugins).
+//! 2. The fn creates a pending `JsPromise`, spawns a future via the
 //!    engine's `AsyncExecutor` that calls `Clipboard::read_text().await`
 //!    (or `Http::request(opts).await`).
 //! 3. `flush`'s `tick` polls the future (Recording* impls resolve eagerly),
@@ -15,6 +15,11 @@
 //! 5. boa's `executor.drain` runs the PromiseJob → fires the `.then` body,
 //!    which calls `set(source, ...)` → dirty → re-layout.
 //! 6. Test asserts the source atom updated.
+//!
+//! Capability lookup: both bridge fns read their `Rc<dyn Clipboard>` /
+//! `Rc<dyn Http>` / `Rc<AsyncExecutor>` from `TurJsContext`'s capability
+//! registry (populated by the plugins during `register`). No `unsafe`
+//! closures are involved.
 
 use tur_integration_tests::{text_response, TurTestApp};
 
@@ -26,15 +31,14 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
     app.set_clipboard_read("hello from clipboard");
 
     // Set up: create a source atom, kick off a read, chain `.then` to set
-    // the source with the resolved text. `clipboardReadText` is exported by
-    // `builtin:tur/std` at runtime (no static TS type — caller declares
-    // locally).
+    // the source with the resolved text. `clipboard.readText` is exported
+    // by `builtin:tur/clipboard` as a method on the `clipboard` object.
     app.eval_module_source(
         r#"
         import { source, set, get } from "builtin:tur/std";
-        import * as std from "builtin:tur/std";
+        import { clipboard } from "builtin:tur/clipboard";
         globalThis.__sink$ = source("initial");
-        std.clipboardReadText().then((text) => {
+        clipboard.readText().then((text) => {
             set(globalThis.__sink$, text);
             // Stash the resolved value as a plain string global so eval_js
             // (which runs as a script, not a module) can read it without
@@ -58,8 +62,8 @@ fn clipboard_write_logs_to_recording() {
 
     app.eval_module_source(
         r#"
-        import * as std from "builtin:tur/std";
-        std.clipboardWriteText("payload");
+        import { clipboard } from "builtin:tur/clipboard";
+        clipboard.writeText("payload");
         "#,
     )
     .unwrap();

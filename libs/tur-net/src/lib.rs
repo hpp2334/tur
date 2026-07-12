@@ -23,8 +23,6 @@ use std::rc::Rc;
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 
-pub use bridge::closures as bridge_closures;
-
 // ---------------------------------------------------------------------------
 // Http capability trait + supporting types
 // ---------------------------------------------------------------------------
@@ -104,6 +102,12 @@ impl Http for NoopHttp {
 /// remains unregistered, and JS code that imports from it fails at module
 /// load. Cases that may run in HTTP-less environments must guard accordingly
 /// (or be marked playground-only, like github-viewer).
+///
+/// The bridge fn (`request`) is a ctx-bound `Ptr` that reads its
+/// `Rc<dyn Http>` and `Rc<AsyncExecutor>` from `TurJsContext`'s capability
+/// registry (populated here during `register`, and by the engine for the
+/// executor). This avoids `unsafe NativeFunction::from_closure` — see
+/// [`bridge`].
 #[derive(Default)]
 pub struct TurNetPlugin {
     http: Option<Rc<dyn Http>>,
@@ -118,14 +122,12 @@ impl TurNetPlugin {
 impl Plugin for TurNetPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         if let Some(http) = self.http.clone() {
-            let net_closures = bridge::closures(http, ctx.async_executor().clone());
-            // `closures()` returns `(name, length, fn)`;
-            // `register_host_module` takes `(name, fn, length)`.
-            let exports: Vec<(String, boa_engine::NativeFunction, usize)> = net_closures
-                .into_iter()
-                .map(|(n, l, f)| (n.to_string(), f, l))
-                .collect();
-            ctx.register_host_module("builtin:tur/net", exports);
+            // Expose the Http backend to ctx-bound bridge fns (tur_net_request).
+            // The executor capability is already inserted by the engine.
+            ctx.js_ctx().insert_capability::<Rc<dyn Http>>(http);
+
+            // Register `builtin:tur/net` with `request` as a ctx-bound fn.
+            ctx.register_module("builtin:tur/net", bridge::fns(), vec![], vec![]);
         }
         Ok(())
     }

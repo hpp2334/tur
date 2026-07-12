@@ -90,6 +90,14 @@ impl TurAppInternal {
 
         let async_executor = Rc::new(AsyncExecutor::new());
 
+        // Expose the engine's async executor as a capability so capability-
+        // using bridge fns (tur-net's `request`, tur-clipboard's read/write)
+        // can spawn futures without capturing state in `unsafe` closures.
+        // Plugins that inject their own capabilities (Http, Clipboard) sit
+        // on top of this; the executor is engine-owned and always present.
+        js_context
+            .insert_capability::<Rc<AsyncExecutor>>(async_executor.clone());
+
         Self {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),

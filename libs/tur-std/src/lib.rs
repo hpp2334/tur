@@ -97,12 +97,11 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::lifecycle::bridge::fns());
         std_fns.extend(tur_engine::elements::readable_subscribe::bridge::fns());
 
-        // Clipboard bridge: Promise-returning closures that capture the
-        // injected `Rc<dyn Clipboard>` and the engine's `AsyncExecutor`.
-        // Registered as free-form closures (not ctx-bound fn pointers)
-        // because their state can't live on `TurJsContext`.
-        let clipboard_closures =
-            bridge::clipboard::closures(self.clipboard.clone(), ctx.async_executor().clone());
+        // Clipboard bridge moved to `builtin:tur/clipboard` (tur-clipboard
+        // crate). The `Clipboard` trait + `ClipboardWriteHandler` /
+        // `ClipboardPasteHandler` stay here for the engine's internal
+        // Cmd+C/Cmd+V/Cmd+X event path. The JS-callable `clipboard.readText`
+        // / `clipboard.writeText` fns are registered by `TurClipboardPlugin`.
 
         let mut std_consts: Vec<ConstEntry> = Vec::new();
         let js_ctx_value = ctx.js_ctx_value.clone();
@@ -113,7 +112,7 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
-        ctx.register_module("builtin:tur/std", std_fns, clipboard_closures, std_consts);
+        ctx.register_module("builtin:tur/std", std_fns, vec![], std_consts);
 
         Ok(())
     }

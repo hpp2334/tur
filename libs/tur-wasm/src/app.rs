@@ -11,6 +11,7 @@ use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_shared::Offset;
 use tur_std::Clipboard;
+use tur_clipboard::TurClipboardPlugin;
 use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
@@ -665,6 +666,11 @@ impl TurWasmApp {
                         .cursor(WasmCursorPlatform {
                             canvas: canvas.clone(),
                         })
+                        .clipboard(WasmClipboard)
+                        .build(),
+                )
+                .plugin(
+                    TurClipboardPlugin::builder()
                         .clipboard(WasmClipboard)
                         .build(),
                 )

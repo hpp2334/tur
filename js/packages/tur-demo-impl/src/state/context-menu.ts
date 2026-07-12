@@ -1,18 +1,5 @@
-// Clipboard bridge: exported at runtime by `builtin:tur/std` but
-// intentionally omitted from the public .d.ts. Declared locally — these
-// are Promise-returning fns backed by the engine's async executor.
-declare module "builtin:tur/std" {
-    export function clipboardReadText(): Promise<string>;
-    export function clipboardWriteText(text: string): Promise<void>;
-}
-
-import {
-    clipboardReadText,
-    clipboardWriteText,
-    mutate,
-    set,
-    source,
-} from "builtin:tur/std";
+import { mutate, set, source } from "builtin:tur/std";
+import { clipboard } from "builtin:tur/clipboard";
 import { editorCtrl } from "./case-store";
 
 // ---------------------------------------------------------------------------
@@ -58,14 +45,14 @@ export const closeContextMenu = mutate(() => {
 
 /** Cut: copy selection to clipboard then delete it. The actual clipboard
  *  write is performed by the engine when Cmd+X is pressed; for the menu
- *  action we simulate by calling `clipboardWriteText` directly. */
+ *  action we simulate by calling `clipboard.writeText` directly. */
 export const cutSelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         editorCtrl.deleteSelection();
         // Fire-and-forget the Promise — the editor state has already been
         // updated synchronously.
-        void clipboardWriteText(text);
+        void clipboard.writeText(text);
     }
     set(contextMenuOpen$, false);
 });
@@ -73,17 +60,17 @@ export const cutSelection = mutate(() => {
 export const copySelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
-        void clipboardWriteText(text);
+        void clipboard.writeText(text);
     }
     set(contextMenuOpen$, false);
 });
 
 export const pasteFromClipboard = mutate(() => {
-    // Paste via the engine's clipboard bridge. The engine handles Cmd+V
-    // natively via the paste event on the hidden textarea, but the
-    // context-menu action needs an explicit call. `clipboardReadText`
-    // returns a Promise; `.then` runs as a PromiseJob on the next flush.
-    void clipboardReadText().then((text) => {
+    // Paste via the clipboard bridge. The engine handles Cmd+V natively
+    // via the paste event on the hidden textarea, but the context-menu
+    // action needs an explicit call. `clipboard.readText` returns a
+    // Promise; `.then` runs as a PromiseJob on the next flush.
+    void clipboard.readText().then((text) => {
         if (text.length > 0) editorCtrl.insertText(text);
     });
     set(contextMenuOpen$, false);

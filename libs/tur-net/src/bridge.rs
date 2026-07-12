@@ -1,84 +1,95 @@
 //! `builtin:tur/net` HTTP bridge: `request(opts) -> Promise<ResponseResult>`.
 //!
-//! Mirrors the clipboard bridge pattern in tur-std: a closure that creates a
-//! pending `JsPromise`, spawns a future via the engine's `AsyncExecutor` that
+//! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
+//! pointer** (no captures) that reads its `Rc<dyn Http>` and
+//! `Rc<AsyncExecutor>` from `TurJsContext`'s capability registry. The fn
+//! creates a pending `JsPromise`, spawns a future via the executor that
 //! calls `Http::request(opts).await`, and pushes a completion closure that
 //! builds the JS response object and resolves/rejects the promise under
 //! `&mut Context`.
 //!
-//! Like clipboard, this is a free-form closure (not a ctx-bound fn pointer)
-//! because it captures `Rc<dyn Http>` and `Rc<AsyncExecutor>`, neither of
-//! which can live on `TurJsContext`.
+//! This file contains **no `unsafe`** — uses `NativeFunction::from_fn_ptr`
+//! via the engine's `bound_native` helper instead of the previous
+//! `unsafe NativeFunction::from_closure`. Captures are eliminated because
+//! the needed state lives in the capability registry (populated by
+//! [`crate::TurNetPlugin`] during `register`).
 
 use std::rc::Rc;
 
-use boa_engine::native_function::NativeFunction;
 use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyKey;
-use boa_engine::{js_string, JsArgs, JsResult, JsValue};
+use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
 use tur_engine::core::async_::AsyncExecutor;
+use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 
-/// Build the `request` bridge closure for `builtin:tur/net`.
+/// Bridge function table entries for `builtin:tur/net`.
 ///
-/// Returns `(name, length, NativeFunction)` entries. The caller (typically
-/// [`crate::TurNetPlugin`]) re-orders to `(name, fn, length)` for
-/// [`tur_engine::core::plugin::PluginContext::register_host_module`].
-pub fn closures(
-    http: Rc<dyn Http>,
-    executor: Rc<AsyncExecutor>,
-) -> Vec<(&'static str, usize, NativeFunction)> {
-    vec![("request", 1, build_request(http, executor))]
+/// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
+/// that reads its `Http` + executor from `TurJsContext`'s capability
+/// registry.
+pub fn fns() -> Vec<FnEntry> {
+    vec![("request", 1, tur_net_request as Ptr)]
 }
 
-fn build_request(http: Rc<dyn Http>, executor: Rc<AsyncExecutor>) -> NativeFunction {
-    // SAFETY: captures are pure Rust state (`Rc<dyn Http>`, `Rc<AsyncExecutor>`)
-    // — no boa GC-traceable types. Sound to use `from_closure`.
-    unsafe {
-        NativeFunction::from_closure(move |_this, args, ctx| {
-            let (promise, resolvers) = JsPromise::new_pending(ctx);
+/// `request(opts): Promise<ResponseResult>` — performs an HTTP request via
+/// the injected `Http` backend. Rejects with `{ message }` on network error
+/// or when no backend is registered.
+fn tur_net_request(
+    _this: &JsValue,
+    args: &[JsValue],
+    ctx: &mut boa_engine::Context,
+) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let http = js_ctx
+        .capability::<Rc<dyn Http>>()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http backend")))?;
+    let executor = js_ctx
+        .capability::<Rc<AsyncExecutor>>()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no async executor")))?;
 
-            // Parse opts from the JS `{ url, method?, ... }` object.
-            let opts = match parse_request_opts(args, ctx) {
-                Ok(o) => o,
-                Err(msg) => {
-                    let e = JsObject::with_object_proto(ctx.intrinsics());
-                    let _ = e.create_data_property(
-                        js_string!("message"),
-                        JsValue::from(js_string!(msg.as_str())),
-                        ctx,
-                    );
-                    let _ =
-                        resolvers
-                            .reject
-                            .call(&JsValue::undefined(), &[e.into()], ctx);
-                    return Ok(promise.into());
-                }
-            };
+    let (promise, resolvers) = JsPromise::new_pending(ctx);
 
-            let http = http.clone();
-            let executor = executor.clone();
-            let executor_for_complete = executor.clone();
-            executor.spawn_detached(async move {
-                let outcome = http.request(opts).await;
-                executor_for_complete.complete(Box::new(move |ctx| {
-                    resolve_outcome(&outcome, &resolvers, ctx)?;
-                    Ok(())
-                }));
-            });
-            Ok(promise.into())
-        })
-    }
+    // Parse opts from the JS `{ url, method?, ... }` object. Note: args[0]
+    // is the bound ctx_value (prepended by `bound_native`); the user's opts
+    // arg is at index 1.
+    let opts = match parse_request_opts(args, ctx) {
+        Ok(o) => o,
+        Err(msg) => {
+            let e = JsObject::with_object_proto(ctx.intrinsics());
+            let _ = e.create_data_property(
+                js_string!("message"),
+                JsValue::from(js_string!(msg.as_str())),
+                ctx,
+            );
+            let _ =
+                resolvers
+                    .reject
+                    .call(&JsValue::undefined(), &[e.into()], ctx);
+            return Ok(promise.into());
+        }
+    };
+
+    let executor_for_complete = executor.clone();
+    executor.spawn_detached(async move {
+        let outcome = http.request(opts).await;
+        executor_for_complete.complete(Box::new(move |ctx| {
+            resolve_outcome(&outcome, &resolvers, ctx)?;
+            Ok(())
+        }));
+    });
+    Ok(promise.into())
 }
 
 fn parse_request_opts(
     args: &[JsValue],
     ctx: &mut boa_engine::Context,
 ) -> Result<RequestOpts, String> {
-    let opts = args.get_or_undefined(0);
+    // args[0] is the ctx_value; user opts is at index 1.
+    let opts = args.get_or_undefined(1);
     let obj = opts.as_object().ok_or("request: options object required")?;
 
     let url = js_opt_str(&obj, "url", ctx).unwrap_or_default();

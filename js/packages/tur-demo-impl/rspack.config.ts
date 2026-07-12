@@ -26,6 +26,7 @@ export default defineConfig({
     externals: {
         "builtin:tur/std": "builtin:tur/std",
         "builtin:tur/host": "builtin:tur/host",
+        "builtin:tur/clipboard": "builtin:tur/clipboard",
         "builtin:tur/net": "builtin:tur/net",
     },
     optimization: {

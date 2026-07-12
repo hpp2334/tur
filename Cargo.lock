@@ -3718,6 +3718,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-clipboard"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "tracing",
+ "tur-engine",
+ "tur-std",
+]
+
+[[package]]
 name = "tur-engine"
 version = "0.1.0"
 dependencies = [
@@ -3750,6 +3760,7 @@ dependencies = [
  "pollster",
  "raw-window-handle",
  "thiserror",
+ "tur-clipboard",
  "tur-engine",
  "tur-net",
  "tur-shared",
@@ -3810,6 +3821,7 @@ dependencies = [
  "swc_ecma_visit",
  "tracing",
  "tracing-wasm",
+ "tur-clipboard",
  "tur-engine",
  "tur-net",
  "tur-shared",
