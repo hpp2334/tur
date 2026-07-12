@@ -61,6 +61,9 @@ importers:
       '@tur/animation-ext':
         specifier: workspace:*
         version: link:../tur-animation-ext
+      '@tur/clipboard':
+        specifier: workspace:*
+        version: link:../tur-clipboard
       '@tur/core':
         specifier: workspace:*
         version: link:../tur-core
