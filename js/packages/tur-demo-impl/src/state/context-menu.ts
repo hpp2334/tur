@@ -1,5 +1,5 @@
-import { mutate, set, source } from "builtin:tur/std";
 import { clipboard } from "builtin:tur/clipboard";
+import { mutate, set, source } from "builtin:tur/std";
 import { editorCtrl } from "./case-store";
 
 // ---------------------------------------------------------------------------
