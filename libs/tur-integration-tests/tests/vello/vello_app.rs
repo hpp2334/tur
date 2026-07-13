@@ -5,7 +5,7 @@ use std::rc::Rc;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::{AppEvent, PlatformEvent};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
@@ -116,7 +116,7 @@ impl TurVelloApp {
             .async_runtime(Rc::new(TestRuntime))
             .plugin(TurStdPlugin::default())
             .build()?;
-        app.push_event(AppEvent::Resize {
+        app.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr,
@@ -152,7 +152,7 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        self.inner.borrow_mut().app.push_event(AppEvent::RequestDraw);
+        self.inner.borrow_mut().app.push_app_event(AppEvent::RequestDraw);
         let _ = self.inner.borrow_mut().app.spawn_loop_once(std::time::Duration::ZERO);
     }
 

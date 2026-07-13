@@ -2,7 +2,7 @@ mod arena;
 mod composer;
 
 use tur_engine::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
-use tur_engine::core::event::{AppEvent, AppGestureEvent, PointerDeviceKind};
+use tur_engine::core::event::{AppEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::focus::helper::find_focusable_in_path;
 use tur_engine::core::handler::{AppHandler, HandlerContext};
@@ -37,9 +37,9 @@ impl GestureAppHandler {
 }
 
 impl AppHandler for GestureAppHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
         match event {
-            AppEvent::Gesture(AppGestureEvent::PointerDown {
+            PlatformEvent::Pointer(PointerInput::PointerDown {
                 position,
                 button,
                 time_ms,
@@ -52,7 +52,7 @@ impl AppHandler for GestureAppHandler {
                     self.handle_touch_pointer_down(cx, *position, *time_ms);
                 }
             },
-            AppEvent::Gesture(AppGestureEvent::PointerMove { position, device }) => match device {
+            PlatformEvent::Pointer(PointerInput::PointerMove { position, device }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_move(cx, *position);
                 }
@@ -60,7 +60,7 @@ impl AppHandler for GestureAppHandler {
                     self.handle_touch_pointer_move(cx, *position);
                 }
             },
-            AppEvent::Gesture(AppGestureEvent::PointerUp {
+            PlatformEvent::Pointer(PointerInput::PointerUp {
                 position,
                 button,
                 device,
@@ -72,7 +72,7 @@ impl AppHandler for GestureAppHandler {
                     self.handle_touch_pointer_up(cx, *position);
                 }
             },
-            AppEvent::Gesture(AppGestureEvent::PointerCancel { device }) => match device {
+            PlatformEvent::Pointer(PointerInput::PointerCancel { device }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_cancel(cx);
                 }
@@ -80,9 +80,6 @@ impl AppHandler for GestureAppHandler {
                     self.handle_touch_pointer_cancel(cx);
                 }
             },
-            AppEvent::Gesture(AppGestureEvent::ContextMenu { position }) => {
-                self.handle_context_menu(cx, *position);
-            }
             _ => {}
         }
     }
@@ -91,18 +88,6 @@ impl AppHandler for GestureAppHandler {
 // ── Mouse path (immediate dispatch, no arena) ────────────────────────
 
 impl GestureAppHandler {
-    fn handle_context_menu(&mut self, cx: &mut HandlerContext, position: Offset) {
-        let path = HitTest::new(&*cx.element_tree).path(position);
-        for id in &path {
-            let local = local_position(cx, *id, position);
-            dispatch_gesture_event(
-                cx,
-                *id,
-                &ComposedGestureEvent::ContextMenu { local, global: position },
-            );
-        }
-    }
-
     fn handle_mouse_pointer_down(
         &mut self,
         cx: &mut HandlerContext,
@@ -184,9 +169,18 @@ impl GestureAppHandler {
             None => false,
         };
 
-        let clicked = self.composer.on_pointer_up(click_eligible);
-        if clicked {
-            dispatch_click(cx, position);
+        let resolved = self.composer.on_pointer_up(click_eligible);
+        if resolved {
+            // Derive the gesture from the button that was released: a primary
+            // (left) release becomes a `Click`; a secondary (right) release
+            // becomes a `ContextMenu`. Context-menu is a *gesture*, not a
+            // platform event, so it is produced here rather than carried in
+            // from the embedder.
+            match button {
+                MouseButton::Left => dispatch_click(cx, position),
+                MouseButton::Right => dispatch_context_menu(cx, position),
+                _ => {}
+            }
         }
     }
 
@@ -284,10 +278,12 @@ impl GestureAppHandler {
                 } else {
                     // No drag element claimed — resolve to scroll.
                     self.arena.resolve(ArenaWinnerKind::Scroll);
-                    // Dispatch a wheel event for the initial delta.
+                    // Emit the derived scroll delta on the internal bus (not a
+                    // fake platform wheel) so the wheel handler processes real
+                    // and derived scroll uniformly.
                     let dx = position.x - down_position.x;
                     let dy = position.y - down_position.y;
-                    cx.event_queue.push(AppEvent::Wheel {
+                    cx.app_event_queue.push(AppEvent::Scroll {
                         delta_x: -dx,
                         delta_y: -dy,
                         position,
@@ -314,7 +310,7 @@ impl GestureAppHandler {
                 delta_y,
                 position,
             } => {
-                cx.event_queue.push(AppEvent::Wheel {
+                cx.app_event_queue.push(AppEvent::Scroll {
                     delta_x,
                     delta_y,
                     position,
@@ -345,17 +341,14 @@ impl GestureAppHandler {
             }
             TouchUpOutcome::ScrollEnded => {}
             TouchUpOutcome::NeedsSyntheticClick { position, time_ms } => {
-                cx.event_queue.push(AppEvent::Gesture(AppGestureEvent::PointerDown {
-                    position,
-                    button: MouseButton::Left,
-                    time_ms,
-                    device: PointerDeviceKind::Mouse,
-                }));
-                cx.event_queue.push(AppEvent::Gesture(AppGestureEvent::PointerUp {
-                    position,
-                    button: MouseButton::Left,
-                    device: PointerDeviceKind::Mouse,
-                }));
+                // The touch sequence ended below slop with a tiny move that the
+                // browser won't synthesize a click for. Drive the mouse
+                // down→up path in-process (composer capture + click
+                // classification + dispatch) so the tap behaves exactly like a
+                // mouse click — without faking a platform pointer event or
+                // touching `PointerRegionAppHandler` (no hover on touch).
+                self.handle_mouse_pointer_down(cx, position, MouseButton::Left, time_ms);
+                self.handle_mouse_pointer_up(cx, position, MouseButton::Left);
             }
             TouchUpOutcome::BrowserClick => {}
         }
@@ -405,6 +398,20 @@ fn dispatch_click(cx: &mut HandlerContext, position: Offset) {
     }
 }
 
+/// Dispatch `ComposedGestureEvent::ContextMenu` to every element in the
+/// hit-path (mirrors how the web `contextmenu` event bubbles).
+fn dispatch_context_menu(cx: &mut HandlerContext, position: Offset) {
+    let hit_path = HitTest::new(&*cx.element_tree).path(position);
+    for node_id in &hit_path {
+        let local = local_position(cx, *node_id, position);
+        dispatch_gesture_event(
+            cx,
+            *node_id,
+            &ComposedGestureEvent::ContextMenu { local, global: position },
+        );
+    }
+}
+
 fn is_click_opaque(tree: &NodeTreeData, id: ElementNodeId) -> bool {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
@@ -445,7 +452,7 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
         return false;
     };
     let mut el_cx = ElementOnGestureContext::new(
-        &mut *cx.event_queue,
+        &mut *cx.app_event_queue,
         &mut *cx.focus_manager,
         &mut *cx.mutation_queue,
         id,

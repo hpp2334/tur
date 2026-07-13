@@ -68,9 +68,12 @@ impl ElementRender for EditableTextElement {
         }
 
         if is_focused && !has_selection {
-            // Blink the caret at a 530ms half-cycle (the conventional
-            // editor caret blink rate). Visible on even half-cycles.
-            let blink_visible = (paint_ctx.now().as_millis() / 530) % 2 == 0;
+            // Blink the caret at a fixed half-cycle (the conventional editor
+            // caret blink rate). Visible on even half-cycles. The half-period
+            // is shared with the engine's frame scheduler so the embedder
+            // wakes precisely at each toggle instead of redrawing every frame.
+            let blink_visible =
+                (paint_ctx.now().as_millis() as u64 / tur_engine::core::focus::CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
             if blink_visible {
                 paint_cursor(
                     canvas,

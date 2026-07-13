@@ -11,7 +11,7 @@ use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent, PointerDeviceKind};
+use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -177,7 +177,7 @@ pub struct TurTestApp {
     /// constructed via [`Self::new_with_http`]). `None` for the default
     /// constructor — those tests don't register `builtin:tur/net`.
     http: Option<RecordingHttp>,
-    /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
+    /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
     /// steps (well under the 500 ms threshold) on each pointer-down so
     /// consecutive `double_click` / `triple_click` calls register as a
@@ -226,7 +226,7 @@ impl TurTestApp {
             builder = builder.plugin(TurNetPlugin::builder().http(http_impl).build());
         }
         let mut inner = builder.build()?;
-        inner.push_event(AppEvent::Resize {
+        inner.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr: 1.0,
@@ -282,13 +282,13 @@ impl TurTestApp {
     }
 
     pub fn render(&mut self) {
-        self.inner.push_event(AppEvent::RequestDraw);
+        self.inner.push_app_event(AppEvent::RequestDraw);
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
     /// Push a viewport resize and flush, exercising the full relayout path.
     pub fn resize(&mut self, width: f64, height: f64) {
-        self.inner.push_event(AppEvent::Resize {
+        self.inner.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr: 1.0,
@@ -297,11 +297,11 @@ impl TurTestApp {
     }
 
     pub fn tick(&mut self) -> Result<(), TurError> {
-        self.inner.spawn_loop_once(Duration::ZERO)
+        self.inner.spawn_loop_once(Duration::ZERO).map(|_| ())
     }
 
     pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
-        self.inner.spawn_loop_once(duration)
+        self.inner.spawn_loop_once(duration).map(|_| ())
     }
 
     pub fn element_tree(&self) -> Ref<'_, NodeTreeData> {
@@ -311,7 +311,7 @@ impl TurTestApp {
     pub fn click(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -319,7 +319,7 @@ impl TurTestApp {
             }));
         self.ensure_flushed();
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -328,7 +328,7 @@ impl TurTestApp {
     }
 
     pub fn send_key(&mut self, key: &str) {
-        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers::default(),
@@ -338,7 +338,7 @@ impl TurTestApp {
     }
 
     pub fn send_ime(&mut self, event: AppImeEvent) {
-        self.inner.push_event(AppEvent::Ime(event));
+        self.inner.push_platform_event(PlatformEvent::Ime(event));
         self.ensure_flushed();
     }
 
@@ -349,7 +349,7 @@ impl TurTestApp {
     /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
     /// Use this for Cmd+C / Cmd+V / Cmd+S tests.
     pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
-        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers {
@@ -366,7 +366,7 @@ impl TurTestApp {
     pub fn pointer_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -394,7 +394,7 @@ impl TurTestApp {
 
     pub fn pointer_move(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
             }));
@@ -403,7 +403,7 @@ impl TurTestApp {
 
     pub fn pointer_up(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -416,7 +416,7 @@ impl TurTestApp {
     pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button,
                 time_ms,
@@ -427,7 +427,7 @@ impl TurTestApp {
 
     pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button,
                 device: PointerDeviceKind::Mouse,
@@ -435,14 +435,12 @@ impl TurTestApp {
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
     }
 
-    /// Push a right-click sequence: pointer-down(button=Right), context-menu,
-    /// pointer-up(button=Right). Mirrors the DOM event order.
+    /// Push a right-click sequence: pointer-down(button=Right) then
+    /// pointer-up(button=Right). The engine's gesture arena derives the
+    /// `ContextMenu` gesture from the right-button pointer-up — there is no
+    /// separate context-menu platform event anymore.
     pub fn right_click(&mut self, x: f64, y: f64) {
         self.pointer_down_with_button(x, y, MouseButton::Right);
-        self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::ContextMenu {
-                position: Offset::new(x, y),
-            }));
         let _ = self.inner.spawn_loop_once(Duration::ZERO);
         self.pointer_up_with_button(x, y, MouseButton::Right);
     }
@@ -453,7 +451,7 @@ impl TurTestApp {
     pub fn pointer_down_no_flush(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -463,7 +461,7 @@ impl TurTestApp {
 
     pub fn pointer_move_no_flush(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
             }));
@@ -471,7 +469,7 @@ impl TurTestApp {
 
     pub fn pointer_up_no_flush(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -480,7 +478,7 @@ impl TurTestApp {
 
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Wheel {
+            .push_platform_event(PlatformEvent::Wheel {
                 delta_x,
                 delta_y,
                 position: Offset::new(x, y),
@@ -615,7 +613,7 @@ impl TurTestApp {
     /// then inserts `text` into the focused editable.
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner
-            .push_event(AppEvent::ClipboardPaste { text: text.to_string() });
+            .push_platform_event(PlatformEvent::ClipboardPaste { text: text.to_string() });
         self.ensure_flushed();
     }
 

@@ -5,7 +5,7 @@ use std::rc::Rc;
 use std::time::Instant;
 use tur_engine::TurApp;
 use tur_engine::core::async_::AsyncRuntime;
-use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent};
+use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
@@ -54,7 +54,6 @@ struct WasmState {
     _compositionupdate_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
     _compositionend_closure: Closure<dyn Fn(web_sys::CompositionEvent)>,
     _paste_closure: Closure<dyn Fn(web_sys::ClipboardEvent)>,
-    _raf_closure: RefCell<Option<Closure<dyn Fn()>>>,
 }
 
 /// Embedder-side `CursorPlatform`: the engine pushes the resolved cursor here
@@ -121,6 +120,7 @@ impl Http for WasmHttp {
 #[wasm_bindgen]
 pub struct TurWasmApp {
     state: Rc<RefCell<Option<WasmState>>>,
+    frame_loop: Rc<FrameLoop>,
 }
 
 trait JsResult<T> {
@@ -130,6 +130,20 @@ trait JsResult<T> {
 impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
     fn err_to_jsval(self) -> Result<T, JsValue> {
         self.map_err(Into::into)
+    }
+}
+
+/// Translate a DOM `MouseEvent.button` (+ ctrlKey state) into our
+/// [`MouseButton`]. On macOS, a context-menu is triggered by Ctrl+click,
+/// which the browser reports as `button=0` (primary) with `ctrlKey=true`;
+/// normalize that to [`MouseButton::Right`] so the engine's arena derives a
+/// context-menu gesture from the resulting right-button pointer up.
+fn normalize_mouse_button(dom_button: u16, ctrl_key: bool) -> tur_shared::MouseButton {
+    let button = tur_shared::MouseButton::from_dom(dom_button);
+    if ctrl_key && button == tur_shared::MouseButton::Left {
+        tur_shared::MouseButton::Right
+    } else {
+        button
     }
 }
 
@@ -562,7 +576,7 @@ impl TurWasmApp {
 
             // Claim touch gestures for the app. With `touch-action: none` the
             // browser will not pan/zoom the page on touch-drag (we translate
-            // touchmove → AppEvent::Wheel below). Taps still synthesize
+            // touchmove → PlatformEvent::Wheel below). Taps still synthesize
             // mousedown/click for caret placement, buttons, and the soft
             // keyboard via the hidden textarea.
             canvas
@@ -679,7 +693,7 @@ impl TurWasmApp {
                 .build()
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-            app.push_event(AppEvent::Resize {
+            app.push_platform_event(PlatformEvent::Resize {
                 logical_width,
                 logical_height,
                 dpr,
@@ -711,7 +725,7 @@ impl TurWasmApp {
                     let physical_height = (logical_height as f64 * dpr) as u32;
                     s._canvas.set_width(physical_width);
                     s._canvas.set_height(physical_height);
-                    s.app.push_event(AppEvent::Resize {
+                    s.app.push_platform_event(PlatformEvent::Resize {
                         logical_width,
                         logical_height,
                         dpr,
@@ -739,13 +753,18 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        let button = tur_shared::MouseButton::from_dom(event.button() as u16);
+                        // Normalize macOS Ctrl+click (a primary-button press with
+                        // Ctrl held) to a secondary/right button so the engine's
+                        // gesture arena derives a context-menu from it. Other
+                        // platforms don't send Ctrl+click for context-menu, so
+                        // this only affects the macOS convention.
+                        let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
                         // DOM `MouseEvent.timeStamp` is ms since epoch — used by
                         // the engine's gesture composer for multi-click
                         // (double/triple) classification.
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::PointerDown {
+                        s.app.push_platform_event(PlatformEvent::Pointer(
+                            PointerInput::PointerDown {
                                 position: Offset::new(x, y),
                                 button,
                                 time_ms,
@@ -770,9 +789,9 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        let button = tur_shared::MouseButton::from_dom(event.button() as u16);
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::PointerUp {
+                        let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
+                        s.app.push_platform_event(PlatformEvent::Pointer(
+                            PointerInput::PointerUp {
                                 position: Offset::new(x, y),
                                 button,
                                 device: tur_engine::core::event::PointerDeviceKind::Mouse,
@@ -796,8 +815,8 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::PointerMove {
+                        s.app.push_platform_event(PlatformEvent::Pointer(
+                            PointerInput::PointerMove {
                                 position: Offset::new(x, y),
                                 device: tur_engine::core::event::PointerDeviceKind::Mouse,
                             },
@@ -821,7 +840,7 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
-                        s.app.push_event(AppEvent::Wheel {
+                        s.app.push_platform_event(PlatformEvent::Wheel {
                             delta_x: event.delta_x(),
                             delta_y: event.delta_y(),
                             position: Offset::new(x, y),
@@ -878,8 +897,8 @@ impl TurWasmApp {
                     let x = t.client_x() as f64 - rect.left();
                     let y = t.client_y() as f64 - rect.top();
                     let time_ms = event.time_stamp() as u64;
-                    s.app.push_event(AppEvent::Gesture(
-                        AppGestureEvent::PointerDown {
+                    s.app.push_platform_event(PlatformEvent::Pointer(
+                        PointerInput::PointerDown {
                             position: Offset::new(x, y),
                             button: tur_shared::MouseButton::Left,
                             time_ms,
@@ -909,8 +928,8 @@ impl TurWasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = t.client_x() as f64 - rect.left();
                     let y = t.client_y() as f64 - rect.top();
-                    s.app.push_event(AppEvent::Gesture(
-                        AppGestureEvent::PointerMove {
+                    s.app.push_platform_event(PlatformEvent::Pointer(
+                        PointerInput::PointerMove {
                             position: Offset::new(x, y),
                             device: tur_engine::core::event::PointerDeviceKind::Touch,
                         },
@@ -930,8 +949,8 @@ impl TurWasmApp {
                     let Some(t) = event.changed_touches().get(0) else {
                         let guard = touch_end_state.borrow();
                         if let Some(s) = guard.as_ref() {
-                            s.app.push_event(AppEvent::Gesture(
-                                AppGestureEvent::PointerUp {
+                            s.app.push_platform_event(PlatformEvent::Pointer(
+                                PointerInput::PointerUp {
                                     position: Offset::new(0.0, 0.0),
                                     button: tur_shared::MouseButton::Left,
                                     device: tur_engine::core::event::PointerDeviceKind::Touch,
@@ -947,8 +966,8 @@ impl TurWasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = t.client_x() as f64 - rect.left();
                     let y = t.client_y() as f64 - rect.top();
-                    s.app.push_event(AppEvent::Gesture(
-                        AppGestureEvent::PointerUp {
+                    s.app.push_platform_event(PlatformEvent::Pointer(
+                        PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button: tur_shared::MouseButton::Left,
                             device: tur_engine::core::event::PointerDeviceKind::Touch,
@@ -968,8 +987,8 @@ impl TurWasmApp {
                 Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                     let guard = touch_cancel_state.borrow();
                     if let Some(s) = guard.as_ref() {
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::PointerCancel {
+                        s.app.push_platform_event(PlatformEvent::Pointer(
+                            PointerInput::PointerCancel {
                                 device: tur_engine::core::event::PointerDeviceKind::Touch,
                             },
                         ));
@@ -983,25 +1002,18 @@ impl TurWasmApp {
                 )
                 .err_to_jsval()?;
 
-            // Context menu (right-click) listener. We prevent the default
-            // browser menu and forward the click position to the engine,
-            // which dispatches a `ContextMenu` gesture to every element in
-            // the hit-path.
+            // Context menu listener. We only `preventDefault` to suppress the
+            // native browser menu. The context-menu *gesture* itself is derived
+            // inside the engine from the right-button `PointerUp` (the mouseup
+            // listener above already pushes that — including macOS Ctrl+click,
+            // which is normalized to a Right button). We must NOT push a
+            // separate event here, otherwise a physical right-click would fire
+            // context-menu twice (once from mouseup, once from here).
             let context_state = state_clone.clone();
             let context_closure =
                 Closure::<dyn Fn(web_sys::MouseEvent)>::new(move |event: web_sys::MouseEvent| {
+                    let _ = context_state;
                     event.prevent_default();
-                    let guard = context_state.borrow();
-                    if let Some(s) = guard.as_ref() {
-                        let rect = s._canvas.get_bounding_client_rect();
-                        let x = event.client_x() as f64 - rect.left();
-                        let y = event.client_y() as f64 - rect.top();
-                        s.app.push_event(AppEvent::Gesture(
-                            AppGestureEvent::ContextMenu {
-                                position: Offset::new(x, y),
-                            },
-                        ));
-                    }
                 });
 
             canvas
@@ -1027,7 +1039,7 @@ impl TurWasmApp {
                         if s.is_composing.get() {
                             return;
                         }
-                        s.app.push_event(AppEvent::Key(AppKeyEvent {
+                        s.app.push_platform_event(PlatformEvent::Key(AppKeyEvent {
                             key: event.key(),
                             code: event.code(),
                             modifiers: Modifiers {
@@ -1063,7 +1075,7 @@ impl TurWasmApp {
                         if s.is_composing.get() {
                             return;
                         }
-                        s.app.push_event(AppEvent::Key(AppKeyEvent {
+                        s.app.push_platform_event(PlatformEvent::Key(AppKeyEvent {
                             key: event.key(),
                             code: event.code(),
                             modifiers: Modifiers {
@@ -1097,7 +1109,7 @@ impl TurWasmApp {
                     let guard = comp_start_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         s.is_composing.set(true);
-                        s.app.push_event(AppEvent::Ime(
+                        s.app.push_platform_event(PlatformEvent::Ime(
                             AppImeEvent::CompositionStart,
                         ));
                     }
@@ -1116,7 +1128,7 @@ impl TurWasmApp {
                     let guard = comp_update_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let text = event.data().unwrap_or_default();
-                        s.app.push_event(AppEvent::Ime(
+                        s.app.push_platform_event(PlatformEvent::Ime(
                             AppImeEvent::CompositionUpdate {
                                 text,
                                 cursor: None,
@@ -1139,7 +1151,7 @@ impl TurWasmApp {
                     if let Some(s) = guard.as_ref() {
                         s.is_composing.set(false);
                         let text = event.data().unwrap_or_default();
-                        s.app.push_event(AppEvent::Ime(
+                        s.app.push_platform_event(PlatformEvent::Ime(
                             AppImeEvent::CompositionEnd { text },
                         ));
                         s.textarea.set_value("");
@@ -1156,7 +1168,7 @@ impl TurWasmApp {
             // Paste listener — when the user presses Cmd+V (or Ctrl+V) while
             // the hidden textarea is focused, the browser fires a `paste`
             // event with `clipboardData`. We forward the text to the engine
-            // via AppEvent::ClipboardPaste, which the engine's
+            // via PlatformEvent::ClipboardPaste, which the engine's
             // ClipboardPasteHandler inserts into the focused editable.
             let paste_state = state_clone.clone();
             let paste_closure =
@@ -1171,7 +1183,7 @@ impl TurWasmApp {
                     }
                     let guard = paste_state.borrow();
                     if let Some(s) = guard.as_ref() {
-                        s.app.push_event(AppEvent::ClipboardPaste { text });
+                        s.app.push_platform_event(PlatformEvent::ClipboardPaste { text });
                     }
                 });
 
@@ -1203,13 +1215,30 @@ impl TurWasmApp {
                 _compositionstart_closure: compositionstart_closure,
                 _compositionupdate_closure: compositionupdate_closure,
                 _compositionend_closure: compositionend_closure,
-                _paste_closure: paste_closure,
-                _raf_closure: RefCell::new(None),
+                 _paste_closure: paste_closure,
             };
 
             *state_clone.borrow_mut() = Some(wasm_state);
 
-            let app = TurWasmApp { state: state_clone };
+            // On-demand frame loop. Lives outside `WasmState` so the wake
+            // hook (fired from inside `push_platform_event`, while a listener
+            // holds an immutable borrow of `WasmState`) can poke
+            // `scheduled`/store the rAF closure without contending for
+            // `WasmState`'s `RefCell`.
+            let frame_loop = FrameLoop::new(state_clone.clone());
+            {
+                let guard = state_clone.borrow();
+                if let Some(s) = guard.as_ref() {
+                    let fl = frame_loop.clone();
+                    s.app
+                        .set_wake_hook(Some(Rc::new(move || fl.schedule())));
+                }
+            }
+
+            let app = TurWasmApp {
+                state: state_clone,
+                frame_loop,
+            };
             Ok(JsValue::from(app))
         })
     }
@@ -1224,13 +1253,13 @@ impl TurWasmApp {
             .load_js(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        state.app.push_event(AppEvent::RequestDraw);
+        state.app.push_app_event(AppEvent::RequestDraw);
         if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
             tracing::error!("load_and_run_js: initial spawn_loop_once error: {e}");
         }
 
         drop(guard);
-        Self::start_frame_loop(&self.state);
+        self.frame_loop.schedule();
 
         Ok(())
     }
@@ -1251,13 +1280,13 @@ impl TurWasmApp {
             .load_module(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        state.app.push_event(AppEvent::RequestDraw);
+        state.app.push_app_event(AppEvent::RequestDraw);
         if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
             tracing::error!("load_and_run_module: initial spawn_loop_once error: {e}");
         }
 
         drop(guard);
-        Self::start_frame_loop(&self.state);
+        self.frame_loop.schedule();
 
         Ok(())
     }
@@ -1306,80 +1335,176 @@ impl TurDevTool {
     }
 }
 
-impl TurWasmApp {
-    fn start_frame_loop(state: &Rc<RefCell<Option<WasmState>>>) {
-        let loop_state = state.clone();
-        let raf_closure = Closure::<dyn Fn()>::new(move || {
-            let mut guard = loop_state.borrow_mut();
-            if let Some(s) = guard.as_mut() {
-                if let Err(e) = s.app.spawn_loop_once(std::time::Duration::from_millis(16)) {
-                    tracing::error!("frame loop spawn_loop_once error: {e}");
-                }
+/// On-demand frame loop for the wasm embedder. Unlike a permanent
+/// `requestAnimationFrame` cycle, it only runs while something actually needs
+/// a frame: a continuous animation, a pending JS timer, a live async task, a
+/// focused caret blink, or — via the wake hook — freshly-arrived platform
+/// input. When none of those apply it stops entirely (zero rAF, zero
+/// renders) until [`TurApp::push_platform_event`] fires the wake hook.
+///
+/// The scheduling decision comes from the engine each frame as a
+/// [`NextFrame`]: `Vsync` (re-arm immediately), `After(d)` (re-arm in `d`),
+/// or `Idle` (stop).
+struct FrameLoop {
+    state: Rc<RefCell<Option<WasmState>>>,
+    scheduled: Cell<bool>,
+    last_now_ms: Cell<f64>,
+    // Long-lived closures created once and re-registered for every rAF /
+    // setTimeout. Reusing them (instead of allocating a fresh closure per
+    // arm) avoids dropping a closure while its trampoline is still on the
+    // call stack: `on_frame` is invoked by `raf_closure`, and it may call
+    // `schedule()` again (when the engine asks for `Vsync`) — overwriting a
+    // per-frame `raf_closure` mid-invocation makes wasm-bindgen throw
+    // "closure invoked recursively or after being dropped". The closures
+    // hold a `Weak` back-ref installed via `Rc::new_cyclic`, so there's no
+    // reference cycle.
+    raf_closure: Closure<dyn Fn()>,
+    timeout_closure: Closure<dyn Fn()>,
+}
 
-                // Drain pending __turHost.pickFile resolutions: build the
-                // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
-                // callback from here, where a `&mut Context` is available.
-                let pending_picks: Vec<PendingPick> =
-                    FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
-                if !pending_picks.is_empty() {
-                    s.app.with_boa_context(|ctx| {
-                        use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
-                        use boa_engine::object::JsObject;
-                        use boa_engine::{js_string, JsValue};
-                        for (cb, picked) in pending_picks {
-                            let arg = match picked {
-                                Some((name, bytes)) => {
-                                    let o = JsObject::with_object_proto(ctx.intrinsics());
+impl FrameLoop {
+    fn new(state: Rc<RefCell<Option<WasmState>>>) -> Rc<Self> {
+        Rc::<Self>::new_cyclic(|weak| {
+            let weak_raf = weak.clone();
+            let raf_closure = Closure::<dyn Fn()>::new(move || {
+                if let Some(fl) = weak_raf.upgrade() {
+                    fl.on_frame();
+                }
+            });
+            let weak_to = weak.clone();
+            let timeout_closure = Closure::<dyn Fn()>::new(move || {
+                if let Some(fl) = weak_to.upgrade() {
+                    fl.schedule();
+                }
+            });
+            Self {
+                state,
+                scheduled: Cell::new(false),
+                last_now_ms: Cell::new(now_ms()),
+                raf_closure,
+                timeout_closure,
+            }
+        })
+    }
+
+    /// Re-arm the loop for one animation frame if it isn't already pending.
+    /// Cheap and idempotent — this is the single entry point the wake hook
+    /// (and the post-load kickoff) uses to bring an idle loop back to life.
+    fn schedule(self: &Rc<Self>) {
+        if self.scheduled.get() {
+            return;
+        }
+        self.scheduled.set(true);
+        let window = web_sys::window().unwrap();
+        let _ = window.request_animation_frame(self.raf_closure.as_ref().unchecked_ref());
+    }
+
+    fn on_frame(self: &Rc<Self>) {
+        self.scheduled.set(false);
+
+        // Advance the engine clock by the real elapsed time since the last
+        // frame (the old loop used a fixed 16 ms, which ran animations at the
+        // wrong rate under load and ticked the clock while idle). Clamp to
+        // avoid huge jumps after the tab was backgrounded.
+        let now = now_ms();
+        let delta = (now - self.last_now_ms.get()).max(0.0);
+        self.last_now_ms.set(now);
+        let delta = if delta > 0.0 && delta < 1000.0 {
+            std::time::Duration::from_millis(delta as u64)
+        } else {
+            std::time::Duration::ZERO
+        };
+
+        let schedule = {
+            let mut guard = self.state.borrow_mut();
+            let Some(s) = guard.as_mut() else {
+                return;
+            };
+
+            let outcome = match s.app.spawn_loop_once(delta) {
+                Ok(o) => o,
+                Err(e) => {
+                    tracing::error!("frame loop spawn_loop_once error: {e}");
+                    return;
+                }
+            };
+
+            // Drain pending __turHost.pickFile resolutions: build the
+            // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
+            // callback from here, where a `&mut Context` is available.
+            let pending_picks: Vec<PendingPick> =
+                FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
+            if !pending_picks.is_empty() {
+                s.app.with_boa_context(|ctx| {
+                    use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
+                    use boa_engine::object::JsObject;
+                    use boa_engine::{js_string, JsValue};
+                    for (cb, picked) in pending_picks {
+                        let arg = match picked {
+                            Some((name, bytes)) => {
+                                let o = JsObject::with_object_proto(ctx.intrinsics());
+                                let _ = o.create_data_property(
+                                    js_string!("name"),
+                                    JsValue::from(js_string!(name.as_str())),
+                                    ctx,
+                                );
+                                if let Ok(ab) =
+                                    JsArrayBuffer::from_byte_block(
+                                        AlignedVec::from_iter(0, bytes),
+                                        ctx,
+                                    )
+                                {
                                     let _ = o.create_data_property(
-                                        js_string!("name"),
-                                        JsValue::from(js_string!(name.as_str())),
+                                        js_string!("bytes"),
+                                        JsValue::from(ab),
                                         ctx,
                                     );
-                                    if let Ok(ab) =
-                                        JsArrayBuffer::from_byte_block(
-                                            AlignedVec::from_iter(0, bytes),
-                                            ctx,
-                                        )
-                                    {
-                                        let _ = o.create_data_property(
-                                            js_string!("bytes"),
-                                            JsValue::from(ab),
-                                            ctx,
-                                        );
-                                    }
-                                    o.into()
                                 }
-                                None => JsValue::null(),
-                            };
-                            if let Err(e) =
-                                cb.call(&boa_engine::JsValue::undefined(), &[arg], ctx)
-                            {
-                                tracing::error!("pickFile callback error: {e}");
+                                o.into()
                             }
+                            None => JsValue::null(),
+                        };
+                        if let Err(e) =
+                            cb.call(&boa_engine::JsValue::undefined(), &[arg], ctx)
+                        {
+                            tracing::error!("pickFile callback error: {e}");
                         }
-                    });
-                }
-
-                let is_editable = s.app.focused_is_editable();
-                if is_editable {
-                    let _ = s.textarea.focus();
-                    if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
-                        let _ = s.textarea.style().set_property("left", &format!("{x}px"));
-                        let _ = s.textarea.style().set_property("top", &format!("{y}px"));
                     }
-                }
-
-                drop(guard);
-                Self::start_frame_loop(&loop_state);
+                });
             }
-        });
 
-        let window = web_sys::window().unwrap();
-        let _ = window.request_animation_frame(raf_closure.as_ref().unchecked_ref());
+            let is_editable = s.app.focused_is_editable();
+            if is_editable {
+                let _ = s.textarea.focus();
+                if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
+                    let _ = s.textarea.style().set_property("left", &format!("{x}px"));
+                    let _ = s.textarea.style().set_property("top", &format!("{y}px"));
+                }
+            }
 
-        let guard = state.borrow();
-        if let Some(s) = guard.as_ref() {
-            *s._raf_closure.borrow_mut() = Some(raf_closure);
+            outcome.schedule
+        };
+
+        // Re-arm based on the engine's verdict. `Idle` → leave the loop
+        // stopped (the wake hook restarts it on the next input).
+        match schedule {
+            tur_engine::core::app::NextFrame::Idle => {}
+            tur_engine::core::app::NextFrame::Vsync => self.schedule(),
+            tur_engine::core::app::            NextFrame::After(delay) => {
+                let ms = delay.as_millis().min(i32::MAX as u128) as i32;
+                let window = web_sys::window().unwrap();
+                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+                    self.timeout_closure.as_ref().unchecked_ref(),
+                    ms.max(1),
+                );
+            }
         }
     }
+}
+
+fn now_ms() -> f64 {
+    // `Date::now()` (js-sys) is wall-clock ms since epoch — always available
+    // without a web-sys feature flag. Only the *delta* between frames
+    // matters, so the absolute epoch is irrelevant.
+    js_sys::Date::now()
 }

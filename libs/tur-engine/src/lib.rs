@@ -40,6 +40,12 @@ pub struct TurApp {
     internal: TurAppInternal,
     executor: Rc<TurJobExecutor>,
     module_loader: Rc<TurModuleLoader>,
+    /// Embedder-installed wake callback, invoked whenever a platform event is
+    /// pushed. Lets an idle frame loop (one that stopped because nothing was
+    /// time-driven) re-arm itself on input without each listener having to
+    /// call back into the embedder. `None` until the embedder calls
+    /// [`Self::set_wake_hook`].
+    wake_hook: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl TurApp {
@@ -127,26 +133,55 @@ impl TurApp {
         Ok(())
     }
 
-    pub fn spawn_loop_once(&mut self, advanced_time: Duration) -> Result<(), TurError> {
+    pub fn spawn_loop_once(
+        &mut self,
+        advanced_time: Duration,
+    ) -> Result<core::app::FrameOutcome, TurError> {
         self.internal
             .app_context
             .borrow()
             .shell
             .forward(advanced_time.as_millis() as u64);
-        self.internal.flush(&mut self.boa_context)?;
-        Ok(())
+        self.internal.flush(&mut self.boa_context)
     }
 
     pub fn with_boa_context<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
         f(&mut self.boa_context)
     }
 
-    pub fn push_event(&self, event: core::event::AppEvent) {
+    /// Push a platform (input) event from the embedder — resize, pointer,
+    /// wheel, key, IME, or paste. These are dispatched to handlers via
+    /// [`AppHandler::handle_platform_event`](core::handler::AppHandler::handle_platform_event).
+    /// Also fires the embedder's wake hook (see [`Self::set_wake_hook`]) so an
+    /// idle frame loop re-arms to process the event.
+    pub fn push_platform_event(&self, event: core::event::PlatformEvent) {
         self.internal
             .app_context
             .borrow_mut()
-            .event_queue
+            .platform_event_queue
             .push(event);
+        if let Some(hook) = self.wake_hook.borrow().as_ref() {
+            hook();
+        }
+    }
+
+    /// Push an engine-internal event onto the app-event bus (e.g. a host
+    /// kickoff `RequestDraw`). Most embedders only need
+    /// [`Self::push_platform_event`]; this is exposed for host-initiated
+    /// draws and testing.
+    pub fn push_app_event(&self, event: core::event::AppEvent) {
+        self.internal
+            .app_context
+            .borrow_mut()
+            .app_event_queue
+            .push(event);
+    }
+
+    /// Install a wake callback fired by [`Self::push_platform_event`]. The
+    /// embedder uses this to re-arm its (otherwise idle) frame loop when
+    /// input arrives. Passing `None` clears it.
+    pub fn set_wake_hook(&self, hook: Option<Rc<dyn Fn()>>) {
+        *self.wake_hook.borrow_mut() = hook;
     }
 
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
@@ -424,6 +459,7 @@ impl TurEngineBuilder {
             internal,
             executor,
             module_loader,
+            wake_hook: RefCell::new(None),
         })
     }
 }

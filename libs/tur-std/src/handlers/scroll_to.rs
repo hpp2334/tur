@@ -11,7 +11,7 @@ use crate::handlers::wheel::dispatch_wheel;
 pub struct ScrollToHandler;
 
 impl AppHandler for ScrollToHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
         let AppEvent::ScrollTo { node_id, offset } = event else {
             return;
         };

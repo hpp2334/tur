@@ -1,16 +1,16 @@
 use tur_engine::core::elements::ElementOnImeContext;
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::PlatformEvent;
 use crate::handlers::ensure_visible::ensure_caret_visible;
 
 pub struct ImeAppHandler;
 
 impl tur_engine::core::handler::AppHandler for ImeAppHandler {
-    fn handle_event(
+    fn handle_platform_event(
         &mut self,
         cx: &mut tur_engine::core::handler::HandlerContext,
-        event: &AppEvent,
+        event: &PlatformEvent,
     ) {
-        let AppEvent::Ime(ime_event) = event else {
+        let PlatformEvent::Ime(ime_event) = event else {
             return;
         };
 
@@ -26,7 +26,7 @@ impl tur_engine::core::handler::AppHandler for ImeAppHandler {
             };
 
             let mut el_cx =
-                ElementOnImeContext::new(&mut *cx.mutation_queue, &mut *cx.event_queue);
+                ElementOnImeContext::new(&mut *cx.mutation_queue, &mut *cx.app_event_queue);
             element.on_ime_event(&mut el_cx, ime_event);
         }
         cx.element_tree.mark_dirty(focused_id.into());
