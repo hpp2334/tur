@@ -55,10 +55,18 @@ impl<'a> PaintContext<'a> {
         self.focused_node_id == self.current_node_id
     }
 
-    /// Current frame time as a `Duration` since the epoch. Used by time-based
-    /// paint effects (e.g. caret blink phase).
+    /// Current frame time as a `Duration` since the epoch. Used by
+    /// time-based paint effects.
     pub fn now(&self) -> Duration {
         self.shell.now()
+    }
+
+    /// Request a paint-only redraw after `delay`. Multiple calls during one
+    /// paint pass take the earliest deadline. The engine schedules a wake-up
+    /// at the deadline and forces a paint when it expires, so elements can
+    /// drive periodic visual updates (e.g. caret blink) entirely from paint.
+    pub fn request_redraw_after(&self, delay: Duration) {
+        self.shell.request_redraw_after(delay);
     }
 
     pub fn get_image_resource(&self, id: ResourceId) -> Option<&ImageResource> {

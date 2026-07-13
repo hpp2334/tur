@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use tur_shared::{Brush, Color, ComputedLayout, Geometry, Offset, Size};
 
 use tur_engine::core::element::ElementNodeId;
@@ -8,6 +10,10 @@ use tur_engine::core::text::text_layout;
 use super::element::{DEFAULT_TEXT_COLOR, EditableTextElement};
 
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
+
+/// Half-period of the caret blink, in milliseconds. The caret is visible on
+/// even half-cycles: `(now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0`.
+const CARET_BLINK_HALF_PERIOD_MS: u64 = 530;
 
 impl ElementRender for EditableTextElement {
     fn type_name(&self) -> &'static str {
@@ -68,12 +74,12 @@ impl ElementRender for EditableTextElement {
         }
 
         if is_focused && !has_selection {
-            // Blink the caret at a fixed half-cycle (the conventional editor
-            // caret blink rate). Visible on even half-cycles. The half-period
-            // is shared with the engine's frame scheduler so the embedder
-            // wakes precisely at each toggle instead of redrawing every frame.
-            let blink_visible =
-                (paint_ctx.now().as_millis() as u64 / tur_engine::core::focus::CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
+            // Blink the caret at a fixed half-cycle. Visible on even
+            // half-cycles. The element drives its own blink schedule: each
+            // paint requests a redraw at the next toggle, so the engine
+            // wakes precisely at each half-period boundary.
+            let now_ms = paint_ctx.now().as_millis() as u64;
+            let blink_visible = (now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
             if blink_visible {
                 paint_cursor(
                     canvas,
@@ -83,6 +89,9 @@ impl ElementRender for EditableTextElement {
                     cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
                 );
             }
+            // Schedule the next paint at the next toggle boundary.
+            let blink_delay = CARET_BLINK_HALF_PERIOD_MS - (now_ms % CARET_BLINK_HALF_PERIOD_MS);
+            paint_ctx.request_redraw_after(Duration::from_millis(blink_delay));
         }
     }
 }

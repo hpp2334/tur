@@ -59,6 +59,12 @@ pub struct Shell {
     pointer_position: Option<Offset>,
     cursor: CursorSink,
     applied_cursor: Option<Cursor>,
+    /// Absolute deadline (epoch-relative, same as `now()`) at which the
+    /// engine should force a paint-only redraw. Populated by elements
+    /// during paint via [`PaintShell::request_redraw_after`]; cleared at
+    /// the start of each paint pass so only the current pass's requests
+    /// survive. Read by `flush()` after paint for `NextFrame` scheduling.
+    redraw_deadline: Cell<Option<Duration>>,
 }
 
 impl Shell {
@@ -69,6 +75,7 @@ impl Shell {
             pointer_position: None,
             cursor: CursorSink::new(),
             applied_cursor: None,
+            redraw_deadline: Cell::new(None),
         }
     }
 
@@ -117,6 +124,19 @@ impl Shell {
     pub fn paint_face(&self) -> PaintShell<'_> {
         PaintShell { inner: self }
     }
+
+    /// Read the pending redraw deadline without consuming it. Returns an
+    /// absolute `Duration` (epoch-relative, comparable to `now()`), or
+    /// `None` if no element requested a timed redraw during the last paint.
+    pub fn peek_redraw_deadline(&self) -> Option<Duration> {
+        self.redraw_deadline.get()
+    }
+
+    /// Clear the redraw deadline. Called at the start of each paint pass
+    /// so only requests made during the current pass survive.
+    pub fn clear_redraw_deadline(&self) {
+        self.redraw_deadline.set(None);
+    }
 }
 
 /// The face the biz (paint / `MouseRegion` / `PaintContext`) sees.
@@ -146,5 +166,21 @@ impl<'a> PaintShell<'a> {
     /// Last known pointer position, or `None` if no pointer move was received.
     pub fn pointer_position(&self) -> Option<Offset> {
         self.inner.pointer_position
+    }
+
+    /// Request a paint-only redraw after `delay` from now. Multiple calls
+    /// during one paint pass take the earliest deadline. The engine reads
+    /// the accumulated deadline after paint to schedule the next wake-up
+    /// and force a paint when the deadline expires.
+    pub fn request_redraw_after(&self, delay: Duration) {
+        let deadline_ms = self.inner.clock.now().millis_since_epoch()
+            + delay.as_millis() as u64;
+        let deadline = Duration::from_millis(deadline_ms);
+        let prev = self.inner.redraw_deadline.get();
+        let next = match prev {
+            None => Some(deadline),
+            Some(d) => Some(d.min(deadline)),
+        };
+        self.inner.redraw_deadline.set(next);
     }
 }

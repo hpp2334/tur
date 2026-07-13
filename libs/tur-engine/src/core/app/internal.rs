@@ -13,7 +13,7 @@ use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::event::AppEvent;
-use crate::core::focus::{self, helper};
+
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
 use crate::error::TurError;
@@ -67,11 +67,6 @@ pub struct TurAppInternal {
     /// spurious stale marking (`set_source` compares `JsValue` by object
     /// identity, so a fresh `{w,h}` object would otherwise dirty every frame).
     pub(crate) last_viewport: Cell<(f64, f64)>,
-    /// Last caret-blink half-cycle rendered. The caret visibility is a pure
-    /// modulo of the deterministic clock (`now_ms / 530`); we only need to
-    /// redraw when that half-cycle flips, so we compare against this rather
-    /// than redrawing every frame while an editable holds focus.
-    pub(crate) last_blink_half: Cell<Option<u64>>,
 }
 
 impl TurAppInternal {
@@ -136,7 +131,6 @@ impl TurAppInternal {
             async_runtime,
             viewport_size: None,
             last_viewport: Cell::new((-1.0, -1.0)),
-            last_blink_half: Cell::new(None),
         }
     }
 
@@ -146,6 +140,7 @@ impl TurAppInternal {
     ) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
         let mut animation_ticked = false;
+        let mut focus_changed = false;
 
         loop {
             // Drive spawned Rust futures one poll step. Completions they
@@ -190,7 +185,7 @@ impl TurAppInternal {
         // elements, on_updated for dirtied elements, before_destroy for
         // removed elements. Pushed mutations are drained right after.
         self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
-        self.flush_focus_notifications();
+        focus_changed |= self.flush_focus_notifications();
         let handled_mutations = self.flush_pending_mutations(boa_context);
             // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
             // ClockJobs). PromiseJobs fire `.then` callbacks which may call
@@ -225,58 +220,25 @@ impl TurAppInternal {
             self.needs_draw.set(true);
         }
 
-        // Decide how the caller should schedule the next frame.
-        //
-        // - `Vsync` (continuous): an animation is running or a Rust async
-        //   task is live. Animations need smooth 60fps; async tasks need
-        //   polling each frame.
-        // - `After(d)`: nothing continuous is pending, but either a JS timer
-        //   (setTimeout/setInterval) is outstanding or an editable holds
-        //   focus. We wake precisely at the sooner of the timer deadline and
-        //   the next caret-blink toggle — never polling at vsync while a
-        //   multi-second interval sits outstanding.
-        // - `Idle`: nothing time-driven is pending — the loop can stop until
-        //   the next platform input arrives (the embedder re-arms it via the
-        //   wake hook installed on `TurApp`).
-        let async_pending = self.async_executor.has_pending();
-        let timers_pending = self.executor.has_pending_clock_jobs();
-        let mut schedule = if animation_active || async_pending {
-            NextFrame::Vsync
-        } else if timers_pending {
-            // Wake at the soonest pending timer deadline (one frame) rather
-            // than polling at vsync while e.g. a 5s interval is outstanding.
-            let now = boa_context.clock().now();
-            match self.executor.next_clock_job_delay(now) {
-                Some(delay) => NextFrame::After(delay),
-                None => NextFrame::Vsync,
-            }
-        } else {
-            NextFrame::Idle
-        };
+        // Focus changes require a paint-only redraw so that focus-sensitive
+        // visual effects (e.g. caret appearance/disappearance) update
+        // immediately, even when no reactive atom changed and no layout
+        // is needed.
+        if focus_changed {
+            needs_render = true;
+        }
 
-        if self.focused_is_editable() {
-            let now_ms = self.app_context.borrow().shell.now().as_millis() as u64;
-            let half = now_ms / focus::CARET_BLINK_HALF_PERIOD_MS;
-            if Some(half) != self.last_blink_half.get() {
-                // The blink phase flipped since our last render — paint so the
-                // caret shows/hides. Subsequent toggles are driven by the
-                // `After` deadline below.
-                needs_render = true;
-                self.last_blink_half.set(Some(half));
+        // A paint-time redraw deadline (set by elements via
+        // `PaintContext::request_redraw_after`) may have expired since the
+        // last paint. If so, force a paint-only redraw so the element can
+        // update its visual state and re-arm the next deadline.
+        if !needs_render {
+            let now = self.app_context.borrow().shell.now();
+            if let Some(deadline) = self.app_context.borrow().shell.peek_redraw_deadline() {
+                if now >= deadline {
+                    needs_render = true;
+                }
             }
-            let blink_delay = Duration::from_millis(
-                focus::CARET_BLINK_HALF_PERIOD_MS - (now_ms % focus::CARET_BLINK_HALF_PERIOD_MS),
-            );
-            // Wake at the sooner of the existing schedule and the blink toggle.
-            schedule = match schedule {
-                NextFrame::Idle => NextFrame::After(blink_delay),
-                NextFrame::After(d) => NextFrame::After(d.min(blink_delay)),
-                NextFrame::Vsync => NextFrame::Vsync,
-            };
-        } else {
-            // Reset so the next focus re-renders immediately (first half is
-            // always "visible", so the half comparison forces a draw).
-            self.last_blink_half.set(None);
         }
 
         if needs_render {
@@ -286,19 +248,58 @@ impl TurAppInternal {
                 return Err(TurError::Render(e.to_string()));
             }
         }
+
+        // Decide how the caller should schedule the next frame.
+        //
+        // - `Vsync` (continuous): an animation is running or a Rust async
+        //   task is live. Animations need smooth 60fps; async tasks need
+        //   polling each frame.
+        // - `After(d)`: nothing continuous is pending, but a JS timer
+        //   (setTimeout/setInterval) or a paint-time redraw deadline is
+        //   outstanding. We wake at the sooner of the two rather than
+        //   polling at vsync.
+        // - `Idle`: nothing time-driven is pending — the loop can stop
+        //   until the next platform input arrives.
+        let async_pending = self.async_executor.has_pending();
+        let timers_pending = self.executor.has_pending_clock_jobs();
+        let schedule = if animation_active || async_pending {
+            NextFrame::Vsync
+        } else {
+            let timer_delay = if timers_pending {
+                let now = boa_context.clock().now();
+                self.executor.next_clock_job_delay(now)
+            } else {
+                None
+            };
+
+            // The redraw deadline was populated during the most recent
+            // paint (this frame's if render ran, or the previous frame's
+            // if it didn't). Convert the absolute deadline to a relative
+            // delay for scheduling.
+            let now = self.app_context.borrow().shell.now();
+            let redraw_delay = self
+                .app_context
+                .borrow()
+                .shell
+                .peek_redraw_deadline()
+                .map(|d| d.saturating_sub(now));
+
+            match (timer_delay, redraw_delay) {
+                (Some(t), Some(r)) => NextFrame::After(t.min(r)),
+                (Some(t), None) => NextFrame::After(t),
+                (None, Some(r)) => NextFrame::After(r),
+                // `timers_pending` with no delay is a transient race
+                // (timer drained between the check and the read); fall
+                // back to vsync as a safety net.
+                (None, None) if timers_pending => NextFrame::Vsync,
+                (None, None) => NextFrame::Idle,
+            }
+        };
+
         Ok(FrameOutcome {
             rendered: needs_render,
             schedule,
         })
-    }
-
-    /// True if the currently-focused element is an `EditableTextElement`.
-    /// Used by `flush` to schedule blink-timed redraws (waking at each caret
-    /// toggle) instead of redrawing every frame while an editable holds focus.
-    fn focused_is_editable(&self) -> bool {
-        let tree = self.js_context.element_tree.borrow();
-        let focus = self.js_context.focus_manager.borrow();
-        helper::focused_is_editable(&tree, &focus)
     }
 
     /// Build a `{width, height}` JS object (CSS pixels) — the value shape of
@@ -549,12 +550,14 @@ impl TurAppInternal {
     /// Delegates to the focus domain, which maps each pending id to its
     /// `Focusable` element (if any) and enqueues the `on_focus` / `on_blur`
     /// mutation. Runs before `flush_pending_mutations` so focus callbacks
-    /// fire in the same pass.
-    fn flush_focus_notifications(&self) {
+    /// fire in the same pass. Returns `true` if any focus changes were
+    /// resolved — callers use this to force a paint-only redraw so that
+    /// focus-sensitive paint effects update immediately.
+    fn flush_focus_notifications(&self) -> bool {
         let tree = self.js_context.element_tree.borrow();
         let mut focus = self.js_context.focus_manager.borrow_mut();
         let mut queue = self.js_context.mutation_queue.borrow_mut();
-        focus.flush_pending(&tree, &mut queue);
+        focus.flush_pending(&tree, &mut queue) > 0
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the

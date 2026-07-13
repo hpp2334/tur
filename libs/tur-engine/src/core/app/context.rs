@@ -160,6 +160,9 @@ impl TurAppContext {
         // cursor claims through the host API. The face is scoped so the
         // immutable shell borrow ends before `apply_changes` takes &mut.
         {
+            // Clear the redraw deadline so only requests made during THIS
+            // paint pass survive (elements repopulate it as they paint).
+            self.shell.clear_redraw_deadline();
             let shell = self.shell.paint_face();
             self.renderer
                 .render(&tree, focused_node_id, &resource_map, shell);

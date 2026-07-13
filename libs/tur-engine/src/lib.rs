@@ -320,6 +320,8 @@ impl TurApp {
         ))
     }
 
+    /// True if the currently-focused element is an editable text element.
+    /// Used by embedders (e.g. tur-wasm) to manage IME state.
     pub fn focused_is_editable(&self) -> bool {
         use core::focus::helper;
         let tree = self.internal.js_context.element_tree.borrow();
@@ -415,8 +417,9 @@ impl TurEngineBuilder {
     }
 
     /// Provide the engine clock — the single source of time read by JS
-    /// `Date.now()`, timer scheduling, and the caret-blink phase. Shared
-    /// between the boa `Context` and the engine `Shell`. Required.
+    /// `Date.now()` and timer scheduling, and by paint-time effects via
+    /// `PaintContext::now()`. Shared between the boa `Context` and the
+    /// engine `Shell`. Required.
     ///
     /// Production passes an [`StdClock`] (real wall clock — `Date.now()` is
     /// live, no manual advancement). Tests pass a [`FixedClock`] they advance
