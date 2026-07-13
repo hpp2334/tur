@@ -1,6 +1,6 @@
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::ElementOnKeyboardContext;
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::PlatformEvent;
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 use tur_engine::core::keyboard::AppKeyEvent;
 use crate::handlers::ensure_visible::ensure_caret_visible;
@@ -11,8 +11,8 @@ use crate::keyboard::KeydownEvent;
 pub struct KeyboardAppHandler;
 
 impl AppHandler for KeyboardAppHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Key(key_event) = event else {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+        let PlatformEvent::Key(key_event) = event else {
             return;
         };
 
@@ -71,7 +71,7 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &AppKeyEvent) {
     };
     let mut el_cx = ElementOnKeyboardContext::new(
         &mut *cx.mutation_queue,
-        &mut *cx.event_queue,
+        &mut *cx.app_event_queue,
     );
     element.on_keyboard_event(&mut el_cx, event);
     cx.element_tree.mark_dirty(focused_id.into());

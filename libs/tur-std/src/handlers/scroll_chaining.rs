@@ -7,7 +7,7 @@ use crate::handlers::wheel::dispatch_wheel;
 pub struct ScrollChainingHandler;
 
 impl AppHandler for ScrollChainingHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
         let AppEvent::ScrollOverscroll { source_id, delta } = event else {
             return;
         };
@@ -19,7 +19,7 @@ impl AppHandler for ScrollChainingHandler {
 
         let overscroll = dispatch_wheel(cx, parent_id, 0.0, delta);
         if overscroll.abs() > 0.001 {
-            cx.event_queue.push(AppEvent::ScrollOverscroll {
+            cx.app_event_queue.push(AppEvent::ScrollOverscroll {
                 source_id: parent_id,
                 delta: overscroll,
             });

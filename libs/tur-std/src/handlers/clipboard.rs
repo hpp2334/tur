@@ -1,20 +1,20 @@
 use std::rc::Rc;
 
 use tur_engine::core::async_::AsyncExecutor;
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::{AppEvent, PlatformEvent};
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 use crate::elements::editable_text::EditableTextElement;
 use crate::platform::Clipboard;
 
-/// Handles `AppEvent::ClipboardPaste` by inserting the pasted text into the
-/// currently-focused editable text element (if any). The embedder (tur-wasm)
-/// captures the user's Cmd+V paste event on a hidden input and forwards the
-/// clipboard text via this event.
+/// Handles `PlatformEvent::ClipboardPaste` by inserting the pasted text into
+/// the currently-focused editable text element (if any). The embedder
+/// (tur-wasm) captures the user's Cmd+V paste event on a hidden input and
+/// forwards the clipboard text via this event.
 pub struct ClipboardPasteHandler;
 
 impl AppHandler for ClipboardPasteHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::ClipboardPaste { text } = event else {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+        let PlatformEvent::ClipboardPaste { text } = event else {
             return;
         };
         let text = text.clone();
@@ -85,7 +85,7 @@ impl ClipboardWriteHandler {
 }
 
 impl AppHandler for ClipboardWriteHandler {
-    fn handle_event(&mut self, _cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_app_event(&mut self, _cx: &mut HandlerContext, event: &AppEvent) {
         let AppEvent::ClipboardWrite { text } = event else {
             return;
         };

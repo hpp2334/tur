@@ -7,11 +7,13 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use boa_engine::context::time::FixedClock;
+use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppGestureEvent, AppImeEvent, PointerDeviceKind};
+use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -22,6 +24,11 @@ use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
 use tur_std::{Clipboard, CursorPlatform, TurStdPlugin};
 use tur_clipboard::TurClipboardPlugin;
 use tur_shared::{Cursor, MouseButton, Offset};
+
+/// Fixed per-frame time step (ms) used by [`TurTestApp::wait_frames`] and
+/// [`TurTestApp::wait_for`] — 60 fps. Animation/timer tests express elapsed
+/// time as a frame count rather than a wall duration.
+const FRAME_STEP_MS: u64 = 16;
 
 /// Wall-clock `AsyncRuntime` for tests. Uses real `Instant::now()` —
 /// deterministic timing belongs to boa's `FixedClock` (advanced manually);
@@ -164,7 +171,12 @@ impl Rect {
 }
 
 pub struct TurTestApp {
-    inner: TurApp,
+    inner: Rc<TurApp>,
+    /// The engine's deterministic clock. Advanced frame-by-frame by
+    /// [`Self::wait_frames`] / [`Self::wait_for`] (and the legacy
+    /// [`Self::advance`]). Shared with the engine `Shell` and the boa
+    /// `Context`, so `Date.now()` and timer scheduling see the same time.
+    clock: Rc<FixedClock>,
     /// Shared with the `RecordingCursorPlatform` installed in the engine. The engine
     /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
     /// drains it through `take_current_cursor`.
@@ -177,7 +189,7 @@ pub struct TurTestApp {
     /// constructed via [`Self::new_with_http`]). `None` for the default
     /// constructor — those tests don't register `builtin:tur/net`.
     http: Option<RecordingHttp>,
-    /// Synthetic wall-clock ms used to stamp `AppGestureEvent::PointerDown`
+    /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
     /// steps (well under the 500 ms threshold) on each pointer-down so
     /// consecutive `double_click` / `triple_click` calls register as a
@@ -205,10 +217,12 @@ impl TurTestApp {
     ) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
         let clipboard = RecordingClipboard::new();
+        let clock = Rc::new(FixedClock::from_millis(0));
         let mut builder = TurEngine::builder()
             .renderer(Box::new(NoopRenderer::new()))
             .font_loader(Box::new(PresetFontLoader::new()))
             .async_runtime(Rc::new(TestRuntime))
+            .clock(clock.clone())
             .plugin(
                 TurStdPlugin::builder()
                     .cursor(RecordingCursorPlatform {
@@ -225,15 +239,16 @@ impl TurTestApp {
         if let Some(http_impl) = http.clone() {
             builder = builder.plugin(TurNetPlugin::builder().http(http_impl).build());
         }
-        let mut inner = builder.build()?;
-        inner.push_event(AppEvent::Resize {
+        let inner = builder.build()?;
+        inner.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr: 1.0,
         });
-        let _ = inner.spawn_loop_once(Duration::ZERO);
+        let _ = inner.run_frame();
         Ok(Self {
             inner,
+            clock,
             cursor_slot,
             clipboard,
             http,
@@ -274,34 +289,94 @@ impl TurTestApp {
         Ok(())
     }
 
-    /// Direct mutable access to the underlying `TurApp` — lets a test register
-    /// extra `__tur.*` / `__turHost.*` fns (e.g. a fake `__tur.request` backed
-    /// by an in-process WebDAV server) before loading a bundle.
-    pub fn with_app_mut<R>(&mut self, f: impl FnOnce(&mut TurApp) -> R) -> R {
-        f(&mut self.inner)
+    /// Direct access to the underlying `TurApp` — lets a test register extra
+    /// `__tur.*` / `__turHost.*` fns (e.g. a fake `__tur.request` backed by an
+    /// in-process WebDAV server) before loading a bundle.
+    pub fn with_app<R>(&self, f: impl FnOnce(&TurApp) -> R) -> R {
+        f(&self.inner)
     }
 
+    /// Run exactly one frame: advance the engine's fixed-point flush (events,
+    /// reactive updates, layout, microtasks, async polling) and render if
+    /// anything changed. No time advance — the `FixedClock` is untouched.
+    pub fn pump(&mut self) -> Result<FrameOutcome, TurError> {
+        self.inner.run_frame()
+    }
+
+    /// Legacy alias for [`Self::pump`] (drops the `FrameOutcome`). Prefer
+    /// `pump` in new code.
+    pub fn tick(&mut self) -> Result<(), TurError> {
+        self.inner.run_frame().map(|_| ())
+    }
+
+    /// Pump until the engine has no more immediately-available work (nothing
+    /// rendered and nothing time-driven pending). Does not advance the clock,
+    /// so an active animation (which would render every frame) is left running
+    /// rather than spun indefinitely. Capped at 8 frames to guard cascades.
+    pub fn settle(&mut self) {
+        for _ in 0..8 {
+            let outcome = match self.inner.run_frame() {
+                Ok(o) => o,
+                Err(_) => return,
+            };
+            if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                break;
+            }
+        }
+    }
+
+    /// Advance virtual time by `frames × FRAME_STEP_MS` (60 fps), running one
+    /// frame per step, then settle. Use this instead of a wall duration to
+    /// express "wait N frames" — animation/timer tests derive elapsed time
+    /// from the frame count.
+    pub fn wait_frames(&mut self, frames: usize) {
+        for _ in 0..frames {
+            self.clock.forward(FRAME_STEP_MS);
+            let _ = self.inner.run_frame();
+        }
+        self.settle();
+    }
+
+    /// Pump frames (advancing the clock by `FRAME_STEP_MS` each) until
+    /// `predicate` holds, or a cap (~2 s virtual time) is hit. The predicate
+    /// is checked *before* the first advance, so an already-satisfied
+    /// condition returns immediately. Use for async/HTTP results and
+    /// animation thresholds.
+    pub fn wait_for(&mut self, predicate: impl Fn(&TurTestApp) -> bool) {
+        for _ in 0..120 {
+            if predicate(self) {
+                return;
+            }
+            self.clock.forward(FRAME_STEP_MS);
+            let _ = self.inner.run_frame();
+        }
+    }
+
+    /// Request a redraw and settle. Mostly redundant now that the input
+    /// helpers settle automatically; kept for tests that assert a paint after
+    /// an explicit draw request.
     pub fn render(&mut self) {
-        self.inner.push_event(AppEvent::RequestDraw);
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.inner.push_app_event(AppEvent::RequestDraw);
+        self.settle();
     }
 
-    /// Push a viewport resize and flush, exercising the full relayout path.
+    /// Push a viewport resize and settle, exercising the full relayout path.
     pub fn resize(&mut self, width: f64, height: f64) {
-        self.inner.push_event(AppEvent::Resize {
+        self.inner.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr: 1.0,
         });
-        self.ensure_flushed();
+        self.settle();
     }
 
-    pub fn tick(&mut self) -> Result<(), TurError> {
-        self.inner.spawn_loop_once(Duration::ZERO)
-    }
-
+    /// Advance the deterministic clock by an exact duration and run one frame.
+    /// Prefer [`Self::wait_frames`] / [`Self::wait_for`] for new tests (which
+    /// express time as frame counts); this remains for the few cases that need
+    /// a precise non-16 ms-aligned step.
     pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
-        self.inner.spawn_loop_once(duration)
+        self.clock.forward(duration.as_millis() as u64);
+        self.inner.run_frame().map(|_| ())
     }
 
     pub fn element_tree(&self) -> Ref<'_, NodeTreeData> {
@@ -311,7 +386,7 @@ impl TurTestApp {
     pub fn click(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -319,7 +394,7 @@ impl TurTestApp {
             }));
         self.ensure_flushed();
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -328,7 +403,7 @@ impl TurTestApp {
     }
 
     pub fn send_key(&mut self, key: &str) {
-        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers::default(),
@@ -338,7 +413,7 @@ impl TurTestApp {
     }
 
     pub fn send_ime(&mut self, event: AppImeEvent) {
-        self.inner.push_event(AppEvent::Ime(event));
+        self.inner.push_platform_event(PlatformEvent::Ime(event));
         self.ensure_flushed();
     }
 
@@ -349,7 +424,7 @@ impl TurTestApp {
     /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
     /// Use this for Cmd+C / Cmd+V / Cmd+S tests.
     pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
-        self.inner.push_event(AppEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers {
@@ -366,13 +441,13 @@ impl TurTestApp {
     pub fn pointer_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.settle();
     }
 
     /// Simulate a double-click at `(x, y)`. Two `pointer_down`s are pushed in
@@ -394,21 +469,21 @@ impl TurTestApp {
 
     pub fn pointer_move(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
             }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.settle();
     }
 
     pub fn pointer_up(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
             }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.settle();
     }
 
     /// Same as `pointer_down` but with an explicit mouse button. Used to
@@ -416,44 +491,41 @@ impl TurTestApp {
     pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button,
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.settle();
     }
 
     pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button,
                 device: PointerDeviceKind::Mouse,
             }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
+        self.settle();
     }
 
-    /// Push a right-click sequence: pointer-down(button=Right), context-menu,
-    /// pointer-up(button=Right). Mirrors the DOM event order.
+    /// Push a right-click sequence: pointer-down(button=Right) then
+    /// pointer-up(button=Right). The engine's gesture arena derives the
+    /// `ContextMenu` gesture from the right-button pointer-up — there is no
+    /// separate context-menu platform event anymore.
     pub fn right_click(&mut self, x: f64, y: f64) {
         self.pointer_down_with_button(x, y, MouseButton::Right);
-        self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::ContextMenu {
-                position: Offset::new(x, y),
-            }));
-        let _ = self.inner.spawn_loop_once(Duration::ZERO);
         self.pointer_up_with_button(x, y, MouseButton::Right);
     }
 
-    /// Queue a pointer-down without flushing — used to simulate the browser's
+    /// Queue a pointer-down without settling — used to simulate the browser's
     /// batching of multiple input events between animation frames. Pair with
-    /// `pointer_move_no_flush` / `pointer_up_no_flush` and a single `tick()`.
+    /// `pointer_move_no_flush` / `pointer_up_no_flush` and a single `pump()`.
     pub fn pointer_down_no_flush(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerDown {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 time_ms,
@@ -463,7 +535,7 @@ impl TurTestApp {
 
     pub fn pointer_move_no_flush(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerMove {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
             }));
@@ -471,7 +543,7 @@ impl TurTestApp {
 
     pub fn pointer_up_no_flush(&mut self, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Gesture(AppGestureEvent::PointerUp {
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
@@ -480,7 +552,7 @@ impl TurTestApp {
 
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner
-            .push_event(AppEvent::Wheel {
+            .push_platform_event(PlatformEvent::Wheel {
                 delta_x,
                 delta_y,
                 position: Offset::new(x, y),
@@ -488,13 +560,12 @@ impl TurTestApp {
         self.ensure_flushed();
     }
 
-    /// Drive `spawn_loop_once` for a few iterations to settle cascading
-    /// reactive updates, async completions, and PromiseJobs. Public so
-    /// external tests (e.g. async bridge tests) can use the same pattern.
+    /// Drive `run_frame` for a few iterations to settle cascading reactive
+    /// updates, async completions, and PromiseJobs. Public so external tests
+    /// (e.g. async bridge tests) can use the same pattern. Equivalent to
+    /// [`Self::settle`]; prefer `settle` in new code.
     pub fn ensure_flushed(&mut self) {
-        for _ in 0..6 {
-            let _ = self.inner.spawn_loop_once(Duration::from_millis(3));
-        }
+        self.settle();
     }
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
@@ -615,22 +686,22 @@ impl TurTestApp {
     /// then inserts `text` into the focused editable.
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner
-            .push_event(AppEvent::ClipboardPaste { text: text.to_string() });
+            .push_platform_event(PlatformEvent::ClipboardPaste { text: text.to_string() });
         self.ensure_flushed();
     }
 
-    pub fn eval_js(&mut self, source: &str) -> String {
+    pub fn eval_js(&self, source: &str) -> String {
         self.inner.eval_js(source).unwrap_or_default()
     }
 
-    pub fn load_bundle_source(&mut self, source: &str) -> Result<(), TurError> {
+    pub fn load_bundle_source(&self, source: &str) -> Result<(), TurError> {
         self.inner.load_js(source)
     }
 
     /// Evaluate `source` as an ES module — supports real
     /// `import { … } from "builtin:tur/std"` (or `builtin:tur/host`/`builtin:tur/net`). Returns
     /// nothing; read results back via [`eval_js`](Self::eval_js).
-    pub fn eval_module_source(&mut self, source: &str) -> Result<(), TurError> {
+    pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         self.inner.load_module(source)
     }
 

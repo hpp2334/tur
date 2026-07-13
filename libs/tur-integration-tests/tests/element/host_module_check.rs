@@ -6,7 +6,7 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn host_module_is_importable() {
     let mut app = TurTestApp::new(100.0, 100.0).unwrap();
-    app.with_app_mut(|tur| {
+    app.with_app(|tur| {
         let echo = NativeFunction::from_copy_closure(|_this, args, _ctx| {
             Ok(args.get_or_undefined(0).clone())
         });

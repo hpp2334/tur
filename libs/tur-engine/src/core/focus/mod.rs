@@ -8,6 +8,13 @@ use boa_engine::{Context, JsValue};
 use crate::core::element::ElementNodeId;
 use crate::core::edgy_event::IntoJsArgs;
 
+/// Half-period of the caret blink, in milliseconds. The caret is visible on
+/// even half-cycles: `(now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0`. Shared
+/// between the editable-text paint (tur-std, which draws the caret) and the
+/// engine's frame scheduler (which wakes the embedder precisely at each
+/// toggle instead of redrawing every frame while an editable is focused).
+pub const CARET_BLINK_HALF_PERIOD_MS: u64 = 530;
+
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
 // ---------------------------------------------------------------------------

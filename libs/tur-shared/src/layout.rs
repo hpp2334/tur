@@ -362,7 +362,7 @@ pub enum HitTestBehavior {
 
 /// Mouse button that produced a pointer event. Mirrors the DOM
 /// `MouseEvent.button` value (0 = primary/left, 1 = middle, 2 = secondary/
-/// right). Used by `AppGestureEvent::PointerDown` / `PointerUp` so handlers
+/// right). Used by `PointerInput::PointerDown` / `PointerUp` so handlers
 /// can distinguish left and right clicks without inspecting raw DOM events.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MouseButton {

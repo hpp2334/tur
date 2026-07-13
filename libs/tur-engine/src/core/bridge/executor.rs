@@ -6,7 +6,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
 
-use boa_engine::context::time::JsInstant;
+use boa_engine::context::time::{JsDuration, JsInstant};
 use boa_engine::job::{
     GenericJob, IntervalJob, Job, JobExecutor, NativeAsyncJob, PromiseJob, TimeoutJob,
 };
@@ -40,8 +40,25 @@ impl TurJobExecutor {
         Self::default()
     }
 
-    pub fn drain(&self, context: &mut Context) -> JsResult<usize> {
-        let mut count = 0;
+    /// True if there are pending `setTimeout`/`setInterval` jobs not yet due.
+    /// Used by the frame scheduler to keep the loop advancing the clock (so
+    /// pending timers eventually fire) instead of going idle.
+    pub fn has_pending_clock_jobs(&self) -> bool {
+        !self.clock_jobs.borrow().is_empty()
+    }
+
+    /// Time from `now` until the soonest pending `setTimeout`/`setInterval`
+    /// job is due, or `None` if no clock job is pending. Lets the frame
+    /// scheduler wake precisely at a timer's deadline (one frame) instead of
+    /// polling at vsync while a long interval is outstanding.
+    pub fn next_clock_job_delay(&self, now: JsInstant) -> Option<std::time::Duration> {
+        let jobs = self.clock_jobs.borrow();
+        let deadline = *jobs.keys().next()?;
+        let delay: JsDuration = deadline - now;
+        Some(delay.into())
+    }
+
+    pub fn drain(&self, context: &mut Context) -> JsResult<usize> {        let mut count = 0;
 
         let now = context.clock().now();
         let due = {

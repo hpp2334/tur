@@ -24,7 +24,7 @@ fn std_module_imports_and_renders() {
     .unwrap();
     app.render();
     for _ in 0..6 {
-        let _ = app.tick();
+        let _ = app.pump();
     }
 
     let root = app.dev_tool_element_tree().expect("tree mounted");

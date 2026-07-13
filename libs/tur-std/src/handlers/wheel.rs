@@ -1,32 +1,50 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::elements::{ElementOnWheelContext, WheelEvent};
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::{AppEvent, PlatformEvent};
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 use tur_engine::core::hit_test::HitTest;
+use tur_shared::Offset;
 
 pub struct WheelAppHandler;
 
 impl AppHandler for WheelAppHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Wheel { delta_x, delta_y, position } = event else {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+        // Real device wheel / trackpad scroll from the platform.
+        let PlatformEvent::Wheel { delta_x, delta_y, position } = event else {
             return;
         };
-        let (delta_x, delta_y, position) = (*delta_x, *delta_y, *position);
+        process_scroll_delta(cx, *delta_x, *delta_y, *position);
+    }
 
-        let hit_path = HitTest::new(&*cx.element_tree).path(position);
-        let target = find_deepest_with_wheel(&*cx.element_tree, &hit_path);
-
-        let Some(target_id) = target else {
+    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+        // Derived scroll produced by the gesture arena (e.g. a touch drag the
+        // arena resolved to scroll). Routed through the same pipeline as a
+        // real platform wheel so hit-testing, overscroll and chaining behave
+        // identically.
+        let AppEvent::Scroll { delta_x, delta_y, position } = event else {
             return;
         };
+        process_scroll_delta(cx, *delta_x, *delta_y, *position);
+    }
+}
 
-        let overscroll = dispatch_wheel(cx, target_id, delta_x, delta_y);
-        if overscroll.abs() > 0.001 {
-            cx.event_queue.push(AppEvent::ScrollOverscroll {
-                source_id: target_id,
-                delta: overscroll,
-            });
-        }
+/// Shared scroll-delta processing for real (`PlatformEvent::Wheel`) and
+/// derived (`AppEvent::Scroll`) scroll: hit-test to the deepest wheel-bearing
+/// element, dispatch the delta, and forward any residual as overscroll.
+fn process_scroll_delta(cx: &mut HandlerContext, delta_x: f64, delta_y: f64, position: Offset) {
+    let hit_path = HitTest::new(&*cx.element_tree).path(position);
+    let target = find_deepest_with_wheel(&*cx.element_tree, &hit_path);
+
+    let Some(target_id) = target else {
+        return;
+    };
+
+    let overscroll = dispatch_wheel(cx, target_id, delta_x, delta_y);
+    if overscroll.abs() > 0.001 {
+        cx.app_event_queue.push(AppEvent::ScrollOverscroll {
+            source_id: target_id,
+            delta: overscroll,
+        });
     }
 }
 
@@ -59,7 +77,7 @@ pub fn dispatch_wheel(
         return 0.0;
     };
     let mut el_cx = ElementOnWheelContext::new(
-        &mut *cx.event_queue,
+        &mut *cx.app_event_queue,
         &mut *cx.mutation_queue,
         id,
     );

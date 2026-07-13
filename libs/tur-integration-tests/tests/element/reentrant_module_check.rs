@@ -12,7 +12,7 @@ use tur_integration_tests::TurTestApp;
 #[test]
 fn reentrant_module_load_via_host_fn() {
     let mut app = TurTestApp::new(100.0, 100.0).unwrap();
-    app.with_app_mut(|tur| {
+    app.with_app(|tur| {
         // `loadModule(src)` — parses + evaluates `src` as a module on the
         // current context (re-entrant safe if boa supports nested module eval).
         let load_module_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {

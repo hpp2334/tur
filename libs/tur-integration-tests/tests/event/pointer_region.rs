@@ -26,7 +26,7 @@ fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
 
 fn flush(app: &mut TurTestApp) {
     for _ in 0..6 {
-        let _ = app.tick();
+        let _ = app.pump();
     }
 }
 

@@ -1,11 +1,11 @@
-use tur_engine::core::event::AppEvent;
+use tur_engine::core::event::PlatformEvent;
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 
 pub struct ResizeHandler;
 
 impl AppHandler for ResizeHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Resize { logical_width, logical_height, dpr } = event else {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+        let PlatformEvent::Resize { logical_width, logical_height, dpr } = event else {
             return;
         };
 

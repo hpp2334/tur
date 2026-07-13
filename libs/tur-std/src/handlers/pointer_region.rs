@@ -1,7 +1,7 @@
 use tur_engine::core::edgy_event::EdgyMutation;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppGestureEvent, PointerDeviceKind};
+use tur_engine::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::handler::{AppHandler, HandlerContext};
 use tur_engine::core::hit_test::HitTest;
 use tur_engine::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
@@ -32,8 +32,8 @@ impl PointerRegionAppHandler {
 }
 
 impl AppHandler for PointerRegionAppHandler {
-    fn handle_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
-        let AppEvent::Gesture(AppGestureEvent::PointerMove {
+    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+        let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
         }) = event

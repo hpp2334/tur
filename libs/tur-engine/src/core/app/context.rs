@@ -3,14 +3,14 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use boa_engine::context::time::FixedClock;
+use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
-use crate::core::event::queue::AppEventQueue;
-use crate::core::event::{AppEvent, AppGestureEvent, PointerDeviceKind};
+use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
+use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::handler::{AppHandler, HandlerContext};
@@ -27,7 +27,8 @@ pub struct TurAppContext {
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) size: (f64, f64),
-    pub(crate) event_queue: AppEventQueue,
+    pub(crate) platform_event_queue: PlatformEventQueue,
+    pub(crate) app_event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
@@ -52,7 +53,7 @@ impl TurAppContext {
         resource_map: Rc<RefCell<ResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
-        clock: Rc<FixedClock>,
+        clock: Rc<dyn Clock>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {
@@ -64,7 +65,8 @@ impl TurAppContext {
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             size: (400.0, 600.0),
-            event_queue: AppEventQueue::new(),
+            platform_event_queue: PlatformEventQueue::new(),
+            app_event_queue: AppEventQueue::new(),
             handlers: vec![],
             shell: Shell::new(clock),
         }
@@ -74,12 +76,12 @@ impl TurAppContext {
         self.handlers.push(handler);
     }
 
-    pub fn dispatch_handlers(&mut self, event: &AppEvent, needs_draw: &Cell<bool>) {
-        // Track the last pointer position so the paint pass can hit-test
-        // MouseRegions for cursor resolution. A move must trigger a render
-        // because the cursor is now computed during paint (not in a handler).
-        // Only mouse moves update the cursor position — touch has no cursor.
-        if let AppEvent::Gesture(AppGestureEvent::PointerMove {
+    /// Dispatch a platform (input) event to every registered handler via
+    /// [`AppHandler::handle_platform_event`]. Mouse `PointerMove`s also
+    /// update the shell's tracked pointer position and request a draw, since
+    /// the cursor is resolved during paint (not in a handler).
+    pub fn dispatch_platform_handlers(&mut self, event: &PlatformEvent, needs_draw: &Cell<bool>) {
+        if let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
         }) = event
@@ -95,13 +97,35 @@ impl TurAppContext {
             element_tree: &mut tree,
             focus_manager: &mut focus,
             mutation_queue: &mut mq,
-            event_queue: &mut self.event_queue,
+            platform_event_queue: &mut self.platform_event_queue,
+            app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,
         };
         for handler in &mut self.handlers {
-            handler.handle_event(&mut cx, event);
+            handler.handle_platform_event(&mut cx, event);
+        }
+    }
+
+    /// Dispatch an engine-internal event to every registered handler via
+    /// [`AppHandler::handle_app_event`].
+    pub fn dispatch_app_handlers(&mut self, event: &crate::core::event::AppEvent, needs_draw: &Cell<bool>) {
+        let mut tree = self.element_tree.borrow_mut();
+        let mut focus = self.focus_manager.borrow_mut();
+        let mut mq = self.mutation_queue.borrow_mut();
+        let mut cx = HandlerContext {
+            element_tree: &mut tree,
+            focus_manager: &mut focus,
+            mutation_queue: &mut mq,
+            platform_event_queue: &mut self.platform_event_queue,
+            app_event_queue: &mut self.app_event_queue,
+            renderer: self.renderer.as_mut(),
+            size: &mut self.size,
+            needs_draw,
+        };
+        for handler in &mut self.handlers {
+            handler.handle_app_event(&mut cx, event);
         }
     }
 
