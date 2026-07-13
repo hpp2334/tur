@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::FixedClock;
+use boa_engine::context::time::Clock;
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, JsValue};
 
@@ -32,7 +32,7 @@ pub enum NextFrame {
     After(Duration),
 }
 
-/// Outcome of a single [`TurAppInternal::flush`] / `spawn_loop_once` call.
+/// Outcome of a single [`TurAppInternal::flush`] / `run_frame` call.
 #[derive(Debug, Clone, Copy)]
 pub struct FrameOutcome {
     /// Whether a new frame was actually rendered this call.
@@ -79,7 +79,7 @@ impl TurAppInternal {
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
-        clock: std::rc::Rc<FixedClock>,
+        clock: std::rc::Rc<dyn Clock>,
         async_runtime: Rc<dyn AsyncRuntime>,
     ) -> Self {
         use crate::core::elements::NodeTree;

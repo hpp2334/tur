@@ -412,7 +412,7 @@ fn multiline_drag_select_batched_events() {
     app.pointer_move_no_flush(left + 5.0, y_line2);
     app.pointer_up_no_flush(left + 5.0, y_line2);
     // Single flush processes all events at once.
-    app.tick().unwrap();
+    app.pump().unwrap();
     app.render();
 
     let (anchor, end) = get_selection(&app, input_id);

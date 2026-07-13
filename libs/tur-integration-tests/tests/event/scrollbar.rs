@@ -80,7 +80,7 @@ fn dragging_scrollbar_thumb_scrolls() {
     app.pointer_down_no_flush(195.0, 100.0);
     app.pointer_move_no_flush(195.0, 180.0);
     app.pointer_up_no_flush(195.0, 180.0);
-    app.tick().unwrap();
+    app.pump().unwrap();
     app.render();
 
     // The scrollbar claimed focus on pointer-down.

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::NodeTreeData;
@@ -34,7 +35,7 @@ pub struct TurVelloApp {
 }
 
 struct TurVelloAppInner {
-    app: TurApp,
+    app: Rc<TurApp>,
     _window: Window,
 }
 
@@ -114,6 +115,7 @@ impl TurVelloApp {
             .renderer(Box::new(renderer))
             .font_loader(Box::new(PresetFontLoader::new()))
             .async_runtime(Rc::new(TestRuntime))
+            .clock(Rc::new(StdClock::new()))
             .plugin(TurStdPlugin::default())
             .build()?;
         app.push_platform_event(PlatformEvent::Resize {
@@ -121,7 +123,7 @@ impl TurVelloApp {
             logical_height: height as u32,
             dpr,
         });
-        let _ = app.spawn_loop_once(std::time::Duration::ZERO);
+        let _ = app.run_frame();
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -141,7 +143,7 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.borrow_mut().app.load_module(&source)?;
+        self.inner.borrow().app.load_module(&source)?;
         Ok(())
     }
 
@@ -152,11 +154,11 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        self.inner.borrow_mut().app.push_app_event(AppEvent::RequestDraw);
-        let _ = self.inner.borrow_mut().app.spawn_loop_once(std::time::Duration::ZERO);
+        self.inner.borrow().app.push_app_event(AppEvent::RequestDraw);
+        let _ = self.inner.borrow().app.run_frame();
     }
 
     pub fn render_to_pixels(&self) -> Vec<u8> {
-        self.inner.borrow_mut().app.render_to_pixels().expect("renderer does not support render_to_pixels")
+        self.inner.borrow().app.render_to_pixels().expect("renderer does not support render_to_pixels")
     }
 }

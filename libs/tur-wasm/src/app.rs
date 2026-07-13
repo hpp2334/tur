@@ -1,14 +1,16 @@
 use std::cell::{Cell, RefCell};
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 use std::time::Instant;
-use tur_engine::TurApp;
+use boa_engine::context::time::{Clock, JsInstant};
+use tur_engine::core::app::NextFrame;
 use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
+use tur_engine::{LoopDriver, TurApp};
 use tur_shared::Offset;
 use tur_std::Clipboard;
 use tur_clipboard::TurClipboardPlugin;
@@ -20,9 +22,8 @@ use wasm_bindgen_futures::future_to_promise;
 
 /// `AsyncRuntime` for wasm: wall-clock reads via `Instant::now()` (which
 /// wasm-bindgen bridges to `Performance::now()` under the hood on most
-/// targets). Deterministic timing belongs to boa's `FixedClock` (advanced
-/// by the embedder) — this is only for relative timestamps inside spawned
-/// futures.
+/// targets). Deterministic timing belongs to the engine `Clock` — this is
+/// only for relative timestamps inside spawned futures.
 #[derive(Default)]
 struct WasmRuntime;
 
@@ -32,8 +33,32 @@ impl AsyncRuntime for WasmRuntime {
     }
 }
 
+/// Engine `Clock` for wasm. boa's `StdClock` panics on
+/// `wasm32-unknown-unknown` (`SystemTime::now()` is unimplemented), and
+/// `std::time::Instant::now()` is unsupported too, so this reads
+/// `Date.now()` — the same wall-clock source the old frame loop used for its
+/// per-frame delta. Production thus gets live real time with no manual clock
+/// forwarding. (Not strictly monotonic across system-clock adjustments, but
+/// the engine's animation/timer math derives durations from deltas, which is
+/// robust to the rare jump.)
+#[derive(Default)]
+struct WasmClock;
+
+impl Clock for WasmClock {
+    fn now(&self) -> JsInstant {
+        let ms = js_sys::Date::now();
+        let secs = (ms / 1000.0) as u64;
+        let nanos = ((ms % 1000.0) * 1_000_000.0) as u32;
+        JsInstant::new(secs, nanos)
+    }
+
+    fn system_time_millis(&self) -> i64 {
+        js_sys::Date::now() as i64
+    }
+}
+
 struct WasmState {
-    app: TurApp,
+    app: Rc<TurApp>,
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
@@ -120,7 +145,6 @@ impl Http for WasmHttp {
 #[wasm_bindgen]
 pub struct TurWasmApp {
     state: Rc<RefCell<Option<WasmState>>>,
-    frame_loop: Rc<FrameLoop>,
 }
 
 trait JsResult<T> {
@@ -671,10 +695,11 @@ impl TurWasmApp {
                 .map(|(n, f, l)| (n.to_string(), f, l))
                 .collect();
 
-            let mut app = tur_engine::TurEngine::builder()
+            let app = tur_engine::TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(PresetFontLoader::new()))
                 .async_runtime(Rc::new(WasmRuntime))
+                .clock(Rc::new(WasmClock))
                 .plugin(
                     tur_std::TurStdPlugin::builder()
                         .cursor(WasmCursorPlatform {
@@ -698,7 +723,6 @@ impl TurWasmApp {
                 logical_height,
                 dpr,
             });
-            let _ = app.spawn_loop_once(std::time::Duration::ZERO);
 
             let resize_state = state_clone.clone();
             let resize_container_id = container_id.clone();
@@ -1220,24 +1244,90 @@ impl TurWasmApp {
 
             *state_clone.borrow_mut() = Some(wasm_state);
 
-            // On-demand frame loop. Lives outside `WasmState` so the wake
-            // hook (fired from inside `push_platform_event`, while a listener
-            // holds an immutable borrow of `WasmState`) can poke
-            // `scheduled`/store the rAF closure without contending for
-            // `WasmState`'s `RefCell`.
-            let frame_loop = FrameLoop::new(state_clone.clone());
-            {
-                let guard = state_clone.borrow();
-                if let Some(s) = guard.as_ref() {
-                    let fl = frame_loop.clone();
-                    s.app
-                        .set_wake_hook(Some(Rc::new(move || fl.schedule())));
-                }
-            }
+            // Autonomous loop. The engine owns the frame logic (clock advance
+            // is its own `StdClock`, no manual forwarding); this driver just
+            // arms rAF / setTimeout per the engine's `NextFrame` verdict. The
+            // `after_frame` hook — fired by the engine after each wake — does
+            // the DOM side-effects that used to live in `FrameLoop::on_frame`
+            // (file-pick resolution, textarea focus / caret positioning). It
+            // holds a `Weak` into `state` so there's no reference cycle
+            // (`state` → `app` → `after_frame` → `state`).
+            let app = state_clone
+                .borrow()
+                .as_ref()
+                .expect("wasm state just set")
+                .app
+                .clone();
+            let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
+            let after_frame: Rc<dyn Fn(tur_engine::core::app::FrameOutcome)> =
+                Rc::new(move |_outcome| {
+                    let Some(state) = state_weak.upgrade() else {
+                        return;
+                    };
+                    let mut guard = state.borrow_mut();
+                    let Some(s) = guard.as_mut() else {
+                        return;
+                    };
+
+                    // Drain pending __turHost.pickFile resolutions: build the
+                    // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
+                    // callback from here, where a `&mut Context` is available.
+                    let pending_picks: Vec<PendingPick> =
+                        FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
+                    if !pending_picks.is_empty() {
+                        s.app.with_boa_context(|ctx| {
+                            use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
+                            use boa_engine::object::JsObject;
+                            use boa_engine::{js_string, JsValue};
+                            for (cb, picked) in pending_picks {
+                                let arg = match picked {
+                                    Some((name, bytes)) => {
+                                        let o = JsObject::with_object_proto(ctx.intrinsics());
+                                        let _ = o.create_data_property(
+                                            js_string!("name"),
+                                            JsValue::from(js_string!(name.as_str())),
+                                            ctx,
+                                        );
+                                        if let Ok(ab) = JsArrayBuffer::from_byte_block(
+                                            AlignedVec::from_iter(0, bytes),
+                                            ctx,
+                                        ) {
+                                            let _ = o.create_data_property(
+                                                js_string!("bytes"),
+                                                JsValue::from(ab),
+                                                ctx,
+                                            );
+                                        }
+                                        o.into()
+                                    }
+                                    None => JsValue::null(),
+                                };
+                                if let Err(e) = cb
+                                    .call(&boa_engine::JsValue::undefined(), &[arg], ctx)
+                                {
+                                    tracing::error!("pickFile callback error: {e}");
+                                }
+                            }
+                        });
+                    }
+
+                    let is_editable = s.app.focused_is_editable();
+                    if is_editable {
+                        let _ = s.textarea.focus();
+                        if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
+                            let _ = s.textarea.style().set_property("left", &format!("{x}px"));
+                            let _ = s.textarea.style().set_property("top", &format!("{y}px"));
+                        }
+                    }
+                });
+            app.set_after_frame_hook(Some(after_frame));
+            // `start` registers the driver and runs frame 1 (which processes
+            // the resize pushed above), then arms follow-up wake-ups per the
+            // engine's verdict.
+            app.start(WasmLoopDriver::new());
 
             let app = TurWasmApp {
                 state: state_clone,
-                frame_loop,
             };
             Ok(JsValue::from(app))
         })
@@ -1253,13 +1343,10 @@ impl TurWasmApp {
             .load_js(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
+        // Request a draw; `push_app_event` re-arms the autonomous loop (via
+        // the driver's `request_next(Vsync)`), so the bundle renders on the
+        // next frame without any manual pump.
         state.app.push_app_event(AppEvent::RequestDraw);
-        if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
-            tracing::error!("load_and_run_js: initial spawn_loop_once error: {e}");
-        }
-
-        drop(guard);
-        self.frame_loop.schedule();
 
         Ok(())
     }
@@ -1281,12 +1368,6 @@ impl TurWasmApp {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         state.app.push_app_event(AppEvent::RequestDraw);
-        if let Err(e) = state.app.spawn_loop_once(std::time::Duration::ZERO) {
-            tracing::error!("load_and_run_module: initial spawn_loop_once error: {e}");
-        }
-
-        drop(guard);
-        self.frame_loop.schedule();
 
         Ok(())
     }
@@ -1335,176 +1416,121 @@ impl TurDevTool {
     }
 }
 
-/// On-demand frame loop for the wasm embedder. Unlike a permanent
-/// `requestAnimationFrame` cycle, it only runs while something actually needs
-/// a frame: a continuous animation, a pending JS timer, a live async task, a
-/// focused caret blink, or — via the wake hook — freshly-arrived platform
-/// input. When none of those apply it stops entirely (zero rAF, zero
-/// renders) until [`TurApp::push_platform_event`] fires the wake hook.
+/// `LoopDriver` for the wasm embedder, backed by `requestAnimationFrame`
+/// (`Vsync`) and `setTimeout` (`After(d)`). The engine drives itself: each
+/// autonomous frame runs in [`TurApp::wake`] (clock advance is the engine's
+/// own `StdClock` — no manual time forwarding), the `after_frame` hook handles
+/// DOM side-effects, and this driver just arms the next wake-up per the
+/// engine's `NextFrame` verdict. When the engine reports `Idle`, the loop
+/// stops entirely (zero rAF, zero renders) until [`TurApp::push_platform_event`]
+/// re-arms it via `request_next(Vsync)`.
 ///
-/// The scheduling decision comes from the engine each frame as a
-/// [`NextFrame`]: `Vsync` (re-arm immediately), `After(d)` (re-arm in `d`),
-/// or `Idle` (stop).
-struct FrameLoop {
-    state: Rc<RefCell<Option<WasmState>>>,
-    scheduled: Cell<bool>,
-    last_now_ms: Cell<f64>,
-    // Long-lived closures created once and re-registered for every rAF /
-    // setTimeout. Reusing them (instead of allocating a fresh closure per
-    // arm) avoids dropping a closure while its trampoline is still on the
-    // call stack: `on_frame` is invoked by `raf_closure`, and it may call
-    // `schedule()` again (when the engine asks for `Vsync`) — overwriting a
-    // per-frame `raf_closure` mid-invocation makes wasm-bindgen throw
-    // "closure invoked recursively or after being dropped". The closures
-    // hold a `Weak` back-ref installed via `Rc::new_cyclic`, so there's no
-    // reference cycle.
+/// The two `Closure`s are long-lived and re-registered for every wake-up
+/// (created once via `Rc::new_cyclic` with `Weak` back-refs) so a wake that
+/// requests the next wake-up mid-invocation doesn't drop its own trampoline —
+/// the same closure-lifetime fix the old `FrameLoop` needed.
+struct WasmLoopDriver {
+    /// Engine wake trampoline, set once via [`LoopDriver::set_wake`] at
+    /// [`TurApp::start`].
+    wake: RefCell<Option<Rc<dyn Fn()>>>,
+    /// Pending rAF / setTimeout handle, if any. `None` ⇒ nothing pending
+    /// (the loop is idle). Cleared by the trampoline when it fires.
+    raf_id: Cell<Option<i32>>,
+    timeout_id: Cell<Option<i32>>,
     raf_closure: Closure<dyn Fn()>,
     timeout_closure: Closure<dyn Fn()>,
 }
 
-impl FrameLoop {
-    fn new(state: Rc<RefCell<Option<WasmState>>>) -> Rc<Self> {
+impl WasmLoopDriver {
+    fn new() -> Rc<Self> {
         Rc::<Self>::new_cyclic(|weak| {
             let weak_raf = weak.clone();
             let raf_closure = Closure::<dyn Fn()>::new(move || {
-                if let Some(fl) = weak_raf.upgrade() {
-                    fl.on_frame();
+                if let Some(d) = weak_raf.upgrade() {
+                    d.fire_raf();
                 }
             });
             let weak_to = weak.clone();
             let timeout_closure = Closure::<dyn Fn()>::new(move || {
-                if let Some(fl) = weak_to.upgrade() {
-                    fl.schedule();
+                if let Some(d) = weak_to.upgrade() {
+                    d.fire_timeout();
                 }
             });
             Self {
-                state,
-                scheduled: Cell::new(false),
-                last_now_ms: Cell::new(now_ms()),
+                wake: RefCell::new(None),
+                raf_id: Cell::new(None),
+                timeout_id: Cell::new(None),
                 raf_closure,
                 timeout_closure,
             }
         })
     }
 
-    /// Re-arm the loop for one animation frame if it isn't already pending.
-    /// Cheap and idempotent — this is the single entry point the wake hook
-    /// (and the post-load kickoff) uses to bring an idle loop back to life.
-    fn schedule(self: &Rc<Self>) {
-        if self.scheduled.get() {
+    /// rAF trampoline entry: clear the handle, then fire the engine wake.
+    fn fire_raf(&self) {
+        self.raf_id.set(None);
+        if let Some(wake) = self.wake.borrow().as_ref().cloned() {
+            wake();
+        }
+    }
+
+    /// setTimeout trampoline entry: clear the handle, then fire the wake
+    /// (which re-arms via `request_next` for any further scheduling).
+    fn fire_timeout(&self) {
+        self.timeout_id.set(None);
+        if let Some(wake) = self.wake.borrow().as_ref().cloned() {
+            wake();
+        }
+    }
+
+    /// Cancel any pending rAF / setTimeout so a fresh `request_next` starts
+    /// from a clean slate (avoids double-firing when input re-arms an idle
+    /// loop that had a timer outstanding).
+    fn cancel_pending(&self) {
+        if let Some(id) = self.raf_id.take() {
+            if let Some(window) = web_sys::window() {
+                let _ = window.cancel_animation_frame(id);
+            }
+        }
+        if let Some(id) = self.timeout_id.take() {
+            if let Some(window) = web_sys::window() {
+                window.clear_timeout_with_handle(id);
+            }
+        }
+    }
+}
+
+impl LoopDriver for WasmLoopDriver {
+    fn set_wake(&self, wake: Rc<dyn Fn()>) {
+        *self.wake.borrow_mut() = Some(wake);
+    }
+
+    fn request_next(&self, next: NextFrame) {
+        self.cancel_pending();
+        let Some(window) = web_sys::window() else {
             return;
-        }
-        self.scheduled.set(true);
-        let window = web_sys::window().unwrap();
-        let _ = window.request_animation_frame(self.raf_closure.as_ref().unchecked_ref());
-    }
-
-    fn on_frame(self: &Rc<Self>) {
-        self.scheduled.set(false);
-
-        // Advance the engine clock by the real elapsed time since the last
-        // frame (the old loop used a fixed 16 ms, which ran animations at the
-        // wrong rate under load and ticked the clock while idle). Clamp to
-        // avoid huge jumps after the tab was backgrounded.
-        let now = now_ms();
-        let delta = (now - self.last_now_ms.get()).max(0.0);
-        self.last_now_ms.set(now);
-        let delta = if delta > 0.0 && delta < 1000.0 {
-            std::time::Duration::from_millis(delta as u64)
-        } else {
-            std::time::Duration::ZERO
         };
-
-        let schedule = {
-            let mut guard = self.state.borrow_mut();
-            let Some(s) = guard.as_mut() else {
-                return;
-            };
-
-            let outcome = match s.app.spawn_loop_once(delta) {
-                Ok(o) => o,
-                Err(e) => {
-                    tracing::error!("frame loop spawn_loop_once error: {e}");
-                    return;
-                }
-            };
-
-            // Drain pending __turHost.pickFile resolutions: build the
-            // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
-            // callback from here, where a `&mut Context` is available.
-            let pending_picks: Vec<PendingPick> =
-                FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
-            if !pending_picks.is_empty() {
-                s.app.with_boa_context(|ctx| {
-                    use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
-                    use boa_engine::object::JsObject;
-                    use boa_engine::{js_string, JsValue};
-                    for (cb, picked) in pending_picks {
-                        let arg = match picked {
-                            Some((name, bytes)) => {
-                                let o = JsObject::with_object_proto(ctx.intrinsics());
-                                let _ = o.create_data_property(
-                                    js_string!("name"),
-                                    JsValue::from(js_string!(name.as_str())),
-                                    ctx,
-                                );
-                                if let Ok(ab) =
-                                    JsArrayBuffer::from_byte_block(
-                                        AlignedVec::from_iter(0, bytes),
-                                        ctx,
-                                    )
-                                {
-                                    let _ = o.create_data_property(
-                                        js_string!("bytes"),
-                                        JsValue::from(ab),
-                                        ctx,
-                                    );
-                                }
-                                o.into()
-                            }
-                            None => JsValue::null(),
-                        };
-                        if let Err(e) =
-                            cb.call(&boa_engine::JsValue::undefined(), &[arg], ctx)
-                        {
-                            tracing::error!("pickFile callback error: {e}");
-                        }
-                    }
-                });
-            }
-
-            let is_editable = s.app.focused_is_editable();
-            if is_editable {
-                let _ = s.textarea.focus();
-                if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
-                    let _ = s.textarea.style().set_property("left", &format!("{x}px"));
-                    let _ = s.textarea.style().set_property("top", &format!("{y}px"));
+        match next {
+            NextFrame::Idle => {}
+            NextFrame::Vsync => {
+                let id = window
+                    .request_animation_frame(self.raf_closure.as_ref().unchecked_ref())
+                    .unwrap_or(-1);
+                if id >= 0 {
+                    self.raf_id.set(Some(id));
                 }
             }
-
-            outcome.schedule
-        };
-
-        // Re-arm based on the engine's verdict. `Idle` → leave the loop
-        // stopped (the wake hook restarts it on the next input).
-        match schedule {
-            tur_engine::core::app::NextFrame::Idle => {}
-            tur_engine::core::app::NextFrame::Vsync => self.schedule(),
-            tur_engine::core::app::            NextFrame::After(delay) => {
+            NextFrame::After(delay) => {
                 let ms = delay.as_millis().min(i32::MAX as u128) as i32;
-                let window = web_sys::window().unwrap();
-                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
-                    self.timeout_closure.as_ref().unchecked_ref(),
-                    ms.max(1),
-                );
+                let id = window
+                    .set_timeout_with_callback_and_timeout_and_arguments_0(
+                        self.timeout_closure.as_ref().unchecked_ref(),
+                        ms.max(1),
+                    )
+                    .unwrap_or(0);
+                self.timeout_id.set(Some(id));
             }
         }
     }
 }
 
-fn now_ms() -> f64 {
-    // `Date::now()` (js-sys) is wall-clock ms since epoch — always available
-    // without a web-sys feature flag. Only the *delta* between frames
-    // matters, so the absolute epoch is irrelevant.
-    js_sys::Date::now()
-}

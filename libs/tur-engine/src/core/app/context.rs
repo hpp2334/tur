@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-use boa_engine::context::time::FixedClock;
+use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
@@ -53,7 +53,7 @@ impl TurAppContext {
         resource_map: Rc<RefCell<ResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
-        clock: Rc<FixedClock>,
+        clock: Rc<dyn Clock>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {

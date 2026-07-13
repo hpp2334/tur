@@ -7,9 +7,8 @@ pub mod error;
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
-use std::time::Duration;
 
-use boa_engine::context::time::FixedClock;
+use boa_engine::context::time::Clock;
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
@@ -19,7 +18,7 @@ use boa_engine::Source;
 
 use error::TurError;
 
-use core::app::TurAppInternal;
+use core::app::{FrameOutcome, TurAppInternal};
 use core::async_::AsyncRuntime;
 use core::bridge::helpers::FnEntry;
 use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
@@ -36,78 +35,93 @@ use core::render::Renderer;
 use core::elements::NodeTreeData;
 
 pub struct TurApp {
-    boa_context: Context,
+    boa_context: RefCell<Context>,
     internal: TurAppInternal,
     executor: Rc<TurJobExecutor>,
     module_loader: Rc<TurModuleLoader>,
-    /// Embedder-installed wake callback, invoked whenever a platform event is
-    /// pushed. Lets an idle frame loop (one that stopped because nothing was
-    /// time-driven) re-arm itself on input without each listener having to
-    /// call back into the embedder. `None` until the embedder calls
-    /// [`Self::set_wake_hook`].
-    wake_hook: RefCell<Option<Rc<dyn Fn()>>>,
+    /// Autonomous-loop driver. `None` until [`Self::start`] is called
+    /// (production); tests leave it unset and pump via [`Self::run_frame`].
+    driver: RefCell<Option<Rc<dyn LoopDriver>>>,
+    /// Long-lived wake trampoline created in [`Self::start`]: upgrades a
+    /// `Weak<Self>` and calls [`Self::wake`]. Held here (and cloned into the
+    /// driver via [`LoopDriver::set_wake`]) so it stays alive for the loop's
+    /// lifetime; the `Weak` back-ref avoids a reference cycle.
+    wake_fn: RefCell<Option<Rc<dyn Fn()>>>,
+    /// Embedder-installed callback fired after each autonomous frame — used by
+    /// the wasm embedder for DOM side-effects (file-pick resolution, textarea
+    /// focus / caret positioning). `None` in tests.
+    after_frame: RefCell<Option<AfterFrameHook>>,
 }
 
+/// Per-frame hook fired at the end of [`TurApp::wake`] (after `run_frame`,
+/// before rescheduling). See [`TurApp::set_after_frame_hook`].
+pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
+
 impl TurApp {
-    pub fn load_js(&mut self, source: &str) -> Result<(), TurError> {
+    pub fn load_js(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
-        self.boa_context
-            .eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
+        let mut boa = self.boa_context.borrow_mut();
+        boa.eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
             .map_err(|e| {
                 tracing::error!("JS eval error: {e}");
                 TurError::JsEval(e)
             })?;
-        if let Err(e) = self.executor.drain(&mut self.boa_context) {
+        if let Err(e) = self.executor.drain(&mut boa) {
             tracing::error!("load_js drain error: {e}");
         }
         tracing::info!("load_js: bundle evaluated successfully");
         Ok(())
     }
 
-    pub fn load_module(&mut self, source: &str) -> Result<(), TurError> {
+    pub fn load_module(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
+        let mut boa = self.boa_context.borrow_mut();
         let module = boa_engine::Module::parse(
             Source::from_bytes(source).with_path(Path::new("entry.mjs")),
             None,
-            &mut self.boa_context,
+            &mut boa,
         )
         .map_err(|e| {
             tracing::error!("module parse error: {e}");
             TurError::JsEval(e)
         })?;
-        let _promise = module.load_link_evaluate(&mut self.boa_context);
-        if let Err(e) = self.boa_context.run_jobs() {
+        let _promise = module.load_link_evaluate(&mut boa);
+        if let Err(e) = boa.run_jobs() {
             tracing::error!("module run_jobs error: {e}");
         }
-        if let Err(e) = self.executor.drain(&mut self.boa_context) {
+        drop(boa);
+        if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
             tracing::error!("load_module drain error: {e}");
         }
         Ok(())
     }
 
-    pub fn eval_module(&mut self, source: &str) -> Result<(), TurError> {
+    pub fn eval_module(&self, source: &str) -> Result<(), TurError> {
+        let mut boa = self.boa_context.borrow_mut();
         let module = boa_engine::Module::parse(
             Source::from_bytes(source).with_path(Path::new("eval.mjs")),
             None,
-            &mut self.boa_context,
+            &mut boa,
         )
         .map_err(|e| {
             tracing::error!("eval_module parse error: {e}");
             TurError::JsEval(e)
         })?;
-        let _promise = module.load_link_evaluate(&mut self.boa_context);
-        if let Err(e) = self.boa_context.run_jobs() {
+        let _promise = module.load_link_evaluate(&mut boa);
+        if let Err(e) = boa.run_jobs() {
             tracing::error!("eval_module run_jobs error: {e}");
         }
-        let _ = self.executor.drain(&mut self.boa_context);
+        drop(boa);
+        let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
         Ok(())
     }
 
-    pub fn eval_js(&mut self, source: &str) -> Result<String, TurError> {
-        let result = self
-            .boa_context
-            .eval(Source::from_bytes(source))
-            .map_err(TurError::JsEval)?;
+    pub fn eval_js(&self, source: &str) -> Result<String, TurError> {
+        let result = {
+            let mut boa = self.boa_context.borrow_mut();
+            boa.eval(Source::from_bytes(source))
+                .map_err(TurError::JsEval)?
+        };
         let s = result
             .as_string()
             .map(|s| s.to_std_string_escaped())
@@ -119,7 +133,7 @@ impl TurApp {
     /// given native functions. Embedders (tur-wasm) use this to expose host
     /// services as importable modules — e.g. `builtin:tur/host`.
     pub fn register_host_module(
-        &mut self,
+        &self,
         specifier: &str,
         exports: Vec<(String, boa_engine::NativeFunction, usize)>,
     ) -> Result<(), boa_engine::JsError> {
@@ -127,61 +141,121 @@ impl TurApp {
             .iter()
             .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
             .collect();
-        let module = build_fn_module(&mut self.boa_context, &owned);
+        let module = build_fn_module(&mut self.boa_context.borrow_mut(), &owned);
         self.module_loader.register(specifier, module);
         tracing::info!("registered host module {specifier} ({} exports)", owned.len());
         Ok(())
     }
 
-    pub fn spawn_loop_once(
-        &mut self,
-        advanced_time: Duration,
-    ) -> Result<core::app::FrameOutcome, TurError> {
-        self.internal
-            .app_context
-            .borrow()
-            .shell
-            .forward(advanced_time.as_millis() as u64);
-        self.internal.flush(&mut self.boa_context)
+    /// Advance exactly one frame: run the engine's fixed-point flush (events,
+    /// reactive updates, layout, microtasks, async polling) and render if
+    /// anything changed. Returns the outcome including how the next frame
+    /// should be scheduled.
+    ///
+    /// This is the low-level frame primitive. Embedders normally drive the
+    /// engine via [`Self::start`] (autonomous loop); test harnesses and
+    /// advanced embedders call this directly.
+    ///
+    /// Unlike the old `spawn_loop_once`, this takes no time argument — the
+    /// clock is the engine's own `Clock` (a real wall-clock in production,
+    /// a `FixedClock` the harness advances in tests).
+    pub fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
+        let mut boa = self.boa_context.borrow_mut();
+        self.internal.flush(&mut boa)
     }
 
-    pub fn with_boa_context<R>(&mut self, f: impl FnOnce(&mut Context) -> R) -> R {
-        f(&mut self.boa_context)
+    pub fn with_boa_context<R>(&self, f: impl FnOnce(&mut Context) -> R) -> R {
+        f(&mut self.boa_context.borrow_mut())
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
     /// wheel, key, IME, or paste. These are dispatched to handlers via
     /// [`AppHandler::handle_platform_event`](core::handler::AppHandler::handle_platform_event).
-    /// Also fires the embedder's wake hook (see [`Self::set_wake_hook`]) so an
-    /// idle frame loop re-arms to process the event.
+    /// Also re-arms an idle autonomous loop (see [`Self::start`]) so the event
+    /// is processed on the next frame.
     pub fn push_platform_event(&self, event: core::event::PlatformEvent) {
         self.internal
             .app_context
             .borrow_mut()
             .platform_event_queue
             .push(event);
-        if let Some(hook) = self.wake_hook.borrow().as_ref() {
-            hook();
-        }
+        self.request_wakeup();
     }
 
     /// Push an engine-internal event onto the app-event bus (e.g. a host
     /// kickoff `RequestDraw`). Most embedders only need
     /// [`Self::push_platform_event`]; this is exposed for host-initiated
-    /// draws and testing.
+    /// draws and testing. Re-arms an idle autonomous loop like
+    /// [`Self::push_platform_event`].
     pub fn push_app_event(&self, event: core::event::AppEvent) {
         self.internal
             .app_context
             .borrow_mut()
             .app_event_queue
             .push(event);
+        self.request_wakeup();
     }
 
-    /// Install a wake callback fired by [`Self::push_platform_event`]. The
-    /// embedder uses this to re-arm its (otherwise idle) frame loop when
-    /// input arrives. Passing `None` clears it.
-    pub fn set_wake_hook(&self, hook: Option<Rc<dyn Fn()>>) {
-        *self.wake_hook.borrow_mut() = hook;
+    /// Begin autonomous operation: the engine schedules its own frames via
+    /// `driver`. The driver fires the engine's wake trampoline when due;
+    /// each wake runs one [`Self::run_frame`], the [`Self::after_frame`] hook,
+    /// then requests the next wake-up per the frame outcome. Input pushed
+    /// via [`Self::push_platform_event`] re-arms an idle loop automatically.
+    ///
+    /// Must be called exactly once, after JS is loaded. The engine holds a
+    /// `Weak` back-reference (no reference cycle), so the loop stops when the
+    /// last `Rc<TurApp>` is dropped.
+    pub fn start(self: &Rc<Self>, driver: Rc<dyn LoopDriver>) {
+        let wake_fn: Rc<dyn Fn()> = {
+            let weak = Rc::downgrade(self);
+            Rc::new(move || {
+                if let Some(app) = weak.upgrade() {
+                    app.wake();
+                }
+            })
+        };
+        driver.set_wake(wake_fn.clone());
+        *self.wake_fn.borrow_mut() = Some(wake_fn);
+        *self.driver.borrow_mut() = Some(driver);
+        // Kick off frame 1.
+        self.wake();
+    }
+
+    /// Install a callback fired after each autonomous frame (in [`Self::wake`],
+    /// after `run_frame`, before rescheduling). The wasm embedder uses it for
+    /// DOM side-effects (file-pick resolution, textarea focus / caret
+    /// positioning). Has no effect for manually-pumped (test) operation.
+    pub fn set_after_frame_hook(&self, hook: Option<Rc<dyn Fn(FrameOutcome)>>) {
+        *self.after_frame.borrow_mut() = hook;
+    }
+
+    /// Re-arm an idle autonomous loop: ask the driver for one wake-up on the
+    /// next frame. No-op when no driver is installed (tests) or when a frame
+    /// is already pending — the driver treats `request_next` as idempotent.
+    fn request_wakeup(&self) {
+        if let Some(driver) = self.driver.borrow().as_ref() {
+            driver.request_next(core::app::NextFrame::Vsync);
+        }
+    }
+
+    /// One autonomous-frame tick: `run_frame`, the `after_frame` hook, then
+    /// reschedule via the driver. Called by the wake trampoline the driver
+    /// fires (and by [`Self::start`] for the first frame).
+    fn wake(self: &Rc<Self>) {
+        let outcome = match self.run_frame() {
+            Ok(o) => o,
+            Err(e) => {
+                tracing::error!("frame loop run_frame error: {e}");
+                return;
+            }
+        };
+        if let Some(hook) = self.after_frame.borrow().as_ref() {
+            hook.clone()(outcome);
+        }
+        let next = outcome.schedule;
+        if let Some(driver) = self.driver.borrow().as_ref().cloned() {
+            driver.request_next(next);
+        }
     }
 
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
@@ -258,9 +332,30 @@ impl TurApp {
         self.internal.js_context.element_tree.borrow()
     }
 
-    pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
+    pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
         self.internal.app_context.borrow_mut().render_to_pixels()
     }
+}
+
+/// Autonomous-loop driver — the platform scheduling primitive the engine
+/// uses to wake itself for the next frame. Implementations live in the
+/// embedder: a wasm driver backed by `requestAnimationFrame` / `setTimeout`
+/// (tur-wasm), or any other platform's wake mechanism. Tests do not install
+/// one (they pump [`TurApp::run_frame`] manually).
+pub trait LoopDriver {
+    /// Install the engine's wake trampoline. The driver must call it exactly
+    /// once whenever a wake-up requested via [`Self::request_next`] becomes
+    /// due. Set once at [`TurApp::start`].
+    fn set_wake(&self, wake: Rc<dyn Fn()>);
+
+    /// Request the next wake-up, replacing any pending request.
+    /// - [`NextFrame::Vsync`](core::app::NextFrame) → wake on the next display
+    ///   frame (~16 ms).
+    /// - [`NextFrame::After(d)`](core::app::NextFrame) → wake after `d`.
+    /// - [`NextFrame::Idle`](core::app::NextFrame) → cancel any pending
+    ///   wake-up; the loop stops until [`TurApp::push_platform_event`] (via
+    ///   `request_next(Vsync)`) re-arms it.
+    fn request_next(&self, next: core::app::NextFrame);
 }
 
 pub struct TurEngine;
@@ -277,6 +372,7 @@ pub struct TurEngineBuilder {
     renderer: Option<Box<dyn Renderer>>,
     font_loader: Option<Box<dyn FontLoader>>,
     async_runtime: Option<Rc<dyn AsyncRuntime>>,
+    clock: Option<Rc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
     host_modules: Vec<(String, HostExports)>,
 }
@@ -293,6 +389,7 @@ impl TurEngineBuilder {
             renderer: None,
             font_loader: None,
             async_runtime: None,
+            clock: None,
             plugins: Vec::new(),
             host_modules: Vec::new(),
         }
@@ -317,6 +414,21 @@ impl TurEngineBuilder {
         self
     }
 
+    /// Provide the engine clock — the single source of time read by JS
+    /// `Date.now()`, timer scheduling, and the caret-blink phase. Shared
+    /// between the boa `Context` and the engine `Shell`. Required.
+    ///
+    /// Production passes an [`StdClock`] (real wall clock — `Date.now()` is
+    /// live, no manual advancement). Tests pass a [`FixedClock`] they advance
+    /// themselves frame-by-frame.
+    ///
+    /// [`StdClock`]: boa_engine::context::time::StdClock
+    /// [`FixedClock`]: boa_engine::context::time::FixedClock
+    pub fn clock(mut self, clock: Rc<dyn Clock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
     pub fn plugin<P: Plugin + 'static>(mut self, plugin: P) -> Self {
         self.plugins.push(Box::new(plugin));
         self
@@ -331,7 +443,7 @@ impl TurEngineBuilder {
         self
     }
 
-    pub fn build(self) -> Result<TurApp, TurError> {
+    pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let renderer = self.renderer.expect("renderer must be set");
         let font_loader = self
             .font_loader
@@ -339,12 +451,31 @@ impl TurEngineBuilder {
         let async_runtime = self
             .async_runtime
             .expect("async_runtime must be set (use TurEngineBuilder::async_runtime)");
+        let clock = self
+            .clock
+            .expect("clock must be set (use TurEngineBuilder::clock)");
 
-        let clock = Rc::new(FixedClock::from_millis(0));
+        // boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
+        // concrete (`Sized`) `C`, so it won't accept an already-erased
+        // `Rc<dyn Clock>`. `ClockProxy` is a Sized adapter that delegates to
+        // the shared `Rc<dyn Clock>` — giving boa and the engine `Shell` (and,
+        // for `FixedClock`, the test harness's `forward` calls) one shared
+        // time source.
+        #[derive(Clone)]
+        struct ClockProxy(Rc<dyn Clock>);
+        impl Clock for ClockProxy {
+            fn now(&self) -> boa_engine::context::time::JsInstant {
+                self.0.now()
+            }
+            fn system_time_millis(&self) -> i64 {
+                self.0.system_time_millis()
+            }
+        }
+
         let executor = Rc::new(TurJobExecutor::new());
         let module_loader = TurModuleLoader::new();
         let mut boa_context = Context::builder()
-            .clock(clock.clone())
+            .clock(Rc::new(ClockProxy(clock.clone())))
             .job_executor(executor.clone())
             .module_loader(module_loader.clone())
             .build()
@@ -454,12 +585,14 @@ impl TurEngineBuilder {
 
         tracing::info!("TurApp initialized ({} plugins)", self.plugins.len());
 
-        Ok(TurApp {
-            boa_context,
+        Ok(Rc::new(TurApp {
+            boa_context: RefCell::new(boa_context),
             internal,
             executor,
             module_loader,
-            wake_hook: RefCell::new(None),
-        })
+            driver: RefCell::new(None),
+            wake_fn: RefCell::new(None),
+            after_frame: RefCell::new(None),
+        }))
     }
 }

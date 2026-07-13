@@ -2,8 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::FixedClock;
-use boa_engine::context::Clock;
+use boa_engine::context::time::Clock;
 use tur_shared::{Cursor, Offset};
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
@@ -55,7 +54,7 @@ impl Default for CursorSink {
 ///
 /// [`paint_face`]: Shell::paint_face
 pub struct Shell {
-    clock: Rc<FixedClock>,
+    clock: Rc<dyn Clock>,
     cursor_output: Option<Box<dyn FnMut(Cursor)>>,
     pointer_position: Option<Offset>,
     cursor: CursorSink,
@@ -63,7 +62,7 @@ pub struct Shell {
 }
 
 impl Shell {
-    pub fn new(clock: Rc<FixedClock>) -> Self {
+    pub fn new(clock: Rc<dyn Clock>) -> Self {
         Shell {
             clock,
             cursor_output: None,
@@ -80,13 +79,13 @@ impl Shell {
         self.cursor_output = Some(f);
     }
 
-    /// Advance the shared clock. The boa `Context` holds a clone of the same
-    /// `Rc<FixedClock>`, so JS `Date.now()` advances in lockstep.
-    pub fn forward(&self, ms: u64) {
-        self.clock.forward(ms);
-    }
-
     /// Current frame time as a `Duration` since the epoch.
+    ///
+    /// The clock is shared with the boa `Context` (the same `Rc<dyn Clock>`
+    /// is passed to both at build time), so JS `Date.now()` and engine
+    /// scheduling read the same source. The clock is advanced by the embedder
+    /// — a real wall-clock (`StdClock`) in production self-advances; a
+    /// `FixedClock` in tests is bumped by the test harness.
     pub fn now(&self) -> Duration {
         Duration::from_millis(self.clock.now().millis_since_epoch())
     }
@@ -124,7 +123,7 @@ impl Shell {
 ///
 /// Constructed only via `Shell::paint_face`. It exposes claiming a
 /// cursor plus reading time and pointer position — but **not** the privileged
-/// `apply_changes` / `set_pointer_position` / `forward`, so biz cannot flush
+/// `apply_changes` / `set_pointer_position`, so biz cannot flush
 /// or mutate driver state.
 #[derive(Clone, Copy)]
 pub struct PaintShell<'a> {

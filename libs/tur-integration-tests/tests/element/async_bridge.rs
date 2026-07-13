@@ -49,9 +49,9 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
     )
     .unwrap();
 
-    // Drive the async loop: poll the spawned clipboard future, drain the
-    // completion, run the PromiseJob, fire the `.then`.
-    app.ensure_flushed();
+    // Wait for the async chain to resolve: poll the spawned clipboard future,
+    // drain the completion, run the PromiseJob, fire the `.then`.
+    app.wait_for(|a| a.eval_js("globalThis.__result_text") == "hello from clipboard");
 
     assert_eq!(app.eval_js("globalThis.__result_text"), "hello from clipboard");
 }
@@ -67,7 +67,7 @@ fn clipboard_write_logs_to_recording() {
         "#,
     )
     .unwrap();
-    app.ensure_flushed();
+    app.settle();
 
     assert_eq!(app.take_clipboard_write().as_deref(), Some("payload"));
 }
@@ -98,7 +98,7 @@ fn http_request_resolves_with_canned_response() {
         "#,
     )
     .unwrap();
-    app.ensure_flushed();
+    app.wait_for(|a| a.eval_js("globalThis.__result_status") == "200");
 
     assert_eq!(app.eval_js("globalThis.__result_status"), "200");
     assert_eq!(app.eval_js("globalThis.__result_body"), "body bytes");
