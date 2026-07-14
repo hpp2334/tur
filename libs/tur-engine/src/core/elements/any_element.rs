@@ -82,6 +82,12 @@ trait Erased: 'static {
         cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
     );
+    fn run_on_focus_changed(
+        &mut self,
+        focused: bool,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    );
     fn run_before_destroy(
         &mut self,
         cx: &mut crate::core::view::SharedViewCx,
@@ -204,6 +210,15 @@ where
         boa: &mut Context,
     ) {
         <Self as Lifecycle>::on_updated(self, cx, boa);
+    }
+
+    fn run_on_focus_changed(
+        &mut self,
+        focused: bool,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        <Self as Lifecycle>::on_focus_changed(self, focused, cx, boa);
     }
 
     fn run_before_destroy(
@@ -467,6 +482,18 @@ impl AnyElement {
         boa: &mut Context,
     ) {
         self.inner.run_on_updated(cx, boa);
+    }
+
+    /// Fire the element's `on_focus_changed` lifecycle hook (called when the
+    /// element gains or loses focus). `focused` is `true` for focus, `false`
+    /// for blur. No-op for most elements.
+    pub fn run_on_focus_changed(
+        &mut self,
+        focused: bool,
+        cx: &mut crate::core::view::SharedViewCx,
+        boa: &mut Context,
+    ) {
+        self.inner.run_on_focus_changed(focused, cx, boa);
     }
 
     /// Fire the element's `before_destroy` lifecycle hook (called once,

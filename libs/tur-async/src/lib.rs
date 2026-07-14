@@ -16,22 +16,25 @@
 //! `tur_engine::core::async_::AsyncExecutor`.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
+use std::time::Duration;
 
 /// Portable reactor primitives the engine cannot implement itself. Backends
 /// inject an impl at engine build time. Intentionally tiny — anything with a
 /// portable implementation belongs on [`Executor`] directly. Future additions:
-/// `spawn_blocking`, `timer(Duration)`, etc.
+/// `spawn_blocking`, etc.
 pub trait AsyncRuntime: 'static {
-    /// Wall-clock now. Distinct from boa's `FixedClock` (which is advanced
-    /// deterministically by the embedder); used for wall-clock timestamps in
-    /// async work.
-    fn now(&self) -> std::time::Instant;
+    /// Wall-clock now, in milliseconds since the Unix epoch. Used by
+    /// [`Executor::sleep`] and [`Executor::tick`] for timer management.
+    /// Implementations must use a wasm-compatible source (e.g.
+    /// `js_sys::Date::now()`) — `std::time::Instant::now()` panics on
+    /// `wasm32-unknown-unknown`.
+    fn now(&self) -> u64;
 }
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()>>>;
@@ -100,6 +103,69 @@ unsafe fn waker_drop(ptr: *const ()) {
     unsafe { drop(Box::from_raw(ptr as *mut WakerPayload)) };
 }
 
+type TimerQueue = Rc<RefCell<BTreeMap<u64, Vec<Waker>>>>;
+
+/// A future that completes after `duration` has elapsed.
+///
+/// Created by [`Executor::sleep`]. On first poll, registers its waker in the
+/// executor's timer queue keyed by the absolute deadline (ms since epoch).
+/// When `tick()` runs and the deadline has passed, the waker is fired and the
+/// task is re-enqueued for polling.
+///
+/// Stale entries (from dropped or cancelled tasks) remain in the timer queue
+/// until their deadline passes; they are harmlessly woken and skipped by
+/// `tick()` (the task id is no longer in the task map).
+pub struct Sleep {
+    deadline_ms: u64,
+    timers: TimerQueue,
+    runtime: Rc<dyn AsyncRuntime>,
+    registered: bool,
+}
+
+impl Future for Sleep {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<()> {
+        if self.runtime.now() >= self.deadline_ms {
+            return Poll::Ready(());
+        }
+        if !self.registered {
+            self.registered = true;
+            self.timers
+                .borrow_mut()
+                .entry(self.deadline_ms)
+                .or_default()
+                .push(cx.waker().clone());
+        }
+        Poll::Pending
+    }
+}
+
+/// Cancellation handle for a spawned task. Dropping it removes the task from
+/// the executor's task map; any ready-queue or timer-queue entries for the
+/// task become no-ops (skipped by `tick`).
+///
+/// Created by [`Executor::spawn_handle`]. For fire-and-forget tasks that don't
+/// need cancellation, use [`Executor::spawn`] instead.
+pub struct TaskHandle {
+    id: TaskId,
+    tasks: Rc<RefCell<HashMap<TaskId, BoxFuture>>>,
+}
+
+impl TaskHandle {
+    /// Returns `true` if the task is still alive (has not completed or been
+    /// cancelled).
+    pub fn is_alive(&self) -> bool {
+        self.tasks.borrow().contains_key(&self.id)
+    }
+}
+
+impl Drop for TaskHandle {
+    fn drop(&mut self) {
+        self.tasks.borrow_mut().remove(&self.id);
+    }
+}
+
 /// Engine-owned, engine-driven single-threaded executor with real wakers.
 ///
 /// Held as `Rc<Executor>` and exposed to spawned futures (which can capture
@@ -117,11 +183,27 @@ pub struct Executor {
     ready: Rc<RefCell<VecDeque<TaskId>>>,
     /// Monotonic task id source.
     next_id: Rc<AtomicU64>,
+    /// Timer queue: absolute deadline (ms since epoch) → wakers waiting
+    /// for that deadline. Drained by `tick` (expired entries are woken)
+    /// and read by `next_timer_deadline` for frame-loop scheduling.
+    timers: TimerQueue,
+    /// Wall-clock time source. `None` only with `Default` (tests that
+    /// don't use `sleep`); otherwise injected at construction.
+    runtime: Option<Rc<dyn AsyncRuntime>>,
 }
 
 impl Executor {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create an executor with a wall-clock time source for `sleep`/`tick`
+    /// timer management.
+    pub fn with_runtime(runtime: Rc<dyn AsyncRuntime>) -> Self {
+        Executor {
+            runtime: Some(runtime),
+            ..Self::default()
+        }
     }
 
     /// Spawn a `!Send` future. The future lives until it returns `Ready` or
@@ -145,13 +227,82 @@ impl Executor {
         self.spawn(fut);
     }
 
+    /// Spawn a `!Send` future and return a [`TaskHandle`] that can cancel it.
+    /// Dropping the handle removes the task from the executor.
+    pub fn spawn_handle<F>(&self, fut: F) -> TaskHandle
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        self.tasks.borrow_mut().insert(id, Box::pin(fut));
+        self.ready.borrow_mut().push_back(id);
+        TaskHandle {
+            id,
+            tasks: self.tasks.clone(),
+        }
+    }
+
+    /// Create a [`Sleep`] future that completes after `duration`.
+    ///
+    /// The future registers its waker in the executor's timer queue on first
+    /// poll. The engine frame loop reads [`Self::next_timer_deadline`] to
+    /// schedule a precise wake-up via `NextFrame::After(d)` instead of
+    /// busy-polling at vsync.
+    pub fn sleep(&self, duration: Duration) -> Sleep {
+        let runtime = self
+            .runtime
+            .clone()
+            .expect("Executor::sleep requires a runtime (use with_runtime)");
+        let deadline_ms = runtime.now().saturating_add(duration.as_millis() as u64);
+        Sleep {
+            deadline_ms,
+            timers: self.timers.clone(),
+            runtime,
+            registered: false,
+        }
+    }
+
+    /// Returns the earliest pending timer deadline (ms since epoch), if any.
+    /// Used by the engine frame loop to schedule `NextFrame::After(d)` for
+    /// timer-driven async tasks (e.g. caret blink).
+    pub fn next_timer_deadline(&self) -> Option<u64> {
+        self.timers.borrow().keys().next().copied()
+    }
+
+    /// Returns the current wall-clock time (ms since epoch), or `None` if
+    /// no runtime is installed.
+    pub fn runtime_now(&self) -> Option<u64> {
+        self.runtime.as_ref().map(|r| r.now())
+    }
+
     /// Drive all ready tasks one poll step. Returns `true` if any task was
     /// polled.
     ///
-    /// A task that returns `Pending` parks; its waker (produced by
-    /// [`make_waker`]) re-enqueues the task id on wake. A task that returns
-    /// `Ready` is dropped and removed from the registry.
+    /// First, expired timer entries are woken (their wakers push task ids onto
+    /// the ready queue). Then all ready tasks are polled once. A task that
+    /// returns `Pending` parks; its waker (produced by [`make_waker`])
+    /// re-enqueues the task id on wake. A task that returns `Ready` is dropped
+    /// and removed from the registry.
     pub fn tick(&self) -> bool {
+        // Wake expired timers.
+        let now = self.runtime.as_ref().map(|r| r.now()).unwrap_or(0);
+        let expired: Vec<Vec<Waker>> = {
+            let mut timers = self.timers.borrow_mut();
+            let keys: Vec<u64> = timers
+                .keys()
+                .take_while(|&&k| k <= now)
+                .copied()
+                .collect();
+            keys.into_iter()
+                .filter_map(|k| timers.remove(&k))
+                .collect()
+        };
+        for wakers in expired {
+            for waker in wakers {
+                waker.wake();
+            }
+        }
+
         let ids: Vec<TaskId> = self.ready.borrow_mut().drain(..).collect();
         if ids.is_empty() {
             return false;

@@ -5,7 +5,7 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use boa_engine::context::time::FixedClock;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
@@ -30,15 +30,19 @@ use tur_shared::{Cursor, MouseButton, Offset};
 /// time as a frame count rather than a wall duration.
 const FRAME_STEP_MS: u64 = 16;
 
-/// Wall-clock `AsyncRuntime` for tests. Uses real `Instant::now()` —
+/// Wall-clock `AsyncRuntime` for tests. Uses real `SystemTime::now()` —
 /// deterministic timing belongs to boa's `FixedClock` (advanced manually);
 /// this is just for wall-clock reads from spawned futures (rare in tests).
 #[derive(Default, Clone)]
 pub struct TestRuntime;
 
 impl AsyncRuntime for TestRuntime {
-    fn now(&self) -> Instant {
-        Instant::now()
+    fn now(&self) -> u64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
     }
 }
 

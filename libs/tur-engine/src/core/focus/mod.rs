@@ -108,20 +108,20 @@ impl FocusManager {
     /// free of tree/queue borrows and can run inside element gesture
     /// handlers); this method resolves the changes once per frame.
     ///
-    /// Returns the count of resolved focus changes (focus + blur). Callers
-    /// use a non-zero return to force a paint-only redraw so that focus-
-    /// sensitive paint effects (e.g. caret appearance/disappearance) update
-    /// even when no reactive atom changed.
+    /// Returns the list of resolved `(id, focused)` pairs. Callers use this
+    /// to dispatch Rust-level `on_focus_changed` callbacks (e.g. to spawn
+    /// async tasks tied to focus state) and to force a paint-only redraw so
+    /// that focus-sensitive paint effects update immediately.
     pub fn flush_pending(
         &mut self,
         tree: &crate::core::elements::NodeTreeData,
         queue: &mut crate::core::edgy_event::PendingMutationInvocationQueue,
-    ) -> usize {
+    ) -> Vec<(ElementNodeId, bool)> {
         let changes = self.drain_pending();
         if changes.is_empty() {
-            return 0;
+            return Vec::new();
         }
-        let mut count = 0;
+        let mut result = Vec::new();
         for change in changes {
             let id = change.id();
             let Some(node) = tree.get_element(id) else {
@@ -135,19 +135,19 @@ impl FocusManager {
             };
             match change {
                 FocusChange::Focus(_) => {
-                    count += 1;
                     if let Some(m) = focusable.on_focus_mutation() {
                         queue.push(m, FocusEvent);
                     }
+                    result.push((id, true));
                 }
                 FocusChange::Blur(_) => {
-                    count += 1;
                     if let Some(m) = focusable.on_blur_mutation() {
                         queue.push(m, BlurEvent);
                     }
+                    result.push((id, false));
                 }
             }
         }
-        count
+        result
     }
 }

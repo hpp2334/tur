@@ -52,13 +52,6 @@ pub struct TurAppInternal {
     /// `ClipboardWriteHandler` to perform async platform work without
     /// blocking the sync flush loop.
     pub(crate) async_executor: Rc<AsyncExecutor>,
-    /// Portable async-runtime hooks (wall-clock `now()`, future
-    /// `spawn_blocking`/timer). Injected by the embedder via
-    /// `TurEngineBuilder::async_runtime`. Held here for future use
-    /// (timer scheduling, wall-clock timestamps); the current
-    /// clipboard/http bridge fns don't need it.
-    #[allow(dead_code)]
-    pub(crate) async_runtime: Rc<dyn AsyncRuntime>,
     /// Engine-owned `viewportSize$` reactive source handle. `None` only until
     /// `TurEngineBuilder::build` creates it (right after `new`). Synced each
     /// frame in `flush` from `app_context.size`.
@@ -112,7 +105,7 @@ impl TurAppInternal {
 
         let needs_draw = Rc::new(Cell::new(false));
 
-        let async_executor = Rc::new(AsyncExecutor::new());
+        let async_executor = Rc::new(AsyncExecutor::with_runtime(async_runtime.clone()));
 
         // Expose the engine's async executor as a capability so capability-
         // using bridge fns (tur-net's `request`, tur-clipboard's read/write)
@@ -128,7 +121,6 @@ impl TurAppInternal {
             needs_draw,
             executor,
             async_executor,
-            async_runtime,
             viewport_size: None,
             last_viewport: Cell::new((-1.0, -1.0)),
         }
@@ -140,7 +132,6 @@ impl TurAppInternal {
     ) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
         let mut animation_ticked = false;
-        let mut focus_changed = false;
 
         loop {
             // Drive spawned Rust futures one poll step. Completions they
@@ -148,6 +139,12 @@ impl TurAppInternal {
             // before boa's microtask drain — so PromiseJobs enqueued by
             // `resolvers.resolve.call(...)` run in the same iteration.
             let async_progress = self.async_executor.tick();
+            // Async tasks may request a redraw (e.g. caret blink loop waking
+            // after `sleep`). Check right after tick so the render happens
+            // in the same flush iteration.
+            if self.async_executor.take_redraw_requested() {
+                self.needs_draw.set(true);
+            }
             self.async_executor.drain_completions(boa_context);
 
             let handled_events = self.flush_app_events();
@@ -185,27 +182,27 @@ impl TurAppInternal {
         // elements, on_updated for dirtied elements, before_destroy for
         // removed elements. Pushed mutations are drained right after.
         self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
-        focus_changed |= self.flush_focus_notifications();
+        self.flush_focus_notifications(boa_context);
         let handled_mutations = self.flush_pending_mutations(boa_context);
-            // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
-            // ClockJobs). PromiseJobs fire `.then` callbacks which may call
-            // bridge fns that `spawn_detached` more Rust futures — those
-            // land in `async_executor.ready` and are caught by the
-            // `has_pending`/`async_progress` termination check, keeping
-            // the fixed-point loop alive.
+        // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
+        // ClockJobs). PromiseJobs fire `.then` callbacks which may call
+        // bridge fns that `spawn_detached` more Rust futures — those
+        // land in `async_executor.ready` and are caught by the
+        // `async_progress` termination check on the next iteration,
+        // keeping the fixed-point loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
-            let async_pending = self.async_executor.has_pending();
-            // Quiescence requires: no events handled, no mutations handled,
-            // no reactive dirty, no microtasks just ran (pre-existing latent
-            // bug — a microtask that enqueues another without doing set/event
-            // would terminate early), and no pending async work.
+            // Quiescence: no events, no mutations, no dirty state, no async
+            // task was polled, no microtasks ran. We deliberately do NOT
+            // check `has_pending()` here — a task waiting on a `sleep` timer
+            // is not immediately-available work. The `schedule` decision
+            // below uses `has_pending` + `next_timer_delay` to decide when
+            // to wake the engine next.
             if !handled_events
                 && !handled_mutations
                 && !new_dirty
                 && !async_progress
                 && jobs_run == 0
-                && !async_pending
             {
                 break;
             }
@@ -220,27 +217,6 @@ impl TurAppInternal {
             self.needs_draw.set(true);
         }
 
-        // Focus changes require a paint-only redraw so that focus-sensitive
-        // visual effects (e.g. caret appearance/disappearance) update
-        // immediately, even when no reactive atom changed and no layout
-        // is needed.
-        if focus_changed {
-            needs_render = true;
-        }
-
-        // A paint-time redraw deadline (set by elements via
-        // `PaintContext::request_redraw_after`) may have expired since the
-        // last paint. If so, force a paint-only redraw so the element can
-        // update its visual state and re-arm the next deadline.
-        if !needs_render {
-            let now = self.app_context.borrow().shell.now();
-            if let Some(deadline) = self.app_context.borrow().shell.peek_redraw_deadline() {
-                if now >= deadline {
-                    needs_render = true;
-                }
-            }
-        }
-
         if needs_render {
             self.app_context.borrow_mut().render();
             if let Err(e) = self.app_context.borrow_mut().renderer.present() {
@@ -251,18 +227,22 @@ impl TurAppInternal {
 
         // Decide how the caller should schedule the next frame.
         //
-        // - `Vsync` (continuous): an animation is running or a Rust async
-        //   task is live. Animations need smooth 60fps; async tasks need
-        //   polling each frame.
+        // - `Vsync` (continuous): an animation is running, or a Rust async
+        //   task is live without a timer deadline (e.g. clipboard/http
+        //   futures awaiting external wake-up). Animations need smooth 60fps;
+        //   timer-less async tasks need polling each frame.
         // - `After(d)`: nothing continuous is pending, but a JS timer
-        //   (setTimeout/setInterval) or a paint-time redraw deadline is
+        //   (setTimeout/setInterval) or an async `sleep` deadline is
         //   outstanding. We wake at the sooner of the two rather than
         //   polling at vsync.
         // - `Idle`: nothing time-driven is pending — the loop can stop
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
+        let async_timer_delay = self.async_executor.next_timer_delay();
         let timers_pending = self.executor.has_pending_clock_jobs();
-        let schedule = if animation_active || async_pending {
+        let need_vsync = animation_active
+            || (async_pending && async_timer_delay.is_none());
+        let schedule = if need_vsync {
             NextFrame::Vsync
         } else {
             let timer_delay = if timers_pending {
@@ -271,23 +251,10 @@ impl TurAppInternal {
             } else {
                 None
             };
-
-            // The redraw deadline was populated during the most recent
-            // paint (this frame's if render ran, or the previous frame's
-            // if it didn't). Convert the absolute deadline to a relative
-            // delay for scheduling.
-            let now = self.app_context.borrow().shell.now();
-            let redraw_delay = self
-                .app_context
-                .borrow()
-                .shell
-                .peek_redraw_deadline()
-                .map(|d| d.saturating_sub(now));
-
-            match (timer_delay, redraw_delay) {
-                (Some(t), Some(r)) => NextFrame::After(t.min(r)),
+            match (timer_delay, async_timer_delay) {
+                (Some(t), Some(a)) => NextFrame::After(t.min(a)),
                 (Some(t), None) => NextFrame::After(t),
-                (None, Some(r)) => NextFrame::After(r),
+                (None, Some(a)) => NextFrame::After(a),
                 // `timers_pending` with no delay is a transient race
                 // (timer drained between the check and the read); fall
                 // back to vsync as a safety net.
@@ -549,15 +516,41 @@ impl TurAppInternal {
     /// Resolve pending focus/blur notifications recorded by `FocusManager`.
     /// Delegates to the focus domain, which maps each pending id to its
     /// `Focusable` element (if any) and enqueues the `on_focus` / `on_blur`
-    /// mutation. Runs before `flush_pending_mutations` so focus callbacks
-    /// fire in the same pass. Returns `true` if any focus changes were
-    /// resolved — callers use this to force a paint-only redraw so that
-    /// focus-sensitive paint effects update immediately.
-    fn flush_focus_notifications(&self) -> bool {
-        let tree = self.js_context.element_tree.borrow();
-        let mut focus = self.js_context.focus_manager.borrow_mut();
-        let mut queue = self.js_context.mutation_queue.borrow_mut();
-        focus.flush_pending(&tree, &mut queue) > 0
+    /// mutation. Then fires Rust-level `on_focus_changed` lifecycle callbacks
+    /// on each affected element, giving them a chance to spawn/cancel async
+    /// tasks tied to focus state (e.g. caret blink). Returns `true` if any
+    /// focus changes were resolved.
+    fn flush_focus_notifications(&self, boa_context: &mut boa_engine::Context) -> bool {
+        // Phase 1: enqueue JS mutations (borrows tree immutably).
+        let focus_changes = {
+            let tree = self.js_context.element_tree.borrow();
+            let mut focus = self.js_context.focus_manager.borrow_mut();
+            let mut queue = self.js_context.mutation_queue.borrow_mut();
+            focus.flush_pending(&tree, &mut queue)
+        };
+        if focus_changes.is_empty() {
+            return false;
+        }
+
+        // Phase 2: Rust focus callbacks (borrows tree mutably — take element
+        // out, call, put back, same pattern as `run_lifecycle_hooks`).
+        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+        for (id, focused) in &focus_changes {
+            let mut element = {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                tree.get_element_mut(*id).and_then(|n| n.element.take())
+            };
+            if let Some(ref mut elem) = element {
+                elem.run_on_focus_changed(*focused, &mut cx, boa_context);
+            }
+            if let Some(elem) = element {
+                let mut tree = self.js_context.element_tree.borrow_mut();
+                if let Some(node) = tree.get_element_mut(*id) {
+                    node.element = Some(elem);
+                }
+            }
+        }
+        true
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the

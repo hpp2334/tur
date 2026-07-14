@@ -1,9 +1,13 @@
+use std::rc::Rc;
+use std::time::Duration;
+
 use boa_engine::class::Class;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
+use tur_engine::core::async_::{AsyncExecutor, TaskHandle};
 use tur_engine::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
@@ -23,7 +27,7 @@ use crate::text::{
     InputEvent, SelectionChangeEvent,
 };
 use tur_engine::core::bridge::JsProps;
-use tur_engine::core::view::{ViewCx, read_atom_raw, Lifecycle, Val, View};
+use tur_engine::core::view::{SharedViewCx, ViewCx, read_atom_raw, Lifecycle, Val, View};
 use tur_engine::core::reactive::AnyReadable;
 use crate::elements::text::span_data::SpanData;
 use tur_engine::core::text::text_layout::TextLayoutData;
@@ -147,6 +151,7 @@ impl View for EditableTextView {
                 cached_layout: None,
                 resolved_multiline: false,
                 painting: EditableTextPainting::default(),
+                blink_task: None,
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
@@ -180,7 +185,15 @@ pub struct EditableTextElement {
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) resolved_multiline: bool,
     pub(crate) painting: EditableTextPainting,
+    /// Handle to the async caret-blink task. `Some` while focused (task is
+    /// alive and periodically requesting redraws); `None` when unfocused
+    /// (task cancelled by dropping the handle).
+    pub(crate) blink_task: Option<TaskHandle>,
 }
+
+/// Half-period of the caret blink, in milliseconds. The caret is visible on
+/// even half-cycles: `(now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0`.
+pub(crate) const CARET_BLINK_HALF_PERIOD_MS: u64 = 530;
 
 impl tur_engine::core::elements::ElementCursorRect for EditableTextElement {
     fn cursor_rect_relative(&self) -> Option<(f64, f64, f64, f64)> {
@@ -684,7 +697,24 @@ impl IntoJsArgs for ContextMenuEvent {
     }
 }
 
-impl Lifecycle for EditableTextElement {}
+impl Lifecycle for EditableTextElement {
+    fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
+        if focused {
+            let Some(exec) = cx.js_ctx().capability::<Rc<AsyncExecutor>>() else {
+                return;
+            };
+            let exec_clone = exec.clone();
+            self.blink_task = Some(exec.spawn_handle(async move {
+                loop {
+                    exec_clone.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS)).await;
+                    exec_clone.request_redraw();
+                }
+            }));
+        } else {
+            self.blink_task = None;
+        }
+    }
+}
 
 impl ElementSubscribe for EditableTextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {

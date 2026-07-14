@@ -61,14 +61,6 @@ impl<'a> PaintContext<'a> {
         self.shell.now()
     }
 
-    /// Request a paint-only redraw after `delay`. Multiple calls during one
-    /// paint pass take the earliest deadline. The engine schedules a wake-up
-    /// at the deadline and forces a paint when it expires, so elements can
-    /// drive periodic visual updates (e.g. caret blink) entirely from paint.
-    pub fn request_redraw_after(&self, delay: Duration) {
-        self.shell.request_redraw_after(delay);
-    }
-
     pub fn get_image_resource(&self, id: ResourceId) -> Option<&ImageResource> {
         self.resource_map.get_image(id)
     }
