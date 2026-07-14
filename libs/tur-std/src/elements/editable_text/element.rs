@@ -7,7 +7,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use tur_engine::core::async_::{AsyncExecutor, TaskHandle};
+use tur_engine::core::async_::{AsyncExecutor, Task};
 use tur_engine::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
@@ -188,7 +188,7 @@ pub struct EditableTextElement {
     /// Handle to the async caret-blink task. `Some` while focused (task is
     /// alive and periodically requesting redraws); `None` when unfocused
     /// (task cancelled by dropping the handle).
-    pub(crate) blink_task: Option<TaskHandle>,
+    pub(crate) blink_task: Option<Task>,
 }
 
 /// Half-period of the caret blink, in milliseconds. The caret is visible on
@@ -703,11 +703,12 @@ impl Lifecycle for EditableTextElement {
             let Some(exec) = cx.js_ctx().capability::<Rc<AsyncExecutor>>() else {
                 return;
             };
+            let needs_draw = cx.js_ctx().needs_draw.clone();
             let exec_clone = exec.clone();
-            self.blink_task = Some(exec.spawn_handle(async move {
+            self.blink_task = Some(exec.spawn_task(async move {
                 loop {
                     exec_clone.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS)).await;
-                    exec_clone.request_redraw();
+                    needs_draw.set(true);
                 }
             }));
         } else {

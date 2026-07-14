@@ -540,7 +540,7 @@ impl TurEngineBuilder {
         timer::register_timer_globals(
             &mut boa_context,
             timer_state,
-            internal.needs_draw.clone(),
+            internal.js_context.needs_draw.clone(),
         );
         console::register_console_globals(&mut boa_context);
 
@@ -561,7 +561,6 @@ impl TurEngineBuilder {
                 js_ctx_value: ctx_val.clone(),
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
-                needs_draw: internal.needs_draw.clone(),
                 async_executor: internal.async_executor.clone(),
                 viewport_size: viewport_size_js.clone(),
             };

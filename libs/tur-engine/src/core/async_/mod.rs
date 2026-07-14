@@ -22,7 +22,7 @@
 //!
 //! See [`crate::core::app::TurAppInternal::flush`] for the full sequence.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::rc::Rc;
@@ -32,7 +32,7 @@ use boa_engine::context::time::Clock as BoaClock;
 use boa_engine::Context;
 use boa_engine::JsResult;
 
-pub use tur_async::{Sleep, TaskHandle};
+pub use tur_async::{Sleep, Task};
 
 /// Adapter that bridges boa's `Clock` trait to `tur_async::Clock`. The engine
 /// already receives a `Clock` (for boa's `Context` and `Shell`); this wraps it
@@ -54,34 +54,26 @@ pub type Completion = Box<dyn FnOnce(&mut Context) -> JsResult<()>>;
 
 /// Engine-side async executor: a [`tur_async::Executor`] (which handles
 /// futures, wakers, ready queue, timers) plus a [`Completion`] queue (which
-/// bridges to boa's `Context`) and a redraw-request flag.
+/// bridges to boa's `Context`).
 ///
 /// Held as `Rc<AsyncExecutor>` on
 /// [`crate::core::app::TurAppInternal`] and exposed to plugins via
 /// [`crate::core::plugin::PluginContext`]. Spawned futures can capture
 /// `Rc<AsyncExecutor>` (cheap clone) to call [`Self::complete`], [`Self::sleep`],
-/// or [`Self::request_redraw`] from inside their body.
-#[derive(Default)]
+/// or [`Self::spawn`] from inside their body.
 pub struct AsyncExecutor {
     inner: tur_async::Executor,
     completions: Rc<RefCell<VecDeque<Completion>>>,
-    /// Set by async tasks via [`Self::request_redraw`]; checked by `flush`
-    /// after `tick` to trigger a paint-only redraw.
-    redraw_requested: Cell<bool>,
 }
 
 impl AsyncExecutor {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Create with a wall-clock time source (boa's `Clock`) for `sleep`/timer
     /// support. Internally adapts to `tur_async::Clock`.
-    pub fn with_clock(clock: Rc<dyn BoaClock>) -> Self {
+    pub fn new(clock: Rc<dyn BoaClock>) -> Self {
         let adapter: Rc<dyn tur_async::Clock> = Rc::new(ClockAdapter(clock));
         AsyncExecutor {
-            inner: tur_async::Executor::with_clock(adapter),
-            ..Self::default()
+            inner: tur_async::Executor::new(adapter),
+            completions: Rc::new(RefCell::new(VecDeque::new())),
         }
     }
 
@@ -106,14 +98,14 @@ impl AsyncExecutor {
         self.spawn(fut);
     }
 
-    /// Spawn a future and return a cancellable [`TaskHandle`]. Dropping the
-    /// handle cancels the task. Used by elements that need to manage async
+    /// Spawn a future and return a cancellable [`Task`]. Dropping the
+    /// task cancels it. Used by elements that need to manage async
     /// task lifecycles (e.g. caret blink on focus/blur).
-    pub fn spawn_handle<F>(&self, fut: F) -> TaskHandle
+    pub fn spawn_task<F>(&self, fut: F) -> Task
     where
         F: Future<Output = ()> + 'static,
     {
-        self.inner.spawn_handle(fut)
+        self.inner.spawn_task(fut)
     }
 
     /// Create a [`Sleep`] future that completes after `duration`. The engine
@@ -126,25 +118,13 @@ impl AsyncExecutor {
     /// Returns the delay until the earliest pending timer deadline, if any.
     /// Used by the frame loop to schedule `NextFrame::After(d)` for
     /// timer-driven async tasks.
-    pub fn next_timer_delay(&self) -> Option<Duration> {
+    pub(crate) fn next_timer_delay(&self) -> Option<Duration> {
         let deadline_ms = self.inner.next_timer_deadline()?;
-        let now_ms = self.inner.now().unwrap_or(0);
+        let now_ms = self.inner.now();
         if deadline_ms <= now_ms {
             return Some(Duration::ZERO);
         }
         Some(Duration::from_millis(deadline_ms - now_ms))
-    }
-
-    /// Request a paint-only redraw from an async task. Checked by `flush`
-    /// after `tick` via [`Self::take_redraw_requested`].
-    pub fn request_redraw(&self) {
-        self.redraw_requested.set(true);
-    }
-
-    /// Consume and return the pending redraw-request flag. Called by `flush`
-    /// after `tick`.
-    pub fn take_redraw_requested(&self) -> bool {
-        self.redraw_requested.replace(false)
     }
 
     /// Push a completion closure. Called from inside a spawned future when it
@@ -157,7 +137,7 @@ impl AsyncExecutor {
 
     /// Drive all ready tasks one poll step. Returns `true` if any task was
     /// polled. Delegates to [`tur_async::Executor::tick`].
-    pub fn tick(&self) -> bool {
+    pub(crate) fn tick(&self) -> bool {
         self.inner.tick()
     }
 
@@ -176,7 +156,7 @@ impl AsyncExecutor {
     /// True if there is pending work (ready tasks, live tasks, pending
     /// completions, or pending timers). Used by `flush`'s termination
     /// condition — see [`crate::core::app::TurAppInternal::flush`].
-    pub fn has_pending(&self) -> bool {
+    pub(crate) fn has_pending(&self) -> bool {
         self.inner.has_pending() || !self.completions.borrow().is_empty()
     }
 }

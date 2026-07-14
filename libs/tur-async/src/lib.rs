@@ -110,25 +110,27 @@ pub(crate) type TimerQueue = Rc<RefCell<BTreeMap<u64, Vec<Waker>>>>;
 /// Cancellation handle for a spawned task. Dropping it removes the task from
 /// the executor's task map; any ready-queue or timer-queue entries for the
 /// task become no-ops (skipped by `tick`).
-///
-/// Created by [`Executor::spawn_handle`]. For fire-and-forget tasks that don't
-/// need cancellation, use [`Executor::spawn`] instead.
-pub struct TaskHandle {
+pub(crate) struct TaskHandle {
     id: TaskId,
     tasks: Rc<RefCell<HashMap<TaskId, BoxFuture>>>,
-}
-
-impl TaskHandle {
-    /// Returns `true` if the task is still alive (has not completed or been
-    /// cancelled).
-    pub fn is_alive(&self) -> bool {
-        self.tasks.borrow().contains_key(&self.id)
-    }
 }
 
 impl Drop for TaskHandle {
     fn drop(&mut self) {
         self.tasks.borrow_mut().remove(&self.id);
+    }
+}
+
+/// A spawned task that can be cancelled by dropping. Created by
+/// [`Executor::spawn_task`]. For fire-and-forget tasks that don't need
+/// cancellation, use [`Executor::spawn`] instead.
+pub struct Task(TaskHandle);
+
+impl Task {
+    /// Returns `true` if the task is still alive (has not completed or been
+    /// cancelled).
+    pub fn is_alive(&self) -> bool {
+        self.0.tasks.borrow().contains_key(&self.0.id)
     }
 }
 
@@ -138,7 +140,6 @@ impl Drop for TaskHandle {
 /// the `Rc` to spawn nested tasks). The JS-binding wrapper in
 /// `tur-engine::core::async_` adds a Completion queue on top for settling
 /// JsPromises under `&mut boa_engine::Context`.
-#[derive(Default)]
 pub struct Executor {
     /// Live futures keyed by id. Removed when a future returns `Ready`.
     /// Held as `Rc<RefCell<...>>` so wakers can outlive the borrowed
@@ -153,22 +154,20 @@ pub struct Executor {
     /// for that deadline. Drained by `tick` (expired entries are woken)
     /// and read by `next_timer_deadline` for frame-loop scheduling.
     timers: TimerQueue,
-    /// Wall-clock time source. `None` only with `Default` (tests that
-    /// don't use `sleep`); otherwise injected at construction.
-    clock: Option<Rc<dyn Clock>>,
+    /// Wall-clock time source for `sleep` and timer management.
+    clock: Rc<dyn Clock>,
 }
 
 impl Executor {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Create an executor with a wall-clock time source for `sleep`/`tick`
     /// timer management.
-    pub fn with_clock(clock: Rc<dyn Clock>) -> Self {
+    pub fn new(clock: Rc<dyn Clock>) -> Self {
         Executor {
-            clock: Some(clock),
-            ..Self::default()
+            tasks: Rc::new(RefCell::new(HashMap::new())),
+            ready: Rc::new(RefCell::new(VecDeque::new())),
+            next_id: Rc::new(AtomicU64::new(0)),
+            timers: Rc::new(RefCell::new(BTreeMap::new())),
+            clock,
         }
     }
 
@@ -193,19 +192,19 @@ impl Executor {
         self.spawn(fut);
     }
 
-    /// Spawn a `!Send` future and return a [`TaskHandle`] that can cancel it.
-    /// Dropping the handle removes the task from the executor.
-    pub fn spawn_handle<F>(&self, fut: F) -> TaskHandle
+    /// Spawn a `!Send` future and return a cancellable [`Task`]. Dropping the
+    /// task removes it from the executor.
+    pub fn spawn_task<F>(&self, fut: F) -> Task
     where
         F: Future<Output = ()> + 'static,
     {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         self.tasks.borrow_mut().insert(id, Box::pin(fut));
         self.ready.borrow_mut().push_back(id);
-        TaskHandle {
+        Task(TaskHandle {
             id,
             tasks: self.tasks.clone(),
-        }
+        })
     }
 
     /// Create a [`Sleep`] future that completes after `duration`.
@@ -215,15 +214,11 @@ impl Executor {
     /// schedule a precise wake-up via `NextFrame::After(d)` instead of
     /// busy-polling at vsync.
     pub fn sleep(&self, duration: Duration) -> Sleep {
-        let clock = self
-            .clock
-            .clone()
-            .expect("Executor::sleep requires a clock (use with_clock)");
-        let deadline_ms = clock.now().saturating_add(duration.as_millis() as u64);
+        let deadline_ms = self.clock.now().saturating_add(duration.as_millis() as u64);
         Sleep {
             deadline_ms,
             timers: self.timers.clone(),
-            clock: Rc::downgrade(&clock),
+            clock: Rc::downgrade(&self.clock),
             registered: false,
         }
     }
@@ -235,10 +230,9 @@ impl Executor {
         self.timers.borrow().keys().next().copied()
     }
 
-    /// Returns the current wall-clock time (ms since epoch), or `None` if
-    /// no clock is installed.
-    pub fn now(&self) -> Option<u64> {
-        self.clock.as_ref().map(|c| c.now())
+    /// Returns the current wall-clock time (ms since epoch).
+    pub fn now(&self) -> u64 {
+        self.clock.now()
     }
 
     /// Drive all ready tasks one poll step. Returns `true` if any task was
@@ -251,7 +245,7 @@ impl Executor {
     /// and removed from the registry.
     pub fn tick(&self) -> bool {
         // Wake expired timers.
-        let now = self.clock.as_ref().map(|c| c.now()).unwrap_or(0);
+        let now = self.clock.now();
         let expired: Vec<Vec<Waker>> = {
             let mut timers = self.timers.borrow_mut();
             let keys: Vec<u64> = timers

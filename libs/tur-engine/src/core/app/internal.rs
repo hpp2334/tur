@@ -44,7 +44,6 @@ pub struct FrameOutcome {
 pub struct TurAppInternal {
     pub(crate) js_context: TurJsContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
-    pub(crate) needs_draw: Rc<Cell<bool>>,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// Engine-owned async executor. Drives spawned Rust futures via
     /// [`AsyncExecutor::tick`] inside `flush`, with real wakers (backed by
@@ -78,6 +77,7 @@ impl TurAppInternal {
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
+        let needs_draw = Rc::new(Cell::new(false));
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
         let store = Store::new(dirty.clone());
@@ -88,11 +88,12 @@ impl TurAppInternal {
             mutation_queue.clone(),
             focus_manager.clone(),
             dirty.clone(),
+            needs_draw.clone(),
             resource_map.clone(),
             store,
         );
 
-        let async_executor = Rc::new(AsyncExecutor::with_clock(clock.clone()));
+        let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
 
         let app_context = TurAppContext::new(
             element_tree,
@@ -103,8 +104,6 @@ impl TurAppInternal {
             font_loader,
             clock,
         );
-
-        let needs_draw = Rc::new(Cell::new(false));
 
         // Expose the engine's async executor as a capability so capability-
         // using bridge fns (tur-net's `request`, tur-clipboard's read/write)
@@ -117,7 +116,6 @@ impl TurAppInternal {
         Self {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
-            needs_draw,
             executor,
             async_executor,
             viewport_size: None,
@@ -138,12 +136,6 @@ impl TurAppInternal {
             // before boa's microtask drain — so PromiseJobs enqueued by
             // `resolvers.resolve.call(...)` run in the same iteration.
             let async_progress = self.async_executor.tick();
-            // Async tasks may request a redraw (e.g. caret blink loop waking
-            // after `sleep`). Check right after tick so the render happens
-            // in the same flush iteration.
-            if self.async_executor.take_redraw_requested() {
-                self.needs_draw.set(true);
-            }
             self.async_executor.drain_completions(boa_context);
 
             let handled_events = self.flush_app_events();
@@ -170,7 +162,7 @@ impl TurAppInternal {
         // the real viewport from constraints), so there is no separate
         // pre-layout remount pass here.
         let dirty =
-            self.js_context.dirty.take() || self.needs_draw.take() || animation_did_update || reactive_changed;
+            self.js_context.dirty.take() || self.js_context.needs_draw.take() || animation_did_update || reactive_changed;
         if dirty {
             needs_render = true;
             self.app_context
@@ -181,7 +173,10 @@ impl TurAppInternal {
         // elements, on_updated for dirtied elements, before_destroy for
         // removed elements. Pushed mutations are drained right after.
         self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
-        self.flush_focus_notifications(boa_context);
+        {
+            let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+            cx.flush_focus_notifications(boa_context);
+        }
         let handled_mutations = self.flush_pending_mutations(boa_context);
         // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
         // ClockJobs). PromiseJobs fire `.then` callbacks which may call
@@ -190,7 +185,7 @@ impl TurAppInternal {
         // `async_progress` termination check on the next iteration,
         // keeping the fixed-point loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
-            let new_dirty = self.js_context.dirty.get() || self.needs_draw.get();
+            let new_dirty = self.js_context.dirty.get() || self.js_context.needs_draw.get();
             // Quiescence: no events, no mutations, no dirty state, no async
             // task was polled, no microtasks ran. We deliberately do NOT
             // check `has_pending()` here — a task waiting on a `sleep` timer
@@ -213,7 +208,7 @@ impl TurAppInternal {
             .borrow()
             .has_active();
         if animation_active {
-            self.needs_draw.set(true);
+            self.js_context.needs_draw.set(true);
         }
 
         if needs_render {
@@ -497,58 +492,18 @@ impl TurAppInternal {
         for event in &platform_events {
             self.app_context
                 .borrow_mut()
-                .dispatch_platform_handlers(event, &self.needs_draw);
+                .dispatch_platform_handlers(event, &self.js_context.needs_draw);
         }
 
         for event in &app_events {
             if matches!(event, AppEvent::RequestDraw) {
-                self.needs_draw.set(true);
+                self.js_context.needs_draw.set(true);
             }
             self.app_context
                 .borrow_mut()
-                .dispatch_app_handlers(event, &self.needs_draw);
+                .dispatch_app_handlers(event, &self.js_context.needs_draw);
         }
 
-        true
-    }
-
-    /// Resolve pending focus/blur notifications recorded by `FocusManager`.
-    /// Delegates to the focus domain, which maps each pending id to its
-    /// `Focusable` element (if any) and enqueues the `on_focus` / `on_blur`
-    /// mutation. Then fires Rust-level `on_focus_changed` lifecycle callbacks
-    /// on each affected element, giving them a chance to spawn/cancel async
-    /// tasks tied to focus state (e.g. caret blink). Returns `true` if any
-    /// focus changes were resolved.
-    fn flush_focus_notifications(&self, boa_context: &mut boa_engine::Context) -> bool {
-        // Phase 1: enqueue JS mutations (borrows tree immutably).
-        let focus_changes = {
-            let tree = self.js_context.element_tree.borrow();
-            let mut focus = self.js_context.focus_manager.borrow_mut();
-            let mut queue = self.js_context.mutation_queue.borrow_mut();
-            focus.flush_pending(&tree, &mut queue)
-        };
-        if focus_changes.is_empty() {
-            return false;
-        }
-
-        // Phase 2: Rust focus callbacks (borrows tree mutably — take element
-        // out, call, put back, same pattern as `run_lifecycle_hooks`).
-        let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
-        for (id, focused) in &focus_changes {
-            let mut element = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_element_mut(*id).and_then(|n| n.element.take())
-            };
-            if let Some(ref mut elem) = element {
-                elem.run_on_focus_changed(*focused, &mut cx, boa_context);
-            }
-            if let Some(elem) = element {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(node) = tree.get_element_mut(*id) {
-                    node.element = Some(elem);
-                }
-            }
-        }
         true
     }
 
