@@ -7,7 +7,7 @@ use boa_engine::object::JsObject;
 use boa_engine::{js_string, JsValue};
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::{AsyncExecutor, AsyncRuntime};
+use crate::core::async_::AsyncExecutor;
 use crate::core::reactive::Source;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
@@ -68,7 +68,6 @@ impl TurAppInternal {
         font_loader: Box<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<dyn Clock>,
-        async_runtime: Rc<dyn AsyncRuntime>,
     ) -> Self {
         use crate::core::elements::NodeTree;
         use crate::core::edgy_event::PendingMutationInvocationQueue;
@@ -93,6 +92,8 @@ impl TurAppInternal {
             store,
         );
 
+        let async_executor = Rc::new(AsyncExecutor::with_clock(clock.clone()));
+
         let app_context = TurAppContext::new(
             element_tree,
             mutation_queue,
@@ -104,8 +105,6 @@ impl TurAppInternal {
         );
 
         let needs_draw = Rc::new(Cell::new(false));
-
-        let async_executor = Rc::new(AsyncExecutor::with_runtime(async_runtime.clone()));
 
         // Expose the engine's async executor as a capability so capability-
         // using bridge fns (tur-net's `request`, tur-clipboard's read/write)

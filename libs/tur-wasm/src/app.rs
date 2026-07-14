@@ -4,7 +4,6 @@ use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
-use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
@@ -18,19 +17,6 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::future_to_promise;
-
-/// `AsyncRuntime` for wasm: wall-clock reads via `Date.now()`. Used by
-/// `tur-async`'s `Sleep` future and timer queue. `std::time::Instant::now()`
-/// panics on `wasm32-unknown-unknown`, so we use `js_sys::Date::now()` —
-/// the same source as `WasmClock`.
-#[derive(Default)]
-struct WasmRuntime;
-
-impl AsyncRuntime for WasmRuntime {
-    fn now(&self) -> u64 {
-        js_sys::Date::now() as u64
-    }
-}
 
 /// Engine `Clock` for wasm. boa's `StdClock` panics on
 /// `wasm32-unknown-unknown` (`SystemTime::now()` is unimplemented), and
@@ -697,7 +683,6 @@ impl TurWasmApp {
             let app = tur_engine::TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(PresetFontLoader::new()))
-                .async_runtime(Rc::new(WasmRuntime))
                 .clock(Rc::new(WasmClock))
                 .plugin(
                     tur_std::TurStdPlugin::builder()

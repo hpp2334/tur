@@ -20,20 +20,19 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::rc::Weak;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
 use std::time::Duration;
 
-/// Portable reactor primitives the engine cannot implement itself. Backends
-/// inject an impl at engine build time. Intentionally tiny — anything with a
-/// portable implementation belongs on [`Executor`] directly. Future additions:
-/// `spawn_blocking`, etc.
-pub trait AsyncRuntime: 'static {
-    /// Wall-clock now, in milliseconds since the Unix epoch. Used by
-    /// [`Executor::sleep`] and [`Executor::tick`] for timer management.
-    /// Implementations must use a wasm-compatible source (e.g.
-    /// `js_sys::Date::now()`) — `std::time::Instant::now()` panics on
-    /// `wasm32-unknown-unknown`.
+/// Wall-clock time source for [`Executor::sleep`] and timer management.
+///
+/// Implementations must use a wasm-compatible source (e.g.
+/// `js_sys::Date::now()`) — `std::time::Instant::now()` panics on
+/// `wasm32-unknown-unknown`. The engine provides an adapter from its own
+/// `Clock` (boa's trait) so backends only implement one time source.
+pub trait Clock: 'static {
+    /// Wall-clock now, in milliseconds since the Unix epoch.
     fn now(&self) -> u64;
 }
 
@@ -118,7 +117,7 @@ type TimerQueue = Rc<RefCell<BTreeMap<u64, Vec<Waker>>>>;
 pub struct Sleep {
     deadline_ms: u64,
     timers: TimerQueue,
-    runtime: Rc<dyn AsyncRuntime>,
+    clock: Weak<dyn Clock>,
     registered: bool,
 }
 
@@ -126,7 +125,11 @@ impl Future for Sleep {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<()> {
-        if self.runtime.now() >= self.deadline_ms {
+        if let Some(clock) = self.clock.upgrade() {
+            if clock.now() >= self.deadline_ms {
+                return Poll::Ready(());
+            }
+        } else {
             return Poll::Ready(());
         }
         if !self.registered {
@@ -189,7 +192,7 @@ pub struct Executor {
     timers: TimerQueue,
     /// Wall-clock time source. `None` only with `Default` (tests that
     /// don't use `sleep`); otherwise injected at construction.
-    runtime: Option<Rc<dyn AsyncRuntime>>,
+    clock: Option<Rc<dyn Clock>>,
 }
 
 impl Executor {
@@ -199,9 +202,9 @@ impl Executor {
 
     /// Create an executor with a wall-clock time source for `sleep`/`tick`
     /// timer management.
-    pub fn with_runtime(runtime: Rc<dyn AsyncRuntime>) -> Self {
+    pub fn with_clock(clock: Rc<dyn Clock>) -> Self {
         Executor {
-            runtime: Some(runtime),
+            clock: Some(clock),
             ..Self::default()
         }
     }
@@ -249,15 +252,15 @@ impl Executor {
     /// schedule a precise wake-up via `NextFrame::After(d)` instead of
     /// busy-polling at vsync.
     pub fn sleep(&self, duration: Duration) -> Sleep {
-        let runtime = self
-            .runtime
+        let clock = self
+            .clock
             .clone()
-            .expect("Executor::sleep requires a runtime (use with_runtime)");
-        let deadline_ms = runtime.now().saturating_add(duration.as_millis() as u64);
+            .expect("Executor::sleep requires a clock (use with_clock)");
+        let deadline_ms = clock.now().saturating_add(duration.as_millis() as u64);
         Sleep {
             deadline_ms,
             timers: self.timers.clone(),
-            runtime,
+            clock: Rc::downgrade(&clock),
             registered: false,
         }
     }
@@ -270,9 +273,9 @@ impl Executor {
     }
 
     /// Returns the current wall-clock time (ms since epoch), or `None` if
-    /// no runtime is installed.
-    pub fn runtime_now(&self) -> Option<u64> {
-        self.runtime.as_ref().map(|r| r.now())
+    /// no clock is installed.
+    pub fn now(&self) -> Option<u64> {
+        self.clock.as_ref().map(|c| c.now())
     }
 
     /// Drive all ready tasks one poll step. Returns `true` if any task was
@@ -285,7 +288,7 @@ impl Executor {
     /// and removed from the registry.
     pub fn tick(&self) -> bool {
         // Wake expired timers.
-        let now = self.runtime.as_ref().map(|r| r.now()).unwrap_or(0);
+        let now = self.clock.as_ref().map(|c| c.now()).unwrap_or(0);
         let expired: Vec<Vec<Waker>> = {
             let mut timers = self.timers.borrow_mut();
             let keys: Vec<u64> = timers

@@ -28,10 +28,23 @@ use std::future::Future;
 use std::rc::Rc;
 use std::time::Duration;
 
+use boa_engine::context::time::Clock as BoaClock;
 use boa_engine::Context;
 use boa_engine::JsResult;
 
-pub use tur_async::{AsyncRuntime, Sleep, TaskHandle};
+pub use tur_async::{Sleep, TaskHandle};
+
+/// Adapter that bridges boa's `Clock` trait to `tur_async::Clock`. The engine
+/// already receives a `Clock` (for boa's `Context` and `Shell`); this wraps it
+/// so `tur_async::Executor` gets its wall-clock from the same source — no
+/// separate time injection needed.
+struct ClockAdapter(Rc<dyn BoaClock>);
+
+impl tur_async::Clock for ClockAdapter {
+    fn now(&self) -> u64 {
+        self.0.now().millis_since_epoch()
+    }
+}
 
 /// A closure that runs under `&mut Context` to settle a JsPromise (or any
 /// other synchronous side-effect that needs Context access). Produced by a
@@ -62,10 +75,12 @@ impl AsyncExecutor {
         Self::default()
     }
 
-    /// Create with a wall-clock time source for `sleep`/timer support.
-    pub fn with_runtime(runtime: Rc<dyn AsyncRuntime>) -> Self {
+    /// Create with a wall-clock time source (boa's `Clock`) for `sleep`/timer
+    /// support. Internally adapts to `tur_async::Clock`.
+    pub fn with_clock(clock: Rc<dyn BoaClock>) -> Self {
+        let adapter: Rc<dyn tur_async::Clock> = Rc::new(ClockAdapter(clock));
         AsyncExecutor {
-            inner: tur_async::Executor::with_runtime(runtime),
+            inner: tur_async::Executor::with_clock(adapter),
             ..Self::default()
         }
     }
@@ -113,10 +128,7 @@ impl AsyncExecutor {
     /// timer-driven async tasks.
     pub fn next_timer_delay(&self) -> Option<Duration> {
         let deadline_ms = self.inner.next_timer_deadline()?;
-        let now_ms = self
-            .inner
-            .runtime_now()
-            .unwrap_or(0);
+        let now_ms = self.inner.now().unwrap_or(0);
         if deadline_ms <= now_ms {
             return Some(Duration::ZERO);
         }
