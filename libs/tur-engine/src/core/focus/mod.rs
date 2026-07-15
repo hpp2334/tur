@@ -8,13 +8,6 @@ use boa_engine::{Context, JsValue};
 use crate::core::element::ElementNodeId;
 use crate::core::edgy_event::IntoJsArgs;
 
-/// Half-period of the caret blink, in milliseconds. The caret is visible on
-/// even half-cycles: `(now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0`. Shared
-/// between the editable-text paint (tur-std, which draws the caret) and the
-/// engine's frame scheduler (which wakes the embedder precisely at each
-/// toggle instead of redrawing every frame while an editable is focused).
-pub const CARET_BLINK_HALF_PERIOD_MS: u64 = 530;
-
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
 // ---------------------------------------------------------------------------
@@ -114,15 +107,21 @@ impl FocusManager {
     /// `clear_focus`: those only record a pending `FocusChange` (so they stay
     /// free of tree/queue borrows and can run inside element gesture
     /// handlers); this method resolves the changes once per frame.
+    ///
+    /// Returns the list of resolved `(id, focused)` pairs. Callers use this
+    /// to dispatch Rust-level `on_focus_changed` callbacks (e.g. to spawn
+    /// async tasks tied to focus state) and to force a paint-only redraw so
+    /// that focus-sensitive paint effects update immediately.
     pub fn flush_pending(
         &mut self,
         tree: &crate::core::elements::NodeTreeData,
         queue: &mut crate::core::edgy_event::PendingMutationInvocationQueue,
-    ) {
+    ) -> Vec<(ElementNodeId, bool)> {
         let changes = self.drain_pending();
         if changes.is_empty() {
-            return;
+            return Vec::new();
         }
+        let mut result = Vec::new();
         for change in changes {
             let id = change.id();
             let Some(node) = tree.get_element(id) else {
@@ -139,13 +138,16 @@ impl FocusManager {
                     if let Some(m) = focusable.on_focus_mutation() {
                         queue.push(m, FocusEvent);
                     }
+                    result.push((id, true));
                 }
                 FocusChange::Blur(_) => {
                     if let Some(m) = focusable.on_blur_mutation() {
                         queue.push(m, BlurEvent);
                     }
+                    result.push((id, false));
                 }
             }
         }
+        result
     }
 }

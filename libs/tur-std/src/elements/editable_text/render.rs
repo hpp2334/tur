@@ -5,7 +5,7 @@ use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text::paint_helpers;
 use tur_engine::core::text::text_layout;
 
-use super::element::{DEFAULT_TEXT_COLOR, EditableTextElement};
+use super::element::{CARET_BLINK_HALF_PERIOD_MS, DEFAULT_TEXT_COLOR, EditableTextElement};
 
 const COMPOSITION_UNDERLINE_COLOR: Color = Color::rgb(0, 0, 0);
 
@@ -68,12 +68,12 @@ impl ElementRender for EditableTextElement {
         }
 
         if is_focused && !has_selection {
-            // Blink the caret at a fixed half-cycle (the conventional editor
-            // caret blink rate). Visible on even half-cycles. The half-period
-            // is shared with the engine's frame scheduler so the embedder
-            // wakes precisely at each toggle instead of redrawing every frame.
-            let blink_visible =
-                (paint_ctx.now().as_millis() as u64 / tur_engine::core::focus::CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
+            // Blink the caret at a fixed half-cycle. Visible on even
+            // half-cycles. The blink loop (spawned in `on_focus_changed`)
+            // sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
+            // `request_redraw`, so the engine wakes at each toggle boundary.
+            let now_ms = paint_ctx.now().as_millis() as u64;
+            let blink_visible = (now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
             if blink_visible {
                 paint_cursor(
                     canvas,

@@ -16,8 +16,8 @@ pub fn find_focusable_in_path(tree: &NodeTreeData, path: &[ElementNodeId]) -> Op
 }
 
 /// True if the currently-focused element is an editable text element.
-/// Used to drive caret-blink redraws on idle frames and to expose IME state
-/// to the embedder.
+/// Used by the embedder (e.g. tur-wasm) to manage IME state — focusing the
+/// hidden `<textarea>` and positioning it at the caret.
 pub fn focused_is_editable(tree: &NodeTreeData, focus_manager: &FocusManager) -> bool {
     static EDITABLE_TEXT_KIND: std::sync::LazyLock<ElementKind> =
         std::sync::LazyLock::new(|| ElementKind::new("tur_editable_text"));

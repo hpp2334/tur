@@ -11,7 +11,6 @@ use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
-use tur_integration_tests::TestRuntime;
 use tur_std::TurStdPlugin;
 
 #[derive(Debug, thiserror::Error)]
@@ -114,7 +113,6 @@ impl TurVelloApp {
         let mut app = TurEngine::builder()
             .renderer(Box::new(renderer))
             .font_loader(Box::new(PresetFontLoader::new()))
-            .async_runtime(Rc::new(TestRuntime))
             .clock(Rc::new(StdClock::new()))
             .plugin(TurStdPlugin::default())
             .build()?;

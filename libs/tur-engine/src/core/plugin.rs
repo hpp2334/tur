@@ -55,7 +55,6 @@ pub struct PluginContext<'a> {
     pub js_ctx_value: JsValue,
     pub(crate) js_ctx: TurJsContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
-    pub(crate) needs_draw: Rc<Cell<bool>>,
     /// Engine-owned async executor. Plugins use this to spawn Rust futures
     /// (clipboard/http work, etc.) — see [`AsyncExecutor::spawn`] and
     /// [`AsyncExecutor::spawn_detached`].
@@ -138,7 +137,7 @@ impl<'a> PluginContext<'a> {
 
     /// The `needs_draw` flag — setting it triggers a re-layout on the next frame.
     pub fn needs_draw(&self) -> &Rc<Cell<bool>> {
-        &self.needs_draw
+        &self.js_ctx.needs_draw
     }
 
     /// The engine-owned async executor. Plugins call `spawn_detached(...)` to

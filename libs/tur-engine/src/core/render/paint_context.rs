@@ -55,8 +55,8 @@ impl<'a> PaintContext<'a> {
         self.focused_node_id == self.current_node_id
     }
 
-    /// Current frame time as a `Duration` since the epoch. Used by time-based
-    /// paint effects (e.g. caret blink phase).
+    /// Current frame time as a `Duration` since the epoch. Used by
+    /// time-based paint effects.
     pub fn now(&self) -> Duration {
         self.shell.now()
     }

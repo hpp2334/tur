@@ -26,11 +26,25 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::rc::Rc;
+use std::time::Duration;
 
+use boa_engine::context::time::Clock as BoaClock;
 use boa_engine::Context;
 use boa_engine::JsResult;
 
-pub use tur_async::AsyncRuntime;
+pub use tur_async::{Sleep, Task};
+
+/// Adapter that bridges boa's `Clock` trait to `tur_async::Clock`. The engine
+/// already receives a `Clock` (for boa's `Context` and `Shell`); this wraps it
+/// so `tur_async::Executor` gets its wall-clock from the same source — no
+/// separate time injection needed.
+struct ClockAdapter(Rc<dyn BoaClock>);
+
+impl tur_async::Clock for ClockAdapter {
+    fn now(&self) -> Duration {
+        Duration::from_millis(self.0.now().millis_since_epoch())
+    }
+}
 
 /// A closure that runs under `&mut Context` to settle a JsPromise (or any
 /// other synchronous side-effect that needs Context access). Produced by a
@@ -39,22 +53,28 @@ pub use tur_async::AsyncRuntime;
 pub type Completion = Box<dyn FnOnce(&mut Context) -> JsResult<()>>;
 
 /// Engine-side async executor: a [`tur_async::Executor`] (which handles
-/// futures, wakers, ready queue) plus a [`Completion`] queue (which bridges
-/// to boa's `Context`).
+/// futures, wakers, ready queue, timers) plus a [`Completion`] queue (which
+/// bridges to boa's `Context`).
 ///
 /// Held as `Rc<AsyncExecutor>` on
 /// [`crate::core::app::TurAppInternal`] and exposed to plugins via
 /// [`crate::core::plugin::PluginContext`]. Spawned futures can capture
-/// `Rc<AsyncExecutor>` to call [`Self::complete`] or [`Self::spawn`].
-#[derive(Default)]
+/// `Rc<AsyncExecutor>` (cheap clone) to call [`Self::complete`], [`Self::sleep`],
+/// or [`Self::spawn`] from inside their body.
 pub struct AsyncExecutor {
     inner: tur_async::Executor,
     completions: Rc<RefCell<VecDeque<Completion>>>,
 }
 
 impl AsyncExecutor {
-    pub fn new() -> Self {
-        Self::default()
+    /// Create with a wall-clock time source (boa's `Clock`) for `sleep`/timer
+    /// support. Internally adapts to `tur_async::Clock`.
+    pub fn new(clock: Rc<dyn BoaClock>) -> Self {
+        let adapter: Rc<dyn tur_async::Clock> = Rc::new(ClockAdapter(clock));
+        AsyncExecutor {
+            inner: tur_async::Executor::new(adapter),
+            completions: Rc::new(RefCell::new(VecDeque::new())),
+        }
     }
 
     /// Spawn a `!Send` future. The future lives until it returns `Ready` or
@@ -78,6 +98,35 @@ impl AsyncExecutor {
         self.spawn(fut);
     }
 
+    /// Spawn a future and return a cancellable [`Task`]. Dropping the
+    /// task cancels it. Used by elements that need to manage async
+    /// task lifecycles (e.g. caret blink on focus/blur).
+    pub fn spawn_task<F>(&self, fut: F) -> Task
+    where
+        F: Future<Output = ()> + 'static,
+    {
+        self.inner.spawn_task(fut)
+    }
+
+    /// Create a [`Sleep`] future that completes after `duration`. The engine
+    /// frame loop reads [`Self::next_timer_delay`] to schedule a precise
+    /// wake-up instead of busy-polling.
+    pub fn sleep(&self, duration: Duration) -> Sleep {
+        self.inner.sleep(duration)
+    }
+
+    /// Returns the delay until the earliest pending timer deadline, if any.
+    /// Used by the frame loop to schedule `NextFrame::After(d)` for
+    /// timer-driven async tasks.
+    pub(crate) fn next_timer_delay(&self) -> Option<Duration> {
+        let deadline = self.inner.next_timer_deadline()?;
+        let now = self.inner.now();
+        if deadline <= now {
+            return Some(Duration::ZERO);
+        }
+        Some(deadline - now)
+    }
+
     /// Push a completion closure. Called from inside a spawned future when it
     /// has produced a Rust result and needs to settle a JsPromise (or similar)
     /// under `&mut Context`. The closure runs on the next
@@ -88,7 +137,7 @@ impl AsyncExecutor {
 
     /// Drive all ready tasks one poll step. Returns `true` if any task was
     /// polled. Delegates to [`tur_async::Executor::tick`].
-    pub fn tick(&self) -> bool {
+    pub(crate) fn tick(&self) -> bool {
         self.inner.tick()
     }
 
@@ -104,10 +153,10 @@ impl AsyncExecutor {
         }
     }
 
-    /// True if there is pending work (ready tasks, live tasks, or pending
-    /// completions). Used by `flush`'s termination condition — see
-    /// [`crate::core::app::TurAppInternal::flush`].
-    pub fn has_pending(&self) -> bool {
+    /// True if there is pending work (ready tasks, live tasks, pending
+    /// completions, or pending timers). Used by `flush`'s termination
+    /// condition — see [`crate::core::app::TurAppInternal::flush`].
+    pub(crate) fn has_pending(&self) -> bool {
         self.inner.has_pending() || !self.completions.borrow().is_empty()
     }
 }

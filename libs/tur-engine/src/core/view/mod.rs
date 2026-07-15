@@ -126,20 +126,25 @@ pub fn extract_view(value: &JsValue) -> Option<Rc<dyn View>> {
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle — optional element lifecycle hooks. All three default to no-op
+// Lifecycle — optional element lifecycle hooks. All default to no-op
 // so every element type satisfies the bound without boilerplate.
 //
-//   * `on_mounted`     — fired once, right after the element is inserted
-//                        into the tree (in `SharedViewCx::insert_node`).
-//   * `on_updated`     — fired after layout, for each element whose
-//                        subscribed atoms were dirtied during the reactive
-//                        flush (driven by the subscriber graph).
-//   * `before_destroy` — fired once, immediately before the element is
-//                        removed from the tree (in `destroy_subtree`).
+//   * `on_mounted`       — fired once, right after the element is inserted
+//                          into the tree (in `SharedViewCx::insert_node`).
+//   * `on_updated`       — fired after layout, for each element whose
+//                          subscribed atoms were dirtied during the reactive
+//                          flush (driven by the subscriber graph).
+//   * `on_focus_changed` — fired when the element gains or loses focus.
+//                          The `focused` parameter is `true` for focus,
+//                          `false` for blur. Elements use this to manage
+//                          async tasks tied to focus (e.g. caret blink).
+//   * `before_destroy`   — fired once, immediately before the element is
+//                          removed from the tree (in `destroy_subtree`).
 // ---------------------------------------------------------------------------
 
 pub trait Lifecycle {
     fn on_mounted(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
     fn on_updated(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
+    fn on_focus_changed(&mut self, _focused: bool, _cx: &mut SharedViewCx, _boa: &mut Context) {}
     fn before_destroy(&mut self, _cx: &mut SharedViewCx, _boa: &mut Context) {}
 }

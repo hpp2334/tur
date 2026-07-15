@@ -19,7 +19,7 @@ use boa_engine::Source;
 use error::TurError;
 
 use core::app::{FrameOutcome, TurAppInternal};
-use core::async_::AsyncRuntime;
+
 use core::bridge::helpers::FnEntry;
 use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
 use core::bridge::{console, dev_tool, reactive, render, timer};
@@ -320,6 +320,8 @@ impl TurApp {
         ))
     }
 
+    /// True if the currently-focused element is an editable text element.
+    /// Used by embedders (e.g. tur-wasm) to manage IME state.
     pub fn focused_is_editable(&self) -> bool {
         use core::focus::helper;
         let tree = self.internal.js_context.element_tree.borrow();
@@ -371,7 +373,6 @@ type HostExports = Vec<(String, NativeFunction, usize)>;
 pub struct TurEngineBuilder {
     renderer: Option<Box<dyn Renderer>>,
     font_loader: Option<Box<dyn FontLoader>>,
-    async_runtime: Option<Rc<dyn AsyncRuntime>>,
     clock: Option<Rc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
     host_modules: Vec<(String, HostExports)>,
@@ -388,7 +389,6 @@ impl TurEngineBuilder {
         Self {
             renderer: None,
             font_loader: None,
-            async_runtime: None,
             clock: None,
             plugins: Vec::new(),
             host_modules: Vec::new(),
@@ -405,18 +405,10 @@ impl TurEngineBuilder {
         self
     }
 
-    /// Provide the async runtime (wall-clock source for the engine-owned
-    /// [`AsyncExecutor`]). Required — every backend must supply one:
-    /// `WasmRuntime` for wasm (`Performance::now()`), `TestRuntime` for
-    /// integration tests (deterministic clock).
-    pub fn async_runtime(mut self, runtime: Rc<dyn AsyncRuntime>) -> Self {
-        self.async_runtime = Some(runtime);
-        self
-    }
-
     /// Provide the engine clock — the single source of time read by JS
-    /// `Date.now()`, timer scheduling, and the caret-blink phase. Shared
-    /// between the boa `Context` and the engine `Shell`. Required.
+    /// `Date.now()` and timer scheduling, and by paint-time effects via
+    /// `PaintContext::now()`. Shared between the boa `Context` and the
+    /// engine `Shell`. Required.
     ///
     /// Production passes an [`StdClock`] (real wall clock — `Date.now()` is
     /// live, no manual advancement). Tests pass a [`FixedClock`] they advance
@@ -448,9 +440,6 @@ impl TurEngineBuilder {
         let font_loader = self
             .font_loader
             .expect("font_loader must be set");
-        let async_runtime = self
-            .async_runtime
-            .expect("async_runtime must be set (use TurEngineBuilder::async_runtime)");
         let clock = self
             .clock
             .expect("clock must be set (use TurEngineBuilder::clock)");
@@ -486,7 +475,6 @@ impl TurEngineBuilder {
             font_loader,
             executor.clone(),
             clock,
-            async_runtime,
         );
 
         let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
@@ -552,7 +540,7 @@ impl TurEngineBuilder {
         timer::register_timer_globals(
             &mut boa_context,
             timer_state,
-            internal.needs_draw.clone(),
+            internal.js_context.needs_draw.clone(),
         );
         console::register_console_globals(&mut boa_context);
 
@@ -573,7 +561,6 @@ impl TurEngineBuilder {
                 js_ctx_value: ctx_val.clone(),
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
-                needs_draw: internal.needs_draw.clone(),
                 async_executor: internal.async_executor.clone(),
                 viewport_size: viewport_size_js.clone(),
             };

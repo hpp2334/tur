@@ -192,6 +192,38 @@ impl SharedViewCx {
             .get_element(id)
             .map(|n| n.computed_layout)
     }
+
+    /// Resolve pending focus/blur notifications recorded by `FocusManager`.
+    /// Phase 1 enqueues JS mutations (on_focus / on_blur); Phase 2 fires
+    /// Rust-level `on_focus_changed` lifecycle callbacks on each affected
+    /// element, giving them a chance to spawn/cancel async tasks tied to
+    /// focus state (e.g. caret blink).
+    pub fn flush_focus_notifications(&mut self, boa: &mut Context) {
+        let focus_changes = {
+            let tree = self.js_ctx.element_tree.borrow();
+            let mut focus = self.js_ctx.focus_manager.borrow_mut();
+            let mut queue = self.js_ctx.mutation_queue.borrow_mut();
+            focus.flush_pending(&tree, &mut queue)
+        };
+        if focus_changes.is_empty() {
+            return;
+        }
+        for (id, focused) in &focus_changes {
+            let mut element = {
+                let mut tree = self.js_ctx.element_tree.borrow_mut();
+                tree.get_element_mut(*id).and_then(|n| n.element.take())
+            };
+            if let Some(ref mut elem) = element {
+                elem.run_on_focus_changed(*focused, self, boa);
+            }
+            if let Some(elem) = element {
+                let mut tree = self.js_ctx.element_tree.borrow_mut();
+                if let Some(node) = tree.get_element_mut(*id) {
+                    node.element = Some(elem);
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

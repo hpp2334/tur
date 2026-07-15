@@ -20,6 +20,7 @@ pub struct TurJsContext {
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub dirty: Rc<Cell<bool>>,
+    pub needs_draw: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub animation_manager: Rc<RefCell<AnimationManager>>,
     pub(crate) store: Store,
@@ -46,6 +47,7 @@ impl TurJsContext {
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
+        needs_draw: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
         store: Store,
     ) -> Self {
@@ -54,6 +56,7 @@ impl TurJsContext {
             mutation_queue,
             focus_manager,
             dirty,
+            needs_draw,
             resource_map,
             animation_manager: Rc::new(RefCell::new(AnimationManager::new())),
             store,

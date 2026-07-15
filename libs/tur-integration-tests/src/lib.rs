@@ -5,11 +5,10 @@ use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use boa_engine::context::time::FixedClock;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
-use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
@@ -29,18 +28,6 @@ use tur_shared::{Cursor, MouseButton, Offset};
 /// [`TurTestApp::wait_for`] — 60 fps. Animation/timer tests express elapsed
 /// time as a frame count rather than a wall duration.
 const FRAME_STEP_MS: u64 = 16;
-
-/// Wall-clock `AsyncRuntime` for tests. Uses real `Instant::now()` —
-/// deterministic timing belongs to boa's `FixedClock` (advanced manually);
-/// this is just for wall-clock reads from spawned futures (rare in tests).
-#[derive(Default, Clone)]
-pub struct TestRuntime;
-
-impl AsyncRuntime for TestRuntime {
-    fn now(&self) -> Instant {
-        Instant::now()
-    }
-}
 
 /// `Clipboard` impl for tests. Reads return a pre-canned value (set via
 /// [`Self::set_next_read`]); writes are appended to a log drainable via
@@ -221,7 +208,6 @@ impl TurTestApp {
         let mut builder = TurEngine::builder()
             .renderer(Box::new(NoopRenderer::new()))
             .font_loader(Box::new(PresetFontLoader::new()))
-            .async_runtime(Rc::new(TestRuntime))
             .clock(clock.clone())
             .plugin(
                 TurStdPlugin::builder()

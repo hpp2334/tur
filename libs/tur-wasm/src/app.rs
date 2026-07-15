@@ -2,10 +2,8 @@ use std::cell::{Cell, RefCell};
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::{Rc, Weak};
-use std::time::Instant;
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
-use tur_engine::core::async_::AsyncRuntime;
 use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
@@ -19,19 +17,6 @@ use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::future_to_promise;
-
-/// `AsyncRuntime` for wasm: wall-clock reads via `Instant::now()` (which
-/// wasm-bindgen bridges to `Performance::now()` under the hood on most
-/// targets). Deterministic timing belongs to the engine `Clock` — this is
-/// only for relative timestamps inside spawned futures.
-#[derive(Default)]
-struct WasmRuntime;
-
-impl AsyncRuntime for WasmRuntime {
-    fn now(&self) -> Instant {
-        Instant::now()
-    }
-}
 
 /// Engine `Clock` for wasm. boa's `StdClock` panics on
 /// `wasm32-unknown-unknown` (`SystemTime::now()` is unimplemented), and
@@ -698,7 +683,6 @@ impl TurWasmApp {
             let app = tur_engine::TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(PresetFontLoader::new()))
-                .async_runtime(Rc::new(WasmRuntime))
                 .clock(Rc::new(WasmClock))
                 .plugin(
                     tur_std::TurStdPlugin::builder()
