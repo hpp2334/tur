@@ -22,8 +22,8 @@ use core::app::{FrameOutcome, TurAppInternal};
 
 use core::bridge::helpers::FnEntry;
 use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
-use core::bridge::{console, dev_tool, reactive, render, timer};
-use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader, TimerState};
+use core::bridge::{console, dev_tool, reactive, render};
+use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader};
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
@@ -342,8 +342,8 @@ impl TurApp {
 /// Autonomous-loop driver — the platform scheduling primitive the engine
 /// uses to wake itself for the next frame. Implementations live in the
 /// embedder: a wasm driver backed by `requestAnimationFrame` / `setTimeout`
-/// (tur-wasm), or any other platform's wake mechanism. Tests do not install
-/// one (they pump [`TurApp::run_frame`] manually).
+/// for the wake trampoline (tur-wasm), or any other platform's wake mechanism.
+/// Tests do not install one (they pump [`TurApp::run_frame`] manually).
 pub trait LoopDriver {
     /// Install the engine's wake trampoline. The driver must call it exactly
     /// once whenever a wake-up requested via [`Self::request_next`] becomes
@@ -536,12 +536,6 @@ impl TurEngineBuilder {
         let _ = boa_context
             .register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
 
-        let timer_state = Rc::new(RefCell::new(TimerState::new()));
-        timer::register_timer_globals(
-            &mut boa_context,
-            timer_state,
-            internal.js_context.needs_draw.clone(),
-        );
         console::register_console_globals(&mut boa_context);
 
         for (specifier, exports) in &self.host_modules {

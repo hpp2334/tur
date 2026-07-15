@@ -546,6 +546,45 @@ declare module "builtin:tur/std" {
     }
 
     // ---------------------------------------------------------------------------
+    // Async task primitives — `sleep` (a timer primitive) + `launch` (a
+    // cancellable generator coroutine driver). These replace the old
+    // `setTimeout` / `setInterval` globals.
+    // ---------------------------------------------------------------------------
+
+    /** Resolve after `ms` milliseconds (engine time). The engine's frame loop
+     *  wakes precisely at the deadline. Use bare (`sleep(ms).then(...)`) or
+     *  inside a `launch` coroutine via `yield sleep(ms)`. */
+    export function sleep(ms: number): Promise<void>;
+
+    /** A cancellable coroutine task returned by `launch`. `cancel()` stops the
+     *  generator from resuming after its current `yield`. Any in-flight
+     *  `sleep` resolves harmlessly and is ignored. */
+    export interface Task {
+        cancel(): void;
+    }
+
+    /** Run a zero-arg generator function as a cancellable coroutine. The
+     *  generator must `yield` Promises (typically `sleep(ms)`); each resolved
+     *  promise resumes the generator, passing the resolved value back as the
+     *  `yield` result. Returns a `Task` whose `cancel()` halts further
+     *  resumption.
+     *
+     *  Rejections: when a yielded promise rejects, the rejection reason is
+     *  thrown into the generator at the `yield` point — so a `try/catch`
+     *  around `yield` catches it (the same ergonomics as `await`). An uncaught
+     *  rejection stops the coroutine. This makes `launch` safe to use with
+     *  fallible Promises (`clipboard.readText`, `http`, `fetch`), not just
+     *  `sleep`.
+     *
+     *  Unlike `async`/`await`, generators can be externally stepped/abandoned,
+     *  which is what makes real cancellation possible. Use the debounce
+     *  pattern: `task?.cancel(); task = launch(function* () { yield sleep(ms);
+     *  ... });`. */
+    export function launch<T>(
+        gen: () => Generator<Promise<unknown>, T, unknown>,
+    ): Task;
+
+    // ---------------------------------------------------------------------------
     // Element factories
     // ---------------------------------------------------------------------------
 

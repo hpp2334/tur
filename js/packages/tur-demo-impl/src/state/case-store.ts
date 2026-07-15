@@ -4,8 +4,11 @@ import {
     type Element,
     get,
     type KeyEvent,
+    launch,
     mutate,
     set,
+    sleep,
+    type Task,
 } from "builtin:tur/std";
 import { CASE_SOURCES, compileCase } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
@@ -58,7 +61,7 @@ for (const name of CASE_NAMES) {
     lastCompiledFiles.set(name, { ...CASE_SOURCES[name] });
 }
 
-let autoRunTimer: ReturnType<typeof setTimeout> | null = null;
+let autoRunTask: Task | null = null;
 
 // ---------------------------------------------------------------------------
 // Editor controller — closures reference forward-declared lifecycle fns
@@ -71,8 +74,11 @@ export const editorCtrl = createTextEditingController({
         saveCurrentFileText();
         refreshEditedState();
         if (get(autoRun$)) {
-            if (autoRunTimer) clearTimeout(autoRunTimer);
-            autoRunTimer = setTimeout(() => recompile(), 300);
+            autoRunTask?.cancel();
+            autoRunTask = launch(function* () {
+                yield sleep(300);
+                recompile();
+            });
         }
     }),
     onKeyDown: mutate((_ctx, ev: KeyEvent) => {
@@ -147,10 +153,8 @@ export function selectFile(filename: string): void {
 }
 
 export function recompile(): void {
-    if (autoRunTimer) {
-        clearTimeout(autoRunTimer);
-        autoRunTimer = null;
-    }
+    autoRunTask?.cancel();
+    autoRunTask = null;
     const name = get(selectedCase$);
 
     // Save current editor text to the file cache before compiling.

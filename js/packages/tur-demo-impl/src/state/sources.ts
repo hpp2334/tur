@@ -2,7 +2,9 @@ import {
     type Atom,
     derive,
     get,
+    launch,
     set,
+    sleep,
     source,
     type ViewportSize,
     viewportSize$,
@@ -82,4 +84,11 @@ export const editorWidth$ = source(600);
 // status bar stays fresh without manual refresh.
 export const lastCompiledAtMs$ = source<number>(Date.now());
 export const now$: Atom<number> = source<number>(Date.now());
-setInterval(() => set(now$, Date.now()), 5000);
+// Permanent ticker: never cancelled. A `launch` coroutine loop replaces the
+// old `setInterval` — no timer id to manage.
+launch(function* () {
+    for (;;) {
+        yield sleep(5000);
+        set(now$, Date.now());
+    }
+});

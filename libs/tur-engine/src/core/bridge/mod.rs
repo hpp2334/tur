@@ -11,7 +11,7 @@ pub mod reactive;
 pub mod render;
 pub mod js_context;
 pub mod opaque;
-pub mod timer;
+pub mod task;
 
 pub use console::register_console_globals;
 pub use executor::TurJobExecutor;
@@ -20,4 +20,3 @@ pub use js_context::TurJsContext;
 pub use js_props::JsProps;
 pub use module_loader::TurModuleLoader;
 pub use opaque::BoaOpaque;
-pub use timer::TimerState;

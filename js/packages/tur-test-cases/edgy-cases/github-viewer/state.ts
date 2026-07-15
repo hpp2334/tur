@@ -6,9 +6,12 @@ import {
     createTextEditingController,
     derive,
     get,
+    launch,
     mutate,
     type Readable,
+    sleep,
     type StoreCtx,
+    type Task,
     set,
     source,
 } from "builtin:tur/std";
@@ -285,8 +288,13 @@ function loadRepo(target: Repo): void {
 
     const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
 
-    http({ method: "GET", url: base, responseType: "text" })
-        .then((rVer) => {
+    launch(function* () {
+        try {
+            const rVer = (yield http({
+                method: "GET",
+                url: base,
+                responseType: "text",
+            })) as HttpResponse;
             if (rVer.status === 404) {
                 set(error$, `Repository not found: ${target.fullName}`);
                 return;
@@ -308,44 +316,46 @@ function loadRepo(target: Repo): void {
                 return;
             }
             set(version$, ver);
-            return http({
+            const rTree = (yield http({
                 method: "GET",
                 url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
                 responseType: "text",
-            }).then((rTree) => {
-                if (rTree.status !== 200) {
-                    // jsDelivr returns 403 for repos exceeding the 50 MB cap.
-                    let msg = `HTTP ${rTree.status} ${rTree.statusText}`.trim();
-                    try {
-                        const body: JsDelivrTree = JSON.parse(
-                            rTree.bodyText ?? "{}",
-                        );
-                        if (
-                            rTree.status === 403 &&
-                            (body.message ?? "").includes("size")
-                        ) {
-                            msg = `${target.fullName} is too large for the CDN-backed viewer (50 MB limit). Try a smaller repo.`;
-                        } else if (body.message) {
-                            msg = body.message;
-                        }
-                    } catch {
-                        /* keep HTTP status string */
-                    }
-                    set(error$, msg);
-                    return;
-                }
-                let parsedTree: JsDelivrTree;
+            })) as HttpResponse;
+            if (rTree.status !== 200) {
+                // jsDelivr returns 403 for repos exceeding the 50 MB cap.
+                let msg = `HTTP ${rTree.status} ${rTree.statusText}`.trim();
                 try {
-                    parsedTree = JSON.parse(rTree.bodyText ?? "{}");
+                    const body: JsDelivrTree = JSON.parse(
+                        rTree.bodyText ?? "{}",
+                    );
+                    if (
+                        rTree.status === 403 &&
+                        (body.message ?? "").includes("size")
+                    ) {
+                        msg = `${target.fullName} is too large for the CDN-backed viewer (50 MB limit). Try a smaller repo.`;
+                    } else if (body.message) {
+                        msg = body.message;
+                    }
                 } catch {
-                    set(error$, "Bad file-tree response from jsDelivr");
-                    return;
+                    /* keep HTTP status string */
                 }
-                set(fileTree$, parsedTree.files ?? []);
-            });
-        })
-        .catch((e) => set(error$, errMsg(e)))
-        .finally(() => set(loading$, false));
+                set(error$, msg);
+                return;
+            }
+            let parsedTree: JsDelivrTree;
+            try {
+                parsedTree = JSON.parse(rTree.bodyText ?? "{}");
+            } catch {
+                set(error$, "Bad file-tree response from jsDelivr");
+                return;
+            }
+            set(fileTree$, parsedTree.files ?? []);
+        } catch (e) {
+            set(error$, errMsg(e));
+        } finally {
+            set(loading$, false);
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -378,10 +388,8 @@ export function openRepoFromDraft(ctx: StoreCtx): void {
 
 export function backToLanding(): void {
     spinCtrl.stop();
-    if (statusTimer) {
-        clearTimeout(statusTimer);
-        statusTimer = null;
-    }
+    statusTask?.cancel();
+    statusTask = null;
     set(view$, "landing");
     set(repo$, null);
     set(version$, null);
@@ -434,18 +442,19 @@ export function selectEntry(entry: DirEntry): void {
 /** Revert the button to idle after a short confirmation window so the user
  *  sees the "Saved" / "Failed" flash before the label resets. */
 const STATUS_FLASH_MS = 1800;
-let statusTimer: ReturnType<typeof setTimeout> | null = null;
+let statusTask: Task | null = null;
 function flashStatus(status: DownloadStatus): void {
-    if (statusTimer) clearTimeout(statusTimer);
+    statusTask?.cancel();
     set(downloadStatus$, status);
     if (status === "error") {
         // Keep error$ set — the banner will show it.
     }
     if (status !== "loading") {
-        statusTimer = setTimeout(() => {
-            statusTimer = null;
+        statusTask = launch(function* () {
+            yield sleep(STATUS_FLASH_MS);
+            statusTask = null;
             set(downloadStatus$, "idle");
-        }, STATUS_FLASH_MS);
+        });
     }
 }
 
@@ -460,15 +469,19 @@ export function doDownload(): void {
     }
     const entry = get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
+    // Capture the narrowed string before the closure — TS does not preserve
+    // property narrowing across generator/callback boundaries.
+    const downloadUrl = entry.downloadUrl;
     set(error$, null);
     flashStatus("loading");
     spinCtrl.forward();
-    http({
-        method: "GET",
-        url: entry.downloadUrl,
-        responseType: "bytes",
-    })
-        .then((r) => {
+    launch(function* () {
+        try {
+            const r = (yield http({
+                method: "GET",
+                url: downloadUrl,
+                responseType: "bytes",
+            })) as HttpResponse;
             spinCtrl.stop();
             if (r.status >= 200 && r.status < 300 && r.bodyBytes) {
                 // Flip status to "done" first so the button morph renders on
@@ -480,17 +493,18 @@ export function doDownload(): void {
                 flashStatus("done");
                 const bytes = r.bodyBytes;
                 const name = entry.name;
-                setTimeout(() => save(name, bytes as ArrayBuffer), 500);
+                yield sleep(500);
+                save(name, bytes as ArrayBuffer);
             } else {
                 set(error$, `Download failed: HTTP ${r.status}`);
                 flashStatus("error");
             }
-        })
-        .catch((e) => {
+        } catch (e) {
             spinCtrl.stop();
             set(error$, errMsg(e));
             flashStatus("error");
-        });
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------

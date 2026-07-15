@@ -477,7 +477,7 @@ The status bar at the bottom of the window is the single source of truth for "wh
 
 **Practical implications**
 - Never show state in only one place. If `status$ === "error"`, it appears as: status dot + label in status bar, AND the viewer is replaced by the ErrorPanel. The redundancy is intentional.
-- The status bar updates on every relevant state change. Use `setInterval` + a `now$` source for time-relative fields ("compiled Xs ago") — don't try to invalidate strings manually.
+- The status bar updates on every relevant state change. Use a `launch` loop (`launch(function*(){ for(;;){ yield sleep(5000); set(now$, Date.now()); } })`) driving a `now$` source for time-relative fields ("compiled Xs ago") — don't try to invalidate strings manually.
 - The status bar is ~24px tall. Treat it as scannable, not readable: short labels, single dot indicators, no full sentences.
 
 When this principle conflicts with principle 1 (Editor is the hero), the editor's needs win for the body area, but the status bar is sacrosanct chrome — never hide it to give the editor more space.
@@ -563,30 +563,49 @@ Row({
 
 **Symptom of violation**: a Container reports its width as the parent's full width even though its visible content is much narrower. Debug via `JSON.parse(globalThis.turDevTool.elementTree())`.
 
-### 9.5 Pattern: debounced auto-run via `setTimeout`
+### 9.5 Pattern: debounced auto-run via `launch` + `sleep`
 
-Auto-run debouncing uses the engine's bridge-provided `setTimeout` (see `libs/tur-engine/src/core/bridge/timer.rs:153`). The pattern:
+Auto-run debouncing uses the engine's `sleep` + `launch` task primitives (see `libs/tur-engine/src/core/bridge/task.rs`). `launch` runs a generator function as a cancellable coroutine; `yield sleep(ms)` suspends it. Each keystroke cancels the pending task and launches a fresh one — only the last survives:
 
 ```ts
-let autoRunTimer: ReturnType<typeof setTimeout> | null = null;
+import { launch, mutate, sleep, type Task } from "builtin:tur/std";
+
+let autoRunTask: Task | null = null;
 
 const editorCtrl = createTextEditingController({
     onInput: mutate(() => {
         // ... sync work like syntax highlighting ...
         if (get(autoRun$)) {
-            if (autoRunTimer) clearTimeout(autoRunTimer);
-            autoRunTimer = setTimeout(() => {
-                autoRunTimer = null;
+            autoRunTask?.cancel();
+            autoRunTask = launch(function* () {
+                yield sleep(300);
                 recompile();
-            }, 300);
+            });
         }
     }),
 });
 ```
 
-- Clear any pending timer before scheduling a new one — debounce, not throttle.
-- Set the local `autoRunTimer` to `null` inside the callback so the next keystroke starts fresh.
-- Also clear the timer inside `recompile()` itself (in case the user hits Cmd-S while a debounce is pending).
+- `launch` returns a `Task`; call `task.cancel()` to supersede it (the generator body after the current `yield` never runs again). The in-flight `sleep` resolves harmlessly and is ignored.
+- Set the local `autoRunTask` to `null` inside the callback isn't needed — the cancelled task is simply abandoned; reassign on the next schedule.
+- Also cancel inside `recompile()` itself (in case the user hits Cmd-S while a debounce is pending).
+
+For periodic timers (e.g. a countdown), use a `launch` loop with a `running$` flag check rather than a cancel handle: `launch(function* () { while (get(running$)) { yield sleep(1000); … } })`.
+
+`launch` accepts any Promise on the right of `yield`, not just `sleep`. A rejected yielded promise throws its reason at the `yield` point — wrap the `yield` in `try/catch` to handle failures (the same ergonomics as `await`). Prefer this linear generator form over nested `.then(...).catch(...)` chains for sequential async work (e.g. HTTP fetches):
+
+```ts
+launch(function* () {
+    try {
+        const r = (yield http({ method: "GET", url, responseType: "text" })) as HttpResponse;
+        // ... use r ...
+    } catch (e) {
+        set(error$, errMsg(e));
+    } finally {
+        set(loading$, false);
+    }
+});
+```
 
 ### 9.6 Pattern: full-state-replacement for errors
 
@@ -616,6 +635,7 @@ Add to §6's PR review checklist:
 - [ ] Every `Row` inside a `Container` without explicit width sets `mainAxisSize: MainAxisSize.Min` (unless it's meant to fill).
 - [ ] Every interactive group uses one shared `hovered$` source, not per-item sources.
 - [ ] Layout changes that only affect flex ratios use `derive()` on `Expanded.flex`, not `Switch`.
-- [ ] Auto-run / debounce paths call `clearTimeout` before `setTimeout` and null the local handle inside the callback.
+- [ ] Auto-run / debounce paths supersede the previous `Task` via `cancel()` before launching a new one (`launch` + `yield sleep`).
+- [ ] Sequential async (HTTP fetches, clipboard reads) uses `launch` + `yield` with `try/catch` for rejections, not nested `.then(...).catch(...)` chains.
 - [ ] State appears in at least two places (e.g. error dot in status bar + ErrorPanel in viewer).
 - [ ] Status bar contents are scannable (single dot + 1-2 word labels), not prose.

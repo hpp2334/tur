@@ -178,12 +178,12 @@ impl TurAppInternal {
             cx.flush_focus_notifications(boa_context);
         }
         let handled_mutations = self.flush_pending_mutations(boa_context);
-        // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs,
-        // ClockJobs). PromiseJobs fire `.then` callbacks which may call
-        // bridge fns that `spawn_detached` more Rust futures — those
-        // land in `async_executor.ready` and are caught by the
-        // `async_progress` termination check on the next iteration,
-        // keeping the fixed-point loop alive.
+        // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
+        // PromiseJobs fire `.then` callbacks which may call bridge fns that
+        // `spawn_detached` more Rust futures — those land in
+        // `async_executor.ready` and are caught by the `async_progress`
+        // termination check on the next iteration, keeping the fixed-point
+        // loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.js_context.needs_draw.get();
             // Quiescence: no events, no mutations, no dirty state, no async
@@ -225,36 +225,19 @@ impl TurAppInternal {
         //   task is live without a timer deadline (e.g. clipboard/http
         //   futures awaiting external wake-up). Animations need smooth 60fps;
         //   timer-less async tasks need polling each frame.
-        // - `After(d)`: nothing continuous is pending, but a JS timer
-        //   (setTimeout/setInterval) or an async `sleep` deadline is
-        //   outstanding. We wake at the sooner of the two rather than
-        //   polling at vsync.
+        // - `After(d)`: nothing continuous is pending, but an async `sleep`
+        //   deadline is outstanding (driving a `launch` coroutine or a plain
+        //   `sleep().then(...)`). Wake at the deadline rather than polling.
         // - `Idle`: nothing time-driven is pending — the loop can stop
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
         let async_timer_delay = self.async_executor.next_timer_delay();
-        let timers_pending = self.executor.has_pending_clock_jobs();
-        let need_vsync = animation_active
-            || (async_pending && async_timer_delay.is_none());
-        let schedule = if need_vsync {
+        let schedule = if animation_active || (async_pending && async_timer_delay.is_none()) {
             NextFrame::Vsync
+        } else if let Some(delay) = async_timer_delay {
+            NextFrame::After(delay)
         } else {
-            let timer_delay = if timers_pending {
-                let now = boa_context.clock().now();
-                self.executor.next_clock_job_delay(now)
-            } else {
-                None
-            };
-            match (timer_delay, async_timer_delay) {
-                (Some(t), Some(a)) => NextFrame::After(t.min(a)),
-                (Some(t), None) => NextFrame::After(t),
-                (None, Some(a)) => NextFrame::After(a),
-                // `timers_pending` with no delay is a transient race
-                // (timer drained between the check and the read); fall
-                // back to vsync as a safety net.
-                (None, None) if timers_pending => NextFrame::Vsync,
-                (None, None) => NextFrame::Idle,
-            }
+            NextFrame::Idle
         };
 
         Ok(FrameOutcome {
