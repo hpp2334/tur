@@ -9,11 +9,11 @@ import {
     launch,
     mutate,
     type Readable,
-    sleep,
     type StoreCtx,
-    type Task,
     set,
+    sleep,
     source,
+    type Task,
 } from "builtin:tur/std";
 
 // ---------------------------------------------------------------------------

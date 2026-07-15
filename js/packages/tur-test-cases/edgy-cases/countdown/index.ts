@@ -23,11 +23,11 @@ import {
     Positioned,
     Row,
     SizedBox,
-    sleep,
     Stack,
+    sleep,
     source,
-    Text,
     type Task,
+    Text,
     type TextController,
     view,
 } from "builtin:tur/std";
