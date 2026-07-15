@@ -35,8 +35,8 @@ pub use sleep::Sleep;
 /// `wasm32-unknown-unknown`. The engine provides an adapter from its own
 /// `Clock` (boa's trait) so backends only implement one time source.
 pub trait Clock: 'static {
-    /// Wall-clock now, in milliseconds since the Unix epoch.
-    fn now(&self) -> u64;
+    /// Wall-clock now, as a `Duration` since the Unix epoch.
+    fn now(&self) -> Duration;
 }
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()>>>;
@@ -105,7 +105,7 @@ unsafe fn waker_drop(ptr: *const ()) {
     unsafe { drop(Box::from_raw(ptr as *mut WakerPayload)) };
 }
 
-pub(crate) type TimerQueue = Rc<RefCell<BTreeMap<u64, Vec<Waker>>>>;
+pub(crate) type TimerQueue = Rc<RefCell<BTreeMap<Duration, Vec<Waker>>>>;
 
 /// Cancellation handle for a spawned task. Dropping it removes the task from
 /// the executor's task map; any ready-queue or timer-queue entries for the
@@ -150,7 +150,7 @@ pub struct Executor {
     ready: Rc<RefCell<VecDeque<TaskId>>>,
     /// Monotonic task id source.
     next_id: Rc<AtomicU64>,
-    /// Timer queue: absolute deadline (ms since epoch) → wakers waiting
+    /// Timer queue: absolute deadline → wakers waiting
     /// for that deadline. Drained by `tick` (expired entries are woken)
     /// and read by `next_timer_deadline` for frame-loop scheduling.
     timers: TimerQueue,
@@ -214,24 +214,24 @@ impl Executor {
     /// schedule a precise wake-up via `NextFrame::After(d)` instead of
     /// busy-polling at vsync.
     pub fn sleep(&self, duration: Duration) -> Sleep {
-        let deadline_ms = self.clock.now().saturating_add(duration.as_millis() as u64);
+        let deadline = self.clock.now() + duration;
         Sleep {
-            deadline_ms,
+            deadline,
             timers: self.timers.clone(),
             clock: Rc::downgrade(&self.clock),
             registered: false,
         }
     }
 
-    /// Returns the earliest pending timer deadline (ms since epoch), if any.
+    /// Returns the earliest pending timer deadline, if any.
     /// Used by the engine frame loop to schedule `NextFrame::After(d)` for
     /// timer-driven async tasks (e.g. caret blink).
-    pub fn next_timer_deadline(&self) -> Option<u64> {
+    pub fn next_timer_deadline(&self) -> Option<Duration> {
         self.timers.borrow().keys().next().copied()
     }
 
-    /// Returns the current wall-clock time (ms since epoch).
-    pub fn now(&self) -> u64 {
+    /// Returns the current wall-clock time.
+    pub fn now(&self) -> Duration {
         self.clock.now()
     }
 
@@ -248,7 +248,7 @@ impl Executor {
         let now = self.clock.now();
         let expired: Vec<Vec<Waker>> = {
             let mut timers = self.timers.borrow_mut();
-            let keys: Vec<u64> = timers
+            let keys: Vec<Duration> = timers
                 .keys()
                 .take_while(|&&k| k <= now)
                 .copied()

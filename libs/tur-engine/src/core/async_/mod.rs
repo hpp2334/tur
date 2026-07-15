@@ -41,8 +41,8 @@ pub use tur_async::{Sleep, Task};
 struct ClockAdapter(Rc<dyn BoaClock>);
 
 impl tur_async::Clock for ClockAdapter {
-    fn now(&self) -> u64 {
-        self.0.now().millis_since_epoch()
+    fn now(&self) -> Duration {
+        Duration::from_millis(self.0.now().millis_since_epoch())
     }
 }
 
@@ -119,12 +119,12 @@ impl AsyncExecutor {
     /// Used by the frame loop to schedule `NextFrame::After(d)` for
     /// timer-driven async tasks.
     pub(crate) fn next_timer_delay(&self) -> Option<Duration> {
-        let deadline_ms = self.inner.next_timer_deadline()?;
-        let now_ms = self.inner.now();
-        if deadline_ms <= now_ms {
+        let deadline = self.inner.next_timer_deadline()?;
+        let now = self.inner.now();
+        if deadline <= now {
             return Some(Duration::ZERO);
         }
-        Some(Duration::from_millis(deadline_ms - now_ms))
+        Some(deadline - now)
     }
 
     /// Push a completion closure. Called from inside a spawned future when it
