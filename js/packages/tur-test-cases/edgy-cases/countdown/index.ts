@@ -12,6 +12,7 @@ import {
     get,
     HitTestBehavior,
     InputEdgy,
+    launch,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -23,7 +24,9 @@ import {
     Row,
     SizedBox,
     Stack,
+    sleep,
     source,
+    type Task,
     Text,
     type TextController,
     view,
@@ -56,44 +59,46 @@ const initial$ = source(DEFAULT_TIME);
 const editText$ = source("");
 const editController$ = source<unknown>(null);
 
-let timerId: ReturnType<typeof setInterval> | null = null;
-
-function clearTimer() {
-    if (timerId !== null) {
-        clearInterval(timerId);
-        timerId = null;
-    }
+// Cancellable coroutine driving the 1 Hz countdown. `cancel()` halts it;
+// pause/reset also flip `running$` so the loop's own check exits it.
+let countdownTask: Task | null = null;
+function stopCountdown() {
+    countdownTask?.cancel();
+    countdownTask = null;
 }
 
 const start$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (get(running$)) return;
     set(running$, true);
-    timerId = setInterval(() => {
-        const r = get(remaining$);
-        if (r <= 1) {
-            clearTimer();
-            set(running$, false);
-            set(remaining$, 0);
-            return;
+    stopCountdown();
+    countdownTask = launch(function* () {
+        while (get(running$)) {
+            yield sleep(1000);
+            const r = get(remaining$);
+            if (r <= 1) {
+                set(running$, false);
+                set(remaining$, 0);
+                return;
+            }
+            set(remaining$, r - 1);
         }
-        set(remaining$, r - 1);
-    }, 1000);
+    });
 });
 
 const pause$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     if (!get(running$)) return;
-    clearTimer();
+    stopCountdown();
     set(running$, false);
 });
 
 const reset$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    clearTimer();
+    stopCountdown();
     set(running$, false);
     set(remaining$, get(initial$));
 });
 
 const openEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    clearTimer();
+    stopCountdown();
     set(running$, false);
     set(editText$, String(get(initial$)));
     // Pre-fill the field with the current initial value so the user can

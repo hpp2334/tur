@@ -73,6 +73,7 @@ impl Plugin for TurStdPlugin {
         let mut std_fns: Vec<FnEntry> = Vec::new();
         std_fns.extend(reactive::fns());
         std_fns.extend(render::fns());
+        std_fns.extend(tur_engine::core::bridge::task::fns());
         std_fns.extend(bridge::color::fns());
         std_fns.extend(bridge::animation::fns());
         std_fns.extend(tur_engine::elements::container::bridge::fns());

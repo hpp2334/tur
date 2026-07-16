@@ -20,4 +20,5 @@ mod scroll_view;
 mod sized_box;
 mod stack;
 mod std_module_check;
+mod task;
 mod text;

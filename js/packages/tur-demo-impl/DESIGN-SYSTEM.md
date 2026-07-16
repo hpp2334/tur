@@ -611,7 +611,7 @@ Bottom chrome strip. Always-visible runtime state. Outer Container with 1px top 
 
 **Background**: `bg.elevated`. **Border**: 1px `border.subtle` (visible only on top edge). **Padding**: `space.xs` (4) vertical × `space.sm` (8) horizontal. **Approximate height**: 24px.
 
-> **Reactive pattern**: the relative timestamp uses two sources — `lastCompiledAtMs$` (set on every successful recompile) and `now$` (ticks every 5s via `setInterval`). The displayed text is `derive`d from both. This avoids needing to manually invalidate the timestamp.
+> **Reactive pattern**: the relative timestamp uses two sources — `lastCompiledAtMs$` (set on every successful recompile) and `now$` (ticks every 5s via a `launch` loop driving `yield sleep(5000)`). The displayed text is `derive`d from both. This avoids needing to manually invalidate the timestamp.
 
 ### 4.18 `ErrorPanel` (implemented)
 

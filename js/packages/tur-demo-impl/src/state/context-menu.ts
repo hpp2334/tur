@@ -1,5 +1,5 @@
 import { clipboard } from "builtin:tur/clipboard";
-import { mutate, set, source } from "builtin:tur/std";
+import { launch, mutate, set, source } from "builtin:tur/std";
 import { editorCtrl } from "./case-store";
 
 // ---------------------------------------------------------------------------
@@ -50,9 +50,11 @@ export const cutSelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
         editorCtrl.deleteSelection();
-        // Fire-and-forget the Promise — the editor state has already been
-        // updated synchronously.
-        void clipboard.writeText(text);
+        // The editor state has already been updated synchronously; the
+        // clipboard write is a fire-and-forget coroutine.
+        launch(function* () {
+            yield clipboard.writeText(text);
+        });
     }
     set(contextMenuOpen$, false);
 });
@@ -60,7 +62,9 @@ export const cutSelection = mutate(() => {
 export const copySelection = mutate(() => {
     const text = editorCtrl.selectedText;
     if (text.length > 0) {
-        void clipboard.writeText(text);
+        launch(function* () {
+            yield clipboard.writeText(text);
+        });
     }
     set(contextMenuOpen$, false);
 });
@@ -69,9 +73,15 @@ export const pasteFromClipboard = mutate(() => {
     // Paste via the clipboard bridge. The engine handles Cmd+V natively
     // via the paste event on the hidden textarea, but the context-menu
     // action needs an explicit call. `clipboard.readText` returns a
-    // Promise; `.then` runs as a PromiseJob on the next flush.
-    void clipboard.readText().then((text) => {
-        if (text.length > 0) editorCtrl.insertText(text);
+    // Promise that can reject (e.g. permission denied); a `try/catch`
+    // around the `yield` surfaces rejections like `await` does.
+    launch(function* () {
+        try {
+            const text = (yield clipboard.readText()) as string;
+            if (text.length > 0) editorCtrl.insertText(text);
+        } catch {
+            /* clipboard denied — ignore */
+        }
     });
     set(contextMenuOpen$, false);
 });
