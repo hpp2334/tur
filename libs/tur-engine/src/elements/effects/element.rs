@@ -3,6 +3,8 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
+use tur_shared::Alignment;
+
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
@@ -92,7 +94,9 @@ impl OpacityView {
 // TransformView — applies a 2D affine transform to its child subtree.
 //
 // Supported props: `scale` (uniform), `scaleX`, `scaleY`, `rotate` (radians),
-// `translateX`, `translateY`. All reactive.
+// `translateX`, `translateY`, and `alignment` (the pivot for rotate/scale,
+// defaulting to `Alignment.Center` — matches Flutter's `Transform`). All
+// reactive.
 // ---------------------------------------------------------------------------
 
 #[derive(Clone, Default)]
@@ -103,6 +107,7 @@ pub struct TransformView {
     pub(crate) rotate: Option<Val<f64>>,
     pub(crate) translate_x: Option<Val<f64>>,
     pub(crate) translate_y: Option<Val<f64>>,
+    pub(crate) alignment: Option<Val<Alignment>>,
     pub(crate) query_key: Option<Vec<String>>,
     pub(crate) child: Option<Rc<dyn View>>,
 }
@@ -136,6 +141,7 @@ pub struct TransformPainting {
     pub(crate) rotate: Option<f64>,
     pub(crate) translate_x: Option<f64>,
     pub(crate) translate_y: Option<f64>,
+    pub(crate) alignment: Alignment,
 }
 
 impl Lifecycle for TransformElement {}
@@ -149,6 +155,7 @@ impl ElementSubscribe for TransformElement {
         if let Some(v) = c.rotate.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.translate_x.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.translate_y.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
     }
 }
 
@@ -171,6 +178,7 @@ impl TransformView {
             rotate: p.val::<f64>("rotate"),
             translate_x: p.val::<f64>("translateX"),
             translate_y: p.val::<f64>("translateY"),
+            alignment: p.val::<Alignment>("alignment"),
             query_key: p.query_key("queryKey"),
             child: p.child("child"),
         }

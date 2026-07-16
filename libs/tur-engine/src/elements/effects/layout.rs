@@ -56,6 +56,10 @@ impl ElementLayout for TransformElement {
             rotate: cx.read_val_opt(self.view.rotate.as_ref()),
             translate_x: cx.read_val_opt(self.view.translate_x.as_ref()),
             translate_y: cx.read_val_opt(self.view.translate_y.as_ref()),
+            // Default pivot is the child center (Flutter `Transform` parity).
+            alignment: cx
+                .read_val_opt(self.view.alignment.as_ref())
+                .unwrap_or(tur_shared::Alignment::Center),
         };
 
         // --- position ---
