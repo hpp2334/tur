@@ -4,7 +4,6 @@ members = [
     "libs/tur-shared",
     "libs/tur-async",
     "libs/tur-engine",
-    "libs/tur-std",
     "libs/tur-clipboard",
     "libs/tur-net",
     "libs/tur-wasm",
@@ -22,7 +21,6 @@ repository = "https://github.com/hpp2334/tur"
 tur-shared = { path = "libs/tur-shared" }
 tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
-tur-std = { path = "libs/tur-std" }
 tur-clipboard = { path = "libs/tur-clipboard" }
 tur-net = { path = "libs/tur-net" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }

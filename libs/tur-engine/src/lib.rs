@@ -1,8 +1,17 @@
 pub mod core;
 pub mod elements;
 pub mod renderer;
+pub mod stdlib;
 
 pub mod error;
+
+// Re-export the standard widget library's public surface at the crate root
+// so embedders can write `tur_engine::TurStdPlugin`,
+// `tur_engine::Clipboard`, etc. without reaching into `stdlib::`.
+pub use crate::stdlib::TurStdPlugin;
+pub use crate::stdlib::platform::{
+    Clipboard, CursorPlatform, NoopClipboard, NoopCursorPlatform,
+};
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -484,7 +493,7 @@ impl TurEngineBuilder {
         // `&mut Context` for the initial `{width,height}` value + the opaque
         // wrap) and synced each frame in `TurAppInternal::flush`. The handle
         // (`Source<JsValue>`, a `Copy` `AtomId`) lives on `internal`; the
-        // `JsValue` opaque is handed to plugins so `tur-std` can export it as
+        // `JsValue` opaque is handed to plugins so `std` can export it as
         // the `viewportSize$` const in `builtin:tur/std`.
         let viewport_size_js: boa_engine::JsValue = {
             let (w, h) = internal.app_context.borrow().size;

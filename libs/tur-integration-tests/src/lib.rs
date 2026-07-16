@@ -18,9 +18,8 @@ use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::{TurApp, TurEngine};
+use tur_engine::{Clipboard, CursorPlatform, TurApp, TurEngine, TurStdPlugin};
 use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
-use tur_std::{Clipboard, CursorPlatform, TurStdPlugin};
 use tur_clipboard::TurClipboardPlugin;
 use tur_shared::{Cursor, MouseButton, Offset};
 

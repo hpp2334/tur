@@ -5,9 +5,9 @@
 //!
 //! ## Architecture
 //!
-//! - The [`Clipboard`] trait + `NoopClipboard` live in `tur-std` (alongside
-//!   the engine's paste/write event handlers). tur-clipboard depends on
-//!   tur-std for the trait.
+//! - The [`Clipboard`] trait + `NoopClipboard` live in `tur-engine`'s `std`
+//!   module (alongside the engine's paste/write event handlers). tur-clipboard
+//!   depends on tur-engine for the trait.
 //! - The bridge fns (in [`bridge`]) are ctx-bound `Ptr`s that look up their
 //!   `Rc<dyn Clipboard>` and `Rc<AsyncExecutor>` from `TurJsContext`'s
 //!   capability registry — populated by this plugin during `register` (and
@@ -16,7 +16,7 @@
 //!   inject their impl via [`TurClipboardPlugin::builder`].
 //!
 //! Note: the same `Rc<dyn Clipboard>` should also be passed to
-//! [`tur_std::TurStdPlugin`] — tur-std's `ClipboardWriteHandler` and
+//! [`tur_engine::TurStdPlugin`] — the std module's `ClipboardWriteHandler` and
 //! `ClipboardPasteHandler` use it for the Cmd+C/Cmd+V/Cmd+X event path
 //! (engine-internal), while this plugin exposes the JS-callable bridge.
 
@@ -28,9 +28,9 @@ use tur_engine::core::bridge::helpers::ConstEntry;
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 
-use tur_std::{Clipboard, NoopClipboard};
+use tur_engine::{Clipboard, NoopClipboard};
 
-pub use tur_std::{Clipboard as ClipboardTrait, NoopClipboard as NoopClipboardBackend};
+pub use tur_engine::{Clipboard as ClipboardTrait, NoopClipboard as NoopClipboardBackend};
 
 /// tur-clipboard plugin: registers `builtin:tur/clipboard` (exporting a
 /// `clipboard` object with `readText` / `writeText` methods) and exposes the
