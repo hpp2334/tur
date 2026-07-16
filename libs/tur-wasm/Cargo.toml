@@ -11,7 +11,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tur-engine = { workspace = true, features = ["webgl"] }
-tur-std = { workspace = true }
 tur-clipboard = { workspace = true }
 tur-net = { workspace = true }
 tur-shared = { workspace = true }

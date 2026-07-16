@@ -3724,7 +3724,6 @@ dependencies = [
  "boa_engine",
  "tracing",
  "tur-engine",
- "tur-std",
 ]
 
 [[package]]
@@ -3764,7 +3763,6 @@ dependencies = [
  "tur-engine",
  "tur-net",
  "tur-shared",
- "tur-std",
  "wgpu",
 ]
 
@@ -3789,21 +3787,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tur-std"
-version = "0.1.0"
-dependencies = [
- "boa_engine",
- "boa_gc",
- "num-traits",
- "parley",
- "thiserror",
- "tracing",
- "tur-engine",
- "tur-shared",
- "unicode-segmentation",
-]
-
-[[package]]
 name = "tur-wasm"
 version = "0.1.0"
 dependencies = [
@@ -3825,7 +3808,6 @@ dependencies = [
  "tur-engine",
  "tur-net",
  "tur-shared",
- "tur-std",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

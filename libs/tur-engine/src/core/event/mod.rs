@@ -121,7 +121,7 @@ pub enum AppEvent {
         position: Offset,
     },
     /// Engine → embedder: write `text` to the system clipboard (copy/cut).
-    /// Consumed by `ClipboardWriteHandler` (tur-std), which drives the
+    /// Consumed by `ClipboardWriteHandler` (std module), which drives the
     /// injected `Clipboard` capability — the embedder owns the actual
     /// clipboard interaction (e.g. `navigator.clipboard.writeText` in
     /// tur-wasm).

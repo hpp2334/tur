@@ -8,9 +8,8 @@ use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
-use tur_engine::{LoopDriver, TurApp};
+use tur_engine::{Clipboard, LoopDriver, TurApp};
 use tur_shared::Offset;
-use tur_std::Clipboard;
 use tur_clipboard::TurClipboardPlugin;
 use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 use wasm_bindgen::closure::Closure;
@@ -72,7 +71,7 @@ struct WasmCursorPlatform {
     canvas: web_sys::HtmlCanvasElement,
 }
 
-impl tur_std::CursorPlatform for WasmCursorPlatform {
+impl tur_engine::CursorPlatform for WasmCursorPlatform {
     fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
@@ -276,7 +275,7 @@ fn build_host_service_fns() -> Vec<(&'static str, boa_engine::NativeFunction, us
 // `perform_request` — async HTTP via reqwest-wasm.
 //
 // Used by `WasmHttp::request`, called from the engine-side `builtin:tur/net`
-// bridge closure (registered by the tur-std plugin). The bridge fn parses JS
+// bridge closure (registered by the std plugin). The bridge fn parses JS
 // opts into `RequestOpts`, spawns this via the engine's `AsyncExecutor`, and
 // settles the JsPromise via a completion closure on the next `flush`.
 // ---------------------------------------------------------------------------
@@ -685,7 +684,7 @@ impl TurWasmApp {
                 .font_loader(Box::new(PresetFontLoader::new()))
                 .clock(Rc::new(WasmClock))
                 .plugin(
-                    tur_std::TurStdPlugin::builder()
+                    tur_engine::TurStdPlugin::builder()
                         .cursor(WasmCursorPlatform {
                             canvas: canvas.clone(),
                         })

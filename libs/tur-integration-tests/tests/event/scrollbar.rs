@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_std::elements::ScrollViewElement;
+use tur_engine::stdlib::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
 /// A vertical `ScrollView` (200×200 viewport, 600px of content) sharing a

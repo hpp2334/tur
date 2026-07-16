@@ -1,7 +1,7 @@
 //! `builtin:tur/clipboard` bridge: a `clipboard` object with `readText` /
 //! `writeText` methods, each returning a `Promise`.
 //!
-//! Unlike the older clipboard bridge in tur-std (which used
+//! Unlike the older clipboard bridge (which used
 //! `unsafe NativeFunction::from_closure` to capture `Rc<dyn Clipboard>` and
 //! `Rc<AsyncExecutor>`), this version is **fully safe** — the bridge fns are
 //! ctx-bound `Ptr`s that look up their `Rc<dyn Clipboard>` and
@@ -32,7 +32,7 @@ use tur_engine::core::async_::AsyncExecutor;
 use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 use tur_engine::core::bridge::module_loader::bound_native;
 
-use tur_std::Clipboard;
+use tur_engine::Clipboard;
 
 /// Bridge function table entries for `builtin:tur/clipboard`.
 ///

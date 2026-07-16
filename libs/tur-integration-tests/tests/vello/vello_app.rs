@@ -11,7 +11,7 @@ use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
-use tur_std::TurStdPlugin;
+use tur_engine::stdlib::TurStdPlugin;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TurVelloError {
