@@ -102,6 +102,7 @@ impl TurAppInternal {
             resource_map,
             renderer,
             font_loader,
+            async_executor.clone(),
             clock,
         );
 

@@ -12,7 +12,6 @@ use boa_engine::NativeFunction;
 use tur_shared::Cursor;
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::AsyncExecutor;
 use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 use crate::core::bridge::module_loader::{build_fn_module, build_native_module};
 use crate::core::bridge::{TurJsContext, TurModuleLoader};
@@ -55,10 +54,6 @@ pub struct PluginContext<'a> {
     pub js_ctx_value: JsValue,
     pub(crate) js_ctx: TurJsContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
-    /// Engine-owned async executor. Plugins use this to spawn Rust futures
-    /// (clipboard/http work, etc.) — see [`AsyncExecutor::spawn`] and
-    /// [`AsyncExecutor::spawn_detached`].
-    pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
     /// `import { viewportSize$ } from "builtin:tur/std"` and read the live
@@ -138,13 +133,5 @@ impl<'a> PluginContext<'a> {
     /// The `needs_draw` flag — setting it triggers a re-layout on the next frame.
     pub fn needs_draw(&self) -> &Rc<Cell<bool>> {
         &self.js_ctx.needs_draw
-    }
-
-    /// The engine-owned async executor. Plugins call `spawn_detached(...)` to
-    /// run Rust futures (clipboard/http/etc.); futures push completion
-    /// closures via `complete(...)` that settle JsPromises under `&mut
-    /// Context` during the next `flush`.
-    pub fn async_executor(&self) -> &Rc<AsyncExecutor> {
-        &self.async_executor
     }
 }

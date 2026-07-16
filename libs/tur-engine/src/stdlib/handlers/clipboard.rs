@@ -1,6 +1,5 @@
 use std::rc::Rc;
 
-use crate::core::async_::AsyncExecutor;
 use crate::core::event::{AppEvent, PlatformEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::stdlib::elements::editable_text::EditableTextElement;
@@ -71,27 +70,26 @@ impl AppHandler for ClipboardPasteHandler {
 /// asynchronously (browser `navigator.clipboard.writeText` on wasm, eager
 /// on tests).
 ///
-/// Unlike the previous slot-based design, this needs no embedder-side drain
-/// loop — the executor drives the future inside `flush`.
+/// The async executor is sourced from [`HandlerContext`] at dispatch time, so
+/// this handler holds no executor state of its own.
 pub struct ClipboardWriteHandler {
     clipboard: Rc<dyn Clipboard>,
-    executor: Rc<AsyncExecutor>,
 }
 
 impl ClipboardWriteHandler {
-    pub fn new(clipboard: Rc<dyn Clipboard>, executor: Rc<AsyncExecutor>) -> Self {
-        Self { clipboard, executor }
+    pub fn new(clipboard: Rc<dyn Clipboard>) -> Self {
+        Self { clipboard }
     }
 }
 
 impl AppHandler for ClipboardWriteHandler {
-    fn handle_app_event(&mut self, _cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
         let AppEvent::ClipboardWrite { text } = event else {
             return;
         };
         let text = text.clone();
         let clipboard = self.clipboard.clone();
-        self.executor.spawn_detached(async move {
+        cx.async_executor.spawn_detached(async move {
             clipboard.write_text(text).await;
         });
     }

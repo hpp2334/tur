@@ -1,5 +1,7 @@
 use std::cell::Cell;
+use std::rc::Rc;
 
+use crate::core::async_::AsyncExecutor;
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTreeData;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
@@ -29,6 +31,10 @@ pub struct HandlerContext<'a> {
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
     pub(crate) needs_draw: &'a Cell<bool>,
+    /// Engine-owned async executor. Handlers call `spawn_detached(...)` to run
+    /// Rust futures (e.g. `clipboard.write_text`); the executor is driven each
+    /// frame inside `flush`. See [`AsyncExecutor::spawn_detached`].
+    pub async_executor: &'a Rc<AsyncExecutor>,
 }
 
 impl<'a> HandlerContext<'a> {
