@@ -444,6 +444,9 @@ declare module "builtin:tur/std" {
         rotate?: Val<number>;
         translateX?: Val<number>;
         translateY?: Val<number>;
+        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
+         *  `Alignment.Center` (matches Flutter's `Transform`). */
+        alignment?: Val<Alignment>;
         child?: Element;
         queryKey?: Val<string[]>;
     }
