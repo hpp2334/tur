@@ -21,7 +21,6 @@ use boa_engine::object::JsObject;
 use boa_engine::property::PropertyKey;
 use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use tur_engine::core::async_::AsyncExecutor;
 use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
@@ -47,9 +46,7 @@ fn tur_net_request(
     let http = js_ctx
         .capability::<Rc<dyn Http>>()
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http backend")))?;
-    let executor = js_ctx
-        .capability::<Rc<AsyncExecutor>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no async executor")))?;
+    let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
 
