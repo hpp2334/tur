@@ -1,4 +1,4 @@
-//! JS bridge for the `ImageEdgy` element + image/svg resource factories.
+//! JS bridge for the `Image` element + image/svg resource factories.
 
 use std::rc::Rc;
 
@@ -9,13 +9,13 @@ use crate::core::resource::ImageResource;
 
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("ImageEdgy", 2, tur_image_edgy as Ptr),
+        ("Image", 2, tur_image as Ptr),
         ("createImageResource", 2, tur_create_image_resource as Ptr),
         ("createSvgResource", 2, tur_create_svg_resource as Ptr),
     ]
 }
 
-fn tur_image_edgy(
+fn tur_image(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,

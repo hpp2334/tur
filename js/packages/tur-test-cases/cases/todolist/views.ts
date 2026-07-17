@@ -10,8 +10,8 @@ import {
     Expanded,
     get,
     HitTestBehavior,
-    ImageEdgy,
-    InputEdgy,
+    Image,
+    Input,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -103,7 +103,7 @@ export function TaskItem({
                                 alignment: Alignment.Center,
                                 children: [
                                     task.completed
-                                        ? ImageEdgy({
+                                        ? Image({
                                               resourceId: getIcon("check"),
                                               width: 13,
                                               height: 13,
@@ -156,7 +156,7 @@ export function TaskItem({
                                 color: COLORS.subtleButton,
                                 alignment: Alignment.Center,
                                 children: [
-                                    ImageEdgy({
+                                    Image({
                                         resourceId: getIcon("close"),
                                         width: 13,
                                         height: 13,
@@ -272,7 +272,7 @@ export function AddTaskModal(): Element {
                             borderColor: COLORS.inputBorder,
                             borderWidth: 1,
                             children: [
-                                InputEdgy({
+                                Input({
                                     controller: titleCtrl,
                                     placeholder: "What needs doing?",
                                     fontSize: 14,
@@ -297,7 +297,7 @@ export function AddTaskModal(): Element {
                             borderColor: COLORS.inputBorder,
                             borderWidth: 1,
                             children: [
-                                InputEdgy({
+                                Input({
                                     controller: descCtrl,
                                     placeholder: "Optional details",
                                     fontSize: 14,

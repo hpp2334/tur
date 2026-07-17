@@ -5,7 +5,7 @@ pub use controller::ScrollController;
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsValue};
 
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Scroll event payload — JS callback arguments for onScroll.

@@ -11,7 +11,7 @@ import {
     Expanded,
     get,
     HitTestBehavior,
-    InputEdgy,
+    Input,
     launch,
     MainAxisAlignment,
     MainAxisSize,
@@ -103,7 +103,7 @@ const openEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
     set(editText$, String(get(initial$)));
     // Pre-fill the field with the current initial value so the user can
     // edit it in place rather than retyping. `initialText` is honoured at
-    // controller construction time and shows up as soon as the InputEdgy
+    // controller construction time and shows up as soon as the Input
     // mounts the new controller.
     const ctrl = createTextEditingController({
         initialText: String(get(initial$)),
@@ -389,7 +389,7 @@ function EditModal(): Element {
                                             borderWidth: 1,
                                             queryKey: ["edit-input"],
                                             children: [
-                                                InputEdgy({
+                                                Input({
                                                     controller: derive(() =>
                                                         get(editController$),
                                                     ) as unknown as TextController,

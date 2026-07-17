@@ -5,8 +5,8 @@ import {
     Container,
     CrossAxisAlignment,
     type Element,
-    ImageEdgy,
-    InputEdgy,
+    Image,
+    Input,
     MainAxisSize,
     MouseRegion,
     mutate,
@@ -70,7 +70,7 @@ export function IconButton({
                 alignment: Alignment.Center,
                 color: COLORS.subtleButton,
                 children: [
-                    ImageEdgy({
+                    Image({
                         resourceId,
                         width: 16,
                         height: 16,
@@ -105,7 +105,7 @@ export function Field({
                 borderColor: COLORS.inputBorder,
                 borderWidth: 1,
                 children: [
-                    InputEdgy({
+                    Input({
                         controller,
                         placeholder,
                         fontSize: 14,

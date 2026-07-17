@@ -7,7 +7,7 @@ use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::core::async_::Task;
-use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
+use crate::core::mutation::{MutationHandle, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
@@ -103,7 +103,7 @@ pub struct EditableTextView {
     pub(crate) font_size: Option<Val<f64>>,
     pub(crate) font_family: Option<Val<String>>,
     pub(crate) multiline: Option<Val<bool>>,
-    pub(crate) on_context_menu: Option<EdgyMutation<ContextMenuEvent>>,
+    pub(crate) on_context_menu: Option<MutationHandle<ContextMenuEvent>>,
     pub(crate) query_key: Option<Vec<String>>,
 }
 
@@ -206,11 +206,11 @@ impl crate::core::elements::ElementCursorRect for EditableTextElement {
 }
 
 impl Focusable for EditableTextElement {
-    fn on_focus_mutation(&self) -> Option<EdgyMutation<FocusEvent>> {
+    fn on_focus_mutation(&self) -> Option<MutationHandle<FocusEvent>> {
         self.controller().on_focus()
     }
 
-    fn on_blur_mutation(&self) -> Option<EdgyMutation<BlurEvent>> {
+    fn on_blur_mutation(&self) -> Option<MutationHandle<BlurEvent>> {
         self.controller().on_blur()
     }
 }

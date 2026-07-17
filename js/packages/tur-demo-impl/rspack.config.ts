@@ -10,8 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // module loader — so the bundle keeps its `import` statements. The
 // `@tur/animation-ext` workspace package is bundled in (only its
 // `builtin:tur/std` imports stay external). The bundle contains the Shell UI
-// + inlined case sources; it sets `globalThis.TurEdgy` and calls
-// `render(Shell)` on evaluation.
+// + inlined case sources; it calls `render(Shell)` on evaluation.
 export default defineConfig({
     entry: {
         impl: "./src/index.ts",

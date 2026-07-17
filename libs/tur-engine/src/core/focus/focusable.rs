@@ -1,4 +1,4 @@
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::elements::AnyElement;
 use crate::core::focus::{BlurEvent, FocusEvent};
 
@@ -15,8 +15,8 @@ use crate::core::focus::{BlurEvent, FocusEvent};
 // ---------------------------------------------------------------------------
 
 pub trait Focusable: 'static {
-    fn on_focus_mutation(&self) -> Option<EdgyMutation<FocusEvent>>;
-    fn on_blur_mutation(&self) -> Option<EdgyMutation<BlurEvent>>;
+    fn on_focus_mutation(&self) -> Option<MutationHandle<FocusEvent>>;
+    fn on_blur_mutation(&self) -> Option<MutationHandle<BlurEvent>>;
 }
 
 /// Resolve a type-erased element to its `Focusable` face, if it registered

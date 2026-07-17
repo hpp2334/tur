@@ -9,7 +9,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::TurJsContext;
 use crate::core::bridge::TurNodeHandle;
-use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation};
+use crate::core::mutation::{extract_mutation_from_opts, MutationHandle};
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::stdlib::keyboard::{KeydownEvent, KeyupEvent};
 use crate::stdlib::text::{
@@ -28,12 +28,12 @@ pub struct TextEditingController {
     composing_text: Option<String>,
     composing_start: usize,
     handle: Option<JsObject>,
-    /// Back-reference to the `UndoController` attached via `InputEdgy`'s
+    /// Back-reference to the `UndoController` attached via `Input`'s
     /// `undoController` prop. When `Some`, every text-mutating method pushes
     /// a snapshot of the *current* state to the recorder BEFORE mutating —
     /// mirroring Flutter's `UndoHistory` listener model where recording is a
     /// side effect of the controller's value setter, not a per-call-site
-    /// concern. Note: a controller shared across multiple `InputEdgy`
+    /// concern. Note: a controller shared across multiple `Input`
     /// elements will have its recorder overwritten by whichever element
     /// attaches last (the demo uses a single editor, so this is fine).
     undo_recorder: Option<JsObject>,
@@ -42,16 +42,16 @@ pub struct TextEditingController {
     /// restoration from pushing the current state and clearing the redo
     /// stack. Single-threaded (boa), no re-entrancy across the JS boundary.
     suppress_undo: bool,
-    on_input: Option<EdgyMutation<InputEvent>>,
-    on_cursor_change: Option<EdgyMutation<CursorChangeEvent>>,
-    on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
-    on_key_down: Option<EdgyMutation<KeydownEvent>>,
-    on_key_up: Option<EdgyMutation<KeyupEvent>>,
-    on_focus: Option<EdgyMutation<FocusEvent>>,
-    on_blur: Option<EdgyMutation<BlurEvent>>,
-    on_composition_start: Option<EdgyMutation<CompositionStartEvent>>,
-    on_composition_update: Option<EdgyMutation<CompositionUpdateEvent>>,
-    on_composition_end: Option<EdgyMutation<CompositionEndEvent>>,
+    on_input: Option<MutationHandle<InputEvent>>,
+    on_cursor_change: Option<MutationHandle<CursorChangeEvent>>,
+    on_selection_change: Option<MutationHandle<SelectionChangeEvent>>,
+    on_key_down: Option<MutationHandle<KeydownEvent>>,
+    on_key_up: Option<MutationHandle<KeyupEvent>>,
+    on_focus: Option<MutationHandle<FocusEvent>>,
+    on_blur: Option<MutationHandle<BlurEvent>>,
+    on_composition_start: Option<MutationHandle<CompositionStartEvent>>,
+    on_composition_update: Option<MutationHandle<CompositionUpdateEvent>>,
+    on_composition_end: Option<MutationHandle<CompositionEndEvent>>,
 }
 
 
@@ -80,7 +80,7 @@ impl TextEditingController {
         }
     }
 
-    /// Attach an `UndoController` recorder. Called by `InputEdgy`'s element
+    /// Attach an `UndoController` recorder. Called by `Input`'s element
     /// builder when the `undoController` prop is present, so the controller's
     /// text-mutating methods can snapshot to the history stack uniformly —
     /// regardless of whether the mutation originated from a keystroke, IME,
@@ -267,43 +267,43 @@ impl TextEditingController {
         self.selection_end = end;
     }
 
-    pub fn on_input(&self) -> Option<EdgyMutation<InputEvent>> {
+    pub fn on_input(&self) -> Option<MutationHandle<InputEvent>> {
         self.on_input
     }
 
-    pub fn on_cursor_change(&self) -> Option<EdgyMutation<CursorChangeEvent>> {
+    pub fn on_cursor_change(&self) -> Option<MutationHandle<CursorChangeEvent>> {
         self.on_cursor_change
     }
 
-    pub fn on_selection_change(&self) -> Option<EdgyMutation<SelectionChangeEvent>> {
+    pub fn on_selection_change(&self) -> Option<MutationHandle<SelectionChangeEvent>> {
         self.on_selection_change
     }
 
-    pub fn on_key_down(&self) -> Option<EdgyMutation<KeydownEvent>> {
+    pub fn on_key_down(&self) -> Option<MutationHandle<KeydownEvent>> {
         self.on_key_down
     }
 
-    pub fn on_key_up(&self) -> Option<EdgyMutation<KeyupEvent>> {
+    pub fn on_key_up(&self) -> Option<MutationHandle<KeyupEvent>> {
         self.on_key_up
     }
 
-    pub fn on_focus(&self) -> Option<EdgyMutation<FocusEvent>> {
+    pub fn on_focus(&self) -> Option<MutationHandle<FocusEvent>> {
         self.on_focus
     }
 
-    pub fn on_blur(&self) -> Option<EdgyMutation<BlurEvent>> {
+    pub fn on_blur(&self) -> Option<MutationHandle<BlurEvent>> {
         self.on_blur
     }
 
-    pub fn on_composition_start(&self) -> Option<EdgyMutation<CompositionStartEvent>> {
+    pub fn on_composition_start(&self) -> Option<MutationHandle<CompositionStartEvent>> {
         self.on_composition_start
     }
 
-    pub fn on_composition_update(&self) -> Option<EdgyMutation<CompositionUpdateEvent>> {
+    pub fn on_composition_update(&self) -> Option<MutationHandle<CompositionUpdateEvent>> {
         self.on_composition_update
     }
 
-    pub fn on_composition_end(&self) -> Option<EdgyMutation<CompositionEndEvent>> {
+    pub fn on_composition_end(&self) -> Option<MutationHandle<CompositionEndEvent>> {
         self.on_composition_end
     }
 
@@ -653,9 +653,9 @@ impl Class for TextEditingController {
             }),
         );
 
-        // Explicit JS-side recorder attachment. `InputEdgy` attaches
+        // Explicit JS-side recorder attachment. `Input` attaches
         // automatically from the `undoController` prop, so this is only needed
-        // when a controller is mutated outside an InputEdgy binding.
+        // when a controller is mutated outside an Input binding.
         class.method(
             js_string!("setUndoController"),
             1,

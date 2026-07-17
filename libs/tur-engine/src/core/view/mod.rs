@@ -48,7 +48,7 @@ pub trait ViewFactory: 'static {
     fn create(&self, boa: &mut Context) -> Option<Rc<dyn View>>;
 }
 
-/// Invoke a JS thunk `() => EdgyElement` and resolve the returned View.
+/// Invoke a JS thunk `() => Element` and resolve the returned View.
 fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
     let result = match thunk.call(&JsValue::undefined(), &[], boa) {
         Ok(v) => v,
@@ -63,7 +63,7 @@ fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
 // ---------------------------------------------------------------------------
 // JsView — a user-defined view created via `view(fn)` in JS.
 //
-// It wraps the JS thunk `() => EdgyElement` and is itself a View: `build`
+// It wraps the JS thunk `() => Element` and is itself a View: `build`
 // invokes the thunk, resolves the returned View, and builds it under the
 // parent. It allocates no node of its own (transparent pass-through), so the
 // element-tree shape is identical to invoking the thunk eagerly.
@@ -87,7 +87,7 @@ impl View for JsView {
 
 // ---------------------------------------------------------------------------
 // JsViewFactory — a ViewFactory backed by a JS thunk
-// `() => EdgyElement`. Used for Condition/Switch branches: `create()` invokes
+// `() => Element`. Used for Condition/Switch branches: `create()` invokes
 // the thunk and returns the produced View.
 // ---------------------------------------------------------------------------
 

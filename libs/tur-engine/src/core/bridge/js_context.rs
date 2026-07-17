@@ -8,7 +8,7 @@ use boa_engine::JsData;
 
 use crate::core::animation::AnimationManager;
 use crate::core::async_::AsyncExecutor;
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::reactive::Store;

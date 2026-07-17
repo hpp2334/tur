@@ -13,7 +13,7 @@ use crate::core::view::{ViewCx, View};
 /// Provides scoped access to the tree and the reactive store.
 ///
 /// The boa `Context` is passed alongside (not stored) so callers can reborrow
-/// freely while holding `&mut SharedViewCx` — same pattern as the old `EdgyContext`.
+/// freely while holding `&mut SharedViewCx`.
 pub struct SharedViewCx {
     js_ctx: TurJsContext,
 }
@@ -278,7 +278,7 @@ impl ViewCx for SharedViewCx {
     fn node_tree(&self) -> NodeTree {
         controller_handles(&self.js_ctx).0
     }
-    fn mutation_queue(&self) -> std::rc::Rc<std::cell::RefCell<crate::core::edgy_event::PendingMutationInvocationQueue>> {
+    fn mutation_queue(&self) -> std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>> {
         controller_handles(&self.js_ctx).1
     }
     fn dirty(&self) -> std::rc::Rc<std::cell::Cell<bool>> {

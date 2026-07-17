@@ -33,7 +33,7 @@ pub struct InputView {
     font_size: Option<Val<f64>>,
     font_family: Option<Val<String>>,
     multiline: Option<Val<bool>>,
-    on_context_menu: Option<crate::core::edgy_event::EdgyMutation<ContextMenuEvent>>,
+    on_context_menu: Option<crate::core::mutation::MutationHandle<ContextMenuEvent>>,
     query_key: Option<Vec<String>>,
 }
 

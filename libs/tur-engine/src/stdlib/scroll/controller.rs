@@ -11,7 +11,7 @@ use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::BoaOpaque;
 use crate::core::bridge::{TurJsContext, TurNodeHandle};
-use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
+use crate::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
 use crate::core::element::ElementNodeId;
 use crate::stdlib::scroll::ScrollEvent;
 use crate::stdlib::elements::scroll_view::ScrollViewElement;
@@ -22,7 +22,7 @@ pub struct ScrollController {
     pub(crate) offset: f64,
     pub(crate) max_scroll_extent: f64,
     pub(crate) viewport_dimension: f64,
-    pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
+    pub(crate) on_scroll: Option<MutationHandle<ScrollEvent>>,
     pub(crate) handle: Option<JsObject>,
     /// The scroll-view node this controller is bound to. Set at build time by
     /// `ScrollViewView::build` (the `_attach` JS path is the legacy

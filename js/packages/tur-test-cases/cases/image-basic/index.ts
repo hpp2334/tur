@@ -1,7 +1,7 @@
 import {
     Container,
     createImageResource,
-    ImageEdgy,
+    Image,
     view,
 } from "builtin:tur/std";
 
@@ -18,7 +18,7 @@ export default view(() =>
         width: 200,
         height: 100,
         children: [
-            ImageEdgy({
+            Image({
                 resourceId: resource,
                 width: 200,
                 height: 100,

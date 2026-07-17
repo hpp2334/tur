@@ -11,7 +11,7 @@ use tur_shared::Curve;
 
 use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::core::animation::AnimationManager;
-use crate::core::edgy_event::{EdgyMutation, PendingMutationInvocationQueue, extract_mutation_from_opts};
+use crate::core::mutation::{MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts};
 use crate::core::js_value::{type_error, FromJs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,10 +91,10 @@ pub struct AnimationController {
     /// Atom-backed callback handle for `onTick`. Resolved via the reactive
     /// store at flush time (just like every other event handler), so the
     /// callback runs after all `RefMut` borrows are released.
-    on_tick: Option<EdgyMutation<AnimationTickEvent>>,
+    on_tick: Option<MutationHandle<AnimationTickEvent>>,
     /// Atom-backed callback handle for `onEnd`. Same dispatch path as
     /// `on_tick`.
-    on_end: Option<EdgyMutation<AnimationEndEvent>>,
+    on_end: Option<MutationHandle<AnimationEndEvent>>,
     start_time_ms: Option<u64>,
     animation_manager: Option<Rc<RefCell<AnimationManager>>>,
     /// The engine-wide mutation queue. Set by `tur_create_animation_controller`
@@ -280,8 +280,8 @@ impl Class for AnimationController {
     ) -> JsResult<Self> {
         let mut duration_ms = 300u64;
         let mut curve = Curve::Linear;
-        let mut on_tick: Option<EdgyMutation<AnimationTickEvent>> = None;
-        let mut on_end: Option<EdgyMutation<AnimationEndEvent>> = None;
+        let mut on_tick: Option<MutationHandle<AnimationTickEvent>> = None;
+        let mut on_end: Option<MutationHandle<AnimationEndEvent>> = None;
         let mut repeat_mode = RepeatMode::default();
 
         if let Some(opts) = args.get_or_undefined(0).as_object() {

@@ -5,7 +5,7 @@ import {
     type Element,
     Expanded,
     get,
-    ImageEdgy,
+    Image,
     MainAxisSize,
     MouseRegion,
     mutate,
@@ -53,7 +53,7 @@ function RunButton(): Element {
                     Row({
                         mainAxisSize: MainAxisSize.Min,
                         children: [
-                            ImageEdgy({
+                            Image({
                                 resourceId: runIconId,
                                 width: 10,
                                 height: 10,
@@ -93,7 +93,7 @@ function ResetButton(): Element {
                     Row({
                         mainAxisSize: MainAxisSize.Min,
                         children: [
-                            ImageEdgy({
+                            Image({
                                 resourceId: resetIconId,
                                 width: 12,
                                 height: 12,

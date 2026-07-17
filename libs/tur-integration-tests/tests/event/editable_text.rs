@@ -3,7 +3,7 @@ use tur_engine::stdlib::elements::{EditableTextElement, ScrollViewElement};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
-/// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
+/// given `queryKey` (Input puts the queryKey on its Container wrapper; the
 /// editable text is that container's first child).
 fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
@@ -436,7 +436,7 @@ fn multiline_drag_select_batched_events() {
 }
 
 const ONKEY_BUNDLE: &str = r#"
-import { mutate, render, InputEdgy } from "builtin:tur/std";
+import { mutate, render, Input } from "builtin:tur/std";
 globalThis.__keyHit = "";
 globalThis.__ctrlHeld = "false";
 const onKey = mutate((_storeCtx, ev) => {
@@ -444,7 +444,7 @@ const onKey = mutate((_storeCtx, ev) => {
     globalThis.__ctrlHeld = String(ev.ctrl);
 });
 globalThis.__ctrl = new globalThis.TextEditingController({ onKeyDown: onKey });
-render(InputEdgy({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
+render(Input({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
 "#;
 
 /// Regression: the controller's `onKeyDown` listener must fire on every
@@ -489,10 +489,10 @@ fn controller_on_key_down_fires_on_keydown() {
 }
 
 const SPANS_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     fontSize: 20,
     width: 200,
@@ -576,10 +576,10 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -592,13 +592,13 @@ render(InputEdgy({
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "import", color: { r: 200, g: 120, b: 50, a: 255 } },
     { content: " {", color: { r: 80, g: 80, b: 80, a: 255 } },
 ]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -608,10 +608,10 @@ render(InputEdgy({
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "abc\ndef\nghi" }]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     multiline: true,
     fontFamily: "monospace",
@@ -786,7 +786,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "AAAA", color: { r: 200, g: 120, b: 50, a: 255 } },
@@ -794,7 +794,7 @@ globalThis.__ctrl.setSpans([
     { content: "CCCC", color: { r: 120, g: 80, b: 200, a: 255 } },
     { content: "DDDD", color: { r: 200, g: 200, b: 80, a: 255 } },
 ]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -841,14 +841,14 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "ab", color: { r: 200, g: 120, b: 50, a: 255 } },
     { content: "", color: { r: 80, g: 200, b: 120, a: 255 } },
     { content: "cd", color: { r: 120, g: 80, b: 200, a: 255 } },
 ]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -870,17 +870,17 @@ fn empty_colored_span_does_not_panic() {
     assert_eq!(get_text(&app, id), "abcd");
 }
 
-// Mirrors the playground editor: a multiline `InputEdgy` INSIDE a `ScrollView`,
+// Mirrors the playground editor: a multiline `Input` INSIDE a `ScrollView`,
 // scrolled down so the clicked line is only reachable after scrolling. This is
 // the exact configuration the reported bug was seen in.
 const CLICK_SCROLLED_BUNDLE: &str = r#"
-import { render, ScrollView, InputEdgy } from "builtin:tur/std";
+import { render, ScrollView, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH",
 }]);
 render(ScrollView({
-    child: InputEdgy({
+    child: Input({
         controller: globalThis.__ctrl,
         multiline: true,
         fontFamily: "monospace",
@@ -967,15 +967,15 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // todolist's `{ title: "Walk the dog", completed: true },`) and clicking a wrap
 // continuation was reported to land the caret on the wrong character. parley
 // only wraps at break opportunities, so the text MUST contain spaces (a bare
-// digit string has none and overflows instead of wrapping). Bare `InputEdgy`
+// digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"
-import { render, InputEdgy } from "builtin:tur/std";
+import { render, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
 }]);
-render(InputEdgy({
+render(Input({
     controller: globalThis.__ctrl,
     multiline: true,
     fontFamily: "monospace",

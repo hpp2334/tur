@@ -8,7 +8,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
 use crate::core::async_::AsyncExecutor;
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
 use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};

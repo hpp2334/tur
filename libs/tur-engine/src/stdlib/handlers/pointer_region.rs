@@ -1,4 +1,4 @@
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
@@ -71,7 +71,7 @@ impl AppHandler for PointerRegionAppHandler {
 fn mouse_region_enter_mutation(
     tree: &NodeTreeData,
     id: ElementNodeId,
-) -> Option<EdgyMutation<PointerRegionEvent>> {
+) -> Option<MutationHandle<PointerRegionEvent>> {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())
@@ -81,7 +81,7 @@ fn mouse_region_enter_mutation(
 fn mouse_region_exit_mutation(
     tree: &NodeTreeData,
     id: ElementNodeId,
-) -> Option<EdgyMutation<PointerRegionEvent>> {
+) -> Option<MutationHandle<PointerRegionEvent>> {
     tree.get_element(id)
         .and_then(|node| node.element.as_ref())
         .and_then(|e| e.cast::<MouseRegionElement>())

@@ -9,7 +9,7 @@ import {
     type Element,
     Expanded,
     get,
-    ImageEdgy,
+    Image,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -92,7 +92,7 @@ function Header(): Element {
                                 mainAxisSize: MainAxisSize.Min,
                                 crossAlignment: CrossAxisAlignment.Center,
                                 children: [
-                                    ImageEdgy({
+                                    Image({
                                         resourceId: getIcon("plus"),
                                         width: 13,
                                         height: 13,

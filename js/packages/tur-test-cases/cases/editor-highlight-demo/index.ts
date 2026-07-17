@@ -5,7 +5,7 @@ import {
     CrossAxisAlignment,
     createTextEditingController,
     Expanded,
-    InputEdgy,
+    Input,
     MainAxisAlignment,
     Text,
     view,
@@ -44,7 +44,7 @@ export default view(() =>
                             color: Color.hex("#848da5"),
                         }),
                         Container({ height: 12 }),
-                        InputEdgy({
+                        Input({
                             controller: ctrl,
                             multiline: true,
                             fontFamily: "monospace",

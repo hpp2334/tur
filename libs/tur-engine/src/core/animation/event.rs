@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsValue};
 
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Animation callback payloads — JS callback arguments for onTick / onEnd.

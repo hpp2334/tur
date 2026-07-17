@@ -6,7 +6,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Axis;
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
@@ -28,7 +28,7 @@ const INITIAL_BUILD_COUNT: u64 = 20;
 // LazyListView — the user's declaration.
 //
 // `axis`, `itemCount`, `overscan`, and `itemExtent` are reactive (`Val<T>`).
-// `builder` is a JS function `(index) => EdgyElement` captured at factory
+// `builder` is a JS function `(index) => Element` captured at factory
 // time and stored as a `JsFunction`.
 // ---------------------------------------------------------------------------
 

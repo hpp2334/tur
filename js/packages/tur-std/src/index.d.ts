@@ -394,7 +394,7 @@ declare module "builtin:tur/std" {
         queryKey?: Val<string[]>;
     }
 
-    export interface ImageEdgyProps {
+    export interface ImageProps {
         resourceId: Val<number>;
         width?: Val<number>;
         height?: Val<number>;
@@ -403,7 +403,7 @@ declare module "builtin:tur/std" {
         child?: Element;
     }
 
-    export interface InputEdgyProps {
+    export interface InputProps {
         controller?: TextController;
         undoController?: UndoController;
         placeholder?: Val<string>;
@@ -614,8 +614,8 @@ declare module "builtin:tur/std" {
     export function LazyList(props: LazyListProps): Element;
     export function ScrollView(props: ScrollViewProps): Element;
     export function Scrollbar(props: ScrollbarProps): Element;
-    export function ImageEdgy(props: ImageEdgyProps): Element;
-    export function InputEdgy(props: InputEdgyProps): Element;
+    export function Image(props: ImageProps): Element;
+    export function Input(props: InputProps): Element;
     export function Fragment(props: FragmentProps): Element;
     export function Focusable(props: FocusableProps): Element;
     export function Opacity(props: OpacityProps): Element;

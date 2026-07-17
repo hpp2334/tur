@@ -68,7 +68,7 @@ impl TurAppInternal {
         clock: std::rc::Rc<dyn Clock>,
     ) -> Self {
         use crate::core::elements::NodeTree;
-        use crate::core::edgy_event::PendingMutationInvocationQueue;
+        use crate::core::mutation::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
         use crate::core::reactive::Store;
         use crate::core::resource::ResourceMap;
@@ -146,7 +146,7 @@ impl TurAppInternal {
             };
 
         // Reactive flush: drain the store, expand dirty atoms, and dispatch
-        // `do_update(dirties)` to the mounted edgy root. This may mutate
+        // `do_update(dirties)` to the mounted root. This may mutate
         // the ElementTree, which sets `dirty`/`need_paint` for the next
         // layout pass.
         let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);

@@ -88,7 +88,7 @@ export const editorCtrl = createTextEditingController({
     }),
 });
 
-/** Undo/redo history stack for the code editor. Passed to `InputEdgy` via
+/** Undo/redo history stack for the code editor. Passed to `Input` via
  *  the `undoController` prop so Cmd+Z / Cmd+Shift+Z work out of the box. */
 export const editorUndo = createUndoController();
 

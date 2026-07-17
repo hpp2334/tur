@@ -15,7 +15,7 @@ use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
 // EachView — render one child per item of a reactive array.
 //
 // `items` is an atom (source or derived) holding a JS array. `build` is a JS
-// function `(item, index) => EdgyElement` invoked once per item to produce
+// function `(item, index) => Element` invoked once per item to produce
 // that item's subtree. Whenever the `items` atom changes, the mounted item
 // subtrees are rebuilt.
 //
