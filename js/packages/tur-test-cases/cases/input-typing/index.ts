@@ -9,8 +9,6 @@ const controller = createTextEditingController({});
 
 export default view(() =>
     Container({
-        children: [
-            Input({ controller, fontSize: 14, width: 200, height: 30 }),
-        ],
+        children: [Input({ controller, fontSize: 14, width: 200, height: 30 })],
     }),
 );

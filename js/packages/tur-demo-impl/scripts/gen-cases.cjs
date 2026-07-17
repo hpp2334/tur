@@ -9,13 +9,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-const casesDir = path.resolve(
-    __dirname,
-    "..",
-    "..",
-    "tur-test-cases",
-    "cases",
-);
+const casesDir = path.resolve(__dirname, "..", "..", "tur-test-cases", "cases");
 const outDir = path.resolve(__dirname, "..", "src", "cases");
 fs.mkdirSync(outDir, { recursive: true });
 
