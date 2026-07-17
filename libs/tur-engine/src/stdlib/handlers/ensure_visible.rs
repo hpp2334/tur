@@ -63,7 +63,7 @@ pub fn ensure_caret_visible(cx: &mut HandlerContext) {
     }
 
     // Reuse the wheel path: it clamps, updates controller metrics, fires the
-    // onScroll callback, requests a redraw, and handles scroll chaining. The
+    // onScroll callback, requests a paint, and handles scroll chaining. The
     // delta is pre-clamped, so no spurious overscroll is produced.
     dispatch_wheel(cx, scroll_id, 0.0, delta);
 }

@@ -48,7 +48,7 @@ import {
 //     derive re-evaluates as `pieces$` mutates.
 //   * `Positioned` is fully reactive (libs/tur-engine/src/elements/positioned/
 //     render.rs:10-21 + layout/layout_context.rs:123-134): changing `left`/
-//     `top` re-layouts the parent Stack and redraws next frame.
+//     `top` re-layouts the parent Stack and paints next frame.
 // ---------------------------------------------------------------------------
 
 const GRID = 3;

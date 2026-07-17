@@ -191,17 +191,27 @@ impl TurApp {
         self.request_wakeup();
     }
 
-    /// Push an engine-internal event onto the app-event bus (e.g. a host
-    /// kickoff `RequestDraw`). Most embedders only need
-    /// [`Self::push_platform_event`]; this is exposed for host-initiated
-    /// draws and testing. Re-arms an idle autonomous loop like
-    /// [`Self::push_platform_event`].
+    /// Push an engine-internal event onto the app-event bus (programmatic
+    /// scrolls, clipboard writes). Most embedders only need
+    /// [`Self::push_platform_event`] / [`Self::request_paint`]; this is
+    /// exposed for host-initiated app events and testing. Re-arms an idle
+    /// autonomous loop like [`Self::push_platform_event`].
     pub fn push_app_event(&self, event: core::event::AppEvent) {
         self.internal
             .app_context
             .borrow_mut()
             .app_event_queue
             .push(event);
+        self.request_wakeup();
+    }
+
+    /// Request a paint on the next frame. Sets the `need_paint` flag directly
+    /// (no event is enqueued), which the flush loop turns into a re-layout +
+    /// re-render. Re-arms an idle autonomous loop so the request is processed
+    /// even when nothing else is pending (see [`Self::start`]). Used by
+    /// embedders after loading JS and by tests asserting an explicit paint.
+    pub fn request_paint(&self) {
+        self.internal.js_context.need_paint.set(true);
         self.request_wakeup();
     }
 

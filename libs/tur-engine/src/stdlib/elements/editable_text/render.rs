@@ -71,7 +71,7 @@ impl ElementRender for EditableTextElement {
             // Blink the caret at a fixed half-cycle. Visible on even
             // half-cycles. The blink loop (spawned in `on_focus_changed`)
             // sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
-            // `request_redraw`, so the engine wakes at each toggle boundary.
+            // `request_paint`, so the engine wakes at each toggle boundary.
             let now_ms = paint_ctx.now().as_millis() as u64;
             let blink_visible = (now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
             if blink_visible {

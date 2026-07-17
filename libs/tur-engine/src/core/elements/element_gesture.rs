@@ -5,6 +5,7 @@ use crate::core::edgy_event::{EdgyMutation, IntoJsArgs, PendingMutationInvocatio
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::{AppEvent, PointerDeviceKind};
 use crate::core::focus::FocusManager;
+use std::cell::Cell;
 
 pub enum ComposedGestureEvent {
     PointerDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
@@ -31,6 +32,7 @@ pub struct ElementOnGestureContext<'a> {
     event_queue: &'a mut AppEventQueue,
     focus_manager: &'a mut FocusManager,
     mutation_queue: &'a mut PendingMutationInvocationQueue,
+    need_paint: &'a Cell<bool>,
     node_id: ElementNodeId,
 }
 
@@ -39,18 +41,20 @@ impl<'a> ElementOnGestureContext<'a> {
         event_queue: &'a mut AppEventQueue,
         focus_manager: &'a mut FocusManager,
         mutation_queue: &'a mut PendingMutationInvocationQueue,
+        need_paint: &'a Cell<bool>,
         node_id: ElementNodeId,
     ) -> Self {
         Self {
             event_queue,
             focus_manager,
             mutation_queue,
+            need_paint,
             node_id,
         }
     }
 
-    pub fn request_redraw(&mut self) {
-        self.event_queue.push(AppEvent::RequestDraw);
+    pub fn request_paint(&mut self) {
+        self.need_paint.set(true);
     }
 
     /// Request that the scroll-view node be scrolled to an absolute offset.

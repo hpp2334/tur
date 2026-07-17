@@ -6,7 +6,7 @@ use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, PlatformEvent};
+use tur_engine::core::event::PlatformEvent;
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
@@ -152,7 +152,7 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        self.inner.borrow().app.push_app_event(AppEvent::RequestDraw);
+        self.inner.borrow().app.request_paint();
         let _ = self.inner.borrow().app.run_frame();
     }
 

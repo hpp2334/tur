@@ -1,21 +1,20 @@
 use crate::core::edgy_event::{EdgyMutation, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::event::queue::AppEventQueue;
-use crate::core::event::AppEvent;
 use crate::core::event::AppImeEvent;
+use std::cell::Cell;
 
 pub struct ElementOnImeContext<'a> {
     mutation_queue: &'a mut PendingMutationInvocationQueue,
-    app_event_queue: &'a mut AppEventQueue,
+    need_paint: &'a Cell<bool>,
 }
 
 impl<'a> ElementOnImeContext<'a> {
     pub fn new(
         mutation_queue: &'a mut PendingMutationInvocationQueue,
-        app_event_queue: &'a mut AppEventQueue,
+        need_paint: &'a Cell<bool>,
     ) -> Self {
         Self {
             mutation_queue,
-            app_event_queue,
+            need_paint,
         }
     }
 
@@ -23,8 +22,8 @@ impl<'a> ElementOnImeContext<'a> {
         self.mutation_queue.push(mutation, event);
     }
 
-    pub fn request_redraw(&mut self) {
-        self.app_event_queue.push(AppEvent::RequestDraw);
+    pub fn request_paint(&mut self) {
+        self.need_paint.set(true);
     }
 }
 

@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
-use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerInput};
+use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
@@ -1326,10 +1326,10 @@ impl TurWasmApp {
             .load_js(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        // Request a draw; `push_app_event` re-arms the autonomous loop (via
+        // Request a paint; `request_paint` re-arms the autonomous loop (via
         // the driver's `request_next(Vsync)`), so the bundle renders on the
         // next frame without any manual pump.
-        state.app.push_app_event(AppEvent::RequestDraw);
+        state.app.request_paint();
 
         Ok(())
     }
@@ -1350,7 +1350,7 @@ impl TurWasmApp {
             .load_module(js_source)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        state.app.push_app_event(AppEvent::RequestDraw);
+        state.app.request_paint();
 
         Ok(())
     }

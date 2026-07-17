@@ -15,8 +15,8 @@ use crate::core::render::Renderer;
 ///
 /// - [`Self::handle_platform_event`] — input from the platform/embedder
 ///   (`Resize`, `Gesture`, `Wheel`, `Key`, `Ime`, `ClipboardPaste`).
-/// - [`Self::handle_app_event`] — engine-internal bus (`RequestDraw`,
-///   `ScrollTo`, `ScrollOverscroll`, `ClipboardWrite`).
+/// - [`Self::handle_app_event`] — engine-internal bus (`ScrollTo`,
+///   `ScrollOverscroll`, `ClipboardWrite`).
 pub trait AppHandler {
     fn handle_platform_event(&mut self, _cx: &mut HandlerContext, _event: &PlatformEvent) {}
     fn handle_app_event(&mut self, _cx: &mut HandlerContext, _event: &AppEvent) {}
@@ -30,7 +30,7 @@ pub struct HandlerContext<'a> {
     pub app_event_queue: &'a mut AppEventQueue,
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
-    pub(crate) needs_draw: &'a Cell<bool>,
+    pub(crate) need_paint: &'a Cell<bool>,
     /// Engine-owned async executor. Handlers call `spawn_detached(...)` to run
     /// Rust futures (e.g. `clipboard.write_text`); the executor is driven each
     /// frame inside `flush`. See [`AsyncExecutor::spawn_detached`].
@@ -38,7 +38,7 @@ pub struct HandlerContext<'a> {
 }
 
 impl<'a> HandlerContext<'a> {
-    pub fn request_draw(&self) {
-        self.needs_draw.set(true);
+    pub fn request_paint(&self) {
+        self.need_paint.set(true);
     }
 }

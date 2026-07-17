@@ -12,7 +12,7 @@ use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppEvent, AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::fonts::PresetFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -337,11 +337,11 @@ impl TurTestApp {
         }
     }
 
-    /// Request a redraw and settle. Mostly redundant now that the input
+    /// Request a paint and settle. Mostly redundant now that the input
     /// helpers settle automatically; kept for tests that assert a paint after
-    /// an explicit draw request.
+    /// an explicit paint request.
     pub fn render(&mut self) {
-        self.inner.push_app_event(AppEvent::RequestDraw);
+        self.inner.request_paint();
         self.settle();
     }
 

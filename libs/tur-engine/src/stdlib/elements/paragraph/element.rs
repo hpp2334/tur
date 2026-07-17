@@ -169,7 +169,7 @@ impl ElementOnGesture for TextElement {
                 if let Some(m) = self.view.on_selection_change {
                     cx.push_event(m, SelectionChangeEvent { anchor, end });
                 }
-                cx.request_redraw();
+                cx.request_paint();
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
                 let char_idx = self.char_index_at(local.x, local.y);
@@ -180,7 +180,7 @@ impl ElementOnGesture for TextElement {
                     if let Some(m) = self.view.on_selection_change {
                         cx.push_event(m, SelectionChangeEvent { anchor, end });
                     }
-                    cx.request_redraw();
+                    cx.request_paint();
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}

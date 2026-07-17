@@ -560,7 +560,7 @@ impl ElementOnWheel for LazyListElement {
             // `dispatch_wheel`) makes the next `perform_layout` re-run, and
             // its remount step uses the new `position.pixels()` with the real
             // viewport to adjust the mounted set.
-            cx.request_redraw();
+            cx.request_paint();
         }
 
         overscroll
