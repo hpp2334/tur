@@ -1,11 +1,13 @@
 #[cfg(target_arch = "wasm32")]
 mod app;
 mod compiler;
+pub mod fonts;
 
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 pub use app::TurWasmApp;
+pub use fonts::WasmFontLoader;
 
 pub use compiler::{transpile_tsx, tokenize_tsx, highlight_tsx, TokenSpan, generate_ast, AstNode, AstNodeKind, ImportSpecifierInfo};
 

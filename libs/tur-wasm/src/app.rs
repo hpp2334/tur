@@ -5,7 +5,7 @@ use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
 use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerInput};
-use tur_engine::core::fonts::PresetFontLoader;
+use crate::fonts::WasmFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_engine::{Clipboard, LoopDriver, TurApp};
@@ -681,7 +681,7 @@ impl TurWasmApp {
 
             let app = tur_engine::TurEngine::builder()
                 .renderer(Box::new(renderer))
-                .font_loader(Box::new(PresetFontLoader::new()))
+                .font_loader(Box::new(WasmFontLoader::new()))
                 .clock(Rc::new(WasmClock))
                 .plugin(
                     tur_engine::TurStdPlugin::builder()
