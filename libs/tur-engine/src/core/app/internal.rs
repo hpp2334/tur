@@ -79,6 +79,8 @@ impl TurAppInternal {
         let need_paint = Rc::new(Cell::new(false));
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
+        let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
+
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
 
@@ -86,13 +88,12 @@ impl TurAppInternal {
             element_tree.clone(),
             mutation_queue.clone(),
             focus_manager.clone(),
-            dirty.clone(),
-            need_paint.clone(),
+            dirty,
+            need_paint,
             resource_map.clone(),
             store,
+            async_executor.clone(),
         );
-
-        let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
 
         let app_context = TurAppContext::new(
             element_tree,
@@ -104,14 +105,6 @@ impl TurAppInternal {
             async_executor.clone(),
             clock,
         );
-
-        // Expose the engine's async executor as a capability so capability-
-        // using bridge fns (tur-net's `request`, tur-clipboard's read/write)
-        // can spawn futures without capturing state in `unsafe` closures.
-        // Plugins that inject their own capabilities (Http, Clipboard) sit
-        // on top of this; the executor is engine-owned and always present.
-        js_context
-            .insert_capability::<Rc<AsyncExecutor>>(async_executor.clone());
 
         Self {
             js_context,

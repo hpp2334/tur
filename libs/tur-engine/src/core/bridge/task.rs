@@ -40,7 +40,6 @@ use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::{FunctionObjectBuilder, JsObject};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::async_::AsyncExecutor;
 use crate::core::bridge::helpers::{extract_ctx, FnEntry};
 
 /// Bridge function table entries for `builtin:tur/std`: `sleep` + `launch`.
@@ -53,9 +52,7 @@ pub fn fns() -> Vec<FnEntry> {
 /// the deadline via `next_timer_delay`.
 fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let executor = js_ctx
-        .capability::<Rc<AsyncExecutor>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no async executor")))?;
+    let executor = js_ctx.async_executor().clone();
     let ms = args
         .get_or_undefined(1)
         .as_number()

@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::class::Class;
@@ -7,7 +6,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::core::async_::{AsyncExecutor, Task};
+use crate::core::async_::Task;
 use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
@@ -700,9 +699,7 @@ impl IntoJsArgs for ContextMenuEvent {
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
         if focused {
-            let Some(exec) = cx.js_ctx().capability::<Rc<AsyncExecutor>>() else {
-                return;
-            };
+            let exec = cx.js_ctx().async_executor().clone();
             let need_paint = cx.js_ctx().need_paint.clone();
             let exec_clone = exec.clone();
             self.blink_task = Some(exec.spawn_task(async move {

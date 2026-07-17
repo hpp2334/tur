@@ -7,6 +7,7 @@ use boa_gc::{Finalize, Trace};
 use boa_engine::JsData;
 
 use crate::core::animation::AnimationManager;
+use crate::core::async_::AsyncExecutor;
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
@@ -24,6 +25,12 @@ pub struct TurJsContext {
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
     pub animation_manager: Rc<RefCell<AnimationManager>>,
     pub(crate) store: Store,
+    /// Engine-owned async executor. Always present (created in
+    /// [`crate::core::app::TurAppInternal::new`]); exposed to ctx-bound bridge
+    /// fns via [`TurJsContext::async_executor`] instead of the capability
+    /// registry, since — unlike `Http`/`Clipboard` — it is not a swappable
+    /// plugin backend.
+    pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Type-erased capability slots for plugin-injected services (e.g.
     /// `Rc<dyn Http>`, `Rc<dyn Clipboard>`, `Rc<AsyncExecutor>`).
     ///
@@ -42,6 +49,7 @@ pub struct TurJsContext {
 }
 
 impl TurJsContext {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
@@ -50,6 +58,7 @@ impl TurJsContext {
         need_paint: Rc<Cell<bool>>,
         resource_map: Rc<RefCell<ResourceMap>>,
         store: Store,
+        async_executor: Rc<AsyncExecutor>,
     ) -> Self {
         Self {
             element_tree,
@@ -60,8 +69,14 @@ impl TurJsContext {
             resource_map,
             animation_manager: Rc::new(RefCell::new(AnimationManager::new())),
             store,
+            async_executor,
             capabilities: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    /// Engine-owned async executor. Always present.
+    pub fn async_executor(&self) -> &Rc<AsyncExecutor> {
+        &self.async_executor
     }
 
     /// Insert a capability under `TypeId::of::<T>()`. Plugins call this from

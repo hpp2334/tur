@@ -28,7 +28,6 @@ use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use tur_engine::core::async_::AsyncExecutor;
 use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 use tur_engine::core::bridge::module_loader::bound_native;
 
@@ -87,9 +86,7 @@ fn tur_clipboard_read_text(
     let clipboard = js_ctx
         .capability::<Rc<dyn Clipboard>>()
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard backend")))?;
-    let executor = js_ctx
-        .capability::<Rc<AsyncExecutor>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no async executor")))?;
+    let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let executor_for_complete = executor.clone();
@@ -119,9 +116,7 @@ fn tur_clipboard_write_text(
     let clipboard = js_ctx
         .capability::<Rc<dyn Clipboard>>()
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard backend")))?;
-    let executor = js_ctx
-        .capability::<Rc<AsyncExecutor>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no async executor")))?;
+    let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let text = args
