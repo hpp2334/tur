@@ -86,17 +86,18 @@ pub enum PointerInput {
 }
 
 /// Engine-internal event bus. Carries requests produced by elements and
-/// handlers during a flush (draw requests, programmatic scrolls, clipboard
-/// writes) and consumed by other handlers via
-/// [`AppHandler::handle_app_event`] within the same fixed-point flush loop.
-/// These never cross the embedder boundary.
+/// handlers during a flush (programmatic scrolls, clipboard writes) and
+/// consumed by other handlers via [`AppHandler::handle_app_event`] within the
+/// same fixed-point flush loop. These never cross the embedder boundary.
+///
+/// Paint requests do **not** live here — they set the `need_paint` flag
+/// directly (see [`TurJsContext::need_paint`](crate::core::bridge::TurJsContext)).
 ///
 /// This is also where **derived** scrolling lives: when the gesture arena
 /// resolves a touch drag to scroll it emits [`AppEvent::Scroll`] here (rather
 /// than faking a `PlatformEvent::Wheel`), so the wheel handler can process
 /// real and derived scroll through one path.
 pub enum AppEvent {
-    RequestDraw,
     /// Programmatic scroll request — set the absolute scroll offset of the
     /// target scroll-view node. Emitted by scrollbar drag (where the gesture
     /// handler can't mutate the tree directly due to an active borrow).

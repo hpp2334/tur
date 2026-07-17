@@ -110,7 +110,7 @@ impl FocusManager {
     ///
     /// Returns the list of resolved `(id, focused)` pairs. Callers use this
     /// to dispatch Rust-level `on_focus_changed` callbacks (e.g. to spawn
-    /// async tasks tied to focus state) and to force a paint-only redraw so
+    /// async tasks tied to focus state) and to force a paint so
     /// that focus-sensitive paint effects update immediately.
     pub fn flush_pending(
         &mut self,

@@ -23,7 +23,7 @@ pub struct LayoutContext<'a, 'js> {
     /// mount/unmount (LazyList remount). The `node_tree` is a clonable
     /// handle so controllers captured at build time can reach the tree at
     /// event time; `mutation_queue` / `dirty` let built views request
-    /// redraws and enqueue mutations.
+    /// paints and enqueue mutations.
     pub node_tree: NodeTree,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub dirty: Rc<Cell<bool>>,

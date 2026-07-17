@@ -85,16 +85,16 @@ impl TurAppContext {
 
     /// Dispatch a platform (input) event to every registered handler via
     /// [`AppHandler::handle_platform_event`]. Mouse `PointerMove`s also
-    /// update the shell's tracked pointer position and request a draw, since
+    /// update the shell's tracked pointer position and request a paint, since
     /// the cursor is resolved during paint (not in a handler).
-    pub fn dispatch_platform_handlers(&mut self, event: &PlatformEvent, needs_draw: &Cell<bool>) {
+    pub fn dispatch_platform_handlers(&mut self, event: &PlatformEvent, need_paint: &Cell<bool>) {
         if let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
         }) = event
         {
             self.shell.set_pointer_position(Some(*position));
-            needs_draw.set(true);
+            need_paint.set(true);
         }
 
         let mut tree = self.element_tree.borrow_mut();
@@ -108,7 +108,7 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
-            needs_draw,
+            need_paint,
             async_executor: &self.async_executor,
         };
         for handler in &mut self.handlers {
@@ -118,7 +118,7 @@ impl TurAppContext {
 
     /// Dispatch an engine-internal event to every registered handler via
     /// [`AppHandler::handle_app_event`].
-    pub fn dispatch_app_handlers(&mut self, event: &crate::core::event::AppEvent, needs_draw: &Cell<bool>) {
+    pub fn dispatch_app_handlers(&mut self, event: &crate::core::event::AppEvent, need_paint: &Cell<bool>) {
         let mut tree = self.element_tree.borrow_mut();
         let mut focus = self.focus_manager.borrow_mut();
         let mut mq = self.mutation_queue.borrow_mut();
@@ -130,7 +130,7 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
-            needs_draw,
+            need_paint,
             async_executor: &self.async_executor,
         };
         for handler in &mut self.handlers {

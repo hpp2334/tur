@@ -72,6 +72,7 @@ fn dispatch_key_event(cx: &mut HandlerContext, event: &AppKeyEvent) {
     let mut el_cx = ElementOnKeyboardContext::new(
         &mut *cx.mutation_queue,
         &mut *cx.app_event_queue,
+        cx.need_paint,
     );
     element.on_keyboard_event(&mut el_cx, event);
     cx.element_tree.mark_dirty(focused_id.into());

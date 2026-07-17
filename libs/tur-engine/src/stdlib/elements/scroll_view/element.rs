@@ -216,7 +216,7 @@ impl ElementOnWheel for ScrollViewElement {
                     }
                 }
             }
-            cx.request_redraw();
+            cx.request_paint();
         }
 
         overscroll

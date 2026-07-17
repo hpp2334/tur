@@ -455,6 +455,7 @@ fn dispatch_gesture_event(cx: &mut HandlerContext, id: ElementNodeId, event: &Co
         &mut *cx.app_event_queue,
         &mut *cx.focus_manager,
         &mut *cx.mutation_queue,
+        cx.need_paint,
         id,
     );
     let claimed = element.on_gesture_event(&mut el_cx, event);

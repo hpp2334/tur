@@ -81,7 +81,7 @@ pub trait ViewCx {
     /// The pending-mutation queue handle (for controllers that fire mutations).
     fn mutation_queue(&self) -> Rc<RefCell<PendingMutationInvocationQueue>>;
 
-    /// The dirty-flag handle (for controllers that request redraws).
+    /// The dirty-flag handle (for controllers that request paints).
     fn dirty(&self) -> Rc<Cell<bool>>;
 }
 

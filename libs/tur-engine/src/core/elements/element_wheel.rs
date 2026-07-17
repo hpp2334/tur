@@ -2,6 +2,7 @@ use crate::core::edgy_event::{EdgyMutation, IntoJsArgs, PendingMutationInvocatio
 use crate::core::element::ElementNodeId;
 use crate::core::event::queue::AppEventQueue;
 use crate::core::event::AppEvent;
+use std::cell::Cell;
 
 pub struct WheelEvent {
     pub delta_x: f64,
@@ -11,6 +12,7 @@ pub struct WheelEvent {
 pub struct ElementOnWheelContext<'a> {
     event_queue: &'a mut AppEventQueue,
     mutation_queue: &'a mut PendingMutationInvocationQueue,
+    need_paint: &'a Cell<bool>,
     node_id: ElementNodeId,
 }
 
@@ -18,17 +20,19 @@ impl<'a> ElementOnWheelContext<'a> {
     pub fn new(
         event_queue: &'a mut AppEventQueue,
         mutation_queue: &'a mut PendingMutationInvocationQueue,
+        need_paint: &'a Cell<bool>,
         node_id: ElementNodeId,
     ) -> Self {
         Self {
             event_queue,
             mutation_queue,
+            need_paint,
             node_id,
         }
     }
 
-    pub fn request_redraw(&mut self) {
-        self.event_queue.push(AppEvent::RequestDraw);
+    pub fn request_paint(&mut self) {
+        self.need_paint.set(true);
     }
 
     pub fn node_id(&self) -> ElementNodeId {

@@ -130,8 +130,8 @@ impl<'a> PluginContext<'a> {
         self.boa
     }
 
-    /// The `needs_draw` flag — setting it triggers a re-layout on the next frame.
-    pub fn needs_draw(&self) -> &Rc<Cell<bool>> {
-        &self.js_ctx.needs_draw
+    /// The `need_paint` flag — setting it triggers a re-layout on the next frame.
+    pub fn need_paint(&self) -> &Rc<Cell<bool>> {
+        &self.js_ctx.need_paint
     }
 }

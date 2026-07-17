@@ -63,15 +63,15 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
         .max(0.0) as u64;
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
-    let needs_draw = js_ctx.needs_draw.clone();
+    let need_paint = js_ctx.need_paint.clone();
     let exec = executor.clone();
     executor.spawn_detached(async move {
         exec.sleep(Duration::from_millis(ms)).await;
         // Settle the promise under `&mut Context` on the next flush. Setting
-        // `needs_draw` mirrors the old timer's flush flag so a redraw follows
+        // `need_paint` mirrors the old timer's flush flag so a paint follows
         // even if the `.then` body makes no reactive `set`.
         exec.complete(Box::new(move |ctx| {
-            needs_draw.set(true);
+            need_paint.set(true);
             resolvers
                 .resolve
                 .call(&JsValue::undefined(), &[], ctx)?;

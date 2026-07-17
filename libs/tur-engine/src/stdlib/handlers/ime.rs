@@ -26,7 +26,7 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
             };
 
             let mut el_cx =
-                ElementOnImeContext::new(&mut *cx.mutation_queue, &mut *cx.app_event_queue);
+                ElementOnImeContext::new(&mut *cx.mutation_queue, cx.need_paint);
             element.on_ime_event(&mut el_cx, ime_event);
         }
         cx.element_tree.mark_dirty(focused_id.into());

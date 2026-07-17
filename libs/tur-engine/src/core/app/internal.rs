@@ -12,7 +12,6 @@ use crate::core::reactive::Source;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
-use crate::core::event::AppEvent;
 
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -28,7 +27,7 @@ pub enum NextFrame {
     /// request another animation frame immediately).
     Vsync,
     /// Wake after the given delay (e.g. until the next caret-blink toggle),
-    /// then render. Used when no animation is active but a timed redraw is.
+    /// then render. Used when no animation is active but a timed paint is.
     After(Duration),
 }
 
@@ -77,7 +76,7 @@ impl TurAppInternal {
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
-        let needs_draw = Rc::new(Cell::new(false));
+        let need_paint = Rc::new(Cell::new(false));
         let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
 
         let store = Store::new(dirty.clone());
@@ -88,7 +87,7 @@ impl TurAppInternal {
             mutation_queue.clone(),
             focus_manager.clone(),
             dirty.clone(),
-            needs_draw.clone(),
+            need_paint.clone(),
             resource_map.clone(),
             store,
         );
@@ -155,7 +154,7 @@ impl TurAppInternal {
 
         // Reactive flush: drain the store, expand dirty atoms, and dispatch
         // `do_update(dirties)` to the mounted edgy root. This may mutate
-        // the ElementTree, which sets `dirty`/`needs_draw` for the next
+        // the ElementTree, which sets `dirty`/`need_paint` for the next
         // layout pass.
         let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);
 
@@ -163,7 +162,7 @@ impl TurAppInternal {
         // the real viewport from constraints), so there is no separate
         // pre-layout remount pass here.
         let dirty =
-            self.js_context.dirty.take() || self.js_context.needs_draw.take() || animation_did_update || reactive_changed;
+            self.js_context.dirty.take() || self.js_context.need_paint.take() || animation_did_update || reactive_changed;
         if dirty {
             needs_render = true;
             self.app_context
@@ -186,7 +185,7 @@ impl TurAppInternal {
         // termination check on the next iteration, keeping the fixed-point
         // loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
-            let new_dirty = self.js_context.dirty.get() || self.js_context.needs_draw.get();
+            let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
             // Quiescence: no events, no mutations, no dirty state, no async
             // task was polled, no microtasks ran. We deliberately do NOT
             // check `has_pending()` here — a task waiting on a `sleep` timer
@@ -209,7 +208,7 @@ impl TurAppInternal {
             .borrow()
             .has_active();
         if animation_active {
-            self.js_context.needs_draw.set(true);
+            self.js_context.need_paint.set(true);
         }
 
         if needs_render {
@@ -476,16 +475,13 @@ impl TurAppInternal {
         for event in &platform_events {
             self.app_context
                 .borrow_mut()
-                .dispatch_platform_handlers(event, &self.js_context.needs_draw);
+                .dispatch_platform_handlers(event, &self.js_context.need_paint);
         }
 
         for event in &app_events {
-            if matches!(event, AppEvent::RequestDraw) {
-                self.js_context.needs_draw.set(true);
-            }
             self.app_context
                 .borrow_mut()
-                .dispatch_app_handlers(event, &self.js_context.needs_draw);
+                .dispatch_app_handlers(event, &self.js_context.need_paint);
         }
 
         true

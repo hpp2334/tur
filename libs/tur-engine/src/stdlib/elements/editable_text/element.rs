@@ -186,7 +186,7 @@ pub struct EditableTextElement {
     pub(crate) resolved_multiline: bool,
     pub(crate) painting: EditableTextPainting,
     /// Handle to the async caret-blink task. `Some` while focused (task is
-    /// alive and periodically requesting redraws); `None` when unfocused
+    /// alive and periodically requesting paints); `None` when unfocused
     /// (task cancelled by dropping the handle).
     pub(crate) blink_task: Option<Task>,
 }
@@ -703,12 +703,12 @@ impl Lifecycle for EditableTextElement {
             let Some(exec) = cx.js_ctx().capability::<Rc<AsyncExecutor>>() else {
                 return;
             };
-            let needs_draw = cx.js_ctx().needs_draw.clone();
+            let need_paint = cx.js_ctx().need_paint.clone();
             let exec_clone = exec.clone();
             self.blink_task = Some(exec.spawn_task(async move {
                 loop {
                     exec_clone.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS)).await;
-                    needs_draw.set(true);
+                    need_paint.set(true);
                 }
             }));
         } else {
@@ -794,7 +794,7 @@ impl ElementOnGesture for EditableTextElement {
                 c.set_cursor_position(end);
                 c.set_selection(anchor, end);
                 drop(c);
-                cx.request_redraw();
+                cx.request_paint();
             }
             ComposedGestureEvent::PointerTripleDown { local, .. } => {
                 cx.request_own_focus();
@@ -810,13 +810,13 @@ impl ElementOnGesture for EditableTextElement {
                     c.set_cursor_position(end);
                     c.set_selection(start, end);
                     drop(c);
-                    cx.request_redraw();
+                    cx.request_paint();
                 } else {
                     let mut c = self.controller_mut();
                     c.set_cursor_position(byte_pos);
                     c.set_selection(byte_pos, byte_pos);
                     drop(c);
-                    cx.request_redraw();
+                    cx.request_paint();
                 }
             }
             ComposedGestureEvent::PointerDown { local, button, .. } => {
@@ -843,7 +843,7 @@ impl ElementOnGesture for EditableTextElement {
                     c.set_cursor_position(byte_pos);
                     c.set_selection(byte_pos, byte_pos);
                     drop(c);
-                    cx.request_redraw();
+                    cx.request_paint();
                 }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
@@ -855,7 +855,7 @@ impl ElementOnGesture for EditableTextElement {
                     c.set_selection(anchor, byte_pos);
                     c.set_cursor_position(byte_pos);
                     drop(c);
-                    cx.request_redraw();
+                    cx.request_paint();
                 }
             }
             ComposedGestureEvent::PointerUp { .. } => {}
@@ -920,7 +920,7 @@ impl ElementOnKeyboard for EditableTextElement {
         }
 
         if changed {
-            cx.request_redraw();
+            cx.request_paint();
 
             let c = self.controller();
             let new_text = c.text();
@@ -963,14 +963,14 @@ impl ElementOnIme for EditableTextElement {
                 if let Some(m) = self.controller().on_composition_start() {
                     cx.push_event(m, CompositionStartEvent);
                 }
-                cx.request_redraw();
+                cx.request_paint();
             }
             AppImeEvent::CompositionUpdate { text, .. } => {
                 self.controller_mut().update_composition(text.clone());
                 if let Some(m) = self.controller().on_composition_update() {
                     cx.push_event(m, CompositionUpdateEvent { text: text.clone() });
                 }
-                cx.request_redraw();
+                cx.request_paint();
             }
             AppImeEvent::CompositionEnd { text } => {
                 let mut c = self.controller_mut();
@@ -996,7 +996,7 @@ impl ElementOnIme for EditableTextElement {
                     if let Some(m) = m_cursor {
                         cx.push_event(m, CursorChangeEvent { position: cursor });
                     }
-                    cx.request_redraw();
+                    cx.request_paint();
                 }
             }
         }

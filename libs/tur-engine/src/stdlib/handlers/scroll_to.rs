@@ -6,7 +6,7 @@ use crate::stdlib::handlers::wheel::dispatch_wheel;
 
 /// Resolves `AppEvent::ScrollTo` by translating the requested absolute offset
 /// into a delta and routing it through the wheel path (`dispatch_wheel`), which
-/// clamps, updates controller metrics, fires `onScroll`, requests a redraw,
+/// clamps, updates controller metrics, fires `onScroll`, requests a paint,
 /// and handles scroll chaining.
 pub struct ScrollToHandler;
 
