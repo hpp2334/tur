@@ -1,6 +1,6 @@
 use boa_engine::{js_string, Context, JsValue};
 
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Text-editing event payloads — JS callback arguments emitted via

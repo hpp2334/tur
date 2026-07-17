@@ -7,7 +7,7 @@ import {
     derive,
     type Element,
     get,
-    ImageEdgy,
+    Image,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -106,7 +106,7 @@ export function LandingScreen(): Element {
                                 color: COLORS.accentSoft,
                                 alignment: Alignment.Center,
                                 children: [
-                                    ImageEdgy({
+                                    Image({
                                         resourceId: getIcon("github"),
                                         width: 24,
                                         height: 24,

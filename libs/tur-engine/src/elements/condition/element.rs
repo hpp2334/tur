@@ -175,7 +175,7 @@ impl ConditionView {
     /// Build a `ConditionView` from a JS props object.
     ///
     /// `child` is the then-branch, `elseChild` is the else-branch (mirroring
-    /// the JS `ConditionProps` interface). Both are thunks `() => EdgyElement`.
+    /// the JS `ConditionProps` interface). Both are thunks `() => Element`.
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Self {
         let mut p = JsProps::new(props, ctx);
         ConditionView {

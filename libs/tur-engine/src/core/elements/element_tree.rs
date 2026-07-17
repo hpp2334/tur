@@ -384,7 +384,7 @@ impl NodeTreeData {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy_event::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {
@@ -406,7 +406,7 @@ impl NodeTreeData {
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &'a ResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy_event::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Size {
@@ -972,7 +972,7 @@ impl NodeTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         resource_map: &ResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy_event::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {

@@ -5,7 +5,7 @@ import { defineConfig } from "@rspack/cli";
 import * as rspack from "@rspack/core";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const casesDir = path.resolve(__dirname, "edgy-cases");
+const casesDir = path.resolve(__dirname, "cases");
 
 // Each case source `export default`s a view and no longer calls
 // `render()`. The Rust integration tests eval `dist/<name>.js` and expect the
@@ -17,7 +17,7 @@ const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
     virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../edgy-cases/${name}/index";\nimport { render } from "builtin:tur/std";\nrender(Case);\n`;
+        `import Case from "../cases/${name}/index";\nimport { render } from "builtin:tur/std";\nrender(Case);\n`;
     entries[name] = `./virtual-entries/${name}.ts`;
 }
 

@@ -5,7 +5,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{Cursor, HitTestBehavior, Offset};
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
+use crate::core::mutation::{MutationHandle, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::layout::SubscribeCx;
@@ -25,8 +25,8 @@ use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 pub struct MouseRegionView {
     pub(crate) behavior: Option<Val<HitTestBehavior>>,
     pub(crate) cursor: Option<Val<Cursor>>,
-    pub on_enter: Option<EdgyMutation<PointerRegionEvent>>,
-    pub on_exit: Option<EdgyMutation<PointerRegionEvent>>,
+    pub on_enter: Option<MutationHandle<PointerRegionEvent>>,
+    pub on_exit: Option<MutationHandle<PointerRegionEvent>>,
     pub(crate) child: Option<Rc<dyn View>>,
 }
 

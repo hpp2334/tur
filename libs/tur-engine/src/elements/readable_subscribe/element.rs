@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
@@ -22,7 +22,7 @@ use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx};
 #[derive(Clone)]
 pub struct ReadableSubscribeView {
     readables: Vec<AnyReadable>,
-    on_update: Option<EdgyMutation<()>>,
+    on_update: Option<MutationHandle<()>>,
     child: Option<Rc<dyn View>>,
 }
 
@@ -47,7 +47,7 @@ impl View for ReadableSubscribeView {
 
 pub struct ReadableSubscribeElement {
     readables: Vec<AnyReadable>,
-    on_update: Option<EdgyMutation<()>>,
+    on_update: Option<MutationHandle<()>>,
 }
 
 impl ElementSubscribe for ReadableSubscribeElement {

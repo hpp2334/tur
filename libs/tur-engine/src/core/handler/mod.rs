@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::core::async_::AsyncExecutor;
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTreeData;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
 use crate::core::event::{AppEvent, PlatformEvent};

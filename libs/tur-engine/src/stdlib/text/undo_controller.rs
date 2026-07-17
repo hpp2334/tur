@@ -29,7 +29,7 @@ impl TextEditingValue {
 }
 
 /// Flutter-style undo/redo history stack. Pairs with a
-/// `TextEditingController` (passed to `InputEdgy` via the `undoController`
+/// `TextEditingController` (passed to `Input` via the `undoController`
 /// prop). The controller owns the *current* value; this object owns the
 /// *history*. Each call to `push` records a prior state (cleared on push,
 /// matching the standard "redo branch is abandoned when the user types

@@ -4,5 +4,5 @@
         "noEmit": true,
         "types": ["@tur/core", "@tur/std", "@tur/host", "@tur/net"]
     },
-    "include": ["edgy-cases"]
+    "include": ["cases"]
 }

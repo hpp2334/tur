@@ -2,7 +2,7 @@ use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsValue};
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::layout::ElementSubscribe;
@@ -62,8 +62,8 @@ impl View for LifecycleView {
 }
 
 pub struct LifecycleElement {
-    on_mounted: Option<EdgyMutation<()>>,
-    before_destroy: Option<EdgyMutation<()>>,
+    on_mounted: Option<MutationHandle<()>>,
+    before_destroy: Option<MutationHandle<()>>,
 }
 
 impl ElementTrace for LifecycleElement {

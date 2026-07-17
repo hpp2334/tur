@@ -4,7 +4,7 @@ use std::rc::Rc;
 use boa_engine::{Context, JsValue};
 
 use crate::core::bridge::TurJsContext;
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
 use crate::core::layout::SubscribeCx;

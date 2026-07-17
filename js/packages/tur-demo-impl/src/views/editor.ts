@@ -7,7 +7,7 @@ import {
     type Element,
     Expanded,
     get,
-    InputEdgy,
+    Input,
     MouseRegion,
     type Mutation,
     mutate,
@@ -27,7 +27,7 @@ import {
 } from "../state";
 import { tokens } from "../theme/tokens";
 
-const editorInput: Element = InputEdgy({
+const editorInput: Element = Input({
     controller: editorCtrl,
     undoController: editorUndo,
     multiline: true,

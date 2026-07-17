@@ -2,7 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{
@@ -33,7 +33,7 @@ pub struct TextView {
     /// Parsed eagerly at factory time (not reactive).
     pub(crate) spans: Option<Vec<SpanData>>,
     pub(crate) query_key: Option<Vec<String>>,
-    pub(crate) on_selection_change: Option<EdgyMutation<SelectionChangeEvent>>,
+    pub(crate) on_selection_change: Option<MutationHandle<SelectionChangeEvent>>,
     /// When `true`, the text can be drag-selected. Defaults to `false`
     /// (read-only, non-selectable) — matches the browser convention for
     /// `<span>`/`<div>` text. Read directly from the spec by the gesture

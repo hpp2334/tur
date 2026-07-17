@@ -14,7 +14,7 @@ use boa_engine::object::builtins::{JsArray, JsFunction};
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsResult, JsValue};
 
-use crate::core::edgy_event::{edgy_mutation_from_js, EdgyMutation, IntoJsArgs};
+use crate::core::mutation::{mutation_from_js, MutationHandle, IntoJsArgs};
 use crate::core::js_value::{type_error, FromJs};
 use crate::core::reactive::AnyReadable;
 use crate::core::view::{extract_view, val_from_js, JsViewFactory, Val, View, ViewFactory};
@@ -106,11 +106,11 @@ impl<'a> JsProps<'a> {
         out
     }
 
-    /// Read an atom-backed callback handle (`EdgyMutation<E>`) from an atom
+    /// Read an atom-backed callback handle (`MutationHandle<E>`) from an atom
     /// handle prop. `None` if absent or not a mutation handle.
-    pub fn mutation<E: IntoJsArgs>(&mut self, key: &str) -> Option<EdgyMutation<E>> {
+    pub fn mutation<E: IntoJsArgs>(&mut self, key: &str) -> Option<MutationHandle<E>> {
         let v = self.obj.get(js_string!(key), self.ctx).ok()?;
-        edgy_mutation_from_js(&v)
+        mutation_from_js(&v)
     }
 
     /// Read an array of atom handles (`AnyReadable`). Empty vec if absent;
@@ -147,7 +147,7 @@ impl<'a> JsProps<'a> {
         Some((x, y))
     }
 
-    /// Read a branch factory from a JS thunk `() => EdgyElement`. `None` if
+    /// Read a branch factory from a JS thunk `() => Element`. `None` if
     /// absent/null/undefined or not callable.
     pub fn factory(&mut self, key: &str) -> Option<Rc<dyn ViewFactory>> {
         let v = self.obj.get(js_string!(key), self.ctx).ok()?;

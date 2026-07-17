@@ -1,4 +1,4 @@
-//! JS bridge for the `InputEdgy` element + text editing controllers.
+//! JS bridge for the `Input` element + text editing controllers.
 
 use std::rc::Rc;
 
@@ -10,13 +10,13 @@ use crate::stdlib::text::{TextEditingController, UndoController};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![
-        ("InputEdgy", 2, tur_input_edgy as Ptr),
+        ("Input", 2, tur_input as Ptr),
         ("createTextEditingController", 2, tur_create_text_editing_controller as Ptr),
         ("createUndoController", 2, tur_create_undo_controller as Ptr),
     ]
 }
 
-fn tur_input_edgy(
+fn tur_input(
     _this: &JsValue,
     args: &[JsValue],
     context: &mut Context,

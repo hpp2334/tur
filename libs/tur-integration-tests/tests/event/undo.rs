@@ -3,7 +3,7 @@ use tur_engine::stdlib::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
-/// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
+/// given `queryKey` (Input puts the queryKey on its Container wrapper; the
 /// editable text is that container's first child).
 fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
@@ -47,15 +47,15 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     app.click(cx, cy);
 }
 
-/// Inline bundle that places a single InputEdgy at the top-left of the canvas,
+/// Inline bundle that places a single Input at the top-left of the canvas,
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, createUndoController, render, Container, InputEdgy } from "builtin:tur/std";
+    import { createTextEditingController, createUndoController, render, Container, Input } from "builtin:tur/std";
     globalThis.__ctrl = createTextEditingController({});
     globalThis.__undo = createUndoController();
     render(Container({
         children: [
-            InputEdgy({
+            Input({
                 controller: globalThis.__ctrl,
                 undoController: globalThis.__undo,
                 multiline: true,
@@ -73,7 +73,7 @@ const UNDO_INPUT_BUNDLE: &str = r#"
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"
-    import { mutate, createTextEditingController, createUndoController, render, Container, InputEdgy } from "builtin:tur/std";
+    import { mutate, createTextEditingController, createUndoController, render, Container, Input } from "builtin:tur/std";
     // Tokenize the buffer into a single plain span (no syntax highlighting —
     // the act of calling setSpansPreserveCursor on every input is what matters).
     const onInput = mutate((_ctxArg) => {
@@ -87,7 +87,7 @@ const PLAYGROUND_BUNDLE: &str = r#"
     globalThis.__undo = createUndoController();
     render(Container({
         children: [
-            InputEdgy({
+            Input({
                 controller: globalThis.__ctrl,
                 undoController: globalThis.__undo,
                 multiline: true,

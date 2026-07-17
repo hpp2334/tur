@@ -1,10 +1,10 @@
 use crate::core::js_value::IntoJsArgs;
 use crate::core::reactive::Mutation;
 
-use super::mutation::EdgyMutation;
+use super::handle::MutationHandle;
 
 // ---------------------------------------------------------------------------
-// PendingMutationInvocationQueue — the buffer of pending EdgyMutation
+// PendingMutationInvocationQueue — the buffer of pending MutationHandle
 // invocations.
 //
 // Elements/controllers/handlers call `push(mutation, event)` at event time;
@@ -44,7 +44,7 @@ impl PendingMutationInvocationQueue {
         self.0.is_empty()
     }
 
-    pub fn push<E: IntoJsArgs>(&mut self, mutation: EdgyMutation<E>, event: E) {
+    pub fn push<E: IntoJsArgs>(&mut self, mutation: MutationHandle<E>, event: E) {
         self.0.push(PendingMutationInvocation {
             mutation: mutation.mutation(),
             args: Box::new(event),

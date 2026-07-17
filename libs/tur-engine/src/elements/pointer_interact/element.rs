@@ -5,7 +5,7 @@ use boa_engine::{Context, JsValue};
 use tur_shared::{HitTestBehavior, Offset};
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::{EdgyMutation, IntoJsArgs};
+use crate::core::mutation::{MutationHandle, IntoJsArgs};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
@@ -14,7 +14,7 @@ use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 // ---------------------------------------------------------------------------
 // PointerInteractView — the user's declaration. Pure Rust, no JsValues.
 //
-// Callbacks are mutation atoms typed as `EdgyMutation<E>`. The JS bridge
+// Callbacks are mutation atoms typed as `MutationHandle<E>`. The JS bridge
 // wraps user callbacks as mutation atoms and passes the `Mutation` handle as the
 // prop value. At event time the gesture handler resolves these and pushes
 // invocations onto the pending-mutation queue.
@@ -26,11 +26,11 @@ use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 #[derive(Clone)]
 pub struct PointerInteractView {
     pub behavior: Option<Val<HitTestBehavior>>,
-    pub on_click: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_down: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_move: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_pointer_up: Option<EdgyMutation<PointerInteractEvent>>,
-    pub on_context_menu: Option<EdgyMutation<PointerInteractEvent>>,
+    pub on_click: Option<MutationHandle<PointerInteractEvent>>,
+    pub on_pointer_down: Option<MutationHandle<PointerInteractEvent>>,
+    pub on_pointer_move: Option<MutationHandle<PointerInteractEvent>>,
+    pub on_pointer_up: Option<MutationHandle<PointerInteractEvent>>,
+    pub on_context_menu: Option<MutationHandle<PointerInteractEvent>>,
     pub query_key: Option<Vec<String>>,
     pub child: Option<Rc<dyn View>>,
 }

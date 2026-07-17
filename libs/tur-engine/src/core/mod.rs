@@ -2,7 +2,7 @@ pub mod animation;
 pub mod app;
 pub mod async_;
 pub mod bridge;
-pub mod edgy_event;
+pub mod mutation;
 pub mod element;
 pub mod elements;
 pub mod event;

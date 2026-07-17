@@ -6,7 +6,7 @@ import {
     type Element,
     Expanded,
     get,
-    ImageEdgy,
+    Image,
     MainAxisSize,
     MouseRegion,
     type Mutation,
@@ -76,7 +76,7 @@ function menuItem(spec: MenuItemSpec): Element {
                                 Container({
                                     width: 16,
                                     children: [
-                                        ImageEdgy({
+                                        Image({
                                             resourceId: id,
                                             width: 14,
                                             height: 14,

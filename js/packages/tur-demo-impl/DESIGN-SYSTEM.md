@@ -463,7 +463,7 @@ A status dot + label, used in panel headers.
 
 Code editor pane: header (case name + Run button) + scrollable editor body.
 
-Wraps `InputEdgy` with the canonical editor config.
+Wraps `Input` with the canonical editor config.
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
@@ -474,7 +474,7 @@ Wraps `InputEdgy` with the canonical editor config.
 **Editor field config** (normative):
 
 ```tsx
-InputEdgy({
+Input({
     controller,
     multiline: true,
     fontFamily: "mono",      // engine resolves to JetBrains Mono fallback
@@ -634,7 +634,7 @@ Full-panel error state. Replaces the Viewer body when `status$ === "error"` (not
 
 ## 5. State matrix
 
-Every interactive view must define all five states. Hover/active require `PointerInteract` with `onPointerEnter`/`onPointerExit` (already in the API — `tur-edgy/src/index.ts:181`). Focus requires future keyboard support; spec it now so it can drop in.
+Every interactive view must define all five states. Hover/active require `PointerInteract` with `onPointerEnter`/`onPointerExit` (already in the API — see `PointerInteractProps` in `js/packages/tur-std/src/index.d.ts`). Focus requires future keyboard support; spec it now so it can drop in.
 
 | View | default | hover | active/pressed | focused | disabled |
 |---|---|---|---|---|---|

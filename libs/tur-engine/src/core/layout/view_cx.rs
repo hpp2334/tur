@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use boa_engine::Context;
 
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree, NodeTreeData};
 use crate::core::layout::SubscribeCx;

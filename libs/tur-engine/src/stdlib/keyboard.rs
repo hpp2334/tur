@@ -2,7 +2,7 @@ use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::{js_string, Context, JsValue};
 
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 use crate::core::keyboard::Modifiers;
 
 // ---------------------------------------------------------------------------

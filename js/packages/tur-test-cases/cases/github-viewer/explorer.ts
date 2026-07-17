@@ -11,7 +11,7 @@ import {
     type Element,
     Expanded,
     get,
-    ImageEdgy,
+    Image,
     MainAxisSize,
     MouseRegion,
     mutate,
@@ -95,7 +95,7 @@ function FileRow({
                         children: [
                             Row({
                                 children: [
-                                    ImageEdgy({
+                                    Image({
                                         resourceId: entry.isDir
                                             ? getIcon("folder")
                                             : getIcon("file"),
@@ -158,7 +158,7 @@ function RepoCrumb(): Element {
 function Spinner(): Element {
     return Transform({
         rotate: derive(() => get(spinProgress$) * 2 * Math.PI),
-        child: ImageEdgy({
+        child: Image({
             resourceId: getIcon("spinner"),
             width: 14,
             height: 14,
@@ -168,7 +168,7 @@ function Spinner(): Element {
 }
 
 function CheckIcon(): Element {
-    return ImageEdgy({
+    return Image({
         resourceId: getIcon("check"),
         width: 14,
         height: 14,
@@ -408,7 +408,7 @@ function emptyFolder(): Element {
                 crossAlignment: CrossAxisAlignment.Center,
                 mainAxisSize: MainAxisSize.Min,
                 children: [
-                    ImageEdgy({
+                    Image({
                         resourceId: getIcon("folderSoft"),
                         width: 40,
                         height: 40,

@@ -10,7 +10,7 @@ use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
-use crate::core::edgy_event::{extract_mutation_from_opts, EdgyMutation, PendingMutationInvocationQueue};
+use crate::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
 use crate::core::element::ElementNodeId;
 use crate::stdlib::scroll::ScrollEvent;
 use crate::stdlib::elements::lazy_list::VisibleRangeChangeEvent;
@@ -22,8 +22,8 @@ pub struct LazyListController {
     pub(crate) offset: f64,
     pub(crate) max_scroll_extent: f64,
     pub(crate) viewport_dimension: f64,
-    pub(crate) on_scroll: Option<EdgyMutation<ScrollEvent>>,
-    pub(crate) on_visible_range_change: Option<EdgyMutation<VisibleRangeChangeEvent>>,
+    pub(crate) on_scroll: Option<MutationHandle<ScrollEvent>>,
+    pub(crate) on_visible_range_change: Option<MutationHandle<VisibleRangeChangeEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
         Option<crate::core::elements::NodeTree>,

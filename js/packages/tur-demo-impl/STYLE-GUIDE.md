@@ -394,7 +394,7 @@ Container({ padding: 13 })  // ditto
 
 **Do** — Use the canonical editor config from `<EditorSurface>`:
 ```tsx
-InputEdgy({
+Input({
     controller,
     multiline: true,
     fontFamily: "mono",
@@ -407,8 +407,8 @@ InputEdgy({
 
 **Don't** — Custom per-instance editor configs:
 ```tsx
-// ✗ Some other place renders an InputEdgy with different sizes/colors
-InputEdgy({ controller, fontSize: 14, color: Color.hex("#333") })
+// ✗ Some other place renders an Input with different sizes/colors
+Input({ controller, fontSize: 14, color: Color.hex("#333") })
 ```
 
 There is exactly one editor surface in the playground. If a future feature needs an inline editable text (e.g. renaming a case), that's a different view (`<TextInput>`), not a second `<EditorSurface>`.

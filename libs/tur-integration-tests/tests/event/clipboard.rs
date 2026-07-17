@@ -3,7 +3,7 @@ use tur_engine::stdlib::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
-/// given `queryKey` (InputEdgy puts the queryKey on its Container wrapper; the
+/// given `queryKey` (Input puts the queryKey on its Container wrapper; the
 /// editable text is that container's first child).
 fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
@@ -56,14 +56,14 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     app.click(cx, cy);
 }
 
-/// Inline bundle that places a single InputEdgy at the top-left of the
+/// Inline bundle that places a single Input at the top-left of the
 /// canvas. Reused across tests to avoid the JS bundle roundtrip.
 const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, InputEdgy } from "builtin:tur/std";
+    import { createTextEditingController, render, Container, Input } from "builtin:tur/std";
     const controller = createTextEditingController({});
     render(Container({
         children: [
-            InputEdgy({
+            Input({
                 controller: controller,
                 fontSize: 14,
                 width: 200,

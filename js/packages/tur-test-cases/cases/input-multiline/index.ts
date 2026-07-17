@@ -1,7 +1,7 @@
 import {
     Container,
     createTextEditingController,
-    InputEdgy,
+    Input,
     view,
 } from "builtin:tur/std";
 
@@ -10,7 +10,7 @@ const controller = createTextEditingController({});
 export default view(() =>
     Container({
         children: [
-            InputEdgy({
+            Input({
                 controller,
                 multiline: true,
                 fontSize: 14,

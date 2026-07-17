@@ -6,7 +6,7 @@ pub use focusable::Focusable;
 use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
-use crate::core::edgy_event::IntoJsArgs;
+use crate::core::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
@@ -34,7 +34,7 @@ impl IntoJsArgs for BlurEvent {
 // FocusChange — a deferred focus/blur notification. `set_focus` / `clear_focus`
 // only update `focused_id` and record a pending change; a flush step
 // (`flush_focus_notifications` in the app loop) resolves each pending id to its
-// `EdgyMutation` via the element tree and pushes the invocation. This keeps
+// `MutationHandle` via the element tree and pushes the invocation. This keeps
 // `set_focus` free of tree/queue borrows so it can be called from inside
 // element gesture handlers (which already hold the tree).
 // ---------------------------------------------------------------------------
@@ -98,7 +98,7 @@ impl FocusManager {
         std::mem::take(&mut self.pending)
     }
 
-    /// Resolve pending focus/blur notifications into `EdgyMutation`s and push
+    /// Resolve pending focus/blur notifications into `MutationHandle`s and push
     /// them onto the pending-mutation queue. Each pending id is looked up in
     /// the element tree; if it resolves to a `Focusable` element with an
     /// `on_focus` / `on_blur` mutation, the invocation is enqueued.
@@ -115,7 +115,7 @@ impl FocusManager {
     pub fn flush_pending(
         &mut self,
         tree: &crate::core::elements::NodeTreeData,
-        queue: &mut crate::core::edgy_event::PendingMutationInvocationQueue,
+        queue: &mut crate::core::mutation::PendingMutationInvocationQueue,
     ) -> Vec<(ElementNodeId, bool)> {
         let changes = self.drain_pending();
         if changes.is_empty() {

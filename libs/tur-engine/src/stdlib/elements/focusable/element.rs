@@ -4,7 +4,7 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 
 use crate::core::bridge::JsProps;
-use crate::core::edgy_event::EdgyMutation;
+use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
@@ -17,11 +17,11 @@ use crate::core::view::{ViewCx, Lifecycle, View};
 
 #[derive(Clone)]
 pub struct FocusableView {
-    pub(crate) on_key_down: Option<EdgyMutation<KeydownEvent>>,
+    pub(crate) on_key_down: Option<MutationHandle<KeydownEvent>>,
     #[allow(dead_code)]
-    pub(crate) on_key_up: Option<EdgyMutation<KeyupEvent>>,
-    pub(crate) on_focus: Option<EdgyMutation<FocusEvent>>,
-    pub(crate) on_blur: Option<EdgyMutation<BlurEvent>>,
+    pub(crate) on_key_up: Option<MutationHandle<KeyupEvent>>,
+    pub(crate) on_focus: Option<MutationHandle<FocusEvent>>,
+    pub(crate) on_blur: Option<MutationHandle<BlurEvent>>,
     pub(crate) child: Option<Rc<dyn View>>,
 }
 
@@ -55,11 +55,11 @@ pub struct FocusableElement {
 }
 
 impl Focusable for FocusableElement {
-    fn on_focus_mutation(&self) -> Option<EdgyMutation<FocusEvent>> {
+    fn on_focus_mutation(&self) -> Option<MutationHandle<FocusEvent>> {
         self.view.on_focus
     }
 
-    fn on_blur_mutation(&self) -> Option<EdgyMutation<BlurEvent>> {
+    fn on_blur_mutation(&self) -> Option<MutationHandle<BlurEvent>> {
         self.view.on_blur
     }
 }

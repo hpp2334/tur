@@ -5,7 +5,7 @@ use crate::core::reactive::ReactiveReadJsContext;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use tur_shared::{Constraints, Offset, Size};
 
-use crate::core::edgy_event::PendingMutationInvocationQueue;
+use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{NodeTree, NodeTreeData};
 use crate::core::fonts::FontManager;
