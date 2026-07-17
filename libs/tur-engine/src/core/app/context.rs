@@ -7,6 +7,7 @@ use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
+use crate::core::async_::AsyncExecutor;
 use crate::core::edgy_event::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
@@ -30,6 +31,10 @@ pub struct TurAppContext {
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
     pub(crate) handlers: Vec<Box<dyn AppHandler>>,
+    /// Engine-owned async executor. Cloned from the one `TurAppInternal`
+    /// owns; surfaced to handlers via [`HandlerContext`] so they can spawn
+    /// Rust futures (clipboard writes, etc.) at dispatch time.
+    pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
     /// shared with the boa `Context`. See [`Shell`].
@@ -53,6 +58,7 @@ impl TurAppContext {
         resource_map: Rc<RefCell<ResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
+        async_executor: Rc<AsyncExecutor>,
         clock: Rc<dyn Clock>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
@@ -68,6 +74,7 @@ impl TurAppContext {
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             handlers: vec![],
+            async_executor,
             shell: Shell::new(clock),
         }
     }
@@ -102,6 +109,7 @@ impl TurAppContext {
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,
+            async_executor: &self.async_executor,
         };
         for handler in &mut self.handlers {
             handler.handle_platform_event(&mut cx, event);
@@ -123,6 +131,7 @@ impl TurAppContext {
             renderer: self.renderer.as_mut(),
             size: &mut self.size,
             needs_draw,
+            async_executor: &self.async_executor,
         };
         for handler in &mut self.handlers {
             handler.handle_app_event(&mut cx, event);

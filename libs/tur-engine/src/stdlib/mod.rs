@@ -67,7 +67,6 @@ impl Plugin for TurStdPlugin {
         ctx.register_handler(Box::new(handlers::clipboard::ClipboardPasteHandler));
         ctx.register_handler(Box::new(handlers::clipboard::ClipboardWriteHandler::new(
             self.clipboard.clone(),
-            ctx.async_executor().clone(),
         )));
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
