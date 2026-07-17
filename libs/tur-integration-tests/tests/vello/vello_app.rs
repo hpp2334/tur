@@ -7,7 +7,7 @@ use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::PlatformEvent;
-use tur_engine::core::fonts::PresetFontLoader;
+use tur_native::NativeFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
@@ -112,7 +112,7 @@ impl TurVelloApp {
 
         let mut app = TurEngine::builder()
             .renderer(Box::new(renderer))
-            .font_loader(Box::new(PresetFontLoader::new()))
+            .font_loader(Box::new(NativeFontLoader::new()))
             .clock(Rc::new(StdClock::new()))
             .plugin(TurStdPlugin::default())
             .build()?;

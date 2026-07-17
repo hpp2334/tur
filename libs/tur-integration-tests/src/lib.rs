@@ -13,7 +13,7 @@ use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
-use tur_engine::core::fonts::PresetFontLoader;
+use tur_native::NativeFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
@@ -206,7 +206,7 @@ impl TurTestApp {
         let clock = Rc::new(FixedClock::from_millis(0));
         let mut builder = TurEngine::builder()
             .renderer(Box::new(NoopRenderer::new()))
-            .font_loader(Box::new(PresetFontLoader::new()))
+            .font_loader(Box::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .plugin(
                 TurStdPlugin::builder()

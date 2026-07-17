@@ -7,6 +7,7 @@ members = [
     "libs/tur-clipboard",
     "libs/tur-net",
     "libs/tur-wasm",
+    "libs/tur-native",
     "libs/tur-integration-tests",
 ]
 
@@ -23,6 +24,7 @@ tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-clipboard = { path = "libs/tur-clipboard" }
 tur-net = { path = "libs/tur-net" }
+tur-native = { path = "libs/tur-native" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 
 num-derive = "0.4"

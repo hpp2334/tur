@@ -15,6 +15,7 @@ tur-clipboard = { workspace = true }
 tur-net = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
+parley = { workspace = true }
 tracing = { workspace = true }
 tracing-wasm = { workspace = true }
 wasm-bindgen = { workspace = true }
