@@ -23,5 +23,6 @@ pub mod render;
 pub mod resource;
 pub mod scroll;
 pub mod shell;
+pub mod subsystem;
 pub mod text;
 pub mod view;

@@ -12,6 +12,7 @@ use crate::core::reactive::Source;
 use crate::core::bridge::TurJobExecutor;
 use crate::core::bridge::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::FontLoader;
 use crate::core::render::Renderer;
@@ -58,6 +59,12 @@ pub struct TurAppInternal {
     /// spurious stale marking (`set_source` compares `JsValue` by object
     /// identity, so a fresh `{w,h}` object would otherwise dirty every frame).
     pub(crate) last_viewport: Cell<(f64, f64)>,
+    /// Plugin-registered flush subsystems. Each is `flush`-ed once per
+    /// `flush()` call (= once per frame), in registration order, before
+    /// `flush_reactive`. The same `Rc<RefCell<…>>` is shared with
+    /// [`PluginContext`](crate::core::plugin::PluginContext) so plugins can
+    /// push into the vec during `register`.
+    pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
 }
 
 impl TurAppInternal {
@@ -119,6 +126,7 @@ impl TurAppInternal {
             async_executor,
             viewport_size: None,
             last_viewport: Cell::new((-1.0, -1.0)),
+            subsystems: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -128,6 +136,12 @@ impl TurAppInternal {
     ) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
         let mut animation_ticked = false;
+        let mut subsystems_ticked = false;
+        // Aggregates across all iterations of the fixed-point loop. Once any
+        // subsystem requested a frame, the post-loop schedule decision must
+        // honour it; once any subsystem dirtied state, the post-loop
+        // `need_paint` decision must honour it.
+        let mut subsystem_request_frame = false;
 
         loop {
             // Drive spawned Rust futures one poll step. Completions they
@@ -151,6 +165,32 @@ impl TurAppInternal {
                 self.js_context.animation_manager.borrow().has_active()
             };
 
+            // Subsystem tick — runs once per `flush()` call (= once per
+            // frame), in registration order. Each subsystem owns its own
+            // clock + state; we feed it the boa context and aggregate the
+            // outcomes. Dirtied outcomes force another iteration (the loop
+            // continuation check below); request_frame outcomes carry
+            // forward into the post-loop schedule decision.
+            let subsystem_dirtied = if !subsystems_ticked {
+                subsystems_ticked = true;
+                let mut cx = crate::core::subsystem::SubsystemFlushContext {
+                    boa: boa_context,
+                };
+                let mut dirtied = false;
+                for sub in self.subsystems.borrow_mut().iter_mut() {
+                    let outcome = sub.flush(&mut cx);
+                    if outcome.dirtied {
+                        dirtied = true;
+                    }
+                    if outcome.request_frame {
+                        subsystem_request_frame = true;
+                    }
+                }
+                dirtied
+            } else {
+                false
+            };
+
         // Reactive flush: drain the store, expand dirty atoms, and dispatch
         // `do_update(dirties)` to the mounted root. This may mutate
         // the ElementTree, which sets `dirty`/`need_paint` for the next
@@ -161,7 +201,7 @@ impl TurAppInternal {
         // the real viewport from constraints), so there is no separate
         // pre-layout remount pass here.
         let dirty =
-            self.js_context.dirty.take() || self.js_context.need_paint.take() || animation_did_update || reactive_changed;
+            self.js_context.dirty.take() || self.js_context.need_paint.take() || animation_did_update || reactive_changed || subsystem_dirtied;
         if dirty {
             needs_render = true;
             self.app_context
@@ -220,9 +260,10 @@ impl TurAppInternal {
 
         // Decide how the caller should schedule the next frame.
         //
-        // - `Vsync` (continuous): an animation is running, or a Rust async
-        //   task is live without a timer deadline (e.g. clipboard/http
-        //   futures awaiting external wake-up). Animations need smooth 60fps;
+        // - `Vsync` (continuous): an animation is running, a subsystem
+        //   requested a frame, or a Rust async task is live without a timer
+        //   deadline (e.g. clipboard/http futures awaiting external wake-up).
+        //   Animations need smooth 60fps; subsystems like audio need polling;
         //   timer-less async tasks need polling each frame.
         // - `After(d)`: nothing continuous is pending, but an async `sleep`
         //   deadline is outstanding (driving a `launch` coroutine or a plain
@@ -231,7 +272,10 @@ impl TurAppInternal {
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
         let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if animation_active || (async_pending && async_timer_delay.is_none()) {
+        let schedule = if animation_active
+            || subsystem_request_frame
+            || (async_pending && async_timer_delay.is_none())
+        {
             NextFrame::Vsync
         } else if let Some(delay) = async_timer_delay {
             NextFrame::After(delay)

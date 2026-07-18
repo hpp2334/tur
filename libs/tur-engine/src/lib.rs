@@ -593,6 +593,7 @@ impl TurEngineBuilder {
                 js_ctx_value: ctx_val.clone(),
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
+                subsystems: internal.subsystems.clone(),
                 viewport_size: viewport_size_js.clone(),
             };
             plugin.register(&mut plugin_ctx)?;
