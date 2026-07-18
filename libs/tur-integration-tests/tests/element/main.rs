@@ -1,5 +1,6 @@
 mod animation;
 mod async_bridge;
+mod capability;
 mod column;
 mod container;
 mod core_module_check;

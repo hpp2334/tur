@@ -1,0 +1,13 @@
+[package]
+name = "tur-clipboard-wasm"
+description = "Browser clipboard backend for tur (navigator.clipboard via WasmClipboard)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-clipboard-capability = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = ["Window", "Navigator", "Clipboard"] }

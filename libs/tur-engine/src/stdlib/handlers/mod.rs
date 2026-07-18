@@ -1,4 +1,3 @@
-pub mod clipboard;
 pub mod ensure_visible;
 pub mod gesture;
 pub mod ime;

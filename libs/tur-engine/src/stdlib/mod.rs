@@ -7,34 +7,26 @@ pub mod pointer_region;
 pub mod scroll;
 pub mod text;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 use crate::core::plugin::{Plugin, PluginContext};
 use crate::core::bridge::{reactive, render};
 use crate::error::TurError;
-use tur_shared::Cursor;
 
-pub use platform::{Clipboard, CursorPlatform, NoopClipboard, NoopCursorPlatform};
+pub use platform::{CursorBackend, CursorCap, NoopCursor};
 
-pub struct TurStdPlugin {
-    cursor: Rc<RefCell<dyn CursorPlatform>>,
-    clipboard: Rc<dyn Clipboard>,
-}
-
-impl TurStdPlugin {
-    pub fn builder() -> TurStdPluginBuilder {
-        TurStdPluginBuilder::new()
-    }
-}
+/// The standard widget library plugin. Registers the `builtin:tur/std`
+/// module (widget factories, controllers, color bridge, animation primitives),
+/// plus the input-event handlers (gesture, keyboard, ime, resize, wheel,
+/// scroll chaining, pointer region, paste).
+///
+/// `TurStdPlugin` carries no per-instance state. Backend injection
+/// (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
+/// and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`).
+pub struct TurStdPlugin;
 
 impl Default for TurStdPlugin {
     fn default() -> Self {
-        Self {
-            cursor: Rc::new(RefCell::new(NoopCursorPlatform)),
-            clipboard: Rc::new(NoopClipboard),
-        }
+        Self
     }
 }
 
@@ -64,10 +56,10 @@ impl Plugin for TurStdPlugin {
         ctx.register_handler(Box::new(handlers::wheel::WheelAppHandler));
         ctx.register_handler(Box::new(handlers::scroll_chaining::ScrollChainingHandler));
         ctx.register_handler(Box::new(handlers::scroll_to::ScrollToHandler));
-        ctx.register_handler(Box::new(handlers::clipboard::ClipboardPasteHandler));
-        ctx.register_handler(Box::new(handlers::clipboard::ClipboardWriteHandler::new(
-            self.clipboard.clone(),
-        )));
+        // Note: ClipboardPasteHandler and ClipboardWriteHandler have moved
+        // to `tur-clipboard-capability` (TurClipboardPlugin) — they're
+        // registered there along with the JS bridge so the embedder wires
+        // the clipboard backend through a single `.capability(...)` call.
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
         std_fns.extend(reactive::fns());
@@ -97,12 +89,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(crate::elements::lifecycle::bridge::fns());
         std_fns.extend(crate::elements::readable_subscribe::bridge::fns());
 
-        // Clipboard bridge moved to `builtin:tur/clipboard` (tur-clipboard
-        // crate). The `Clipboard` trait + `ClipboardWriteHandler` /
-        // `ClipboardPasteHandler` stay here for the engine's internal
-        // Cmd+C/Cmd+V/Cmd+X event path. The JS-callable `clipboard.readText`
-        // / `clipboard.writeText` fns are registered by `TurClipboardPlugin`.
-
         let mut std_consts: Vec<ConstEntry> = Vec::new();
         let js_ctx_value = ctx.js_ctx_value.clone();
         std_consts.extend(bridge::color::consts(ctx.boa_mut(), js_ctx_value));
@@ -115,47 +101,5 @@ impl Plugin for TurStdPlugin {
         ctx.register_module("builtin:tur/std", std_fns, vec![], std_consts);
 
         Ok(())
-    }
-
-    fn cursor_output(&self) -> Option<Box<dyn FnMut(Cursor)>> {
-        let cursor = self.cursor.clone();
-        Some(Box::new(move |c| cursor.borrow_mut().set_cursor(c)))
-    }
-}
-
-pub struct TurStdPluginBuilder {
-    cursor: Rc<RefCell<dyn CursorPlatform>>,
-    clipboard: Rc<dyn Clipboard>,
-}
-
-impl Default for TurStdPluginBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl TurStdPluginBuilder {
-    pub fn new() -> Self {
-        Self {
-            cursor: Rc::new(RefCell::new(NoopCursorPlatform)),
-            clipboard: Rc::new(NoopClipboard),
-        }
-    }
-
-    pub fn cursor<P: CursorPlatform + 'static>(mut self, platform: P) -> Self {
-        self.cursor = Rc::new(RefCell::new(platform));
-        self
-    }
-
-    pub fn clipboard<P: Clipboard + 'static>(mut self, platform: P) -> Self {
-        self.clipboard = Rc::new(platform);
-        self
-    }
-
-    pub fn build(self) -> TurStdPlugin {
-        TurStdPlugin {
-            cursor: self.cursor,
-            clipboard: self.clipboard,
-        }
     }
 }

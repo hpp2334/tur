@@ -11,8 +11,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 tur-engine = { workspace = true, features = ["webgl"] }
-tur-clipboard = { workspace = true }
-tur-net = { workspace = true }
+tur-clipboard-wasm = { workspace = true }
+tur-net-wasm = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
@@ -57,7 +57,6 @@ js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
-reqwest-wasm = { version = "0.11", default-features = false }
 swc_common = "23.0.1"
 swc_ecma_ast = "25.0.0"
 swc_ecma_visit = "25.0.0"

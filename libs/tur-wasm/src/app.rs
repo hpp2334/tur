@@ -1,6 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::future::Future;
-use std::pin::Pin;
 use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
@@ -8,10 +6,10 @@ use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerInput};
 use crate::fonts::WasmFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
-use tur_engine::{Clipboard, LoopDriver, TurApp};
+use tur_engine::{CursorCap, LoopDriver, TurApp};
 use tur_shared::Offset;
-use tur_clipboard::TurClipboardPlugin;
-use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
+use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
+use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
@@ -65,66 +63,23 @@ struct WasmState {
     _paste_closure: Closure<dyn Fn(web_sys::ClipboardEvent)>,
 }
 
-/// Embedder-side `CursorPlatform`: the engine pushes the resolved cursor here
+/// Embedder-side `CursorBackend`: the engine pushes the resolved cursor here
 /// during the frame loop, and we apply it to the host canvas.
-struct WasmCursorPlatform {
+struct WasmCursor {
     canvas: web_sys::HtmlCanvasElement,
 }
 
-impl tur_engine::CursorPlatform for WasmCursorPlatform {
+impl tur_engine::CursorBackend for WasmCursor {
     fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
 }
 
-/// `Clipboard` impl backed by `navigator.clipboard`. Reads await a browser
-/// Promise (`navigator.clipboard.readText()`); writes are fire-and-forget
-/// `writeText` calls but still go through the executor so the engine sees
-/// consistent spawn → poll → complete flow.
-#[derive(Default)]
-struct WasmClipboard;
+// `Clipboard` impl lives in `tur-clipboard-wasm` now — re-exported here via
+// `use tur_clipboard_wasm::{Clipboard, WasmClipboard}`.
 
-impl Clipboard for WasmClipboard {
-    fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
-        Box::pin(async {
-            let Some(window) = web_sys::window() else {
-                return String::new();
-            };
-            let promise = window.navigator().clipboard().read_text();
-            match wasm_bindgen_futures::JsFuture::from(promise).await {
-                Ok(v) => v.as_string().unwrap_or_default(),
-                Err(_) => String::new(),
-            }
-        })
-    }
-    fn write_text(&self, text: String) -> Pin<Box<dyn Future<Output = ()>>> {
-        Box::pin(async move {
-            if let Some(window) = web_sys::window() {
-                let _ = window.navigator().clipboard().write_text(&text);
-            }
-        })
-    }
-}
-
-/// `Http` impl backed by `reqwest-wasm`. Spawns the request via the engine's
-/// executor when the bridge fn calls `request(opts).await`. The legacy
-/// `perform_request` helper is reused verbatim.
-#[derive(Default)]
-struct WasmHttp;
-
-impl Http for WasmHttp {
-    fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>> {
-        Box::pin(perform_request(
-            opts.url,
-            opts.method,
-            opts.headers,
-            opts.body,
-            opts.response_type == ResponseType::Bytes,
-            opts.username,
-            opts.password,
-        ))
-    }
-}
+// `Http` impl lives in `tur-net-wasm` now — re-exported here via
+// `use tur_net_wasm::{Http, WasmHttp}`.
 
 #[wasm_bindgen]
 pub struct TurWasmApp {
@@ -272,12 +227,8 @@ fn build_host_service_fns() -> Vec<(&'static str, boa_engine::NativeFunction, us
 }
 
 // ---------------------------------------------------------------------------
-// `perform_request` — async HTTP via reqwest-wasm.
-//
-// Used by `WasmHttp::request`, called from the engine-side `builtin:tur/net`
-// bridge closure (registered by the std plugin). The bridge fn parses JS
-// opts into `RequestOpts`, spawns this via the engine's `AsyncExecutor`, and
-// settles the JsPromise via a completion closure on the next `flush`.
+// `perform_request` moved to `tur-net-wasm/src/backend.rs` — extracted
+// verbatim so the WasmHttp backend lives in its own crate.
 // ---------------------------------------------------------------------------
 
 /// A pending `__turHost.pickFile` result: callback + (`None` if cancelled).
@@ -288,64 +239,6 @@ type PendingPick = (
 
 /// The `change` handler closure type used by the hidden file-picker `<input>`.
 type PickHandler = wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>;
-
-async fn perform_request(
-    url: String,
-    method: String,
-    headers: Vec<(String, String)>,
-    body: Option<HttpBody>,
-    want_bytes: bool,
-    username: Option<String>,
-    password: Option<String>,
-) -> HttpOutcome {
-    let result: Result<HttpOutcome, String> = async {
-        let client = reqwest_wasm::Client::new();
-        let m = reqwest_wasm::Method::from_bytes(method.as_bytes())
-            .map_err(|e| format!("invalid method {method:?}: {e}"))?;
-        let mut rb = client.request(m, &url);
-        if let (Some(u), Some(p)) = (username.as_deref(), password.as_deref()) {
-            rb = rb.basic_auth(u, Some(p));
-        }
-        for (k, v) in &headers {
-            if let (Ok(name), Ok(val)) = (
-                reqwest_wasm::header::HeaderName::from_bytes(k.as_bytes()),
-                reqwest_wasm::header::HeaderValue::from_str(v),
-            ) {
-                rb = rb.header(name, val);
-            }
-        }
-        rb = match body {
-            Some(HttpBody::Text(s)) => rb.body(s),
-            Some(HttpBody::Bytes(b)) => rb.body(b),
-            None => rb,
-        };
-        let resp = rb.send().await.map_err(|e| format!("{e}"))?;
-        let status = resp.status().as_u16();
-        let status_text = resp
-            .status()
-            .canonical_reason()
-            .unwrap_or("")
-            .to_string();
-        let hdrs: Vec<(String, String)> = resp
-            .headers()
-            .iter()
-            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
-            .collect();
-        let body = if want_bytes {
-            HttpBody::Bytes(resp.bytes().await.map_err(|e| format!("{e}"))?.to_vec())
-        } else {
-            HttpBody::Text(resp.text().await.map_err(|e| format!("{e}"))?)
-        };
-        Ok(HttpOutcome::Ok {
-            status,
-            status_text,
-            headers: hdrs,
-            body,
-        })
-    }
-    .await;
-    result.unwrap_or_else(HttpOutcome::Err)
-}
 
 
 // --- File IO host bridges (browser-only) -----------------------------------
@@ -683,20 +576,14 @@ impl TurWasmApp {
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(WasmFontLoader::new()))
                 .clock(Rc::new(WasmClock))
-                .plugin(
-                    tur_engine::TurStdPlugin::builder()
-                        .cursor(WasmCursorPlatform {
-                            canvas: canvas.clone(),
-                        })
-                        .clipboard(WasmClipboard)
-                        .build(),
-                )
-                .plugin(
-                    TurClipboardPlugin::builder()
-                        .clipboard(WasmClipboard)
-                        .build(),
-                )
-                .plugin(tur_net::TurNetPlugin::builder().http(WasmHttp).build())
+                .capability(CursorCap::new(WasmCursor {
+                    canvas: canvas.clone(),
+                }))
+                .capability(Clipboard::new(WasmClipboard))
+                .capability(Http::new(WasmHttp))
+                .plugin(tur_engine::TurStdPlugin)
+                .plugin(TurClipboardPlugin)
+                .plugin(TurNetPlugin)
                 .host_module("builtin:tur/host", host_exports)
                 .build()
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;

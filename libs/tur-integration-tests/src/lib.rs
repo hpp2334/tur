@@ -18,9 +18,13 @@ use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::{Clipboard, CursorPlatform, TurApp, TurEngine, TurStdPlugin};
-use tur_net::{Http, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
-use tur_clipboard::TurClipboardPlugin;
+use tur_engine::{CursorBackend, CursorCap, TurApp, TurEngine, TurStdPlugin};
+use tur_net_capability::{
+    Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin,
+};
+use tur_clipboard_capability::{
+    Clipboard, ClipboardBackend, TurClipboardPlugin,
+};
 use tur_shared::{Cursor, MouseButton, Offset};
 
 /// Fixed per-frame time step (ms) used by [`TurTestApp::wait_frames`] and
@@ -66,7 +70,7 @@ impl RecordingClipboard {
     }
 }
 
-impl Clipboard for RecordingClipboard {
+impl ClipboardBackend for RecordingClipboard {
     fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
         let s = self.inner.next_read.borrow().clone();
         Box::pin(std::future::ready(s))
@@ -117,7 +121,7 @@ impl RecordingHttp {
     }
 }
 
-impl Http for RecordingHttp {
+impl HttpBackend for RecordingHttp {
     fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>> {
         *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
             url: opts.url.clone(),
@@ -208,21 +212,16 @@ impl TurTestApp {
             .renderer(Box::new(NoopRenderer::new()))
             .font_loader(Box::new(NativeFontLoader::new()))
             .clock(clock.clone())
-            .plugin(
-                TurStdPlugin::builder()
-                    .cursor(RecordingCursorPlatform {
-                        last: cursor_slot.clone(),
-                    })
-                    .clipboard(clipboard.clone())
-                    .build(),
-            )
-            .plugin(
-                TurClipboardPlugin::builder()
-                    .clipboard(clipboard.clone())
-                    .build(),
-            );
+            .capability(CursorCap::new(RecordingCursor {
+                last: cursor_slot.clone(),
+            }))
+            .capability(Clipboard::new(clipboard.clone()))
+            .plugin(TurStdPlugin)
+            .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {
-            builder = builder.plugin(TurNetPlugin::builder().http(http_impl).build());
+            builder = builder
+                .capability(Http::new(http_impl))
+                .plugin(TurNetPlugin);
         }
         let inner = builder.build()?;
         inner.push_platform_event(PlatformEvent::Resize {
@@ -705,15 +704,15 @@ impl TurTestApp {
     }
 }
 
-/// Test `CursorPlatform` that records the last cursor the engine pushed. Shares its
+/// Test `CursorBackend` that records the last cursor the engine pushed. Shares its
 /// slot (via `Rc<Cell>`) with [`TurTestApp`], which drains it through
 /// `take_current_cursor`.
 #[derive(Clone)]
-struct RecordingCursorPlatform {
+struct RecordingCursor {
     last: Rc<Cell<Option<Cursor>>>,
 }
 
-impl CursorPlatform for RecordingCursorPlatform {
+impl CursorBackend for RecordingCursor {
     fn set_cursor(&mut self, cursor: Cursor) {
         self.last.set(Some(cursor));
     }

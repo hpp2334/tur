@@ -2,6 +2,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use crate::core::async_::AsyncExecutor;
+use crate::core::capability::Capabilities;
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTreeData;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
@@ -35,6 +36,12 @@ pub struct HandlerContext<'a> {
     /// Rust futures (e.g. `clipboard.write_text`); the executor is driven each
     /// frame inside `flush`. See [`AsyncExecutor::spawn_detached`].
     pub async_executor: &'a Rc<AsyncExecutor>,
+    /// Capability registry view. Handlers look up plugin-injected backends
+    /// (e.g. `Clipboard`, `Http`) at dispatch time via
+    /// `cx.capabilities.of::<C>()`. Missing capabilities return `None` —
+    /// handlers must handle absence gracefully (typically silent drop with a
+    /// `tracing::warn!`).
+    pub capabilities: &'a Capabilities,
 }
 
 impl<'a> HandlerContext<'a> {

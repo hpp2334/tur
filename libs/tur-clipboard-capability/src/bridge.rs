@@ -1,14 +1,11 @@
 //! `builtin:tur/clipboard` bridge: a `clipboard` object with `readText` /
 //! `writeText` methods, each returning a `Promise`.
 //!
-//! Unlike the older clipboard bridge (which used
-//! `unsafe NativeFunction::from_closure` to capture `Rc<dyn Clipboard>` and
-//! `Rc<AsyncExecutor>`), this version is **fully safe** — the bridge fns are
-//! ctx-bound `Ptr`s that look up their `Rc<dyn Clipboard>` and
-//! `Rc<AsyncExecutor>` from `TurJsContext`'s capability registry (populated
-//! by [`crate::TurClipboardPlugin`] during `register`).
+//! The bridge fns are ctx-bound `Ptr`s that look up the [`crate::Clipboard`]
+//! capability from `TurJsContext`'s capability registry (populated by the
+//! embedder via `TurEngineBuilder::capability(Clipboard::new(...))`).
 //!
-//! Promise settlement flow (unchanged from the previous design):
+//! Promise settlement flow:
 //!
 //! 1. Bridge fn creates a pending `JsPromise` synchronously and returns it.
 //! 2. Spawns a future via the executor that calls `clipboard.read_text()`
@@ -18,10 +15,8 @@
 //!    resolves the promise.
 //!
 //! Promise settlement enqueues a PromiseJob; boa's `executor.drain` (called
-//! right after `tick`/`drain_completions` in `flush`) runs the `.then`
+//! right after `tick`/`drain_completion` in `flush`) runs the `.then`
 //! callbacks, which can `set()` reactive atoms that drive re-layout.
-
-use std::rc::Rc;
 
 use boa_engine::js_string;
 use boa_engine::object::builtins::JsPromise;
@@ -31,7 +26,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 use tur_engine::core::bridge::module_loader::bound_native;
 
-use tur_engine::Clipboard;
+use crate::Clipboard;
 
 /// Bridge function table entries for `builtin:tur/clipboard`.
 ///
@@ -45,7 +40,7 @@ pub fn fns() -> Vec<FnEntry> {
 /// Build the `clipboard` JS object: `{ readText(): Promise<string>,
 /// writeText(text: string): Promise<void> }`. Each method is a ctx-bound
 /// native fn (via [`bound_native`]) so it can `extract_ctx(args)` and look
-/// up its capability slots.
+/// up its capability slot.
 pub fn build_clipboard_object(context: &mut Context, ctx_value: JsValue) -> JsValue {
     let read = bound_native(
         context,
@@ -84,8 +79,11 @@ fn tur_clipboard_read_text(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let clipboard = js_ctx
-        .capability::<Rc<dyn Clipboard>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard backend")))?;
+        .capability()
+        .of::<Clipboard>()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
+        .backend()
+        .clone();
     let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
@@ -114,8 +112,11 @@ fn tur_clipboard_write_text(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let clipboard = js_ctx
-        .capability::<Rc<dyn Clipboard>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard backend")))?;
+        .capability()
+        .of::<Clipboard>()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
+        .backend()
+        .clone();
     let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);

@@ -1,0 +1,12 @@
+[package]
+name = "tur-clipboard-capability"
+description = "Clipboard capability for tur (Clipboard + ClipboardBackend trait + builtin:tur/clipboard bridge)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true }
+boa_engine = { workspace = true }
+tracing = { workspace = true }

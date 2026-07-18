@@ -873,11 +873,17 @@ fn empty_colored_span_does_not_panic() {
 // Mirrors the playground editor: a multiline `Input` INSIDE a `ScrollView`,
 // scrolled down so the clicked line is only reachable after scrolling. This is
 // the exact configuration the reported bug was seen in.
+//
+// The content is intentionally long enough that scrolling `2 * line_height`
+// stays well within the scroll-view's clamp range (content_height -
+// viewport_height). With a 100px viewport and 16px lines, ~12 lines (=192px)
+// leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
+// body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"
 import { render, ScrollView, Input } from "builtin:tur/std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
-    content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH",
+    content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL",
 }]);
 render(ScrollView({
     child: Input({
@@ -956,7 +962,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     );
     assert_eq!(
         get_text(&app, id),
-        "L0AAAA\nL1BBBB\nLCCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH",
+        "L0AAAA\nL1BBBB\nLCCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL",
         "backspace must delete the char left of the caret on the scrolled line"
     );
     assert_eq!(get_cursor_pos(&app, id), 15);

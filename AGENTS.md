@@ -33,6 +33,10 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  │                   ElementTree with layout+paint)    │
 │  ├── core/render   (PaintContext, Renderer,            │
 │  │                   ChildLayout, ChildPaint)          │
+│  ├── core/capability (Capability trait, Capabilities,  │
+│  │                   CapabilityDecls — type-keyed      │
+│  │                   service registry consumed by      │
+│  │                   bridge fns, handlers, plugins)    │
 │  ├── core/bridge   (boa_engine JS bridge, init_bridge) │
 │  ├── elements/     (FlexElement, StackElement, etc.    │
 │  │                   each with element.rs + render.rs)  │
@@ -41,13 +45,63 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 └──────────────────────────────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
+│  Capability crates (3-crate split per domain):         │
+│  ├── tur-clipboard-capability (Clipboard +             │
+│  │   ClipboardBackend trait + builtin:tur/clipboard)   │
+│  ├── tur-clipboard-wasm     (WasmClipboard backend)    │
+│  ├── tur-clipboard-native   (NativeClipboard via       │
+│  │   arboard)                                          │
+│  ├── tur-net-capability (Http + HttpBackend trait +    │
+│  │   builtin:tur/net)                                  │
+│  ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
+│  └── tur-net-native         (NativeHttp via reqwest)   │
+│  Embedders register backends via                      │
+│    TurEngineBuilder::capability(Clipboard::new(backend))│
+│    TurEngineBuilder::capability(Http::new(backend))    │
+│  Engine-internal capabilities (e.g. CursorCap for      │
+│  CursorBackend) live in tur-engine/stdlib/platform.rs.│
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-wasm                                        │
 │  (wasm binary via wasm-pack: boajs + vello-hybrid)     │
 │  TurWasmApp::create() — full viewport                 │
 │  TurWasmApp::create_in(id) — embed in container       │
 │  clear_and_run_js() — clear tree + evaluate new JS    │
+│  Composes: Clipboard::new(WasmClipboard),             │
+│            Http::new(WasmHttp),                        │
+│            CursorCap::new(WasmCursor) + plugins.       │
 └─────────────────────────────────────────────────────┘
 ```
+
+### Capability registry
+
+Embedders register swappable backends (clipboard, http, cursor) on the engine builder:
+
+```rust
+TurEngine::builder()
+    .capability(Clipboard::new(WasmClipboard))   // tur-clipboard-wasm
+    .capability(Http::new(WasmHttp))             // tur-net-wasm
+    .capability(CursorCap::new(WasmCursor))      // engine-internal
+    .plugin(TurStdPlugin)
+    .plugin(TurClipboardPlugin)                  // requires: Clipboard
+    .plugin(TurNetPlugin)                        // Http optional (skips builtin:tur/net if absent)
+    .build()
+```
+
+- `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
+  newtype (`Clipboard`, `Http`, `CursorCap`).
+- `Plugin::requires(&mut CapabilityDecls)` — declare hard deps; the builder
+  validates them BEFORE any plugin's `register` runs, so missing capabilities
+  fail fast at `build()` with a clear error.
+- `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
+  time (bridge fns) or event dispatch time (handlers via
+  `HandlerContext.capabilities`).
+- Convention: capability newtypes use base names (`Clipboard`, `Http`);
+  backend traits use `*Backend` suffix (`ClipboardBackend`, `HttpBackend`,
+  `CursorBackend`). `CursorCap` is the lone exception because `tur_shared::Cursor`
+  already names the cursor-kind enum.
+
 
 ### Element types
 
@@ -93,14 +147,23 @@ libs/
         trait_/              # Domain traits (ElementLayout, ElementRender, ElementOnUpdate, ElementSubscribe)
         elements/            # AnyElement, ElementNode, ElementTree
         render/              # PaintContext, Renderer, ChildLayout, ChildPaint
+        capability/          # Capability trait, Capabilities view, CapabilityDecls
         bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)
+        plugin.rs            # Plugin trait (register + requires) + PluginContext
       elements/              # Concrete elements (flex/, stack/, positioned/, etc.)
         flex/element.rs      # FlexElement struct + ElementOnUpdate
         flex/render.rs       # ElementLayout + ElementRender (layout algorithm)
       renderer/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
+      stdlib/platform.rs     # CursorBackend trait + CursorCap capability (engine-internal)
   tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
+  tur-clipboard-capability/  # Clipboard trait + Clipboard cap + builtin:tur/clipboard + handlers
+  tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend
+  tur-clipboard-native/      # NativeClipboard (arboard) backend
+  tur-net-capability/        # HttpBackend trait + Http cap + builtin:tur/net
+  tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
+  tur-net-native/            # NativeHttp (reqwest) backend
   tur-wasm/                  # wasm binary (boa_engine + vello-hybrid + tur-engine)
 js/
   packages/
