@@ -228,7 +228,7 @@ cd js/packages/tur-test-cases && pnpm build
 
 ## Conventions
 
-- Rust edition 2024, MSRV 1.85
+- Rust edition 2024, MSRV 1.91
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: biome
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).

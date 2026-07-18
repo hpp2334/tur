@@ -20,7 +20,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.91"
 license = "MIT"
 repository = "https://github.com/hpp2334/tur"
 
@@ -44,8 +44,8 @@ num-traits = "0.2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"
-boa_engine = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
-boa_gc = { git = "https://github.com/hpp2334/boa.git", rev = "7addeb39597f60156cd355022196772d32e60a9d" }
+boa_engine = { git = "https://github.com/boa-dev/boa.git", rev = "6ef5370c1cff770c51f3e4f8600590f11d66eeaf" }
+boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "6ef5370c1cff770c51f3e4f8600590f11d66eeaf" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 resvg = "0.47"
 usvg = "0.47"
