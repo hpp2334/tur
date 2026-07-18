@@ -178,8 +178,8 @@ impl Canvas for VelloPaintContext<'_> {
                         .map(|g| Glyph { id: g.id, x: g.x, y: g.y }),
                 );
 
-            if run.underline {
-                if let Some(first) = run.glyphs.first() {
+            if run.underline
+                && let Some(first) = run.glyphs.first() {
                     let last_x = run
                         .glyphs
                         .last()
@@ -195,7 +195,6 @@ impl Canvas for VelloPaintContext<'_> {
                         .to_path(TOLERANCE),
                     );
                 }
-            }
         }
     }
 

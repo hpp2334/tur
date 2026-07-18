@@ -62,14 +62,13 @@ impl View for ScrollViewView {
         }
         // Bind the controller to this node so `jumpTo` (and drag-driven
         // `ScrollTo` events from a sibling Scrollbar) can locate this element.
-        if let Some(ctrl_obj) = &self.controller {
-            if let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() {
+        if let Some(ctrl_obj) = &self.controller
+            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() {
                 ctrl.bound_node = Some(id);
                 ctrl.element_tree = Some(cx.node_tree());
                 ctrl.mutation_queue = Some(cx.mutation_queue());
                 ctrl.dirty_flag = Some(cx.dirty());
             }
-        }
         let _child_id = self.child.build(cx, boa, id.into());
         cx.link_child(parent, id.into());
         id.into()
@@ -202,9 +201,9 @@ impl ElementOnWheel for ScrollViewElement {
 
         if (new_pixels - old_pixels).abs() > 0.001 {
             self.update_controller_metrics();
-            if let Some(ref ctrl_obj) = self.view.controller {
-                if let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>() {
-                    if let Some(m) = ctrl.on_scroll {
+            if let Some(ref ctrl_obj) = self.view.controller
+                && let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>()
+                    && let Some(m) = ctrl.on_scroll {
                         cx.push_event(
                             m,
                             ScrollEvent {
@@ -214,8 +213,6 @@ impl ElementOnWheel for ScrollViewElement {
                             },
                         );
                     }
-                }
-            }
             cx.request_paint();
         }
 

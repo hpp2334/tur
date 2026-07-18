@@ -73,7 +73,7 @@ impl ElementRender for EditableTextElement {
             // sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
             // `request_paint`, so the engine wakes at each toggle boundary.
             let now_ms = paint_ctx.now().as_millis() as u64;
-            let blink_visible = (now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0;
+            let blink_visible = (now_ms / CARET_BLINK_HALF_PERIOD_MS).is_multiple_of(2);
             if blink_visible {
                 paint_cursor(
                     canvas,

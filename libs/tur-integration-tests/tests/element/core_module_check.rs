@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// and work end-to-end (a `view()` factory + `render()` mount).
 #[test]
 fn core_reactive_primitives_import_and_render() {
-    let mut app = TurTestApp::new(400.0, 100.0).unwrap();
+    let app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
             import { view, render } from "builtin:tur/core";
@@ -33,7 +33,7 @@ fn core_reactive_primitives_import_and_render() {
 /// whose body builds nothing (the real widget tests live in `std_module_check`).
 #[test]
 fn core_render_importable() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
+    let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
             import { view, render } from "builtin:tur/core";
@@ -51,7 +51,7 @@ fn core_render_importable() {
 /// they bind them to undefined). This confirms the widget is genuinely absent.
 #[test]
 fn core_does_not_export_widgets() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
+    let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
             import { Container } from "builtin:tur/core";

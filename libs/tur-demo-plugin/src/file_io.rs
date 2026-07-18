@@ -114,11 +114,11 @@ pub fn build_file_io_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usi
             let arr = js_sys::Uint8Array::from(&bytes[..]);
             let parts = js_sys::Array::new();
             parts.push(&arr);
-            if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence(&parts) {
-                if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
-                    if let Some(document) = document {
-                        if let Ok(a_el) = document.create_element("a") {
-                            if let Ok(a) = a_el.dyn_into::<web_sys::HtmlAnchorElement>() {
+            if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence(&parts)
+                && let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
+                    if let Some(document) = document
+                        && let Ok(a_el) = document.create_element("a")
+                            && let Ok(a) = a_el.dyn_into::<web_sys::HtmlAnchorElement>() {
                                 a.set_href(&url);
                                 a.set_download(&name);
                                 if let Some(body) = document.body() {
@@ -127,11 +127,8 @@ pub fn build_file_io_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usi
                                     let _ = body.remove_child(&a);
                                 }
                             }
-                        }
-                    }
                     let _ = web_sys::Url::revoke_object_url(&url);
                 }
-            }
         }
         Ok(JsValue::undefined())
     });

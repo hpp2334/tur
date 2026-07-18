@@ -149,11 +149,10 @@ impl SwitchFragment {
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
-        if let Some(factory) = self.mounted.factory(&self.view) {
-            if let Some(view) = factory.create(boa) {
+        if let Some(factory) = self.mounted.factory(&self.view)
+            && let Some(view) = factory.create(boa) {
                 return vec![view.build(cx, boa, NodeId::from(fragment_id))];
             }
-        }
         Vec::new()
     }
 }

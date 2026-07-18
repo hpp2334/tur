@@ -36,7 +36,7 @@ fn reentrant_module_load_via_host_fn() {
         specifier: "builtin:tur/cases",
         exports: vec![("loadModule".to_string(), load_module_fn, 1)],
     };
-    let mut app = TurTestApp::new_with_extra_plugins(
+    let app = TurTestApp::new_with_extra_plugins(
         100.0,
         100.0,
         vec![Box::new(plugin)],

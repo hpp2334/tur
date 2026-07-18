@@ -1054,16 +1054,14 @@ impl WasmLoopDriver {
     /// from a clean slate (avoids double-firing when input re-arms an idle
     /// loop that had a timer outstanding).
     fn cancel_pending(&self) {
-        if let Some(id) = self.raf_id.take() {
-            if let Some(window) = web_sys::window() {
+        if let Some(id) = self.raf_id.take()
+            && let Some(window) = web_sys::window() {
                 let _ = window.cancel_animation_frame(id);
             }
-        }
-        if let Some(id) = self.timeout_id.take() {
-            if let Some(window) = web_sys::window() {
+        if let Some(id) = self.timeout_id.take()
+            && let Some(window) = web_sys::window() {
                 window.clear_timeout_with_handle(id);
             }
-        }
     }
 }
 

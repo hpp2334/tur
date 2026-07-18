@@ -278,11 +278,10 @@ impl NodeTreeData {
             }
         }
         // Capture the element so the flush loop can fire `before_destroy`.
-        if let Some(node) = self.remove_element(id) {
-            if let Some(elem) = node.element {
+        if let Some(node) = self.remove_element(id)
+            && let Some(elem) = node.element {
                 self.pending_destroy.push(elem);
             }
-        }
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
@@ -317,11 +316,10 @@ impl NodeTreeData {
     /// `ref_child` (no parent-pointer update — used to reorder an already-linked
     /// child, e.g. keeping LazyList items ordered by logical index).
     pub fn move_child_before(&mut self, parent: ElementNodeId, child: NodeId, ref_child: NodeId) {
-        if let Some(node) = self.elements.get_mut(&parent) {
-            if let Some(pos) = node.children.iter().position(|c| *c == child) {
+        if let Some(node) = self.elements.get_mut(&parent)
+            && let Some(pos) = node.children.iter().position(|c| *c == child) {
                 node.children.remove(pos);
             }
-        }
         if let Some(node) = self.elements.get_mut(&parent) {
             if let Some(pos) = node.children.iter().position(|c| *c == ref_child) {
                 node.children.insert(pos, child);

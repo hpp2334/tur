@@ -26,8 +26,8 @@ impl ElementRender for ContainerElement {
         let border_radius = self.painting.border_radius;
         let border_position = self.painting.border_position;
 
-        if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur) {
-            if sb > 0.0 {
+        if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur)
+            && sb > 0.0 {
                 let radius = border_radius.unwrap_or(0.0);
                 canvas.draw_shadow(
                     offset,
@@ -38,7 +38,6 @@ impl ElementRender for ContainerElement {
                     self.view.shadow_offset.unwrap_or((0.0, 0.0)),
                 );
             }
-        }
 
         if let Some(brush) = color {
             let geometry = match border_radius {
@@ -51,8 +50,8 @@ impl ElementRender for ContainerElement {
             canvas.fill_geometry(offset, &geometry, brush);
         }
 
-        if let (Some(bc), Some(bw)) = (border_color, border_width) {
-            if bw > 0.0 {
+        if let (Some(bc), Some(bw)) = (border_color, border_width)
+            && bw > 0.0 {
                 let half = bw / 2.0;
                 let s = layout.size;
                 let (ox, oy, size) = match border_position {
@@ -75,7 +74,6 @@ impl ElementRender for ContainerElement {
                 };
                 canvas.stroke_geometry(border_offset, &geometry, bc, bw);
             }
-        }
 
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas, offset);

@@ -62,7 +62,7 @@ fn capability_round_trip_via_plugin() {
     let seen = Rc::new(RefCell::new(None));
     let app = build_app(|b| {
         b.capability(counter.clone())
-            .plugin(TurStdPlugin::default())
+            .plugin(TurStdPlugin)
             .plugin(CapturePlugin {
                 seen: seen.clone(),
             })
@@ -78,7 +78,7 @@ fn capability_round_trip_via_plugin() {
 // a clear error naming the missing type.
 #[test]
 fn missing_capability_fails_build() {
-    let result = build_app(|b| b.plugin(TurStdPlugin::default()).plugin(NeedsCounterPlugin));
+    let result = build_app(|b| b.plugin(TurStdPlugin).plugin(NeedsCounterPlugin));
     let err = result.err().expect("build must fail");
     let msg = err.to_string();
     assert!(
@@ -97,7 +97,7 @@ fn missing_capability_fails_build() {
 #[test]
 fn capability_chain_order_irrelevant() {
     let app = build_app(|b| {
-        b.plugin(TurStdPlugin::default())
+        b.plugin(TurStdPlugin)
             .plugin(NeedsCounterPlugin)
             .capability(CountersCapability::new())
     });

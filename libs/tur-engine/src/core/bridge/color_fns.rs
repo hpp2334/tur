@@ -122,8 +122,8 @@ fn tur_create_linear_gradient(
         args.get_or_undefined(4).as_number().unwrap_or(0.0),
     );
     let mut stops: Vec<GradientStop> = Vec::new();
-    if let Some(stops_val) = args.get_or_undefined(5).as_object() {
-        if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone()) {
+    if let Some(stops_val) = args.get_or_undefined(5).as_object()
+        && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone()) {
             let len = arr.length(context).unwrap_or(0);
             for i in 0..len {
                 if let Ok(stop_val) = arr.at(i as i64, context) {
@@ -144,7 +144,6 @@ fn tur_create_linear_gradient(
                 }
             }
         }
-    }
     let brush = Brush::LinearGradient { start, end, stops };
     let opaque = BoaOpaque::new(BrushOpaque(brush), context);
     Ok(opaque.object().clone().into())
@@ -225,9 +224,9 @@ fn tur_linear_gradient_create(
     let end = offset_pair(&opts, "end", context).unwrap_or((0.0, 0.0));
 
     let mut stops: Vec<GradientStop> = Vec::new();
-    if let Ok(stops_val) = opts.get(js_string!("stops"), context) {
-        if let Some(stops_obj) = stops_val.as_object() {
-            if let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_obj.clone()) {
+    if let Ok(stops_val) = opts.get(js_string!("stops"), context)
+        && let Some(stops_obj) = stops_val.as_object()
+            && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_obj.clone()) {
                 let len = arr.length(context).unwrap_or(0);
                 for i in 0..len {
                     let Ok(stop_val) = arr.at(i as i64, context) else {
@@ -248,8 +247,6 @@ fn tur_linear_gradient_create(
                     stops.push(GradientStop { offset, color });
                 }
             }
-        }
-    }
 
     let brush = Brush::LinearGradient { start, end, stops };
     let opaque = BoaOpaque::new(BrushOpaque(brush), context);

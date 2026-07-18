@@ -38,7 +38,7 @@ fn std_module_imports_and_renders() {
 /// `builtin:tur/std` even though its canonical home is `builtin:tur/std`).
 #[test]
 fn std_re_exports_core_primitives() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
+    let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
             import { source, get, set } from "builtin:tur/std";
@@ -58,7 +58,7 @@ fn std_re_exports_core_primitives() {
 /// (`MainAxisSize[0] === "Max"`). Both must hold at runtime.
 #[test]
 fn enum_dual_mapping() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
+    let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
             import { MainAxisSize, BoxFit } from "builtin:tur/std";
@@ -77,7 +77,7 @@ fn enum_dual_mapping() {
 /// the `bound_native`-method wiring in `init_bridge`.
 #[test]
 fn native_color_and_gradient_builders() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
+    let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r##"
             import { Color, LinearGradient } from "builtin:tur/std";

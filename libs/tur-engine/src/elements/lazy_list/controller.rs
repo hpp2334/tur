@@ -221,21 +221,19 @@ impl Class for LazyListController {
                     .downcast_mut::<LazyListController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                if let Some(handle_obj) = args.get_or_undefined(0).as_object() {
-                    if BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
+                if let Some(handle_obj) = args.get_or_undefined(0).as_object()
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
                         ctrl.handle = Some(handle_obj.clone());
                     }
-                }
 
-                if let Some(ctx_obj) = args.get_or_undefined(1).as_object() {
-                    if let Some(js_ctx) =
+                if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
+                    && let Some(js_ctx) =
                         BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
                     {
                         ctrl.element_tree = Some(js_ctx.element_tree.clone());
                         ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
                         ctrl.dirty_flag = Some(js_ctx.dirty.clone());
                     }
-                }
 
                 Ok(JsValue::undefined())
             }),

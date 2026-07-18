@@ -285,24 +285,21 @@ impl Class for AnimationController {
         let mut repeat_mode = RepeatMode::default();
 
         if let Some(opts) = args.get_or_undefined(0).as_object() {
-            if let Ok(val) = opts.get(js_string!("duration"), ctx) {
-                if let Some(n) = val.as_number() {
+            if let Ok(val) = opts.get(js_string!("duration"), ctx)
+                && let Some(n) = val.as_number() {
                     duration_ms = n as u64;
                 }
-            }
-            if let Ok(val) = opts.get(js_string!("curve"), ctx) {
-                if let Some(s) = val.as_string() {
+            if let Ok(val) = opts.get(js_string!("curve"), ctx)
+                && let Some(s) = val.as_string() {
                     curve = s
                         .to_std_string_escaped()
                         .parse()
                         .unwrap_or(Curve::Linear);
                 }
-            }
-            if let Ok(val) = opts.get(js_string!("repeat"), ctx) {
-                if !val.is_undefined() && !val.is_null() {
+            if let Ok(val) = opts.get(js_string!("repeat"), ctx)
+                && !val.is_undefined() && !val.is_null() {
                     repeat_mode = RepeatMode::from_js(&val)?;
                 }
-            }
             on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
             on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
         }

@@ -207,11 +207,10 @@ impl Visit for HighlightOverlay {
         // Color the callee identifier of a plain call (`foo(...)`) as a
         // function/view name (kind 7). Member callees (`obj.m()`) are
         // handled by `visit_member_expr` (the `.m` is a property, kind 11).
-        if let swc_ecma_ast::Callee::Expr(e) = &n.callee {
-            if let swc_ecma_ast::Expr::Ident(id) = e.as_ref() {
+        if let swc_ecma_ast::Callee::Expr(e) = &n.callee
+            && let swc_ecma_ast::Expr::Ident(id) = e.as_ref() {
                 self.push(id.span, 7);
             }
-        }
         n.visit_children_with(self);
     }
 

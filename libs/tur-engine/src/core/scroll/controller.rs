@@ -92,11 +92,10 @@ impl Class for ScrollController {
         let mut ctrl = Self::new();
         if let Some(opts) = args.get_or_undefined(0).as_object() {
             ctrl.on_scroll = extract_mutation_from_opts(&opts, "onScroll", ctx);
-            if let Ok(val) = opts.get(js_string!("initialOffset"), ctx) {
-                if let Some(n) = val.as_number() {
+            if let Ok(val) = opts.get(js_string!("initialOffset"), ctx)
+                && let Some(n) = val.as_number() {
                     ctrl.pending_initial_offset = Some(n);
                 }
-            }
         }
         Ok(ctrl)
     }
@@ -190,8 +189,8 @@ impl Class for ScrollController {
                 ctrl.viewport_dimension = dim;
                 dirty_flag.set(true);
 
-                if let Some(queue_rc) = mutation_queue {
-                    if let Some(m) = on_scroll {
+                if let Some(queue_rc) = mutation_queue
+                    && let Some(m) = on_scroll {
                         queue_rc.borrow_mut().push(
                             m,
                             ScrollEvent {
@@ -201,7 +200,6 @@ impl Class for ScrollController {
                             },
                         );
                     }
-                }
 
                 Ok(JsValue::undefined())
             }),
@@ -218,21 +216,19 @@ impl Class for ScrollController {
                     .downcast_mut::<ScrollController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                if let Some(handle_obj) = args.get_or_undefined(0).as_object() {
-                    if BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
+                if let Some(handle_obj) = args.get_or_undefined(0).as_object()
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
                         ctrl.handle = Some(handle_obj.clone());
                     }
-                }
 
-                if let Some(ctx_obj) = args.get_or_undefined(1).as_object() {
-                    if let Some(js_ctx) =
+                if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
+                    && let Some(js_ctx) =
                         BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
                     {
                         ctrl.element_tree = Some(js_ctx.element_tree.clone());
                         ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
                         ctrl.dirty_flag = Some(js_ctx.dirty.clone());
                     }
-                }
 
                 Ok(JsValue::undefined())
             }),

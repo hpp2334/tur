@@ -10,18 +10,16 @@ fn format_args(args: &[JsValue], ctx: &mut Context) -> String {
         .map(|v| {
             let mut out = v.display().to_string();
             if let Some(obj) = v.as_object() {
-                if let Ok(msg) = obj.get(js_string!("message"), ctx) {
-                    if let Some(s) = msg.as_string() {
+                if let Ok(msg) = obj.get(js_string!("message"), ctx)
+                    && let Some(s) = msg.as_string() {
                         out.push('\n');
                         out.push_str(&s.to_std_string_escaped());
                     }
-                }
-                if let Ok(stack) = obj.get(js_string!("stack"), ctx) {
-                    if let Some(s) = stack.as_string() {
+                if let Ok(stack) = obj.get(js_string!("stack"), ctx)
+                    && let Some(s) = stack.as_string() {
                         out.push('\n');
                         out.push_str(&s.to_std_string_escaped());
                     }
-                }
             }
             out
         })

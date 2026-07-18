@@ -67,11 +67,10 @@ impl<'a> JsProps<'a> {
         let len = arr.length(self.ctx).ok()? as usize;
         let mut out = Vec::with_capacity(len);
         for i in 0..len {
-            if let Ok(val) = arr.at(i as i64, self.ctx) {
-                if let Some(s) = val.as_string() {
+            if let Ok(val) = arr.at(i as i64, self.ctx)
+                && let Some(s) = val.as_string() {
                     out.push(s.to_std_string_escaped());
                 }
-            }
         }
         (!out.is_empty()).then_some(out)
     }
@@ -97,11 +96,10 @@ impl<'a> JsProps<'a> {
         let len = arr.length(self.ctx).unwrap_or(0);
         let mut out = Vec::with_capacity(len as usize);
         for i in 0..len {
-            if let Ok(item) = arr.at(i as i64, self.ctx) {
-                if let Some(spec) = extract_view(&item) {
+            if let Ok(item) = arr.at(i as i64, self.ctx)
+                && let Some(spec) = extract_view(&item) {
                     out.push(spec);
                 }
-            }
         }
         out
     }
@@ -128,11 +126,10 @@ impl<'a> JsProps<'a> {
         let len = arr.length(self.ctx).unwrap_or(0);
         let mut out = Vec::with_capacity(len as usize);
         for i in 0..len {
-            if let Ok(item) = arr.at(i as i64, self.ctx) {
-                if let Ok(readable) = AnyReadable::from_js(&item) {
+            if let Ok(item) = arr.at(i as i64, self.ctx)
+                && let Ok(readable) = AnyReadable::from_js(&item) {
                     out.push(readable);
                 }
-            }
         }
         out
     }

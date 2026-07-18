@@ -4,13 +4,11 @@ use crate::core::focus::FocusManager;
 
 pub fn find_focusable_in_path(tree: &NodeTreeData, path: &[ElementNodeId]) -> Option<ElementNodeId> {
     for &id in path {
-        if let Some(node) = tree.get_element(id) {
-            if let Some(ref element) = node.element {
-                if element.has_focus() {
+        if let Some(node) = tree.get_element(id)
+            && let Some(ref element) = node.element
+                && element.has_focus() {
                     return Some(id);
                 }
-            }
-        }
     }
     None
 }
