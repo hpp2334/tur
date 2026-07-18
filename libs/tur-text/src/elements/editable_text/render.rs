@@ -1,9 +1,9 @@
 use tur_shared::{Brush, Color, ComputedLayout, Geometry, Offset, Size};
 
-use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text_shared::paint_helpers;
-use crate::core::text::text_layout;
+use tur_engine::core::text::text_layout;
 
 use super::element::{CARET_BLINK_HALF_PERIOD_MS, DEFAULT_TEXT_COLOR, EditableTextElement};
 

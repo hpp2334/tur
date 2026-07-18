@@ -30,7 +30,9 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  │                   ElementLayout, ElementRender,     │
 │  │                   ElementOnUpdate, ElementSubscribe)│
 │  ├── core/elements (AnyElement, ElementNode,           │
-│  │                   ElementTree with layout+paint)    │
+│  │                   ElementTree with layout+paint,    │
+│  │                   ElementOnClipboard trait for       │
+│  │                   paste dispatch)                   │
 │  ├── core/render   (PaintContext, Renderer,            │
 │  │                   ChildLayout, ChildPaint)          │
 │  ├── core/capability (Capability trait, Capabilities,  │
@@ -39,6 +41,8 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  │                   bridge fns, handlers, plugins)    │
 │  ├── core/bridge   (boa_engine JS bridge, init_bridge) │
 │  ├── core/subsystem (Subsystem trait + flush hook)     │
+│  ├── core/text     (TextLayoutData, FontManager —      │
+│  │                   paint/layout contract types only) │
 │  ├── elements/     (FlexElement, StackElement, etc.    │
 │  │                   each with element.rs + render.rs)  │
 │  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
@@ -54,6 +58,18 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  createAnimationController + AnimatedContainer/Opacity/ │
 │  Positioned, Tween, ColorTween) + internal hidden       │
 │  tur:animation/native (ctx-bound fns only).             │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│  libs/tur-text (text feature library, NOT a plugin)    │
+│  Installed into builtin:tur/std by TurStdPlugin via    │
+│  install_text_feature(ctx) → Vec<FnEntry>. Owns:       │
+│  TextElement, EditableTextElement,                     │
+│  TextEditingController, UndoController,                │
+│  EnsureCaretVisibleHandler (post-event), and           │
+│  extract_layout_data() (bridge: JS → TextLayoutData).  │
+│  Engine keeps TextLayoutData/FontManager as paint       │
+│  contract; Canvas::fill_text_layout does the drawing.   │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -120,7 +136,7 @@ TurEngine::builder()
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `Text`, `Input`, `PointerInteract`, `Focusable`, `Paragraph`, `Image`, `Svg`
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Image`, `Svg` (tur-engine) · `Text`, `Input`, `Paragraph` (tur-text) · `Opacity`, `Transform` (tur-animation)
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -137,6 +153,19 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
 
 `tur-animation` registers ONE combined consumer-facing module `builtin:tur/animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
 
+### Text model
+
+Text logic lives in the standalone `libs/tur-text` crate — **not** a plugin. It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_text_feature(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
+
+- **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; tur-text only produces these structs.
+- **`extract_layout_data(props) -> TextLayoutData`** (tur-text, in `src/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
+- **Elements** (`tur-text::elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
+- **Controllers** (`tur-text::controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
+- **Post-event caret visibility** (`tur-text::handlers`): `EnsureCaretVisibleHandler` runs after keyboard/IME/clipboard-paste handlers (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `keyboard.rs` / `ime.rs` no longer call caret-scroll directly.
+- **Paste dispatch** (engine): `ElementOnClipboard` trait + `ClipboardPasteAppHandler` in `tur-engine::core::handlers` route `PlatformEvent::ClipboardPaste` to the focused element. tur-text's `EditableTextElement` is the only impl (replaces selection with pasted text, or inserts at cursor). This mirrors the keyboard/IME event pipeline.
+
+JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
+
 ### Domain traits
 
 Each element implements these focused traits:
@@ -145,6 +174,7 @@ Each element implements these focused traits:
 - `ElementLayout` — layout (`perform_layout`: measure children, compute own size, assign child offsets in one pass)
 - `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
 - `ElementSubscribe` — declares which reactive atoms the node depends on (`subscribe`), so a reactive flush can mark it dirty for re-layout. Runs as an explicit phase after `perform_layout` for dirty nodes.
+- `ElementOnClipboard` — paste handling (`on_clipboard_paste`); only `EditableTextElement` (tur-text) implements it. The engine's `ClipboardPasteAppHandler` dispatches `PlatformEvent::ClipboardPaste` to the focused element through `AnyElement::on_clipboard_paste`.
 
 Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits).
 
@@ -170,6 +200,9 @@ libs/
         bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)
         plugin.rs            # Plugin trait (register + requires) + PluginContext
         subsystem.rs         # Subsystem trait + SubsystemFlushContext (per-flush hooks)
+        text/                # TextLayoutData + LineInfo + TextRunData (paint/layout
+                             #   contract types only — tur-text produces them)
+        fonts.rs             # FontManager + FontLoader (used by Canvas::fill_text_layout)
       elements/              # Concrete elements (flex/, stack/, positioned/, etc.)
         flex/element.rs      # FlexElement struct + ElementOnUpdate
         flex/render.rs       # ElementLayout + ElementRender (layout algorithm)
@@ -182,6 +215,10 @@ libs/
                              #   effects + JS widgets) — registered via TurAnimationPlugin, exposes
                              #   `builtin:tur/animation` (combined native+JS module) + internal
                              #   `tur:animation/native` (ctx-bound fns only)
+  tur-text/                  # Text feature library (TextElement, EditableTextElement,
+                             #   ParagraphElement, controllers, EnsureCaretVisibleHandler,
+                             #   extract_layout_data) — NOT a plugin; installed into
+                             #   builtin:tur/std by TurStdPlugin via install_text_feature()
   tur-clipboard-capability/  # Clipboard trait + Clipboard cap + builtin:tur/clipboard + handlers
   tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend
   tur-clipboard-native/      # NativeClipboard (arboard) backend

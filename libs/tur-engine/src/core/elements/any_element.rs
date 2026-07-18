@@ -9,7 +9,7 @@ use crate::core::view::Lifecycle;
 use crate::core::keyboard::AppKeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
+use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ElementOnClipboard, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, ElementOnClipboardContext, WheelEvent};
 use crate::core::event::AppImeEvent;
 use crate::core::focus::Focusable;
 
@@ -17,6 +17,7 @@ type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent) -> bool;
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
+type ClipboardFn = fn(&mut dyn Any, &mut ElementOnClipboardContext, &str);
 type CursorRectFn = fn(&dyn Any) -> Option<(f64, f64, f64, f64)>;
 type FocusableCastFn = fn(&dyn Any) -> Option<&dyn Focusable>;
 
@@ -26,6 +27,7 @@ pub struct AnyElement {
     on_gesture: Option<GestureFn>,
     on_wheel: Option<WheelFn>,
     on_ime: Option<ImeFn>,
+    on_clipboard: Option<ClipboardFn>,
     cursor_rect_fn: Option<CursorRectFn>,
     focusable_fn: Option<FocusableCastFn>,
     has_callbacks: bool,
@@ -129,6 +131,15 @@ fn ime_dispatch<E: ElementOnIme + 'static>(
 ) {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnIme::on_ime_event(element, cx, event);
+}
+
+fn clipboard_dispatch<E: ElementOnClipboard + 'static>(
+    any: &mut dyn Any,
+    cx: &mut ElementOnClipboardContext,
+    text: &str,
+) {
+    let element = any.downcast_mut::<E>().unwrap();
+    ElementOnClipboard::on_clipboard_paste(element, cx, text);
 }
 
 impl<E> Erased for E
@@ -241,6 +252,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -265,6 +277,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -288,6 +301,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -311,6 +325,7 @@ impl AnyElement {
             on_wheel: Some(wheel_dispatch::<E>),
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -334,6 +349,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -358,6 +374,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -384,6 +401,7 @@ impl AnyElement {
             on_wheel: None,
             on_ime: Some(ime_dispatch::<E>),
             cursor_rect_fn: None,
+            on_clipboard: None,
             focusable_fn: None,
             has_callbacks: false,
         }
@@ -396,6 +414,11 @@ impl AnyElement {
 
     pub fn with_cursor_rect<E: ElementCursorRect + 'static>(mut self) -> Self {
         self.cursor_rect_fn = Some(cursor_rect_dispatch::<E>);
+        self
+    }
+
+    pub fn with_clipboard_paste<E: ElementOnClipboard + 'static>(mut self) -> Self {
+        self.on_clipboard = Some(clipboard_dispatch::<E>);
         self
     }
 
@@ -556,6 +579,24 @@ impl AnyElement {
     ) {
         if let Some(handler) = self.on_ime {
             handler(self.inner.as_any_mut(), cx, event);
+        }
+    }
+
+    /// Returns `true` if this element handles clipboard paste (i.e. was built
+    /// with [`Self::with_clipboard_paste`]). Used by the engine's
+    /// `ClipboardPasteAppHandler` to skip non-editable focused elements
+    /// without forcing them to implement a no-op trait method.
+    pub fn has_on_clipboard(&self) -> bool {
+        self.on_clipboard.is_some()
+    }
+
+    pub fn on_clipboard_paste(
+        &mut self,
+        cx: &mut ElementOnClipboardContext,
+        text: &str,
+    ) {
+        if let Some(handler) = self.on_clipboard {
+            handler(self.inner.as_any_mut(), cx, text);
         }
     }
 

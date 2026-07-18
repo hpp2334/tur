@@ -8,7 +8,7 @@
 mod backend;
 
 pub use tur_clipboard_capability::{
-    Clipboard, ClipboardBackend, ClipboardPasteHandler, ClipboardWriteHandler, NoopClipboard,
+    Clipboard, ClipboardBackend, ClipboardWriteHandler, NoopClipboard,
     TurClipboardPlugin,
 };
 pub use backend::WasmClipboard;

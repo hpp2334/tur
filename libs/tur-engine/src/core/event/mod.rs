@@ -49,7 +49,7 @@ pub enum PlatformEvent {
     Ime(AppImeEvent),
     /// Embedder → engine: a paste occurred (the user pressed Cmd+V, the
     /// embedder captured the paste event on its hidden input, and is
-    /// forwarding the clipboard text). Handled by `ClipboardPasteHandler`,
+    /// forwarding the clipboard text). Handled by `ClipboardPasteAppHandler`,
     /// which inserts the text into the focused editable.
     ClipboardPaste {
         text: String,

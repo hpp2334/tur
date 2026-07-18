@@ -1,4 +1,5 @@
 mod any_element;
+mod element_clipboard;
 mod element_focus;
 mod element_gesture;
 mod element_ime;
@@ -10,6 +11,7 @@ mod fragment_host;
 mod trace;
 
 pub use any_element::*;
+pub use element_clipboard::*;
 pub use element_focus::*;
 pub use element_gesture::*;
 pub use element_ime::*;

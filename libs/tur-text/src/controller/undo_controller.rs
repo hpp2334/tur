@@ -18,7 +18,7 @@ pub struct TextEditingValue {
 }
 
 impl TextEditingValue {
-    pub fn from_controller(c: &crate::core::text::controller::TextEditingController) -> Self {
+    pub fn from_controller(c: &crate::controller::TextEditingController) -> Self {
         TextEditingValue {
             text: c.text(),
             cursor_position: c.cursor_position(),

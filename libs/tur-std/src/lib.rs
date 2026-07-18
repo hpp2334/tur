@@ -2,7 +2,7 @@
 //!
 //! Provides [`TurStdPlugin`], which registers the `builtin:tur/std` JS module
 //! (widget factories, controllers, color bridge) plus the engine's
-//! input-event handlers (gesture, keyboard, ime, resize, wheel, scroll
+//! input-event handlers (gesture, keyboard, ime, paste, resize, wheel, scroll
 //! chaining, pointer region, scroll-to).
 //!
 //! `TurStdPlugin` carries no per-instance state. Backend injection
@@ -15,14 +15,21 @@
 //!
 //! ## Architecture
 //!
-//! - All elements, controllers, handlers, and bridge fns live in `tur-engine`
+//! - Most elements, controllers, handlers, and bridge fns live in `tur-engine`
 //!   (they're the engine's building blocks). This crate is a thin registration
 //!   layer that wires them into the `builtin:tur/std` module.
+//! - Text feature (Text/Input elements, `TextEditingController`,
+//!   `UndoController`, `EnsureCaretVisibleHandler`, `extract_layout_data`) is
+//!   pulled in from the standalone `tur-text` crate via
+//!   [`tur_text::install_text_feature`] and merged into `std_fns` here — so
+//!   from JS's perspective Text/Input ship as part of `builtin:tur/std`. The
+//!   engine retains only the paint/layout contract types (`TextLayoutData`,
+//!   `FontManager`).
 //! - Cursor-backend capability types (`CursorBackend`, `CursorCap`,
 //!   `NoopCursor`) live in `tur_engine::core::platform` and are re-exported at
 //!   the `tur_engine::` crate root — import them from there, not from here.
 
-use tur_engine::core::bridge::helpers::{ConstEntry, FnEntry};
+use tur_engine::core::bridge::helpers::ConstEntry;
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::bridge::{reactive, render};
 use tur_engine::error::TurError;
@@ -49,15 +56,11 @@ impl Default for TurStdPlugin {
 impl Plugin for TurStdPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         use tur_engine::core::scroll::ScrollController;
-        use tur_engine::core::text::controller::{TextEditingController, UndoController};
         use tur_engine::core::bridge::{color_fns, enums};
+        use tur_engine::core::bridge::helpers::FnEntry;
         use tur_engine::core::handlers;
         use tur_engine::elements::lazy_list::LazyListController;
 
-        ctx.register_class::<TextEditingController>()
-            .expect("failed to register TextEditingController");
-        ctx.register_class::<UndoController>()
-            .expect("failed to register UndoController");
         ctx.register_class::<ScrollController>()
             .expect("failed to register ScrollController");
         ctx.register_class::<LazyListController>()
@@ -66,17 +69,24 @@ impl Plugin for TurStdPlugin {
         ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler::new()));
         ctx.register_handler(Box::new(handlers::keyboard::KeyboardAppHandler));
         ctx.register_handler(Box::new(handlers::ime::ImeAppHandler));
+        ctx.register_handler(Box::new(handlers::clipboard_paste::ClipboardPasteAppHandler));
         ctx.register_handler(Box::new(handlers::resize::ResizeHandler));
         ctx.register_handler(Box::new(handlers::pointer_region::PointerRegionAppHandler::new()));
         ctx.register_handler(Box::new(handlers::wheel::WheelAppHandler));
         ctx.register_handler(Box::new(handlers::scroll_chaining::ScrollChainingHandler));
         ctx.register_handler(Box::new(handlers::scroll_to::ScrollToHandler));
-        // Note: ClipboardPasteHandler and ClipboardWriteHandler have moved
-        // to `tur-clipboard-capability` (TurClipboardPlugin) — they're
-        // registered there along with the JS bridge so the embedder wires
-        // the clipboard backend through a single `.capability(...)` call.
+        // Note: ClipboardWriteHandler lives in `tur-clipboard-capability`
+        // (TurClipboardPlugin) — registered there along with the JS bridge
+        // so the embedder wires the clipboard backend through a single
+        // `.capability(...)` call.
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
+        // Text feature (Text/Input elements, TextEditingController /
+        // UndoController classes, ensure-caret-visible post-handler) is
+        // installed into `builtin:tur/std` rather than as a separate plugin.
+        // tur-text owns all text logic; the engine keeps only the
+        // paint/layout contract types (`TextLayoutData`, `FontManager`).
+        std_fns.extend(tur_text::install_text_feature(ctx)?);
         std_fns.extend(reactive::fns());
         std_fns.extend(render::fns());
         std_fns.extend(tur_engine::core::bridge::task::fns());
@@ -86,8 +96,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::flex_item::bridge::fns());
         std_fns.extend(tur_engine::elements::stack::bridge::fns());
         std_fns.extend(tur_engine::elements::positioned::bridge::fns());
-        std_fns.extend(tur_engine::elements::paragraph::bridge::fns());
-        std_fns.extend(tur_engine::elements::editable_text::bridge::fns());
         std_fns.extend(tur_engine::elements::image::bridge::fns());
         std_fns.extend(tur_engine::elements::pointer_interact::bridge::fns());
         std_fns.extend(tur_engine::elements::mouse_region::bridge::fns());

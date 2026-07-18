@@ -1,6 +1,5 @@
 use crate::core::elements::ElementOnImeContext;
 use crate::core::event::PlatformEvent;
-use crate::core::handlers::ensure_visible::ensure_caret_visible;
 
 pub struct ImeAppHandler;
 
@@ -31,7 +30,8 @@ impl crate::core::handler::AppHandler for ImeAppHandler {
         }
         cx.element_tree.mark_dirty(focused_id.into());
 
-        // A composition end inserts text and moves the caret; keep it visible.
-        ensure_caret_visible(cx);
+        // Keeping the caret visible after composition-end is handled by
+        // tur-text's PostImeHandler, which runs after this handler in
+        // registration order.
     }
 }

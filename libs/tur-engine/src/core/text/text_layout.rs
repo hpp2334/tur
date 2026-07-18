@@ -1,5 +1,3 @@
-use parley::layout::PositionedLayoutItem;
-
 /// One user-positionable glyph stop on a line, in source-string BYTE space.
 ///
 /// `byte` is the byte offset in the source string where this glyph starts.
@@ -11,18 +9,17 @@ use parley::layout::PositionedLayoutItem;
 pub struct LineGlyphStop {
     pub byte: usize,
     pub x: f32,
-    y: f32,
-    advance: f32,
+    pub y: f32,
+    pub advance: f32,
 }
 
 pub struct LineInfo {
     pub top: f32,
     pub height: f32,
-    #[allow(dead_code)]
-    baseline: f32,
+    pub baseline: f32,
     /// Byte offset of the first character of this line (after the previous
     /// line's terminating `\n`, or 0 for the first line).
-    start_byte: usize,
+    pub start_byte: usize,
     /// Byte offset of the cursor sitting at the END of this line's visible
     /// text — i.e. just past the last non-newline character. For a line ended
     /// by `\n`, this points AT the `\n` (cursor before it). For the final
@@ -36,28 +33,27 @@ pub struct LineInfo {
 }
 
 pub struct TextLayoutData {
-    pub(crate) runs: Vec<TextRunData>,
+    pub runs: Vec<TextRunData>,
     pub line_infos: Vec<LineInfo>,
     pub _width: f32,
     pub _height: f32,
 }
 
 pub struct TextRunData {
-    pub(crate) font: parley::FontData,
-    pub(crate) font_size: f32,
-    pub(crate) normalized_coords: Vec<i16>,
-    pub(crate) glyphs: Vec<TextGlyph>,
-    pub(crate) brush: [u8; 4],
-    pub(crate) underline: bool,
-    #[allow(dead_code)]
-    pub(crate) line_index: usize,
+    pub font: parley::FontData,
+    pub font_size: f32,
+    pub normalized_coords: Vec<i16>,
+    pub glyphs: Vec<TextGlyph>,
+    pub brush: [u8; 4],
+    pub underline: bool,
+    pub line_index: usize,
 }
 
 pub struct TextGlyph {
-    pub(crate) id: u32,
-    pub(crate) x: f32,
-    pub(crate) y: f32,
-    pub(crate) advance: f32,
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub advance: f32,
 }
 
 impl TextLayoutData {
@@ -169,124 +165,4 @@ fn byte_at_x(info: &LineInfo, x: f32) -> usize {
         }
     }
     info.end_byte
-}
-
-pub fn extract_layout_data(
-    layout: &mut parley::Layout<[u8; 4]>,
-    underline_ranges: &[(usize, usize)],
-    full_text: &str,
-) -> (TextLayoutData, f32, f32) {
-    let width = layout.width();
-    let height = layout.height();
-
-    let text_bytes = full_text.as_bytes();
-    let mut runs = Vec::new();
-    let mut line_infos = Vec::new();
-
-    for (line_idx, line) in layout.lines().enumerate() {
-        let metrics = line.metrics();
-        let line_range = line.text_range();
-
-        let start_byte = line_range.start;
-        // `end_byte` is the caret position past the last visible char: strip
-        // any trailing `\n` that parley may have included in the line range.
-        let mut end_byte = line_range.end.min(full_text.len());
-        while end_byte > start_byte && text_bytes.get(end_byte - 1) == Some(&b'\n') {
-            end_byte -= 1;
-        }
-        // parley sometimes leaves the cursor stop on the empty trailing line
-        // of a text ending in `\n`; keep start within bounds.
-        let start_byte = start_byte.min(full_text.len());
-
-        let mut stops: Vec<LineGlyphStop> = Vec::new();
-        let mut right_x = 0.0f32;
-
-        // The glyph→source-byte mapping is tracked with a single per-LINE
-        // char cursor, advanced once per glyph across all glyph runs. In
-        // parley 0.9 a `Run` exposes the *line's* `text_range`/`clusters` (via
-        // `line_data`), so every glyph run in the line reports the same
-        // whole-line range; the previous per-run `char_indices()` restarted at
-        // byte 0 for each run and mis-tagged every glyph past the first style
-        // run. That made clicks on later spans (e.g. a highlighted string in
-        // the code editor) land on the wrong byte, so Backspace deleted the
-        // wrong character. `line.items()` yields glyph runs in visual order
-        // and tiles the line's glyphs without gaps, so walking one char cursor
-        // in lockstep yields the correct byte for each glyph (for the
-        // monospace, 1-char-per-glyph editor this is exact).
-        let mut line_chars = full_text[start_byte..end_byte].char_indices();
-
-        for item in line.items() {
-            let PositionedLayoutItem::GlyphRun(glyph_run) = item else {
-                continue;
-            };
-            let run = glyph_run.run();
-            let font = run.font().clone();
-            let font_size = run.font_size();
-            let normalized_coords = run.normalized_coords().to_vec();
-            let style = glyph_run.style();
-
-            let run_range = run.text_range();
-            let run_underline = underline_ranges
-                .iter()
-                .any(|&(start, end)| run_range.start < end && run_range.end > start);
-
-            let mut glyphs = Vec::new();
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-
-            for glyph in glyph_run.glyphs() {
-                let gx = x + glyph.x;
-                let gy = y - glyph.y;
-                x += glyph.advance;
-                let byte = line_chars
-                    .next()
-                    .map(|(off, _)| start_byte + off)
-                    .unwrap_or(end_byte);
-                right_x = right_x.max(gx + glyph.advance);
-                stops.push(LineGlyphStop {
-                    byte,
-                    x: gx,
-                    y: gy,
-                    advance: glyph.advance,
-                });
-                glyphs.push(TextGlyph {
-                    id: glyph.id,
-                    x: gx,
-                    y: gy,
-                    advance: glyph.advance,
-                });
-            }
-
-            runs.push(TextRunData {
-                font,
-                font_size,
-                normalized_coords,
-                glyphs,
-                brush: style.brush,
-                underline: run_underline,
-                line_index: line_idx,
-            });
-        }
-
-        line_infos.push(LineInfo {
-            top: metrics.baseline - metrics.ascent,
-            height: metrics.size(),
-            baseline: metrics.baseline,
-            start_byte,
-            end_byte,
-            right_x,
-            stops,
-        });
-    }
-
-    (
-        TextLayoutData {
-            runs,
-            line_infos,
-            _width: width,
-            _height: height,
-        },
-        width,
-        height,
-    )
 }

@@ -5,8 +5,8 @@ use std::rc::Rc;
 use boa_engine::class::Class;
 use boa_engine::{Context, JsResult, JsValue};
 
-use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
-use crate::core::text::controller::{TextEditingController, UndoController};
+use tur_engine::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
+use crate::controller::{TextEditingController, UndoController};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![

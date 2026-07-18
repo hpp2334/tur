@@ -3,7 +3,6 @@ use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::PlatformEvent;
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::keyboard::AppKeyEvent;
-use crate::core::handlers::ensure_visible::ensure_caret_visible;
 
 use crate::elements::focusable::FocusableElement;
 use crate::core::keyboard::events::KeydownEvent;
@@ -18,8 +17,9 @@ impl AppHandler for KeyboardAppHandler {
 
         dispatch_key_event(cx, key_event);
 
-        // Keep the caret on screen after cursor-moving keys / typed text.
-        ensure_caret_visible(cx);
+        // Keeping the caret on screen after cursor-moving keys / typed text
+        // is now handled by tur-text's PostKeyboardHandler, which runs after
+        // this handler in registration order.
 
         let Some(focused_id) = cx.focus_manager.focused() else {
             return;

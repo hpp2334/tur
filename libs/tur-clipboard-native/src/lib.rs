@@ -11,7 +11,7 @@
 //! wasm should depend on `tur-clipboard-wasm` instead.
 
 pub use tur_clipboard_capability::{
-    Clipboard, ClipboardBackend, ClipboardPasteHandler, ClipboardWriteHandler, NoopClipboard,
+    Clipboard, ClipboardBackend, ClipboardWriteHandler, NoopClipboard,
     TurClipboardPlugin,
 };
 
