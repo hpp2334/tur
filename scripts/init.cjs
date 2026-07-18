@@ -10,7 +10,7 @@ function run(cmd, opts) {
 
 run('cargo build --workspace', { cwd: root });
 
-run('cargo test -p tur-shared --lib export_bindings', { cwd: root });
+run('cargo test -p tur-engine --lib export_bindings', { cwd: root });
 
 run('pnpm install', { cwd: path.join(root, 'js') });
 

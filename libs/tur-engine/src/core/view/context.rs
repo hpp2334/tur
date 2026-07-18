@@ -186,7 +186,7 @@ impl SharedViewCx {
     }
 
     /// Read the computed layout of a node (for scroll controllers etc.).
-    pub fn computed_layout(&self, id: ElementNodeId) -> Option<tur_shared::ComputedLayout> {
+    pub fn computed_layout(&self, id: ElementNodeId) -> Option<crate::core::layout::ComputedLayout> {
         self.js_ctx
             .element_tree
             .get_element(id)
@@ -266,7 +266,7 @@ impl ViewCx for SharedViewCx {
     fn set_query_key(&mut self, id: ElementNodeId, keys: Vec<String>) {
         SharedViewCx::set_query_key(self, id, keys);
     }
-    fn computed_layout(&self, id: ElementNodeId) -> Option<tur_shared::ComputedLayout> {
+    fn computed_layout(&self, id: ElementNodeId) -> Option<crate::core::layout::ComputedLayout> {
         SharedViewCx::computed_layout(self, id)
     }
     fn store_read_only(&self) -> ReactiveReadStore {

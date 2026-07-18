@@ -26,7 +26,7 @@ fn tur_render(
     // view is typically a `JsView` whose `build()` invokes the JS
     // thunk to produce the real subtree.
     let root_view = crate::elements::FlexView {
-        direction: Some(tur_shared::Axis::Vertical),
+        direction: Some(crate::core::layout::Axis::Vertical),
         main_alignment: None,
         cross_alignment: None,
         main_axis_size: None,

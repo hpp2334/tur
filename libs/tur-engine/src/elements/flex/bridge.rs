@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use boa_engine::{Context, JsResult, JsValue};
-use tur_shared::Axis;
+use crate::core::layout::Axis;
 
 use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 

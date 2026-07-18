@@ -7,7 +7,7 @@ use crate::fonts::WasmFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_engine::{CursorCap, LoopDriver, TurApp};
-use tur_shared::Offset;
+use tur_engine::core::layout::Offset;
 use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::closure::Closure;
@@ -70,7 +70,7 @@ struct WasmCursor {
 }
 
 impl tur_engine::CursorBackend for WasmCursor {
-    fn set_cursor(&mut self, cursor: tur_shared::Cursor) {
+    fn set_cursor(&mut self, cursor: tur_engine::core::platform::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
 }
@@ -101,10 +101,10 @@ impl<T, E: Into<JsValue>> JsResult<T> for Result<T, E> {
 /// which the browser reports as `button=0` (primary) with `ctrlKey=true`;
 /// normalize that to [`MouseButton::Right`] so the engine's arena derives a
 /// context-menu gesture from the resulting right-button pointer up.
-fn normalize_mouse_button(dom_button: u16, ctrl_key: bool) -> tur_shared::MouseButton {
-    let button = tur_shared::MouseButton::from_dom(dom_button);
-    if ctrl_key && button == tur_shared::MouseButton::Left {
-        tur_shared::MouseButton::Right
+fn normalize_mouse_button(dom_button: u16, ctrl_key: bool) -> tur_engine::core::layout::MouseButton {
+    let button = tur_engine::core::layout::MouseButton::from_dom(dom_button);
+    if ctrl_key && button == tur_engine::core::layout::MouseButton::Left {
+        tur_engine::core::layout::MouseButton::Right
     } else {
         button
     }
@@ -527,7 +527,7 @@ impl TurWasmApp {
                     s.app.push_platform_event(PlatformEvent::Pointer(
                         PointerInput::PointerDown {
                             position: Offset::new(x, y),
-                            button: tur_shared::MouseButton::Left,
+                            button: tur_engine::core::layout::MouseButton::Left,
                             time_ms,
                             device: tur_engine::core::event::PointerDeviceKind::Touch,
                         },
@@ -579,7 +579,7 @@ impl TurWasmApp {
                             s.app.push_platform_event(PlatformEvent::Pointer(
                                 PointerInput::PointerUp {
                                     position: Offset::new(0.0, 0.0),
-                                    button: tur_shared::MouseButton::Left,
+                                    button: tur_engine::core::layout::MouseButton::Left,
                                     device: tur_engine::core::event::PointerDeviceKind::Touch,
                                 },
                             ));
@@ -596,7 +596,7 @@ impl TurWasmApp {
                     s.app.push_platform_event(PlatformEvent::Pointer(
                         PointerInput::PointerUp {
                             position: Offset::new(x, y),
-                            button: tur_shared::MouseButton::Left,
+                            button: tur_engine::core::layout::MouseButton::Left,
                             device: tur_engine::core::event::PointerDeviceKind::Touch,
                         },
                     ));

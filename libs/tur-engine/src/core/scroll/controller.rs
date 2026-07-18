@@ -177,8 +177,8 @@ impl Class for ScrollController {
 
                 let vp = sv.viewport_size();
                 let dim = match sv.axis() {
-                    tur_shared::Axis::Vertical => vp.height,
-                    tur_shared::Axis::Horizontal => vp.width,
+                    crate::core::layout::Axis::Vertical => vp.height,
+                    crate::core::layout::Axis::Horizontal => vp.width,
                 };
                 let new_offset = sv.position.pixels();
                 tree.mark_dirty(node_id.into());

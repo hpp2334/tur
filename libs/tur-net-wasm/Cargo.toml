@@ -8,6 +8,5 @@ license.workspace = true
 
 [dependencies]
 tur-net-capability = { workspace = true }
-tur-shared = { workspace = true }
 boa_engine = { workspace = true }
 reqwest-wasm = { version = "0.11", default-features = false }

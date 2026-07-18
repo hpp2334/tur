@@ -1,4 +1,4 @@
-use tur_shared::{Constraints, Offset, Size};
+use crate::core::layout::{Constraints, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
@@ -36,13 +36,13 @@ impl ElementLayout for ScrollViewElement {
                 None => (0.0, 0.0),
             };
             let child_constraints = match self.axis {
-                tur_shared::Axis::Vertical => Constraints {
+                crate::core::layout::Axis::Vertical => Constraints {
                     min_width: (constraints.min_width - pad_w).max(0.0),
                     max_width: (constraints.max_width - pad_w).max(0.0),
                     min_height: 0.0,
                     max_height: f64::INFINITY,
                 },
-                tur_shared::Axis::Horizontal => Constraints {
+                crate::core::layout::Axis::Horizontal => Constraints {
                     min_width: 0.0,
                     max_width: f64::INFINITY,
                     min_height: (constraints.min_height - pad_h).max(0.0),
@@ -66,8 +66,8 @@ impl ElementLayout for ScrollViewElement {
         if let Some(&child_id) = children.first() {
             let padding = cx.read_val_opt(self.view.padding.as_ref()).unwrap_or(0.0);
             let scroll_offset = match self.axis {
-                tur_shared::Axis::Vertical => Offset::new(padding, padding - self.position.pixels()),
-                tur_shared::Axis::Horizontal => {
+                crate::core::layout::Axis::Vertical => Offset::new(padding, padding - self.position.pixels()),
+                crate::core::layout::Axis::Horizontal => {
                     Offset::new(padding - self.position.pixels(), padding)
                 }
             };

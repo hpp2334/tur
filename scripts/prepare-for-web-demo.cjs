@@ -10,7 +10,7 @@ function run(cmd, opts) {
 }
 
 run("pnpm install", { cwd: jsDir });
-run("cargo test -p tur-shared --lib export_bindings --locked", { cwd: root });
+run("cargo test -p tur-engine --lib export_bindings --locked", { cwd: root });
 run("pnpm --filter @tur/rspack-plugin build", { cwd: jsDir });
 run("pnpm --filter @tur/react-renderer build", { cwd: jsDir });
 run("pnpm --filter @tur/react build", { cwd: jsDir });

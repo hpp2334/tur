@@ -28,7 +28,8 @@ use tur_net_capability::{
 use tur_clipboard_capability::{
     Clipboard, ClipboardBackend, TurClipboardPlugin,
 };
-use tur_shared::{Cursor, MouseButton, Offset};
+use tur_engine::core::layout::{MouseButton, Offset};
+use tur_engine::core::platform::{Cursor};
 
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
 /// build time. Test-only convenience for the cases that previously used the

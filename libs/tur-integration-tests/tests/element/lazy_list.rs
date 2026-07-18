@@ -679,7 +679,7 @@ fn scroll_does_not_remeasure_mounted_children() {
     let (mut app, id) = setup_virtualized();
 
     // Snapshot each currently-mounted child's (id, size, offset.y).
-    let before: Vec<(tur_engine::core::element::NodeId, tur_shared::Size, f64)> = {
+    let before: Vec<(tur_engine::core::element::NodeId, tur_engine::core::layout::Size, f64)> = {
         let tree = app.element_tree();
         let ll_node = tree.get_element(id).unwrap();
         ll_node

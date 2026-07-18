@@ -1,5 +1,5 @@
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
-use tur_shared::{Constraints, Size};
+use tur_engine::core::layout::{Constraints, Size};
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::layout::{ElementLayout, LayoutContext};
@@ -64,7 +64,7 @@ impl ElementLayout for TextElement {
             if !range.is_empty() {
                 // Fall back to opaque black when no color is set — without an
                 // explicit brush, parley/vello render text invisibly.
-                let c = span.color.unwrap_or(tur_shared::Color::rgb(0, 0, 0));
+                let c = span.color.unwrap_or(tur_engine::core::render::Color::rgb(0, 0, 0));
                 builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
                 if span.bold {
                     builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());

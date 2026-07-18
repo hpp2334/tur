@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::{Axis, Brush, Size};
+use crate::core::render::{Brush};
+use crate::core::layout::{Axis, Size};
 
 use crate::core::bridge::JsProps;
 use crate::core::element::{ElementNodeId, NodeId};

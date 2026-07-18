@@ -1,6 +1,6 @@
 use boa_engine::JsValue;
 use boa_gc::{Finalize, Trace};
-use tur_shared::{Brush, Color};
+use crate::core::render::{Brush, Color};
 
 use crate::core::js_value::{type_error, FromJs};
 

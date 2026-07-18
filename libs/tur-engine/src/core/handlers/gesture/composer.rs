@@ -6,7 +6,7 @@
 //! and triple clicks from a running history of recent pointer-downs.
 
 use crate::core::element::ElementNodeId;
-use tur_shared::Offset;
+use crate::core::layout::Offset;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ClickKind {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tur_shared::Offset;
+use crate::core::layout::Offset;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;

@@ -9,7 +9,7 @@ use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::elements::pointer_interact::PointerInteractElement;
 use crate::core::elements::NodeTreeData;
-use tur_shared::{MouseButton, Offset};
+use crate::core::layout::{MouseButton, Offset};
 
 pub use composer::ClickKind;
 

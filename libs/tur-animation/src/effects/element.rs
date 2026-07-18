@@ -8,7 +8,7 @@ use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::{AnyElement, ElementTrace};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
 use tur_engine::core::view::{Lifecycle, Val, View, ViewCx};
-use tur_shared::Alignment;
+use tur_engine::core::layout::Alignment;
 
 // ---------------------------------------------------------------------------
 // OpacityView — applies an alpha multiplier to its child subtree.

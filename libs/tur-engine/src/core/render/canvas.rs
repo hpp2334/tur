@@ -1,6 +1,7 @@
 use std::fmt;
 
-use tur_shared::{Brush, Color, Geometry, Offset, Size};
+use crate::core::render::{Brush, Color};
+use crate::core::layout::{Geometry, Offset, Size};
 use vello_common::kurbo::Affine;
 
 use crate::core::resource::ResourceId;

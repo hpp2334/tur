@@ -16,7 +16,7 @@
 //! Mouse events bypass the arena entirely (immediate dispatch, no slop).
 
 use crate::core::element::ElementNodeId;
-use tur_shared::Offset;
+use crate::core::layout::Offset;
 
 const TOUCH_SLOP: f64 = 18.0;
 

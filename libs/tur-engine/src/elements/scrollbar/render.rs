@@ -1,4 +1,5 @@
-use tur_shared::{Brush, Color, ComputedLayout, Geometry, Offset, Size};
+use crate::core::render::{Brush, Color};
+use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};

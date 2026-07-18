@@ -1,7 +1,7 @@
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsValue};
-use tur_shared::{Brush, Color, GradientStop};
+use crate::core::render::{Brush, Color, GradientStop};
 
 use crate::core::bridge::color::{BrushOpaque, ColorOpaque};
 use crate::core::bridge::helpers::{ConstEntry, FnEntry, Ptr};

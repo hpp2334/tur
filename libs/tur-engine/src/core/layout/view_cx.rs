@@ -101,7 +101,7 @@ impl<'a> ViewCx for LayoutViewCx<'a> {
         self.dirty.set(true);
     }
 
-    fn computed_layout(&self, id: ElementNodeId) -> Option<tur_shared::ComputedLayout> {
+    fn computed_layout(&self, id: ElementNodeId) -> Option<crate::core::layout::ComputedLayout> {
         self.tree.elements.get(&id).map(|n| n.computed_layout)
     }
 

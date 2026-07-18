@@ -1,4 +1,4 @@
-use tur_shared::Axis;
+use tur_engine::core::layout::Axis;
 
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::NodeTreeData;

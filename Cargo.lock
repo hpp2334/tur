@@ -4203,7 +4203,6 @@ dependencies = [
  "boa_gc",
  "tracing",
  "tur-engine",
- "tur-shared",
  "vello_common",
 ]
 
@@ -4270,13 +4269,14 @@ dependencies = [
  "boa_gc",
  "glifo",
  "image",
+ "num-derive",
  "num-traits",
  "parley",
  "resvg",
  "thiserror",
  "tracing",
+ "ts-rs",
  "tur-async",
- "tur-shared",
  "unicode-segmentation",
  "usvg",
  "vello_common",
@@ -4300,7 +4300,6 @@ dependencies = [
  "tur-engine",
  "tur-native",
  "tur-net-capability",
- "tur-shared",
  "tur-std",
  "tur-text",
  "wgpu",
@@ -4321,7 +4320,6 @@ dependencies = [
  "boa_engine",
  "tracing",
  "tur-engine",
- "tur-shared",
 ]
 
 [[package]]
@@ -4341,17 +4339,6 @@ dependencies = [
  "boa_engine",
  "reqwest-wasm",
  "tur-net-capability",
- "tur-shared",
-]
-
-[[package]]
-name = "tur-shared"
-version = "0.1.0"
-dependencies = [
- "num-derive",
- "num-traits",
- "thiserror",
- "ts-rs",
 ]
 
 [[package]]
@@ -4371,7 +4358,6 @@ dependencies = [
  "boa_gc",
  "parley",
  "tur-engine",
- "tur-shared",
  "unicode-segmentation",
 ]
 
@@ -4391,7 +4377,6 @@ dependencies = [
  "tur-demo-plugin",
  "tur-engine",
  "tur-net-wasm",
- "tur-shared",
  "tur-std",
  "wasm-bindgen",
  "wasm-bindgen-futures",

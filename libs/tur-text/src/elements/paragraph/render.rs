@@ -1,4 +1,4 @@
-use tur_shared::{ComputedLayout, Offset};
+use tur_engine::core::layout::{ComputedLayout, Offset};
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::render::{Canvas, ElementRender, PaintContext};

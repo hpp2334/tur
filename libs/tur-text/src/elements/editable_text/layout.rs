@@ -1,5 +1,6 @@
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
-use tur_shared::{Color, Constraints, Size};
+use tur_engine::core::render::{Color};
+use tur_engine::core::layout::{Constraints, Size};
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::layout::{ElementLayout, LayoutContext};

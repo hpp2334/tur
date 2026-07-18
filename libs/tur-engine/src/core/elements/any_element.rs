@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use boa_engine::Context;
-use tur_shared::{ComputedLayout, Constraints, Offset, Size};
+use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};

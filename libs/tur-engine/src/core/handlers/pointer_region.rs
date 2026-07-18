@@ -5,7 +5,7 @@ use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
 use crate::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
-use tur_shared::Offset;
+use crate::core::layout::Offset;
 
 use crate::core::pointer_region::PointerRegionTracker;
 

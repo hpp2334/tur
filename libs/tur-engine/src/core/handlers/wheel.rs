@@ -3,7 +3,7 @@ use crate::core::elements::{ElementOnWheelContext, WheelEvent};
 use crate::core::event::{AppEvent, PlatformEvent};
 use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
-use tur_shared::Offset;
+use crate::core::layout::Offset;
 
 pub struct WheelAppHandler;
 
