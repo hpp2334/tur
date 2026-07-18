@@ -1,6 +1,6 @@
-import * as Clipboard from "builtin:tur/clipboard";
 import type { AstNode, TokenSpan } from "builtin:demo-helper";
 import * as Host from "builtin:demo-helper";
+import * as Clipboard from "builtin:tur/clipboard";
 import * as Net from "builtin:tur/net";
 import type { Color, SpanData } from "builtin:tur/std";
 import * as Std from "builtin:tur/std";
