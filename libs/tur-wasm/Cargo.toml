@@ -14,6 +14,7 @@ tur-engine = { workspace = true, features = ["webgl"] }
 tur-std = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
+tur-demo-plugin = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
@@ -45,23 +46,9 @@ web-sys = { workspace = true, features = [
     "Clipboard",
     "ClipboardEvent",
     "DataTransfer",
-    "Blob",
-    "BlobPropertyBag",
-    "File",
-    "FileList",
-    "HtmlInputElement",
-    "HtmlAnchorElement",
     "ResizeObserver",
-    "Url",
 ] }
 js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
-swc_common = "23.0.1"
-swc_ecma_ast = "25.0.0"
-swc_ecma_visit = "25.0.0"
-swc_ecma_parser = { version = "41.1.0", features = ["typescript", "unstable"] }
-swc_ecma_transforms_base = "44.0.2"
-swc_ecma_transforms_typescript = "49.0.0"
-swc_ecma_codegen = "28.0.1"

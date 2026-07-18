@@ -42,7 +42,7 @@ export default defineConfig({
     // ES module loaded via `load_module`.
     externals: {
         "builtin:tur/std": "builtin:tur/std",
-        "builtin:tur/host": "builtin:tur/host",
+        "builtin:demo-helper": "builtin:demo-helper",
         "builtin:tur/clipboard": "builtin:tur/clipboard",
         "builtin:tur/net": "builtin:tur/net",
     },

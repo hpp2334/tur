@@ -4220,6 +4220,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-demo-plugin"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "js-sys",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_codegen",
+ "swc_ecma_parser",
+ "swc_ecma_transforms_base",
+ "swc_ecma_transforms_typescript",
+ "swc_ecma_visit",
+ "tracing",
+ "tur-engine",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "tur-engine"
 version = "0.1.0"
 dependencies = [
@@ -4326,16 +4346,10 @@ dependencies = [
  "getrandom 0.4.2",
  "js-sys",
  "parley",
- "swc_common",
- "swc_ecma_ast",
- "swc_ecma_codegen",
- "swc_ecma_parser",
- "swc_ecma_transforms_base",
- "swc_ecma_transforms_typescript",
- "swc_ecma_visit",
  "tracing",
  "tracing-wasm",
  "tur-clipboard-wasm",
+ "tur-demo-plugin",
  "tur-engine",
  "tur-net-wasm",
  "tur-shared",

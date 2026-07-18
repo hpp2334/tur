@@ -110,265 +110,6 @@ fn normalize_mouse_button(dom_button: u16, ctrl_key: bool) -> tur_shared::MouseB
     }
 }
 
-/// Build the swc-backed compiler + clipboard host functions.
-///
-/// Returns `(name, fn, length)` tuples. The caller registers them both as the
-/// legacy `globalThis.__turHost.*` globals and as the `builtin:tur/host` module
-/// exports (see [`register_all_services`]).
-///
-/// - `transpileTsx(src): string` (throws on parse error)
-/// - `tokenizeTsx(src): Array<{ start, end, kind }>` (lexical token categories
-///   refined by AST-derived semantic categories — declaration names, JSX
-///   tags/attributes, type names, comments — for syntax highlighting)
-/// - `generateAst(src): AstNode[]`
-/// - `clipboardWriteText(text)` / `clipboardReadText(callback)`
-fn build_host_service_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)> {
-    use boa_engine::native_function::NativeFunction;
-    use boa_engine::object::builtins::JsArray;
-    use boa_engine::object::JsObject;
-    use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsValue};
-
-    let transpile = NativeFunction::from_copy_closure(|_this, args, _ctx| {
-        let src = args
-            .get_or_undefined(0)
-            .as_string()
-            .ok_or_else(|| {
-                JsError::from(JsNativeError::typ().with_message("transpileTsx: expected a string"))
-            })?
-            .to_std_string_escaped();
-        match crate::compiler::transpile_tsx(&src) {
-            Ok(code) => Ok(JsValue::from(js_string!(code))),
-            Err(e) => Err(JsError::from(JsNativeError::typ().with_message(e))),
-        }
-    });
-
-    let tokenize = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let src = args
-            .get_or_undefined(0)
-            .as_string()
-            .ok_or_else(|| {
-                JsError::from(JsNativeError::typ().with_message("tokenizeTsx: expected a string"))
-            })?
-            .to_std_string_escaped();
-        let spans = crate::compiler::highlight_tsx(&src);
-        let arr = JsArray::new(ctx)?;
-        for sp in spans {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            obj.create_data_property(js_string!("start"), JsValue::from(sp.start as f64), ctx)?;
-            obj.create_data_property(js_string!("end"), JsValue::from(sp.end as f64), ctx)?;
-            obj.create_data_property(js_string!("kind"), JsValue::from(sp.kind as f64), ctx)?;
-            arr.push(obj, ctx)?;
-        }
-        Ok(arr.into())
-    });
-
-    let generate_ast = NativeFunction::from_copy_closure(|_this, args, ctx| {        let src = args
-            .get_or_undefined(0)
-            .as_string()
-            .ok_or_else(|| {
-                JsError::from(JsNativeError::typ().with_message("generateAst: expected a string"))
-            })?
-            .to_std_string_escaped();
-        let nodes = crate::compiler::generate_ast(&src)
-            .map_err(|e| JsError::from(JsNativeError::typ().with_message(e)))?;
-
-        let arr = JsArray::new(ctx)?;
-        for node in nodes {
-            let obj = JsObject::with_object_proto(ctx.intrinsics());
-            let kind_str = match &node.kind {
-                crate::compiler::AstNodeKind::Import { .. } => "import",
-                crate::compiler::AstNodeKind::ExportDecl { .. } => "exportDecl",
-                crate::compiler::AstNodeKind::ExportDefault => "exportDefault",
-                crate::compiler::AstNodeKind::ExportNamed { .. } => "exportNamed",
-                crate::compiler::AstNodeKind::ExportAll => "exportAll",
-                crate::compiler::AstNodeKind::ExportType { .. } => "exportType",
-                crate::compiler::AstNodeKind::Statement => "statement",
-            };
-            obj.create_data_property(js_string!("kind"), JsValue::from(js_string!(kind_str)), ctx)?;
-            obj.create_data_property(js_string!("text"), JsValue::from(js_string!(node.text.as_str())), ctx)?;
-            if let Some(body) = &node.body {
-                obj.create_data_property(js_string!("body"), JsValue::from(js_string!(body.as_str())), ctx)?;
-            }
-
-            match &node.kind {
-                crate::compiler::AstNodeKind::Import { source, specifiers } => {
-                    obj.create_data_property(js_string!("source"), JsValue::from(js_string!(source.as_str())), ctx)?;
-                    let spec_arr = JsArray::new(ctx)?;
-                    for spec in specifiers {
-                        let spec_obj = JsObject::with_object_proto(ctx.intrinsics());
-                        spec_obj.create_data_property(js_string!("local"), JsValue::from(js_string!(spec.local.as_str())), ctx)?;
-                        spec_obj.create_data_property(js_string!("imported"), JsValue::from(js_string!(spec.imported.as_str())), ctx)?;
-                        spec_arr.push(spec_obj, ctx)?;
-                    }
-                    obj.create_data_property(js_string!("specifiers"), JsValue::from(spec_arr), ctx)?;
-                }
-                crate::compiler::AstNodeKind::ExportDecl { names }
-                | crate::compiler::AstNodeKind::ExportNamed { names }
-                | crate::compiler::AstNodeKind::ExportType { names } => {
-                    let name_arr = JsArray::new(ctx)?;
-                    for n in names {
-                        name_arr.push(JsValue::from(js_string!(n.as_str())), ctx)?;
-                    }
-                    obj.create_data_property(js_string!("names"), JsValue::from(name_arr), ctx)?;
-                }
-                _ => {}
-            }
-
-            arr.push(obj, ctx)?;
-        }
-        Ok(arr.into())
-    });
-
-    vec![
-        ("transpileTsx", transpile, 1),
-        ("tokenizeTsx", tokenize, 1),
-        ("generateAst", generate_ast, 1),
-    ]
-}
-
-// ---------------------------------------------------------------------------
-// `perform_request` moved to `tur-net-wasm/src/backend.rs` — extracted
-// verbatim so the WasmHttp backend lives in its own crate.
-// ---------------------------------------------------------------------------
-
-/// A pending `__turHost.pickFile` result: callback + (`None` if cancelled).
-type PendingPick = (
-    boa_engine::object::builtins::JsFunction,
-    Option<(String, Vec<u8>)>,
-);
-
-/// The `change` handler closure type used by the hidden file-picker `<input>`.
-type PickHandler = wasm_bindgen::closure::Closure<dyn FnMut(web_sys::Event)>;
-
-
-// --- File IO host bridges (browser-only) -----------------------------------
-//
-// `pickFile(callback)` opens the native file picker and resolves with
-// `{ name, bytes<ArrayBuffer> }` (or null if cancelled). `saveFile(name, bytes)`
-// triggers a browser download. Bytes round-trip through boa ArrayBuffers; the
-// actual File/Blob live in the browser heap, so we copy through `Vec<u8>`.
-
-fn build_file_io_fns() -> Vec<(&'static str, boa_engine::NativeFunction, usize)> {
-    use boa_engine::native_function::NativeFunction;
-    use boa_engine::object::builtins::{JsArrayBuffer, JsFunction};
-    use boa_engine::{JsArgs, JsValue};
-    use wasm_bindgen::JsCast;
-
-    let pick_file = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
-        let Some(cb_obj) = args.get_or_undefined(0).as_object() else {
-            return Ok(JsValue::undefined());
-        };
-        let Some(cb) = JsFunction::from_object(cb_obj.clone()) else {
-            return Ok(JsValue::undefined());
-        };
-        let Some(window) = web_sys::window() else {
-            return Ok(JsValue::undefined());
-        };
-        let Some(document) = window.document() else {
-            return Ok(JsValue::undefined());
-        };
-        let Ok(input_el) = document.create_element("input") else {
-            return Ok(JsValue::undefined());
-        };
-        let Ok(input) = input_el.dyn_into::<web_sys::HtmlInputElement>() else {
-            return Ok(JsValue::undefined());
-        };
-        input.set_type("file");
-
-        let input_for_handler = input.clone();
-        let cb_for_handler = cb.clone();
-        let on_change = Closure::<dyn FnMut(web_sys::Event)>::new(move |_ev| {
-            let picked = input_for_handler.files().and_then(|fl| fl.get(0));
-            match picked {
-                Some(file) => {
-                    let name = file.name();
-                    let cb2 = cb_for_handler.clone();
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let bytes = match wasm_bindgen_futures::JsFuture::from(file.array_buffer())
-                            .await
-                        {
-                            Ok(buf) => {
-                                let arr = js_sys::Uint8Array::new(&buf);
-                                let mut v = vec![0u8; arr.length() as usize];
-                                arr.copy_to(&mut v);
-                                Some(v)
-                            }
-                            Err(_) => None,
-                        };
-                        FILE_PICK_RESULTS
-                            .with(|q| q.borrow_mut().push((cb2, bytes.map(|b| (name, b)))));
-                    });
-                }
-                None => {
-                    FILE_PICK_RESULTS
-                        .with(|q| q.borrow_mut().push((cb_for_handler.clone(), None)));
-                }
-            }
-        });
-        input.set_onchange(Some(on_change.as_ref().unchecked_ref()));
-        PICK_CLOSURES.with(|c| c.borrow_mut().push(on_change));
-        input.click();
-        Ok(JsValue::undefined())
-    });
-
-    let save_file = NativeFunction::from_copy_closure(move |_this, args, _ctx| {
-        let name = args
-            .get_or_undefined(0)
-            .as_string()
-            .map(|s| s.to_std_string_escaped())
-            .unwrap_or_else(|| "download".to_string());
-        let bytes: Option<Vec<u8>> = args
-            .get_or_undefined(1)
-            .as_object()
-            .and_then(|o| JsArrayBuffer::from_object(o.clone()).ok())
-            .and_then(|ab| ab.to_vec());
-        if let (Some(bytes), Some(window)) = (bytes, web_sys::window()) {
-            let document = window.document();
-            let arr = js_sys::Uint8Array::from(&bytes[..]);
-            let parts = js_sys::Array::new();
-            parts.push(&arr);
-            if let Ok(blob) = web_sys::Blob::new_with_u8_array_sequence(&parts) {
-                if let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) {
-                    if let Some(document) = document {
-                        if let Ok(a_el) = document.create_element("a") {
-                            if let Ok(a) = a_el.dyn_into::<web_sys::HtmlAnchorElement>() {
-                                a.set_href(&url);
-                                a.set_download(&name);
-                                if let Some(body) = document.body() {
-                                    let _ = body.append_child(&a);
-                                    a.click();
-                                    let _ = body.remove_child(&a);
-                                }
-                            }
-                        }
-                    }
-                    let _ = web_sys::Url::revoke_object_url(&url);
-                }
-            }
-        }
-        Ok(JsValue::undefined())
-    });
-
-    vec![
-        ("pickFile", pick_file, 1),
-        ("saveFile", save_file, 2),
-    ]
-}
-
-thread_local! {
-    /// Pending `(callback, picked-file)` pairs queued by `__turHost.pickFile`
-    /// once the browser File bytes are read. `None` = picker cancelled.
-    static FILE_PICK_RESULTS: std::cell::RefCell<Vec<PendingPick>>
-        = const { std::cell::RefCell::new(Vec::new()) };
-
-    /// Keeps the per-pick `change` closures alive for the lifetime of the
-    /// hidden `<input type=file>` (otherwise they'd be dropped before the user
-    /// selects a file). Accumulates; entries outlive their use but the leak is
-    /// negligible for a playground.
-    static PICK_CLOSURES: std::cell::RefCell<Vec<PickHandler>>
-        = const { std::cell::RefCell::new(Vec::new()) };
-}
-
 #[wasm_bindgen]
 impl TurWasmApp {
     pub fn create() -> js_sys::Promise {
@@ -563,15 +304,6 @@ impl TurWasmApp {
                 dpr,
             );
 
-            let host_fns = build_host_service_fns();
-            let file_fns = build_file_io_fns();
-
-            let host_exports: Vec<(String, boa_engine::NativeFunction, usize)> = host_fns
-                .into_iter()
-                .chain(file_fns)
-                .map(|(n, f, l)| (n.to_string(), f, l))
-                .collect();
-
             let app = tur_engine::TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(WasmFontLoader::new()))
@@ -584,7 +316,7 @@ impl TurWasmApp {
                 .plugin(tur_std::TurStdPlugin)
                 .plugin(TurClipboardPlugin)
                 .plugin(TurNetPlugin)
-                .host_module("builtin:tur/host", host_exports)
+                .plugin(tur_demo_plugin::TurDemoPlugin)
                 .build()
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
@@ -1139,47 +871,12 @@ impl TurWasmApp {
                         return;
                     };
 
-                    // Drain pending __turHost.pickFile resolutions: build the
-                    // `{ name, bytes<ArrayBuffer> }` (or null) and invoke the
-                    // callback from here, where a `&mut Context` is available.
-                    let pending_picks: Vec<PendingPick> =
-                        FILE_PICK_RESULTS.with(|q| q.borrow_mut().drain(..).collect());
-                    if !pending_picks.is_empty() {
-                        s.app.with_boa_context(|ctx| {
-                            use boa_engine::object::builtins::{AlignedVec, JsArrayBuffer};
-                            use boa_engine::object::JsObject;
-                            use boa_engine::{js_string, JsValue};
-                            for (cb, picked) in pending_picks {
-                                let arg = match picked {
-                                    Some((name, bytes)) => {
-                                        let o = JsObject::with_object_proto(ctx.intrinsics());
-                                        let _ = o.create_data_property(
-                                            js_string!("name"),
-                                            JsValue::from(js_string!(name.as_str())),
-                                            ctx,
-                                        );
-                                        if let Ok(ab) = JsArrayBuffer::from_byte_block(
-                                            AlignedVec::from_iter(0, bytes),
-                                            ctx,
-                                        ) {
-                                            let _ = o.create_data_property(
-                                                js_string!("bytes"),
-                                                JsValue::from(ab),
-                                                ctx,
-                                            );
-                                        }
-                                        o.into()
-                                    }
-                                    None => JsValue::null(),
-                                };
-                                if let Err(e) = cb
-                                    .call(&boa_engine::JsValue::undefined(), &[arg], ctx)
-                                {
-                                    tracing::error!("pickFile callback error: {e}");
-                                }
-                            }
-                        });
-                    }
+                    // Drain pending `pickFile` resolutions: the plugin owns
+                    // the queue + the ArrayBuffer/callback logic; we just hand
+                    // it a `&mut Context` from here (where one is available).
+                    s.app.with_boa_context(|ctx| {
+                        tur_demo_plugin::resolve_pending_picks(ctx);
+                    });
 
                     let is_editable = s.app.focused_is_editable();
                     if is_editable {

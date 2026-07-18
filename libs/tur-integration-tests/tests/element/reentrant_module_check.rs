@@ -7,38 +7,41 @@
 use std::path::Path;
 
 use boa_engine::{js_string, JsArgs, JsValue, Module, NativeFunction, Source};
-use tur_integration_tests::TurTestApp;
+use tur_integration_tests::{HostModulePlugin, TurTestApp};
 
 #[test]
 fn reentrant_module_load_via_host_fn() {
-    let mut app = TurTestApp::new(100.0, 100.0).unwrap();
-    app.with_app(|tur| {
-        // `loadModule(src)` — parses + evaluates `src` as a module on the
-        // current context (re-entrant safe if boa supports nested module eval).
-        let load_module_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {
-            let src = args
-                .get_or_undefined(0)
-                .as_string()
-                .ok_or_else(|| {
-                    boa_engine::JsNativeError::typ()
-                        .with_message("loadModule: expected string")
-                })?
-                .to_std_string_escaped();
-            let module = Module::parse(
-                Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
-                None,
-                ctx,
-            )?;
-            let _ = module.load_link_evaluate(ctx);
-            ctx.run_jobs()?;
-            Ok(JsValue::undefined())
-        });
-        tur.register_host_module(
-            "builtin:tur/cases",
-            vec![("loadModule".to_string(), load_module_fn, 1)],
-        )
-        .unwrap();
+    // `loadModule(src)` — parses + evaluates `src` as a module on the
+    // current context (re-entrant safe if boa supports nested module eval).
+    let load_module_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {
+        let src = args
+            .get_or_undefined(0)
+            .as_string()
+            .ok_or_else(|| {
+                boa_engine::JsNativeError::typ()
+                    .with_message("loadModule: expected string")
+            })?
+            .to_std_string_escaped();
+        let module = Module::parse(
+            Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
+            None,
+            ctx,
+        )?;
+        let _ = module.load_link_evaluate(ctx);
+        ctx.run_jobs()?;
+        Ok(JsValue::undefined())
     });
+
+    let plugin = HostModulePlugin {
+        specifier: "builtin:tur/cases",
+        exports: vec![("loadModule".to_string(), load_module_fn, 1)],
+    };
+    let mut app = TurTestApp::new_with_extra_plugins(
+        100.0,
+        100.0,
+        vec![Box::new(plugin)],
+    )
+    .unwrap();
 
     // Outer module calls `loadModule(innerSrc)` during its own evaluation.
     // `innerSrc` imports `builtin:tur/std` (already registered) and stashes a value.

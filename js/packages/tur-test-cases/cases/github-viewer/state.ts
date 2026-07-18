@@ -1,4 +1,4 @@
-import { saveFile } from "builtin:tur/host";
+import { saveFile } from "builtin:demo-helper";
 import { request } from "builtin:tur/net";
 import {
     createAnimationController,
@@ -35,7 +35,7 @@ export interface DirEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Host bridge — HTTP via `builtin:tur/net`, file save via `builtin:tur/host`.
+// Host bridge — HTTP via `builtin:tur/net`, file save via `builtin:demo-helper`.
 // Both are registered by tur-wasm (playground). The case is playground-only,
 // so `hasHttp` is true whenever the case loads.
 // ---------------------------------------------------------------------------

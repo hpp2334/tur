@@ -19,7 +19,6 @@ use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
 use boa_engine::Context;
-use boa_engine::NativeFunction;
 use boa_engine::Source;
 
 use error::TurError;
@@ -27,7 +26,7 @@ use error::TurError;
 use core::app::{FrameOutcome, TurAppInternal};
 
 use core::bridge::helpers::FnEntry;
-use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
+use core::bridge::module_loader::{build_native_module, bound_native};
 use core::bridge::{console, dev_tool, reactive, render};
 use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader};
 use core::capability::{Capability, CapabilityDecls};
@@ -45,7 +44,6 @@ pub struct TurApp {
     boa_context: RefCell<Context>,
     internal: TurAppInternal,
     executor: Rc<TurJobExecutor>,
-    module_loader: Rc<TurModuleLoader>,
     /// Autonomous-loop driver. `None` until [`Self::start`] is called
     /// (production); tests leave it unset and pump via [`Self::run_frame`].
     driver: RefCell<Option<Rc<dyn LoopDriver>>>,
@@ -134,24 +132,6 @@ impl TurApp {
             .map(|s| s.to_std_string_escaped())
             .unwrap_or_else(|| result.display().to_string());
         Ok(s)
-    }
-
-    /// Register a synthetic ES module under `specifier` whose exports are the
-    /// given native functions. Embedders (tur-wasm) use this to expose host
-    /// services as importable modules — e.g. `builtin:tur/host`.
-    pub fn register_host_module(
-        &self,
-        specifier: &str,
-        exports: Vec<(String, boa_engine::NativeFunction, usize)>,
-    ) -> Result<(), boa_engine::JsError> {
-        let owned: Vec<(&str, boa_engine::NativeFunction, usize)> = exports
-            .iter()
-            .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
-            .collect();
-        let module = build_fn_module(&mut self.boa_context.borrow_mut(), &owned);
-        self.module_loader.register(specifier, module);
-        tracing::info!("registered host module {specifier} ({} exports)", owned.len());
-        Ok(())
     }
 
     /// Advance exactly one frame: run the engine's fixed-point flush (events,
@@ -385,8 +365,6 @@ impl TurEngine {
     }
 }
 
-type HostExports = Vec<(String, NativeFunction, usize)>;
-
 /// Deferred capability-insert closure. Captures the typed capability value
 /// and the static type parameter, so the actual `Capabilities::insert::<C>`
 /// call (which requires a static `C`) happens once inside `build()` rather
@@ -400,7 +378,6 @@ pub struct TurEngineBuilder {
     font_loader: Option<Box<dyn FontLoader>>,
     clock: Option<Rc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
-    host_modules: Vec<(String, HostExports)>,
     capabilities: Vec<CapabilityInsert>,
 }
 
@@ -417,7 +394,6 @@ impl TurEngineBuilder {
             font_loader: None,
             clock: None,
             plugins: Vec::new(),
-            host_modules: Vec::new(),
             capabilities: Vec::new(),
         }
     }
@@ -453,6 +429,14 @@ impl TurEngineBuilder {
         self
     }
 
+    /// Like [`plugin`](Self::plugin) but accepts an already-boxed plugin.
+    /// Useful when a caller wants to mix plugin types into a single collection
+    /// (e.g. a test harness aggregating plugins from multiple sources).
+    pub fn plugin_boxed(mut self, plugin: Box<dyn Plugin>) -> Self {
+        self.plugins.push(plugin);
+        self
+    }
+
     /// Register a capability (a plugin-swappable backend) so it's available
     /// to plugins (via [`PluginContext::capability`]), bridge fns (via
     /// `extract_ctx(...).capability()`), handlers (via
@@ -470,15 +454,6 @@ impl TurEngineBuilder {
             .push(Box::new(move |registry: &core::capability::Capabilities| {
                 registry.insert::<C>(cap);
             }));
-        self
-    }
-
-    pub fn host_module(
-        mut self,
-        specifier: impl Into<String>,
-        exports: HostExports,
-    ) -> Self {
-        self.host_modules.push((specifier.into(), exports));
         self
     }
 
@@ -585,16 +560,6 @@ impl TurEngineBuilder {
 
         console::register_console_globals(&mut boa_context);
 
-        for (specifier, exports) in &self.host_modules {
-            let owned: Vec<(&str, NativeFunction, usize)> = exports
-                .iter()
-                .map(|(n, f, l)| (n.as_str(), f.clone(), *l))
-                .collect();
-            let module = build_fn_module(&mut boa_context, &owned);
-            module_loader.register(specifier, module);
-            tracing::info!("registered host module {specifier} ({} exports)", owned.len());
-        }
-
         // Insert every builder-level capability into the shared registry
         // BEFORE plugins run, so plugin call-site order (`capability` before
         // or after `plugin`) doesn't matter. Each closure calls
@@ -660,7 +625,6 @@ impl TurEngineBuilder {
             boa_context: RefCell::new(boa_context),
             internal,
             executor,
-            module_loader,
             driver: RefCell::new(None),
             wake_fn: RefCell::new(None),
             after_frame: RefCell::new(None),

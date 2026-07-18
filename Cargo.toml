@@ -11,6 +11,7 @@ members = [
     "libs/tur-net-capability",
     "libs/tur-net-wasm",
     "libs/tur-net-native",
+    "libs/tur-demo-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
     "libs/tur-integration-tests",
@@ -34,6 +35,7 @@ tur-clipboard-native = { path = "libs/tur-clipboard-native" }
 tur-net-capability = { path = "libs/tur-net-capability" }
 tur-net-wasm = { path = "libs/tur-net-wasm" }
 tur-net-native = { path = "libs/tur-net-native" }
+tur-demo-plugin = { path = "libs/tur-demo-plugin" }
 tur-native = { path = "libs/tur-native" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 
