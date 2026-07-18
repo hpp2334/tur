@@ -707,8 +707,8 @@ impl TurTestApp {
 
     /// Push a synthetic paste event — equivalent to the embedder firing
     /// `paste` on the hidden textarea. The engine's
-    /// `ClipboardPasteAppHandler` forwards it as `AppEvent::ClipboardPaste`,
-    /// and tur-text's `ClipboardPasteHandler` then inserts `text` into the
+    /// `ClipboardPlatformSubsystem` forwards it as `AppEvent::ClipboardPaste`,
+    /// and tur-text's `ClipboardPasteSubsystem` then inserts `text` into the
     /// focused editable.
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner

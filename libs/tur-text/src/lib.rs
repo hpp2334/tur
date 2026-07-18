@@ -3,12 +3,12 @@
 //! Provides text rendering and editing elements (`TextElement`,
 //! `EditableTextElement`, `ParagraphElement`), their controllers
 //! (`TextEditingController`, `UndoController`), the paste + caret-visible
-//! handlers (`ClipboardPasteHandler`, `EnsureCaretVisibleHandler`), and the
-//! `extract_layout_data` bridge helper.
+//! subsystems (`ClipboardPasteSubsystem`, `CaretVisibilitySubsystem`), and
+//! the `extract_layout_data` bridge helper.
 //!
 //! Unlike `tur-animation`, this crate is **not** a plugin. It is installed
 //! into `builtin:tur/std` by `TurStdPlugin` via [`install_text_feature`],
-//! which registers the boa classes + handlers and returns the JS factory
+//! which registers the boa classes + subsystems and returns the JS factory
 //! fns to be merged into `std_fns`. From JS's perspective Text/Input ship as
 //! part of `builtin:tur/std`.
 //!
@@ -17,9 +17,9 @@
 //! `tur_engine::core::fonts::FontManager` — which `Canvas::fill_text_layout`
 //! consumes to do the actual drawing. tur-text produces these structs from
 //! JS-side props via `extract_layout_data`. Paste flows through the
-//! engine-internal bus: the engine's `ClipboardPasteAppHandler` (in
+//! engine-internal bus: the engine's `ClipboardPlatformSubsystem` (in
 //! `TurStdPlugin`) forwards `PlatformEvent::ClipboardPaste` as
-//! `AppEvent::ClipboardPaste`, which [`handlers::ClipboardPasteHandler`]
+//! `AppEvent::ClipboardPaste`, which [`handlers::ClipboardPasteSubsystem`]
 //! consumes here.
 
 pub mod controller;
@@ -41,12 +41,12 @@ use tur_engine::error::TurError;
 /// Side effects:
 /// - Registers the boa classes [`TextEditingController`] and
 ///   [`UndoController`] on `globalThis`.
-/// - Registers tur-text's [`handlers::ClipboardPasteHandler`] (consumes
+/// - Registers tur-text's [`handlers::ClipboardPasteSubsystem`] (consumes
 ///   `AppEvent::ClipboardPaste` forwarded by the engine's
-///   `ClipboardPasteAppHandler`) and [`handlers::EnsureCaretVisibleHandler`]
-///   (post-handler that keeps the caret visible after keyboard / IME / paste
-///   events). Registration order matters: paste handler before caret-visible
-///   handler, so the latter observes the post-paste caret.
+///   `ClipboardPlatformSubsystem`) and [`handlers::CaretVisibilitySubsystem`]
+///   (post-subsystem that keeps the caret visible after keyboard / IME /
+///   paste events). Registration order matters: paste subsystem before
+///   caret-visible subsystem, so the latter observes the post-paste caret.
 ///
 /// Returns: the `Text` / `Input` / `createTextEditingController` /
 /// `createUndoController` factory fns, which the caller merges into
@@ -59,15 +59,15 @@ pub fn install_text_feature(
     ctx.register_class::<UndoController>()
         .map_err(|e| TurError::Other(format!("failed to register UndoController: {e}")))?;
 
-    // Handlers run in registration order, so register the paste handler
-    // BEFORE `EnsureCaretVisibleHandler`. Both consume
+    // Subsystems run in registration order, so register the paste subsystem
+    // BEFORE `CaretVisibilitySubsystem`. Both consume
     // `AppEvent::ClipboardPaste`: paste mutates the focused editable's text +
-    // caret, then the caret-visible handler observes the post-paste caret
-    // and scrolls if needed. (Engine's `KeyboardAppHandler` /
-    // `ImeAppHandler` are registered even earlier by `TurStdPlugin`, so
-    // keyboard / IME caret moves also land before `EnsureCaretVisibleHandler`.)
-    ctx.register_handler(Box::new(handlers::ClipboardPasteHandler));
-    ctx.register_handler(Box::new(handlers::EnsureCaretVisibleHandler));
+    // caret, then the caret-visible subsystem observes the post-paste caret
+    // and scrolls if needed. (Engine's `KeyboardSubsystem` /
+    // `ImeSubsystem` are registered even earlier by `TurStdPlugin`, so
+    // keyboard / IME caret moves also land before `CaretVisibilitySubsystem`.)
+    ctx.register_subsystem(Box::new(handlers::ClipboardPasteSubsystem));
+    ctx.register_subsystem(Box::new(handlers::CaretVisibilitySubsystem));
 
     let mut fns = Vec::new();
     fns.extend(elements::paragraph::bridge::fns());

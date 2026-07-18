@@ -1,41 +1,78 @@
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::PlatformEvent;
-use crate::core::handler::{AppHandler, HandlerContext};
+use crate::core::keyboard::events::KeydownEvent;
 use crate::core::keyboard::AppKeyEvent;
+use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::elements::focusable::FocusableElement;
-use crate::core::keyboard::events::KeydownEvent;
 
-pub struct KeyboardAppHandler;
+/// Routes `PlatformEvent::Key` to the focused element synchronously (mutating
+/// the element's text buffer / caret in place), then bubbles the key event up
+/// the focus chain via `onKeyDown` mutations.
+///
+/// Caret-keep-visible behaviour (scrolling the nearest scrollable ancestor
+/// to keep the caret on screen after a key event) lives in tur-text's
+/// `CaretVisibilitySubsystem`, which must be registered after this subsystem
+/// so it observes the post-event caret position.
+pub struct KeyboardSubsystem;
 
-impl AppHandler for KeyboardAppHandler {
-    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+impl Subsystem for KeyboardSubsystem {
+    fn handle_platform_event(
+        &mut self,
+        cx: &mut SubsystemFlushContext<'_>,
+        event: &PlatformEvent,
+    ) {
         let PlatformEvent::Key(key_event) = event else {
             return;
         };
 
         dispatch_key_event(cx, key_event);
 
-        // Keeping the caret on screen after cursor-moving keys / typed text
-        // is now handled by tur-text's PostKeyboardHandler, which runs after
-        // this handler in registration order.
+        bubble_on_key_down(cx, key_event);
+    }
+}
 
-        let Some(focused_id) = cx.focus_manager.focused() else {
-            return;
-        };
-        let key = key_event.key.clone();
-        let code = key_event.code.clone();
-        let modifiers = key_event.modifiers;
-        // Walk from the focused element up to the root, hopping fragment links
-        // transparently (fragments can't host Focusable handlers themselves).
-        let mut current: Option<NodeId> = Some(focused_id.into());
-        while let Some(nid) = current {
-            if let Some(node) = cx.element_tree.get_element(ElementNodeId::new(nid.as_u64())) {
-                if let Some(ref element) = node.element
-                    && let Some(f) = element.cast::<FocusableElement>()
-                        && let Some(m) = f.view.on_key_down {
-                            cx.mutation_queue.push(
+fn dispatch_key_event(cx: &mut SubsystemFlushContext<'_>, event: &AppKeyEvent) {
+    let Some(focused_id) = cx.focus_manager.borrow().focused() else {
+        return;
+    };
+    let mut tree = cx.element_tree.borrow_mut();
+    let Some(node) = tree.get_element_mut(focused_id) else {
+        return;
+    };
+    let Some(ref mut element) = node.element else {
+        return;
+    };
+    let mut mq = cx.mutation_queue.borrow_mut();
+    let mut el_cx = ElementOnKeyboardContext::new(
+        &mut mq,
+        &mut *cx.app_event_queue,
+        cx.need_paint,
+    );
+    element.on_keyboard_event(&mut el_cx, event);
+    tree.mark_dirty(focused_id.into());
+}
+
+fn bubble_on_key_down(cx: &mut SubsystemFlushContext<'_>, key_event: &AppKeyEvent) {
+    let Some(focused_id) = cx.focus_manager.borrow().focused() else {
+        return;
+    };
+    let key = key_event.key.clone();
+    let code = key_event.code.clone();
+    let modifiers = key_event.modifiers;
+    // Walk from the focused element up to the root, hopping fragment links
+    // transparently (fragments can't host Focusable handlers themselves).
+    let mut mq = cx.mutation_queue.borrow_mut();
+    let tree = cx.element_tree.borrow();
+    let mut current: Option<NodeId> = Some(focused_id.into());
+    while let Some(nid) = current {
+        if let Some(node) = tree.get_element(ElementNodeId::new(nid.as_u64())) {
+            if let Some(ref element) = node.element
+                && let Some(f) = element.cast::<FocusableElement>()
+                    && let Some(m) = f.view.on_key_down
+                        {
+                            mq.push(
                                 m,
                                 KeydownEvent {
                                     key: key.clone(),
@@ -44,34 +81,11 @@ impl AppHandler for KeyboardAppHandler {
                                 },
                             );
                         }
-                current = node.parent;
-            } else if let Some(frag) = cx
-                .element_tree
-                .get_fragment(FragmentNodeId::new(nid.as_u64()))
-            {
-                current = Some(frag.parent);
-            } else {
-                break;
-            }
+            current = node.parent;
+        } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(nid.as_u64())) {
+            current = Some(frag.parent);
+        } else {
+            break;
         }
     }
-}
-
-fn dispatch_key_event(cx: &mut HandlerContext, event: &AppKeyEvent) {
-    let Some(focused_id) = cx.focus_manager.focused() else {
-        return;
-    };
-    let Some(node) = cx.element_tree.get_element_mut(focused_id) else {
-        return;
-    };
-    let Some(ref mut element) = node.element else {
-        return;
-    };
-    let mut el_cx = ElementOnKeyboardContext::new(
-        &mut *cx.mutation_queue,
-        &mut *cx.app_event_queue,
-        cx.need_paint,
-    );
-    element.on_keyboard_event(&mut el_cx, event);
-    cx.element_tree.mark_dirty(focused_id.into());
 }

@@ -51,7 +51,7 @@ pub enum PlatformEvent {
     /// embedder captured the paste event on its hidden input, and is
     /// forwarding the clipboard text). Forwarded as
     /// [`AppEvent::ClipboardPaste`] by the engine's
-    /// `ClipboardPasteAppHandler`; tur-text's `ClipboardPasteHandler` then
+    /// `ClipboardPlatformSubsystem`; tur-text's `ClipboardPasteSubsystem` then
     /// inserts the text into the focused editable.
     ClipboardPaste {
         text: String,
@@ -109,7 +109,7 @@ pub enum AppEvent {
     },
     /// Scroll overflow bubbling — a scroll view consumed as much delta as it
     /// could and is forwarding the remainder (`delta`) to its nearest
-    /// scrollable ancestor. Resolved by `ScrollChainingHandler`.
+    /// scrollable ancestor. Resolved by `ScrollSubsystem`.
     ScrollOverscroll {
         source_id: ElementNodeId,
         delta: f64,
@@ -132,9 +132,9 @@ pub enum AppEvent {
         text: String,
     },
     /// Engine-internal paste request — the paste text to insert into the
-    /// focused editable. Produced by the engine's `ClipboardPasteAppHandler`
+    /// focused editable. Produced by the engine's `ClipboardPlatformSubsystem`
     /// (which forwards the embedder's [`PlatformEvent::ClipboardPaste`]) and
-    /// consumed by tur-text's `ClipboardPasteHandler`, which does the actual
+    /// consumed by tur-text's `ClipboardPasteSubsystem`, which does the actual
     /// insertion. Lives on the AppEvent bus so the paste logic stays in
     /// tur-text next to `EditableTextElement` instead of requiring a
     /// per-element trait in the engine.

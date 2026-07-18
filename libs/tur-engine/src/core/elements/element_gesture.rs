@@ -58,7 +58,7 @@ impl<'a> ElementOnGestureContext<'a> {
     }
 
     /// Request that the scroll-view node be scrolled to an absolute offset.
-    /// Resolved post-dispatch by the `ScrollToHandler` (the tree is mutably
+    /// Resolved post-dispatch by the `ScrollSubsystem` (the tree is mutably
     /// borrowed for the duration of a gesture event, so we defer).
     pub fn request_scroll_to(&mut self, node_id: ElementNodeId, offset: f64) {
         self.event_queue

@@ -796,8 +796,8 @@ impl TurWasmApp {
             // the hidden textarea is focused, the browser fires a `paste`
             // event with `clipboardData`. We forward the text to the engine
             // via PlatformEvent::ClipboardPaste; the engine's
-            // ClipboardPasteAppHandler re-emits it as AppEvent::ClipboardPaste,
-            // which tur-text's ClipboardPasteHandler consumes to insert into
+            // ClipboardPlatformSubsystem re-emits it as AppEvent::ClipboardPaste,
+            // which tur-text's ClipboardPasteSubsystem consumes to insert into
             // the focused editable.
             let paste_state = state_clone.clone();
             let paste_closure =

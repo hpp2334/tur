@@ -1,41 +1,44 @@
-use tur_engine::core::layout::Axis;
-
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::{AppEvent, PlatformEvent};
-use tur_engine::core::handler::{AppHandler, HandlerContext};
-use tur_engine::core::handlers::wheel::dispatch_wheel;
+use tur_engine::core::handlers::scroll::dispatch_wheel;
+use tur_engine::core::layout::Axis;
+use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
 use tur_engine::elements::scroll_view::ScrollViewElement;
 
 use crate::elements::editable_text::EditableTextElement;
 
-/// Post-handler that keeps the caret on screen after text-moving events
+/// Post-subsystem that keeps the caret on screen after text-moving events
 /// (keyboard, IME, clipboard-paste). Registered by [`crate::install_text_feature`]
-/// after the engine's `KeyboardAppHandler` / `ImeAppHandler` (for keyboard /
-/// IME caret moves) and after tur-text's `ClipboardPasteHandler` (for paste
-/// caret moves), so by the time this handler runs the focused editable's
+/// after the engine's `KeyboardSubsystem` / `ImeSubsystem` (for keyboard /
+/// IME caret moves) and after tur-text's `ClipboardPasteSubsystem` (for paste
+/// caret moves), so by the time this subsystem runs the focused editable's
 /// buffer + caret have already been updated.
 ///
 /// Subscribes to two event streams:
 /// - `PlatformEvent::Key` / `PlatformEvent::Ime` — keyboard / IME caret moves
-///   happen synchronously in the engine's `KeyboardAppHandler` /
-///   `ImeAppHandler`, so the post-handler can observe them in the same
+///   happen synchronously in the engine's `KeyboardSubsystem` /
+///   `ImeSubsystem`, so the post-subsystem can observe them in the same
 ///   platform-event pass.
 /// - `AppEvent::ClipboardPaste` — paste is forwarded from
 ///   `PlatformEvent::ClipboardPaste` to `AppEvent::ClipboardPaste` by the
-///   engine's `ClipboardPasteAppHandler`, then consumed by tur-text's
-///   `ClipboardPasteHandler`. Since AppEvents drain in a later flush pass
+///   engine's `ClipboardPlatformSubsystem`, then consumed by tur-text's
+///   `ClipboardPasteSubsystem`. Since AppEvents drain in a later flush pass
 ///   than the originating PlatformEvent (the queues are snapshotted at the
-///   start of `flush_app_events`), this handler must subscribe to the
+///   start of `flush_app_events`), this subsystem must subscribe to the
 ///   AppEvent — subscribing to `PlatformEvent::ClipboardPaste` would run
 ///   before the paste happens.
 ///
 /// No-op when the focused element isn't a multiline `EditableText`, no
 /// scrollable ancestor exists, or the caret line is already visible.
-pub struct EnsureCaretVisibleHandler;
+pub struct CaretVisibilitySubsystem;
 
-impl AppHandler for EnsureCaretVisibleHandler {
-    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+impl Subsystem for CaretVisibilitySubsystem {
+    fn handle_platform_event(
+        &mut self,
+        cx: &mut SubsystemFlushContext<'_>,
+        event: &PlatformEvent,
+    ) {
         // Only caret-moving events warrant a scroll. Resize / pointer / wheel
         // events don't move the caret. (Paste is handled in
         // `handle_app_event` — see the struct doc for why.)
@@ -47,7 +50,11 @@ impl AppHandler for EnsureCaretVisibleHandler {
         }
     }
 
-    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+    fn handle_app_event(
+        &mut self,
+        cx: &mut SubsystemFlushContext<'_>,
+        event: &AppEvent,
+    ) {
         if let AppEvent::ClipboardPaste { .. } = event {
             ensure_caret_visible(cx);
         }
@@ -62,29 +69,33 @@ impl AppHandler for EnsureCaretVisibleHandler {
 /// Reads the editable's cached text layout from the previous frame; for pure
 /// cursor moves this is exact, for typed text the correction lags one frame
 /// and self-corrects.
-pub fn ensure_caret_visible(cx: &mut HandlerContext) {
-    let Some(focused) = cx.focus_manager.focused() else {
+pub fn ensure_caret_visible(cx: &mut SubsystemFlushContext<'_>) {
+    let Some(focused) = cx.focus_manager.borrow().focused() else {
         return;
     };
 
-    let Some((line_top, line_height)) = caret_line_geom(&*cx.element_tree, focused) else {
-        return;
-    };
+    let metrics = {
+        let tree = cx.element_tree.borrow();
+        let Some((line_top, line_height)) = caret_line_geom(&tree, focused) else {
+            return;
+        };
+        let Some(scroll_id) = nearest_scroll_ancestor(&tree, focused) else {
+            return;
+        };
+        // Absolute Y of the caret and of the scroll viewport, obtained by
+        // accumulating each node's offset relative to its parent up to the root.
+        let caret_abs_top = abs_offset_y(&tree, focused) + line_top as f64;
+        let scroll_abs_top = abs_offset_y(&tree, scroll_id);
 
-    let Some(scroll_id) = nearest_scroll_ancestor(&*cx.element_tree, focused) else {
-        return;
+        let Some((axis, current, viewport_main, max_extent)) =
+            scroll_metrics(&tree, scroll_id)
+        else {
+            return;
+        };
+        (axis, current, viewport_main, max_extent, scroll_id, caret_abs_top, scroll_abs_top, line_height)
     };
+    let (axis, current, viewport_main, max_extent, scroll_id, caret_abs_top, scroll_abs_top, line_height) = metrics;
 
-    // Absolute Y of the caret and of the scroll viewport, obtained by
-    // accumulating each node's offset relative to its parent up to the root.
-    let caret_abs_top = abs_offset_y(&*cx.element_tree, focused) + line_top as f64;
-    let scroll_abs_top = abs_offset_y(&*cx.element_tree, scroll_id);
-
-    let Some((axis, current, viewport_main, max_extent)) =
-        scroll_metrics(&*cx.element_tree, scroll_id)
-    else {
-        return;
-    };
     if axis != Axis::Vertical {
         return;
     }

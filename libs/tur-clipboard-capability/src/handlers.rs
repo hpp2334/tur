@@ -1,13 +1,13 @@
-//! Engine-internal clipboard write handler — the Cmd+C/Cmd+X path.
+//! Engine-internal clipboard write subsystem — the Cmd+C/Cmd+X path.
 //!
 //! Paste (Cmd+V) is not handled here. The embedder pushes
 //! `PlatformEvent::ClipboardPaste`, which the engine's
-//! `ClipboardPasteAppHandler` forwards as `AppEvent::ClipboardPaste`; tur-text's
-//! `ClipboardPasteHandler` then consumes the AppEvent and inserts the text
-//! into the focused `EditableTextElement`.
+//! `ClipboardPlatformSubsystem` forwards as `AppEvent::ClipboardPaste`;
+//! tur-text's `ClipboardPasteSubsystem` then consumes the AppEvent and
+//! inserts the text into the focused `EditableTextElement`.
 
-use tur_engine::core::event::{AppEvent, PlatformEvent};
-use tur_engine::core::handler::{AppHandler, HandlerContext};
+use tur_engine::core::event::AppEvent;
+use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::Clipboard;
 
@@ -18,20 +18,22 @@ use crate::Clipboard;
 /// warning) if no backend is registered — though `TurClipboardPlugin`'s
 /// `requires` declaration should prevent that at `build()` time.
 ///
-/// The async executor is sourced from [`HandlerContext`] at dispatch time, so
-/// this handler holds no executor state of its own.
-pub struct ClipboardWriteHandler;
+/// The async executor is sourced from [`SubsystemFlushContext`] at dispatch
+/// time, so this subsystem holds no executor state of its own.
+pub struct ClipboardWriteSubsystem;
 
-impl AppHandler for ClipboardWriteHandler {
-    fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
+impl Subsystem for ClipboardWriteSubsystem {
+    fn handle_app_event(
+        &mut self,
+        cx: &mut SubsystemFlushContext<'_>,
+        event: &AppEvent,
+    ) {
         let AppEvent::ClipboardWrite { text } = event else {
             return;
         };
         let text = text.clone();
         let Some(clipboard_cap) = cx.capabilities.of::<Clipboard>() else {
-            tracing::warn!(
-                "ClipboardWrite dropped: no Clipboard capability registered"
-            );
+            tracing::warn!("ClipboardWrite dropped: no Clipboard capability registered");
             return;
         };
         let backend = clipboard_cap.backend().clone();
@@ -39,7 +41,4 @@ impl AppHandler for ClipboardWriteHandler {
             backend.write_text(text).await;
         });
     }
-
-    fn handle_platform_event(&mut self, _cx: &mut HandlerContext, _event: &PlatformEvent) {}
 }
-

@@ -1,37 +1,39 @@
 use crate::core::elements::ElementOnImeContext;
 use crate::core::event::PlatformEvent;
+use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
-pub struct ImeAppHandler;
+pub struct ImeSubsystem;
 
-impl crate::core::handler::AppHandler for ImeAppHandler {
+impl Subsystem for ImeSubsystem {
     fn handle_platform_event(
         &mut self,
-        cx: &mut crate::core::handler::HandlerContext,
+        cx: &mut SubsystemFlushContext<'_>,
         event: &PlatformEvent,
     ) {
         let PlatformEvent::Ime(ime_event) = event else {
             return;
         };
 
-        let Some(focused_id) = cx.focus_manager.focused() else {
+        let Some(focused_id) = cx.focus_manager.borrow().focused() else {
             return;
         };
         {
-            let Some(node) = cx.element_tree.get_element_mut(focused_id) else {
+            let mut tree = cx.element_tree.borrow_mut();
+            let Some(node) = tree.get_element_mut(focused_id) else {
                 return;
             };
             let Some(ref mut element) = node.element else {
                 return;
             };
 
-            let mut el_cx =
-                ElementOnImeContext::new(&mut *cx.mutation_queue, cx.need_paint);
+            let mut mq = cx.mutation_queue.borrow_mut();
+            let mut el_cx = ElementOnImeContext::new(&mut mq, cx.need_paint);
             element.on_ime_event(&mut el_cx, ime_event);
         }
-        cx.element_tree.mark_dirty(focused_id.into());
+        cx.element_tree.borrow_mut().mark_dirty(focused_id.into());
 
         // Keeping the caret visible after composition-end is handled by
-        // tur-text's PostImeHandler, which runs after this handler in
-        // registration order.
+        // tur-text's CaretVisibilitySubsystem, which runs after this
+        // subsystem in registration order.
     }
 }

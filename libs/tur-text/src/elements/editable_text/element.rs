@@ -457,7 +457,7 @@ impl EditableTextElement {
                 // Paste: the browser fires a `paste` event on the hidden
                 // textarea when the user presses Cmd+V; the wasm layer
                 // forwards the clipboard text via AppEvent::ClipboardPaste,
-                // which is processed by ClipboardPasteAppHandler. Here we just
+                // which is processed by ClipboardPlatformSubsystem. Here we just
                 // mark the key as handled so no fallback runs.
                 true
             }
