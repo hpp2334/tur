@@ -1,7 +1,7 @@
 import { saveFile } from "builtin:demo-helper";
+import { createAnimationController } from "builtin:tur/animation";
 import { request } from "builtin:tur/net";
 import {
-    createAnimationController,
     createSvgResource,
     createTextEditingController,
     derive,

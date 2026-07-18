@@ -10,7 +10,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@tur/animation-ext": "workspace:*",
+        "@tur/animation": "workspace:*",
         "@tur/core": "workspace:*",
         "@tur/std": "workspace:*",
         "@tur/demo-helper": "workspace:*",

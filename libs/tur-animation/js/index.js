@@ -1,12 +1,15 @@
 /**
- * @tur/animation-ext — Flutter-style animation toolkit built on the
- * `builtin:tur/std` primitives.
+ * @tur/animation — Flutter-style animation toolkit.
  *
- * Provides `Tween` / `ColorTween` (mutable begin/end interpolation channels)
- * and the `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned`
- * implicit-animation family (Flutter's `ImplicitlyAnimatedWidget`). Everything
- * is composed in TS from the core primitives `ReadableSubscribe` + `Tween` +
- * `createAnimationController` — no native element is involved.
+ * This module is the consumer-facing surface of `tur-animation`. It exposes
+ * both the native bridge fns (`Opacity`, `Transform`, `createAnimationController`,
+ * re-exported from the internal `tur:animation/native` module) and the
+ * JS-defined implicit-animation widgets (`AnimatedContainer`,
+ * `AnimatedOpacity`, `AnimatedPositioned`, `Tween`, `ColorTween`).
+ *
+ * The widgets are composed entirely from `builtin:tur/std` primitives
+ * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — no native
+ * element beyond `Opacity`/`Transform`/`Container`/`Positioned` is involved.
  *
  * Each animatable prop becomes a "channel": a Tween/ColorTween seeded at the
  * prop's initial value, displayed as `tween.lerp(progress)`. One
@@ -18,99 +21,77 @@
  */
 
 import {
-    type Color,
-    Container,
-    type ContainerProps,
-    colorLerp,
-    createAnimationController,
-    derive,
-    type Element,
-    get,
-    type Mutation,
-    mutate,
     Opacity,
+    Transform,
+    createAnimationController,
+} from "tur:animation/native";
+
+import {
+    Container,
     Positioned,
-    type Readable,
     ReadableSubscribe,
+    colorLerp,
+    derive,
+    get,
+    mutate,
     set,
     source,
-    type Val,
 } from "builtin:tur/std";
 
-// ---------------------------------------------------------------------------
-// Curve keyword (mirror of the engine-side curve enum string).
-// ---------------------------------------------------------------------------
-
-export type Curve = "linear" | "easeIn" | "easeOut" | "easeInOut";
+// Re-export the native bridge fns so consumers can import everything from
+// `builtin:tur/animation`.
+export { Opacity, Transform, createAnimationController };
 
 // ---------------------------------------------------------------------------
 // Tween / ColorTween — Flutter-style begin/end interpolation with mutable
 // endpoints. Pair with an `AnimationController`'s `onTick` to drive a source.
 // ---------------------------------------------------------------------------
 
-/** A mutable begin/end interpolation channel over values of type `T`. */
-export interface TweenLike<T> {
-    /** Value at the start of the animation (`t = 0`). Mutable. */
-    begin: T;
-    /** Value at the end of the animation (`t = 1`). Mutable. */
-    end: T;
-    /** Interpolate at parameter `t`. `t` is NOT clamped (matches Flutter). */
-    lerp(t: number): T;
-    /** Interpolate at parameter `t`, clamped to `[0, 1]`. */
-    transform(t: number): T;
-}
-
-export interface TweenValue extends TweenLike<number> {}
-export interface ColorTweenValue extends TweenLike<Color> {}
-
-export function Tween(opts: { begin: number; end: number }): TweenValue {
+export function Tween(opts) {
     let begin = opts.begin;
     let end = opts.end;
     return {
         get begin() {
             return begin;
         },
-        set begin(v: number) {
+        set begin(v) {
             begin = v;
         },
         get end() {
             return end;
         },
-        set end(v: number) {
+        set end(v) {
             end = v;
         },
-        lerp(t: number) {
+        lerp(t) {
             return begin + (end - begin) * t;
         },
-        transform(t: number) {
+        transform(t) {
             return begin + (end - begin) * Math.max(0, Math.min(1, t));
         },
     };
 }
 
-export function ColorTween(opts: {
-    begin: Color;
-    end: Color;
-}): ColorTweenValue {
+export function ColorTween(opts) {
     let begin = opts.begin;
     let end = opts.end;
     return {
         get begin() {
             return begin;
         },
-        set begin(v: Color) {
+        set begin(v) {
             begin = v;
         },
         get end() {
             return end;
         },
-        set end(v: Color) {
+        set end(v) {
             end = v;
         },
-        lerp(t: number) {
+        lerp(t) {
             return colorLerp(begin, end, t);
         },
-        transform(t: number) {
+        transform(t) {
             return colorLerp(begin, end, Math.max(0, Math.min(1, t)));
         },
     };
@@ -120,30 +101,13 @@ export function ColorTween(opts: {
 // AnimatedContainer / AnimatedOpacity / AnimatedPositioned
 // ---------------------------------------------------------------------------
 
-export interface AnimatedContainerProps extends ContainerProps {
-    /** Animation duration in milliseconds. Required. */
-    duration: Val<number>;
-    /** Easing curve keyword (default `"linear"`). */
-    curve?: Val<Curve>;
-    /** Fired once when an in-flight implicit animation completes. */
-    onEnd?: Mutation<[], void>;
-}
-
 // Precisely detects reactive atom handles by probing `get`, which the bridge
 // validates and rejects (throws) for non-atoms. Carries the current value so
 // callers avoid a second read.
-interface AtomProbe {
-    atom: false;
-}
-interface AtomProbeHit<T> {
-    atom: true;
-    handle: Readable<T>;
-    value: T;
-}
-function probeAtom<T>(v: Val<T>): AtomProbe | AtomProbeHit<T> {
+function probeAtom(v) {
     if (typeof v !== "object" || v === null) return { atom: false };
     try {
-        const handle = v as Readable<T>;
+        const handle = v;
         return { atom: true, handle, value: get(handle) };
     } catch {
         return { atom: false };
@@ -151,23 +115,15 @@ function probeAtom<T>(v: Val<T>): AtomProbe | AtomProbeHit<T> {
 }
 
 // Resolve a `Val<T>` to its current static value (read once, then fixed).
-function resolveStatic<T>(v: Val<T> | undefined, fallback: T): T {
+function resolveStatic(v, fallback) {
     if (v == null) return fallback;
     const probe = probeAtom(v);
-    return probe.atom ? probe.value : (v as T);
+    return probe.atom ? probe.value : v;
 }
-
-type Retarget = () => void;
 
 // Register one animatable channel: returns a `derive(() => tween.lerp(progress))`
 // for reactive props, or the static value unchanged for non-reactive props.
-function animChannel<T>(
-    target: Val<T>,
-    progress: Readable<number>,
-    makeTween: (initial: T) => TweenLike<T>,
-    retargets: Retarget[],
-    readables: Readable<unknown>[],
-): Val<T> {
+function animChannel(target, progress, makeTween, retargets, readables) {
     const probe = probeAtom(target);
     if (!probe.atom) return target;
     readables.push(probe.handle);
@@ -180,25 +136,22 @@ function animChannel<T>(
     return derive(() => tween.lerp(get(progress)));
 }
 
-function runRetargets(retargets: Retarget[], ctrl: { forward(): void }): void {
+function runRetargets(retargets, ctrl) {
     for (const r of retargets) r();
     ctrl.forward();
 }
 
-export function AnimatedContainer(props: AnimatedContainerProps): Element {
+export function AnimatedContainer(props) {
     const duration = resolveStatic(props.duration, 300);
     const curve = resolveStatic(props.curve, "linear");
     const progress$ = source(1.0);
-    const retargets: Retarget[] = [];
-    const readables: Readable<unknown>[] = [];
-    const num = (i: number): TweenValue => Tween({ begin: i, end: i });
-    // `color` props are typed `Val<Brush | null>` but only solid `Color`s
-    // interpolate (gradients snap to the new target); narrow to `Val<Color>`.
-    const col = (i: Color): ColorTweenValue => ColorTween({ begin: i, end: i });
-    const ch = <T>(
-        v: Val<T> | undefined,
-        mk: (initial: T) => TweenLike<T>,
-    ): Val<T> | undefined =>
+    const retargets = [];
+    const readables = [];
+    const num = (i) => Tween({ begin: i, end: i });
+    // `color` props accept solid `Color`s; gradients / null snap to the new
+    // target (no interpolation).
+    const col = (i) => ColorTween({ begin: i, end: i });
+    const ch = (v, mk) =>
         v != null
             ? animChannel(v, progress$, mk, retargets, readables)
             : undefined;
@@ -207,11 +160,11 @@ export function AnimatedContainer(props: AnimatedContainerProps): Element {
         width: ch(props.width, num),
         height: ch(props.height, num),
         padding: ch(props.padding, num),
-        color: ch(props.color as Val<Color> | undefined, col),
-        borderColor: ch(props.borderColor as Val<Color> | undefined, col),
+        color: ch(props.color, col),
+        borderColor: ch(props.borderColor, col),
         borderWidth: ch(props.borderWidth, num),
         borderRadius: ch(props.borderRadius, num),
-        shadowColor: ch(props.shadowColor as Val<Color> | undefined, col),
+        shadowColor: ch(props.shadowColor, col),
         shadowBlur: ch(props.shadowBlur, num),
         alignment: props.alignment,
         borderPosition: props.borderPosition,
@@ -234,20 +187,13 @@ export function AnimatedContainer(props: AnimatedContainerProps): Element {
     });
 }
 
-export function AnimatedOpacity(props: {
-    value: Val<number>;
-    duration: Val<number>;
-    curve?: Val<Curve>;
-    onEnd?: Mutation<[], void>;
-    child?: Element;
-    queryKey?: Val<string[]>;
-}): Element {
+export function AnimatedOpacity(props) {
     const duration = resolveStatic(props.duration, 300);
     const curve = resolveStatic(props.curve, "linear");
     const progress$ = source(1.0);
-    const retargets: Retarget[] = [];
-    const readables: Readable<unknown>[] = [];
-    const num = (i: number): TweenValue => Tween({ begin: i, end: i });
+    const retargets = [];
+    const readables = [];
+    const num = (i) => Tween({ begin: i, end: i });
 
     const value = animChannel(
         props.value,
@@ -270,26 +216,14 @@ export function AnimatedOpacity(props: {
     });
 }
 
-export function AnimatedPositioned(props: {
-    left?: Val<number>;
-    top?: Val<number>;
-    right?: Val<number>;
-    bottom?: Val<number>;
-    width?: Val<number>;
-    height?: Val<number>;
-    duration: Val<number>;
-    curve?: Val<Curve>;
-    onEnd?: Mutation<[], void>;
-    child: Element;
-    queryKey?: Val<string[]>;
-}): Element {
+export function AnimatedPositioned(props) {
     const duration = resolveStatic(props.duration, 300);
     const curve = resolveStatic(props.curve, "linear");
     const progress$ = source(1.0);
-    const retargets: Retarget[] = [];
-    const readables: Readable<unknown>[] = [];
-    const num = (i: number): TweenValue => Tween({ begin: i, end: i });
-    const ch = (v: Val<number> | undefined): Val<number> | undefined =>
+    const retargets = [];
+    const readables = [];
+    const num = (i) => Tween({ begin: i, end: i });
+    const ch = (v) =>
         v != null
             ? animChannel(v, progress$, num, retargets, readables)
             : undefined;

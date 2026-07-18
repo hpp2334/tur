@@ -252,6 +252,7 @@ impl TurTestApp {
             }))
             .capability(Clipboard::new(clipboard.clone()))
             .plugin(TurStdPlugin)
+            .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {
             builder = builder

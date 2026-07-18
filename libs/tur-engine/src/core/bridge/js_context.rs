@@ -4,7 +4,6 @@ use std::rc::Rc;
 use boa_gc::{Finalize, Trace};
 use boa_engine::JsData;
 
-use crate::core::animation::AnimationManager;
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::mutation::PendingMutationInvocationQueue;
@@ -22,7 +21,6 @@ pub struct TurJsContext {
     pub dirty: Rc<Cell<bool>>,
     pub need_paint: Rc<Cell<bool>>,
     pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
-    pub animation_manager: Rc<RefCell<AnimationManager>>,
     pub(crate) store: Store,
     /// Engine-owned async executor. Always present (created in
     /// [`crate::core::app::TurAppInternal::new`]); exposed to ctx-bound bridge
@@ -66,7 +64,6 @@ impl TurJsContext {
             dirty,
             need_paint,
             resource_map,
-            animation_manager: Rc::new(RefCell::new(AnimationManager::new())),
             store,
             async_executor,
             capabilities: Capabilities::new(),

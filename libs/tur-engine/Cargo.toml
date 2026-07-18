@@ -26,9 +26,9 @@ resvg = { workspace = true }
 usvg = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
-vello_hybrid = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["text"] }
-vello_common = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
-glifo = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
+vello_hybrid = { workspace = true }
+vello_common = { workspace = true }
+glifo = { workspace = true }
 wgpu = { workspace = true, optional = true }
 web-sys = { workspace = true, optional = true, features = ["HtmlCanvasElement"] }
 num-traits = { workspace = true }

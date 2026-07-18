@@ -1,11 +1,16 @@
 import {
-    Alignment,
     type AnimationController,
+    ColorTween,
+    createAnimationController,
+    Transform,
+    Tween,
+} from "builtin:tur/animation";
+import {
+    Alignment,
     Color,
     Column,
     Container,
     CrossAxisAlignment,
-    createAnimationController,
     derive,
     type Element,
     Expanded,
@@ -24,10 +29,8 @@ import {
     set,
     source,
     Text,
-    Transform,
     view,
 } from "builtin:tur/std";
-import { ColorTween, Tween } from "@tur/animation-ext";
 
 // ---------------------------------------------------------------------------
 // "Animated Card Studio" — a demo of tur's animation API.

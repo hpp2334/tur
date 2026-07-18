@@ -93,6 +93,14 @@ impl Shell {
         Duration::from_millis(self.clock.now().millis_since_epoch())
     }
 
+    /// The shared clock handle. Plugins obtain this via
+    /// [`PluginContext::clock`](crate::core::plugin::PluginContext::clock)
+    /// and stash it in time-driven subsystems (animation, audio, …) so they
+    /// can query `clock.now()` during their tick.
+    pub fn clock(&self) -> Rc<dyn Clock> {
+        self.clock.clone()
+    }
+
     /// Record the latest pointer position (canvas-local logical pixels), or
     /// `None` to indicate no pointer is present. Called by the event layer on
     /// `PointerMove`.

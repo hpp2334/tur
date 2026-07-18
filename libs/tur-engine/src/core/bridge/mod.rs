@@ -1,6 +1,5 @@
 pub use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 
-pub mod animation;
 pub mod color;
 pub mod color_fns;
 pub mod console;

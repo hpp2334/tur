@@ -1,12 +1,15 @@
 import {
-    Alignment,
     type AnimationController,
+    createAnimationController,
+    Transform,
+} from "builtin:tur/animation";
+import {
+    Alignment,
     Color,
     Column,
     Condition,
     Container,
     CrossAxisAlignment,
-    createAnimationController,
     derive,
     type Element,
     Expanded,
@@ -22,7 +25,6 @@ import {
     set,
     source,
     Text,
-    Transform,
     view,
 } from "builtin:tur/std";
 

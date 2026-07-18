@@ -1,10 +1,10 @@
 import type { AstNode, TokenSpan } from "builtin:demo-helper";
 import * as Host from "builtin:demo-helper";
+import * as Anim from "builtin:tur/animation";
 import * as Clipboard from "builtin:tur/clipboard";
 import * as Net from "builtin:tur/net";
 import type { Color, SpanData } from "builtin:tur/std";
 import * as Std from "builtin:tur/std";
-import * as Anim from "@tur/animation-ext";
 import { code } from "../theme/tokens";
 
 /** Highlight palette indexed by token kind (see tur-wasm `highlight_tsx`).
@@ -73,7 +73,7 @@ function importTarget(source: string): string {
     switch (source) {
         case "builtin:tur/std":
             return "Std";
-        case "@tur/animation-ext":
+        case "builtin:tur/animation":
             return "Anim";
         case "builtin:demo-helper":
             return "Host";

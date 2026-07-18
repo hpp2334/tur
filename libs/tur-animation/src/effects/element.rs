@@ -3,13 +3,12 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::elements::{AnyElement, ElementTrace};
+use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
+use tur_engine::core::view::{Lifecycle, Val, View, ViewCx};
 use tur_shared::Alignment;
-
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::bridge::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // OpacityView — applies an alpha multiplier to its child subtree.

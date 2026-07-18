@@ -11,7 +11,7 @@
  * This is the authoritative contract for the engine's reactive layer. The
  * widget library (`builtin:tur/std`, declared in `@tur/std`) re-exports
  * everything here and adds views, value types, enums, and event details.
- * Consumers normally import from `builtin:tur/std`; `@tur/animation-ext` and
+ * Consumers normally import from `builtin:tur/std`; `@tur/animation` and
  * other low-level libraries may import directly from `builtin:tur/core`.
  *
  * Handles (`Element`, `Atom`, `Mutation`) are opaque — the engine hands out

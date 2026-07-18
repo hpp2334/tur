@@ -37,11 +37,10 @@ export default defineConfig({
     },
     // `builtin:tur/*` capability modules are provided at run time by the
     // engine's boa module loader, so keep the imports rather than bundling
-    // them. `@tur/animation-ext` is a real workspace package and IS bundled
-    // (only its `builtin:tur/std` imports stay external). Each case dist is an
-    // ES module loaded via `load_module`.
+    // them. Each case dist is an ES module loaded via `load_module`.
     externals: {
         "builtin:tur/std": "builtin:tur/std",
+        "builtin:tur/animation": "builtin:tur/animation",
         "builtin:demo-helper": "builtin:demo-helper",
         "builtin:tur/clipboard": "builtin:tur/clipboard",
         "builtin:tur/net": "builtin:tur/net",

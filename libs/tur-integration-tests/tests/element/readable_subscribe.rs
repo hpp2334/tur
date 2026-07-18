@@ -125,7 +125,8 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 fn animated_container_pattern_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/std";
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, set, render } from "builtin:tur/std";
+        import { createAnimationController } from "builtin:tur/animation";
 
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
@@ -197,7 +198,8 @@ fn animated_container_pattern_inner_text_still_updates() {
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Opacity, Text, ReadableSubscribe, createAnimationController, mutate, render } from "builtin:tur/std";
+        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, render } from "builtin:tur/std";
+        import { Opacity, createAnimationController } from "builtin:tur/animation";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         // Sink captures the cardText derive's recomputed value (ground truth,
@@ -266,7 +268,8 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, ReadableSubscribe, createAnimationController, mutate, set, render } from "builtin:tur/std";
+        import { source, derive, Container, ReadableSubscribe, mutate, set, render } from "builtin:tur/std";
+        import { createAnimationController } from "builtin:tur/animation";
         globalThis.__target = source(100);
         const target = globalThis.__target;
         const progress = source(1.0);

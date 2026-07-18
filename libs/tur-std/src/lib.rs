@@ -1,14 +1,17 @@
 //! Standard widget library plugin for tur.
 //!
 //! Provides [`TurStdPlugin`], which registers the `builtin:tur/std` JS module
-//! (widget factories, controllers, color bridge, animation primitives) plus
-//! the engine's input-event handlers (gesture, keyboard, ime, resize, wheel,
-//! scroll chaining, pointer region, scroll-to).
+//! (widget factories, controllers, color bridge) plus the engine's
+//! input-event handlers (gesture, keyboard, ime, resize, wheel, scroll
+//! chaining, pointer region, scroll-to).
 //!
 //! `TurStdPlugin` carries no per-instance state. Backend injection
 //! (clipboard, http, cursor) happens via
 //! [`tur_engine::TurEngineBuilder::capability`] and dedicated plugins
-//! (`TurClipboardPlugin`, `TurNetPlugin`).
+//! (`TurClipboardPlugin`, `TurNetPlugin`). Animation (`AnimationController`,
+//! `Opacity`, `Transform`, `AnimatedContainer`/`AnimatedOpacity`/
+//! `AnimatedPositioned`) is provided by the separate `tur-animation` crate
+//! via [`tur_animation::TurAnimationPlugin`].
 //!
 //! ## Architecture
 //!
@@ -25,13 +28,16 @@ use tur_engine::core::bridge::{reactive, render};
 use tur_engine::error::TurError;
 
 /// The standard widget library plugin. Registers the `builtin:tur/std`
-/// module (widget factories, controllers, color bridge, animation primitives),
-/// plus the input-event handlers (gesture, keyboard, ime, resize, wheel,
-/// scroll chaining, pointer region, paste).
+/// module (widget factories, controllers, color bridge), plus the
+/// input-event handlers (gesture, keyboard, ime, resize, wheel, scroll
+/// chaining, pointer region, paste).
 ///
 /// `TurStdPlugin` carries no per-instance state. Backend injection
 /// (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
-/// and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`).
+/// and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`). Animation
+/// (`Opacity`, `Transform`, `createAnimationController`, `AnimatedContainer`
+/// /`AnimatedOpacity`/`AnimatedPositioned`) is provided by the separate
+/// `tur-animation` crate via `tur_animation::TurAnimationPlugin`.
 pub struct TurStdPlugin;
 
 impl Default for TurStdPlugin {
@@ -42,10 +48,9 @@ impl Default for TurStdPlugin {
 
 impl Plugin for TurStdPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        use tur_engine::core::animation::AnimationController;
         use tur_engine::core::scroll::ScrollController;
         use tur_engine::core::text::controller::{TextEditingController, UndoController};
-        use tur_engine::core::bridge::{animation, color_fns, enums};
+        use tur_engine::core::bridge::{color_fns, enums};
         use tur_engine::core::handlers;
         use tur_engine::elements::lazy_list::LazyListController;
 
@@ -57,8 +62,6 @@ impl Plugin for TurStdPlugin {
             .expect("failed to register ScrollController");
         ctx.register_class::<LazyListController>()
             .expect("failed to register LazyListController");
-        ctx.register_class::<AnimationController>()
-            .expect("failed to register AnimationController");
 
         ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler::new()));
         ctx.register_handler(Box::new(handlers::keyboard::KeyboardAppHandler));
@@ -78,7 +81,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(render::fns());
         std_fns.extend(tur_engine::core::bridge::task::fns());
         std_fns.extend(color_fns::fns());
-        std_fns.extend(animation::fns());
         std_fns.extend(tur_engine::elements::container::bridge::fns());
         std_fns.extend(tur_engine::elements::flex::bridge::fns());
         std_fns.extend(tur_engine::elements::flex_item::bridge::fns());
@@ -97,7 +99,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::scrollbar::bridge::fns());
         std_fns.extend(tur_engine::elements::fragment::bridge::fns());
         std_fns.extend(tur_engine::elements::focusable::bridge::fns());
-        std_fns.extend(tur_engine::elements::effects::bridge::fns());
         std_fns.extend(tur_engine::elements::lifecycle::bridge::fns());
         std_fns.extend(tur_engine::elements::readable_subscribe::bridge::fns());
 
