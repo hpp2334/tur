@@ -1,0 +1,11 @@
+[package]
+name = "tur-std"
+description = "Standard widget library plugin for tur (TurStdPlugin — registers builtin:tur/std + input handlers)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true }
+boa_engine = { workspace = true }

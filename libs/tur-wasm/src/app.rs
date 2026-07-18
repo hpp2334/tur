@@ -581,7 +581,7 @@ impl TurWasmApp {
                 }))
                 .capability(Clipboard::new(WasmClipboard))
                 .capability(Http::new(WasmHttp))
-                .plugin(tur_engine::TurStdPlugin)
+                .plugin(tur_std::TurStdPlugin)
                 .plugin(TurClipboardPlugin)
                 .plugin(TurNetPlugin)
                 .host_module("builtin:tur/host", host_exports)

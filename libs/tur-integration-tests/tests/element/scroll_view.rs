@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::stdlib::elements::ScrollViewElement;
+use tur_engine::elements::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
 #[test]

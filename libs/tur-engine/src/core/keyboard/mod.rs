@@ -1,3 +1,5 @@
+pub mod events;
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Modifiers {
     pub ctrl: bool,

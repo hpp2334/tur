@@ -1,15 +1,14 @@
 pub mod core;
 pub mod elements;
 pub mod renderer;
-pub mod stdlib;
 
 pub mod error;
 
-// Re-export the standard widget library's public surface at the crate root
-// so embedders can write `tur_engine::TurStdPlugin`,
-// `tur_engine::CursorBackend`, etc. without reaching into `stdlib::`.
-pub use crate::stdlib::TurStdPlugin;
-pub use crate::stdlib::platform::{CursorBackend, CursorCap, NoopCursor};
+// Re-export engine-internal cursor-capability types at the crate root so
+// embedders can write `tur_engine::CursorBackend`, `tur_engine::CursorCap`,
+// `tur_engine::NoopCursor` without reaching into `core::platform`. The std
+// plugin itself (`TurStdPlugin`) lives in the separate `tur-std` crate.
+pub use crate::core::platform::{CursorBackend, CursorCap, NoopCursor};
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -642,9 +641,9 @@ impl TurEngineBuilder {
             let cursor_backend = internal
                 .js_context
                 .capability()
-                .of::<stdlib::platform::CursorCap>()
+                .of::<core::platform::CursorCap>()
                 .map(|c| c.backend().clone())
-                .unwrap_or_else(|| Rc::new(std::cell::RefCell::new(stdlib::platform::NoopCursor)));
+                .unwrap_or_else(|| Rc::new(std::cell::RefCell::new(core::platform::NoopCursor)));
             internal
                 .app_context
                 .borrow_mut()
