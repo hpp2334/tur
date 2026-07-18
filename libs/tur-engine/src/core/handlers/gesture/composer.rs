@@ -1,6 +1,6 @@
 //! Gesture event composer — capture tracking + multi-click classification.
 //!
-//! Owned by `GestureAppHandler`. Tracks the pointer-down path (gesture
+//! Owned by `GestureSubsystem`. Tracks the pointer-down path (gesture
 //! capture) so subsequent move/up events route to the same set of elements
 //! regardless of where the pointer moves. Also classifies single, double,
 //! and triple clicks from a running history of recent pointer-downs.

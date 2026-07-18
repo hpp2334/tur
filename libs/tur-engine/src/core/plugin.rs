@@ -19,17 +19,16 @@ use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 use crate::core::bridge::module_loader::{build_fn_module, build_native_module};
 use crate::core::bridge::{TurJsContext, TurModuleLoader};
 use crate::core::capability::{Capabilities, CapabilityDecls};
-use crate::core::handler::AppHandler;
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::subsystem::Subsystem;
 use crate::error::TurError;
-/// A plugin that extends the engine with elements, bridge modules, handlers,
+/// A plugin that extends the engine with elements, bridge modules, subsystems,
 /// and/or platform capabilities.
 ///
 /// Each plugin is registered via [`TurEngineBuilder::plugin`](crate::TurEngineBuilder::plugin)
 /// and installed once during `build()`. The [`register`](Plugin::register)
 /// method is the build-time entry point — it receives a [`PluginContext`]
-/// exposing all registration primitives (modules, handlers, classes, globals).
+/// exposing all registration primitives (modules, subsystems, classes, globals).
 ///
 /// Plugins declare hard-required capabilities via
 /// [`requires`](Plugin::requires); the engine builder validates every
@@ -58,9 +57,9 @@ pub trait Plugin {
 /// Build-time context passed to [`Plugin::register`]. Only available during
 /// `build()` — after the app is constructed, no further registration is possible.
 ///
-/// Exposes registration primitives for JS modules, boa classes, event handlers,
+/// Exposes registration primitives for JS modules, boa classes, subsystems,
 /// and global properties. Each `register_*` method is self-contained: call them
-/// sequentially within `register`.
+/// sequentially within `register.
 pub struct PluginContext<'a> {
     pub(crate) boa: &'a mut Context,
     pub(crate) loader: Rc<TurModuleLoader>,
@@ -123,11 +122,6 @@ impl<'a> PluginContext<'a> {
     /// Register a boa `JsData` global class (e.g. `TextEditingController`).
     pub fn register_class<T: Class>(&mut self) -> Result<(), JsError> {
         self.boa.register_global_class::<T>()
-    }
-
-    /// Register an [`AppHandler`] for input event dispatch.
-    pub fn register_handler(&mut self, handler: Box<dyn AppHandler>) {
-        self.app.borrow_mut().register_handler(handler);
     }
 
     /// Register a global JS property on `globalThis`.

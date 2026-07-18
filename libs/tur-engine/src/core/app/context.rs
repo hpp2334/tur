@@ -12,13 +12,13 @@ use crate::core::capability::Capabilities;
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
-use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::event::{AppEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
-use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::render::Renderer;
 use crate::core::resource::ResourceMap;
 use crate::core::shell::Shell;
+use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {
     pub(crate) element_tree: NodeTree,
@@ -31,14 +31,14 @@ pub struct TurAppContext {
     pub(crate) size: (f64, f64),
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
-    pub(crate) handlers: Vec<Box<dyn AppHandler>>,
     /// Engine-owned async executor. Cloned from the one `TurAppInternal`
-    /// owns; surfaced to handlers via [`HandlerContext`] so they can spawn
-    /// Rust futures (clipboard writes, etc.) at dispatch time.
+    /// owns; surfaced to subsystems via [`SubsystemFlushContext`] so they
+    /// can spawn Rust futures (clipboard writes, etc.) at dispatch time.
     pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Capability registry view, shared with `TurJsContext.capabilities`.
-    /// Surfaced to handlers via [`HandlerContext::capabilities`] so they can
-    /// look up backends (`Clipboard`, `Http`, etc.) at dispatch time.
+    /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
+    /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
+    /// time.
     pub(crate) capabilities: Capabilities,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
@@ -79,22 +79,23 @@ impl TurAppContext {
             size: (400.0, 600.0),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
-            handlers: vec![],
             async_executor,
             capabilities,
             shell: Shell::new(clock),
         }
     }
 
-    pub fn register_handler(&mut self, handler: Box<dyn AppHandler>) {
-        self.handlers.push(handler);
-    }
-
-    /// Dispatch a platform (input) event to every registered handler via
-    /// [`AppHandler::handle_platform_event`]. Mouse `PointerMove`s also
+    /// Dispatch a platform (input) event to every registered subsystem via
+    /// [`Subsystem::handle_platform_event`]. Mouse `PointerMove`s also
     /// update the shell's tracked pointer position and request a paint, since
-    /// the cursor is resolved during paint (not in a handler).
-    pub fn dispatch_platform_handlers(&mut self, event: &PlatformEvent, need_paint: &Cell<bool>) {
+    /// the cursor is resolved during paint (not in a subsystem).
+    pub fn dispatch_platform_event(
+        &mut self,
+        boa: &mut boa_engine::Context,
+        event: &PlatformEvent,
+        need_paint: &Cell<bool>,
+        subsystems: &mut [Box<dyn Subsystem>],
+    ) {
         if let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
@@ -104,13 +105,11 @@ impl TurAppContext {
             need_paint.set(true);
         }
 
-        let mut tree = self.element_tree.borrow_mut();
-        let mut focus = self.focus_manager.borrow_mut();
-        let mut mq = self.mutation_queue.borrow_mut();
-        let mut cx = HandlerContext {
-            element_tree: &mut tree,
-            focus_manager: &mut focus,
-            mutation_queue: &mut mq,
+        let mut cx = SubsystemFlushContext {
+            boa,
+            element_tree: self.element_tree.clone(),
+            focus_manager: self.focus_manager.clone(),
+            mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
@@ -119,21 +118,25 @@ impl TurAppContext {
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
         };
-        for handler in &mut self.handlers {
-            handler.handle_platform_event(&mut cx, event);
+        for sub in subsystems {
+            sub.handle_platform_event(&mut cx, event);
         }
     }
 
-    /// Dispatch an engine-internal event to every registered handler via
-    /// [`AppHandler::handle_app_event`].
-    pub fn dispatch_app_handlers(&mut self, event: &crate::core::event::AppEvent, need_paint: &Cell<bool>) {
-        let mut tree = self.element_tree.borrow_mut();
-        let mut focus = self.focus_manager.borrow_mut();
-        let mut mq = self.mutation_queue.borrow_mut();
-        let mut cx = HandlerContext {
-            element_tree: &mut tree,
-            focus_manager: &mut focus,
-            mutation_queue: &mut mq,
+    /// Dispatch an engine-internal event to every registered subsystem via
+    /// [`Subsystem::handle_app_event`].
+    pub fn dispatch_app_event(
+        &mut self,
+        boa: &mut boa_engine::Context,
+        event: &AppEvent,
+        need_paint: &Cell<bool>,
+        subsystems: &mut [Box<dyn Subsystem>],
+    ) {
+        let mut cx = SubsystemFlushContext {
+            boa,
+            element_tree: self.element_tree.clone(),
+            focus_manager: self.focus_manager.clone(),
+            mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
@@ -142,8 +145,8 @@ impl TurAppContext {
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
         };
-        for handler in &mut self.handlers {
-            handler.handle_app_event(&mut cx, event);
+        for sub in subsystems {
+            sub.handle_app_event(&mut cx, event);
         }
     }
 

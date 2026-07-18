@@ -48,7 +48,7 @@ pub struct TurAppInternal {
     /// Engine-owned async executor. Drives spawned Rust futures via
     /// [`AsyncExecutor::tick`] inside `flush`, with real wakers (backed by
     /// `async_task`). Used by host bridge fns (clipboard, http) and by
-    /// `ClipboardWriteHandler` to perform async platform work without
+    /// `ClipboardWriteSubsystem` to perform async platform work without
     /// blocking the sync flush loop.
     pub(crate) async_executor: Rc<AsyncExecutor>,
     /// Engine-owned `viewportSize$` reactive source handle. `None` only until
@@ -103,7 +103,7 @@ impl TurAppInternal {
         );
 
         // Share the capability registry between the JS context (bridge fns)
-        // and the app context (handlers via HandlerContext). Both hold the
+        // and the app context (subsystems via SubsystemFlushContext). Both hold the
         // same `Rc<RefCell<HashMap>>` via the `Capabilities` view clone.
         let capabilities = js_context.capability();
 
@@ -150,10 +150,10 @@ impl TurAppInternal {
             let async_progress = self.async_executor.tick();
             self.async_executor.drain_completions(boa_context);
 
-            let handled_events = self.flush_app_events();
+            let handled_events = self.flush_app_events(boa_context);
 
             // Keep the engine-owned `viewportSize$` atom in sync with the
-            // current canvas size (updated by `ResizeHandler` via `cx.size`).
+            // current canvas size (updated by `ResizeSubsystem` via `cx.size`).
             // Runs before `flush_reactive` so subscribers re-layout in-frame.
             self.sync_viewport_size(boa_context);
 
@@ -171,8 +171,21 @@ impl TurAppInternal {
             // `flush_pending_mutations`.
             let subsystem_dirtied = if !subsystems_ticked {
                 subsystems_ticked = true;
+                let need_paint = self.js_context.need_paint.clone();
+                let mut ctx_guard = self.app_context.borrow_mut();
+                let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
                     boa: boa_context,
+                    element_tree: ctx.element_tree.clone(),
+                    focus_manager: ctx.focus_manager.clone(),
+                    mutation_queue: ctx.mutation_queue.clone(),
+                    platform_event_queue: &mut ctx.platform_event_queue,
+                    app_event_queue: &mut ctx.app_event_queue,
+                    renderer: ctx.renderer.as_mut(),
+                    size: &mut ctx.size,
+                    need_paint: &need_paint,
+                    async_executor: &ctx.async_executor,
+                    capabilities: &ctx.capabilities,
                 };
                 let mut dirtied = false;
                 for sub in self.subsystems.borrow_mut().iter_mut() {
@@ -482,7 +495,7 @@ impl TurAppInternal {
         }
     }
 
-    fn flush_app_events(&self) -> bool {
+    fn flush_app_events(&self, boa_context: &mut boa_engine::Context) -> bool {
         let (platform_events, app_events) = {
             let mut ctx = self.app_context.borrow_mut();
             (
@@ -494,16 +507,18 @@ impl TurAppInternal {
             return false;
         }
 
+        let need_paint = self.js_context.need_paint.clone();
+        let mut subsystems = self.subsystems.borrow_mut();
         for event in &platform_events {
             self.app_context
                 .borrow_mut()
-                .dispatch_platform_handlers(event, &self.js_context.need_paint);
+                .dispatch_platform_event(boa_context, event, &need_paint, &mut subsystems);
         }
 
         for event in &app_events {
             self.app_context
                 .borrow_mut()
-                .dispatch_app_handlers(event, &self.js_context.need_paint);
+                .dispatch_app_event(boa_context, event, &need_paint, &mut subsystems);
         }
 
         true

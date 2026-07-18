@@ -66,16 +66,16 @@ impl Plugin for TurStdPlugin {
         ctx.register_class::<LazyListController>()
             .expect("failed to register LazyListController");
 
-        ctx.register_handler(Box::new(handlers::gesture::GestureAppHandler::new()));
-        ctx.register_handler(Box::new(handlers::keyboard::KeyboardAppHandler));
-        ctx.register_handler(Box::new(handlers::ime::ImeAppHandler));
-        ctx.register_handler(Box::new(handlers::clipboard_paste::ClipboardPasteAppHandler));
-        ctx.register_handler(Box::new(handlers::resize::ResizeHandler));
-        ctx.register_handler(Box::new(handlers::pointer_region::PointerRegionAppHandler::new()));
-        ctx.register_handler(Box::new(handlers::wheel::WheelAppHandler));
-        ctx.register_handler(Box::new(handlers::scroll_chaining::ScrollChainingHandler));
-        ctx.register_handler(Box::new(handlers::scroll_to::ScrollToHandler));
-        // Note: ClipboardWriteHandler lives in `tur-clipboard-capability`
+        ctx.register_subsystem(Box::new(handlers::gesture::GestureSubsystem::new()));
+        ctx.register_subsystem(Box::new(handlers::keyboard::KeyboardSubsystem));
+        ctx.register_subsystem(Box::new(handlers::ime::ImeSubsystem));
+        ctx.register_subsystem(Box::new(
+            handlers::clipboard_paste::ClipboardPlatformSubsystem,
+        ));
+        ctx.register_subsystem(Box::new(handlers::resize::ResizeSubsystem));
+        ctx.register_subsystem(Box::new(handlers::pointer_region::PointerSubsystem::new()));
+        ctx.register_subsystem(Box::new(handlers::scroll::ScrollSubsystem));
+        // Note: ClipboardWriteSubsystem lives in `tur-clipboard-capability`
         // (TurClipboardPlugin) — registered there along with the JS bridge
         // so the embedder wires the clipboard backend through a single
         // `.capability(...)` call.

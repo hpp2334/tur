@@ -1,29 +1,28 @@
-use crate::core::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::event::{PlatformEvent, PointerDeviceKind, PointerInput};
-use crate::core::handler::{AppHandler, HandlerContext};
 use crate::core::hit_test::HitTest;
-use crate::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
 use crate::core::layout::Offset;
-
+use crate::core::mutation::MutationHandle;
 use crate::core::pointer_region::PointerRegionTracker;
+use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
+use crate::elements::mouse_region::{MouseRegionElement, PointerRegionEvent};
 
 /// Tracks `onEnter` / `onExit` callbacks for `MouseRegion`s as the pointer
 /// moves. Cursor resolution lives in the paint pass (see `MouseRegion::paint`
-/// and `PaintContext::set_cursor`); this handler only fires enter/exit
+/// and `PaintContext::set_cursor`); this subsystem only fires enter/exit
 /// mutations.
-pub struct PointerRegionAppHandler {
+pub struct PointerSubsystem {
     tracker: PointerRegionTracker,
 }
 
-impl Default for PointerRegionAppHandler {
+impl Default for PointerSubsystem {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl PointerRegionAppHandler {
+impl PointerSubsystem {
     pub fn new() -> Self {
         Self {
             tracker: PointerRegionTracker::new(),
@@ -31,8 +30,12 @@ impl PointerRegionAppHandler {
     }
 }
 
-impl AppHandler for PointerRegionAppHandler {
-    fn handle_platform_event(&mut self, cx: &mut HandlerContext, event: &PlatformEvent) {
+impl Subsystem for PointerSubsystem {
+    fn handle_platform_event(
+        &mut self,
+        cx: &mut SubsystemFlushContext<'_>,
+        event: &PlatformEvent,
+    ) {
         let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
@@ -42,28 +45,34 @@ impl AppHandler for PointerRegionAppHandler {
         };
         let position = *position;
 
-        let hit_path = HitTest::new(&*cx.element_tree).path(position);
-        let filtered = filter_opaque_path(&hit_path, &*cx.element_tree);
-        let diff = self.tracker.update(&filtered, |id| {
-            has_region_callbacks(&*cx.element_tree, id)
-        });
+        let (exited, entered) = {
+            let tree = cx.element_tree.borrow();
+            let hit_path = HitTest::new(&tree).path(position);
+            let filtered = filter_opaque_path(&hit_path, &tree);
+            let diff = self
+                .tracker
+                .update(&filtered, |id| has_region_callbacks(&tree, id));
+            let exited: Vec<ElementNodeId> = diff.exited.to_vec();
+            let entered: Vec<ElementNodeId> = diff.entered.to_vec();
+            (exited, entered)
+        };
 
-        for id in &diff.exited {
-            let Some(m) = mouse_region_exit_mutation(&*cx.element_tree, *id) else {
+        let mut mq = cx.mutation_queue.borrow_mut();
+        let tree = cx.element_tree.borrow();
+        for id in &exited {
+            let Some(m) = mouse_region_exit_mutation(&tree, *id) else {
                 continue;
             };
-            let local = local_position(&*cx.element_tree, *id, position);
-            cx.mutation_queue
-                .push(m, PointerRegionEvent { local, global: position });
+            let local = local_position(&tree, *id, position);
+            mq.push(m, PointerRegionEvent { local, global: position });
         }
 
-        for id in &diff.entered {
-            let Some(m) = mouse_region_enter_mutation(&*cx.element_tree, *id) else {
+        for id in &entered {
+            let Some(m) = mouse_region_enter_mutation(&tree, *id) else {
                 continue;
             };
-            let local = local_position(&*cx.element_tree, *id, position);
-            cx.mutation_queue
-                .push(m, PointerRegionEvent { local, global: position });
+            let local = local_position(&tree, *id, position);
+            mq.push(m, PointerRegionEvent { local, global: position });
         }
     }
 }
