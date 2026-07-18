@@ -4,6 +4,7 @@ members = [
     "libs/tur-shared",
     "libs/tur-async",
     "libs/tur-engine",
+    "libs/tur-std",
     "libs/tur-clipboard-capability",
     "libs/tur-clipboard-wasm",
     "libs/tur-clipboard-native",
@@ -26,6 +27,7 @@ repository = "https://github.com/hpp2334/tur"
 tur-shared = { path = "libs/tur-shared" }
 tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
+tur-std = { path = "libs/tur-std" }
 tur-clipboard-capability = { path = "libs/tur-clipboard-capability" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
 tur-clipboard-native = { path = "libs/tur-clipboard-native" }

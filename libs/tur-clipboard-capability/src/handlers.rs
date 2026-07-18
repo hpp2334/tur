@@ -1,13 +1,13 @@
 //! Engine-internal clipboard event handlers — the Cmd+C/Cmd+V/Cmd+X path.
 //!
-//! Moved here from `tur-engine/src/stdlib/handlers/clipboard.rs` so that
-//! clipboard concerns (bridge + handlers + trait) live in a single crate.
-//! The engine's `TurStdPlugin` no longer registers these handlers itself —
+//! Moved here from the engine's clipboard handler module so that clipboard
+//! concerns (bridge + handlers + trait) live in a single crate. The engine's
+//! `TurStdPlugin` no longer registers these handlers itself —
 //! [`crate::TurClipboardPlugin`] does, after declaring `requires::<Clipboard>`.
 
 use tur_engine::core::event::{AppEvent, PlatformEvent};
 use tur_engine::core::handler::{AppHandler, HandlerContext};
-use tur_engine::stdlib::elements::editable_text::EditableTextElement;
+use tur_engine::elements::editable_text::EditableTextElement;
 
 use crate::Clipboard;
 

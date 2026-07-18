@@ -4257,6 +4257,7 @@ dependencies = [
  "tur-native",
  "tur-net-capability",
  "tur-shared",
+ "tur-std",
  "wgpu",
 ]
 
@@ -4309,6 +4310,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-std"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "tur-engine",
+]
+
+[[package]]
 name = "tur-wasm"
 version = "0.1.0"
 dependencies = [
@@ -4330,6 +4339,7 @@ dependencies = [
  "tur-engine",
  "tur-net-wasm",
  "tur-shared",
+ "tur-std",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

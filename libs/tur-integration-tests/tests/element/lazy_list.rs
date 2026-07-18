@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::stdlib::elements::LazyListElement;
+use tur_engine::elements::LazyListElement;
 use tur_integration_tests::TurTestApp;
 #[test]
 fn lazy_list_viewport_size() {

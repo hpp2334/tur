@@ -1,8 +1,11 @@
 pub use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 
+pub mod animation;
 pub mod color;
+pub mod color_fns;
 pub mod console;
 pub mod dev_tool;
+pub mod enums;
 pub mod executor;
 pub mod helpers;
 pub mod js_props;

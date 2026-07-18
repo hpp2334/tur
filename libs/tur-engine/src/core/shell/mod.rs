@@ -6,7 +6,7 @@ use std::time::Duration;
 use boa_engine::context::time::Clock;
 use tur_shared::{Cursor, Offset};
 
-use crate::stdlib::platform::CursorBackend;
+use crate::core::platform::CursorBackend;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
 ///

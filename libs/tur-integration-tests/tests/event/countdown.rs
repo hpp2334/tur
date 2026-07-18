@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::stdlib::elements::TextElement;
+use tur_engine::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
