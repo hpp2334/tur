@@ -1,10 +1,8 @@
 use num_derive::FromPrimitive;
 use std::fmt;
 use std::ops::{Add, Sub};
-use ts_rs::TS;
 
-#[derive(Debug, Clone, Copy, PartialEq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Size {
     pub width: f64,
     pub height: f64,
@@ -45,8 +43,7 @@ impl fmt::Display for Size {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Offset {
     pub x: f64,
     pub y: f64,
@@ -73,8 +70,7 @@ impl fmt::Display for Offset {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct EdgeInsets {
     pub left: f64,
     pub top: f64,
@@ -140,8 +136,7 @@ impl EdgeInsets {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, TS)]
-#[ts(export, export_to = "generated/")]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Constraints {
     pub min_width: f64,
     pub max_width: f64,
@@ -204,8 +199,7 @@ impl Constraints {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum MainAxisAlignment {
     Start,
     Center,
@@ -215,8 +209,7 @@ pub enum MainAxisAlignment {
     SpaceEvenly,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum CrossAxisAlignment {
     Start,
     Center,
@@ -224,38 +217,33 @@ pub enum CrossAxisAlignment {
     Stretch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum MainAxisSize {
     #[default]
     Max,
     Min,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum FlexFit {
     Tight,
     Loose,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum StackFit {
     Loose,
     Expand,
     Passthrough,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum FlexDirection {
     Vertical,
     Horizontal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive)]
 pub enum Axis {
     Vertical,
     Horizontal,
@@ -297,8 +285,7 @@ impl ComputedLayout {
     };
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum BoxFit {
     Fill,
     #[default]
@@ -309,8 +296,7 @@ pub enum BoxFit {
     None,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum BorderPosition {
     #[default]
     Inside,
@@ -318,8 +304,7 @@ pub enum BorderPosition {
     Outside,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum Alignment {
     #[default]
     TopLeft,
@@ -352,8 +337,7 @@ impl Alignment {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, TS, Default)]
-#[ts(export, export_to = "generated/", repr(enum))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum HitTestBehavior {
     #[default]
     Opaque,

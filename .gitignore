@@ -14,7 +14,6 @@ dist/
 *.tsbuildinfo
 
 # Generated TypeScript
-js/packages/tur-react-renderer/src/generated
 js/packages/tur-demo-impl/src/cases/generated.ts
 
 # Build output

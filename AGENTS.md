@@ -1,6 +1,6 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
+A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `builtin:tur/std` / `builtin:tur/animation` / `builtin:tur/clipboard` / `builtin:tur/net` modules registered by engine plugins.
 
 ## Architecture
 
@@ -13,15 +13,13 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  - Tur viewer (embedded WASM canvas)                 │
 │  - Browser-side bundling via @rspack/browser          │
 ├─────────────────────────────────────────────────────┤
+│  js/packages/tur-demo-impl                            │
+│  Playground UI built with builtin:tur/animation +    │
+│  builtin:tur/std (Sidebar/Editor/Viewer)              │
+├─────────────────────────────────────────────────────┤
 │  js/packages/tur-test-cases                          │
-│  ~60 React test cases in react-cases/                 │
-│  Each case calls renderRoot(Component)                │
-├─────────────────────────────────────────────────────┤
-│  js/packages/tur-react                                │
-│  React component wrappers (Column, Row, Container…)  │
-├─────────────────────────────────────────────────────┤
-│  js/packages/tur-react-renderer                       │
-│  Custom React reconciler → globalThis.__tur.*         │
+│  ~60 test cases in cases/ — each calls into           │
+│  builtin:tur/std directly                            │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -230,7 +228,6 @@ js/
     tur-demo/                # Playground: thin browser wrapper (loads wasm + impl bundle)
     tur-demo-impl/           # Playground UI built with builtin:tur/animation + builtin:tur/std (Sidebar/Editor/Viewer)
     tur-test-cases/          # Test cases (cases/, ~60 cases)
-    tur-react-renderer/      # (legacy) React reconciler, superseded by builtin:tur/std
 ```
 
 ## Commands
@@ -280,8 +277,7 @@ pnpm lint             # biome lint across all packages
 ### Per-package JS builds
 
 ```sh
-cd js/packages/tur-react-renderer && pnpm build
-cd js/packages/tur-react && pnpm build
+cd js/packages/tur-demo-impl && pnpm build
 cd js/packages/tur-test-cases && pnpm build
 ```
 
