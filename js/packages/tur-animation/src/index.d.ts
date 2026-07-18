@@ -117,10 +117,7 @@ declare module "builtin:tur/animation" {
     export interface TweenValue extends TweenLike<number> {}
     export interface ColorTweenValue extends TweenLike<Color> {}
 
-    export function Tween(opts: {
-        begin: number;
-        end: number;
-    }): TweenValue;
+    export function Tween(opts: { begin: number; end: number }): TweenValue;
     export function ColorTween(opts: {
         begin: Color;
         end: Color;
@@ -139,9 +136,7 @@ declare module "builtin:tur/animation" {
         onEnd?: Mutation<[], void>;
     }
 
-    export function AnimatedContainer(
-        props: AnimatedContainerProps,
-    ): Element;
+    export function AnimatedContainer(props: AnimatedContainerProps): Element;
 
     export interface AnimatedOpacityProps {
         value: Val<number>;
@@ -168,7 +163,5 @@ declare module "builtin:tur/animation" {
         queryKey?: Val<string[]>;
     }
 
-    export function AnimatedPositioned(
-        props: AnimatedPositionedProps,
-    ): Element;
+    export function AnimatedPositioned(props: AnimatedPositionedProps): Element;
 }
