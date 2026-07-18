@@ -14,8 +14,6 @@
 //! the needed state lives in the capability registry (populated by
 //! [`crate::TurNetPlugin`] during `register`).
 
-use std::rc::Rc;
-
 use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyKey;
@@ -24,7 +22,6 @@ use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
-
 /// Bridge function table entries for `builtin:tur/net`.
 ///
 /// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
@@ -44,8 +41,11 @@ fn tur_net_request(
 ) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let http = js_ctx
-        .capability::<Rc<dyn Http>>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http backend")))?;
+        .capability()
+        .of::<Http>()
+        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http capability")))?
+        .backend()
+        .clone();
     let executor = js_ctx.async_executor().clone();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);

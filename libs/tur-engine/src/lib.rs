@@ -7,11 +7,9 @@ pub mod error;
 
 // Re-export the standard widget library's public surface at the crate root
 // so embedders can write `tur_engine::TurStdPlugin`,
-// `tur_engine::Clipboard`, etc. without reaching into `stdlib::`.
+// `tur_engine::CursorBackend`, etc. without reaching into `stdlib::`.
 pub use crate::stdlib::TurStdPlugin;
-pub use crate::stdlib::platform::{
-    Clipboard, CursorPlatform, NoopClipboard, NoopCursorPlatform,
-};
+pub use crate::stdlib::platform::{CursorBackend, CursorCap, NoopCursor};
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -33,6 +31,7 @@ use core::bridge::helpers::FnEntry;
 use core::bridge::module_loader::{build_fn_module, build_native_module, bound_native};
 use core::bridge::{console, dev_tool, reactive, render};
 use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader};
+use core::capability::{Capability, CapabilityDecls};
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
@@ -389,12 +388,21 @@ impl TurEngine {
 
 type HostExports = Vec<(String, NativeFunction, usize)>;
 
+/// Deferred capability-insert closure. Captures the typed capability value
+/// and the static type parameter, so the actual `Capabilities::insert::<C>`
+/// call (which requires a static `C`) happens once inside `build()` rather
+/// than at registration time. We store closures instead of
+/// `Vec<(TypeId, Box<dyn Any>)>` because `Box<dyn Any>` can't be cloned —
+/// the closure pattern sidesteps that limitation.
+type CapabilityInsert = Box<dyn FnOnce(&core::capability::Capabilities)>;
+
 pub struct TurEngineBuilder {
     renderer: Option<Box<dyn Renderer>>,
     font_loader: Option<Box<dyn FontLoader>>,
     clock: Option<Rc<dyn Clock>>,
     plugins: Vec<Box<dyn Plugin>>,
     host_modules: Vec<(String, HostExports)>,
+    capabilities: Vec<CapabilityInsert>,
 }
 
 impl Default for TurEngineBuilder {
@@ -411,6 +419,7 @@ impl TurEngineBuilder {
             clock: None,
             plugins: Vec::new(),
             host_modules: Vec::new(),
+            capabilities: Vec::new(),
         }
     }
 
@@ -442,6 +451,26 @@ impl TurEngineBuilder {
 
     pub fn plugin<P: Plugin + 'static>(mut self, plugin: P) -> Self {
         self.plugins.push(Box::new(plugin));
+        self
+    }
+
+    /// Register a capability (a plugin-swappable backend) so it's available
+    /// to plugins (via [`PluginContext::capability`]), bridge fns (via
+    /// `extract_ctx(...).capability()`), handlers (via
+    /// [`HandlerContext::capabilities`](core::handler::HandlerContext::capabilities)),
+    /// and the engine itself.
+    ///
+    /// Capabilities are inserted into the registry before any plugin's
+    /// `register` runs, so plugin call-site order (`capability` before/after
+    /// `plugin`) doesn't matter.
+    ///
+    /// Plugins declare hard dependencies via [`Plugin::requires`]; the engine
+    /// validates those before any plugin side effects.
+    pub fn capability<C: Capability>(mut self, cap: C) -> Self {
+        self.capabilities
+            .push(Box::new(move |registry: &core::capability::Capabilities| {
+                registry.insert::<C>(cap);
+            }));
         self
     }
 
@@ -567,6 +596,32 @@ impl TurEngineBuilder {
             tracing::info!("registered host module {specifier} ({} exports)", owned.len());
         }
 
+        // Insert every builder-level capability into the shared registry
+        // BEFORE plugins run, so plugin call-site order (`capability` before
+        // or after `plugin`) doesn't matter. Each closure calls
+        // `Capabilities::insert::<C>(cap)` with the original typed value.
+        for insert_fn in self.capabilities {
+            insert_fn(&internal.js_context.capabilities);
+        }
+
+        // Validate every plugin's `requires` declaration against the registry
+        // BEFORE any plugin's `register` runs side effects. A missing cap
+        // fails fast with a clear message naming the missing type and the fix.
+        {
+            let mut decls = CapabilityDecls::new();
+            for plugin in &self.plugins {
+                plugin.requires(&mut decls);
+            }
+            for (cap_id, cap_name) in decls.iter() {
+                if !internal.js_context.capabilities.contains_id(cap_id) {
+                    return Err(TurError::Other(format!(
+                        "plugin requires capability `{cap_name}` which is not registered; \
+                         add `.capability({cap_name}::new(...))` to the engine builder"
+                    )));
+                }
+            }
+        }
+
         for plugin in &self.plugins {
             let mut plugin_ctx = PluginContext {
                 boa: &mut boa_context,
@@ -577,12 +632,30 @@ impl TurEngineBuilder {
                 viewport_size: viewport_size_js.clone(),
             };
             plugin.register(&mut plugin_ctx)?;
-            if let Some(f) = plugin.cursor_output() {
-                internal.app_context.borrow_mut().shell.set_cursor_output(f);
-            }
         }
 
-        tracing::info!("TurApp initialized ({} plugins)", self.plugins.len());
+        // Install the cursor backend on the Shell from the capability
+        // registry (registered by the embedder via `.capability(CursorCap::new(...))`).
+        // Fall back to `NoopCursor` when no cursor capability is present —
+        // cursor never changes, but the engine still runs.
+        {
+            let cursor_backend = internal
+                .js_context
+                .capability()
+                .of::<stdlib::platform::CursorCap>()
+                .map(|c| c.backend().clone())
+                .unwrap_or_else(|| Rc::new(std::cell::RefCell::new(stdlib::platform::NoopCursor)));
+            internal
+                .app_context
+                .borrow_mut()
+                .shell
+                .set_cursor_platform(cursor_backend);
+        }
+
+        tracing::info!(
+            "TurApp initialized ({} plugins)",
+            self.plugins.len()
+        );
 
         Ok(Rc::new(TurApp {
             boa_context: RefCell::new(boa_context),

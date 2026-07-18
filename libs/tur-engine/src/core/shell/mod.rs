@@ -1,9 +1,12 @@
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::Clock;
 use tur_shared::{Cursor, Offset};
+
+use crate::stdlib::platform::CursorBackend;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
 ///
@@ -48,14 +51,14 @@ impl Default for CursorSink {
 /// sees this type — only the [`PaintShell`] face borrowed via [`paint_face`].
 ///
 /// `apply_changes` is the privileged post-paint flush: it resolves the
-/// deepest cursor claim, dedups against the last applied value, and pushes the
-/// result through the `cursor_output` callback (installed by a plugin at
-/// build time). Biz cannot call it.
+/// deepest cursor claim, dedups against the last applied value, and pushes
+/// the result through the installed `CursorBackend` (looked up from the
+/// capability registry at `build()` time). Biz cannot call it.
 ///
 /// [`paint_face`]: Shell::paint_face
 pub struct Shell {
     clock: Rc<dyn Clock>,
-    cursor_output: Option<Box<dyn FnMut(Cursor)>>,
+    cursor_platform: Option<Rc<RefCell<dyn CursorBackend>>>,
     pointer_position: Option<Offset>,
     cursor: CursorSink,
     applied_cursor: Option<Cursor>,
@@ -65,18 +68,18 @@ impl Shell {
     pub fn new(clock: Rc<dyn Clock>) -> Self {
         Shell {
             clock,
-            cursor_output: None,
+            cursor_platform: None,
             pointer_position: None,
             cursor: CursorSink::new(),
             applied_cursor: None,
         }
     }
 
-    /// Install a cursor-output callback. Called at build time by the engine
-    /// builder when a plugin provides `cursor_output()`. The callback fires
+    /// Install the cursor backend. Called at build time by the engine
+    /// builder after looking up the `Cursor` capability. The backend fires
     /// at runtime during `apply_changes` whenever the resolved cursor changes.
-    pub fn set_cursor_output(&mut self, f: Box<dyn FnMut(Cursor)>) {
-        self.cursor_output = Some(f);
+    pub fn set_cursor_platform(&mut self, backend: Rc<RefCell<dyn CursorBackend>>) {
+        self.cursor_platform = Some(backend);
     }
 
     /// Current frame time as a `Duration` since the epoch.
@@ -99,7 +102,7 @@ impl Shell {
 
     /// Flush the cursor claims accumulated during paint: resolve the
     /// deepest-wins value, dedup against the last applied cursor, and on change
-    /// invoke the `cursor_output` callback (installed by a plugin). Called once
+    /// invoke the installed `CursorBackend`'s `set_cursor`. Called once
     /// by the driver after the paint pass. `take` empties the sink so the next
     /// frame starts clean (no separate reset needed).
     pub fn apply_changes(&mut self) {
@@ -107,8 +110,8 @@ impl Shell {
         let present = self.pointer_position.is_some();
         if present && self.applied_cursor != Some(resolved) {
             self.applied_cursor = Some(resolved);
-            if let Some(f) = &mut self.cursor_output {
-                f(resolved);
+            if let Some(backend) = self.cursor_platform.as_ref() {
+                backend.borrow_mut().set_cursor(resolved);
             }
         }
     }

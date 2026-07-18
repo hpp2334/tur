@@ -1,55 +1,65 @@
 //! Platform capability traits for the std widget library's plugins.
 //!
 //! These describe host services the engine can't provide itself (cursor
-//! output, async clipboard, async HTTP). Each is injected through
-//! [`crate::stdlib::TurStdPluginBuilder`] and stored on the plugin.
+//! output). Clipboard moved to `tur-clipboard-capability`; HTTP lives in
+//! `tur-net`. The traits here are registered as capability newtypes via
+//! [`crate::TurEngineBuilder::capability`] and looked up at runtime via the
+//! [`crate::core::capability::Capabilities`] registry.
 
-use std::future::Future;
-use std::pin::Pin;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use tur_shared::Cursor;
 
-/// Cursor output: the engine pushes the resolved cursor during the frame
-/// loop, and the platform applies it (e.g. set the host canvas CSS cursor
-/// in tur-wasm).
-pub trait CursorPlatform {
+use crate::core::capability::Capability;
+
+/// Cursor output capability. The engine pushes the resolved cursor (deepest
+/// painted `MouseRegion` claim) during the frame loop's `apply_changes`
+/// pass; the backend applies it (e.g. set the host canvas CSS cursor in
+/// tur-wasm).
+///
+/// Backends are registered via
+/// [`crate::TurEngineBuilder::capability`](`CursorCap::new(...)`); the engine
+/// builder looks the cap up after all plugins register and installs the
+/// backend on [`crate::core::shell::Shell`]. If absent, the engine falls
+/// back to [`NoopCursor`] (cursor never changes).
+pub trait CursorBackend {
     fn set_cursor(&mut self, cursor: Cursor);
 }
 
-/// Async clipboard capability. Methods return boxed `Future`s because the
-/// trait is held as `dyn Clipboard` (object-safe). Backends decide whether
-/// the operation is actually async — sync backends (e.g. a test stub)
-/// return `std::future::ready(...)`.
-///
-/// Injected via [`crate::stdlib::TurStdPluginBuilder::clipboard`]; the bridge fns
-/// `clipboardReadText` / `clipboardWriteText` in `builtin:tur/std` consume
-/// it. On wasm, `navigator.clipboard.readText/writeText` are inherently
-/// async (return JS Promises); on native/tests, this can resolve eagerly.
-pub trait Clipboard: 'static {
-    /// Read text from the clipboard. Resolves with the text (empty string
-    /// if denied/unavailable).
-    fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>>;
-
-    /// Write text to the clipboard. Resolves when the write has been
-    /// acknowledged by the platform.
-    fn write_text(&self, text: String) -> Pin<Box<dyn Future<Output = ()>>>;
-}
-
-/// No-op `CursorPlatform` default.
-pub struct NoopCursorPlatform;
-impl CursorPlatform for NoopCursorPlatform {
+/// No-op `CursorBackend` default.
+pub struct NoopCursor;
+impl CursorBackend for NoopCursor {
     fn set_cursor(&mut self, _cursor: Cursor) {}
 }
 
-/// No-op `Clipboard` default. Reads return empty string; writes drop the
-/// text. Used when no platform clipboard is injected (e.g. minimal tests).
-#[derive(Default)]
-pub struct NoopClipboard;
-impl Clipboard for NoopClipboard {
-    fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
-        Box::pin(std::future::ready(String::new()))
+/// Capability newtype wrapping a `Rc<RefCell<dyn CursorBackend>>`. The
+/// `RefCell` is required because [`CursorBackend::set_cursor`] takes
+/// `&mut self` but the engine holds the backend in a shared `Rc` (cloned
+/// across the registry).
+///
+/// Named `CursorCap` (not `Cursor`) because `tur_shared::Cursor` already
+/// names the cursor-kind enum (`Default`, `Pointer`, ...) used pervasively
+/// across the engine — renaming that would be ~74 mechanical call-site
+/// edits for a naming preference. This is the lone exception to the
+/// "capability newtypes use base names" convention.
+///
+/// Registered via [`crate::TurEngineBuilder::capability`] with
+/// `CursorCap::new(backend)`; the engine builder installs the backend on the
+/// Shell at `build()` time.
+#[derive(Clone)]
+pub struct CursorCap(Rc<RefCell<dyn CursorBackend>>);
+
+impl CursorCap {
+    /// Wrap a backend in the capability newtype.
+    pub fn new(backend: impl CursorBackend + 'static) -> Self {
+        Self(Rc::new(RefCell::new(backend)))
     }
-    fn write_text(&self, _text: String) -> Pin<Box<dyn Future<Output = ()>>> {
-        Box::pin(std::future::ready(()))
+
+    /// Borrow the underlying backend handle.
+    pub fn backend(&self) -> &Rc<RefCell<dyn CursorBackend>> {
+        &self.0
     }
 }
+
+impl Capability for CursorCap {}

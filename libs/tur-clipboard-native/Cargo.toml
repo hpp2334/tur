@@ -1,0 +1,17 @@
+[package]
+name = "tur-clipboard-native"
+description = "Native (win/mac/linux) clipboard backend for tur (NativeClipboard via arboard)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-clipboard-capability = { workspace = true }
+tracing = { workspace = true }
+
+# `arboard` (the actual clipboard backend) only compiles on native targets.
+# On wasm the crate compiles as a near-empty stub so the workspace still
+# builds for wasm32 — embedders pick `tur-clipboard-wasm` instead.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+arboard = "3"

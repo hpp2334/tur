@@ -1,9 +1,15 @@
-use std::rc::Rc;
+//! Engine-internal clipboard event handlers — the Cmd+C/Cmd+V/Cmd+X path.
+//!
+//! Moved here from `tur-engine/src/stdlib/handlers/clipboard.rs` so that
+//! clipboard concerns (bridge + handlers + trait) live in a single crate.
+//! The engine's `TurStdPlugin` no longer registers these handlers itself —
+//! [`crate::TurClipboardPlugin`] does, after declaring `requires::<Clipboard>`.
 
-use crate::core::event::{AppEvent, PlatformEvent};
-use crate::core::handler::{AppHandler, HandlerContext};
-use crate::stdlib::elements::editable_text::EditableTextElement;
-use crate::stdlib::platform::Clipboard;
+use tur_engine::core::event::{AppEvent, PlatformEvent};
+use tur_engine::core::handler::{AppHandler, HandlerContext};
+use tur_engine::stdlib::elements::editable_text::EditableTextElement;
+
+use crate::Clipboard;
 
 /// Handles `PlatformEvent::ClipboardPaste` by inserting the pasted text into
 /// the currently-focused editable text element (if any). The embedder
@@ -62,25 +68,20 @@ impl AppHandler for ClipboardPasteHandler {
             cx.element_tree.mark_dirty(focused_id.into());
         }
     }
+
+    fn handle_app_event(&mut self, _cx: &mut HandlerContext, _event: &AppEvent) {}
 }
 
 /// Handles `AppEvent::ClipboardWrite` (produced by EditableText on Cmd+C /
 /// Cmd+X) by spawning `clipboard.write_text(text)` on the engine's async
-/// executor. The future runs on the next `tick` pass; the write completes
-/// asynchronously (browser `navigator.clipboard.writeText` on wasm, eager
-/// on tests).
+/// executor. Looks up the [`Clipboard`] capability at dispatch time via
+/// `cx.capabilities.of::<Clipboard>()`; silently drops the write (with a
+/// warning) if no backend is registered — though `TurClipboardPlugin`'s
+/// `requires` declaration should prevent that at `build()` time.
 ///
 /// The async executor is sourced from [`HandlerContext`] at dispatch time, so
 /// this handler holds no executor state of its own.
-pub struct ClipboardWriteHandler {
-    clipboard: Rc<dyn Clipboard>,
-}
-
-impl ClipboardWriteHandler {
-    pub fn new(clipboard: Rc<dyn Clipboard>) -> Self {
-        Self { clipboard }
-    }
-}
+pub struct ClipboardWriteHandler;
 
 impl AppHandler for ClipboardWriteHandler {
     fn handle_app_event(&mut self, cx: &mut HandlerContext, event: &AppEvent) {
@@ -88,9 +89,17 @@ impl AppHandler for ClipboardWriteHandler {
             return;
         };
         let text = text.clone();
-        let clipboard = self.clipboard.clone();
+        let Some(clipboard_cap) = cx.capabilities.of::<Clipboard>() else {
+            tracing::warn!(
+                "ClipboardWrite dropped: no Clipboard capability registered"
+            );
+            return;
+        };
+        let backend = clipboard_cap.backend().clone();
         cx.async_executor.spawn_detached(async move {
-            clipboard.write_text(text).await;
+            backend.write_text(text).await;
         });
     }
+
+    fn handle_platform_event(&mut self, _cx: &mut HandlerContext, _event: &PlatformEvent) {}
 }

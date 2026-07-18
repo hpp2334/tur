@@ -8,8 +8,8 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true, features = ["wgpu-backend", "trace"] }
-tur-clipboard = { workspace = true }
-tur-net = { workspace = true }
+tur-clipboard-capability = { workspace = true }
+tur-net-capability = { workspace = true }
 tur-native = { workspace = true }
 tur-shared = { workspace = true }
 boa_engine = { workspace = true }

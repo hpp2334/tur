@@ -9,37 +9,44 @@ use boa_engine::Context;
 use boa_engine::JsError;
 use boa_engine::JsValue;
 use boa_engine::NativeFunction;
-use tur_shared::Cursor;
 
 use crate::core::app::TurAppContext;
 use crate::core::bridge::helpers::{ConstEntry, FnEntry};
 use crate::core::bridge::module_loader::{build_fn_module, build_native_module};
 use crate::core::bridge::{TurJsContext, TurModuleLoader};
+use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::handler::AppHandler;
 use crate::error::TurError;
 /// A plugin that extends the engine with elements, bridge modules, handlers,
 /// and/or platform capabilities.
 ///
 /// Each plugin is registered via [`TurEngineBuilder::plugin`](crate::TurEngineBuilder::plugin)
-/// and installed once during `build()`. The [`register`](Plugin::register) method
-/// is the build-time entry point — it receives a [`PluginContext`] exposing all
-/// registration primitives (modules, handlers, classes, globals).
+/// and installed once during `build()`. The [`register`](Plugin::register)
+/// method is the build-time entry point — it receives a [`PluginContext`]
+/// exposing all registration primitives (modules, handlers, classes, globals).
 ///
-/// Runtime hooks (like cursor output) are provided via separate optional trait
-/// methods so they stay conceptually distinct from one-time registration.
+/// Plugins declare hard-required capabilities via
+/// [`requires`](Plugin::requires); the engine builder validates every
+/// declaration against the registered capabilities before any plugin's
+/// `register` runs, so a missing capability fails fast at `build()` with a
+/// clear error (naming the missing type and the fix) instead of midway
+/// through side-effecting registration.
 pub trait Plugin {
-    /// Build-time registration. Called once during `build()`. Register
-    /// modules, handlers, classes, globals via `ctx.register_*()`.
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError>;
-
-    /// Runtime cursor-output callback. The engine calls this once during build
-    /// to extract the closure; the closure itself fires at runtime during the
-    /// frame loop whenever the resolved cursor changes.
+    /// Declare capabilities this plugin hard-requires. Called by the engine
+    /// builder BEFORE any plugin's `register` runs. If a declared capability
+    /// is missing, `build()` returns `TurError::Other(...)` naming the
+    /// missing type.
     ///
-    /// Default: `None` (most plugins don't produce cursor output).
-    fn cursor_output(&self) -> Option<Box<dyn FnMut(Cursor)>> {
-        None
-    }
+    /// Default: no requirements. Optional capabilities should NOT be declared
+    /// here — the plugin should look them up via
+    /// [`PluginContext::capability`] in `register` and handle absence
+    /// gracefully.
+    fn requires(&self, _decls: &mut CapabilityDecls) {}
+
+    /// Build-time registration. Called once during `build()` after capability
+    /// validation. Register modules, handlers, classes, globals via
+    /// `ctx.register_*()`.
+    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError>;
 }
 
 /// Build-time context passed to [`Plugin::register`]. Only available during
@@ -123,6 +130,14 @@ impl<'a> PluginContext<'a> {
     /// Access the shared JS context (reactive store, node tree, etc.).
     pub fn js_ctx(&self) -> &TurJsContext {
         &self.js_ctx
+    }
+
+    /// Cheaply-cloned view over the capability registry. Plugins call
+    /// `ctx.capability().of::<C>()` to look up sibling capabilities (or
+    /// `require::<C>()` for a hard error). Returns a fresh `Capabilities`
+    /// handle (single `Rc` bump).
+    pub fn capability(&self) -> Capabilities {
+        self.js_ctx.capability()
     }
 
     /// Access the boa `Context` directly (for custom registration needs).

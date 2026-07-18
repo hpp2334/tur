@@ -8,6 +8,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use tur_shared::Constraints;
 
 use crate::core::async_::AsyncExecutor;
+use crate::core::capability::Capabilities;
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
@@ -35,6 +36,10 @@ pub struct TurAppContext {
     /// owns; surfaced to handlers via [`HandlerContext`] so they can spawn
     /// Rust futures (clipboard writes, etc.) at dispatch time.
     pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Capability registry view, shared with `TurJsContext.capabilities`.
+    /// Surfaced to handlers via [`HandlerContext::capabilities`] so they can
+    /// look up backends (`Clipboard`, `Http`, etc.) at dispatch time.
+    pub(crate) capabilities: Capabilities,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
     /// shared with the boa `Context`. See [`Shell`].
@@ -59,6 +64,7 @@ impl TurAppContext {
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
         async_executor: Rc<AsyncExecutor>,
+        capabilities: Capabilities,
         clock: Rc<dyn Clock>,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
@@ -75,6 +81,7 @@ impl TurAppContext {
             app_event_queue: AppEventQueue::new(),
             handlers: vec![],
             async_executor,
+            capabilities,
             shell: Shell::new(clock),
         }
     }
@@ -110,6 +117,7 @@ impl TurAppContext {
             size: &mut self.size,
             need_paint,
             async_executor: &self.async_executor,
+            capabilities: &self.capabilities,
         };
         for handler in &mut self.handlers {
             handler.handle_platform_event(&mut cx, event);
@@ -132,6 +140,7 @@ impl TurAppContext {
             size: &mut self.size,
             need_paint,
             async_executor: &self.async_executor,
+            capabilities: &self.capabilities,
         };
         for handler in &mut self.handlers {
             handler.handle_app_event(&mut cx, event);

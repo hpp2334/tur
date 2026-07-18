@@ -95,6 +95,11 @@ impl TurAppInternal {
             async_executor.clone(),
         );
 
+        // Share the capability registry between the JS context (bridge fns)
+        // and the app context (handlers via HandlerContext). Both hold the
+        // same `Rc<RefCell<HashMap>>` via the `Capabilities` view clone.
+        let capabilities = js_context.capability();
+
         let app_context = TurAppContext::new(
             element_tree,
             mutation_queue,
@@ -103,6 +108,7 @@ impl TurAppInternal {
             renderer,
             font_loader,
             async_executor.clone(),
+            capabilities,
             clock,
         );
 
