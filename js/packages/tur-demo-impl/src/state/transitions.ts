@@ -1,11 +1,5 @@
-import {
-    createAnimationController,
-    type Element,
-    mutate,
-    Opacity,
-    set,
-    source,
-} from "builtin:tur/std";
+import { type Element, mutate, set, source } from "builtin:tur/std";
+import { createAnimationController, Opacity } from "builtin:tur/animation";
 
 // ---------------------------------------------------------------------------
 // FadeIn — opacity transition used when the playground's active case content

@@ -135,7 +135,6 @@ impl TurAppInternal {
         boa_context: &mut boa_engine::Context,
     ) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
-        let mut animation_ticked = false;
         let mut subsystems_ticked = false;
         // Aggregates across all iterations of the fixed-point loop. Once any
         // subsystem requested a frame, the post-loop schedule decision must
@@ -158,19 +157,18 @@ impl TurAppInternal {
             // Runs before `flush_reactive` so subscribers re-layout in-frame.
             self.sync_viewport_size(boa_context);
 
-            let animation_did_update = if !animation_ticked {
-                animation_ticked = true;
-                self.tick_animations(boa_context)
-            } else {
-                self.js_context.animation_manager.borrow().has_active()
-            };
-
             // Subsystem tick — runs once per `flush()` call (= once per
             // frame), in registration order. Each subsystem owns its own
             // clock + state; we feed it the boa context and aggregate the
             // outcomes. Dirtied outcomes force another iteration (the loop
             // continuation check below); request_frame outcomes carry
             // forward into the post-loop schedule decision.
+            //
+            // Animation (registered via `tur-animation::TurAnimationPlugin`)
+            // is the canonical example: it ticks active
+            // `AnimationController`s once per frame here, enqueuing
+            // `onTick`/`onEnd` mutations that fire later in
+            // `flush_pending_mutations`.
             let subsystem_dirtied = if !subsystems_ticked {
                 subsystems_ticked = true;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
@@ -201,7 +199,7 @@ impl TurAppInternal {
         // the real viewport from constraints), so there is no separate
         // pre-layout remount pass here.
         let dirty =
-            self.js_context.dirty.take() || self.js_context.need_paint.take() || animation_did_update || reactive_changed || subsystem_dirtied;
+            self.js_context.dirty.take() || self.js_context.need_paint.take() || reactive_changed || subsystem_dirtied;
         if dirty {
             needs_render = true;
             self.app_context
@@ -241,15 +239,6 @@ impl TurAppInternal {
             }
         }
 
-        let animation_active = self
-            .js_context
-            .animation_manager
-            .borrow()
-            .has_active();
-        if animation_active {
-            self.js_context.need_paint.set(true);
-        }
-
         if needs_render {
             self.app_context.borrow_mut().render();
             if let Err(e) = self.app_context.borrow_mut().renderer.present() {
@@ -260,11 +249,11 @@ impl TurAppInternal {
 
         // Decide how the caller should schedule the next frame.
         //
-        // - `Vsync` (continuous): an animation is running, a subsystem
-        //   requested a frame, or a Rust async task is live without a timer
-        //   deadline (e.g. clipboard/http futures awaiting external wake-up).
-        //   Animations need smooth 60fps; subsystems like audio need polling;
-        //   timer-less async tasks need polling each frame.
+        // - `Vsync` (continuous): a subsystem requested a frame (e.g. an
+        //   animation is running), or a Rust async task is live without a
+        //   timer deadline (e.g. clipboard/http futures awaiting external
+        //   wake-up). Animations need smooth 60fps; subsystems like audio
+        //   need polling; timer-less async tasks need polling each frame.
         // - `After(d)`: nothing continuous is pending, but an async `sleep`
         //   deadline is outstanding (driving a `launch` coroutine or a plain
         //   `sleep().then(...)`). Wake at the deadline rather than polling.
@@ -272,8 +261,7 @@ impl TurAppInternal {
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
         let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if animation_active
-            || subsystem_request_frame
+        let schedule = if subsystem_request_frame
             || (async_pending && async_timer_delay.is_none())
         {
             NextFrame::Vsync
@@ -492,15 +480,6 @@ impl TurAppInternal {
                 }
             }
         }
-    }
-
-    fn tick_animations(&self, boa_context: &mut boa_engine::Context) -> bool {
-        let now_ms = self.app_context.borrow().shell.now().as_millis() as u64;
-        let mut mgr = self.js_context.animation_manager.borrow_mut();
-        mgr.tick_controllers(now_ms, boa_context);
-        let has_active = mgr.has_active();
-        drop(mgr);
-        has_active
     }
 
     fn flush_app_events(&self) -> bool {

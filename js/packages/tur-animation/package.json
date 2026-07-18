@@ -1,10 +1,9 @@
 {
-    "name": "@tur/animation-ext",
+    "name": "@tur/animation",
     "version": "0.1.0",
     "type": "module",
     "private": true,
-    "main": "src/index.ts",
-    "types": "src/index.ts",
+    "types": "src/index.d.ts",
     "scripts": {
         "build": "tsc --noEmit",
         "typecheck": "tsc --noEmit"

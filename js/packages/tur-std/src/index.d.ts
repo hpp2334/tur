@@ -14,7 +14,7 @@
  * import { Container, Column, source, Color, Axis } from "builtin:tur/std";
  * ```
  *
- * `@tur/animation-ext` and other libraries that need only the reactive
+ * `@tur/animation` and other libraries that need only the reactive
  * substrate may import directly from `builtin:tur/core`.
  */
 
@@ -127,40 +127,6 @@ declare module "builtin:tur/std" {
         | "all-scroll"
         | "zoom-in"
         | "zoom-out";
-
-    // ---------------------------------------------------------------------------
-    // Animation
-    // ---------------------------------------------------------------------------
-
-    export type AnimationStatus =
-        | "stopped"
-        | "forward"
-        | "reverse"
-        | "completed"
-        | "paused";
-
-    export interface AnimationControllerOpts {
-        duration?: number;
-        curve?: "linear" | "easeIn" | "easeOut" | "easeInOut";
-        repeat?: number | "infinite";
-        onTick?: Mutation<[number], void>;
-        onEnd?: Mutation<[], void>;
-    }
-
-    export interface AnimationController {
-        readonly value: number;
-        readonly status: AnimationStatus;
-        readonly duration: number;
-        readonly speed: number;
-        forward(): void;
-        reverse(): void;
-        stop(): void;
-        pause(): void;
-        resume(): void;
-        seek(t: number): void;
-        setSpeed(factor: number): void;
-        repeat(count: number | "infinite"): void;
-    }
 
     // ---------------------------------------------------------------------------
     // Event detail payloads
@@ -431,26 +397,6 @@ declare module "builtin:tur/std" {
         child?: Element;
     }
 
-    export interface OpacityProps {
-        value: Val<number>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface TransformProps {
-        scale?: Val<number>;
-        scaleX?: Val<number>;
-        scaleY?: Val<number>;
-        rotate?: Val<number>;
-        translateX?: Val<number>;
-        translateY?: Val<number>;
-        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
-         *  `Alignment.Center` (matches Flutter's `Transform`). */
-        alignment?: Val<Alignment>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
     export interface ReadableSubscribeProps {
         readables: Readable<unknown>[];
         onUpdate$: Mutation<[]>;
@@ -618,8 +564,6 @@ declare module "builtin:tur/std" {
     export function Input(props: InputProps): Element;
     export function Fragment(props: FragmentProps): Element;
     export function Focusable(props: FocusableProps): Element;
-    export function Opacity(props: OpacityProps): Element;
-    export function Transform(props: TransformProps): Element;
     export function lifecycleView(f: () => LifecycleDescriptor): Element;
     export function ReadableSubscribe(props: ReadableSubscribeProps): Element;
 
@@ -637,9 +581,6 @@ declare module "builtin:tur/std" {
     export function createLazyListController(
         opts?: LazyListControllerOpts,
     ): LazyListController;
-    export function createAnimationController(
-        opts?: AnimationControllerOpts,
-    ): AnimationController;
     export function createImageResource(
         bytes: Uint8Array | ArrayBuffer,
     ): number;

@@ -1,8 +1,6 @@
 use boa_engine::object::JsObject;
 
-pub mod controller;
-pub use controller::AnimationController;
-pub mod event;
+use crate::controller::AnimationController;
 
 /// Registry of active JS `AnimationController`s. Each `AnimationController`
 /// registers itself via `forward()` / `reverse()`; the frame loop ticks them

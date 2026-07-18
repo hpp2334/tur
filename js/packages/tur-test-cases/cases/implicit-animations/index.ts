@@ -27,7 +27,7 @@ import {
     AnimatedContainer,
     AnimatedOpacity,
     AnimatedPositioned,
-} from "@tur/animation-ext";
+} from "builtin:tur/animation";
 
 // ---------------------------------------------------------------------------
 // "Implicit Animations" — demonstrates tur's AnimatedContainer /

@@ -115,6 +115,7 @@ impl TurVelloApp {
             .font_loader(Box::new(NativeFontLoader::new()))
             .clock(Rc::new(StdClock::new()))
             .plugin(TurStdPlugin)
+            .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
         app.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,

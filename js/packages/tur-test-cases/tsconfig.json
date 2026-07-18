@@ -2,7 +2,13 @@
     "extends": "../../tsconfig.base.json",
     "compilerOptions": {
         "noEmit": true,
-        "types": ["@tur/core", "@tur/std", "@tur/demo-helper", "@tur/net"]
+        "types": [
+            "@tur/core",
+            "@tur/std",
+            "@tur/animation",
+            "@tur/demo-helper",
+            "@tur/net"
+        ]
     },
     "include": ["cases"]
 }

@@ -4196,6 +4196,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-animation"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "boa_gc",
+ "tracing",
+ "tur-engine",
+ "tur-shared",
+ "vello_common",
+]
+
+[[package]]
 name = "tur-async"
 version = "0.1.0"
 dependencies = [
@@ -4283,6 +4295,7 @@ dependencies = [
  "pollster",
  "raw-window-handle",
  "thiserror",
+ "tur-animation",
  "tur-clipboard-capability",
  "tur-engine",
  "tur-native",
@@ -4359,6 +4372,7 @@ dependencies = [
  "parley",
  "tracing",
  "tracing-wasm",
+ "tur-animation",
  "tur-clipboard-wasm",
  "tur-demo-plugin",
  "tur-engine",

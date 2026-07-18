@@ -5,6 +5,7 @@ members = [
     "libs/tur-async",
     "libs/tur-engine",
     "libs/tur-std",
+    "libs/tur-animation",
     "libs/tur-clipboard-capability",
     "libs/tur-clipboard-wasm",
     "libs/tur-clipboard-native",
@@ -29,6 +30,7 @@ tur-shared = { path = "libs/tur-shared" }
 tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-std = { path = "libs/tur-std" }
+tur-animation = { path = "libs/tur-animation" }
 tur-clipboard-capability = { path = "libs/tur-clipboard-capability" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
 tur-clipboard-native = { path = "libs/tur-clipboard-native" }
@@ -49,6 +51,9 @@ boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "6ef5370c1cff770c51
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 resvg = "0.47"
 usvg = "0.47"
+vello_hybrid = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["text"] }
+vello_common = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
+glifo = { git = "https://github.com/linebender/vello.git", rev = "cd852dc06bc0f9011385fc63a4852b0fc853f4b1", default-features = false, features = ["std"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-wasm = "0.2"

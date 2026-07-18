@@ -1,4 +1,3 @@
-pub mod animation;
 pub mod app;
 pub mod async_;
 pub mod bridge;

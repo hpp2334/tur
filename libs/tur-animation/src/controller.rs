@@ -7,12 +7,14 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
+use tur_engine::core::js_value::{type_error, FromJs};
+use tur_engine::core::mutation::{
+    extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue,
+};
 use tur_shared::Curve;
 
-use crate::core::animation::event::{AnimationEndEvent, AnimationTickEvent};
-use crate::core::animation::AnimationManager;
-use crate::core::mutation::{MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts};
-use crate::core::js_value::{type_error, FromJs};
+use crate::event::{AnimationEndEvent, AnimationTickEvent};
+use crate::manager::AnimationManager;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnimationStatus {

@@ -314,6 +314,7 @@ impl TurWasmApp {
                 .capability(Clipboard::new(WasmClipboard))
                 .capability(Http::new(WasmHttp))
                 .plugin(tur_std::TurStdPlugin)
+                .plugin(tur_animation::TurAnimationPlugin)
                 .plugin(TurClipboardPlugin)
                 .plugin(TurNetPlugin)
                 .plugin(tur_demo_plugin::TurDemoPlugin)

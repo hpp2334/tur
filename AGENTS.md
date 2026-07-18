@@ -38,11 +38,23 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  │                   service registry consumed by      │
 │  │                   bridge fns, handlers, plugins)    │
 │  ├── core/bridge   (boa_engine JS bridge, init_bridge) │
+│  ├── core/subsystem (Subsystem trait + flush hook)     │
 │  ├── elements/     (FlexElement, StackElement, etc.    │
 │  │                   each with element.rs + render.rs)  │
 │  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
 │  └── renderer/noop  (NoopRenderer, logs tree stats)    │
-└──────────────────────────────────────────────────────┘
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│  libs/tur-animation (standalone crate)                 │
+│  Registered via TurAnimationPlugin. Owns               │
+│  AnimationManager + Clock (ticks on each flush via     │
+│  the Subsystem hook). Exposes builtin:tur/animation     │
+│  (combined native+JS module: Opacity, Transform,        │
+│  createAnimationController + AnimatedContainer/Opacity/ │
+│  Positioned, Tween, ColorTween) + internal hidden       │
+│  tur:animation/native (ctx-bound fns only).             │
+└──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
 │  Capability crates (3-crate split per domain):         │
@@ -71,6 +83,8 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  Composes: Clipboard::new(WasmClipboard),             │
 │            Http::new(WasmHttp),                        │
 │            CursorCap::new(WasmCursor) + plugins.       │
+│            TurStdPlugin → TurAnimationPlugin →         │
+│            TurClipboardPlugin → TurNetPlugin.          │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -84,6 +98,7 @@ TurEngine::builder()
     .capability(Http::new(WasmHttp))             // tur-net-wasm
     .capability(CursorCap::new(WasmCursor))      // engine-internal
     .plugin(TurStdPlugin)
+    .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
     .plugin(TurClipboardPlugin)                  // requires: Clipboard
     .plugin(TurNetPlugin)                        // Http optional (skips builtin:tur/net if absent)
     .build()
@@ -111,12 +126,16 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 
 ### Animation model (Flutter-aligned)
 
-The engine exposes only the animation **primitives**; the `Animated*` widget family is composed in JS (`@tur/animation-ext`), not implemented as native elements.
+Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hook + `Clock` accessor — no animation code is in `tur-engine`.
 
+- **`Subsystem` trait** (`tur-engine::core::subsystem`) — `fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) -> SubsystemOutcome`. Runs once per `flush()` call, in registration order. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and ticks the manager each flush.
 - **`Curve`** (`tur-shared::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
 - **`Tween<T>`** (`tur-shared::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
+- **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `builtin:tur/animation`.
 - **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
-- **Implicit animation** (JS, in `@tur/animation-ext`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
+- **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
+
+`tur-animation` registers ONE combined consumer-facing module `builtin:tur/animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
 
 ### Domain traits
 
@@ -150,6 +169,7 @@ libs/
         capability/          # Capability trait, Capabilities view, CapabilityDecls
         bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)
         plugin.rs            # Plugin trait (register + requires) + PluginContext
+        subsystem.rs         # Subsystem trait + SubsystemFlushContext (per-flush hooks)
       elements/              # Concrete elements (flex/, stack/, positioned/, etc.)
         flex/element.rs      # FlexElement struct + ElementOnUpdate
         flex/render.rs       # ElementLayout + ElementRender (layout algorithm)
@@ -158,6 +178,10 @@ libs/
         noop/                # NoopRenderer (logging)
       stdlib/platform.rs     # CursorBackend trait + CursorCap capability (engine-internal)
   tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
+  tur-animation/             # Animation subsystem (manager/controller/event + Opacity/Transform
+                             #   effects + JS widgets) — registered via TurAnimationPlugin, exposes
+                             #   `builtin:tur/animation` (combined native+JS module) + internal
+                             #   `tur:animation/native` (ctx-bound fns only)
   tur-clipboard-capability/  # Clipboard trait + Clipboard cap + builtin:tur/clipboard + handlers
   tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend
   tur-clipboard-native/      # NativeClipboard (arboard) backend
@@ -167,9 +191,9 @@ libs/
   tur-wasm/                  # wasm binary (boa_engine + vello-hybrid + tur-engine)
 js/
   packages/
-    tur-animation-ext/        # AnimatedContainer/Opacity/Positioned + Tween/ColorTween (composed from builtin:tur/std primitives)
+    tur-animation/            # Ambient TS types for `builtin:tur/animation` (runtime provided by tur-animation crate)
     tur-demo/                # Playground: thin browser wrapper (loads wasm + impl bundle)
-    tur-demo-impl/           # Playground UI built with @tur/animation-ext + builtin:tur/std (Sidebar/Editor/Viewer)
+    tur-demo-impl/           # Playground UI built with builtin:tur/animation + builtin:tur/std (Sidebar/Editor/Viewer)
     tur-test-cases/          # Test cases (cases/, ~60 cases)
     tur-react-renderer/      # (legacy) React reconciler, superseded by builtin:tur/std
 ```

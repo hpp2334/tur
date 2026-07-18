@@ -1,7 +1,6 @@
 import { saveFile } from "builtin:demo-helper";
 import { request } from "builtin:tur/net";
 import {
-    createAnimationController,
     createSvgResource,
     createTextEditingController,
     derive,
@@ -15,6 +14,7 @@ import {
     source,
     type Task,
 } from "builtin:tur/std";
+import { createAnimationController } from "builtin:tur/animation";
 
 // ---------------------------------------------------------------------------
 // Types

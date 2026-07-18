@@ -24,8 +24,8 @@ import {
     set,
     source,
     Text,
-    Transform,
 } from "builtin:tur/std";
+import { Transform } from "builtin:tur/animation";
 import {
     type DirEntry,
     doDownload,
