@@ -1,4 +1,9 @@
 import {
+    AnimatedContainer,
+    AnimatedOpacity,
+    AnimatedPositioned,
+} from "builtin:tur/animation";
+import {
     Alignment,
     Color,
     Column,
@@ -23,11 +28,6 @@ import {
     Text,
     view,
 } from "builtin:tur/std";
-import {
-    AnimatedContainer,
-    AnimatedOpacity,
-    AnimatedPositioned,
-} from "builtin:tur/animation";
 
 // ---------------------------------------------------------------------------
 // "Implicit Animations" — demonstrates tur's AnimatedContainer /

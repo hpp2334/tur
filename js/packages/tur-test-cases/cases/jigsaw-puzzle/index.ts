@@ -1,4 +1,9 @@
 import {
+    type AnimationController,
+    createAnimationController,
+    Transform,
+} from "builtin:tur/animation";
+import {
     Alignment,
     Color,
     Column,
@@ -22,11 +27,6 @@ import {
     Text,
     view,
 } from "builtin:tur/std";
-import {
-    type AnimationController,
-    createAnimationController,
-    Transform,
-} from "builtin:tur/animation";
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.
