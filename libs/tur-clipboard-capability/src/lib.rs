@@ -13,10 +13,12 @@
 //!   registered by [`TurClipboardPlugin`] so embedders no longer need to wire
 //!   the clipboard backend through `TurStdPlugin` separately.
 //!
-//! Paste (Cmd+V) is not handled here — it flows through the engine's standard
-//! element-event pipeline as `PlatformEvent::ClipboardPaste`, dispatched to
-//! the focused element's `ElementOnClipboard` impl by the engine's
-//! `ClipboardPasteAppHandler` (registered by `TurStdPlugin`).
+//! Paste (Cmd+V) is not handled here — the embedder pushes
+//! `PlatformEvent::ClipboardPaste`, which the engine's
+//! `ClipboardPasteAppHandler` (registered by `TurStdPlugin`) forwards as
+//! `AppEvent::ClipboardPaste`. tur-text's `ClipboardPasteHandler` then
+//! consumes the AppEvent and inserts the text into the focused
+//! `EditableTextElement`.
 //!
 //! ## Architecture
 //!
@@ -69,9 +71,11 @@ impl Capability for Clipboard {}
 /// `clipboard` object with `readText` / `writeText` methods) plus the
 /// engine-internal `ClipboardWriteHandler` (for the Cmd+C/Cmd+X event path).
 ///
-/// Paste (Cmd+V) is handled separately by the engine's
-/// `ClipboardPasteAppHandler`, dispatched to the focused element's
-/// `ElementOnClipboard` impl.
+/// Paste (Cmd+V) is handled separately: the embedder pushes
+/// `PlatformEvent::ClipboardPaste`, the engine's
+/// `ClipboardPasteAppHandler` (in `TurStdPlugin`) forwards it as
+/// `AppEvent::ClipboardPaste`, and tur-text's `ClipboardPasteHandler`
+/// consumes the AppEvent and inserts the text into the focused editable.
 ///
 /// The plugin declares a hard dependency on the [`Clipboard`] capability
 /// via `requires`; the engine builder fails fast at `build()` if the

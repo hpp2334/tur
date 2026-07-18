@@ -49,8 +49,10 @@ pub enum PlatformEvent {
     Ime(AppImeEvent),
     /// Embedder → engine: a paste occurred (the user pressed Cmd+V, the
     /// embedder captured the paste event on its hidden input, and is
-    /// forwarding the clipboard text). Handled by `ClipboardPasteAppHandler`,
-    /// which inserts the text into the focused editable.
+    /// forwarding the clipboard text). Forwarded as
+    /// [`AppEvent::ClipboardPaste`] by the engine's
+    /// `ClipboardPasteAppHandler`; tur-text's `ClipboardPasteHandler` then
+    /// inserts the text into the focused editable.
     ClipboardPaste {
         text: String,
     },
@@ -127,6 +129,16 @@ pub enum AppEvent {
     /// clipboard interaction (e.g. `navigator.clipboard.writeText` in
     /// tur-wasm).
     ClipboardWrite {
+        text: String,
+    },
+    /// Engine-internal paste request — the paste text to insert into the
+    /// focused editable. Produced by the engine's `ClipboardPasteAppHandler`
+    /// (which forwards the embedder's [`PlatformEvent::ClipboardPaste`]) and
+    /// consumed by tur-text's `ClipboardPasteHandler`, which does the actual
+    /// insertion. Lives on the AppEvent bus so the paste logic stays in
+    /// tur-text next to `EditableTextElement` instead of requiring a
+    /// per-element trait in the engine.
+    ClipboardPaste {
         text: String,
     },
 }

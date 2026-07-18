@@ -2,12 +2,13 @@
 //!
 //! Provides text rendering and editing elements (`TextElement`,
 //! `EditableTextElement`, `ParagraphElement`), their controllers
-//! (`TextEditingController`, `UndoController`), the post-event
-//! `EnsureCaretVisibleHandler`, and the `extract_layout_data` bridge helper.
+//! (`TextEditingController`, `UndoController`), the paste + caret-visible
+//! handlers (`ClipboardPasteHandler`, `EnsureCaretVisibleHandler`), and the
+//! `extract_layout_data` bridge helper.
 //!
 //! Unlike `tur-animation`, this crate is **not** a plugin. It is installed
 //! into `builtin:tur/std` by `TurStdPlugin` via [`install_text_feature`],
-//! which registers the boa classes + post-handler and returns the JS factory
+//! which registers the boa classes + handlers and returns the JS factory
 //! fns to be merged into `std_fns`. From JS's perspective Text/Input ship as
 //! part of `builtin:tur/std`.
 //!
@@ -15,7 +16,11 @@
 //! `tur_engine::core::text::TextLayoutData` and
 //! `tur_engine::core::fonts::FontManager` — which `Canvas::fill_text_layout`
 //! consumes to do the actual drawing. tur-text produces these structs from
-//! JS-side props via `extract_layout_data`.
+//! JS-side props via `extract_layout_data`. Paste flows through the
+//! engine-internal bus: the engine's `ClipboardPasteAppHandler` (in
+//! `TurStdPlugin`) forwards `PlatformEvent::ClipboardPaste` as
+//! `AppEvent::ClipboardPaste`, which [`handlers::ClipboardPasteHandler`]
+//! consumes here.
 
 pub mod controller;
 pub mod elements;
@@ -36,8 +41,12 @@ use tur_engine::error::TurError;
 /// Side effects:
 /// - Registers the boa classes [`TextEditingController`] and
 ///   [`UndoController`] on `globalThis`.
-/// - Registers tur-text's post-handlers ([`handlers::EnsureCaretVisibleHandler`])
-///   so the caret stays visible after keyboard / IME / clipboard-paste events.
+/// - Registers tur-text's [`handlers::ClipboardPasteHandler`] (consumes
+///   `AppEvent::ClipboardPaste` forwarded by the engine's
+///   `ClipboardPasteAppHandler`) and [`handlers::EnsureCaretVisibleHandler`]
+///   (post-handler that keeps the caret visible after keyboard / IME / paste
+///   events). Registration order matters: paste handler before caret-visible
+///   handler, so the latter observes the post-paste caret.
 ///
 /// Returns: the `Text` / `Input` / `createTextEditingController` /
 /// `createUndoController` factory fns, which the caller merges into
@@ -50,10 +59,14 @@ pub fn install_text_feature(
     ctx.register_class::<UndoController>()
         .map_err(|e| TurError::Other(format!("failed to register UndoController: {e}")))?;
 
-    // Runs after engine's KeyboardAppHandler / ImeAppHandler /
-    // ClipboardPasteAppHandler (registration order is preserved by the
-    // engine's handler vec). Keeps the caret visible after any text-moving
-    // event; no-op when the focused element isn't an EditableText.
+    // Handlers run in registration order, so register the paste handler
+    // BEFORE `EnsureCaretVisibleHandler`. Both consume
+    // `AppEvent::ClipboardPaste`: paste mutates the focused editable's text +
+    // caret, then the caret-visible handler observes the post-paste caret
+    // and scrolls if needed. (Engine's `KeyboardAppHandler` /
+    // `ImeAppHandler` are registered even earlier by `TurStdPlugin`, so
+    // keyboard / IME caret moves also land before `EnsureCaretVisibleHandler`.)
+    ctx.register_handler(Box::new(handlers::ClipboardPasteHandler));
     ctx.register_handler(Box::new(handlers::EnsureCaretVisibleHandler));
 
     let mut fns = Vec::new();

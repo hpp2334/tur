@@ -1,9 +1,10 @@
 //! Engine-internal clipboard write handler — the Cmd+C/Cmd+X path.
 //!
-//! Paste (Cmd+V) is no longer handled here: it flows through the engine's
-//! standard element-event pipeline as `PlatformEvent::ClipboardPaste`,
-//! dispatched to the focused element's `ElementOnClipboard` impl by the
-//! engine's `ClipboardPasteAppHandler` (registered by `TurStdPlugin`).
+//! Paste (Cmd+V) is not handled here. The embedder pushes
+//! `PlatformEvent::ClipboardPaste`, which the engine's
+//! `ClipboardPasteAppHandler` forwards as `AppEvent::ClipboardPaste`; tur-text's
+//! `ClipboardPasteHandler` then consumes the AppEvent and inserts the text
+//! into the focused `EditableTextElement`.
 
 use tur_engine::core::event::{AppEvent, PlatformEvent};
 use tur_engine::core::handler::{AppHandler, HandlerContext};

@@ -30,9 +30,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  │                   ElementLayout, ElementRender,     │
 │  │                   ElementOnUpdate, ElementSubscribe)│
 │  ├── core/elements (AnyElement, ElementNode,           │
-│  │                   ElementTree with layout+paint,    │
-│  │                   ElementOnClipboard trait for       │
-│  │                   paste dispatch)                   │
+│  │                   ElementTree with layout+paint)    │
 │  ├── core/render   (PaintContext, Renderer,            │
 │  │                   ChildLayout, ChildPaint)          │
 │  ├── core/capability (Capability trait, Capabilities,  │
@@ -161,8 +159,8 @@ Text logic lives in the standalone `libs/tur-text` crate — **not** a plugin. I
 - **`extract_layout_data(props) -> TextLayoutData`** (tur-text, in `src/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
 - **Elements** (`tur-text::elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
 - **Controllers** (`tur-text::controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
-- **Post-event caret visibility** (`tur-text::handlers`): `EnsureCaretVisibleHandler` runs after keyboard/IME/clipboard-paste handlers (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `keyboard.rs` / `ime.rs` no longer call caret-scroll directly.
-- **Paste dispatch** (engine): `ElementOnClipboard` trait + `ClipboardPasteAppHandler` in `tur-engine::core::handlers` route `PlatformEvent::ClipboardPaste` to the focused element. tur-text's `EditableTextElement` is the only impl (replaces selection with pasted text, or inserts at cursor). This mirrors the keyboard/IME event pipeline.
+- **Post-event caret visibility** (`tur-text::handlers`): `EnsureCaretVisibleHandler` runs after keyboard/IME/paste handlers (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `keyboard.rs` / `ime.rs` no longer call caret-scroll directly.
+- **Paste dispatch** (engine → tur-text): the engine's `ClipboardPasteAppHandler` (in `tur-engine::core::handlers`, registered by `TurStdPlugin`) forwards the embedder's `PlatformEvent::ClipboardPaste` as `AppEvent::ClipboardPaste` on the engine-internal event bus. tur-text's `ClipboardPasteHandler` (in `tur-text::handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element knowledge.
 
 JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
 
@@ -174,9 +172,8 @@ Each element implements these focused traits:
 - `ElementLayout` — layout (`perform_layout`: measure children, compute own size, assign child offsets in one pass)
 - `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
 - `ElementSubscribe` — declares which reactive atoms the node depends on (`subscribe`), so a reactive flush can mark it dirty for re-layout. Runs as an explicit phase after `perform_layout` for dirty nodes.
-- `ElementOnClipboard` — paste handling (`on_clipboard_paste`); only `EditableTextElement` (tur-text) implements it. The engine's `ClipboardPasteAppHandler` dispatches `PlatformEvent::ClipboardPaste` to the focused element through `AnyElement::on_clipboard_paste`.
 
-Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits).
+Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits). Paste is **not** an element trait — it flows through `AppEvent::ClipboardPaste` + tur-text's `ClipboardPasteHandler` (see [Text model](#text-model)).
 
 ### Data flow
 

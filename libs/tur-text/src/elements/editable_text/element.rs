@@ -12,9 +12,9 @@ use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
 use tur_engine::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementOnClipboard, ElementOnClipboardContext,
-    ElementOnFocus, ElementOnGesture, ElementOnGestureContext, ElementOnIme, ElementOnImeContext,
-    ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace, TraceValue,
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementOnIme, ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace,
+    TraceValue,
 };
 use tur_engine::core::event::AppImeEvent;
 use tur_engine::core::event::PointerDeviceKind;
@@ -150,8 +150,7 @@ impl View for EditableTextView {
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
-            .with_focusable::<EditableTextElement>()
-            .with_clipboard_paste::<EditableTextElement>(),
+            .with_focusable::<EditableTextElement>(),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -943,45 +942,6 @@ impl ElementOnKeyboard for EditableTextElement {
     }
 }
 
-impl ElementOnClipboard for EditableTextElement {
-    fn on_clipboard_paste(&mut self, cx: &mut ElementOnClipboardContext, text: &str) {
-        // Mirror ClipboardPasteAppHandler's pre-extraction logic: replace any
-        // active selection, otherwise insert at the caret. Records undo
-        // history via the controller's mutating methods (suppressed while
-        // the undo controller itself applies a restored value).
-        let insert_at = if self.controller().has_selection() {
-            let (start, _end) = self.controller().selection_range();
-            self.controller_mut().delete_range(start, _end);
-            start
-        } else {
-            self.controller().cursor_position()
-        };
-
-        let prev_text = {
-            let c = self.controller();
-            c.text()
-        };
-
-        {
-            let mut c = self.controller_mut();
-            c.insert_str_at(insert_at, text);
-            let new_cursor = insert_at + text.len();
-            c.set_cursor_position(new_cursor);
-            c.set_selection(new_cursor, new_cursor);
-        }
-
-        let new_text = self.controller().text();
-        if new_text != prev_text
-            && let Some(m) = self.controller().on_input() {
-                cx.push_event(m, InputEvent { value: new_text, enter: false });
-            }
-        let cursor = self.controller().cursor_position();
-        if let Some(m) = self.controller().on_cursor_change() {
-            cx.push_event(m, CursorChangeEvent { position: cursor });
-        }
-        cx.request_paint();
-    }
-}
 
 
 impl ElementOnIme for EditableTextElement {
