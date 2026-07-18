@@ -14,7 +14,6 @@ tur-text = { workspace = true }
 tur-clipboard-capability = { workspace = true }
 tur-net-capability = { workspace = true }
 tur-native = { workspace = true }
-tur-shared = { workspace = true }
 boa_engine = { workspace = true }
 libc = "0.2"
 

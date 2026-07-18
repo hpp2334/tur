@@ -13,7 +13,7 @@ use crate::controller::SelectionChangeEvent;
 use tur_engine::core::view::{ViewCx, Lifecycle, Val, View};
 use crate::elements::text_shared::span_data::SpanData;
 use tur_engine::core::text::text_layout::TextLayoutData;
-use tur_shared::Color;
+use tur_engine::core::render::Color;
 
 // ---------------------------------------------------------------------------
 // TextView — the user's declaration. Pure Rust, no JsValues.

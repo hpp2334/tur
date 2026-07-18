@@ -4,7 +4,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::Clock;
-use tur_shared::{Cursor, Offset};
+use crate::core::layout::{Offset};
+use crate::core::platform::{Cursor};
 
 use crate::core::platform::CursorBackend;
 

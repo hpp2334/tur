@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::{Axis, Constraints, CrossAxisAlignment, MainAxisSize, MainAxisAlignment, Size};
+use crate::core::layout::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Size};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};

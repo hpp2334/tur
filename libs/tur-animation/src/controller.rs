@@ -11,7 +11,7 @@ use tur_engine::core::js_value::{type_error, FromJs};
 use tur_engine::core::mutation::{
     extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue,
 };
-use tur_shared::Curve;
+use crate::Curve;
 
 use crate::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::manager::AnimationManager;

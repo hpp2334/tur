@@ -1,7 +1,7 @@
 use std::fmt;
 
 use boa_engine::Context;
-use tur_shared::{ComputedLayout, Constraints};
+use crate::core::layout::{ComputedLayout, Constraints};
 
 use crate::core::bridge::{BoaOpaque, TurNodeHandle};
 use crate::core::element::{ElementNodeId, NodeId};

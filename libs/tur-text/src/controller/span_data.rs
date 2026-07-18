@@ -1,4 +1,4 @@
-use tur_shared::Color;
+use tur_engine::core::render::Color;
 
 use tur_engine::core::js_value::FromJs;
 

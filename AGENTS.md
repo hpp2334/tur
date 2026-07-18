@@ -1,6 +1,6 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Renders React applications via a custom reconciler (`@tur/react-renderer`).
+A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `builtin:tur/std` / `builtin:tur/animation` / `builtin:tur/clipboard` / `builtin:tur/net` modules registered by engine plugins.
 
 ## Architecture
 
@@ -13,15 +13,13 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. Re
 │  - Tur viewer (embedded WASM canvas)                 │
 │  - Browser-side bundling via @rspack/browser          │
 ├─────────────────────────────────────────────────────┤
+│  js/packages/tur-demo-impl                            │
+│  Playground UI built with builtin:tur/animation +    │
+│  builtin:tur/std (Sidebar/Editor/Viewer)              │
+├─────────────────────────────────────────────────────┤
 │  js/packages/tur-test-cases                          │
-│  ~60 React test cases in react-cases/                 │
-│  Each case calls renderRoot(Component)                │
-├─────────────────────────────────────────────────────┤
-│  js/packages/tur-react                                │
-│  React component wrappers (Column, Row, Container…)  │
-├─────────────────────────────────────────────────────┤
-│  js/packages/tur-react-renderer                       │
-│  Custom React reconciler → globalThis.__tur.*         │
+│  ~60 test cases in cases/ — each calls into           │
+│  builtin:tur/std directly                            │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -128,8 +126,8 @@ TurEngine::builder()
   `HandlerContext.capabilities`).
 - Convention: capability newtypes use base names (`Clipboard`, `Http`);
   backend traits use `*Backend` suffix (`ClipboardBackend`, `HttpBackend`,
-  `CursorBackend`). `CursorCap` is the lone exception because `tur_shared::Cursor`
-  already names the cursor-kind enum.
+  `CursorBackend`). `CursorCap` is the lone exception because
+  `core::platform::Cursor` already names the cursor-kind enum.
 
 
 ### Element types
@@ -143,8 +141,8 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hook + `Clock` accessor — no animation code is in `tur-engine`.
 
 - **`Subsystem` trait** (`tur-engine::core::subsystem`) — `fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) -> SubsystemOutcome`. Runs once per `flush()` call, in registration order. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and ticks the manager each flush.
-- **`Curve`** (`tur-shared::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
-- **`Tween<T>`** (`tur-shared::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
+- **`Curve`** (`tur-animation::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
+- **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
 - **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `builtin:tur/animation`.
 - **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
 - **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
@@ -206,12 +204,13 @@ libs/
       renderer/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
-      stdlib/platform.rs     # CursorBackend trait + CursorCap capability (engine-internal)
-  tur-shared/                # Shared types (Size, Offset, Constraints, enums, Color)
+      stdlib/platform.rs     # CursorBackend trait + CursorCap capability + Cursor enum
+                             #   (engine-internal)
   tur-animation/             # Animation subsystem (manager/controller/event + Opacity/Transform
-                             #   effects + JS widgets) — registered via TurAnimationPlugin, exposes
-                             #   `builtin:tur/animation` (combined native+JS module) + internal
-                             #   `tur:animation/native` (ctx-bound fns only)
+                             #   effects + JS widgets + Curve/NumTween/ColorTween) — registered
+                             #   via TurAnimationPlugin, exposes `builtin:tur/animation`
+                             #   (combined native+JS module) + internal `tur:animation/native`
+                             #   (ctx-bound fns only)
   tur-text/                  # Text feature library (TextElement, EditableTextElement,
                              #   ParagraphElement, controllers, EnsureCaretVisibleHandler,
                              #   extract_layout_data) — NOT a plugin; installed into
@@ -229,7 +228,6 @@ js/
     tur-demo/                # Playground: thin browser wrapper (loads wasm + impl bundle)
     tur-demo-impl/           # Playground UI built with builtin:tur/animation + builtin:tur/std (Sidebar/Editor/Viewer)
     tur-test-cases/          # Test cases (cases/, ~60 cases)
-    tur-react-renderer/      # (legacy) React reconciler, superseded by builtin:tur/std
 ```
 
 ## Commands
@@ -279,8 +277,7 @@ pnpm lint             # biome lint across all packages
 ### Per-package JS builds
 
 ```sh
-cd js/packages/tur-react-renderer && pnpm build
-cd js/packages/tur-react && pnpm build
+cd js/packages/tur-demo-impl && pnpm build
 cd js/packages/tur-test-cases && pnpm build
 ```
 

@@ -1,5 +1,5 @@
 //! The 8 enum const-objects exported by `builtin:tur/std` (Axis,
-//! MainAxisAlignment, …). Each mirrors a `tur_shared` C-like enum so JS
+//! MainAxisAlignment, …). Each mirrors a `core::layout` C-like enum so JS
 //! callers write `Axis.Vertical` and `Axis[0] === "Vertical"`.
 
 use boa_engine::js_string;

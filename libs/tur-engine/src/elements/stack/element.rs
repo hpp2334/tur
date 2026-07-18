@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::{Alignment, Size, StackFit};
+use crate::core::layout::{Alignment, Size, StackFit};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};

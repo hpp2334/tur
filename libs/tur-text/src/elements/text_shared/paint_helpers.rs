@@ -1,4 +1,5 @@
-use tur_shared::{Brush, Color, Geometry, Offset, Size};
+use tur_engine::core::render::{Brush, Color};
+use tur_engine::core::layout::{Geometry, Offset, Size};
 
 use tur_engine::core::text::text_layout::TextLayoutData;
 

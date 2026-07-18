@@ -63,7 +63,7 @@ pub trait ViewCx {
     fn set_query_key(&mut self, id: ElementNodeId, keys: Vec<String>);
 
     /// Read the computed layout of a node (for scroll controllers etc.).
-    fn computed_layout(&self, id: ElementNodeId) -> Option<tur_shared::ComputedLayout>;
+    fn computed_layout(&self, id: ElementNodeId) -> Option<crate::core::layout::ComputedLayout>;
 
     /// Read-only view of the reactive store for resolving atom values.
     fn store_read_only(&self) -> ReactiveReadStore;

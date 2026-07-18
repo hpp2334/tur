@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use tur_shared::{Cursor, Offset, Size};
+use crate::core::layout::{Offset, Size};
+use crate::core::platform::{Cursor};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;

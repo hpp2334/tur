@@ -1,6 +1,6 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
-use tur_shared::{ComputedLayout, Offset, Size};
+use tur_engine::core::layout::{ComputedLayout, Offset, Size};
 use vello_common::kurbo::Affine;
 
 use super::element::{OpacityElement, TransformElement, TransformPainting};
@@ -81,7 +81,7 @@ impl ElementRender for TransformElement {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tur_shared::{Alignment, Size};
+    use tur_engine::core::layout::{Alignment, Size};
     use vello_common::kurbo::Point;
 
     fn approx(a: Point, b: Point) -> bool {

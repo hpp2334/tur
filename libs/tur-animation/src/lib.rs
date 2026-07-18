@@ -15,13 +15,17 @@
 //! lives inside the `AnimationSubsystem` for the lifetime of the app.
 
 pub mod controller;
+pub mod curve;
 pub mod effects;
 pub mod event;
 pub mod flush_hook;
 pub mod manager;
 pub mod plugin;
+pub mod tween;
 
 pub use controller::AnimationController;
+pub use curve::Curve;
 pub use flush_hook::AnimationSubsystem;
 pub use manager::AnimationManager;
 pub use plugin::TurAnimationPlugin;
+pub use tween::{ColorTween, NumTween, Tween};

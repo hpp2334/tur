@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::{Alignment, BorderPosition, Brush, Color};
+use crate::core::render::{Brush, Color};
+use crate::core::layout::{Alignment, BorderPosition};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};

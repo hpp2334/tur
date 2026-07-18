@@ -3,7 +3,7 @@ use std::time::Duration;
 use boa_engine::class::Class;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use tur_shared::Color;
+use tur_engine::core::render::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
 use tur_engine::core::async_::Task;
@@ -572,7 +572,7 @@ impl EditableTextElement {
         (handled, new_clipboard_write)
     }
 
-    fn char_index_at(&self, local_position: &tur_shared::Offset) -> usize {
+    fn char_index_at(&self, local_position: &tur_engine::core::layout::Offset) -> usize {
         // When the buffer is empty and no IME composition is active, the
         // cached layout was built from the placeholder text — clicking
         // anywhere inside it must still map to byte 0 so the caret lands
@@ -663,8 +663,8 @@ fn next_grapheme_boundary(s: &str, byte_pos: usize) -> usize {
 
 #[derive(Clone)]
 pub struct ContextMenuEvent {
-    local: tur_shared::Offset,
-    global: tur_shared::Offset,
+    local: tur_engine::core::layout::Offset,
+    global: tur_engine::core::layout::Offset,
 }
 
 impl IntoJsArgs for ContextMenuEvent {
@@ -824,7 +824,7 @@ impl ElementOnGesture for EditableTextElement {
                 //   - Otherwise (left click, middle click, or right-click
                 //     outside the selection), move the caret to the click
                 //     position and collapse the selection.
-                let preserve = *button == tur_shared::MouseButton::Right
+                let preserve = *button == tur_engine::core::layout::MouseButton::Right
                     && self.controller().has_selection()
                     && {
                         let (a, b) = self.controller().selection_range();

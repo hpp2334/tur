@@ -1,6 +1,6 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::layout::{ElementLayout, LayoutContext};
-use tur_shared::{Constraints, Offset, Size};
+use tur_engine::core::layout::{Constraints, Offset, Size};
 
 use super::element::{OpacityElement, TransformElement};
 
@@ -58,7 +58,7 @@ impl ElementLayout for TransformElement {
             // Default pivot is the child center (Flutter `Transform` parity).
             alignment: cx
                 .read_val_opt(self.view.alignment.as_ref())
-                .unwrap_or(tur_shared::Alignment::Center),
+                .unwrap_or(tur_engine::core::layout::Alignment::Center),
         };
 
         // --- position ---

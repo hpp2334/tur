@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
-use tur_shared::Constraints;
+use crate::core::layout::Constraints;
 
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;

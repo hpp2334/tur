@@ -1,7 +1,7 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_text::elements::TextElement;
 use tur_integration_tests::TurTestApp;
-use tur_shared::Cursor;
+use tur_engine::core::platform::Cursor;
 
 fn build(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("mouse-region-cursor").unwrap();

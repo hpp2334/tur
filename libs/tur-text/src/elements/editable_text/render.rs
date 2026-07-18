@@ -1,4 +1,5 @@
-use tur_shared::{Brush, Color, ComputedLayout, Geometry, Offset, Size};
+use tur_engine::core::render::{Brush, Color};
+use tur_engine::core::layout::{ComputedLayout, Geometry, Offset, Size};
 
 use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::render::{Canvas, ElementRender, PaintContext};

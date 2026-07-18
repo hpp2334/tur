@@ -11,7 +11,6 @@ function run(label, cmd, opts) {
 }
 
 run('pnpm install', 'pnpm install --frozen-lockfile', { cwd: jsDir });
-run('gen types', 'cargo test -p tur-shared --lib export_bindings --locked', { cwd: root });
 run('build js', 'pnpm build', { cwd: jsDir });
 run('cargo test', 'cargo test --workspace --locked', { cwd: root });
 run('wasm-pack build', 'wasm-pack build --target web --no-opt -- --locked', { cwd: wasmDir });

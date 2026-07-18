@@ -1,6 +1,7 @@
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::{Brush, Size};
+use crate::core::render::{Brush};
+use crate::core::layout::{Size};
 
 use crate::core::bridge::JsProps;
 use crate::core::element::{ElementNodeId, NodeId};

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use tur_shared::Axis;
+use crate::core::layout::Axis;
 
 use crate::core::bridge::JsProps;
 use crate::core::mutation::IntoJsArgs;

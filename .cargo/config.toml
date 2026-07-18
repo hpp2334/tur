@@ -1,4 +1,2 @@
 [env]
-TS_RS_EXPORT_DIR = { value = "js/packages/tur-react-renderer/src", relative = true }
-TS_RS_LARGE_INT = "number"
 RUST_MIN_STACK = "8388608"

@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use crate::core::reactive::ReactiveReadJsContext;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
-use tur_shared::{Constraints, Offset, Size};
+use crate::core::layout::{Constraints, Offset, Size};
 
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;

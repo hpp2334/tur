@@ -1,4 +1,4 @@
-use tur_shared::{MouseButton, Offset};
+use crate::core::layout::{MouseButton, Offset};
 
 use crate::core::element::ElementNodeId;
 use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};

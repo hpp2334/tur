@@ -16,7 +16,6 @@ tur-animation = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
 tur-demo-plugin = { workspace = true }
-tur-shared = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
 tracing = { workspace = true }

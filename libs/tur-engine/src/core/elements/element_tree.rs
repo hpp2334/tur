@@ -4,7 +4,7 @@ use std::fmt;
 use std::rc::Rc;
 
 use parley::LayoutContext as ParleyLayoutContext;
-use tur_shared::{Constraints, Offset, Size};
+use crate::core::layout::{Constraints, Offset, Size};
 
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};

@@ -89,7 +89,7 @@ declare module "builtin:tur/std" {
      *  handler; import from `builtin:tur/std`. */
     export const viewportSize$: Atom<ViewportSize>;
 
-    /** OS cursor keywords (CSS cursor names). Mirrors `tur_shared::Cursor`. */
+    /** OS cursor keywords (CSS cursor names). Mirrors `tur_engine::core::platform::Cursor`. */
     export type Cursor =
         | "auto"
         | "default"
@@ -167,7 +167,7 @@ declare module "builtin:tur/std" {
     // ---------------------------------------------------------------------------
     // Enums — exported as runtime objects (`MainAxisSize.Max`) directly from
     // this native module; the matching type is the union of their literal values.
-    // Mirrors the `tur_shared` C-like enums. The native module exports each as a
+    // Mirrors the `tur_engine::core::layout` C-like enums. The native module exports each as a
     // TS-style numeric enum object (forward `Name: n` + reverse `"n": "Name"`).
     // ---------------------------------------------------------------------------
 

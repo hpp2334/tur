@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::BoxFit;
+use crate::core::layout::BoxFit;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
@@ -52,7 +52,7 @@ impl View for ImageView {
 #[derive(Default, Clone)]
 pub struct ImagePainting {
     pub(crate) resource_id: Option<u64>,
-    pub(crate) fit: Option<tur_shared::BoxFit>,
+    pub(crate) fit: Option<crate::core::layout::BoxFit>,
 }
 
 pub struct ImageElement {

@@ -1,4 +1,4 @@
-use tur_shared::{ComputedLayout, Offset};
+use crate::core::layout::{ComputedLayout, Offset};
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, PaintContext};

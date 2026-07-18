@@ -2,7 +2,7 @@ pub mod queue;
 
 use crate::core::element::ElementNodeId;
 use crate::core::keyboard::AppKeyEvent;
-use tur_shared::{MouseButton, Offset};
+use crate::core::layout::{MouseButton, Offset};
 
 /// The physical input device that produced a pointer event. Used by the
 /// gesture arena to apply different disambiguation rules for touch vs

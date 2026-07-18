@@ -168,11 +168,11 @@ impl Class for LazyListController {
 
                 let vp = ll.position.viewport_size();
                 let dim = match ll.axis {
-                    tur_shared::Axis::Vertical => vp.height,
-                    tur_shared::Axis::Horizontal => vp.width,
+                    crate::core::layout::Axis::Vertical => vp.height,
+                    crate::core::layout::Axis::Horizontal => vp.width,
                 };
 
-                let viewport_main = tur_shared::Axis::main(&ll.axis, vp);
+                let viewport_main = crate::core::layout::Axis::main(&ll.axis, vp);
                 let (start, end) = ll.compute_visible_range(viewport_main);
 
                 let new_offset = ll.position.pixels();

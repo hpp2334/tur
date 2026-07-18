@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use tur_shared::Color;
+use tur_engine::core::render::Color;
 
 use tur_engine::core::bridge::JsProps;
 use tur_engine::core::element::NodeId;
