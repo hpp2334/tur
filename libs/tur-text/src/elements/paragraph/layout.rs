@@ -1,10 +1,10 @@
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
 use tur_shared::{Constraints, Size};
 
-use crate::core::element::ElementNodeId;
-use crate::core::layout::{ElementLayout, LayoutContext};
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::layout::{ElementLayout, LayoutContext};
 use crate::elements::text_shared::span_data::SpanData;
-use crate::core::text::text_layout;
+use crate::text_layout;
 
 use super::element::TextElement;
 

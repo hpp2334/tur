@@ -1,11 +1,11 @@
 use tur_shared::{Brush, Color, Geometry, Offset, Size};
 
-use crate::core::text::text_layout::TextLayoutData;
+use tur_engine::core::text::text_layout::TextLayoutData;
 
 const DEFAULT_SELECTION_COLOR: Color = Color::rgba(56, 132, 255, 140);
 
 pub fn paint_selection(
-    canvas: &mut dyn crate::core::render::Canvas,
+    canvas: &mut dyn tur_engine::core::render::Canvas,
     offset: Offset,
     layout_data: &TextLayoutData,
     start_byte: usize,

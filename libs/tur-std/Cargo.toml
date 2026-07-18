@@ -8,4 +8,5 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true }
+tur-text = { workspace = true }
 boa_engine = { workspace = true }

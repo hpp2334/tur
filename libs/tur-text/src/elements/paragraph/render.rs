@@ -1,7 +1,7 @@
 use tur_shared::{ComputedLayout, Offset};
 
-use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 use crate::elements::text_shared::paint_helpers;
 
 use super::element::TextElement;

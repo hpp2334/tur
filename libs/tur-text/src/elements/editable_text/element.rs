@@ -6,30 +6,30 @@ use boa_engine::{Context, JsValue};
 use tur_shared::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::core::async_::Task;
-use crate::core::mutation::{MutationHandle, IntoJsArgs};
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementOnIme, ElementOnImeContext, ElementOnKeyboard,
-    ElementOnKeyboardContext, ElementTrace, TraceValue,
+use tur_engine::core::async_::Task;
+use tur_engine::core::mutation::{MutationHandle, IntoJsArgs};
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::focus::{BlurEvent, FocusEvent, Focusable};
+use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
+use tur_engine::core::elements::{
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementOnIme, ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace,
+    TraceValue,
 };
-use crate::core::event::AppImeEvent;
-use crate::core::event::PointerDeviceKind;
-use crate::core::keyboard::{AppKeyEvent, KeyEventType};
-use crate::core::keyboard::events::KeydownEvent;
-use crate::core::text::controller::TextEditingController;
-use crate::core::text::controller::{
+use tur_engine::core::event::AppImeEvent;
+use tur_engine::core::event::PointerDeviceKind;
+use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType};
+use tur_engine::core::keyboard::events::KeydownEvent;
+use crate::controller::TextEditingController;
+use crate::controller::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::bridge::JsProps;
-use crate::core::view::{SharedViewCx, ViewCx, read_atom_raw, Lifecycle, Val, View};
-use crate::core::reactive::AnyReadable;
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::view::{SharedViewCx, ViewCx, read_atom_raw, Lifecycle, Val, View};
+use tur_engine::core::reactive::AnyReadable;
 use crate::elements::text_shared::span_data::SpanData;
-use crate::core::text::text_layout::TextLayoutData;
+use tur_engine::core::text::text_layout::TextLayoutData;
 
 /// Default text color (opaque black) shared by the layout (text fall-back)
 /// and render (cursor fall-back) modules.
@@ -190,7 +190,7 @@ pub struct EditableTextElement {
 /// even half-cycles: `(now_ms / CARET_BLINK_HALF_PERIOD_MS) % 2 == 0`.
 pub(crate) const CARET_BLINK_HALF_PERIOD_MS: u64 = 530;
 
-impl crate::core::elements::ElementCursorRect for EditableTextElement {
+impl tur_engine::core::elements::ElementCursorRect for EditableTextElement {
     fn cursor_rect_relative(&self) -> Option<(f64, f64, f64, f64)> {
         let layout_data = self.cached_layout.as_ref()?;
         let cursor_byte = self.cursor_position();
@@ -230,11 +230,11 @@ impl EditableTextElement {
             .expect("controller is always a valid TextEditingController")
     }
 
-    pub fn undo_controller_mut(&self) -> Option<boa_engine::object::RefMut<'_, crate::core::text::controller::UndoController>> {
+    pub fn undo_controller_mut(&self) -> Option<boa_engine::object::RefMut<'_, crate::controller::UndoController>> {
         self.view
             .undo_controller
             .as_ref()?
-            .downcast_mut::<crate::core::text::controller::UndoController>()
+            .downcast_mut::<crate::controller::UndoController>()
     }
 
     pub fn text(&self) -> String {
@@ -457,7 +457,7 @@ impl EditableTextElement {
                 // Paste: the browser fires a `paste` event on the hidden
                 // textarea when the user presses Cmd+V; the wasm layer
                 // forwards the clipboard text via AppEvent::ClipboardPaste,
-                // which is processed by ClipboardPasteHandler. Here we just
+                // which is processed by ClipboardPasteAppHandler. Here we just
                 // mark the key as handled so no fallback runs.
                 true
             }
@@ -466,7 +466,7 @@ impl EditableTextElement {
                 // owns the history stacks; we feed it the controller's
                 // current value (already captured above as `full`/`cursor`/
                 // `anchor`/`end`) and apply the restored value in-place.
-                use crate::core::text::controller::TextEditingValue;
+                use crate::controller::TextEditingValue;
                 let current = TextEditingValue {
                     text: full.clone(),
                     cursor_position: cursor,
@@ -500,7 +500,7 @@ impl EditableTextElement {
             }
             "y" if ctrl && self.view.undo_controller.is_some() => {
                 // Ctrl+Y redo (Windows convention) — mirror of Cmd+Shift+Z.
-                use crate::core::text::controller::TextEditingValue;
+                use crate::controller::TextEditingValue;
                 let current = TextEditingValue {
                     text: full.clone(),
                     cursor_position: cursor,
@@ -937,10 +937,12 @@ impl ElementOnKeyboard for EditableTextElement {
             if (anchor != prev_anchor || end != prev_end)
                 && let Some(m) = c.on_selection_change() {
                     cx.push_event(m, SelectionChangeEvent { anchor, end });
-                }
+            }
         }
     }
 }
+
+
 
 impl ElementOnIme for EditableTextElement {
     fn on_ime_event(
@@ -1005,7 +1007,7 @@ impl EditableTextView {
         EditableTextView {
             controller: p.opaque::<TextEditingController>("controller"),
             controller_atom: p.readable("controller"),
-            undo_controller: p.opaque::<crate::core::text::controller::UndoController>("undoController"),
+            undo_controller: p.opaque::<crate::controller::UndoController>("undoController"),
             placeholder: p.val::<String>("placeholder"),
             color: p.val::<Color>("color"),
             placeholder_color: p.val::<Color>("placeholderColor"),

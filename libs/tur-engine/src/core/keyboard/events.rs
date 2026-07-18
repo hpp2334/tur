@@ -11,16 +11,16 @@ use crate::core::keyboard::Modifiers;
 
 #[derive(Clone)]
 pub struct KeydownEvent {
-    pub(crate) key: String,
-    pub(crate) code: String,
-    pub(crate) modifiers: Modifiers,
+    pub key: String,
+    pub code: String,
+    pub modifiers: Modifiers,
 }
 
 #[derive(Clone)]
 pub struct KeyupEvent {
-    pub(crate) key: String,
-    pub(crate) code: String,
-    pub(crate) modifiers: Modifiers,
+    pub key: String,
+    pub code: String,
+    pub modifiers: Modifiers,
 }
 
 impl IntoJsArgs for KeydownEvent {

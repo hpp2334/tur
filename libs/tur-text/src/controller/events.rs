@@ -1,6 +1,6 @@
 use boa_engine::{js_string, Context, JsValue};
 
-use crate::core::mutation::IntoJsArgs;
+use tur_engine::core::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Text-editing event payloads — JS callback arguments emitted via

@@ -4,14 +4,14 @@ use boa_engine::object::JsObject;
 use boa_engine::Context;
 use tur_shared::Color;
 
-use crate::core::bridge::JsProps;
-use crate::core::element::NodeId;
-use crate::core::view::{ViewCx, View, Val};
-use crate::core::reactive::AnyReadable;
-use crate::elements::ContainerView;
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::element::NodeId;
+use tur_engine::core::view::{ViewCx, View, Val};
+use tur_engine::core::reactive::AnyReadable;
+use tur_engine::elements::ContainerView;
 
 use super::element::{ContextMenuEvent, EditableTextView};
-use crate::core::text::controller::{TextEditingController, UndoController};
+use crate::controller::{TextEditingController, UndoController};
 
 // ---------------------------------------------------------------------------
 // InputView — composes a ContainerElement (sizing/border wrapper) with a single
@@ -33,7 +33,7 @@ pub struct InputView {
     font_size: Option<Val<f64>>,
     font_family: Option<Val<String>>,
     multiline: Option<Val<bool>>,
-    on_context_menu: Option<crate::core::mutation::MutationHandle<ContextMenuEvent>>,
+    on_context_menu: Option<tur_engine::core::mutation::MutationHandle<ContextMenuEvent>>,
     query_key: Option<Vec<String>>,
 }
 

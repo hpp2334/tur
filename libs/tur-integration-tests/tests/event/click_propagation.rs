@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::TextElement;
+use tur_text::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 
 fn build_nested() -> TurTestApp {

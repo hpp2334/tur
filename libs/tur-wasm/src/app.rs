@@ -795,8 +795,10 @@ impl TurWasmApp {
             // Paste listener — when the user presses Cmd+V (or Ctrl+V) while
             // the hidden textarea is focused, the browser fires a `paste`
             // event with `clipboardData`. We forward the text to the engine
-            // via PlatformEvent::ClipboardPaste, which the engine's
-            // ClipboardPasteHandler inserts into the focused editable.
+            // via PlatformEvent::ClipboardPaste; the engine's
+            // ClipboardPasteAppHandler re-emits it as AppEvent::ClipboardPaste,
+            // which tur-text's ClipboardPasteHandler consumes to insert into
+            // the focused editable.
             let paste_state = state_clone.clone();
             let paste_closure =
                 Closure::<dyn Fn(web_sys::ClipboardEvent)>::new(move |event: web_sys::ClipboardEvent| {

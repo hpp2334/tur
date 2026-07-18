@@ -1,17 +1,13 @@
-pub mod controller;
 pub mod events;
 pub mod span_data;
 pub mod undo_controller;
 
-pub use controller::TextEditingController;
 pub use events::*;
 pub use span_data::SpanData;
 pub use undo_controller::{TextEditingValue, UndoController};
 
 // ---------------------------------------------------------------------------
-// TextEditingController — the core text-editing state machine.
-// (merged from controller.rs to avoid module_inception: controller/mod.rs
-//  no longer re-declares )
+// TextEditingController (inlined from controller.rs to avoid module_inception).
 // ---------------------------------------------------------------------------
 
 use boa_engine::class::{Class, ClassBuilder};
@@ -22,17 +18,12 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::bridge::BoaOpaque;
-use crate::core::bridge::TurJsContext;
-use crate::core::bridge::TurNodeHandle;
-use crate::core::mutation::{extract_mutation_from_opts, MutationHandle};
-use crate::core::focus::{BlurEvent, FocusEvent};
-use crate::core::keyboard::events::{KeydownEvent, KeyupEvent};
-use crate::core::text::controller::{
-    CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
-    InputEvent, SelectionChangeEvent,
-};
-use crate::core::text::controller::span_data::SpanData;
+use tur_engine::core::bridge::BoaOpaque;
+use tur_engine::core::bridge::TurJsContext;
+use tur_engine::core::bridge::TurNodeHandle;
+use tur_engine::core::mutation::{extract_mutation_from_opts, MutationHandle};
+use tur_engine::core::focus::{BlurEvent, FocusEvent};
+use tur_engine::core::keyboard::events::{KeydownEvent, KeyupEvent};
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -125,13 +116,13 @@ impl TextEditingController {
             Some(r) => r,
             None => return,
         };
-        let snapshot = crate::core::text::controller::TextEditingValue {
+        let snapshot = crate::controller::TextEditingValue {
             text: self.text(),
             cursor_position: self.cursor_position,
             selection_anchor: self.selection_anchor,
             selection_end: self.selection_end,
         };
-        if let Some(mut undo) = recorder.downcast_mut::<crate::core::text::controller::UndoController>() {
+        if let Some(mut undo) = recorder.downcast_mut::<crate::controller::UndoController>() {
             undo.push(snapshot);
         }
     }
@@ -458,9 +449,8 @@ impl Class for TextEditingController {
                 .get(js_string!("initialText"), ctx)
                 .ok()
                 .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
-            {
-                if !initial.is_empty() {
-                    ctrl.set_spans(vec![crate::core::text::controller::span_data::SpanData {
+                && !initial.is_empty() {
+                    ctrl.set_spans(vec![crate::controller::span_data::SpanData {
                         text: initial,
                         bold: false,
                         italic: false,
@@ -469,7 +459,6 @@ impl Class for TextEditingController {
                         color: None,
                     }]);
                 }
-            }
         }
         Ok(ctrl)
     }
@@ -541,7 +530,7 @@ impl Class for TextEditingController {
                 let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
                     JsNativeError::typ().with_message("invalid this")
                 })?;
-                let spans = crate::core::text::controller::span_data::extract_spans_from_js(
+                let spans = crate::controller::span_data::extract_spans_from_js(
                     args.get_or_undefined(0),
                     ctx,
                 );
@@ -560,7 +549,7 @@ impl Class for TextEditingController {
                 let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
                     JsNativeError::typ().with_message("invalid this")
                 })?;
-                let spans = crate::core::text::controller::span_data::extract_spans_from_js(
+                let spans = crate::controller::span_data::extract_spans_from_js(
                     args.get_or_undefined(0),
                     ctx,
                 );
@@ -660,11 +649,10 @@ impl Class for TextEditingController {
                 let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
                     JsNativeError::typ().with_message("invalid this")
                 })?;
-                if let Some(handle_obj) = args.get_or_undefined(0).as_object() {
-                    if BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
+                if let Some(handle_obj) = args.get_or_undefined(0).as_object()
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
                         ctrl.handle = Some(handle_obj.clone());
                     }
-                }
                 Ok(JsValue::undefined())
             }),
         );
@@ -683,7 +671,7 @@ impl Class for TextEditingController {
                     JsNativeError::typ().with_message("invalid this")
                 })?;
                 let recorder = match args.get_or_undefined(0).as_object() {
-                    Some(o) if o.downcast_ref::<crate::core::text::controller::UndoController>().is_some() => {
+                    Some(o) if o.downcast_ref::<crate::controller::UndoController>().is_some() => {
                         Some(o.clone())
                     }
                     _ => None,

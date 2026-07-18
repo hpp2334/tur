@@ -1,6 +1,6 @@
 use tur_shared::Color;
 
-use crate::core::js_value::FromJs;
+use tur_engine::core::js_value::FromJs;
 
 #[derive(Clone)]
 pub struct SpanData {

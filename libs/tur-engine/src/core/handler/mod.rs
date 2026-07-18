@@ -17,7 +17,7 @@ use crate::core::render::Renderer;
 /// - [`Self::handle_platform_event`] — input from the platform/embedder
 ///   (`Resize`, `Gesture`, `Wheel`, `Key`, `Ime`, `ClipboardPaste`).
 /// - [`Self::handle_app_event`] — engine-internal bus (`ScrollTo`,
-///   `ScrollOverscroll`, `ClipboardWrite`).
+///   `ScrollOverscroll`, `ClipboardWrite`, `ClipboardPaste`).
 pub trait AppHandler {
     fn handle_platform_event(&mut self, _cx: &mut HandlerContext, _event: &PlatformEvent) {}
     fn handle_app_event(&mut self, _cx: &mut HandlerContext, _event: &AppEvent) {}

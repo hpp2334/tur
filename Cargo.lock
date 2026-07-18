@@ -4302,6 +4302,7 @@ dependencies = [
  "tur-net-capability",
  "tur-shared",
  "tur-std",
+ "tur-text",
  "wgpu",
 ]
 
@@ -4359,6 +4360,19 @@ version = "0.1.0"
 dependencies = [
  "boa_engine",
  "tur-engine",
+ "tur-text",
+]
+
+[[package]]
+name = "tur-text"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "boa_gc",
+ "parley",
+ "tur-engine",
+ "tur-shared",
+ "unicode-segmentation",
 ]
 
 [[package]]
