@@ -12,7 +12,7 @@ fn host_module_is_importable() {
         specifier: "builtin:tur/test",
         exports: vec![("echo".to_string(), echo, 1)],
     };
-    let mut app = TurTestApp::new_with_extra_plugins(
+    let app = TurTestApp::new_with_extra_plugins(
         100.0,
         100.0,
         vec![Box::new(plugin)],

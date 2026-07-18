@@ -45,7 +45,7 @@ fn debug_solidjs_column_basic() {
 
 #[test]
 fn debug_react_minimal() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     let source = std::fs::read_to_string(std::path::Path::new(
         &std::env::var("CARGO_MANIFEST_DIR").unwrap()
     ).parent().unwrap().parent().unwrap()

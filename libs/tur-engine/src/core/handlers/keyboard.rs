@@ -32,9 +32,9 @@ impl AppHandler for KeyboardAppHandler {
         let mut current: Option<NodeId> = Some(focused_id.into());
         while let Some(nid) = current {
             if let Some(node) = cx.element_tree.get_element(ElementNodeId::new(nid.as_u64())) {
-                if let Some(ref element) = node.element {
-                    if let Some(f) = element.cast::<FocusableElement>() {
-                        if let Some(m) = f.view.on_key_down {
+                if let Some(ref element) = node.element
+                    && let Some(f) = element.cast::<FocusableElement>()
+                        && let Some(m) = f.view.on_key_down {
                             cx.mutation_queue.push(
                                 m,
                                 KeydownEvent {
@@ -44,8 +44,6 @@ impl AppHandler for KeyboardAppHandler {
                                 },
                             );
                         }
-                    }
-                }
                 current = node.parent;
             } else if let Some(frag) = cx
                 .element_tree

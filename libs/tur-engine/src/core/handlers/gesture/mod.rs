@@ -156,13 +156,11 @@ impl GestureAppHandler {
         // the element's own handler will manage focus in that case).
         let hit_path = HitTest::new(&*cx.element_tree).path(position);
         let focusable_id = find_focusable_in_path(&*cx.element_tree, &hit_path);
-        if focusable_id.is_none() {
-            if let Some(focused) = cx.focus_manager.focused() {
-                if down_target != Some(focused) {
+        if focusable_id.is_none()
+            && let Some(focused) = cx.focus_manager.focused()
+                && down_target != Some(focused) {
                     cx.focus_manager.clear_focus();
                 }
-            }
-        }
 
         let click_eligible = match down_target {
             Some(id) => HitTest::new(&*cx.element_tree).contains(position, id),

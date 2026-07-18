@@ -449,8 +449,7 @@ impl Class for TextEditingController {
                 .get(js_string!("initialText"), ctx)
                 .ok()
                 .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
-            {
-                if !initial.is_empty() {
+                && !initial.is_empty() {
                     ctrl.set_spans(vec![crate::core::text::controller::span_data::SpanData {
                         text: initial,
                         bold: false,
@@ -460,7 +459,6 @@ impl Class for TextEditingController {
                         color: None,
                     }]);
                 }
-            }
         }
         Ok(ctrl)
     }
@@ -651,11 +649,10 @@ impl Class for TextEditingController {
                 let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
                     JsNativeError::typ().with_message("invalid this")
                 })?;
-                if let Some(handle_obj) = args.get_or_undefined(0).as_object() {
-                    if BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
+                if let Some(handle_obj) = args.get_or_undefined(0).as_object()
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
                         ctrl.handle = Some(handle_obj.clone());
                     }
-                }
                 Ok(JsValue::undefined())
             }),
         );

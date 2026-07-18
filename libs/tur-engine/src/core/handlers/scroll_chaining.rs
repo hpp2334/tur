@@ -37,11 +37,10 @@ fn find_ancestor_with_wheel(
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
-            if let Some(ref element) = node.element {
-                if element.has_on_wheel() {
+            if let Some(ref element) = node.element
+                && element.has_on_wheel() {
                     return Some(ElementNodeId::new(id.as_u64()));
                 }
-            }
             current = node.parent;
         } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
             current = Some(frag.parent);

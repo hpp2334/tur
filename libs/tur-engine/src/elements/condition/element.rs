@@ -111,11 +111,10 @@ impl ConditionFragment {
         boa: &mut Context,
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
-        if let Some(factory) = self.current_factory() {
-            if let Some(view) = factory.create(boa) {
+        if let Some(factory) = self.current_factory()
+            && let Some(view) = factory.create(boa) {
                 return vec![view.build(cx, boa, NodeId::from(fragment_id))];
             }
-        }
         Vec::new()
     }
 }

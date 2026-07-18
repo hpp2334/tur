@@ -53,13 +53,11 @@ fn find_deepest_with_wheel(
     hit_path: &[ElementNodeId],
 ) -> Option<ElementNodeId> {
     for &id in hit_path {
-        if let Some(node) = tree.get_element(id) {
-            if let Some(ref element) = node.element {
-                if element.has_on_wheel() {
+        if let Some(node) = tree.get_element(id)
+            && let Some(ref element) = node.element
+                && element.has_on_wheel() {
                     return Some(id);
                 }
-            }
-        }
     }
     None
 }

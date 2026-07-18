@@ -112,16 +112,14 @@ impl View for EditableTextView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         let mut spec = self.clone();
 
-        if spec.controller.is_none() {
-            if let Some(readable) = spec.controller_atom {
+        if spec.controller.is_none()
+            && let Some(readable) = spec.controller_atom {
                 let js_val = read_atom_raw(cx, readable, boa);
-                if let Some(obj) = js_val.as_object() {
-                    if obj.downcast_ref::<TextEditingController>().is_some() {
+                if let Some(obj) = js_val.as_object()
+                    && obj.downcast_ref::<TextEditingController>().is_some() {
                         spec.controller = Some(obj.clone());
                     }
-                }
             }
-        }
 
         if spec.controller.is_none() {
             let data = TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
@@ -135,13 +133,11 @@ impl View for EditableTextView {
         // (keyboard, IME, JS bridge, programmatic setSpans) records to the
         // history stack uniformly — mirroring Flutter's `UndoHistory` listener
         // model. See `TextEditingController::maybe_push_undo`.
-        if let Some(undo_obj) = spec.undo_controller.clone() {
-            if let Some(ctrl_obj) = spec.controller.as_ref() {
-                if let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>() {
+        if let Some(undo_obj) = spec.undo_controller.clone()
+            && let Some(ctrl_obj) = spec.controller.as_ref()
+                && let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>() {
                     ctrl.set_undo_recorder(Some(undo_obj));
                 }
-            }
-        }
 
         cx.insert_node(
             id,
@@ -932,18 +928,16 @@ impl ElementOnKeyboard for EditableTextElement {
                 }
             }
             let cursor = c.cursor_position();
-            if cursor != prev_cursor {
-                if let Some(m) = c.on_cursor_change() {
+            if cursor != prev_cursor
+                && let Some(m) = c.on_cursor_change() {
                     cx.push_event(m, CursorChangeEvent { position: cursor });
                 }
-            }
             let anchor = c.selection_anchor();
             let end = c.selection_end();
-            if anchor != prev_anchor || end != prev_end {
-                if let Some(m) = c.on_selection_change() {
+            if (anchor != prev_anchor || end != prev_end)
+                && let Some(m) = c.on_selection_change() {
                     cx.push_event(m, SelectionChangeEvent { anchor, end });
                 }
-            }
         }
     }
 }

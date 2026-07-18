@@ -197,8 +197,8 @@ fn drive_result(
 
     // The yielded value must be a thenable (a Promise such as `sleep(ms)`).
     // Attach both the fulfilled and rejected handlers to its `.then`.
-    if let Some(obj) = value.as_object() {
-        if let Some(then_fn) = obj
+    if let Some(obj) = value.as_object()
+        && let Some(then_fn) = obj
             .get(js_string!("then"), ctx)?
             .as_object()
             .filter(|f| f.is_callable())
@@ -212,7 +212,6 @@ fn drive_result(
             )?;
             return Ok(JsValue::undefined());
         }
-    }
     tracing::error!("launch: generator yielded a non-thenable; yield a Promise (e.g. sleep(ms))");
     Ok(JsValue::undefined())
 }

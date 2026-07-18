@@ -110,11 +110,11 @@ impl TurVelloApp {
             dpr,
         );
 
-        let mut app = TurEngine::builder()
+        let app = TurEngine::builder()
             .renderer(Box::new(renderer))
             .font_loader(Box::new(NativeFontLoader::new()))
             .clock(Rc::new(StdClock::new()))
-            .plugin(TurStdPlugin::default())
+            .plugin(TurStdPlugin)
             .build()?;
         app.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,

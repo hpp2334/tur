@@ -80,11 +80,10 @@ impl FocusManager {
 
     pub fn set_focus(&mut self, new_id: ElementNodeId) {
         let old = self.focused_id.replace(new_id);
-        if let Some(old) = old {
-            if old != new_id {
+        if let Some(old) = old
+            && old != new_id {
                 self.pending.push(FocusChange::Blur(old));
             }
-        }
         self.pending.push(FocusChange::Focus(new_id));
     }
 
