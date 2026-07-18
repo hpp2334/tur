@@ -8,11 +8,13 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::FixedClock;
+use boa_engine::NativeFunction;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_native::NativeFontLoader;
 use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
@@ -27,6 +29,24 @@ use tur_clipboard_capability::{
     Clipboard, ClipboardBackend, TurClipboardPlugin,
 };
 use tur_shared::{Cursor, MouseButton, Offset};
+
+/// A minimal [`Plugin`] that registers a single ctx-free host module at
+/// build time. Test-only convenience for the cases that previously used the
+/// runtime `TurApp::register_host_module` API (now removed) — lets a test
+/// inject `builtin:tur/<whatever>` exports through the plugin path.
+pub struct HostModulePlugin {
+    /// Module specifier to register (e.g. `"builtin:tur/test"`).
+    pub specifier: &'static str,
+    /// `(name, fn, length)` exports.
+    pub exports: Vec<(String, NativeFunction, usize)>,
+}
+
+impl Plugin for HostModulePlugin {
+    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+        ctx.register_host_module(self.specifier, self.exports.clone());
+        Ok(())
+    }
+}
 
 /// Fixed per-frame time step (ms) used by [`TurTestApp::wait_frames`] and
 /// [`TurTestApp::wait_for`] — 60 fps. Animation/timer tests express elapsed
@@ -190,7 +210,7 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, None)
+        Self::build(width, height, None, Vec::new())
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -198,13 +218,27 @@ impl TurTestApp {
     /// responses via [`Self::set_http_response`]; capture requests via
     /// [`Self::last_http_request`].
     pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, Some(RecordingHttp::new()))
+        Self::build(width, height, Some(RecordingHttp::new()), Vec::new())
     }
 
+    /// Construct with additional plugins registered beyond the default
+    /// `TurStdPlugin` + `TurClipboardPlugin`. Used by tests that need to
+    /// inject extra modules (e.g. [`HostModulePlugin`] for a test-only
+    /// `builtin:tur/*` module).
+    pub fn new_with_extra_plugins(
+        width: f64,
+        height: f64,
+        extra_plugins: Vec<Box<dyn Plugin>>,
+    ) -> Result<Self, TurError> {
+        Self::build(width, height, None, extra_plugins)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
     fn build(
         width: f64,
         height: f64,
         http: Option<RecordingHttp>,
+        extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
         let clipboard = RecordingClipboard::new();
@@ -223,6 +257,9 @@ impl TurTestApp {
             builder = builder
                 .capability(Http::new(http_impl))
                 .plugin(TurNetPlugin);
+        }
+        for p in extra_plugins {
+            builder = builder.plugin_boxed(p);
         }
         let inner = builder.build()?;
         inner.push_platform_event(PlatformEvent::Resize {
@@ -684,7 +721,7 @@ impl TurTestApp {
     }
 
     /// Evaluate `source` as an ES module — supports real
-    /// `import { … } from "builtin:tur/std"` (or `builtin:tur/host`/`builtin:tur/net`). Returns
+    /// `import { … } from "builtin:tur/std"` (or `builtin:demo-helper`/`builtin:tur/net`). Returns
     /// nothing; read results back via [`eval_js`](Self::eval_js).
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         self.inner.load_module(source)

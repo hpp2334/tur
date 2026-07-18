@@ -1,23 +1,22 @@
 /**
- * @tur/host — ambient type declarations for the host-environment module.
+ * @tur/demo-helper — ambient type declarations for the demo-helper module.
  *
- * The runtime is a synthetic boa module registered by tur-wasm
- * (`register_all_services`) under the specifier `"builtin:tur/host"`. It
- * exposes swc-backed compiler services (transpile / tokenize / AST),
- * clipboard access, and file IO (browser picker + download). These live in
- * tur-wasm because they depend on swc and the browser DOM — they are not
- * available in the pure-engine (headless) context.
+ * The runtime is a synthetic boa module registered by `tur-demo-plugin`
+ * (`TurDemoPlugin`) under the specifier `"builtin:demo-helper"`. It exposes
+ * swc-backed compiler services (transpile / tokenize / AST) and file IO
+ * (browser picker + download). These are demo/playground-only and depend on
+ * swc and the browser DOM — they are not part of the core engine surface.
  */
 
-declare module "builtin:tur/host" {
+declare module "builtin:demo-helper" {
     // --- swc compiler services -------------------------------------------------
 
     /** Transpile TSX/TS source to plain JS (throws on parse error). */
     export function transpileTsx(src: string): string;
 
     /** Lexical token span for syntax highlighting.
-     *  `kind` indexes into the caller's highlight palette (see tur-wasm
-     *  `highlight_tsx`). */
+     *  `kind` indexes into the caller's highlight palette (see
+     *  `highlight_tsx` in tur-demo-plugin). */
     export interface TokenSpan {
         start: number;
         end: number;
@@ -29,9 +28,9 @@ declare module "builtin:tur/host" {
 
     /** AST node returned by `generateAst`. Each node includes the exact source
      *  text (`text`) for that declaration, extracted by Rust — so no fragile
-     *  position arithmetic on the JS side. For export nodes, `body` contains the
-     *  declaration text WITHOUT the `export`/`export default` keyword, also
-     *  extracted by Rust from the inner declaration's span. */
+     *  position arithmetic on the JS side. For export nodes, `body` contains
+     *  the declaration text WITHOUT the `export`/`export default` keyword,
+     *  also extracted by Rust from the inner declaration's span. */
     export interface AstNode {
         kind:
             | "import"

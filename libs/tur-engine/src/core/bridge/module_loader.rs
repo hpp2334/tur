@@ -11,8 +11,9 @@
 //! ```
 //!
 //! The loader keeps a registry of bare `builtin:tur/*` specifiers → pre-built
-//! [`Module`]s. Embedders (tur-wasm) register additional capability modules
-//! (`builtin:tur/host`, `builtin:tur/net`) through [`TurModuleLoader::register`].
+//! [`Module`]s. Plugins register additional capability modules
+//! (`builtin:tur/net`, `builtin:tur/clipboard`, …) through
+//! [`PluginContext::register_module`] / [`PluginContext::register_host_module`].
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -141,9 +142,9 @@ pub fn build_native_module(
 }
 
 /// Build a synthetic module whose exports are arbitrary native functions
-/// (no bridge-ctx binding). Used by embedders (tur-wasm) to expose host
-/// services as modules — e.g. `builtin:tur/host` (compiler, clipboard, file IO) and
-/// `builtin:tur/net` (HTTP `request`).
+/// (no bridge-ctx binding). Used by plugins to expose host services as
+/// modules — e.g. `builtin:tur/net` (HTTP `request`), `builtin:demo-helper`
+/// (swc compiler + file IO).
 pub fn build_fn_module(
     context: &mut Context,
     exports: &[(&str, NativeFunction, usize)],

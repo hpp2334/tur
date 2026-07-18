@@ -56,6 +56,8 @@ importers:
         specifier: ^10.0.3
         version: 10.0.3
 
+  packages/tur-demo-helper: {}
+
   packages/tur-demo-impl:
     dependencies:
       '@tur/animation-ext':
@@ -67,9 +69,9 @@ importers:
       '@tur/core':
         specifier: workspace:*
         version: link:../tur-core
-      '@tur/host':
+      '@tur/demo-helper':
         specifier: workspace:*
-        version: link:../tur-host
+        version: link:../tur-demo-helper
       '@tur/net':
         specifier: workspace:*
         version: link:../tur-net
@@ -87,8 +89,6 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/tur-host: {}
-
   packages/tur-net: {}
 
   packages/tur-std: {}
@@ -101,9 +101,9 @@ importers:
       '@tur/core':
         specifier: workspace:*
         version: link:../tur-core
-      '@tur/host':
+      '@tur/demo-helper':
         specifier: workspace:*
-        version: link:../tur-host
+        version: link:../tur-demo-helper
       '@tur/net':
         specifier: workspace:*
         version: link:../tur-net

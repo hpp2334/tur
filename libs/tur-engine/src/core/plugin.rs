@@ -95,7 +95,7 @@ impl<'a> PluginContext<'a> {
     }
 
     /// Register a ctx-free native module (host fns that don't need `TurJsContext`).
-    /// Used for `builtin:tur/host`, `builtin:tur/net`, etc.
+    /// Used for `builtin:tur/net`, `builtin:demo-helper`, etc.
     pub fn register_host_module(
         &mut self,
         specifier: &str,

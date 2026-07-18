@@ -11,7 +11,7 @@
         "@tur/animation-ext": "workspace:*",
         "@tur/core": "workspace:*",
         "@tur/std": "workspace:*",
-        "@tur/host": "workspace:*",
+        "@tur/demo-helper": "workspace:*",
         "@tur/net": "workspace:*"
     },
     "devDependencies": {

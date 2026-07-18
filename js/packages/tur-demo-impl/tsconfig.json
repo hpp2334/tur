@@ -5,7 +5,7 @@
         "types": [
             "@tur/core",
             "@tur/std",
-            "@tur/host",
+            "@tur/demo-helper",
             "@tur/clipboard",
             "@tur/net"
         ]

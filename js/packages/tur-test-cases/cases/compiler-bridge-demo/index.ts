@@ -1,4 +1,4 @@
-import { tokenizeTsx, transpileTsx } from "builtin:tur/host";
+import { tokenizeTsx, transpileTsx } from "builtin:demo-helper";
 import {
     Color,
     Column,
@@ -47,7 +47,7 @@ export default view(() =>
                 Column({
                     children: [
                         Text({
-                            text: "transpileTsx (via builtin:tur/host):",
+                            text: "transpileTsx (via builtin:demo-helper):",
                             fontSize: 13,
                             color: Color.hex("#848da5"),
                         }),

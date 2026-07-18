@@ -1,0 +1,35 @@
+[package]
+name = "tur-demo-plugin"
+description = "Demo-only plugin for tur (TurDemoPlugin — registers builtin:demo-helper: swc compiler + file IO)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true }
+boa_engine = { workspace = true }
+tracing = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "Event",
+    "File",
+    "FileList",
+    "Blob",
+    "BlobPropertyBag",
+    "HtmlInputElement",
+    "HtmlAnchorElement",
+    "Url",
+] }
+js-sys = { workspace = true }
+swc_common = "23.0.1"
+swc_ecma_ast = "25.0.0"
+swc_ecma_visit = "25.0.0"
+swc_ecma_parser = { version = "41.1.0", features = ["typescript", "unstable"] }
+swc_ecma_transforms_base = "44.0.2"
+swc_ecma_transforms_typescript = "49.0.0"
+swc_ecma_codegen = "28.0.1"
