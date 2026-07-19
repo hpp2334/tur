@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::elements::ScrollViewElement;
+use tur_scroll::ScrollViewElement;
 use tur_text::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 

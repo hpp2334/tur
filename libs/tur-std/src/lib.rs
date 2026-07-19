@@ -25,6 +25,14 @@
 //!   from JS's perspective Text/Input ship as part of `builtin:tur/std`. The
 //!   engine retains only the paint/layout contract types (`TextLayoutData`,
 //!   `FontManager`).
+//! - Scroll feature (`ScrollView`, `Scrollbar`, `ScrollController`,
+//!   `ScrollSubsystem`) is pulled in from the standalone `tur-scroll` crate
+//!   via [`tur_scroll::install_scroll_feature`]. Lazy-list feature
+//!   (`LazyList`, `LazyListController`) is pulled in from `tur-lazy-container`
+//!   via [`tur_lazy_container::install_lazy_container_feature`]. Both are
+//!   merged into `std_fns` here. The engine retains only the event protocol
+//!   (`AppEvent::Scroll` / `ScrollTo` / `ScrollOverscroll`) and `WheelEvent`
+//!   primitive.
 //! - Cursor-backend capability types (`CursorBackend`, `CursorCap`,
 //!   `NoopCursor`) live in `tur_engine::core::platform` and are re-exported at
 //!   the `tur_engine::` crate root — import them from there, not from here.
@@ -55,23 +63,15 @@ impl Default for TurStdPlugin {
 
 impl Plugin for TurStdPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        use tur_engine::core::scroll::ScrollController;
         use tur_engine::core::bridge::{color_fns, enums};
         use tur_engine::core::bridge::helpers::FnEntry;
         use tur_engine::core::handlers;
-        use tur_engine::elements::lazy_list::LazyListController;
-
-        ctx.register_class::<ScrollController>()
-            .expect("failed to register ScrollController");
-        ctx.register_class::<LazyListController>()
-            .expect("failed to register LazyListController");
 
         ctx.register_subsystem(Box::new(handlers::gesture::GestureSubsystem::new()));
         ctx.register_subsystem(Box::new(handlers::keyboard::KeyboardSubsystem));
         ctx.register_subsystem(Box::new(handlers::ime::ImeSubsystem));
         ctx.register_subsystem(Box::new(handlers::resize::ResizeSubsystem));
         ctx.register_subsystem(Box::new(handlers::pointer_region::PointerSubsystem::new()));
-        ctx.register_subsystem(Box::new(handlers::scroll::ScrollSubsystem));
         // Note: ClipboardPlatformSubsystem (embedder paste → engine-internal
         // paste forwarding) and ClipboardWriteSubsystem (Cmd+C/X → backend)
         // both live in `tur-clipboard-capability` (TurClipboardPlugin) —
@@ -85,6 +85,14 @@ impl Plugin for TurStdPlugin {
         // tur-text owns all text logic; the engine keeps only the
         // paint/layout contract types (`TextLayoutData`, `FontManager`).
         std_fns.extend(tur_text::install_text_feature(ctx)?);
+        // Scroll feature (ScrollView, Scrollbar, ScrollController,
+        // ScrollSubsystem) and lazy-list feature (LazyList,
+        // LazyListController) live in the standalone `tur-scroll` and
+        // `tur-lazy-container` crates; installed into `builtin:tur/std`
+        // here. The engine retains only the `AppEvent::Scroll*` protocol and
+        // `WheelEvent` primitive.
+        std_fns.extend(tur_scroll::install_scroll_feature(ctx)?);
+        std_fns.extend(tur_lazy_container::install_lazy_container_feature(ctx)?);
         std_fns.extend(reactive::fns());
         std_fns.extend(render::fns());
         std_fns.extend(tur_engine::core::bridge::task::fns());
@@ -100,9 +108,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::condition::bridge::fns());
         std_fns.extend(tur_engine::elements::switch::bridge::fns());
         std_fns.extend(tur_engine::elements::each::bridge::fns());
-        std_fns.extend(tur_engine::elements::lazy_list::bridge::fns());
-        std_fns.extend(tur_engine::elements::scroll_view::bridge::fns());
-        std_fns.extend(tur_engine::elements::scrollbar::bridge::fns());
         std_fns.extend(tur_engine::elements::fragment::bridge::fns());
         std_fns.extend(tur_engine::elements::focusable::bridge::fns());
         std_fns.extend(tur_engine::elements::lifecycle::bridge::fns());

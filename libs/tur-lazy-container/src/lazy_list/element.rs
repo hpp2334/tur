@@ -3,19 +3,19 @@ use std::rc::Rc;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use crate::core::layout::Axis;
+use tur_engine::core::layout::Axis;
 
-use crate::core::bridge::JsProps;
-use crate::core::mutation::IntoJsArgs;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::mutation::IntoJsArgs;
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
 };
-use crate::core::view::{ViewCx, read_val, Val, View, extract_view};
+use tur_engine::core::view::{ViewCx, read_val, Val, View, extract_view};
 
-use crate::elements::lazy_list::controller::LazyListController;
-use crate::elements::scroll_view::ScrollPosition;
+use crate::lazy_list::controller::LazyListController;
+use tur_scroll::ScrollPosition;
 
 const FALLBACK_EXTENT: f64 = 50.0;
 /// The default number of items built up-front when no viewport information
@@ -486,8 +486,8 @@ impl LazyListElement {
 // pre-layout `Effect` handler.
 // ---------------------------------------------------------------------------
 
-impl crate::core::layout::ElementSubscribe for LazyListElement {
-    fn subscribe(&self, cx: &mut crate::core::layout::SubscribeCx) {
+impl tur_engine::core::layout::ElementSubscribe for LazyListElement {
+    fn subscribe(&self, cx: &mut tur_engine::core::layout::SubscribeCx) {
         if let Some(v) = self.view.axis.as_ref() {
             cx.subscribe_val(v);
         }
@@ -504,7 +504,7 @@ impl crate::core::layout::ElementSubscribe for LazyListElement {
 // LazyList has no lifecycle hooks: its reactive handling lives in
 // `react_to_prop_changes` (called from `perform_layout`). The default no-op
 // `Lifecycle` impl satisfies the `AnyElement` bound.
-impl crate::core::view::Lifecycle for LazyListElement {}
+impl tur_engine::core::view::Lifecycle for LazyListElement {}
 
 impl ElementTrace for LazyListElement {
     fn trace_label(&self) -> String {

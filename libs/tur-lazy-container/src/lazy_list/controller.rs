@@ -9,12 +9,12 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
-use crate::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
-use crate::core::scroll::ScrollEvent;
-use crate::elements::lazy_list::VisibleRangeChangeEvent;
-use crate::elements::lazy_list::LazyListElement;
+use tur_engine::core::bridge::{BoaOpaque, TurJsContext, TurNodeHandle};
+use tur_engine::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
+use tur_engine::core::element::ElementNodeId;
+use tur_scroll::ScrollEvent;
+use crate::lazy_list::VisibleRangeChangeEvent;
+use crate::lazy_list::LazyListElement;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -26,7 +26,7 @@ pub struct LazyListController {
     pub(crate) on_visible_range_change: Option<MutationHandle<VisibleRangeChangeEvent>>,
     pub(crate) handle: Option<JsObject>,
     pub(crate) element_tree:
-        Option<crate::core::elements::NodeTree>,
+        Option<tur_engine::core::elements::NodeTree>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
 }
@@ -168,11 +168,11 @@ impl Class for LazyListController {
 
                 let vp = ll.position.viewport_size();
                 let dim = match ll.axis {
-                    crate::core::layout::Axis::Vertical => vp.height,
-                    crate::core::layout::Axis::Horizontal => vp.width,
+                    tur_engine::core::layout::Axis::Vertical => vp.height,
+                    tur_engine::core::layout::Axis::Horizontal => vp.width,
                 };
 
-                let viewport_main = crate::core::layout::Axis::main(&ll.axis, vp);
+                let viewport_main = tur_engine::core::layout::Axis::main(&ll.axis, vp);
                 let (start, end) = ll.compute_visible_range(viewport_main);
 
                 let new_offset = ll.position.pixels();
@@ -197,11 +197,11 @@ impl Class for LazyListController {
                     if let Some(m) = on_scroll {
                         queue_rc.borrow_mut().push(
                             m,
-                            ScrollEvent {
-                                offset: ctrl.offset,
-                                max_extent: ctrl.max_scroll_extent,
-                                viewport_dimension: ctrl.viewport_dimension,
-                            },
+                            ScrollEvent::new(
+                                ctrl.offset,
+                                ctrl.max_scroll_extent,
+                                ctrl.viewport_dimension,
+                            ),
                         );
                     }
                 }

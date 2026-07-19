@@ -1,13 +1,13 @@
-use crate::core::layout::{ComputedLayout, Offset};
+use tur_engine::core::layout::{ComputedLayout, Geometry, Offset};
 
-use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::LazyListElement;
+use super::element::ScrollViewElement;
 
-impl ElementRender for LazyListElement {
+impl ElementRender for ScrollViewElement {
     fn type_name(&self) -> &'static str {
-        "tur_lazy_list"
+        "tur_scroll_view"
     }
 
     fn paint(
@@ -18,6 +18,10 @@ impl ElementRender for LazyListElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
+        if let Some(ref brush) = self.painting.color {
+            canvas.fill_geometry(offset, &Geometry::Rect(layout.size), brush);
+        }
+
         canvas.push_clip(offset, layout.size);
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas, offset);

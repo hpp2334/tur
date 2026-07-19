@@ -2,18 +2,18 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use crate::core::render::{Brush};
-use crate::core::layout::{Axis, Size};
+use tur_engine::core::render::{Brush};
+use tur_engine::core::layout::{Axis, Size};
 
-use crate::core::bridge::JsProps;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
+use tur_engine::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
     TraceValue, WheelEvent,
 };
-use crate::core::scroll::{ScrollController, ScrollEvent};
-use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
+use crate::core::{ScrollController, ScrollEvent};
+use tur_engine::core::view::{ViewCx, read_val, Lifecycle, Val, View};
 
 use super::scroll_position::ScrollPosition;
 

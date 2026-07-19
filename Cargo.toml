@@ -6,6 +6,8 @@ members = [
     "libs/tur-std",
     "libs/tur-animation",
     "libs/tur-text",
+    "libs/tur-scroll",
+    "libs/tur-lazy-container",
     "libs/tur-clipboard-capability",
     "libs/tur-clipboard-wasm",
     "libs/tur-clipboard-native",
@@ -31,6 +33,8 @@ tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-std = { path = "libs/tur-std" }
 tur-animation = { path = "libs/tur-animation" }
 tur-text = { path = "libs/tur-text" }
+tur-scroll = { path = "libs/tur-scroll" }
+tur-lazy-container = { path = "libs/tur-lazy-container" }
 tur-clipboard-capability = { path = "libs/tur-clipboard-capability" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
 tur-clipboard-native = { path = "libs/tur-clipboard-native" }

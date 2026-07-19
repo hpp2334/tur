@@ -11,6 +11,8 @@ tur-engine = { workspace = true, features = ["wgpu-backend", "trace"] }
 tur-std = { workspace = true }
 tur-animation = { workspace = true }
 tur-text = { workspace = true }
+tur-scroll = { workspace = true }
+tur-lazy-container = { workspace = true }
 tur-clipboard-capability = { workspace = true }
 tur-net-capability = { workspace = true }
 tur-native = { workspace = true }

@@ -117,7 +117,7 @@ pub struct SubsystemFlushContext<'a> {
     pub app_event_queue: &'a mut AppEventQueue,
     pub renderer: &'a mut dyn Renderer,
     pub size: &'a mut (f64, f64),
-    pub(crate) need_paint: &'a Cell<bool>,
+    pub need_paint: &'a Cell<bool>,
     /// Engine-owned async executor. Subsystems call `spawn_detached(...)` to
     /// run Rust futures (e.g. `clipboard.write_text`); the executor is driven
     /// each frame inside `flush`. See [`AsyncExecutor::spawn_detached`].

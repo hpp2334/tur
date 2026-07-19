@@ -1,8 +1,8 @@
-use crate::core::layout::{Constraints, Offset, Size};
+use tur_engine::core::layout::{Constraints, Offset, Size};
 
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementLayout, LayoutContext, LayoutViewCx};
-use crate::core::view::ViewCx;
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::layout::{ElementLayout, LayoutContext, LayoutViewCx};
+use tur_engine::core::view::ViewCx;
 
 use super::element::LazyListElement;
 
@@ -71,13 +71,13 @@ impl ElementLayout for LazyListElement {
         // remount), not the `children` snapshot, so newly-mounted items
         // measure in this same pass. ---
         let child_cs = match self.axis {
-            crate::core::layout::Axis::Vertical => Constraints {
+            tur_engine::core::layout::Axis::Vertical => Constraints {
                 min_width: viewport.width,
                 max_width: viewport.width,
                 min_height: 0.0,
                 max_height: f64::INFINITY,
             },
-            crate::core::layout::Axis::Horizontal => Constraints {
+            tur_engine::core::layout::Axis::Horizontal => Constraints {
                 min_width: 0.0,
                 max_width: f64::INFINITY,
                 min_height: viewport.height,
@@ -115,8 +115,8 @@ impl ElementLayout for LazyListElement {
         };
 
         let content = match self.axis {
-            crate::core::layout::Axis::Vertical => Size::new(viewport.width, total_main),
-            crate::core::layout::Axis::Horizontal => Size::new(total_main, viewport.height),
+            tur_engine::core::layout::Axis::Vertical => Size::new(viewport.width, total_main),
+            tur_engine::core::layout::Axis::Horizontal => Size::new(total_main, viewport.height),
         };
         self.position.apply_dimensions(viewport, content);
         let max_scroll = (total_main - viewport_main).max(0.0);
@@ -149,12 +149,11 @@ impl LazyListElement {
         for (i, child_id) in visible {
             let main_pos = offset - scroll_offset;
             let off = match self.axis {
-                crate::core::layout::Axis::Vertical => Offset::new(0.0, main_pos),
-                crate::core::layout::Axis::Horizontal => Offset::new(main_pos, 0.0),
+                tur_engine::core::layout::Axis::Vertical => Offset::new(0.0, main_pos),
+                tur_engine::core::layout::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
             cx.set_child_offset(ElementNodeId::new(child_id.as_u64()), off);
             offset += self.extent_cache.get(&i).copied().unwrap_or(avg);
         }
     }
 }
-
