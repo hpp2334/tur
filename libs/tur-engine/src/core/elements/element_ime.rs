@@ -1,5 +1,5 @@
 use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::event::AppImeEvent;
+use crate::core::event::ImeEvent;
 use std::cell::Cell;
 
 pub struct ElementOnImeContext<'a> {
@@ -28,7 +28,7 @@ impl<'a> ElementOnImeContext<'a> {
 }
 
 pub trait ElementOnIme: 'static {
-    fn on_ime_event(&mut self, cx: &mut ElementOnImeContext, event: &AppImeEvent) {
+    fn on_ime_event(&mut self, cx: &mut ElementOnImeContext, event: &ImeEvent) {
         let _ = cx;
         let _ = event;
     }

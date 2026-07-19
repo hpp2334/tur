@@ -9,16 +9,16 @@
 //!   [`tur_engine::TurEngineBuilder::capability`](`Clipboard::new(backend)`).
 //! - The `builtin:tur/clipboard` bridge module (exporting a `clipboard`
 //!   object with `readText` / `writeText` methods, both Promise-returning).
-//! - The engine-internal [`ClipboardWriteSubsystem`] (Cmd+C/Cmd+X event
-//!   path), registered by [`TurClipboardPlugin`] so embedders no longer need
-//!   to wire the clipboard backend through `TurStdPlugin` separately.
-//!
-//! Paste (Cmd+V) is not handled here — the embedder pushes
-//! `PlatformEvent::ClipboardPaste`, which the engine's
-//! `ClipboardPlatformSubsystem` (registered by `TurStdPlugin`) forwards as
-//! `AppEvent::ClipboardPaste`. tur-text's `ClipboardPasteSubsystem` then
-//! consumes the AppEvent and inserts the text into the focused
-//! `EditableTextElement`.
+//! - Clipboard event payloads ([`events::ClipboardPlatformPasteEvent`],
+//!   [`events::ClipboardPasteEvent`], [`events::ClipboardWriteEvent`]) that
+//!   travel inside the engine's `PlatformEvent::Custom` / `AppEvent::Custom`
+//!   variants, plus queue helpers ([`events::platform_paste`],
+//!   [`events::push_paste`], [`events::push_write`]).
+//! - The engine-internal subsystems ([`ClipboardPlatformSubsystem`] for
+//!   embedder → engine paste forwarding, [`ClipboardWriteSubsystem`] for the
+//!   Cmd+C/Cmd+X write path), both registered by [`TurClipboardPlugin`] so
+//!   embedders no longer need to wire clipboard handling through
+//!   `TurStdPlugin` separately.
 //!
 //! ## Architecture
 //!
@@ -34,6 +34,7 @@
 //!   to register a backend.
 
 pub mod bridge;
+pub mod events;
 pub mod handlers;
 pub mod platform;
 
@@ -44,7 +45,11 @@ use tur_engine::core::bridge::helpers::ConstEntry;
 use tur_engine::error::TurError;
 
 pub use platform::{ClipboardBackend, NoopClipboard};
-pub use handlers::ClipboardWriteSubsystem;
+pub use handlers::{ClipboardPlatformSubsystem, ClipboardWriteSubsystem};
+pub use events::{
+    ClipboardPasteEvent, ClipboardPlatformPasteEvent, ClipboardWriteEvent,
+    platform_paste, push_paste, push_write,
+};
 
 /// Capability newtype wrapping an `Rc<dyn ClipboardBackend>`. Registered via
 /// [`tur_engine::TurEngineBuilder::capability`] with
@@ -69,14 +74,15 @@ impl Capability for Clipboard {}
 
 /// tur-clipboard plugin: registers `builtin:tur/clipboard` (exporting a
 /// `clipboard` object with `readText` / `writeText` methods) plus the
-/// engine-internal `ClipboardWriteSubsystem` (for the Cmd+C/Cmd+X event
-/// path).
+/// engine-internal [`ClipboardPlatformSubsystem`] (forwards embedder paste
+/// into the engine-internal event bus) and [`ClipboardWriteSubsystem`] (the
+/// Cmd+C/Cmd+X event path).
 ///
-/// Paste (Cmd+V) is handled separately: the embedder pushes
-/// `PlatformEvent::ClipboardPaste`, the engine's
-/// `ClipboardPlatformSubsystem` (in `TurStdPlugin`) forwards it as
-/// `AppEvent::ClipboardPaste`, and tur-text's `ClipboardPasteSubsystem`
-/// consumes the AppEvent and inserts the text into the focused editable.
+/// Both subsystems route through the engine's `Custom` event variants:
+/// embedders wrap their paste as a [`ClipboardPlatformPasteEvent`] via
+/// [`platform_paste`]; tur-text consumes the forwarded
+/// [`ClipboardPasteEvent`] and produces [`ClipboardWriteEvent`] on
+/// copy/cut via [`push_write`].
 ///
 /// The plugin declares a hard dependency on the [`Clipboard`] capability
 /// via `requires`; the engine builder fails fast at `build()` if the
@@ -98,11 +104,22 @@ impl Plugin for TurClipboardPlugin {
     }
 
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        // Engine-internal subsystem for Cmd+C / Cmd+X. Looks up the
-        // Clipboard capability at dispatch time via
-        // `cx.capabilities.of::<Clipboard>()` — so if the cap is missing
-        // (which the `requires` declaration above should have caught at
-        // build()), writes silently drop with a warning.
+        // Engine-internal subsystems.
+        //
+        // `ClipboardPlatformSubsystem` must run BEFORE tur-text's
+        // `ClipboardPasteSubsystem` in the AppEvent drain pass: it produces
+        // the `ClipboardPasteEvent` (App) that tur-text consumes. Because
+        // AppEvents drain on a later fixed-point iteration than the
+        // originating PlatformEvent (queues are snapshotted at the start of
+        // `flush_app_events`), the subsystem registration order within a
+        // single iteration doesn't actually gate correctness here — but
+        // registering it first matches the data-flow direction.
+        //
+        // `ClipboardWriteSubsystem` looks up the Clipboard capability at
+        // dispatch time via `cx.capabilities.of::<Clipboard>()` — so if the
+        // cap is missing (which the `requires` declaration above should
+        // have caught at build()), writes silently drop with a warning.
+        ctx.register_subsystem(Box::new(ClipboardPlatformSubsystem));
         ctx.register_subsystem(Box::new(ClipboardWriteSubsystem));
 
         // Build the `clipboard` object (with `readText`/`writeText` methods)

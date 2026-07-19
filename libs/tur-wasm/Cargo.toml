@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 tur-engine = { workspace = true, features = ["webgl"] }
 tur-std = { workspace = true }
 tur-animation = { workspace = true }
+tur-clipboard-capability = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
 tur-demo-plugin = { workspace = true }

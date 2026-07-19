@@ -6,17 +6,17 @@ use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};
 use crate::core::view::Lifecycle;
-use crate::core::keyboard::AppKeyEvent;
+use crate::core::keyboard::KeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
-use crate::core::event::AppImeEvent;
+use crate::core::event::ImeEvent;
 use crate::core::focus::Focusable;
 
-type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &AppKeyEvent);
+type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &KeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent) -> bool;
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
-type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &AppImeEvent);
+type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &ImeEvent);
 type CursorRectFn = fn(&dyn Any) -> Option<(f64, f64, f64, f64)>;
 type FocusableCastFn = fn(&dyn Any) -> Option<&dyn Focusable>;
 
@@ -98,7 +98,7 @@ trait Erased: 'static {
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnKeyboardContext,
-    event: &AppKeyEvent,
+    event: &KeyEvent,
 ) {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnKeyboard::on_keyboard_event(element, cx, event);
@@ -125,7 +125,7 @@ fn wheel_dispatch<E: ElementOnWheel + 'static>(
 fn ime_dispatch<E: ElementOnIme + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnImeContext,
-    event: &AppImeEvent,
+    event: &ImeEvent,
 ) {
     let element = any.downcast_mut::<E>().unwrap();
     ElementOnIme::on_ime_event(element, cx, event);
@@ -510,7 +510,7 @@ impl AnyElement {
     pub fn on_keyboard_event(
         &mut self,
         cx: &mut ElementOnKeyboardContext,
-        event: &AppKeyEvent,
+        event: &KeyEvent,
     ) {
         if let Some(handler) = self.on_keyboard {
             handler(self.inner.as_any_mut(), cx, event);
@@ -552,7 +552,7 @@ impl AnyElement {
     pub fn on_ime_event(
         &mut self,
         cx: &mut ElementOnImeContext,
-        event: &AppImeEvent,
+        event: &ImeEvent,
     ) {
         if let Some(handler) = self.on_ime {
             handler(self.inner.as_any_mut(), cx, event);

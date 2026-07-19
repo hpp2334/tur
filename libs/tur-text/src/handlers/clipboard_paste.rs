@@ -1,24 +1,27 @@
 use tur_engine::core::event::AppEvent;
 use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
+use tur_clipboard_capability::ClipboardPasteEvent;
 
 use crate::controller::{CursorChangeEvent, InputEvent};
 use crate::elements::editable_text::EditableTextElement;
 
-/// Consumes [`AppEvent::ClipboardPaste`] (forwarded by the engine's
-/// `ClipboardPlatformSubsystem` from the embedder's
-/// `PlatformEvent::ClipboardPaste`) and inserts the pasted text into the
-/// focused [`EditableTextElement`], replacing any active selection or
-/// inserting at the caret.
+/// Consumes a [`ClipboardPasteEvent`] (forwarded by tur-clipboard's
+/// [`ClipboardPlatformSubsystem`](tur_clipboard_capability::ClipboardPlatformSubsystem)
+/// from the embedder's [`ClipboardPlatformPasteEvent`]) and inserts the
+/// pasted text into the focused [`EditableTextElement`], replacing any
+/// active selection or inserting at the caret.
 ///
 /// Lives in tur-text (next to `EditableTextElement`) rather than as a
 /// per-element trait in the engine: paste is a stateless, single-consumer
-/// operation, so a dedicated AppEvent + subsystem is simpler than a vtable
-/// slot on every `AnyElement`.
+/// operation, so a dedicated custom AppEvent + subsystem is simpler than a
+/// vtable slot on every `AnyElement`.
 ///
 /// Caret visibility after a paste is handled separately by
 /// [`CaretVisibilitySubsystem`](super::CaretVisibilitySubsystem), which
-/// subscribes to the same `AppEvent::ClipboardPaste` and must be registered
+/// subscribes to the same [`ClipboardPasteEvent`] and must be registered
 /// after this subsystem so the caret move it observes is the post-paste one.
+///
+/// [`ClipboardPlatformPasteEvent`]: tur_clipboard_capability::ClipboardPlatformPasteEvent
 pub struct ClipboardPasteSubsystem;
 
 impl Subsystem for ClipboardPasteSubsystem {
@@ -27,10 +30,10 @@ impl Subsystem for ClipboardPasteSubsystem {
         cx: &mut SubsystemFlushContext<'_>,
         event: &AppEvent,
     ) {
-        let AppEvent::ClipboardPaste { text } = event else {
+        let Some(ev) = event.as_custom::<ClipboardPasteEvent>() else {
             return;
         };
-        let text = text.clone();
+        let text = ev.text.clone();
 
         let Some(focused_id) = cx.focus_manager.borrow().focused() else {
             return;

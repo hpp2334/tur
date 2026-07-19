@@ -13,10 +13,10 @@ use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use tur_engine::core::event::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_native::NativeFontLoader;
-use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
+use tur_engine::core::keyboard::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::elements::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
@@ -427,7 +427,7 @@ impl TurTestApp {
     }
 
     pub fn send_key(&mut self, key: &str) {
-        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(KeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers::default(),
@@ -436,7 +436,7 @@ impl TurTestApp {
         self.ensure_flushed();
     }
 
-    pub fn send_ime(&mut self, event: AppImeEvent) {
+    pub fn send_ime(&mut self, event: ImeEvent) {
         self.inner.push_platform_event(PlatformEvent::Ime(event));
         self.ensure_flushed();
     }
@@ -448,7 +448,7 @@ impl TurTestApp {
     /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
     /// Use this for Cmd+C / Cmd+V / Cmd+S tests.
     pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
-        self.inner.push_platform_event(PlatformEvent::Key(AppKeyEvent {
+        self.inner.push_platform_event(PlatformEvent::Key(KeyEvent {
             key: key.to_string(),
             code: key.to_string(),
             modifiers: Modifiers {
@@ -666,10 +666,11 @@ impl TurTestApp {
         self.cursor_slot.take()
     }
 
-    /// Drain any text written to the clipboard via `AppEvent::ClipboardWrite`
-    /// (e.g. EditableText's Cmd+C / Cmd+X handling) since the last call.
-    /// Returns the latest write (the `RecordingClipboard` logs every write;
-    /// this drains all and returns the last, matching the old slot semantics).
+    /// Drain any text written to the clipboard via `AppEvent::Custom`
+    /// carrying a `ClipboardWriteEvent` (e.g. EditableText's Cmd+C / Cmd+X
+    /// handling) since the last call. Returns the latest write (the
+    /// `RecordingClipboard` logs every write; this drains all and returns
+    /// the last, matching the old slot semantics).
     pub fn take_clipboard_write(&self) -> Option<String> {
         self.clipboard.last_write()
     }
@@ -706,13 +707,14 @@ impl TurTestApp {
     }
 
     /// Push a synthetic paste event — equivalent to the embedder firing
-    /// `paste` on the hidden textarea. The engine's
-    /// `ClipboardPlatformSubsystem` forwards it as `AppEvent::ClipboardPaste`,
-    /// and tur-text's `ClipboardPasteSubsystem` then inserts `text` into the
-    /// focused editable.
+    /// `paste` on the hidden textarea. The paste is wrapped as a
+    /// `ClipboardPlatformPasteEvent` (PlatformEvent::Custom); tur-clipboard's
+    /// `ClipboardPlatformSubsystem` re-emits it as a `ClipboardPasteEvent`
+    /// (AppEvent::Custom), and tur-text's `ClipboardPasteSubsystem` then
+    /// inserts `text` into the focused editable.
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner
-            .push_platform_event(PlatformEvent::ClipboardPaste { text: text.to_string() });
+            .push_platform_event(tur_clipboard_capability::platform_paste(text.to_string()));
         self.ensure_flushed();
     }
 
