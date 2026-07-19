@@ -16,9 +16,9 @@ use tur_engine::core::elements::{
     ElementOnIme, ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace,
     TraceValue,
 };
-use tur_engine::core::event::AppImeEvent;
+use tur_engine::core::event::ImeEvent;
 use tur_engine::core::event::PointerDeviceKind;
-use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType};
+use tur_engine::core::keyboard::{KeyEvent, KeyEventType};
 use tur_engine::core::keyboard::events::KeydownEvent;
 use crate::controller::TextEditingController;
 use crate::controller::{
@@ -456,9 +456,11 @@ impl EditableTextElement {
             "v" if ctrl || meta => {
                 // Paste: the browser fires a `paste` event on the hidden
                 // textarea when the user presses Cmd+V; the wasm layer
-                // forwards the clipboard text via AppEvent::ClipboardPaste,
-                // which is processed by ClipboardPlatformSubsystem. Here we just
-                // mark the key as handled so no fallback runs.
+                // forwards the clipboard text as a ClipboardPlatformPasteEvent
+                // (PlatformEvent::Custom), which tur-clipboard's
+                // ClipboardPlatformSubsystem re-emits as a ClipboardPasteEvent
+                // (AppEvent::Custom). Here we just mark the key as handled so
+                // no fallback runs.
                 true
             }
             "z" if (ctrl || meta) && self.view.undo_controller.is_some() => {
@@ -870,7 +872,7 @@ impl ElementOnKeyboard for EditableTextElement {
     fn on_keyboard_event(
         &mut self,
         cx: &mut ElementOnKeyboardContext,
-        event: &AppKeyEvent,
+        event: &KeyEvent,
     ) {
         if event.event_type != KeyEventType::Down {
             return;
@@ -909,7 +911,7 @@ impl ElementOnKeyboard for EditableTextElement {
         );
 
         if let Some(text) = clipboard_write {
-            cx.push_clipboard_write(text);
+            tur_clipboard_capability::push_write(cx.app_event_queue(), text);
         }
 
         if changed {
@@ -948,24 +950,24 @@ impl ElementOnIme for EditableTextElement {
     fn on_ime_event(
         &mut self,
         cx: &mut ElementOnImeContext,
-        event: &AppImeEvent,
+        event: &ImeEvent,
     ) {
         match event {
-            AppImeEvent::CompositionStart => {
+            ImeEvent::CompositionStart => {
                 self.controller_mut().start_composition();
                 if let Some(m) = self.controller().on_composition_start() {
                     cx.push_event(m, CompositionStartEvent);
                 }
                 cx.request_paint();
             }
-            AppImeEvent::CompositionUpdate { text, .. } => {
+            ImeEvent::CompositionUpdate { text, .. } => {
                 self.controller_mut().update_composition(text.clone());
                 if let Some(m) = self.controller().on_composition_update() {
                     cx.push_event(m, CompositionUpdateEvent { text: text.clone() });
                 }
                 cx.request_paint();
             }
-            AppImeEvent::CompositionEnd { text } => {
+            ImeEvent::CompositionEnd { text } => {
                 let mut c = self.controller_mut();
                 if c.finish_composition().is_some() {
                     let start = c.composing_start().min(c.full_len());

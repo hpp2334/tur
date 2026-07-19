@@ -1,7 +1,6 @@
 use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
 use crate::core::event::queue::AppEventQueue;
-use crate::core::event::AppEvent;
-use crate::core::keyboard::AppKeyEvent;
+use crate::core::keyboard::KeyEvent;
 use std::cell::Cell;
 
 pub struct ElementOnKeyboardContext<'a> {
@@ -31,11 +30,13 @@ impl<'a> ElementOnKeyboardContext<'a> {
         self.need_paint.set(true);
     }
 
-    /// Request that the embedder write `text` to the system clipboard.
-    /// The embedder (e.g. tur-wasm) processes this via a host bridge; in
-    /// test harnesses without a clipboard, it's a no-op.
-    pub fn push_clipboard_write(&mut self, text: String) {
-        self.app_event_queue.push(AppEvent::ClipboardWrite { text });
+    /// Borrow the engine-internal event queue so callers can enqueue
+    /// domain-specific [`AppEvent::Custom`](crate::core::event::AppEvent::Custom)
+    /// payloads (e.g. clipboard write requests) via the matching capability
+    /// crate's helper. The engine itself no longer owns clipboard-specific
+    /// event-construction helpers.
+    pub fn app_event_queue(&mut self) -> &mut AppEventQueue {
+        self.app_event_queue
     }
 }
 
@@ -43,7 +44,7 @@ pub trait ElementOnKeyboard: 'static {
     fn on_keyboard_event(
         &mut self,
         cx: &mut ElementOnKeyboardContext,
-        event: &AppKeyEvent,
+        event: &KeyEvent,
     ) {
         let _ = cx;
         let _ = event;

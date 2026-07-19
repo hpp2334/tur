@@ -1,4 +1,3 @@
-pub mod clipboard_paste;
 pub mod gesture;
 pub mod ime;
 pub mod keyboard;

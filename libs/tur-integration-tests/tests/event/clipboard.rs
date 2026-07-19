@@ -182,7 +182,7 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
 }
 
 // ---------------------------------------------------------------------------
-// Paste (Cmd+V → AppEvent::ClipboardPaste)
+// Paste (Cmd+V → ClipboardPasteEvent via AppEvent::Custom)
 // ---------------------------------------------------------------------------
 
 #[test]

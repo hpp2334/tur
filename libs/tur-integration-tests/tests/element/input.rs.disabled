@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementKind;
-use tur_engine::core::event::AppImeEvent;
+use tur_engine::core::event::ImeEvent;
 use tur_engine::elements::InputElement;
 use tur_integration_tests::TurTestApp;
 
@@ -520,7 +520,7 @@ fn composition_start_sets_state() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionStart);
 
     let (composing, comp_text) = app
         .with_element(input_id, |e| {
@@ -544,8 +544,8 @@ fn composition_update_updates_text() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
@@ -571,12 +571,12 @@ fn composition_end_commits_text() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
@@ -598,8 +598,8 @@ fn composition_end_advances_cursor() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
@@ -632,8 +632,8 @@ fn composition_display_text_shows_preedit() {
     app.send_key("ArrowRight");
     app.send_key("ArrowRight");
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
@@ -658,7 +658,7 @@ fn keyboard_suppressed_during_composition() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionStart);
     app.send_key("x");
 
     let text = app
@@ -684,12 +684,12 @@ fn composition_after_existing_text() {
     app.send_key("a");
     app.send_key("b");
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
@@ -715,8 +715,8 @@ fn composition_at_middle_position() {
 
     app.send_key("ArrowLeft");
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
@@ -807,13 +807,13 @@ fn multiple_composition_cycles() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "い".to_string(),
     });
 
@@ -834,16 +834,16 @@ fn composition_with_update_changes() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "a".to_string(),
         cursor: None,
     });
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 
@@ -864,12 +864,12 @@ fn composition_state_clean_after_end() {
     app.render();
     focus_input(&mut app, input_id);
 
-    app.send_ime(AppImeEvent::CompositionStart);
-    app.send_ime(AppImeEvent::CompositionUpdate {
+    app.send_ime(ImeEvent::CompositionStart);
+    app.send_ime(ImeEvent::CompositionUpdate {
         text: "あ".to_string(),
         cursor: None,
     });
-    app.send_ime(AppImeEvent::CompositionEnd {
+    app.send_ime(ImeEvent::CompositionEnd {
         text: "あ".to_string(),
     });
 

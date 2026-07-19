@@ -69,16 +69,14 @@ impl Plugin for TurStdPlugin {
         ctx.register_subsystem(Box::new(handlers::gesture::GestureSubsystem::new()));
         ctx.register_subsystem(Box::new(handlers::keyboard::KeyboardSubsystem));
         ctx.register_subsystem(Box::new(handlers::ime::ImeSubsystem));
-        ctx.register_subsystem(Box::new(
-            handlers::clipboard_paste::ClipboardPlatformSubsystem,
-        ));
         ctx.register_subsystem(Box::new(handlers::resize::ResizeSubsystem));
         ctx.register_subsystem(Box::new(handlers::pointer_region::PointerSubsystem::new()));
         ctx.register_subsystem(Box::new(handlers::scroll::ScrollSubsystem));
-        // Note: ClipboardWriteSubsystem lives in `tur-clipboard-capability`
-        // (TurClipboardPlugin) — registered there along with the JS bridge
-        // so the embedder wires the clipboard backend through a single
-        // `.capability(...)` call.
+        // Note: ClipboardPlatformSubsystem (embedder paste → engine-internal
+        // paste forwarding) and ClipboardWriteSubsystem (Cmd+C/X → backend)
+        // both live in `tur-clipboard-capability` (TurClipboardPlugin) —
+        // registered there along with the JS bridge so the embedder wires
+        // the clipboard backend through a single `.capability(...)` call.
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
         // Text feature (Text/Input elements, TextEditingController /

@@ -5,6 +5,7 @@ use tur_engine::core::handlers::scroll::dispatch_wheel;
 use tur_engine::core::layout::Axis;
 use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
 use tur_engine::elements::scroll_view::ScrollViewElement;
+use tur_clipboard_capability::ClipboardPasteEvent;
 
 use crate::elements::editable_text::EditableTextElement;
 
@@ -20,14 +21,15 @@ use crate::elements::editable_text::EditableTextElement;
 ///   happen synchronously in the engine's `KeyboardSubsystem` /
 ///   `ImeSubsystem`, so the post-subsystem can observe them in the same
 ///   platform-event pass.
-/// - `AppEvent::ClipboardPaste` — paste is forwarded from
-///   `PlatformEvent::ClipboardPaste` to `AppEvent::ClipboardPaste` by the
-///   engine's `ClipboardPlatformSubsystem`, then consumed by tur-text's
+/// - [`ClipboardPasteEvent`] (inside `AppEvent::Custom`) — paste is forwarded
+///   from `ClipboardPlatformPasteEvent` (platform) to
+///   [`ClipboardPasteEvent`] (app) by tur-clipboard's
+///   `ClipboardPlatformSubsystem`, then consumed by tur-text's
 ///   `ClipboardPasteSubsystem`. Since AppEvents drain in a later flush pass
 ///   than the originating PlatformEvent (the queues are snapshotted at the
 ///   start of `flush_app_events`), this subsystem must subscribe to the
-///   AppEvent — subscribing to `PlatformEvent::ClipboardPaste` would run
-///   before the paste happens.
+///   AppEvent — subscribing to the platform paste would run before the paste
+///   happens.
 ///
 /// No-op when the focused element isn't a multiline `EditableText`, no
 /// scrollable ancestor exists, or the caret line is already visible.
@@ -55,7 +57,7 @@ impl Subsystem for CaretVisibilitySubsystem {
         cx: &mut SubsystemFlushContext<'_>,
         event: &AppEvent,
     ) {
-        if let AppEvent::ClipboardPaste { .. } = event {
+        if event.as_custom::<ClipboardPasteEvent>().is_some() {
             ensure_caret_visible(cx);
         }
     }

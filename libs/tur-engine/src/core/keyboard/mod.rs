@@ -15,7 +15,7 @@ pub enum KeyEventType {
 }
 
 #[derive(Clone, Debug)]
-pub struct AppKeyEvent {
+pub struct KeyEvent {
     pub key: String,
     pub code: String,
     pub modifiers: Modifiers,

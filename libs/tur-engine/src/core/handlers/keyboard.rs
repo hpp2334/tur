@@ -2,7 +2,7 @@ use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::event::PlatformEvent;
 use crate::core::keyboard::events::KeydownEvent;
-use crate::core::keyboard::AppKeyEvent;
+use crate::core::keyboard::KeyEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::elements::focusable::FocusableElement;
@@ -33,7 +33,7 @@ impl Subsystem for KeyboardSubsystem {
     }
 }
 
-fn dispatch_key_event(cx: &mut SubsystemFlushContext<'_>, event: &AppKeyEvent) {
+fn dispatch_key_event(cx: &mut SubsystemFlushContext<'_>, event: &KeyEvent) {
     let Some(focused_id) = cx.focus_manager.borrow().focused() else {
         return;
     };
@@ -54,7 +54,7 @@ fn dispatch_key_event(cx: &mut SubsystemFlushContext<'_>, event: &AppKeyEvent) {
     tree.mark_dirty(focused_id.into());
 }
 
-fn bubble_on_key_down(cx: &mut SubsystemFlushContext<'_>, key_event: &AppKeyEvent) {
+fn bubble_on_key_down(cx: &mut SubsystemFlushContext<'_>, key_event: &KeyEvent) {
     let Some(focused_id) = cx.focus_manager.borrow().focused() else {
         return;
     };

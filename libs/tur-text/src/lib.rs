@@ -17,10 +17,11 @@
 //! `tur_engine::core::fonts::FontManager` — which `Canvas::fill_text_layout`
 //! consumes to do the actual drawing. tur-text produces these structs from
 //! JS-side props via `extract_layout_data`. Paste flows through the
-//! engine-internal bus: the engine's `ClipboardPlatformSubsystem` (in
-//! `TurStdPlugin`) forwards `PlatformEvent::ClipboardPaste` as
-//! `AppEvent::ClipboardPaste`, which [`handlers::ClipboardPasteSubsystem`]
-//! consumes here.
+//! engine-internal bus: tur-clipboard's `ClipboardPlatformSubsystem`
+//! (registered by `TurClipboardPlugin`) forwards the embedder's
+//! `ClipboardPlatformPasteEvent` (PlatformEvent::Custom) as a
+//! `ClipboardPasteEvent` (AppEvent::Custom), which
+//! [`handlers::ClipboardPasteSubsystem`] consumes here.
 
 pub mod controller;
 pub mod elements;
@@ -41,8 +42,8 @@ use tur_engine::error::TurError;
 /// Side effects:
 /// - Registers the boa classes [`TextEditingController`] and
 ///   [`UndoController`] on `globalThis`.
-/// - Registers tur-text's [`handlers::ClipboardPasteSubsystem`] (consumes
-///   `AppEvent::ClipboardPaste` forwarded by the engine's
+/// - Registers tur-text's [`handlers::ClipboardPasteSubsystem`] (consumes a
+///   `ClipboardPasteEvent` — AppEvent::Custom — forwarded by tur-clipboard's
 ///   `ClipboardPlatformSubsystem`) and [`handlers::CaretVisibilitySubsystem`]
 ///   (post-subsystem that keeps the caret visible after keyboard / IME /
 ///   paste events). Registration order matters: paste subsystem before
@@ -60,11 +61,11 @@ pub fn install_text_feature(
         .map_err(|e| TurError::Other(format!("failed to register UndoController: {e}")))?;
 
     // Subsystems run in registration order, so register the paste subsystem
-    // BEFORE `CaretVisibilitySubsystem`. Both consume
-    // `AppEvent::ClipboardPaste`: paste mutates the focused editable's text +
-    // caret, then the caret-visible subsystem observes the post-paste caret
-    // and scrolls if needed. (Engine's `KeyboardSubsystem` /
-    // `ImeSubsystem` are registered even earlier by `TurStdPlugin`, so
+    // BEFORE `CaretVisibilitySubsystem`. Both consume a
+    // `ClipboardPasteEvent` (AppEvent::Custom): paste mutates the focused
+    // editable's text + caret, then the caret-visible subsystem observes the
+    // post-paste caret and scrolls if needed. (Engine's `KeyboardSubsystem`
+    // / `ImeSubsystem` are registered even earlier by `TurStdPlugin`, so
     // keyboard / IME caret moves also land before `CaretVisibilitySubsystem`.)
     ctx.register_subsystem(Box::new(handlers::ClipboardPasteSubsystem));
     ctx.register_subsystem(Box::new(handlers::CaretVisibilitySubsystem));

@@ -2,9 +2,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
-use tur_engine::core::event::{AppImeEvent, PlatformEvent, PointerInput};
+use tur_engine::core::event::{ImeEvent, PlatformEvent, PointerInput};
 use crate::fonts::WasmFontLoader;
-use tur_engine::core::keyboard::{AppKeyEvent, KeyEventType, Modifiers};
+use tur_engine::core::keyboard::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_engine::{CursorCap, LoopDriver, TurApp};
 use tur_engine::core::layout::Offset;
@@ -666,7 +666,7 @@ impl TurWasmApp {
                         if s.is_composing.get() {
                             return;
                         }
-                        s.app.push_platform_event(PlatformEvent::Key(AppKeyEvent {
+                        s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
                             key: event.key(),
                             code: event.code(),
                             modifiers: Modifiers {
@@ -702,7 +702,7 @@ impl TurWasmApp {
                         if s.is_composing.get() {
                             return;
                         }
-                        s.app.push_platform_event(PlatformEvent::Key(AppKeyEvent {
+                        s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
                             key: event.key(),
                             code: event.code(),
                             modifiers: Modifiers {
@@ -737,7 +737,7 @@ impl TurWasmApp {
                     if let Some(s) = guard.as_ref() {
                         s.is_composing.set(true);
                         s.app.push_platform_event(PlatformEvent::Ime(
-                            AppImeEvent::CompositionStart,
+                            ImeEvent::CompositionStart,
                         ));
                     }
                 });
@@ -756,7 +756,7 @@ impl TurWasmApp {
                     if let Some(s) = guard.as_ref() {
                         let text = event.data().unwrap_or_default();
                         s.app.push_platform_event(PlatformEvent::Ime(
-                            AppImeEvent::CompositionUpdate {
+                            ImeEvent::CompositionUpdate {
                                 text,
                                 cursor: None,
                             },
@@ -779,7 +779,7 @@ impl TurWasmApp {
                         s.is_composing.set(false);
                         let text = event.data().unwrap_or_default();
                         s.app.push_platform_event(PlatformEvent::Ime(
-                            AppImeEvent::CompositionEnd { text },
+                            ImeEvent::CompositionEnd { text },
                         ));
                         s.textarea.set_value("");
                     }
@@ -795,10 +795,11 @@ impl TurWasmApp {
             // Paste listener — when the user presses Cmd+V (or Ctrl+V) while
             // the hidden textarea is focused, the browser fires a `paste`
             // event with `clipboardData`. We forward the text to the engine
-            // via PlatformEvent::ClipboardPaste; the engine's
-            // ClipboardPlatformSubsystem re-emits it as AppEvent::ClipboardPaste,
-            // which tur-text's ClipboardPasteSubsystem consumes to insert into
-            // the focused editable.
+            // as a ClipboardPlatformPasteEvent (PlatformEvent::Custom);
+            // tur-clipboard's ClipboardPlatformSubsystem re-emits it as a
+            // ClipboardPasteEvent (AppEvent::Custom), which tur-text's
+            // ClipboardPasteSubsystem consumes to insert into the focused
+            // editable.
             let paste_state = state_clone.clone();
             let paste_closure =
                 Closure::<dyn Fn(web_sys::ClipboardEvent)>::new(move |event: web_sys::ClipboardEvent| {
@@ -812,7 +813,7 @@ impl TurWasmApp {
                     }
                     let guard = paste_state.borrow();
                     if let Some(s) = guard.as_ref() {
-                        s.app.push_platform_event(PlatformEvent::ClipboardPaste { text });
+                        s.app.push_platform_event(tur_clipboard_capability::platform_paste(text));
                     }
                 });
 

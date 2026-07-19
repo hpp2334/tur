@@ -163,7 +163,7 @@ Text logic lives in the standalone `libs/tur-text` crate — **not** a plugin. I
 - **Elements** (`tur-text::elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
 - **Controllers** (`tur-text::controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
 - **Post-event caret visibility** (`tur-text::handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `keyboard.rs` / `ime.rs` no longer call caret-scroll directly.
-- **Paste dispatch** (engine → tur-text): the engine's `ClipboardPlatformSubsystem` (in `tur-engine::core::handlers`, registered by `TurStdPlugin`) forwards the embedder's `PlatformEvent::ClipboardPaste` as `AppEvent::ClipboardPaste` on the engine-internal event bus. tur-text's `ClipboardPasteSubsystem` (in `tur-text::handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element knowledge.
+- **Paste dispatch** (embedder → tur-clipboard → tur-text): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `tur-clipboard-capability::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. tur-text's `ClipboardPasteSubsystem` (in `tur-text::handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits).
 
 JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
 
@@ -176,7 +176,7 @@ Each element implements these focused traits:
 - `ElementRender` — painting and hit testing (`paint`, `hit_test`, `type_name`)
 - `ElementSubscribe` — declares which reactive atoms the node depends on (`subscribe`), so a reactive flush can mark it dirty for re-layout. Runs as an explicit phase after `perform_layout` for dirty nodes.
 
-Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits). Paste is **not** an element trait — it flows through `AppEvent::ClipboardPaste` + tur-text's `ClipboardPasteSubsystem` (see [Text model](#text-model)).
+Elements are type-erased via `AnyElement` (private `Erased` trait with blanket impl for all domain traits). Paste is **not** an element trait — it flows through a `ClipboardPasteEvent` (inside `AppEvent::Custom`) + tur-text's `ClipboardPasteSubsystem` (see [Text model](#text-model)).
 
 ### Data flow
 
