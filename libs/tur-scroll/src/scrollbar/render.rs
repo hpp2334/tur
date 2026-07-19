@@ -1,8 +1,8 @@
-use crate::core::render::{Brush, Color};
-use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
+use tur_engine::core::render::{Brush, Color};
+use tur_engine::core::layout::{ComputedLayout, Geometry, Offset, Size};
 
-use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::{ScrollbarElement, MIN_THUMB};
 

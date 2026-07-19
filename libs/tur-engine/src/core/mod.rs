@@ -19,7 +19,6 @@ pub mod pointer_region;
 pub mod reactive;
 pub mod render;
 pub mod resource;
-pub mod scroll;
 pub mod shell;
 pub mod subsystem;
 pub mod text;

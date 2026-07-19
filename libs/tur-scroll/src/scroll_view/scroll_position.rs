@@ -23,8 +23,8 @@ impl Default for ScrollMetrics {
 #[derive(Clone, Debug)]
 pub struct ScrollPosition {
     metrics: ScrollMetrics,
-    viewport_size: crate::core::layout::Size,
-    content_size: crate::core::layout::Size,
+    viewport_size: tur_engine::core::layout::Size,
+    content_size: tur_engine::core::layout::Size,
     physics: ScrollPhysics,
 }
 
@@ -32,8 +32,8 @@ impl Default for ScrollPosition {
     fn default() -> Self {
         Self {
             metrics: ScrollMetrics::default(),
-            viewport_size: crate::core::layout::Size::ZERO,
-            content_size: crate::core::layout::Size::ZERO,
+            viewport_size: tur_engine::core::layout::Size::ZERO,
+            content_size: tur_engine::core::layout::Size::ZERO,
             physics: ScrollPhysics::Clamping,
         }
     }
@@ -43,13 +43,13 @@ impl ScrollPosition {
     pub fn new() -> Self {
         Self {
             metrics: ScrollMetrics::default(),
-            viewport_size: crate::core::layout::Size::ZERO,
-            content_size: crate::core::layout::Size::ZERO,
+            viewport_size: tur_engine::core::layout::Size::ZERO,
+            content_size: tur_engine::core::layout::Size::ZERO,
             physics: ScrollPhysics::Clamping,
         }
     }
 
-    pub fn apply_dimensions(&mut self, viewport: crate::core::layout::Size, content: crate::core::layout::Size) {
+    pub fn apply_dimensions(&mut self, viewport: tur_engine::core::layout::Size, content: tur_engine::core::layout::Size) {
         self.viewport_size = viewport;
         self.content_size = content;
     }
@@ -77,11 +77,11 @@ impl ScrollPosition {
         self.metrics.max_scroll_extent
     }
 
-    pub fn viewport_size(&self) -> crate::core::layout::Size {
+    pub fn viewport_size(&self) -> tur_engine::core::layout::Size {
         self.viewport_size
     }
 
-    pub fn content_size(&self) -> crate::core::layout::Size {
+    pub fn content_size(&self) -> tur_engine::core::layout::Size {
         self.content_size
     }
 

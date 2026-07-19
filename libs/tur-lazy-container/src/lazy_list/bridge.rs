@@ -5,7 +5,7 @@ use std::rc::Rc;
 use boa_engine::class::Class;
 use boa_engine::{Context, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
+use tur_engine::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![

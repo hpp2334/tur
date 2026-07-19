@@ -1,10 +1,10 @@
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::event::{AppEvent, PlatformEvent};
-use tur_engine::core::handlers::scroll::dispatch_wheel;
 use tur_engine::core::layout::Axis;
 use tur_engine::core::subsystem::{Subsystem, SubsystemFlushContext};
-use tur_engine::elements::scroll_view::ScrollViewElement;
+use tur_scroll::dispatch_wheel;
+use tur_scroll::ScrollViewElement;
 use tur_clipboard_capability::ClipboardPasteEvent;
 
 use crate::elements::editable_text::EditableTextElement;

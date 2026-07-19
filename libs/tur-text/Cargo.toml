@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true }
+tur-scroll = { workspace = true }
 tur-clipboard-capability = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }

@@ -1,17 +1,17 @@
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use crate::core::render::{Brush};
-use crate::core::layout::{Size};
+use tur_engine::core::render::{Brush};
+use tur_engine::core::layout::{Size};
 
-use crate::core::bridge::JsProps;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
+use tur_engine::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementTrace, TraceValue,
 };
-use crate::core::scroll::ScrollController;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::ScrollController;
+use tur_engine::core::view::{ViewCx, Lifecycle, Val, View};
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
 pub(crate) const MIN_THUMB: f64 = 24.0;

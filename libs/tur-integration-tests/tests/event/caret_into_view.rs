@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::elements::ScrollViewElement;
+use tur_scroll::ScrollViewElement;
 use tur_integration_tests::TurTestApp;
 
 /// A multiline editor inside a ScrollView, pre-filled with 30 lines so the

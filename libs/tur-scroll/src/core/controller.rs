@@ -9,12 +9,13 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::bridge::BoaOpaque;
-use crate::core::bridge::{TurJsContext, TurNodeHandle};
-use crate::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
-use crate::core::scroll::ScrollEvent;
-use crate::elements::scroll_view::ScrollViewElement;
+use tur_engine::core::bridge::BoaOpaque;
+use tur_engine::core::bridge::{TurJsContext, TurNodeHandle};
+use tur_engine::core::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
+use tur_engine::core::element::ElementNodeId;
+
+use crate::core::ScrollEvent;
+use crate::scroll_view::ScrollViewElement;
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -29,7 +30,7 @@ pub struct ScrollController {
     /// fallback). `jumpTo`/drag use this to locate the scroll element.
     pub(crate) bound_node: Option<ElementNodeId>,
     pub(crate) element_tree:
-        Option<crate::core::elements::NodeTree>,
+        Option<tur_engine::core::elements::NodeTree>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
     pub(crate) pending_initial_offset: Option<f64>,
@@ -177,8 +178,8 @@ impl Class for ScrollController {
 
                 let vp = sv.viewport_size();
                 let dim = match sv.axis() {
-                    crate::core::layout::Axis::Vertical => vp.height,
-                    crate::core::layout::Axis::Horizontal => vp.width,
+                    tur_engine::core::layout::Axis::Vertical => vp.height,
+                    tur_engine::core::layout::Axis::Horizontal => vp.width,
                 };
                 let new_offset = sv.position.pixels();
                 tree.mark_dirty(node_id.into());
