@@ -1,8 +1,8 @@
-use crate::core::layout::{Constraints, Size};
+use tur_engine::core::layout::{Constraints, Size};
 
-use crate::core::element::ElementNodeId;
-use crate::core::layout::{ElementLayout, LayoutContext};
-use crate::core::resource::ResourceId;
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::image_resource::ImageResourceId;
+use tur_engine::core::layout::{ElementLayout, LayoutContext};
 
 use super::element::ImageElement;
 
@@ -15,7 +15,7 @@ impl ElementLayout for ImageElement {
     ) -> Size {
         let resource_id = cx
             .read_val_opt(self.view.resource_id.as_ref())
-            .map(ResourceId::new);
+            .map(ImageResourceId::new);
 
         // Resolve paint props here (layout holds the store); paint reads
         // `self.painting` and never touches the store.

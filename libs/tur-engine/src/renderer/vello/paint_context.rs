@@ -9,8 +9,8 @@ use vello_common::paint::{Image, ImageId, ImageSource, PaintType};
 use vello_common::peniko::{BlendMode, Color as PenikoColor, Fill, Gradient};
 use vello_hybrid::{Resources, Scene};
 
+use crate::core::image_resource::ImageResourceId;
 use crate::core::render::Canvas;
-use crate::core::resource::ResourceId;
 use crate::core::text::text_layout::TextLayoutData;
 
 /// Tolerance used when converting non-rectangular shapes (rounded rects,
@@ -22,7 +22,7 @@ pub struct VelloPaintContext<'a> {
     resources: &'a mut Resources,
     /// Maps each image resource id to its uploaded hybrid `ImageId`. The WebGPU
     /// backend only supports `ImageSource::OpaqueId`.
-    image_uploads: &'a HashMap<ResourceId, ImageId>,
+    image_uploads: &'a HashMap<ImageResourceId, ImageId>,
     /// Accumulated affine transform applied to every draw call.
     ///
     /// Vello Hybrid's `push_layer` only applies a transform to the clip shape,
@@ -39,7 +39,7 @@ impl<'a> VelloPaintContext<'a> {
         scene: &'a mut Scene,
         resources: &'a mut Resources,
         root_transform: Affine,
-        image_uploads: &'a HashMap<ResourceId, ImageId>,
+    image_uploads: &'a HashMap<ImageResourceId, ImageId>,
     ) -> Self {
         // Seed the transform stack with the root transform (the dpr scale). The
         // hybrid scene has a single global transform state that layers do not
@@ -199,7 +199,7 @@ impl Canvas for VelloPaintContext<'_> {
         }
     }
 
-    fn draw_image(&mut self, resource_id: ResourceId, natural_size: Size, transform: Affine) {
+    fn draw_image(&mut self, resource_id: ImageResourceId, natural_size: Size, transform: Affine) {
         let Some(&image_id) = self.image_uploads.get(&resource_id) else {
             return;
         };

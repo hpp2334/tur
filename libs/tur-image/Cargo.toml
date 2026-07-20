@@ -1,0 +1,15 @@
+[package]
+name = "tur-image"
+description = "Image feature for tur (Image element + PNG/JPEG/SVG decode), installed into builtin:tur/std via install_image_feature"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true }
+boa_engine = { workspace = true }
+image = { workspace = true }
+resvg = { workspace = true }
+usvg = { workspace = true }
+vello_common = { workspace = true }

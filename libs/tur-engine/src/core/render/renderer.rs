@@ -1,6 +1,6 @@
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
-use crate::core::resource::ResourceMap;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::shell::PaintShell;
 
 pub trait Renderer {
@@ -8,7 +8,7 @@ pub trait Renderer {
         &mut self,
         tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     );
 

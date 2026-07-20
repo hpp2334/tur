@@ -4,8 +4,8 @@ use crate::core::layout::Offset;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::render::{NullCanvas, Renderer};
-use crate::core::resource::ResourceMap;
 use crate::core::shell::PaintShell;
 
 pub struct NoopRenderer;
@@ -27,7 +27,7 @@ impl Renderer for NoopRenderer {
         &mut self,
         tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
         let root_id = match tree.root_element_id() {
@@ -41,7 +41,7 @@ impl Renderer for NoopRenderer {
         // Drive the paint walk against a null canvas so paint-time outputs
         // (cursor resolution) still happen even though nothing is drawn.
         let mut null = NullCanvas;
-        tree.paint(&mut null, focused_node_id, resource_map, shell);
+        tree.paint(&mut null, focused_node_id, image_resource_map, shell);
 
         let mut counts: HashMap<&str, usize> = HashMap::new();
         let max_depth = collect_stats(tree, root_id, Offset::ZERO, 0, &mut counts);

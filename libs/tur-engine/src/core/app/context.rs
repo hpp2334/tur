@@ -15,8 +15,8 @@ use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
 use crate::core::event::{AppEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::render::Renderer;
-use crate::core::resource::ResourceMap;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
@@ -24,7 +24,7 @@ pub struct TurAppContext {
     pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
-    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
+    pub(crate) image_resource_map: Rc<RefCell<ImageResourceMap>>,
     pub(crate) renderer: Box<dyn Renderer>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
@@ -60,7 +60,7 @@ impl TurAppContext {
         element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
-        resource_map: Rc<RefCell<ResourceMap>>,
+        image_resource_map: Rc<RefCell<ImageResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_loader: Box<dyn crate::core::fonts::FontLoader>,
         async_executor: Rc<AsyncExecutor>,
@@ -72,7 +72,7 @@ impl TurAppContext {
             element_tree,
             mutation_queue,
             focus_manager,
-            resource_map,
+            image_resource_map,
             renderer,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
@@ -159,13 +159,13 @@ impl TurAppContext {
             max_height: height,
         };
 
-        let resource_map = self.resource_map.borrow();
+        let image_resource_map = self.image_resource_map.borrow();
         let mut tree = self.element_tree.borrow_mut();
         tree.compute_layout(
             &constraints,
             &mut self.font_manager,
             &mut self.text_layout_cx,
-            &resource_map,
+            &image_resource_map,
             self.element_tree.clone(),
             self.mutation_queue.clone(),
             dirty,
@@ -175,7 +175,7 @@ impl TurAppContext {
 
     pub fn render(&mut self) {
         let focused_node_id = self.focus_manager.borrow().focused();
-        let resource_map = self.resource_map.borrow();
+        let image_resource_map = self.image_resource_map.borrow();
         let tree = self.element_tree.borrow();
         // Borrow the biz face for the paint pass, then flush the accumulated
         // cursor claims through the host API. The face is scoped so the
@@ -183,7 +183,7 @@ impl TurAppContext {
         {
             let shell = self.shell.paint_face();
             self.renderer
-                .render(&tree, focused_node_id, &resource_map, shell);
+                .render(&tree, focused_node_id, &image_resource_map, shell);
         }
         self.shell.apply_changes();
     }

@@ -85,6 +85,12 @@ impl Plugin for TurStdPlugin {
         // tur-text owns all text logic; the engine keeps only the
         // paint/layout contract types (`TextLayoutData`, `FontManager`).
         std_fns.extend(tur_text::install_text_feature(ctx)?);
+        // Image feature (Image element, createImageResource /
+        // createSvgResource, PNG/JPEG/SVG decode) lives in the standalone
+        // `tur-image` crate; installed into `builtin:tur/std` here. The
+        // engine retains only the paint/layout contract types
+        // (`ImageResourceId`, `ImageResourceMap`, `ImageResource`).
+        std_fns.extend(tur_image::install_image_feature(ctx)?);
         // Scroll feature (ScrollView, Scrollbar, ScrollController,
         // ScrollSubsystem) and lazy-list feature (LazyList,
         // LazyListController) live in the standalone `tur-scroll` and
@@ -102,7 +108,6 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(tur_engine::elements::flex_item::bridge::fns());
         std_fns.extend(tur_engine::elements::stack::bridge::fns());
         std_fns.extend(tur_engine::elements::positioned::bridge::fns());
-        std_fns.extend(tur_engine::elements::image::bridge::fns());
         std_fns.extend(tur_engine::elements::pointer_interact::bridge::fns());
         std_fns.extend(tur_engine::elements::mouse_region::bridge::fns());
         std_fns.extend(tur_engine::elements::condition::bridge::fns());

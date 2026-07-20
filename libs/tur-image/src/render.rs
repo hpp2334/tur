@@ -1,8 +1,8 @@
-use crate::core::layout::{BoxFit, ComputedLayout, Offset};
+use tur_engine::core::layout::{BoxFit, ComputedLayout, Offset};
 
-use crate::core::element::ElementNodeId;
-use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::resource::ResourceId;
+use tur_engine::core::element::ElementNodeId;
+use tur_engine::core::image_resource::ImageResourceId;
+use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::ImageElement;
 
@@ -19,7 +19,7 @@ impl ElementRender for ImageElement {
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let rid = match self.painting.resource_id.map(ResourceId::new) {
+        let rid = match self.painting.resource_id.map(ImageResourceId::new) {
             Some(id) => id,
             None => {
                 for &child_id in children {

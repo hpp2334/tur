@@ -9,8 +9,8 @@ use crate::core::capability::Capabilities;
 use crate::core::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::reactive::Store;
-use crate::core::resource::ResourceMap;
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -20,7 +20,7 @@ pub struct TurJsContext {
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub dirty: Rc<Cell<bool>>,
     pub need_paint: Rc<Cell<bool>>,
-    pub(crate) resource_map: Rc<RefCell<ResourceMap>>,
+    pub(crate) image_resource_map: Rc<RefCell<ImageResourceMap>>,
     pub(crate) store: Store,
     /// Engine-owned async executor. Always present (created in
     /// [`crate::core::app::TurAppInternal::new`]); exposed to ctx-bound bridge
@@ -53,7 +53,7 @@ impl TurJsContext {
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
         need_paint: Rc<Cell<bool>>,
-        resource_map: Rc<RefCell<ResourceMap>>,
+        image_resource_map: Rc<RefCell<ImageResourceMap>>,
         store: Store,
         async_executor: Rc<AsyncExecutor>,
     ) -> Self {
@@ -63,7 +63,7 @@ impl TurJsContext {
             focus_manager,
             dirty,
             need_paint,
-            resource_map,
+            image_resource_map,
             store,
             async_executor,
             capabilities: Capabilities::new(),
@@ -80,5 +80,14 @@ impl TurJsContext {
     /// `of::<C>()` / `require::<C>()` to look up backends at JS call time.
     pub fn capability(&self) -> Capabilities {
         self.capabilities.clone()
+    }
+
+    /// Image resource map. Bridge fns (e.g. `createImageResource` in
+    /// `tur-image`) extract this via `extract_ctx` and call
+    /// `borrow_mut().insert_image(...)` to register decoded images. Layout
+    /// (`get_image_natural_size`) and the renderers (`iter_images`) read it
+    /// during the paint pass.
+    pub fn image_resource_map(&self) -> &Rc<RefCell<ImageResourceMap>> {
+        &self.image_resource_map
     }
 }

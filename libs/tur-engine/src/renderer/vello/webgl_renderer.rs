@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
+use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
 use crate::core::render::Renderer as TurRenderer;
-use crate::core::resource::{ResourceId, ResourceMap};
 use crate::core::shell::PaintShell;
 use crate::renderer::vello::scene_paint::{new_scene, paint_tree_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
@@ -27,7 +27,7 @@ pub struct WebGlVelloRenderer {
     /// Cache mapping each registered image resource to its uploaded hybrid
     /// `ImageId`. The WebGL backend only supports `ImageSource::OpaqueId`, so
     /// every image must be uploaded to the atlas before painting.
-    image_uploads: HashMap<ResourceId, ImageId>,
+    image_uploads: HashMap<ImageResourceId, ImageId>,
 }
 
 impl WebGlVelloRenderer {
@@ -57,10 +57,10 @@ impl WebGlVelloRenderer {
         &mut self,
         tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
-        self.upload_images(resource_map);
+        self.upload_images(image_resource_map);
 
         paint_tree_to_scene(
             &mut self.scene,
@@ -71,16 +71,16 @@ impl WebGlVelloRenderer {
             self.dpr,
             tree,
             focused_node_id,
-            resource_map,
+            image_resource_map,
             shell,
         );
     }
 
     /// Upload any new image resources to the hybrid image cache (atlas),
-    /// caching their `ImageId` keyed by `ResourceId`. Stale entries (images no
+    /// caching their `ImageId` keyed by `ImageResourceId`. Stale entries (images no
     /// longer in the resource map) are pruned from the cache.
-    fn upload_images(&mut self, resource_map: &ResourceMap) {
-        for (rid, img_res) in resource_map.iter_images() {
+    fn upload_images(&mut self, image_resource_map: &ImageResourceMap) {
+        for (rid, img_res) in image_resource_map.iter_images() {
             if self.image_uploads.contains_key(&rid) {
                 continue;
             }
@@ -92,7 +92,8 @@ impl WebGlVelloRenderer {
             let image_id = self.renderer.upload_image(&mut self.resources, &pixmap);
             self.image_uploads.insert(rid, image_id);
         }
-        self.image_uploads.retain(|rid, _| resource_map.has_image(*rid));
+        self.image_uploads
+            .retain(|rid, _| image_resource_map.has_image(*rid));
     }
 
     fn present(&mut self) {
@@ -118,10 +119,10 @@ impl TurRenderer for WebGlVelloRenderer {
         &mut self,
         tree: &NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
-        self.render_to_scene(tree, focused_node_id, resource_map, shell);
+        self.render_to_scene(tree, focused_node_id, image_resource_map, shell);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

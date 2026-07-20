@@ -4246,20 +4246,29 @@ dependencies = [
  "boa_engine",
  "boa_gc",
  "glifo",
- "image",
  "num-derive",
  "num-traits",
  "parley",
- "resvg",
  "thiserror",
  "tracing",
  "tur-async",
  "unicode-segmentation",
- "usvg",
  "vello_common",
  "vello_hybrid",
  "web-sys",
  "wgpu",
+]
+
+[[package]]
+name = "tur-image"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "image",
+ "resvg",
+ "tur-engine",
+ "usvg",
+ "vello_common",
 ]
 
 [[package]]
@@ -4347,6 +4356,7 @@ version = "0.1.0"
 dependencies = [
  "boa_engine",
  "tur-engine",
+ "tur-image",
  "tur-lazy-container",
  "tur-scroll",
  "tur-text",

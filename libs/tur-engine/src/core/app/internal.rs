@@ -77,14 +77,14 @@ impl TurAppInternal {
         use crate::core::elements::NodeTree;
         use crate::core::mutation::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
+        use crate::core::image_resource::ImageResourceMap;
         use crate::core::reactive::Store;
-        use crate::core::resource::ResourceMap;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
-        let resource_map = Rc::new(RefCell::new(ResourceMap::default()));
+        let image_resource_map = Rc::new(RefCell::new(ImageResourceMap::default()));
 
         let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
 
@@ -97,7 +97,7 @@ impl TurAppInternal {
             focus_manager.clone(),
             dirty,
             need_paint,
-            resource_map.clone(),
+            image_resource_map.clone(),
             store,
             async_executor.clone(),
         );
@@ -111,7 +111,7 @@ impl TurAppInternal {
             element_tree,
             mutation_queue,
             focus_manager,
-            resource_map,
+            image_resource_map,
             renderer,
             font_loader,
             async_executor.clone(),

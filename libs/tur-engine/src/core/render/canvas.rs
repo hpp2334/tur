@@ -4,7 +4,7 @@ use crate::core::render::{Brush, Color};
 use crate::core::layout::{Geometry, Offset, Size};
 use vello_common::kurbo::Affine;
 
-use crate::core::resource::ResourceId;
+use crate::core::image_resource::ImageResourceId;
 use crate::core::text::text_layout::TextLayoutData;
 
 pub trait Canvas: fmt::Debug {
@@ -18,7 +18,7 @@ pub trait Canvas: fmt::Debug {
     );
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData);
-    fn draw_image(&mut self, resource_id: ResourceId, natural_size: Size, transform: Affine);
+    fn draw_image(&mut self, resource_id: ImageResourceId, natural_size: Size, transform: Affine);
     fn draw_shadow(
         &mut self,
         offset: Offset,
@@ -60,7 +60,7 @@ impl Canvas for NullCanvas {
     }
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, _offset: Offset, _layout: &TextLayoutData) {}
-    fn draw_image(&mut self, _resource_id: ResourceId, _natural_size: Size, _transform: Affine) {}
+    fn draw_image(&mut self, _resource_id: ImageResourceId, _natural_size: Size, _transform: Affine) {}
     fn draw_shadow(
         &mut self,
         _offset: Offset,
