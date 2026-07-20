@@ -401,7 +401,7 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
 
         let (leading, trailing) = comments.take_all();
         for map in [leading, trailing] {
-            for (_pos, cmts) in map.borrow().iter() {
+            for cmts in map.borrow().values() {
                 for c in cmts {
                     if let Some((s, e)) = span_to_range(c.span, src_len) {
                         out.push(TokenSpan { start: s, end: e, kind: 4 });
