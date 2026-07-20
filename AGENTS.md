@@ -39,6 +39,9 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  ├── core/subsystem (Subsystem trait + flush hook)     │
 │  ├── core/text     (TextLayoutData, FontManager —      │
 │  │                   paint/layout contract types only) │
+│  ├── core/image_resource (ImageResourceId,              │
+│  │                   ImageResourceMap, ImageResource —  │
+│  │                   paint/layout contract types only) │
 │  ├── elements/     (FlexElement, StackElement, etc.    │
 │  │                   each with element.rs + render.rs)  │
 │  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
@@ -66,6 +69,20 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  extract_layout_data() (bridge: JS → TextLayoutData).  │
 │  Engine keeps TextLayoutData/FontManager as paint       │
 │  contract; Canvas::fill_text_layout does the drawing.   │
+└──────────────────────┬──────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│  libs/tur-image (image feature library, NOT a plugin)  │
+│  Installed into builtin:tur/std by TurStdPlugin via    │
+│  install_image_feature(ctx) → Vec<FnEntry>. Owns:      │
+│  ImageElement + ImageView + layout/render impls,       │
+│  the JS bridge (Image / createImageResource /          │
+│  createSvgResource), and the format decoders           │
+│  (decode_image_bytes for PNG/JPEG, decode_svg).        │
+│  Engine keeps ImageResourceId / ImageResourceMap /     │
+│  ImageResource as the paint/layout contract (the       │
+│  struct's fields are pub, matching TextLayoutData);    │
+│  Canvas::draw_image does the drawing.                  │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -132,7 +149,7 @@ TurEngine::builder()
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Image`, `Svg` (tur-engine) · `Text`, `Input`, `Paragraph` (tur-text) · `Opacity`, `Transform` (tur-animation)
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable` (tur-engine) · `Text`, `Input`, `Paragraph` (tur-text) · `Image`, `Svg` (tur-image) · `Opacity`, `Transform` (tur-animation)
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -166,6 +183,18 @@ Text logic lives in the standalone `libs/tur-text` crate — **not** a plugin. I
 - **Paste dispatch** (embedder → tur-clipboard → tur-text): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `tur-clipboard-capability::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. tur-text's `ClipboardPasteSubsystem` (in `tur-text::handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits).
 
 JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
+
+### Image model
+
+Image logic lives in the standalone `libs/tur-image` crate — **not** a plugin. It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_image_feature(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
+
+- **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; tur-image only produces these structs.
+- **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
+- **Decoders** (`tur-image::decode`): `decode_image_bytes(&[u8])` (PNG/JPEG via the `image` crate) and `decode_svg(&str)` (rasterised via `usvg` + `resvg`). The `image` / `resvg` / `usvg` deps live in tur-image, not in the engine.
+- **Element** (`tur-image::element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurJsContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
+- **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind. Future resource types would live in their own crate.
+
+JS surface is unchanged — `builtin:tur/std` still exports Image/createImageResource/createSvgResource. No `.d.ts` split, no new JS package.
 
 ### Domain traits
 
@@ -221,6 +250,10 @@ libs/
                              #   ParagraphElement, controllers, CaretVisibilitySubsystem,
                              #   extract_layout_data) — NOT a plugin; installed into
                              #   builtin:tur/std by TurStdPlugin via install_text_feature()
+  tur-image/                 # Image feature library (ImageElement, ImageView,
+                             #   layout/render impls, PNG/JPEG/SVG decode) — NOT a plugin;
+                             #   installed into builtin:tur/std by TurStdPlugin via
+                             #   install_image_feature()
   tur-clipboard-capability/  # Clipboard trait + Clipboard cap + builtin:tur/clipboard + handlers
   tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend
   tur-clipboard-native/      # NativeClipboard (arboard) backend

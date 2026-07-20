@@ -9,11 +9,11 @@ use crate::core::layout::{Constraints, Offset, Size};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
-use crate::core::resource::ResourceMap;
 
 pub struct NodeTreeData {
     pub(crate) elements: HashMap<ElementNodeId, ElementObject>,
@@ -380,7 +380,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
@@ -392,7 +392,7 @@ impl NodeTreeData {
         };
 
         let mut js = ReactiveReadJsContext::new(self.read_face.clone(), boa);
-        self.layout(root_id, constraints, font_manager, text_layout_cx, resource_map, node_tree, mutation_queue, dirty, &mut js)
+        self.layout(root_id, constraints, font_manager, text_layout_cx, image_resource_map, node_tree, mutation_queue, dirty, &mut js)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -402,7 +402,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-        resource_map: &'a ResourceMap,
+        image_resource_map: &'a ImageResourceMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
@@ -440,7 +440,7 @@ impl NodeTreeData {
             id,
             font_manager,
             text_layout_cx,
-            resource_map,
+            image_resource_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -471,7 +471,7 @@ impl NodeTreeData {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
         let root_id = match self.root_id {
@@ -483,7 +483,7 @@ impl NodeTreeData {
             canvas,
             Offset::ZERO,
             focused_node_id,
-            resource_map,
+            image_resource_map,
             shell,
         );
     }
@@ -495,7 +495,7 @@ impl NodeTreeData {
         canvas: &mut dyn Canvas,
         parent_offset: Offset,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
         let node = match self.elements.get(&id) {
@@ -514,7 +514,7 @@ impl NodeTreeData {
             self,
             focused_node_id,
             id,
-            resource_map,
+            image_resource_map,
             shell,
         );
         // Flatten: paint fragment children as direct children of this node.
@@ -968,7 +968,7 @@ impl NodeTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
@@ -978,7 +978,7 @@ impl NodeTree {
             constraints,
             font_manager,
             text_layout_cx,
-            resource_map,
+            image_resource_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -990,12 +990,12 @@ impl NodeTree {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        resource_map: &ResourceMap,
+        image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
     ) {
         self.data
             .borrow()
-            .paint(canvas, focused_node_id, resource_map, shell);
+            .paint(canvas, focused_node_id, image_resource_map, shell);
     }
 }
 

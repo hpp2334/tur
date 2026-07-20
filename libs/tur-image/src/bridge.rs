@@ -4,8 +4,9 @@ use std::rc::Rc;
 
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
-use crate::core::resource::ImageResource;
+use tur_engine::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
+
+use crate::decode::{decode_image_bytes, decode_svg};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![
@@ -60,13 +61,13 @@ fn tur_create_image_resource(
             JsNativeError::typ().with_message("expected ArrayBuffer or Uint8Array"),
         ));
     };
-    let image = ImageResource::from_bytes(&bytes).ok_or_else(|| {
+    let image = decode_image_bytes(&bytes).ok_or_else(|| {
         JsError::from(
             JsNativeError::range()
                 .with_message("failed to decode image (supported: PNG, JPEG)"),
         )
     })?;
-    let id = js_ctx.resource_map.borrow_mut().insert_image(image);
+    let id = js_ctx.image_resource_map().borrow_mut().insert_image(image);
     Ok(JsValue::from(id.as_u64() as f64))
 }
 
@@ -81,9 +82,9 @@ fn tur_create_svg_resource(
         .as_string()
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("expected SVG string")))?;
     let svg_str = svg.to_std_string_escaped();
-    let image = ImageResource::from_svg_str(&svg_str).ok_or_else(|| {
+    let image = decode_svg(&svg_str).ok_or_else(|| {
         JsError::from(JsNativeError::range().with_message("failed to parse/render SVG"))
     })?;
-    let id = js_ctx.resource_map.borrow_mut().insert_image(image);
+    let id = js_ctx.image_resource_map().borrow_mut().insert_image(image);
     Ok(JsValue::from(id.as_u64() as f64))
 }

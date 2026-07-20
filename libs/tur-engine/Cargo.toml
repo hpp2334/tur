@@ -20,9 +20,6 @@ webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 
 [dependencies]
 tur-async = { workspace = true }
-image = { workspace = true }
-resvg = { workspace = true }
-usvg = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
 vello_hybrid = { workspace = true }

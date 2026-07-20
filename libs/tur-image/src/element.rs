@@ -2,13 +2,13 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::Context;
-use crate::core::layout::BoxFit;
+use tur_engine::core::layout::BoxFit;
 
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
-use crate::core::bridge::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
+use tur_engine::core::elements::{AnyElement, ElementTrace, TraceValue};
+use tur_engine::core::bridge::JsProps;
+use tur_engine::core::view::{ViewCx, Lifecycle, Val, View};
 
 // ---------------------------------------------------------------------------
 // ImageView — the user's declaration. Pure Rust, no JsValues.
@@ -52,7 +52,7 @@ impl View for ImageView {
 #[derive(Default, Clone)]
 pub struct ImagePainting {
     pub(crate) resource_id: Option<u64>,
-    pub(crate) fit: Option<crate::core::layout::BoxFit>,
+    pub(crate) fit: Option<tur_engine::core::layout::BoxFit>,
 }
 
 pub struct ImageElement {

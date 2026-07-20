@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
-use crate::core::resource::{ResourceId, ResourceMap};
+use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
 use crate::core::shell::PaintShell;
 use crate::renderer::vello::paint_context::VelloPaintContext;
 use vello_common::kurbo::{Affine, Rect};
@@ -38,13 +38,13 @@ pub(crate) fn new_scene(physical_width: u32, physical_height: u32) -> Scene {
 pub(crate) fn paint_tree_to_scene(
     scene: &mut Scene,
     resources: &mut Resources,
-    image_uploads: &HashMap<ResourceId, ImageId>,
+    image_uploads: &HashMap<ImageResourceId, ImageId>,
     physical_width: u32,
     physical_height: u32,
     dpr: f64,
     tree: &NodeTreeData,
     focused_node_id: Option<ElementNodeId>,
-    resource_map: &ResourceMap,
+    image_resource_map: &ImageResourceMap,
     shell: PaintShell<'_>,
 ) {
     scene.reset();
@@ -64,5 +64,5 @@ pub(crate) fn paint_tree_to_scene(
     // `Scene::append`). The dpr scale is seeded as the paint context's root
     // transform so it is baked into every draw call.
     let mut ctx = VelloPaintContext::new(scene, resources, Affine::scale(dpr), image_uploads);
-    tree.paint(&mut ctx, focused_node_id, resource_map, shell);
+    tree.paint(&mut ctx, focused_node_id, image_resource_map, shell);
 }

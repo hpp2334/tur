@@ -5,13 +5,13 @@ use crate::core::platform::{Cursor};
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
+use crate::core::image_resource::{ImageResourceId, ImageResource, ImageResourceMap};
 use crate::core::render::Canvas;
-use crate::core::resource::{ImageResource, ResourceId, ResourceMap};
 use crate::core::shell::PaintShell;
 
 pub struct PaintContext<'a> {
     tree: &'a NodeTreeData,
-    resource_map: &'a ResourceMap,
+    image_resource_map: &'a ImageResourceMap,
     focused_node_id: Option<ElementNodeId>,
     current_node_id: Option<ElementNodeId>,
     /// Shell face for this paint pass: cursor claims, time, pointer position.
@@ -24,12 +24,12 @@ impl<'a> PaintContext<'a> {
         tree: &'a NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,
-        resource_map: &'a ResourceMap,
+        image_resource_map: &'a ImageResourceMap,
         shell: PaintShell<'a>,
     ) -> Self {
         PaintContext {
             tree,
-            resource_map,
+            image_resource_map,
             focused_node_id,
             current_node_id: Some(current_node_id),
             shell,
@@ -47,7 +47,7 @@ impl<'a> PaintContext<'a> {
             canvas,
             parent_offset,
             self.focused_node_id,
-            self.resource_map,
+            self.image_resource_map,
             self.shell,
         );
     }
@@ -62,8 +62,8 @@ impl<'a> PaintContext<'a> {
         self.shell.now()
     }
 
-    pub fn get_image_resource(&self, id: ResourceId) -> Option<&ImageResource> {
-        self.resource_map.get_image(id)
+    pub fn get_image_resource(&self, id: ImageResourceId) -> Option<&ImageResource> {
+        self.image_resource_map.get_image(id)
     }
 
     /// True if the last known pointer position lies within the rectangle at
