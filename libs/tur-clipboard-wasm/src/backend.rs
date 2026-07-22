@@ -6,7 +6,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use tur_clipboard_capability::ClipboardBackend;
+use tur_engine::ClipboardBackend;
 
 /// Browser clipboard backend. Wraps `navigator.clipboard.readText` /
 /// `writeText` — both Promise-returning JS calls.

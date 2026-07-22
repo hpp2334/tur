@@ -1,6 +1,6 @@
 use boa_engine::{Context, JsValue};
 
-use tur_engine::core::mutation::IntoJsArgs;
+use tur_engine::core::edgy::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Animation callback payloads — JS callback arguments for onTick / onEnd.

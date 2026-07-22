@@ -6,11 +6,11 @@ use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::{ElementTrace, TraceValue};
 use crate::core::view::Lifecycle;
-use crate::core::keyboard::KeyEvent;
+use crate::core::platform::key_event::KeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
-use crate::core::event::ImeEvent;
+use crate::core::platform::ImeEvent;
 use crate::core::focus::Focusable;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &KeyEvent);

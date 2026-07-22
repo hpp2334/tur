@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use boa_engine::{Context, JsResult, JsValue};
 
-use tur_engine::core::bridge::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
+use tur_engine::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![

@@ -11,7 +11,7 @@ use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue}
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::layout::{LayoutContext, SubscribeCx};
-use crate::core::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
+use crate::core::edgy::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
 
@@ -382,7 +382,7 @@ impl NodeTreeData {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {
@@ -404,7 +404,7 @@ impl NodeTreeData {
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &'a ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Size {
@@ -970,7 +970,7 @@ impl NodeTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {

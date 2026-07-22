@@ -2,7 +2,7 @@ use std::fmt;
 
 use glifo::Glyph;
 use std::collections::HashMap;
-use crate::core::render::{Brush, Color};
+use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{Geometry, Offset, Size};
 use vello_common::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Shape, Stroke};
 use vello_common::paint::{Image, ImageId, ImageSource, PaintType};

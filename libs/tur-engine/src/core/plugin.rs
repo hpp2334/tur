@@ -15,11 +15,11 @@ use boa_engine::NativeFunction;
 use boa_engine::Source;
 
 use crate::core::app::TurAppContext;
-use crate::core::bridge::helpers::{ConstEntry, FnEntry};
-use crate::core::bridge::module_loader::{build_fn_module, build_native_module};
-use crate::core::bridge::{TurJsContext, TurModuleLoader};
+use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
+use crate::core::js_runtime::module_loader::{build_fn_module, build_native_module};
+use crate::core::js_runtime::{TurJsContext, TurModuleLoader};
 use crate::core::capability::{Capabilities, CapabilityDecls};
-use crate::core::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::subsystem::Subsystem;
 use crate::error::TurError;
 /// A plugin that extends the engine with elements, bridge modules, subsystems,

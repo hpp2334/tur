@@ -3,12 +3,12 @@ use std::rc::Rc;
 
 use boa_engine::{Context, JsValue};
 
-use crate::core::bridge::TurJsContext;
-use crate::core::mutation::PendingMutationInvocationQueue;
+use crate::core::js_runtime::TurJsContext;
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
 use crate::core::layout::SubscribeCx;
-use crate::core::reactive::{Readable, ReactiveReadStore};
+use crate::core::edgy::reactive::{Readable, ReactiveReadStore};
 use crate::core::view::{FromJs, Val};
 
 // ---------------------------------------------------------------------------

@@ -38,10 +38,10 @@ use boa_engine::Context;
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::elements::NodeTree;
-use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
-use crate::core::event::{AppEvent, PlatformEvent};
+use crate::core::app::{AppEvent, AppEventQueue};
+use crate::core::platform::{PlatformEvent, PlatformEventQueue};
 use crate::core::focus::FocusManager;
-use crate::core::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::render::Renderer;
 
 /// A long-lived participant in the engine's per-frame flush loop.
@@ -70,7 +70,7 @@ pub trait Subsystem {
     }
 
     /// React to a platform (input) event drained from
-    /// [`PlatformEventQueue`](crate::core::event::queue::PlatformEventQueue).
+    /// [`PlatformEventQueue`](crate::core::platform::PlatformEventQueue).
     /// Invoked once per drained event, every fixed-point iteration, in
     /// registration order across all registered subsystems. Default: no-op.
     fn handle_platform_event(
@@ -81,7 +81,7 @@ pub trait Subsystem {
     }
 
     /// React to an engine-internal event drained from
-    /// [`AppEventQueue`](crate::core::event::queue::AppEventQueue). Invoked
+    /// [`AppEventQueue`](crate::core::app::AppEventQueue). Invoked
     /// once per drained event, every fixed-point iteration, in registration
     /// order across all registered subsystems. Default: no-op.
     fn handle_app_event(&mut self, _cx: &mut SubsystemFlushContext<'_>, _event: &AppEvent) {}
@@ -101,8 +101,8 @@ pub trait Subsystem {
 ///
 /// Subsystems that just override [`Subsystem::flush`] (e.g. animation) only
 /// need [`Self::boa`]; subsystems that handle events use the element tree /
-/// focus manager / mutation queue / event queues / renderer / size /
-/// async executor / capability fields.
+/// focus manager / mutation queue / event queues / renderer /
+/// `screen_logical_size` / async executor / capability fields.
 pub struct SubsystemFlushContext<'a> {
     /// The engine's boa `Context`. Borrowed for the duration of one subsystem
     /// tick or event dispatch; the borrow is released before the next
@@ -116,7 +116,10 @@ pub struct SubsystemFlushContext<'a> {
     pub platform_event_queue: &'a mut PlatformEventQueue,
     pub app_event_queue: &'a mut AppEventQueue,
     pub renderer: &'a mut dyn Renderer,
-    pub size: &'a mut (f64, f64),
+    /// Current canvas logical size `(width, height)` in CSS pixels. Mutated
+    /// by `ResizeSubsystem` on `PlatformEvent::Resize`; read by layout-driven
+    /// subsystems and render state. Backed by [`Screen::logical_size`].
+    pub screen_logical_size: &'a mut (f64, f64),
     pub need_paint: &'a Cell<bool>,
     /// Engine-owned async executor. Subsystems call `spawn_detached(...)` to
     /// run Rust futures (e.g. `clipboard.write_text`); the executor is driven

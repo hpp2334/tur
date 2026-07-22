@@ -9,8 +9,8 @@ use boa_engine::class::Class;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::JsValue;
 use boa_gc::{Finalize, Trace};
-use tur_engine::core::bridge::helpers::{ConstEntry, FnEntry};
-use tur_engine::core::mutation::PendingMutationInvocationQueue;
+use tur_engine::core::js_runtime::helpers::{ConstEntry, FnEntry};
+use tur_engine::core::edgy::mutation::PendingMutationInvocationQueue;
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 

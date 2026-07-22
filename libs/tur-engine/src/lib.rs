@@ -1,5 +1,5 @@
+pub mod builtin_plugins;
 pub mod core;
-pub mod elements;
 pub mod renderer;
 
 pub mod error;
@@ -7,8 +7,20 @@ pub mod error;
 // Re-export engine-internal cursor-capability types at the crate root so
 // embedders can write `tur_engine::CursorBackend`, `tur_engine::CursorCap`,
 // `tur_engine::NoopCursor` without reaching into `core::platform`. The std
-// plugin itself (`TurStdPlugin`) lives in the separate `tur-std` crate.
+// plugin itself (`TurStdPlugin`) lives in `builtin_plugins::std`.
 pub use crate::core::platform::{CursorBackend, CursorCap, NoopCursor};
+// Re-export the clipboard plugin surface at the crate root so embedders /
+// external backend crates can write `tur_engine::Clipboard`,
+// `tur_engine::ClipboardBackend`, `tur_engine::TurClipboardPlugin`,
+// `tur_engine::platform_paste`. The plugin itself lives in
+// `builtin_plugins::clipboard` (inlined from the former
+// `tur-clipboard-capability` crate).
+pub use crate::builtin_plugins::clipboard::{
+    Clipboard, ClipboardBackend, TurClipboardPlugin, platform_paste,
+};
+// Re-export `TurStdPlugin` at the crate root so embedders can write
+// `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
+pub use crate::builtin_plugins::TurStdPlugin;
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -25,16 +37,18 @@ use error::TurError;
 
 use core::app::{FrameOutcome, TurAppInternal};
 
-use core::bridge::helpers::FnEntry;
-use core::bridge::module_loader::{build_native_module, bound_native};
-use core::bridge::{console, dev_tool, reactive, render};
-use core::bridge::{BoaOpaque, TurJobExecutor, TurModuleLoader};
+use core::js_runtime::helpers::FnEntry;
+use core::js_runtime::module_loader::{build_native_module, bound_native};
+use core::app::render;
+use core::dev::dev_tool;
+use core::js_runtime::{BoaOpaque, TurModuleLoader};
+use core::async_::TurJobExecutor;
 use core::capability::{Capability, CapabilityDecls};
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
 use core::plugin::{Plugin, PluginContext};
-use core::js_value::IntoJs;
+use core::js_runtime::js_value::IntoJs;
 use core::render::Renderer;
 
 #[cfg(feature = "trace")]
@@ -160,7 +174,7 @@ impl TurApp {
     /// [`AppHandler::handle_platform_event`](core::handler::AppHandler::handle_platform_event).
     /// Also re-arms an idle autonomous loop (see [`Self::start`]) so the event
     /// is processed on the next frame.
-    pub fn push_platform_event(&self, event: core::event::PlatformEvent) {
+    pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
         self.internal
             .app_context
             .borrow_mut()
@@ -174,7 +188,7 @@ impl TurApp {
     /// [`Self::push_platform_event`] / [`Self::request_paint`]; this is
     /// exposed for host-initiated app events and testing. Re-arms an idle
     /// autonomous loop like [`Self::push_platform_event`].
-    pub fn push_app_event(&self, event: core::event::AppEvent) {
+    pub fn push_app_event(&self, event: core::app::AppEvent) {
         self.internal
             .app_context
             .borrow_mut()
@@ -492,7 +506,7 @@ impl TurEngineBuilder {
             .build()
             .expect("failed to build boa context");
 
-        let mut internal = TurAppInternal::new(
+        let internal = TurAppInternal::new(
             renderer,
             font_loader,
             executor.clone(),
@@ -504,22 +518,22 @@ impl TurEngineBuilder {
 
         // Engine-owned `viewportSize$` reactive source. Created here (needs
         // `&mut Context` for the initial `{width,height}` value + the opaque
-        // wrap) and synced each frame in `TurAppInternal::flush`. The handle
-        // (`Source<JsValue>`, a `Copy` `AtomId`) lives on `internal`; the
-        // `JsValue` opaque is handed to plugins so `std` can export it as
-        // the `viewportSize$` const in `builtin:tur/std`.
+        // wrap) and synced each frame in `Screen::sync_source` (called from
+        // `TurAppInternal::flush`). The handle (`Source<JsValue>`, a `Copy`
+        // `AtomId`) lives on `app_context.screen`; the `JsValue` opaque is
+        // handed to plugins so `std` can export it as the `viewportSize$`
+        // const in `builtin:tur/std`.
         let viewport_size_js: boa_engine::JsValue = {
-            let (w, h) = internal.app_context.borrow().size;
-            let init = TurAppInternal::viewport_js(&mut boa_context, w, h);
-            let src: core::reactive::Source<boa_engine::JsValue> =
+            let (w, h) = internal.app_context.borrow().screen.logical_size;
+            let init = core::screen::Screen::size_js(w, h, &mut boa_context);
+            let src: core::edgy::reactive::Source<boa_engine::JsValue> =
                 internal.js_context.store.bridge().source(init);
-            internal.viewport_size = Some(src);
-            internal.last_viewport.set((w, h));
+            internal.app_context.borrow_mut().screen.set_source(src);
             src.into_js(&mut boa_context)
         };
 
         let mut core_fns: Vec<FnEntry> = Vec::new();
-        core_fns.extend(reactive::fns());
+        core_fns.extend(core::edgy::bridge::fns());
         core_fns.extend(render::fns());
         let core_module = build_native_module(
             &mut boa_context,
@@ -557,8 +571,6 @@ impl TurEngineBuilder {
         );
         let _ = boa_context
             .register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
-
-        console::register_console_globals(&mut boa_context);
 
         // Insert every builder-level capability into the shared registry
         // BEFORE plugins run, so plugin call-site order (`capability` before

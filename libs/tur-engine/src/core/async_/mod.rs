@@ -34,6 +34,11 @@ use boa_engine::JsResult;
 
 pub use tur_async::{Sleep, Task};
 
+pub mod executor;
+pub mod task;
+
+pub use executor::TurJobExecutor;
+
 /// Adapter that bridges boa's `Clock` trait to `tur_async::Clock`. The engine
 /// already receives a `Clock` (for boa's `Context` and `Shell`); this wraps it
 /// so `tur_async::Executor` gets its wall-clock from the same source — no

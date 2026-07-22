@@ -13,7 +13,7 @@
 //!
 //! [`Tween<T>`]: https://api.flutter.dev/flutter/animation/Tween-class.html
 
-use tur_engine::core::render::Color;
+use tur_engine::core::render::brush::Color;
 
 /// A linear interpolation between a beginning and ending value of type `T`.
 ///

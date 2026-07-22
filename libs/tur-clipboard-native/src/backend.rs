@@ -7,13 +7,13 @@ use std::future::Future;
 use std::pin::Pin;
 
 use arboard::Clipboard as ArboardClipboard;
-use tur_clipboard_capability::ClipboardBackend;
+use tur_engine::ClipboardBackend;
 
 /// Native clipboard backend. Wraps an [`arboard::Clipboard`] handle.
 ///
 /// Construction can fail on systems without a clipboard (e.g. headless CI).
-/// Embedders should fall back to `NoopClipboard` (or the test stub) when
-/// [`NativeClipboard::new`] returns `Err`.
+/// Embedders should fall back to the test stub (or skip registering the
+/// capability) when [`NativeClipboard::new`] returns `Err`.
 ///
 /// Note: the `arboard::Clipboard` field isn't read directly because the
 /// trait methods are `&self` while `arboard::Clipboard::get_text` /

@@ -7,8 +7,8 @@ use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tur_engine::core::js_value::{type_error, FromJs};
-use tur_engine::core::mutation::{
+use tur_engine::core::js_runtime::js_value::{type_error, FromJs};
+use tur_engine::core::edgy::mutation::{
     extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue,
 };
 use crate::Curve;

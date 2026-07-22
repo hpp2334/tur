@@ -1,17 +1,16 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use crate::core::reactive::ReactiveReadJsContext;
+use crate::core::edgy::reactive::ReactiveReadJsContext;
 use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use crate::core::layout::{Constraints, Offset, Size};
 
-use crate::core::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{NodeTree, NodeTreeData};
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
 use crate::core::view::{FromJs, Val};
-use crate::elements::ExpandedElement;
 
 pub struct LayoutContext<'a, 'js> {
     pub tree: &'a mut NodeTreeData,
@@ -123,19 +122,6 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
             .get(&child_id)
             .and_then(|n| n.element.as_ref())
             .and_then(|e| e.cast::<T>())
-    }
-
-    /// Resolve the `flex` weight of a flex-item child (`Expanded({ flex })`).
-    /// Returns 0.0 if the child is not an `Expanded` element. If it is an
-    /// `Expanded` but the `flex` prop is absent, returns 1.0 (Flutter default).
-    pub fn child_flex(&mut self, child_id: ElementNodeId) -> f64 {
-        let Some(expanded) = self.child_element::<ExpandedElement>(child_id) else {
-            return 0.0;
-        };
-        let Some(flex_val) = expanded.view.flex.clone() else {
-            return 1.0;
-        };
-        self.read_val(&flex_val).unwrap_or(1.0).max(0.0)
     }
 
     pub fn text_layout_contexts(

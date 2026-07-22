@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::elements::ContainerElement;
+use tur_engine::builtin_plugins::layout::ContainerElement;
 use tur_engine::core::layout::BorderPosition;
 use tur_integration_tests::TurTestApp;
 

@@ -3,7 +3,7 @@ use std::fmt;
 use boa_engine::Context;
 use crate::core::layout::{ComputedLayout, Constraints};
 
-use crate::core::bridge::{BoaOpaque, TurNodeHandle};
+use crate::core::js_runtime::{BoaOpaque, TurNodeHandle};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::AnyElement;
 

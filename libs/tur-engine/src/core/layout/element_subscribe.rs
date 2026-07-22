@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::core::reactive::{AnyReadable, SubscriberId, SubscriberIndexStore};
+use crate::core::edgy::reactive::{AnyReadable, SubscriberId, SubscriberIndexStore};
 use crate::core::view::{FromJs, Val};
 
 // ---------------------------------------------------------------------------

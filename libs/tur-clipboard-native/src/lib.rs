@@ -1,8 +1,8 @@
 //! Native clipboard backend for tur, backed by the [`arboard`] crate
 //! (cross-platform: win/mac/linux).
 //!
-//! Re-exports the full clipboard surface from [`tur_clipboard_capability`]
-//! so native embedders only need this one crate. The backend
+//! Re-exports the clipboard plugin surface from [`tur_engine`] so native
+//! embedders only need this one crate. The backend
 //! ([`NativeClipboard`]) is registered via
 //! `TurEngineBuilder::capability(Clipboard::new(NativeClipboard::new()?))`.
 //!
@@ -10,10 +10,7 @@
 //! target-gated to `cfg(not(target_family = "wasm"))`). Embedders targeting
 //! wasm should depend on `tur-clipboard-wasm` instead.
 
-pub use tur_clipboard_capability::{
-    Clipboard, ClipboardBackend, ClipboardWriteSubsystem, NoopClipboard,
-    TurClipboardPlugin,
-};
+pub use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
 
 #[cfg(not(target_family = "wasm"))]
 mod backend;

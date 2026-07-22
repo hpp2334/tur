@@ -24,26 +24,74 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
 │  libs/tur-engine (unified engine crate)               │
-│  ├── core/trait_   (ElementKind, NodeId,             │
-│  │                   ElementLayout, ElementRender,     │
-│  │                   ElementOnUpdate, ElementSubscribe)│
-│  ├── core/elements (AnyElement, ElementNode,           │
-│  │                   ElementTree with layout+paint)    │
-│  ├── core/render   (PaintContext, Renderer,            │
-│  │                   ChildLayout, ChildPaint)          │
-│  ├── core/capability (Capability trait, Capabilities,  │
-│  │                   CapabilityDecls — type-keyed      │
-│  │                   service registry consumed by      │
-│  │                   bridge fns, subsystems, plugins)   │
-│  ├── core/bridge   (boa_engine JS bridge, init_bridge) │
-│  ├── core/subsystem (Subsystem trait + flush hook)     │
-│  ├── core/text     (TextLayoutData, FontManager —      │
-│  │                   paint/layout contract types only) │
-│  ├── core/image_resource (ImageResourceId,              │
-│  │                   ImageResourceMap, ImageResource —  │
-│  │                   paint/layout contract types only) │
-│  ├── elements/     (FlexElement, StackElement, etc.    │
-│  │                   each with element.rs + render.rs)  │
+│  ├── core/         (engine infrastructure — NO         │
+│  │                  dependency on builtin_plugins/*)   │
+│  │   ├── app/      (TurAppInternal + FrameOutcome +    │
+│  │   │             AppEvent/AppEventQueue + render()   │
+│  │   │             mount + RootView/RootElement        │
+│  │   │             generic-root wrapper)               │
+│  │   ├── elements/ (AnyElement, ElementObject,         │
+│  │   │             ElementTree with layout+paint)      │
+│  │   ├── render/   (PaintContext, Renderer,            │
+│  │   │             ElementRender trait + brush/         │
+│  │   │             Color/Brush/GradientStop + JS        │
+│  │   │             bindings)                            │
+│  │   ├── layout/   (ElementLayout, ElementSubscribe,   │
+│  │   │             LayoutContext, primitives)          │
+│  │   ├── capability/ (Capability trait, Capabilities,  │
+│  │   │             CapabilityDecls — type-keyed        │
+│  │   │             service registry)                   │
+│  │   ├── js_runtime/ (boa plumbing: TurJsContext,      │
+│  │   │             JsProps, FnEntry, module_loader,    │
+│  │   │             opaque, js_value)                   │
+│  │   ├── dev/      (turDevTool bridge)                 │
+│  │   ├── edgy/     (reactive substrate: Store/Source/  │
+│  │   │             Derived/MutationHandle + mutation   │
+│  │   │             queue + source/derive/mutate/get/   │
+│  │   │             set/view JS bridge — the engine's   │
+│  │   │             own builtin:tur/core)               │
+│  │   ├── focus/    (FocusManager + Focusable trait +   │
+│  │   │             BlurEvent/FocusEvent/FocusChange)   │
+│  │   ├── screen/   (Screen + viewportSize$ source +    │
+│  │   │             ResizeSubsystem)                    │
+│  │   ├── platform/ (Cursor/CursorBackend/CursorCap +   │
+│  │   │             PlatformEvent/PointerInput/Ime +    │
+│  │   │             key_event: KeyEvent/Modifiers/      │
+│  │   │             KeydownEvent/KeyupEvent)            │
+│  │   ├── subsystem.rs (Subsystem trait + flush hook)   │
+│  │   ├── text/     (TextLayoutData, FontManager —      │
+│  │   │             paint/layout contract types only)   │
+│  │   ├── image_resource.rs (ImageResourceId,           │
+│  │   │             ImageResourceMap, ImageResource —   │
+│  │   │             paint/layout contract types only)   │
+│  │   └── plugin.rs (Plugin trait + PluginContext)      │
+│  ├── builtin_plugins/ (feature bundles — each exposes  │
+│  │                      one pub install_xxx(ctx))      │
+│  │   ├── std.rs    (TurStdPlugin — the orchestrator    │
+│  │   │             that calls every install_xxx and    │
+│  │   │             merges FnEntry into builtin:tur/std)│
+│  │   ├── console.rs (global console.log/warn/error/    │
+│  │   │               info/debug)                       │
+│  │   ├── control_flow/ (Condition/Switch/Each/Fragment)│
+│  │   ├── focus/     (Focusable widget — manager is in  │
+│  │   │               core::focus)                      │
+│  │   ├── gesture/   (MouseRegion + PointerInteract +   │
+│  │   │               GestureSubsystem + PointerSubsystem)│
+│  │   ├── input/     (KeyboardSubsystem + ImeSubsystem —│
+│  │   │               event types are in core::platform)│
+│  │   ├── layout/    (Column/Row/Expanded/Stack/        │
+│  │   │               Positioned/Container/SizedBox +   │
+│  │   │               layout enums)                     │
+│  │   ├── lifecycle/ (lifecycleView)                    │
+│  │   ├── text/      (TextElement, EditableTextElement, │
+│  │   │               ParagraphElement, controllers,    │
+│  │   │               ClipboardPasteSubsystem,          │
+│  │   │               CaretVisibilitySubsystem)         │
+│  │   ├── image/     (ImageElement + PNG/JPEG/SVG       │
+│  │   │               decoders)                         │
+│  │   ├── scroll/    (ScrollView, Scrollbar,            │
+│  │   │               ScrollController, ScrollSubsystem)│
+│  │   └── lazy_container/ (LazyList + LazyListController)│
 │  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
 │  └── renderer/noop  (NoopRenderer, logs tree stats)    │
 └──────────────────────┬──────────────────────────────┘
@@ -60,47 +108,30 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-text (text feature library, NOT a plugin)    │
-│  Installed into builtin:tur/std by TurStdPlugin via    │
-│  install_text_feature(ctx) → Vec<FnEntry>. Owns:       │
-│  TextElement, EditableTextElement,                     │
-│  TextEditingController, UndoController,                │
-│  CaretVisibilitySubsystem (post-event), and      │
-│  extract_layout_data() (bridge: JS → TextLayoutData).  │
-│  Engine keeps TextLayoutData/FontManager as paint       │
-│  contract; Canvas::fill_text_layout does the drawing.   │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-image (image feature library, NOT a plugin)  │
-│  Installed into builtin:tur/std by TurStdPlugin via    │
-│  install_image_feature(ctx) → Vec<FnEntry>. Owns:      │
-│  ImageElement + ImageView + layout/render impls,       │
-│  the JS bridge (Image / createImageResource /          │
-│  createSvgResource), and the format decoders           │
-│  (decode_image_bytes for PNG/JPEG, decode_svg).        │
-│  Engine keeps ImageResourceId / ImageResourceMap /     │
-│  ImageResource as the paint/layout contract (the       │
-│  struct's fields are pub, matching TextLayoutData);    │
-│  Canvas::draw_image does the drawing.                  │
-└──────────────────────┬──────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────┐
-│  Capability crates (3-crate split per domain):         │
-│  ├── tur-clipboard-capability (Clipboard +             │
-│  │   ClipboardBackend trait + builtin:tur/clipboard)   │
-│  ├── tur-clipboard-wasm     (WasmClipboard backend)    │
-│  ├── tur-clipboard-native   (NativeClipboard via       │
-│  │   arboard)                                          │
-│  ├── tur-net-capability (Http + HttpBackend trait +    │
-│  │   builtin:tur/net)                                  │
-│  ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
-│  └── tur-net-native         (NativeHttp via reqwest)   │
-│  Embedders register backends via                      │
+│  Capability surfaces:                                  │
+│  ┌─ Inlined into tur-engine (plugin + contract types): │
+│  │  • Clipboard   — `builtin_plugins::clipboard`       │
+│  │    (ClipboardBackend trait + Clipboard cap +        │
+│  │    builtin:tur/clipboard + engine-internal          │
+│  │    subsystems + event payloads)                     │
+│  │  • Cursor      — `core::platform::cursor`           │
+│  │    (CursorBackend trait + CursorCap + Cursor enum;  │
+│  │    no JS bridge — engine-internal only)             │
+│  └─ External capability crates (split per domain):     │
+│     ├── tur-net-capability (Http + HttpBackend trait + │
+│     │   builtin:tur/net)                               │
+│     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
+│     └── tur-net-native         (NativeHttp via reqwest)│
+│  Backend crates for the inlined Clipboard cap:         │
+│     ├── tur-clipboard-wasm  (WasmClipboard — re-exports│
+│     │                       Clipboard/ClipboardBackend/│
+│     │                       TurClipboardPlugin from    │
+│     │                       tur_engine)                │
+│     └── tur-clipboard-native (NativeClipboard via      │
+│                                arboard, same re-exports)│
+│  Embedders register backends via                       │
 │    TurEngineBuilder::capability(Clipboard::new(backend))│
 │    TurEngineBuilder::capability(Http::new(backend))    │
-│  Engine-internal capabilities (e.g. CursorCap for      │
-│  CursorBackend) live in tur-engine/stdlib/platform.rs.│
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -114,6 +145,10 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │            CursorCap::new(WasmCursor) + plugins.       │
 │            TurStdPlugin → TurAnimationPlugin →         │
 │            TurClipboardPlugin → TurNetPlugin.          │
+│            (TurStdPlugin + TurClipboardPlugin re-      │
+│            exported from tur_engine crate root — used  │
+│            to live in separate tur-std /               │
+│            tur-clipboard-capability crates.)           │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +184,7 @@ TurEngine::builder()
 
 ### Element types
 
-`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable` (tur-engine) · `Text`, `Input`, `Paragraph` (tur-text) · `Image`, `Svg` (tur-image) · `Opacity`, `Transform` (tur-animation)
+`Column`, `Row`, `Expanded`, `Stack`, `Positioned`, `SizedBox`, `Container`, `PointerInteract`, `Focusable`, `Text`, `Input`, `Paragraph`, `Image`, `Svg` (all in `tur-engine::builtin_plugins::*`) · `Opacity`, `Transform` (tur-animation)
 
 Flutter-like layout model: flex-based Column/Row with Expanded children, Stack with Positioned children.
 
@@ -173,26 +208,26 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
 
 ### Text model
 
-Text logic lives in the standalone `libs/tur-text` crate — **not** a plugin. It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_text_feature(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
+Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_text(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
 
-- **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; tur-text only produces these structs.
-- **`extract_layout_data(props) -> TextLayoutData`** (tur-text, in `src/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
-- **Elements** (`tur-text::elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
-- **Controllers** (`tur-text::controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
-- **Post-event caret visibility** (`tur-text::handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `keyboard.rs` / `ime.rs` no longer call caret-scroll directly.
-- **Paste dispatch** (embedder → tur-clipboard → tur-text): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `tur-clipboard-capability::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. tur-text's `ClipboardPasteSubsystem` (in `tur-text::handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits).
+- **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; the text plugin only produces these structs.
+- **`extract_layout_data(props) -> TextLayoutData`** (`builtin_plugins/text/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
+- **Elements** (`builtin_plugins/text/elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
+- **Controllers** (`builtin_plugins/text/controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
+- **Post-event caret visibility** (`builtin_plugins/text/handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `builtin_plugins/input/{subsystem.rs,ime.rs}` no longer call caret-scroll directly.
+- **Paste dispatch** (embedder → tur-clipboard → text plugin): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `builtin_plugins::clipboard::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. The text plugin's `ClipboardPasteSubsystem` (`builtin_plugins/text/handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits). The event payload types themselves live in `builtin_plugins::clipboard::event` (clipboard-plugin-owned; cross-plugin via `pub(in crate::builtin_plugins)`).
 
 JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
 
 ### Image model
 
-Image logic lives in the standalone `libs/tur-image` crate — **not** a plugin. It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_image_feature(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
+Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_image(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
 
-- **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; tur-image only produces these structs.
+- **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; the image plugin only produces these structs.
 - **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
-- **Decoders** (`tur-image::decode`): `decode_image_bytes(&[u8])` (PNG/JPEG via the `image` crate) and `decode_svg(&str)` (rasterised via `usvg` + `resvg`). The `image` / `resvg` / `usvg` deps live in tur-image, not in the engine.
-- **Element** (`tur-image::element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurJsContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
-- **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind. Future resource types would live in their own crate.
+- **Decoders** (`builtin_plugins/image/decode`): `decode_image_bytes(&[u8])` (PNG/JPEG via the `image` crate) and `decode_svg(&str)` (rasterised via `usvg` + `resvg`). The `image` / `resvg` / `usvg` deps live in `tur-engine`'s Cargo.toml.
+- **Element** (`builtin_plugins/image/element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurJsContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
+- **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind.
 
 JS surface is unchanged — `builtin:tur/std` still exports Image/createImageResource/createSvgResource. No `.d.ts` split, no new JS package.
 
@@ -221,51 +256,143 @@ Elements are type-erased via `AnyElement` (private `Erased` trait with blanket i
 libs/
   tur-engine/                # Unified engine crate
     src/
-      core/
-        trait_/              # Domain traits (ElementLayout, ElementRender, ElementOnUpdate, ElementSubscribe)
-        elements/            # AnyElement, ElementNode, ElementTree
-        render/              # PaintContext, Renderer, ChildLayout, ChildPaint
-        capability/          # Capability trait, Capabilities view, CapabilityDecls
-        bridge/              # boa_engine JS bridge (init_bridge, TurAppContext)
+      core/                  # Engine infrastructure — NO dependency on
+                             #   builtin_plugins/* (strict boundary)
+        app/                 # TurAppInternal + FrameOutcome + AppEvent/
+                             #   AppEventQueue + render() mount +
+                             #   RootView/RootElement generic-root wrapper
+        async_/              # AsyncExecutor (tur_async wrapper) + task
+                             #   primitives (sleep/launch, the bridge fns
+                             #   for builtin:tur/std) + executor
+                             #   (TurJobExecutor — boa JobExecutor impl)
+        capability.rs        # Capability trait, Capabilities view,
+                             #   CapabilityDecls
+        dev/                 # Dev tooling: turDevTool bridge
+        edgy/                # Reactive substrate: reactive/ (Store/Source/
+                             #   Derived/AnyReadable) + mutation/
+                             #   (MutationHandle/PendingMutationInvocationQueue)
+                             #   + source/derive/mutate/get/set/view bridge +
+                             #   ReadableSubscribe (the engine's own
+                             #   builtin:tur/core)
+        element.rs           # ElementKind / ElementNodeId / NodeId /
+                             #   FragmentNodeId
+        elements/            # AnyElement, ElementObject, ElementTree
+        focus/               # FocusManager + Focusable trait +
+                             #   BlurEvent/FocusEvent/FocusChange
+                             #   (engine contract — the Focusable *widget*
+                             #   lives in builtin_plugins/focus)
+        fonts.rs             # FontManager + FontLoader (used by
+                             #   Canvas::fill_text_layout)
+        hit_test/            # hit-test primitives
+        image_resource.rs    # ImageResourceId / ImageResourceMap /
+                             #   ImageResource (paint/layout contract)
+        js_runtime/          # boa runtime plumbing: TurJsContext, JsProps,
+                             #   FnEntry/ConstEntry, module_loader
+                             #   (build_native_module/bound_native),
+                             #   opaque (BoaOpaque),
+                             #   js_value (FromJs/IntoJs).
+                             #   Shared by every bridge fn engine-wide.
+        layout/              # ElementLayout, ElementSubscribe, LayoutContext,
+                             #   primitives (Constraints/Offset/Size/
+                             #   EdgeInsets/Axis/MainAxisAlignment/…),
+                             #   SubscribeCx
+        platform/            # Cursor/CursorBackend/CursorCap +
+                             #   PlatformEvent/PointerInput/ImeEvent +
+                             #   PlatformEventQueue (raw input from embedder) +
+                             #   key_event.rs (KeyEvent/Modifiers/
+                             #   KeyEventType/KeydownEvent/KeyupEvent —
+                             #   engine contract types)
         plugin.rs            # Plugin trait (register + requires) + PluginContext
-        subsystem.rs         # Subsystem trait (flush + handle_platform_event + handle_app_event) +
+        render/              # PaintContext, Renderer, ElementRender trait,
+                             #   Canvas + brush/ (Color/Brush/GradientStop/
+                             #   RGB types + JS bindings)
+        screen/              # Screen struct (logical_size + viewportSize$
+                             #   source atom) + ResizeSubsystem (handles
+                             #   PlatformEvent::Resize)
+        shell/               # Shell (engine-internal scheduler/clock holder)
+        subsystem.rs         # Subsystem trait (flush +
+                             #   handle_platform_event + handle_app_event) +
                              #   SubsystemFlushContext + SubsystemOutcome
-        text/                # TextLayoutData + LineInfo + TextRunData (paint/layout
-                             #   contract types only — tur-text produces them)
-        fonts.rs             # FontManager + FontLoader (used by Canvas::fill_text_layout)
-      elements/              # Concrete elements (flex/, stack/, positioned/, etc.)
-        flex/element.rs      # FlexElement struct + ElementOnUpdate
-        flex/render.rs       # ElementLayout + ElementRender (layout algorithm)
+        text/                # TextLayoutData + LineInfo + TextRunData
+                             #   (paint/layout contract types only — the
+                             #   text plugin produces them)
+        view/                # View/ViewCx/SharedViewCx + Val<T> + Lifecycle
+      builtin_plugins/       # Feature bundles — each exposes ONE
+                             #   `pub fn install_xxx(ctx) -> Result<Vec<FnEntry>, TurError>`
+                             #   so `core/` cannot import from this tree
+        std.rs               # TurStdPlugin — the orchestrator that calls
+                             #   every install_xxx and merges FnEntry into
+                             #   builtin:tur/std
+        clipboard/           # Clipboard capability + ClipboardBackend trait +
+                             #   TurClipboardPlugin + builtin:tur/clipboard +
+                             #   event payloads + engine-internal subsystems
+                             #   (inlined from former tur-clipboard-capability
+                             #   crate). Public surface (Clipboard /
+                             #   ClipboardBackend / TurClipboardPlugin /
+                             #   platform_paste) re-exported at tur_engine
+                             #   crate root.
+        console.rs           # Global `console` object (log/warn/error/info/
+                             #   debug) — install_console registers globals
+        control_flow/        # Condition, Switch, Each, Fragment
+        focus/               # Focusable widget (manager + trait are in core)
+        gesture/             # MouseRegion + PointerInteract +
+                             #   GestureSubsystem + PointerSubsystem
+        image/               # ImageElement + ImageView + PNG/JPEG/SVG
+                             #   decoders (inlined from former tur-image crate)
+        input/               # KeyboardSubsystem + ImeSubsystem (event types
+                             #   are in core::platform::key_event)
+        layout/              # Column/Row (flex), Expanded, Stack, Positioned,
+                             #   Container/SizedBox + JS layout enums
+                             #   (Axis/MainAxisAlignment/…)
+        lazy_container/      # LazyList + LazyListController (inlined from
+                             #   former tur-lazy-container crate)
+        lifecycle/           # lifecycleView (mount/unmount callbacks)
+        scroll/              # ScrollView, Scrollbar, ScrollController,
+                             #   ScrollSubsystem (inlined from former
+                             #   tur-scroll crate)
+        text/                # TextElement, EditableTextElement,
+                             #   ParagraphElement, controllers,
+                             #   ClipboardPasteSubsystem,
+                             #   CaretVisibilitySubsystem (inlined from
+                             #   former tur-text crate)
       renderer/
         vello/               # VelloRenderer (GPU painting)
         noop/                # NoopRenderer (logging)
-      stdlib/platform.rs     # CursorBackend trait + CursorCap capability + Cursor enum
-                             #   (engine-internal)
-  tur-animation/             # Animation subsystem (manager/controller/event + Opacity/Transform
-                             #   effects + JS widgets + Curve/NumTween/ColorTween) — registered
-                             #   via TurAnimationPlugin, exposes `builtin:tur/animation`
-                             #   (combined native+JS module) + internal `tur:animation/native`
+  tur-animation/             # Animation subsystem (manager/controller/event +
+                             #   Opacity/Transform effects + JS widgets +
+                             #   Curve/NumTween/ColorTween) — registered via
+                             #   TurAnimationPlugin, exposes
+                             #   `builtin:tur/animation` (combined native+JS
+                             #   module) + internal `tur:animation/native`
                              #   (ctx-bound fns only)
-  tur-text/                  # Text feature library (TextElement, EditableTextElement,
-                             #   ParagraphElement, controllers, CaretVisibilitySubsystem,
-                             #   extract_layout_data) — NOT a plugin; installed into
-                             #   builtin:tur/std by TurStdPlugin via install_text_feature()
-  tur-image/                 # Image feature library (ImageElement, ImageView,
-                             #   layout/render impls, PNG/JPEG/SVG decode) — NOT a plugin;
-                             #   installed into builtin:tur/std by TurStdPlugin via
-                             #   install_image_feature()
-  tur-clipboard-capability/  # Clipboard trait + Clipboard cap + builtin:tur/clipboard + handlers
-  tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend
-  tur-clipboard-native/      # NativeClipboard (arboard) backend
+  tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend —
+                             #   re-exports Clipboard/ClipboardBackend/
+                             #   TurClipboardPlugin from tur_engine
+  tur-clipboard-native/      # NativeClipboard (arboard) backend — same
+                             #   re-exports
   tur-net-capability/        # HttpBackend trait + Http cap + builtin:tur/net
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
   tur-net-native/            # NativeHttp (reqwest) backend
-  tur-wasm/                  # wasm binary (boa_engine + vello-hybrid + tur-engine)
+  tur-wasm/                  # wasm binary (boa_engine + vello-hybrid +
+                             #   tur-engine). Composes Clipboard + Http +
+                             #   CursorCap backend capabilities with
+                             #   `tur_engine::TurStdPlugin` (re-exported
+                             #   from `builtin_plugins::std`) →
+                             #   TurAnimationPlugin → TurClipboardPlugin →
+                             #   TurNetPlugin.
+  tur-integration-tests/     # integration test harness + cases
+  tur-demo-plugin/           # playground-only plugin (swc compiler + file IO)
+  tur-native/                # native (non-wasm) embedder entry point
 js/
   packages/
-    tur-animation/            # Ambient TS types for `builtin:tur/animation` (runtime provided by tur-animation crate)
-    tur-demo/                # Playground: thin browser wrapper (loads wasm + impl bundle)
-    tur-demo-impl/           # Playground UI built with builtin:tur/animation + builtin:tur/std (Sidebar/Editor/Viewer)
+    tur-animation/            # Ambient TS types for `builtin:tur/animation`
+                             #   (runtime provided by tur-animation crate)
+    tur-core/                # Ambient TS types for `builtin:tur/core`
+                             #   (engine-owned reactive primitives)
+    tur-demo/                # Playground: thin browser wrapper (loads wasm
+                             #   + impl bundle)
+    tur-demo-impl/           # Playground UI built with builtin:tur/animation
+                             #   + builtin:tur/std (Sidebar/Editor/Viewer)
     tur-test-cases/          # Test cases (cases/, ~60 cases)
 ```
 

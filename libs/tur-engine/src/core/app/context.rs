@@ -9,10 +9,11 @@ use crate::core::layout::Constraints;
 
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
-use crate::core::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
-use crate::core::event::queue::{AppEventQueue, PlatformEventQueue};
-use crate::core::event::{AppEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::app::{AppEvent, AppEventQueue};
+use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
+use crate::core::screen::Screen;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
@@ -28,7 +29,7 @@ pub struct TurAppContext {
     pub(crate) renderer: Box<dyn Renderer>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
-    pub(crate) size: (f64, f64),
+    pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
     /// Engine-owned async executor. Cloned from the one `TurAppInternal`
@@ -49,7 +50,7 @@ pub struct TurAppContext {
 impl fmt::Debug for TurAppContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TurAppContext")
-            .field("size", &self.size)
+            .field("logical_size", &self.screen.logical_size)
             .finish_non_exhaustive()
     }
 }
@@ -76,7 +77,7 @@ impl TurAppContext {
             renderer,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
-            size: (400.0, 600.0),
+            screen: Screen::new(),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             async_executor,
@@ -113,7 +114,7 @@ impl TurAppContext {
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
-            size: &mut self.size,
+            screen_logical_size: &mut self.screen.logical_size,
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
@@ -140,7 +141,7 @@ impl TurAppContext {
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
-            size: &mut self.size,
+            screen_logical_size: &mut self.screen.logical_size,
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
@@ -151,7 +152,7 @@ impl TurAppContext {
     }
 
     pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: &mut boa_engine::Context) {
-        let (width, height) = self.size;
+        let (width, height) = self.screen.logical_size;
         let constraints = Constraints {
             min_width: width,
             max_width: width,
