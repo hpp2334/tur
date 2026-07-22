@@ -3,11 +3,13 @@
 //! - `Expanded` (flex-item factor for filling remaining main-axis space).
 //! - `Stack` + `Positioned` (z-axis stacking with anchored children).
 //! - `Container` / `SizedBox` (explicit width/height + decoration).
+//! - `Grid` (row-major tiling of static children into a max-extent grid).
 
 pub(in crate::builtin_plugins) mod container;
 pub mod enums;
 pub(in crate::builtin_plugins) mod flex;
 pub(in crate::builtin_plugins) mod flex_item;
+pub(in crate::builtin_plugins) mod grid;
 pub(in crate::builtin_plugins) mod positioned;
 pub(in crate::builtin_plugins) mod stack;
 
@@ -18,6 +20,8 @@ pub(in crate::builtin_plugins) mod stack;
 pub use container::ContainerView;
 pub use flex::{FlexElement, FlexView};
 pub use flex_item::{ExpandedElement, ExpandedView};
+pub use grid::{GridElement, GridView};
+pub(crate) use grid::{compute_grid_metrics, cross_offset};
 pub use positioned::{PositionedElement, PositionedView};
 pub use stack::{StackElement, StackView};
 pub use container::ContainerElement;
@@ -36,6 +40,7 @@ pub fn install_layout(
     v.extend(container::bridge::fns());
     v.extend(flex::bridge::fns());
     v.extend(flex_item::bridge::fns());
+    v.extend(grid::bridge::fns());
     v.extend(stack::bridge::fns());
     v.extend(positioned::bridge::fns());
     Ok(v)

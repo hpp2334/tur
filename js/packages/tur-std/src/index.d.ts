@@ -351,6 +351,37 @@ declare module "tur:std" {
         queryKey?: Val<string[]>;
     }
 
+    /** A non-scrollable grid that tiles its static `children` row-major. The
+     *  column count is derived from the available cross-axis size and
+     *  `maxCrossAxisExtent` (`count = floor(width / maxCrossAxisExtent)`). Cell
+     *  main-axis size is `mainAxisExtent` if given, else
+     *  `cell_cross / childAspectRatio` (default square). */
+    export interface GridProps {
+        maxCrossAxisExtent: Val<number>;
+        childAspectRatio?: Val<number>;
+        mainAxisExtent?: Val<number>;
+        crossAxisSpacing?: Val<number>;
+        mainAxisSpacing?: Val<number>;
+        children: Element[];
+        queryKey?: Val<string[]>;
+    }
+
+    /** A scrollable, virtualized grid. Only the cells inside the viewport +
+     *  overscan are mounted. Same sizing model as `Grid`. `builder` receives
+     *  the flat item `index`; row/col are derived from `crossAxisCount`. */
+    export interface LazyGridProps {
+        axis?: Val<Axis>;
+        itemCount: Val<number>;
+        maxCrossAxisExtent: Val<number>;
+        childAspectRatio?: Val<number>;
+        mainAxisExtent?: Val<number>;
+        crossAxisSpacing?: Val<number>;
+        mainAxisSpacing?: Val<number>;
+        overscan?: Val<number>;
+        builder: (index: number) => Element;
+        queryKey?: Val<string[]>;
+    }
+
     export interface EachProps<T> {
         items: Readable<T[]>;
         build: (item: T, index: number) => Element;
@@ -494,6 +525,20 @@ declare module "tur:std" {
         jumpTo(offset: number): void;
     }
 
+    export interface LazyGridControllerOpts {
+        onScroll?: Mutation<[ScrollEvent], void>;
+        onVisibleRangeChange?: Mutation<[number, number], void>;
+    }
+
+    /** Lazy-grid controller (registered boa class). Built via
+     *  `createLazyGridController`. Mirrors `LazyListController`. */
+    export interface LazyGridController {
+        readonly offset: number;
+        readonly maxScrollExtent: number;
+        readonly viewportDimension: number;
+        jumpTo(offset: number): void;
+    }
+
     // ---------------------------------------------------------------------------
     // Async task primitives — `sleep` (a timer primitive) + `launch` (a
     // cancellable generator coroutine driver). These replace the old
@@ -558,6 +603,8 @@ declare module "tur:std" {
     export function Switch(props: SwitchProps): Element;
     export function Each<T>(props: EachProps<T>): Element;
     export function LazyList(props: LazyListProps): Element;
+    export function Grid(props: GridProps): Element;
+    export function LazyGrid(props: LazyGridProps): Element;
     export function ScrollView(props: ScrollViewProps): Element;
     export function Scrollbar(props: ScrollbarProps): Element;
     export function Image(props: ImageProps): Element;
@@ -581,6 +628,9 @@ declare module "tur:std" {
     export function createLazyListController(
         opts?: LazyListControllerOpts,
     ): LazyListController;
+    export function createLazyGridController(
+        opts?: LazyGridControllerOpts,
+    ): LazyGridController;
     export function createImageResource(
         bytes: Uint8Array | ArrayBuffer,
     ): number;
