@@ -518,11 +518,13 @@ impl TurEngineBuilder {
 
         // Engine-owned `viewportSize$` reactive source. Created here (needs
         // `&mut Context` for the initial `{width,height}` value + the opaque
-        // wrap) and synced each frame in `Screen::sync_source` (called from
-        // `TurAppInternal::flush`). The handle (`Source<JsValue>`, a `Copy`
-        // `AtomId`) lives on `app_context.screen`; the `JsValue` opaque is
-        // handed to plugins so `std` can export it as the `viewportSize$`
-        // const in `tur:std`.
+        // wrap). The atom is pushed on each `PlatformEvent::Resize` by
+        // `core::screen::ResizeSubsystem` (via `Screen::sync_source`,
+        // event-driven — not polled each frame). The handle
+        // (`Source<JsValue>`, a `Copy` `AtomId`) lives on
+        // `app_context.screen`; the `JsValue` opaque is handed to plugins so
+        // `std` can export it as the `viewportSize$` const in
+        // `builtin:tur/std`.
         let viewport_size_js: boa_engine::JsValue = {
             let (w, h) = internal.app_context.borrow().screen.logical_size;
             let init = core::screen::Screen::size_js(w, h, &mut boa_context);

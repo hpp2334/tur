@@ -43,6 +43,7 @@ use crate::core::platform::{PlatformEvent, PlatformEventQueue};
 use crate::core::focus::FocusManager;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::render::Renderer;
+use crate::core::screen::Screen;
 
 /// A long-lived participant in the engine's per-frame flush loop.
 ///
@@ -102,7 +103,7 @@ pub trait Subsystem {
 /// Subsystems that just override [`Subsystem::flush`] (e.g. animation) only
 /// need [`Self::boa`]; subsystems that handle events use the element tree /
 /// focus manager / mutation queue / event queues / renderer /
-/// `screen_logical_size` / async executor / capability fields.
+/// `screen` / async executor / capability fields.
 pub struct SubsystemFlushContext<'a> {
     /// The engine's boa `Context`. Borrowed for the duration of one subsystem
     /// tick or event dispatch; the borrow is released before the next
@@ -116,10 +117,12 @@ pub struct SubsystemFlushContext<'a> {
     pub platform_event_queue: &'a mut PlatformEventQueue,
     pub app_event_queue: &'a mut AppEventQueue,
     pub renderer: &'a mut dyn Renderer,
-    /// Current canvas logical size `(width, height)` in CSS pixels. Mutated
-    /// by `ResizeSubsystem` on `PlatformEvent::Resize`; read by layout-driven
-    /// subsystems and render state. Backed by [`Screen::logical_size`].
-    pub screen_logical_size: &'a mut (f64, f64),
+    /// Engine screen state — the canvas logical size + the `viewportSize$`
+    /// atom. Driven by [`crate::core::screen::ResizeSubsystem`] on
+    /// `PlatformEvent::Resize` (it sets the size, pushes the atom via
+    /// [`Screen::sync_source`], and requests a paint). Other subsystems may
+    /// read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
+    pub screen: &'a mut Screen,
     pub need_paint: &'a Cell<bool>,
     /// Engine-owned async executor. Subsystems call `spawn_detached(...)` to
     /// run Rust futures (e.g. `clipboard.write_text`); the executor is driven

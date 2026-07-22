@@ -86,7 +86,7 @@ impl TurAppInternal {
             dirty,
             need_paint,
             image_resource_map.clone(),
-            store,
+            store.clone(),
             async_executor.clone(),
         );
 
@@ -105,6 +105,7 @@ impl TurAppInternal {
             async_executor.clone(),
             capabilities,
             clock,
+            store,
         );
 
         Self {
@@ -138,16 +139,6 @@ impl TurAppInternal {
 
             let handled_events = self.flush_app_events(boa_context);
 
-            // Keep the engine-owned `viewportSize$` atom in sync with the
-            // current screen logical size (updated by `ResizeSubsystem` via
-            // `cx.screen_logical_size`). Runs before `flush_reactive` so
-            // subscribers re-layout in-frame.
-            {
-                let store = self.js_context.store.clone();
-                let ctx = self.app_context.borrow();
-                ctx.screen.sync_source(&store, boa_context);
-            }
-
             // Subsystem tick — runs once per `flush()` call (= once per
             // frame), in registration order. Each subsystem owns its own
             // clock + state; we feed it the boa context and aggregate the
@@ -173,7 +164,7 @@ impl TurAppInternal {
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
                     renderer: ctx.renderer.as_mut(),
-                    screen_logical_size: &mut ctx.screen.logical_size,
+                    screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     async_executor: &ctx.async_executor,
                     capabilities: &ctx.capabilities,

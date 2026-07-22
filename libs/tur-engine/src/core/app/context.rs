@@ -10,6 +10,7 @@ use crate::core::layout::Constraints;
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
@@ -67,6 +68,7 @@ impl TurAppContext {
         async_executor: Rc<AsyncExecutor>,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
+        store: Store,
     ) -> Self {
         let font_manager = FontManager::new(font_loader);
         Self {
@@ -77,7 +79,7 @@ impl TurAppContext {
             renderer,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
-            screen: Screen::new(),
+            screen: Screen::new(store),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             async_executor,
@@ -114,7 +116,7 @@ impl TurAppContext {
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
-            screen_logical_size: &mut self.screen.logical_size,
+            screen: &mut self.screen,
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
@@ -141,7 +143,7 @@ impl TurAppContext {
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
             renderer: self.renderer.as_mut(),
-            screen_logical_size: &mut self.screen.logical_size,
+            screen: &mut self.screen,
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
