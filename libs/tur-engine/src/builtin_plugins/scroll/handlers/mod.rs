@@ -6,6 +6,10 @@ use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
+mod inertia;
+
+pub use inertia::ScrollInertiaSubsystem;
+
 use crate::builtin_plugins::scroll::scroll_view::ScrollViewElement;
 
 /// Unified scroll subsystem. Owns the entire scroll event pipeline:

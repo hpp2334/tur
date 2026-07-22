@@ -1,6 +1,10 @@
 mod arena;
 mod composer;
 
+use std::rc::Rc;
+
+use boa_engine::context::time::Clock;
+
 use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
 use crate::core::app::AppEvent;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
@@ -9,6 +13,7 @@ use crate::core::focus::helper::find_focusable_in_path;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::core::hit_test::HitTest;
 use crate::builtin_plugins::gesture::pointer_interact::PointerInteractElement;
+use crate::builtin_plugins::scroll::event::push_fling;
 use crate::core::elements::NodeTreeData;
 use crate::core::layout::{MouseButton, Offset};
 
@@ -20,19 +25,19 @@ use composer::GestureEventComposer;
 pub struct GestureSubsystem {
     arena: GestureArena,
     composer: GestureEventComposer,
-}
-
-impl Default for GestureSubsystem {
-    fn default() -> Self {
-        Self::new()
-    }
+    /// Engine clock, sampled on each touch move/up to feed the arena's
+    /// velocity tracker. Touch input lacks timestamps on `PointerMove`/
+    /// `PointerUp` (only `PointerDown` carries one), so we sample here at
+    /// flush time instead of threading timestamps through `PointerInput`.
+    clock: Rc<dyn Clock>,
 }
 
 impl GestureSubsystem {
-    pub fn new() -> Self {
+    pub fn new(clock: Rc<dyn Clock>) -> Self {
         Self {
             arena: GestureArena::new(),
             composer: GestureEventComposer::new(),
+            clock,
         }
     }
 }
@@ -62,7 +67,8 @@ impl Subsystem for GestureSubsystem {
                     self.handle_mouse_pointer_move(cx, *position);
                 }
                 PointerDeviceKind::Touch => {
-                    self.handle_touch_pointer_move(cx, *position);
+                    let now_ms = self.clock.now().millis_since_epoch();
+                    self.handle_touch_pointer_move(cx, *position, now_ms);
                 }
             },
             PlatformEvent::Pointer(PointerInput::PointerUp {
@@ -232,8 +238,9 @@ impl GestureSubsystem {
         &mut self,
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
+        now_ms: u64,
     ) {
-        let outcome = self.arena.on_touch_move(position);
+        let outcome = self.arena.on_touch_move(position, now_ms);
         match outcome {
             TouchMoveOutcome::Idle => {}
             TouchMoveOutcome::SlopExceeded => {
@@ -360,7 +367,13 @@ impl GestureSubsystem {
                 }
                 self.composer.on_pointer_up(false);
             }
-            TouchUpOutcome::ScrollEnded => {}
+            TouchUpOutcome::ScrollEnded { vx, vy } => {
+                // Seed a kinetic-scroll fling from the drag's final velocity.
+                // Scroll delta is the negation of touch-movement direction
+                // (touch moves up → content scrolls down), matching the
+                // convention used by `TouchMoveOutcome::Scroll`.
+                push_fling(cx.app_event_queue, -vx, -vy, position);
+            }
             TouchUpOutcome::NeedsSyntheticClick { position, time_ms } => {
                 // The touch sequence ended below slop with a tiny move that the
                 // browser won't synthesize a click for. Drive the mouse

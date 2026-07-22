@@ -16,6 +16,7 @@
 //! `with_gesture_and_focus(...)` builders live in the engine too.
 
 pub mod core;
+pub mod event;
 pub mod handlers;
 pub mod scroll_view;
 pub mod scrollbar;
@@ -26,7 +27,7 @@ use crate::error::TurError;
 
 pub use self::core::controller::ScrollController;
 pub use self::core::ScrollEvent;
-pub use self::handlers::{dispatch_wheel, ScrollSubsystem};
+pub use self::handlers::{dispatch_wheel, ScrollInertiaSubsystem, ScrollSubsystem};
 pub use self::scroll_view::{
     ScrollPhysics, ScrollPosition, ScrollViewElement, ScrollViewView,
 };
@@ -50,6 +51,11 @@ pub fn install_scroll(
     ctx.register_class::<ScrollController>()
         .map_err(|e| TurError::Other(format!("failed to register ScrollController: {e}")))?;
     ctx.register_subsystem(Box::new(ScrollSubsystem));
+    // Registered after `ScrollSubsystem` so fling-seed events (which arrive
+    // via `handle_app_event`) are processed after the gesture plugin pushes
+    // them on touch-up. Captures the engine clock so it can integrate
+    // exponential decay each `flush`.
+    ctx.register_subsystem(Box::new(ScrollInertiaSubsystem::new(ctx.clock())));
 
     let mut fns = Vec::new();
     fns.extend(scroll_view::bridge::fns());

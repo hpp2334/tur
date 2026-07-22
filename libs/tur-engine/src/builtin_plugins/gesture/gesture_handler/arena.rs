@@ -20,6 +20,59 @@ use crate::core::layout::Offset;
 
 const TOUCH_SLOP: f64 = 18.0;
 
+/// Window (ms) of recent touch-move samples used to estimate fling velocity.
+/// Samples older than this are pruned. 100 ms matches the typical "last
+/// gesture snippet" window used by native velocity trackers (Android /
+/// Flutter).
+const VELOCITY_WINDOW_MS: u64 = 100;
+
+/// Minimum span (ms) between the oldest and newest sample in the window
+/// required to produce a velocity estimate. Below this, the tracker reports
+/// zero — too little signal to be reliable.
+const VELOCITY_MIN_DT_MS: f64 = 2.0;
+
+/// Recent touch-move samples (position + time) kept in a sliding window to
+/// estimate the drag velocity at release. The oldest sample in the window
+/// is paired with the newest to compute the average velocity.
+#[derive(Default)]
+struct VelocityTracker {
+    samples: Vec<(Offset, u64)>,
+}
+
+impl VelocityTracker {
+    fn record(&mut self, position: Offset, time_ms: u64) {
+        // Prune samples older than the window.
+        let cutoff = time_ms.saturating_sub(VELOCITY_WINDOW_MS);
+        let mut keep_from = 0;
+        for (i, &(_, t)) in self.samples.iter().enumerate() {
+            if t < cutoff {
+                keep_from = i + 1;
+            } else {
+                break;
+            }
+        }
+        if keep_from > 0 {
+            self.samples.drain(0..keep_from);
+        }
+        self.samples.push((position, time_ms));
+    }
+
+    /// Returns `(vx, vy)` in touch-movement px/ms. `(0, 0)` if there isn't
+    /// enough time span in the window.
+    fn velocity_px_per_ms(&self) -> (f64, f64) {
+        if self.samples.len() < 2 {
+            return (0.0, 0.0);
+        }
+        let &(p0, t0) = self.samples.first().unwrap();
+        let &(p1, t1) = self.samples.last().unwrap();
+        let dt = (t1.saturating_sub(t0)) as f64;
+        if dt < VELOCITY_MIN_DT_MS {
+            return (0.0, 0.0);
+        }
+        ((p1.x - p0.x) / dt, (p1.y - p0.y) / dt)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ArenaWinnerKind {
     Drag,
@@ -48,8 +101,10 @@ pub enum TouchUpOutcome {
     /// Drag was resolved. Dispatch `PointerUp` to the captured path and
     /// release gesture capture.
     DragEnded,
-    /// Scroll was resolved. Nothing to dispatch.
-    ScrollEnded,
+    /// Scroll was resolved. Nothing to dispatch. Carries the tracked
+    /// touch-movement velocity (px/ms) so the handler can seed a fling
+    /// simulation. `(0, 0)` if there wasn't enough movement to estimate.
+    ScrollEnded { vx: f64, vy: f64 },
     /// No resolution but `touchmove` was seen (small movement < slop).
     /// Synthesize a mouse `PointerDown` + `PointerUp` to fire click/focus.
     NeedsSyntheticClick {
@@ -74,6 +129,9 @@ struct TouchState {
     hit_path: Vec<ElementNodeId>,
     winner: Option<ArenaWinnerKind>,
     move_seen: bool,
+    /// Recent touch-move samples used to estimate the drag velocity at
+    /// release, so a scroll-resolved drag can seed an inertia fling.
+    velocity: VelocityTracker,
 }
 
 pub struct GestureArena {
@@ -106,12 +164,15 @@ impl GestureArena {
             hit_path,
             winner: None,
             move_seen: false,
+            velocity: VelocityTracker::default(),
         });
     }
 
     /// Called on `PointerMove { device: Touch }`. Returns the outcome
-    /// telling the handler what to dispatch.
-    pub fn on_touch_move(&mut self, position: Offset) -> TouchMoveOutcome {
+    /// telling the handler what to dispatch. `now_ms` is sampled by the
+    /// caller (the gesture subsystem samples the engine clock) and feeds
+    /// the velocity tracker so fling velocity can be estimated on release.
+    pub fn on_touch_move(&mut self, position: Offset, now_ms: u64) -> TouchMoveOutcome {
         let Some(ts) = self.touch.as_mut() else {
             return TouchMoveOutcome::Idle;
         };
@@ -120,6 +181,7 @@ impl GestureArena {
         let dy = position.y - ts.last_position.y;
         ts.last_position = position;
         ts.move_seen = true;
+        ts.velocity.record(position, now_ms);
 
         if let Some(winner) = ts.winner {
             return match winner {
@@ -158,7 +220,10 @@ impl GestureArena {
         };
         match ts.winner {
             Some(ArenaWinnerKind::Drag) => TouchUpOutcome::DragEnded,
-            Some(ArenaWinnerKind::Scroll) => TouchUpOutcome::ScrollEnded,
+            Some(ArenaWinnerKind::Scroll) => {
+                let (vx, vy) = ts.velocity.velocity_px_per_ms();
+                TouchUpOutcome::ScrollEnded { vx, vy }
+            }
             None => {
                 if ts.move_seen {
                     TouchUpOutcome::NeedsSyntheticClick {
