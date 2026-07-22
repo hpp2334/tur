@@ -1,6 +1,6 @@
 [package]
 name = "tur-demo-plugin"
-description = "Demo-only plugin for tur (TurDemoPlugin — registers builtin:demo-helper: swc compiler + file IO)"
+description = "Demo-only plugin for tur (TurDemoPlugin — registers tur-ext/demo-helper: swc compiler + file IO)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

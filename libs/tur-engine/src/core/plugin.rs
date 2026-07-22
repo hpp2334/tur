@@ -72,7 +72,7 @@ pub struct PluginContext<'a> {
     pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
-    /// `import { viewportSize$ } from "builtin:tur/std"` and read the live
+    /// `import { viewportSize$ } from "tur:std"` and read the live
     /// canvas size via `get`. The engine updates it each frame in `flush`.
     pub viewport_size: JsValue,
 }
@@ -80,7 +80,7 @@ pub struct PluginContext<'a> {
 impl<'a> PluginContext<'a> {
     /// Register a ctx-bound native module (bridge fns that receive `TurJsContext`
     /// as their first argument) plus optional free-form closure exports. Used
-    /// for `builtin:tur/std` and similar.
+    /// for `tur:std` and similar.
     ///
     /// `closures` is for bridge fns that capture state which can't live on
     /// `TurJsContext` (e.g. a `Clipboard` impl provided by a plugin). Each
@@ -104,7 +104,7 @@ impl<'a> PluginContext<'a> {
     }
 
     /// Register a ctx-free native module (host fns that don't need `TurJsContext`).
-    /// Used for `builtin:tur/net`, `builtin:demo-helper`, etc.
+    /// Used for `tur:net`, `tur-ext/demo-helper`, etc.
     pub fn register_host_module(
         &mut self,
         specifier: &str,
@@ -179,7 +179,7 @@ impl<'a> PluginContext<'a> {
     }
 
     /// Register a JS source module under a bare specifier (e.g.
-    /// `builtin:tur/animation`). The source is parsed into a boa `Module` and
+    /// `tur:animation`). The source is parsed into a boa `Module` and
     /// stored in the loader; consumer code can then
     /// `import { ... } from "<specifier>"` and boa resolves it to this module.
     ///

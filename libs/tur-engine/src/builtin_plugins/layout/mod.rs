@@ -28,7 +28,7 @@ use crate::error::TurError;
 
 /// Install the layout plugin (`Column` / `Row` / `Expanded` / `Stack` /
 /// `Positioned` / `Container` / `SizedBox`). Returns the JS factory fns to
-/// be merged into `builtin:tur/std` by the orchestrator.
+/// be merged into `tur:std` by the orchestrator.
 pub fn install_layout(
     _ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

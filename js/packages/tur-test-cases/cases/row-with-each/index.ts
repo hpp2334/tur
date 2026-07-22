@@ -11,7 +11,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const seg$ = source<string[]>(["a", "b"]);
 

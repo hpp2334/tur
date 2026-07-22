@@ -1,6 +1,6 @@
 //! Demo-only plugin for tur.
 //!
-//! Provides [`TurDemoPlugin`], which registers the `builtin:demo-helper` JS
+//! Provides [`TurDemoPlugin`], which registers the `tur-ext/demo-helper` JS
 //! module — swc-backed compiler services (`transpileTsx`, `tokenizeTsx`,
 //! `generateAst`) and browser file IO (`pickFile`, `saveFile`). These are
 //! playground-specific helpers that depend on swc and the browser DOM; they
@@ -27,7 +27,7 @@ pub use compiler::{
     ImportSpecifierInfo, TokenSpan,
 };
 
-/// The demo-helper plugin. Registers the `builtin:demo-helper` module with
+/// The demo-helper plugin. Registers the `tur-ext/demo-helper` module with
 /// swc-backed compiler services and browser file IO. Playground-only — not
 /// part of the core engine API.
 pub struct TurDemoPlugin;
@@ -47,7 +47,7 @@ impl Plugin for TurDemoPlugin {
             .chain(file_fns)
             .map(|(n, f, l)| (n.to_string(), f, l))
             .collect();
-        ctx.register_host_module("builtin:demo-helper", exports);
+        ctx.register_host_module("tur-ext/demo-helper", exports);
         Ok(())
     }
 }

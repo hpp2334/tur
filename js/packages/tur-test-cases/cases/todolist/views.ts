@@ -21,7 +21,7 @@ import {
     SizedBox,
     type StoreCtx,
     Text,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     closeAddModal,
     closeRemoveModal,

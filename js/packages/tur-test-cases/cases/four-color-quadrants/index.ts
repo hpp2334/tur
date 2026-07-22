@@ -1,4 +1,4 @@
-import { Color, Container, Positioned, Stack, view } from "builtin:tur/std";
+import { Color, Container, Positioned, Stack, view } from "tur:std";
 
 export default view(() =>
     Stack({

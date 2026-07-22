@@ -19,7 +19,7 @@ import {
     Text,
     type ViewportSize,
     viewportSize$,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     getIcon,
     openRepo,

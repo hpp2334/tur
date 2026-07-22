@@ -8,7 +8,7 @@ import {
     SizedBox,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const TABS = [{ id: "todolist", label: "TodoList" }];
 const activeId = "todolist";

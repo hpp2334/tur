@@ -544,7 +544,7 @@ impl TurEngineBuilder {
             &[],
             &[],
         );
-        module_loader.register("builtin:tur/core", core_module);
+        module_loader.register("tur:core", core_module);
 
         let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
         let et_fn = bound_native(

@@ -1,6 +1,6 @@
 //! `TurStdPlugin` — the standard widget library plugin.
 //!
-//! Registers the `builtin:tur/std` JS module (widget factories, controllers,
+//! Registers the `tur:std` JS module (widget factories, controllers,
 //! color bridge) plus the engine's input-event subsystems (resize, gesture,
 //! keyboard, ime, pointer region — the latter four registered inside their
 //! respective `install_xxx` calls).
@@ -18,11 +18,11 @@
 //!   `input`, `layout`, `lifecycle`, `text`, `scroll`, `lazy_container`)
 //!   live in sibling modules under `builtin_plugins/` and expose one
 //!   `install_xxx(ctx)` each. This file is the orchestrator that calls
-//!   them and merges their `FnEntry`s into the single `builtin:tur/std`
+//!   them and merges their `FnEntry`s into the single `tur:std`
 //!   module.
 //! - Inlined feature bundles (`image`, `scroll`, `lazy_container`, `text`)
 //!   follow the same `install_xxx` pattern and are also merged into
-//!   `builtin:tur/std`.
+//!   `tur:std`.
 //! - Engine-owned reactive-edge bridge (`source`/`derive`/`mutate`/`get`/
 //!   `set`/`view`) + render mount + async task primitives stay in `core::*`
 //!   (renderer/async/edgy infra, not plugin affinity).
@@ -40,7 +40,7 @@ use crate::core::plugin::{Plugin, PluginContext};
 use crate::core::screen::ResizeSubsystem;
 use crate::error::TurError;
 
-/// The standard widget library plugin. Registers the `builtin:tur/std`
+/// The standard widget library plugin. Registers the `tur:std`
 /// module (widget factories, controllers, color bridge), plus the
 /// input-event subsystems (gesture, keyboard, ime, resize, pointer region).
 ///
@@ -112,7 +112,7 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
-        ctx.register_module("builtin:tur/std", std_fns, vec![], std_consts);
+        ctx.register_module("tur:std", std_fns, vec![], std_consts);
 
         Ok(())
     }

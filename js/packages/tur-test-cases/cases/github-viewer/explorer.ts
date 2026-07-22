@@ -1,4 +1,4 @@
-import { Transform } from "builtin:tur/animation";
+import { Transform } from "tur:animation";
 import {
     Alignment,
     Axis,
@@ -25,7 +25,7 @@ import {
     set,
     source,
     Text,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     type DirEntry,
     doDownload,

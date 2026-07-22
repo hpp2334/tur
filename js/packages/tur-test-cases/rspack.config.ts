@@ -17,7 +17,7 @@ const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
     virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../cases/${name}/index";\nimport { render } from "builtin:tur/std";\nrender(Case);\n`;
+        `import Case from "../cases/${name}/index";\nimport { render } from "tur:std";\nrender(Case);\n`;
     entries[name] = `./virtual-entries/${name}.ts`;
 }
 
@@ -35,15 +35,15 @@ export default defineConfig({
         },
         clean: true,
     },
-    // `builtin:tur/*` capability modules are provided at run time by the
+    // `tur:*` capability modules are provided at run time by the
     // engine's boa module loader, so keep the imports rather than bundling
     // them. Each case dist is an ES module loaded via `load_module`.
     externals: {
-        "builtin:tur/std": "builtin:tur/std",
-        "builtin:tur/animation": "builtin:tur/animation",
-        "builtin:demo-helper": "builtin:demo-helper",
-        "builtin:tur/clipboard": "builtin:tur/clipboard",
-        "builtin:tur/net": "builtin:tur/net",
+        "tur:std": "tur:std",
+        "tur:animation": "tur:animation",
+        "tur-ext/demo-helper": "tur-ext/demo-helper",
+        "tur:clipboard": "tur:clipboard",
+        "tur:net": "tur:net",
     },
     plugins: [new rspack.experiments.VirtualModulesPlugin(virtualModules)],
     module: {

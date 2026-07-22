@@ -6,7 +6,7 @@
 //!     once per frame via the engine's [`Subsystem`](tur_engine::core::subsystem::Subsystem)
 //!     mechanism),
 //!   - the `Opacity` and `Transform` visual-effect elements,
-//!   - the `builtin:tur/animation` JS module combining the native bridge fns
+//!   - the `tur:animation` JS module combining the native bridge fns
 //!     (`createAnimationController`, `Opacity`, `Transform`) with the JS-defined
 //!     implicit-animation widgets (`AnimatedContainer`, `AnimatedOpacity`,
 //!     `AnimatedPositioned`, `Tween`, `ColorTween`).

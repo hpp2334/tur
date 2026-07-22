@@ -7,7 +7,7 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-import { render, ScrollView, Input } from "builtin:tur/std";
+import { render, ScrollView, Input } from "tur:std";
 const lines = [];
 for (let i = 0; i < 30; i++) lines.push("line " + i);
 globalThis.__ctrl = new globalThis.TextEditingController();

@@ -12,7 +12,7 @@
 //!
 //! [`TurStdPlugin`] in `std.rs` is the orchestrator that calls every
 //! plugin's `install_xxx` and merges their `FnEntry`s into the single
-//! `builtin:tur/std` JS module.
+//! `tur:std` JS module.
 
 pub mod clipboard;
 pub mod console;

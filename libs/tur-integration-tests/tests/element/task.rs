@@ -1,5 +1,5 @@
 //! Integration tests for the `sleep` + `launch` task primitives exported by
-//! `builtin:tur/std` (the replacements for `setTimeout`/`setInterval`).
+//! `tur:std` (the replacements for `setTimeout`/`setInterval`).
 //!
 //! These also exercise boa's generator support end-to-end — `launch` drives a
 //! `function*` generator via `JsGenerator::next`, resuming it when each
@@ -15,7 +15,7 @@ fn sleep_resolves_after_delay() {
 
     app.eval_module_source(
         r#"
-        import { sleep } from "builtin:tur/std";
+        import { sleep } from "tur:std";
         globalThis.__done = "0";
         sleep(50).then(() => { globalThis.__done = "1"; });
         "#,
@@ -36,7 +36,7 @@ fn launch_runs_generator_and_resumes_after_sleep() {
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "builtin:tur/std";
+        import { launch, sleep } from "tur:std";
         globalThis.__v = "0";
         launch(function* () {
             yield sleep(40);
@@ -60,7 +60,7 @@ fn launch_repeating_loop_ticks_multiple_times() {
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "builtin:tur/std";
+        import { launch, sleep } from "tur:std";
         globalThis.__count = "0";
         launch(function* () {
             for (let i = 0; i < 3; i++) {
@@ -82,7 +82,7 @@ fn launch_cancel_stops_resumption() {
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "builtin:tur/std";
+        import { launch, sleep } from "tur:std";
         globalThis.__hit = "0";
         // The body after the `yield` must never run once we cancel.
         globalThis.__task = launch(function* () {
@@ -110,7 +110,7 @@ fn launch_debounce_supersedes_previous_task() {
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "builtin:tur/std";
+        import { launch, sleep } from "tur:std";
         globalThis.__calls = "0";
         globalThis.__pending = null;
         globalThis.__schedule = function () {
@@ -141,7 +141,7 @@ fn launch_drives_non_native_iterator() {
 
     app.eval_module_source(
         r#"
-        import { launch, sleep } from "builtin:tur/std";
+        import { launch, sleep } from "tur:std";
         globalThis.__hit = "0";
         // A hand-written iterator that mimics what SWC/tslib produces for
         // `function* () { yield sleep(40); globalThis.__hit = "1"; }` — a
@@ -178,7 +178,7 @@ fn launch_caught_rejection_resumes_generator() {
 
     app.eval_module_source(
         r#"
-        import { launch } from "builtin:tur/std";
+        import { launch } from "tur:std";
         globalThis.__caught = "no";
         globalThis.__after = "no";
         launch(function* () {
@@ -209,7 +209,7 @@ fn launch_uncaught_rejection_stops_without_panic() {
 
     app.eval_module_source(
         r#"
-        import { launch } from "builtin:tur/std";
+        import { launch } from "tur:std";
         globalThis.__reached = "no";
         launch(function* () {
             yield Promise.reject("boom");

@@ -1,9 +1,9 @@
 /** Shared types across the playground's state layer. */
 
-import type { TextController } from "builtin:tur/std";
+import type { TextController } from "tur:std";
 
 /** The editor's text controller — the real `TextController` surface from
- *  `builtin:tur/std`. */
+ *  `tur:std`. */
 export type EditorController = TextController;
 
 export type LayoutMode = "split" | "editor" | "viewer";

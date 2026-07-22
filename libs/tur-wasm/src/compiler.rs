@@ -729,12 +729,12 @@ mod tests {
 
     #[test]
     fn generate_ast_finds_import() {
-        let src = "import { Container, Text } from \"builtin:tur/std\";";
+        let src = "import { Container, Text } from \"tur:std\";";
         let nodes = generate_ast(src).expect("parse should succeed");
         assert_eq!(nodes.len(), 1);
         match &nodes[0].kind {
             AstNodeKind::Import { source, specifiers } => {
-                assert_eq!(source, "builtin:tur/std");
+                assert_eq!(source, "tur:std");
                 assert_eq!(specifiers.len(), 2);
                 assert_eq!(specifiers[0].local, "Container");
                 assert_eq!(specifiers[1].local, "Text");

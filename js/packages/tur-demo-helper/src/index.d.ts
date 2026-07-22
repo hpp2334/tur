@@ -2,13 +2,13 @@
  * @tur/demo-helper — ambient type declarations for the demo-helper module.
  *
  * The runtime is a synthetic boa module registered by `tur-demo-plugin`
- * (`TurDemoPlugin`) under the specifier `"builtin:demo-helper"`. It exposes
+ * (`TurDemoPlugin`) under the specifier `"tur-ext/demo-helper"`. It exposes
  * swc-backed compiler services (transpile / tokenize / AST) and file IO
  * (browser picker + download). These are demo/playground-only and depend on
  * swc and the browser DOM — they are not part of the core engine surface.
  */
 
-declare module "builtin:demo-helper" {
+declare module "tur-ext/demo-helper" {
     // --- swc compiler services -------------------------------------------------
 
     /** Transpile TSX/TS source to plain JS (throws on parse error). */

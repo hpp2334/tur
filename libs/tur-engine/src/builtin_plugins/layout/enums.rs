@@ -1,4 +1,4 @@
-//! The 8 enum const-objects exported by `builtin:tur/std` (Axis,
+//! The 8 enum const-objects exported by `tur:std` (Axis,
 //! MainAxisAlignment, …). Each mirrors a `core::layout` C-like enum so JS
 //! callers write `Axis.Vertical` and `Axis[0] === "Vertical"`.
 

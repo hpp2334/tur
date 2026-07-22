@@ -22,7 +22,7 @@ import {
     Stack,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     addOpen$,
     getIcon,

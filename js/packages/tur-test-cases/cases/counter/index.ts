@@ -14,7 +14,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const count$ = source(0);
 

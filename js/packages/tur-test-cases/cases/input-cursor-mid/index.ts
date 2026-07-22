@@ -1,9 +1,4 @@
-import {
-    Container,
-    createTextEditingController,
-    Input,
-    view,
-} from "builtin:tur/std";
+import { Container, createTextEditingController, Input, view } from "tur:std";
 
 const ctrl = createTextEditingController({});
 

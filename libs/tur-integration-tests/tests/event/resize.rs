@@ -6,7 +6,7 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-import { render, Column, Expanded, Container } from "builtin:tur/std";
+import { render, Column, Expanded, Container } from "tur:std";
 render(Column({
     children: [
         Expanded({ child: Container({ queryKey: ["fill"] }) }),

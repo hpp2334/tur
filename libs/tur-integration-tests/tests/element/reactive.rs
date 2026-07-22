@@ -11,7 +11,7 @@ fn set_mutation_receives_ctx_then_args() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, mutate, set } from "builtin:tur/std";
+        import { source, mutate, set } from "tur:std";
         // Sink source — captures whatever the mutation writes.
         globalThis.__sink = source("");
 
@@ -31,7 +31,7 @@ fn set_mutation_receives_ctx_then_args() {
     app.render();
 
     app.eval_module_source(
-        r#"import { get } from "builtin:tur/std"; globalThis.__result = get(globalThis.__sink);"#,
+        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
     )
     .unwrap();
     let val = app.eval_js("globalThis.__result");
@@ -49,7 +49,7 @@ fn set_mutation_with_zero_args_passes_ctx_only() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, mutate, set } from "builtin:tur/std";
+        import { source, mutate, set } from "tur:std";
         globalThis.__sink = source("");
         const m = mutate((sctx) => {
             const hasCtx = sctx && typeof sctx === "object" && typeof sctx.get === "function";
@@ -62,7 +62,7 @@ fn set_mutation_with_zero_args_passes_ctx_only() {
     app.render();
 
     app.eval_module_source(
-        r#"import { get } from "builtin:tur/std"; globalThis.__result = get(globalThis.__sink);"#,
+        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
     )
     .unwrap();
     let val = app.eval_js("globalThis.__result");

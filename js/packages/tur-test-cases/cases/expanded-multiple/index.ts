@@ -1,10 +1,4 @@
-import {
-    Column,
-    CrossAxisAlignment,
-    Expanded,
-    SizedBox,
-    view,
-} from "builtin:tur/std";
+import { Column, CrossAxisAlignment, Expanded, SizedBox, view } from "tur:std";
 
 export default view(() =>
     Column({
