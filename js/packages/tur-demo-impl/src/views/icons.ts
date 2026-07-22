@@ -1,4 +1,4 @@
-import { createSvgResource } from "builtin:tur/std";
+import { createSvgResource } from "tur:std";
 
 // Inline SVG icons registered once at module load. Vello rasterises them up
 // front via `createSvgResource` (the same path the todolist icons use). Keep

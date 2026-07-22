@@ -1,6 +1,6 @@
 //! Host service functions: swc-backed compiler services exposed to JS as
 //! `transpileTsx`, `tokenizeTsx`, `generateAst`. ctx-free `NativeFunction`s
-//! registered by `TurDemoPlugin` as part of the `builtin:demo-helper` module.
+//! registered by `TurDemoPlugin` as part of the `tur-ext/demo-helper` module.
 
 use boa_engine::native_function::NativeFunction;
 use boa_engine::object::builtins::JsArray;

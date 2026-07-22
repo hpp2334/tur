@@ -2,7 +2,7 @@
  * @tur/animation — ambient type declarations for the animation library.
  *
  * Runtime is a synthetic boa module registered by `tur-animation` under the
- * specifier `"builtin:tur/animation"`. It is a single combined module that:
+ * specifier `"tur:animation"`. It is a single combined module that:
  *
  * 1. Re-exports the native bridge fns `Opacity`, `Transform`, and
  *    `createAnimationController` from the engine-internal `tur:animation/native`
@@ -11,12 +11,12 @@
  *    `AnimatedOpacity`, `AnimatedPositioned` plus the `Tween` / `ColorTween`
  *    interpolation channels.
  *
- * The widgets are composed entirely from `builtin:tur/std` primitives
+ * The widgets are composed entirely from `tur:std` primitives
  * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — no native
  * element beyond `Opacity`/`Transform`/`Container`/`Positioned` is involved.
  */
 
-declare module "builtin:tur/animation" {
+declare module "tur:animation" {
     import type {
         Alignment,
         Color,
@@ -24,7 +24,7 @@ declare module "builtin:tur/animation" {
         Element,
         Mutation,
         Val,
-    } from "builtin:tur/std";
+    } from "tur:std";
 
     // ---------------------------------------------------------------------------
     // Curve keyword (mirror of the engine-side curve enum string).

@@ -17,7 +17,7 @@ import {
     ScrollView,
     set,
     source,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     editorCtrl,
     editorUndo,

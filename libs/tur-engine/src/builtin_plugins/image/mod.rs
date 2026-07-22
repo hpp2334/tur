@@ -5,10 +5,10 @@
 //! `createSvgResource`), and the format-specific decoders
 //! (`decode_image_bytes` for PNG/JPEG, `decode_svg` for SVG strings).
 //!
-//! Installed into `builtin:tur/std` by `TurStdPlugin` via [`install_image`],
+//! Installed into `tur:std` by `TurStdPlugin` via [`install_image`],
 //! which returns the JS factory fns to be merged into `std_fns`. From JS's
 //! perspective `Image` / `createImageResource` / `createSvgResource` ship as
-//! part of `builtin:tur/std`.
+//! part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract —
 //! `crate::core::image_resource::{ImageResourceId, ImageResourceMap,
@@ -28,7 +28,7 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginContext;
 use crate::error::TurError;
 
-/// Wire image plugin into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire image plugin into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl.
 ///
 /// Side effects: none beyond returning the factory fns (no classes, no
@@ -37,7 +37,7 @@ use crate::error::TurError;
 ///
 /// Returns: the `Image` / `createImageResource` / `createSvgResource` factory
 /// fns, which the caller merges into `std_fns` before
-/// `register_module("builtin:tur/std", ...)`.
+/// `register_module("tur:std", ...)`.
 pub fn install_image(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     Ok(bridge::fns())
 }

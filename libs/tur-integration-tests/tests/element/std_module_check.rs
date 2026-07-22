@@ -1,11 +1,11 @@
-//! Verify `builtin:tur/std` — the widget library. It re-exports the reactive
+//! Verify `tur:std` — the widget library. It re-exports the reactive
 //! core (`source`/`derive`/`mutate`/`get`/`set`/`view`/`render`) and adds views,
 //! enums, colors, controllers, resources, and event types. Exercises the
 //! `eval_module_source` harness path.
 
 use tur_integration_tests::TurTestApp;
 
-/// Views + reactive primitives import from a single module (`builtin:tur/std`)
+/// Views + reactive primitives import from a single module (`tur:std`)
 /// and render end-to-end. This is the canonical "std is the convenience
 /// superset" smoke test.
 #[test]
@@ -13,7 +13,7 @@ fn std_module_imports_and_renders() {
     let mut app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { Column, SizedBox, CrossAxisAlignment, render, view } from "builtin:tur/std";
+            import { Column, SizedBox, CrossAxisAlignment, render, view } from "tur:std";
             render(view(() =>
                 Column({
                     crossAlignment: CrossAxisAlignment.Start,
@@ -35,13 +35,13 @@ fn std_module_imports_and_renders() {
 }
 
 /// Core primitives are re-exported from std (`source` resolves from
-/// `builtin:tur/std` even though its canonical home is `builtin:tur/std`).
+/// `tur:std` even though its canonical home is `tur:std`).
 #[test]
 fn std_re_exports_core_primitives() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { source, get, set } from "builtin:tur/std";
+            import { source, get, set } from "tur:std";
             const a = source(42);
             globalThis.__val = get(a);
             set(a, 7);
@@ -53,7 +53,7 @@ fn std_re_exports_core_primitives() {
     assert_eq!(app.eval_js("globalThis.__val2"), "7");
 }
 
-/// Enums are exported from `builtin:tur/std` as TS-style numeric enums:
+/// Enums are exported from `tur:std` as TS-style numeric enums:
 /// forward mapping (`MainAxisSize.Max === 0`) AND reverse mapping
 /// (`MainAxisSize[0] === "Max"`). Both must hold at runtime.
 #[test]
@@ -61,7 +61,7 @@ fn enum_dual_mapping() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { MainAxisSize, BoxFit } from "builtin:tur/std";
+            import { MainAxisSize, BoxFit } from "tur:std";
             globalThis.__fwd = MainAxisSize.Max === 0 && BoxFit.Cover === 2;
             globalThis.__rev = MainAxisSize[0] === "Max" && BoxFit[2] === "Cover";
         "#,
@@ -80,7 +80,7 @@ fn native_color_and_gradient_builders() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r##"
-            import { Color, LinearGradient } from "builtin:tur/std";
+            import { Color, LinearGradient } from "tur:std";
             const c1 = Color.hex("#ff0000");
             const c2 = Color.rgb(0, 255, 0);
             const c3 = Color.rgba(0, 0, 255, 128);

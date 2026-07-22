@@ -33,7 +33,7 @@ fn reentrant_module_load_via_host_fn() {
     });
 
     let plugin = HostModulePlugin {
-        specifier: "builtin:tur/cases",
+        specifier: "tur:cases",
         exports: vec![("loadModule".to_string(), load_module_fn, 1)],
     };
     let app = TurTestApp::new_with_extra_plugins(
@@ -44,11 +44,11 @@ fn reentrant_module_load_via_host_fn() {
     .unwrap();
 
     // Outer module calls `loadModule(innerSrc)` during its own evaluation.
-    // `innerSrc` imports `builtin:tur/std` (already registered) and stashes a value.
+    // `innerSrc` imports `tur:std` (already registered) and stashes a value.
     app.eval_module_source(
         r#"
-            import { loadModule } from "builtin:tur/cases";
-            const inner = "import { source } from \"builtin:tur/std\"; globalThis.__inner = typeof source;";
+            import { loadModule } from "tur:cases";
+            const inner = "import { source } from \"tur:std\"; globalThis.__inner = typeof source;";
             loadModule(inner);
             globalThis.__outer = "ran";
         "#,

@@ -1,4 +1,4 @@
-//! `builtin:tur/net` HTTP bridge: `request(opts) -> Promise<ResponseResult>`.
+//! `tur:net` HTTP bridge: `request(opts) -> Promise<ResponseResult>`.
 //!
 //! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
 //! pointer** (no captures) that reads its `Rc<dyn Http>` and
@@ -22,7 +22,7 @@ use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use tur_engine::core::js_runtime::helpers::{extract_ctx, FnEntry, Ptr};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
-/// Bridge function table entries for `builtin:tur/net`.
+/// Bridge function table entries for `tur:net`.
 ///
 /// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
 /// that reads its `Http` + executor from `TurJsContext`'s capability

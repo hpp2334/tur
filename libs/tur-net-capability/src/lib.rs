@@ -9,7 +9,7 @@
 //!   [`tur_engine::TurEngineBuilder::capability`](`Http::new(backend)`).
 //! - The [`NoopHttp`] default.
 //! - The [`TurNetPlugin`] (unit struct) that conditionally registers the
-//!   `builtin:tur/net` module (with the `request` bridge fn) when an [`Http`]
+//!   `tur:net` module (with the `request` bridge fn) when an [`Http`]
 //!   capability is present.
 //!
 //! ## Architecture
@@ -23,7 +23,7 @@
 //!   `JsPromise` via a completion closure on the next `flush`.
 //! - [`TurNetPlugin`] does NOT declare a `requires` for [`Http`] — HTTP is
 //!   an optional capability. If absent, the plugin simply skips registering
-//!   `builtin:tur/net`, and JS code feature-detects via
+//!   `tur:net`, and JS code feature-detects via
 //!   `typeof request === "function"`.
 
 pub mod bridge;
@@ -85,7 +85,7 @@ pub enum HttpOutcome {
 /// `reqwest_wasm` on wasm; `NativeHttp` via native `reqwest`; `RecordingHttp`
 /// for tests) and register it via
 /// `TurEngineBuilder::capability(Http::new(backend))`. The bridge fn
-/// `request` in `builtin:tur/net` consumes it.
+/// `request` in `tur:net` consumes it.
 pub trait HttpBackend: 'static {
     fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>>;
 }
@@ -93,7 +93,7 @@ pub trait HttpBackend: 'static {
 /// No-op `HttpBackend` default. Always rejects with "no http backend" — JS
 /// cases feature-detect via `typeof request === "function"` (see
 /// github-viewer), which the plugin honors by *not* registering
-/// `builtin:tur/net` when no `Http` capability is provided.
+/// `tur:net` when no `Http` capability is provided.
 #[derive(Default)]
 pub struct NoopHttp;
 impl HttpBackend for NoopHttp {
@@ -106,7 +106,7 @@ impl HttpBackend for NoopHttp {
 
 /// Capability newtype wrapping an `Rc<dyn HttpBackend>`. Registered via
 /// [`tur_engine::TurEngineBuilder::capability`] with `Http::new(backend)`;
-/// the bridge fn `request` in `builtin:tur/net` looks it up at call time.
+/// the bridge fn `request` in `tur:net` looks it up at call time.
 #[derive(Clone)]
 pub struct Http(Rc<dyn HttpBackend>);
 
@@ -128,10 +128,10 @@ impl tur_engine::core::capability::Capability for Http {}
 // Plugin
 // ---------------------------------------------------------------------------
 
-/// tur-net plugin: registers `builtin:tur/net` (with the `request` bridge
+/// tur-net plugin: registers `tur:net` (with the `request` bridge
 /// fn) when an [`Http`] capability is registered.
 ///
-/// If no backend is injected, the plugin is a no-op — `builtin:tur/net`
+/// If no backend is injected, the plugin is a no-op — `tur:net`
 /// remains unregistered, and JS code that imports from it fails at module
 /// load. Cases that may run in HTTP-less environments must guard accordingly
 /// (or be marked playground-only, like github-viewer).
@@ -150,12 +150,12 @@ impl Default for TurNetPlugin {
 impl Plugin for TurNetPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         // Optional capability: if no Http backend is registered, skip
-        // registering `builtin:tur/net`. JS code feature-detects.
+        // registering `tur:net`. JS code feature-detects.
         if !ctx.capability().contains::<Http>() {
-            tracing::info!("TurNetPlugin: no Http capability registered; skipping builtin:tur/net");
+            tracing::info!("TurNetPlugin: no Http capability registered; skipping tur:net");
             return Ok(());
         }
-        ctx.register_module("builtin:tur/net", bridge::fns(), vec![], vec![]);
+        ctx.register_module("tur:net", bridge::fns(), vec![], vec![]);
         Ok(())
     }
 }

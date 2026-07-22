@@ -716,7 +716,7 @@ Tokens live in **`src/tokens.ts`**. The file is the only place `Color.hex(...)` 
 
 ```ts
 // src/tokens.ts
-import { Color } from "builtin:tur/std";
+import { Color } from "tur:std";
 
 // Primitive palette — do not import these from views.
 export const ink = {

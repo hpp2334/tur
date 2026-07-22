@@ -1,4 +1,4 @@
-import { Color } from "builtin:tur/std";
+import { Color } from "tur:std";
 
 /** Light palette (Notion / Linear-style), shared across the case's screens. */
 export const COLORS = {

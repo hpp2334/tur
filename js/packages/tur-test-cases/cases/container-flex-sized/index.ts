@@ -1,12 +1,4 @@
-import {
-    Alignment,
-    Color,
-    Column,
-    Container,
-    Row,
-    Text,
-    view,
-} from "builtin:tur/std";
+import { Alignment, Color, Column, Container, Row, Text, view } from "tur:std";
 
 export default view(() =>
     Column({

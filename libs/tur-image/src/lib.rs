@@ -6,10 +6,10 @@
 //! (`decode_image_bytes` for PNG/JPEG, `decode_svg` for SVG strings).
 //!
 //! Like `tur-text`, this crate is **not** a plugin. It is installed into
-//! `builtin:tur/std` by `TurStdPlugin` via [`install_image_feature`], which
+//! `tur:std` by `TurStdPlugin` via [`install_image_feature`], which
 //! returns the JS factory fns to be merged into `std_fns`. From JS's
 //! perspective `Image` / `createImageResource` / `createSvgResource` ship as
-//! part of `builtin:tur/std`.
+//! part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract —
 //! `tur_engine::core::image_resource::{ImageResourceId, ImageResourceMap,
@@ -29,7 +29,7 @@ use tur_engine::core::bridge::helpers::FnEntry;
 use tur_engine::core::plugin::PluginContext;
 use tur_engine::error::TurError;
 
-/// Wire image feature into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire image feature into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl — image is not a separate plugin, it's a feature installed
 /// into the std module.
 ///
@@ -39,7 +39,7 @@ use tur_engine::error::TurError;
 ///
 /// Returns: the `Image` / `createImageResource` / `createSvgResource` factory
 /// fns, which the caller merges into `std_fns` before
-/// `register_module("builtin:tur/std", ...)`.
+/// `register_module("tur:std", ...)`.
 pub fn install_image_feature(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     Ok(bridge::fns())
 }

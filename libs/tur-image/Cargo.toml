@@ -1,6 +1,6 @@
 [package]
 name = "tur-image"
-description = "Image feature for tur (Image element + PNG/JPEG/SVG decode), installed into builtin:tur/std via install_image_feature"
+description = "Image feature for tur (Image element + PNG/JPEG/SVG decode), installed into tur:std via install_image_feature"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

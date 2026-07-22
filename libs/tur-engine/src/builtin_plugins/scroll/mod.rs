@@ -3,11 +3,11 @@
 //! `ScrollSubsystem` event-pipeline participant, and the shared scroll
 //! primitives (`ScrollEvent`, `ScrollPosition`, `ScrollPhysics`).
 //!
-//! Installed into `builtin:tur/std` by `TurStdPlugin` via
+//! Installed into `tur:std` by `TurStdPlugin` via
 //! [`install_scroll`], which registers the boa class + subsystem and returns
 //! the JS factory fns to be merged into `std_fns`. From JS's perspective
 //! `ScrollView`, `createScrollController`, and `Scrollbar` ship as part of
-//! `builtin:tur/std`.
+//! `tur:std`.
 //!
 //! The engine retains the event protocol — `AppEvent::Scroll`,
 //! `AppEvent::ScrollTo`, `AppEvent::ScrollOverscroll` and the
@@ -32,7 +32,7 @@ pub use self::scroll_view::{
 };
 pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 
-/// Wire the scroll plugin into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire the scroll plugin into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl.
 ///
 /// Side effects:
@@ -43,7 +43,7 @@ pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 ///
 /// Returns: the `ScrollView` / `createScrollController` / `Scrollbar` factory
 /// fns, which the caller merges into `std_fns` before
-/// `register_module("builtin:tur/std", ...)`.
+/// `register_module("tur:std", ...)`.
 pub fn install_scroll(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

@@ -6,10 +6,10 @@
 //! subsystems (`ClipboardPasteSubsystem`, `CaretVisibilitySubsystem`), and
 //! the `extract_layout_data` bridge helper.
 //!
-//! Installed into `builtin:tur/std` by `TurStdPlugin` via [`install_text`],
+//! Installed into `tur:std` by `TurStdPlugin` via [`install_text`],
 //! which registers the boa classes + subsystems and returns the JS factory
 //! fns to be merged into `std_fns`. From JS's perspective Text/Input ship
-//! as part of `builtin:tur/std`.
+//! as part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract types —
 //! `crate::core::text::TextLayoutData` and `crate::core::fonts::FontManager`
@@ -34,7 +34,7 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginContext;
 use crate::error::TurError;
 
-/// Wire text plugin into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire text plugin into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl.
 ///
 /// Side effects:
@@ -50,7 +50,7 @@ use crate::error::TurError;
 ///
 /// Returns: the `Text` / `Input` / `createTextEditingController` /
 /// `createUndoController` factory fns, which the caller merges into
-/// `std_fns` before `register_module("builtin:tur/std", ...)`.
+/// `std_fns` before `register_module("tur:std", ...)`.
 pub fn install_text(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

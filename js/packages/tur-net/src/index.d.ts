@@ -2,12 +2,12 @@
  * @tur/net — ambient type declarations for the networking module.
  *
  * The runtime is a synthetic boa module registered by tur-wasm
- * (`register_all_services`) under the specifier `"builtin:tur/net"`. It
+ * (`register_all_services`) under the specifier `"tur:net"`. It
  * exposes a Promise-based HTTP client backed by reqwest-wasm (wasm-only). Not
  * available in the pure-engine (headless) context.
  */
 
-declare module "builtin:tur/net" {
+declare module "tur:net" {
     export interface RequestOptions {
         url: string;
         method?: string;

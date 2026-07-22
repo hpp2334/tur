@@ -1,6 +1,6 @@
 [package]
 name = "tur-clipboard-capability"
-description = "Clipboard capability for tur (Clipboard + ClipboardBackend trait + builtin:tur/clipboard bridge)"
+description = "Clipboard capability for tur (Clipboard + ClipboardBackend trait + tur:clipboard bridge)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

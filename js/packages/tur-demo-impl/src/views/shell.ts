@@ -12,7 +12,7 @@ import {
     Switch,
     set,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     editorWidth$,
     isMobile$,

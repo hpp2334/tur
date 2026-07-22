@@ -7,7 +7,7 @@
 //! - The [`Clipboard`] capability newtype that wraps `Rc<dyn ClipboardBackend>`
 //!   and is registered via
 //!   [`tur_engine::TurEngineBuilder::capability`](`Clipboard::new(backend)`).
-//! - The `builtin:tur/clipboard` bridge module (exporting a `clipboard`
+//! - The `tur:clipboard` bridge module (exporting a `clipboard`
 //!   object with `readText` / `writeText` methods, both Promise-returning).
 //! - Clipboard event payloads ([`events::ClipboardPlatformPasteEvent`],
 //!   [`events::ClipboardPasteEvent`], [`events::ClipboardWriteEvent`]) that
@@ -72,7 +72,7 @@ impl Clipboard {
 
 impl Capability for Clipboard {}
 
-/// tur-clipboard plugin: registers `builtin:tur/clipboard` (exporting a
+/// tur-clipboard plugin: registers `tur:clipboard` (exporting a
 /// `clipboard` object with `readText` / `writeText` methods) plus the
 /// engine-internal [`ClipboardPlatformSubsystem`] (forwards embedder paste
 /// into the engine-internal event bus) and [`ClipboardWriteSubsystem`] (the
@@ -128,7 +128,7 @@ impl Plugin for TurClipboardPlugin {
         let clipboard_obj = bridge::build_clipboard_object(ctx.boa_mut(), ctx_value);
         let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
 
-        ctx.register_module("builtin:tur/clipboard", bridge::fns(), vec![], consts);
+        ctx.register_module("tur:clipboard", bridge::fns(), vec![], consts);
 
         Ok(())
     }

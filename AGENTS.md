@@ -1,6 +1,6 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `builtin:tur/std` / `builtin:tur/animation` / `builtin:tur/clipboard` / `builtin:tur/net` modules registered by engine plugins.
+A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` modules registered by engine plugins.
 
 ## Architecture
 
@@ -14,12 +14,12 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  - Browser-side bundling via @rspack/browser          │
 ├─────────────────────────────────────────────────────┤
 │  js/packages/tur-demo-impl                            │
-│  Playground UI built with builtin:tur/animation +    │
-│  builtin:tur/std (Sidebar/Editor/Viewer)              │
+│  Playground UI built with tur:animation +    │
+│  tur:std (Sidebar/Editor/Viewer)              │
 ├─────────────────────────────────────────────────────┤
 │  js/packages/tur-test-cases                          │
 │  ~60 test cases in cases/ — each calls into           │
-│  builtin:tur/std directly                            │
+│  tur:std directly                            │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -49,7 +49,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   │             Derived/MutationHandle + mutation   │
 │  │   │             queue + source/derive/mutate/get/   │
 │  │   │             set/view JS bridge — the engine's   │
-│  │   │             own builtin:tur/core)               │
+│  │   │             own tur:core)               │
 │  │   ├── focus/    (FocusManager + Focusable trait +   │
 │  │   │             BlurEvent/FocusEvent/FocusChange)   │
 │  │   ├── screen/   (Screen + viewportSize$ source +    │
@@ -69,7 +69,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │                      one pub install_xxx(ctx))      │
 │  │   ├── std.rs    (TurStdPlugin — the orchestrator    │
 │  │   │             that calls every install_xxx and    │
-│  │   │             merges FnEntry into builtin:tur/std)│
+│  │   │             merges FnEntry into tur:std)│
 │  │   ├── console.rs (global console.log/warn/error/    │
 │  │   │               info/debug)                       │
 │  │   ├── control_flow/ (Condition/Switch/Each/Fragment)│
@@ -100,7 +100,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  libs/tur-animation (standalone crate)                 │
 │  Registered via TurAnimationPlugin. Owns               │
 │  AnimationManager + Clock (ticks on each flush via     │
-│  the Subsystem hook). Exposes builtin:tur/animation     │
+│  the Subsystem hook). Exposes tur:animation     │
 │  (combined native+JS module: Opacity, Transform,        │
 │  createAnimationController + AnimatedContainer/Opacity/ │
 │  Positioned, Tween, ColorTween) + internal hidden       │
@@ -112,14 +112,14 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  ┌─ Inlined into tur-engine (plugin + contract types): │
 │  │  • Clipboard   — `builtin_plugins::clipboard`       │
 │  │    (ClipboardBackend trait + Clipboard cap +        │
-│  │    builtin:tur/clipboard + engine-internal          │
+│  │    tur:clipboard + engine-internal          │
 │  │    subsystems + event payloads)                     │
 │  │  • Cursor      — `core::platform::cursor`           │
 │  │    (CursorBackend trait + CursorCap + Cursor enum;  │
 │  │    no JS bridge — engine-internal only)             │
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
-│     │   builtin:tur/net)                               │
+│     │   tur:net)                               │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
 │     └── tur-net-native         (NativeHttp via reqwest)│
 │  Backend crates for the inlined Clipboard cap:         │
@@ -164,7 +164,7 @@ TurEngine::builder()
     .plugin(TurStdPlugin)
     .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
     .plugin(TurClipboardPlugin)                  // requires: Clipboard
-    .plugin(TurNetPlugin)                        // Http optional (skips builtin:tur/net if absent)
+    .plugin(TurNetPlugin)                        // Http optional (skips tur:net if absent)
     .build()
 ```
 
@@ -200,15 +200,15 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
   `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, and the capability registry.
 - **`Curve`** (`tur-animation::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
 - **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
-- **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `builtin:tur/animation`.
+- **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `tur:animation`.
 - **Explicit animation**: `createAnimationController({duration, curve, repeat, onTick, onEnd})` drives a source atom via `onTick`; pair with `Tween.lerp(t)` in a `derive()` for explicit, controller-driven interpolation (continuous loops, transport controls). See the `complex-animation` case.
 - **Implicit animation** (JS, in `tur-animation`'s `js/index.js`): `AnimatedContainer` / `AnimatedOpacity` / `AnimatedPositioned` wrap their plain siblings (`Container` / `Opacity` / `Positioned`). Each animatable prop is a `Tween` channel displayed as `tween.lerp(progress)`; one shared `progress` source is driven by a single `AnimationController`'s `onTick`. `ReadableSubscribe` watches the reactive targets — on change, `onUpdate$` rebases each channel's `begin` to its currently-displayed value, sets `end` to the new target, and restarts the controller (Flutter's `ImplicitlyAnimatedWidget` retarget). Static props pass through. See the `implicit-animations` case.
 
-`tur-animation` registers ONE combined consumer-facing module `builtin:tur/animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
+`tur-animation` registers ONE combined consumer-facing module `tur:animation` (JS source loaded via `include_str!` + `register_js_module`) that re-exports native fns (`Opacity`, `Transform`, `createAnimationController`) from the hidden `tur:animation/native` module and defines the JS widgets on top.
 
 ### Text model
 
-Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_text(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
+Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former `libs/tur-text` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_text(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Text` / `Input` / `createTextEditingController` / `createUndoController` ship as part of the std module from JS's perspective.
 
 - **Engine contract types** (kept in `tur-engine::core::text::text_layout` + `core::fonts`): `TextLayoutData`, `LineInfo`, `LineGlyphStop`, `TextRunData`, `TextGlyph`, `FontManager`, `FontLoader`. The engine's `Canvas::fill_text_layout(&TextLayoutData)` does the actual drawing; the text plugin only produces these structs.
 - **`extract_layout_data(props) -> TextLayoutData`** (`builtin_plugins/text/text_layout.rs`): bridge helper that turns JS-side text props into the engine's `TextLayoutData` used by layout + paint.
@@ -217,11 +217,11 @@ Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former
 - **Post-event caret visibility** (`builtin_plugins/text/handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `builtin_plugins/input/{subsystem.rs,ime.rs}` no longer call caret-scroll directly.
 - **Paste dispatch** (embedder → tur-clipboard → text plugin): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `builtin_plugins::clipboard::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. The text plugin's `ClipboardPasteSubsystem` (`builtin_plugins/text/handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits). The event payload types themselves live in `builtin_plugins::clipboard::event` (clipboard-plugin-owned; cross-plugin via `pub(in crate::builtin_plugins)`).
 
-JS surface is unchanged — `builtin:tur/std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
+JS surface is unchanged — `tur:std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
 
 ### Image model
 
-Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `builtin:tur/std` by `TurStdPlugin` via `install_image(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("builtin:tur/std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
+Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the former `libs/tur-image` crate). It is installed into `tur:std` by `TurStdPlugin` via `install_image(ctx: &mut PluginContext) -> Result<Vec<FnEntry>, TurError>`. The returned `FnEntry`s are merged into `std_fns` before `register_module("tur:std", ...)`, so `Image` / `createImageResource` / `createSvgResource` ship as part of the std module from JS's perspective.
 
 - **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; the image plugin only produces these structs.
 - **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
@@ -229,7 +229,7 @@ Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the form
 - **Element** (`builtin_plugins/image/element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurJsContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
 - **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind.
 
-JS surface is unchanged — `builtin:tur/std` still exports Image/createImageResource/createSvgResource. No `.d.ts` split, no new JS package.
+JS surface is unchanged — `tur:std` still exports Image/createImageResource/createSvgResource. No `.d.ts` split, no new JS package.
 
 ### Domain traits
 
@@ -263,7 +263,7 @@ libs/
                              #   RootView/RootElement generic-root wrapper
         async_/              # AsyncExecutor (tur_async wrapper) + task
                              #   primitives (sleep/launch, the bridge fns
-                             #   for builtin:tur/std) + executor
+                             #   for tur:std) + executor
                              #   (TurJobExecutor — boa JobExecutor impl)
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
@@ -273,7 +273,7 @@ libs/
                              #   (MutationHandle/PendingMutationInvocationQueue)
                              #   + source/derive/mutate/get/set/view bridge +
                              #   ReadableSubscribe (the engine's own
-                             #   builtin:tur/core)
+                             #   tur:core)
         element.rs           # ElementKind / ElementNodeId / NodeId /
                              #   FragmentNodeId
         elements/            # AnyElement, ElementObject, ElementTree
@@ -322,9 +322,9 @@ libs/
                              #   so `core/` cannot import from this tree
         std.rs               # TurStdPlugin — the orchestrator that calls
                              #   every install_xxx and merges FnEntry into
-                             #   builtin:tur/std
+                             #   tur:std
         clipboard/           # Clipboard capability + ClipboardBackend trait +
-                             #   TurClipboardPlugin + builtin:tur/clipboard +
+                             #   TurClipboardPlugin + tur:clipboard +
                              #   event payloads + engine-internal subsystems
                              #   (inlined from former tur-clipboard-capability
                              #   crate). Public surface (Clipboard /
@@ -362,7 +362,7 @@ libs/
                              #   Opacity/Transform effects + JS widgets +
                              #   Curve/NumTween/ColorTween) — registered via
                              #   TurAnimationPlugin, exposes
-                             #   `builtin:tur/animation` (combined native+JS
+                             #   `tur:animation` (combined native+JS
                              #   module) + internal `tur:animation/native`
                              #   (ctx-bound fns only)
   tur-clipboard-wasm/        # WasmClipboard (navigator.clipboard) backend —
@@ -370,7 +370,7 @@ libs/
                              #   TurClipboardPlugin from tur_engine
   tur-clipboard-native/      # NativeClipboard (arboard) backend — same
                              #   re-exports
-  tur-net-capability/        # HttpBackend trait + Http cap + builtin:tur/net
+  tur-net-capability/        # HttpBackend trait + Http cap + tur:net
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
   tur-net-native/            # NativeHttp (reqwest) backend
   tur-wasm/                  # wasm binary (boa_engine + vello-hybrid +
@@ -385,14 +385,14 @@ libs/
   tur-native/                # native (non-wasm) embedder entry point
 js/
   packages/
-    tur-animation/            # Ambient TS types for `builtin:tur/animation`
+    tur-animation/            # Ambient TS types for `tur:animation`
                              #   (runtime provided by tur-animation crate)
-    tur-core/                # Ambient TS types for `builtin:tur/core`
+    tur-core/                # Ambient TS types for `tur:core`
                              #   (engine-owned reactive primitives)
     tur-demo/                # Playground: thin browser wrapper (loads wasm
                              #   + impl bundle)
-    tur-demo-impl/           # Playground UI built with builtin:tur/animation
-                             #   + builtin:tur/std (Sidebar/Editor/Viewer)
+    tur-demo-impl/           # Playground UI built with tur:animation
+                             #   + tur:std (Sidebar/Editor/Viewer)
     tur-test-cases/          # Test cases (cases/, ~60 cases)
 ```
 

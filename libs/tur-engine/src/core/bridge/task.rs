@@ -1,4 +1,4 @@
-//! Async task primitives exported by `builtin:tur/std`: `sleep` + `launch`.
+//! Async task primitives exported by `tur:std`: `sleep` + `launch`.
 //!
 //! These replace the old `setTimeout`/`setInterval`/`clearTimeout`/
 //! `clearInterval` globals. There is no timer-id registry and no separate
@@ -42,7 +42,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::core::bridge::helpers::{extract_ctx, FnEntry};
 
-/// Bridge function table entries for `builtin:tur/std`: `sleep` + `launch`.
+/// Bridge function table entries for `tur:std`: `sleep` + `launch`.
 pub fn fns() -> Vec<FnEntry> {
     vec![("sleep", 1, tur_sleep as _), ("launch", 1, tur_launch as _)]
 }

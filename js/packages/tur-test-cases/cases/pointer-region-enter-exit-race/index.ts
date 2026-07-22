@@ -8,7 +8,7 @@ import {
     set,
     source,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 // A single shared hover source, mirroring the playground sidebar pattern.
 // Each region sets it on enter and clears it (unconditionally) on exit.

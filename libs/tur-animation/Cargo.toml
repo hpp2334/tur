@@ -1,6 +1,6 @@
 [package]
 name = "tur-animation"
-description = "Animation subsystem for tur (AnimationController + Opacity/Transform elements + AnimatedContainer/Opacity/Positioned widgets via builtin:tur/animation)"
+description = "Animation subsystem for tur (AnimationController + Opacity/Transform elements + AnimatedContainer/Opacity/Positioned widgets via tur:animation)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

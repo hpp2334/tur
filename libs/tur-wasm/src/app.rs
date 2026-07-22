@@ -923,7 +923,7 @@ impl TurWasmApp {
     }
 
     /// Evaluate `js_source` as an ES module (supports real
-    /// `import { ... } from "builtin:tur/..."`, resolved by the engine's module
+    /// `import { ... } from "tur:..."`, resolved by the engine's module
     /// loader), then start the frame loop. The replacement for
     /// [`load_and_run_js`](Self::load_and_run_js) for module-mode bundles
     /// (e.g. the self-hosted playground `impl.js`).

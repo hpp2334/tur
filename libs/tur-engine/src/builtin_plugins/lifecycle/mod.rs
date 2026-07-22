@@ -14,7 +14,7 @@ use crate::core::plugin::PluginContext;
 use crate::error::TurError;
 
 /// Install the lifecycle plugin (`lifecycleView`). Returns the JS factory
-/// fns to be merged into `builtin:tur/std` by the orchestrator.
+/// fns to be merged into `tur:std` by the orchestrator.
 pub fn install_lifecycle(
     _ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

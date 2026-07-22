@@ -3,7 +3,7 @@
 //! Everything in this folder is generic JS-runtime infrastructure shared by
 //! every bridge fn across the engine and every external crate that writes
 //! element bridges (`tur-text`, `tur-image`, `tur-scroll`, …). It owns no
-//! `builtin:tur/*` module exports — engine-level JS fns/consts live in their
+//! `tur:*` module exports — engine-level JS fns/consts live in their
 //! domain folders (`core::render::brush`, `core::app::render`, `core::async_::task`,
 //! `core::dev`, `domains::layout::enums`).
 //!

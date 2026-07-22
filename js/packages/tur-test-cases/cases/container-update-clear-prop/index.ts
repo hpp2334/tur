@@ -8,7 +8,7 @@ import {
     PointerInteract,
     source,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const checked$ = source(true);
 const green = Color.rgba(34, 197, 94, 255);

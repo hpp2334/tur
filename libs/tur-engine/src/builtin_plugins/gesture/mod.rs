@@ -27,7 +27,7 @@ use crate::error::TurError;
 
 /// Install the gesture plugin (`MouseRegion`, `PointerInteract`) and
 /// register `GestureSubsystem` + `PointerSubsystem`. Returns the JS factory
-/// fns to be merged into `builtin:tur/std` by the orchestrator.
+/// fns to be merged into `tur:std` by the orchestrator.
 pub fn install_gesture(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

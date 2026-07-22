@@ -1,4 +1,4 @@
-import { Color, Condition, Container, Text, view } from "builtin:tur/std";
+import { Color, Condition, Container, Text, view } from "tur:std";
 
 export default view(() =>
     Condition({

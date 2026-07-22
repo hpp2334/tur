@@ -1,10 +1,4 @@
-import {
-    Color,
-    Container,
-    mutate,
-    PointerInteract,
-    view,
-} from "builtin:tur/std";
+import { Color, Container, mutate, PointerInteract, view } from "tur:std";
 
 // Mirrors the drag-delta tracking logic in the playground's VDivider:
 // tracks the press position (dragStart) and the previous move position

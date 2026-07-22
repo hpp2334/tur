@@ -1,5 +1,5 @@
 //! Clipboard plugin — backend trait + capability newtype + event payloads +
-//! `builtin:tur/clipboard` JS bridge + engine-internal subsystems.
+//! `tur:clipboard` JS bridge + engine-internal subsystems.
 //!
 //! Inlined from the former `tur-clipboard-capability` crate. Exposes a
 //! minimal public API surface; the rest is internal to `builtin_plugins`.
@@ -23,7 +23,7 @@
 //!   event-bus handlers.
 //! - The JS bridge fns (ctx-bound `Ptr`s) — registered as the
 //!   `clipboard.readText` / `clipboard.writeText` consts of
-//!   `builtin:tur/clipboard`.
+//!   `tur:clipboard`.
 //!
 //! [`ClipboardPlatformSubsystem`]: handlers::ClipboardPlatformSubsystem
 //! [`ClipboardWriteSubsystem`]: handlers::ClipboardWriteSubsystem
@@ -42,7 +42,7 @@ use crate::core::js_runtime::helpers::ConstEntry;
 use crate::core::plugin::{Plugin, PluginContext};
 use crate::error::TurError;
 
-/// tur-clipboard plugin: registers `builtin:tur/clipboard` (exporting a
+/// tur-clipboard plugin: registers `tur:clipboard` (exporting a
 /// `clipboard` object with `readText` / `writeText` methods) plus the
 /// engine-internal [`ClipboardPlatformSubsystem`](handlers::ClipboardPlatformSubsystem)
 /// (forwards embedder paste into the engine-internal event bus) and
@@ -99,7 +99,7 @@ impl Plugin for TurClipboardPlugin {
         let clipboard_obj = bridge::build_clipboard_object(ctx.boa_mut(), ctx_value);
         let consts: Vec<ConstEntry> = vec![("clipboard", clipboard_obj)];
 
-        ctx.register_module("builtin:tur/clipboard", bridge::fns(), vec![], consts);
+        ctx.register_module("tur:clipboard", bridge::fns(), vec![], consts);
 
         Ok(())
     }
