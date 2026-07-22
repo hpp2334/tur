@@ -29,7 +29,7 @@ pub(in crate::builtin_plugins) use subsystem::KeyboardSubsystem;
 
 /// Install the input plugin (`KeyboardSubsystem`, `ImeSubsystem`) — no JS
 /// factory fns are returned (this plugin contributes subsystems only). The
-/// orchestrator merges the empty fn list into `builtin:tur/std` harmlessly.
+/// orchestrator merges the empty fn list into `tur:std` harmlessly.
 pub fn install_input(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

@@ -1,6 +1,6 @@
 [package]
 name = "tur-text"
-description = "Text feature for tur (Text/Input elements + TextEditingController/UndoController + text layout + ensure_visible), installed into builtin:tur/std via install_text_feature"
+description = "Text feature for tur (Text/Input elements + TextEditingController/UndoController + text layout + ensure_visible), installed into tur:std via install_text_feature"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

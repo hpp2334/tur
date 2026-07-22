@@ -7,7 +7,7 @@
  * JS-defined implicit-animation widgets (`AnimatedContainer`,
  * `AnimatedOpacity`, `AnimatedPositioned`, `Tween`, `ColorTween`).
  *
- * The widgets are composed entirely from `builtin:tur/std` primitives
+ * The widgets are composed entirely from `tur:std` primitives
  * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — no native
  * element beyond `Opacity`/`Transform`/`Container`/`Positioned` is involved.
  *
@@ -36,10 +36,10 @@ import {
     mutate,
     set,
     source,
-} from "builtin:tur/std";
+} from "tur:std";
 
 // Re-export the native bridge fns so consumers can import everything from
-// `builtin:tur/animation`.
+// `tur:animation`.
 export { Opacity, Transform, createAnimationController };
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
-import { saveFile } from "builtin:demo-helper";
-import { createAnimationController } from "builtin:tur/animation";
-import { request } from "builtin:tur/net";
+import { saveFile } from "tur-ext/demo-helper";
+import { createAnimationController } from "tur:animation";
+import { request } from "tur:net";
 import {
     createSvgResource,
     createTextEditingController,
@@ -14,7 +14,7 @@ import {
     sleep,
     source,
     type Task,
-} from "builtin:tur/std";
+} from "tur:std";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,7 +35,7 @@ export interface DirEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Host bridge — HTTP via `builtin:tur/net`, file save via `builtin:demo-helper`.
+// Host bridge — HTTP via `tur:net`, file save via `tur-ext/demo-helper`.
 // Both are registered by tur-wasm (playground). The case is playground-only,
 // so `hasHttp` is true whenever the case loads.
 // ---------------------------------------------------------------------------

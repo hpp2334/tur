@@ -1,18 +1,18 @@
 //! Native ES module loader for the tur bridge.
 //!
 //! Replaces the old `globalThis.__tur` global object. Engine-owned bridge
-//! functions are exposed as synthetic modules (`builtin:tur/core` for the
-//! reactive substrate, `builtin:tur/std` for the widget library) that user
+//! functions are exposed as synthetic modules (`tur:core` for the
+//! reactive substrate, `tur:std` for the widget library) that user
 //! code imports directly:
 //!
 //! ```js
-//! import { source, render } from "builtin:tur/core";
-//! import { Container, Color } from "builtin:tur/std";
+//! import { source, render } from "tur:core";
+//! import { Container, Color } from "tur:std";
 //! ```
 //!
-//! The loader keeps a registry of bare `builtin:tur/*` specifiers → pre-built
+//! The loader keeps a registry of bare `tur:*` specifiers → pre-built
 //! [`Module`]s. Plugins register additional capability modules
-//! (`builtin:tur/net`, `builtin:tur/clipboard`, …) through
+//! (`tur:net`, `tur:clipboard`, …) through
 //! [`PluginContext::register_module`] / [`PluginContext::register_host_module`].
 
 use std::cell::RefCell;
@@ -34,7 +34,7 @@ use boa_engine::module::Referrer;
 use boa_engine::module::SyntheticModuleInitializer;
 use boa_engine::object::FunctionObjectBuilder;
 
-/// A module loader that resolves registered bare specifiers (e.g. `builtin:tur/std`)
+/// A module loader that resolves registered bare specifiers (e.g. `tur:std`)
 /// to pre-built [`Module`]s. Unknown specifiers raise a `TypeError`.
 ///
 /// Held behind an `Rc` and shared between [`crate::TurApp`] (which wires it
@@ -143,7 +143,7 @@ pub fn build_native_module(
 
 /// Build a synthetic module whose exports are arbitrary native functions
 /// (no bridge-ctx binding). Used by plugins to expose host services as
-/// modules — e.g. `builtin:tur/net` (HTTP `request`), `builtin:demo-helper`
+/// modules — e.g. `tur:net` (HTTP `request`), `tur-ext/demo-helper`
 /// (swc compiler + file IO).
 pub fn build_fn_module(
     context: &mut Context,

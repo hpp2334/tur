@@ -32,9 +32,9 @@ use tur_engine::core::platform::{Cursor};
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
 /// build time. Test-only convenience for the cases that previously used the
 /// runtime `TurApp::register_host_module` API (now removed) — lets a test
-/// inject `builtin:tur/<whatever>` exports through the plugin path.
+/// inject `tur:<whatever>` exports through the plugin path.
 pub struct HostModulePlugin {
-    /// Module specifier to register (e.g. `"builtin:tur/test"`).
+    /// Module specifier to register (e.g. `"tur:test"`).
     pub specifier: &'static str,
     /// `(name, fn, length)` exports.
     pub exports: Vec<(String, NativeFunction, usize)>,
@@ -197,7 +197,7 @@ pub struct TurTestApp {
     clipboard: RecordingClipboard,
     /// Shared with the `RecordingHttp` installed in the engine (only when
     /// constructed via [`Self::new_with_http`]). `None` for the default
-    /// constructor — those tests don't register `builtin:tur/net`.
+    /// constructor — those tests don't register `tur:net`.
     http: Option<RecordingHttp>,
     /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
@@ -223,7 +223,7 @@ impl TurTestApp {
     /// Construct with additional plugins registered beyond the default
     /// `TurStdPlugin` + `TurClipboardPlugin`. Used by tests that need to
     /// inject extra modules (e.g. [`HostModulePlugin`] for a test-only
-    /// `builtin:tur/*` module).
+    /// `tur:*` module).
     pub fn new_with_extra_plugins(
         width: f64,
         height: f64,
@@ -304,7 +304,7 @@ impl TurTestApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        // Case dist files are ES modules that import `builtin:tur/std` (resolved by
+        // Case dist files are ES modules that import `tur:std` (resolved by
         // the engine's module loader) and call `render(<case default>)`.
         self.inner.load_module(&source)?;
         self.ensure_flushed();
@@ -725,7 +725,7 @@ impl TurTestApp {
     }
 
     /// Evaluate `source` as an ES module — supports real
-    /// `import { … } from "builtin:tur/std"` (or `builtin:demo-helper`/`builtin:tur/net`). Returns
+    /// `import { … } from "tur:std"` (or `tur-ext/demo-helper`/`tur:net`). Returns
     /// nothing; read results back via [`eval_js`](Self::eval_js).
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         self.inner.load_module(source)

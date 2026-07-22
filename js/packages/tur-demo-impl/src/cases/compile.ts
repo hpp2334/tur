@@ -1,10 +1,10 @@
-import type { AstNode, TokenSpan } from "builtin:demo-helper";
-import * as Host from "builtin:demo-helper";
-import * as Anim from "builtin:tur/animation";
-import * as Clipboard from "builtin:tur/clipboard";
-import * as Net from "builtin:tur/net";
-import type { Color, SpanData } from "builtin:tur/std";
-import * as Std from "builtin:tur/std";
+import type { AstNode, TokenSpan } from "tur-ext/demo-helper";
+import * as Host from "tur-ext/demo-helper";
+import * as Anim from "tur:animation";
+import * as Clipboard from "tur:clipboard";
+import * as Net from "tur:net";
+import type { Color, SpanData } from "tur:std";
+import * as Std from "tur:std";
 import { code } from "../theme/tokens";
 
 /** Highlight palette indexed by token kind (see tur-wasm `highlight_tsx`).
@@ -67,19 +67,19 @@ function fileKey(source: string): string {
 }
 
 /** Map an import source to the expression the rewritten code destructures
- *  from. `builtin:tur/*` resolve to the injected module namespace; relative
+ *  from. `tur:*` resolve to the injected module namespace; relative
  *  imports resolve to the local `__modules` registry. */
 function importTarget(source: string): string {
     switch (source) {
-        case "builtin:tur/std":
+        case "tur:std":
             return "Std";
-        case "builtin:tur/animation":
+        case "tur:animation":
             return "Anim";
-        case "builtin:demo-helper":
+        case "tur-ext/demo-helper":
             return "Host";
-        case "builtin:tur/net":
+        case "tur:net":
             return "Net";
-        case "builtin:tur/clipboard":
+        case "tur:clipboard":
             return "Clipboard";
         default:
             return `__modules["${moduleKey(source)}"]`;
@@ -188,7 +188,7 @@ function rewriteEntry(transpiled: string): string {
 // ---------------------------------------------------------------------------
 
 /** Evaluate rewritten case code in an isolated function scope with the
- *  `builtin:tur/*` modules and the per-case `__modules` registry injected as
+ *  `tur:*` modules and the per-case `__modules` registry injected as
  *  parameters (no `globalThis` pollution). Returns the function's value. */
 function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
     const fn = new Function(

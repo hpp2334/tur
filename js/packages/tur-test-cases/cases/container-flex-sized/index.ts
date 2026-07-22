@@ -6,7 +6,7 @@ import {
     Row,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 export default view(() =>
     Column({

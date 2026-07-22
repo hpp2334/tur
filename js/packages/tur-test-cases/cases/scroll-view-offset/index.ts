@@ -5,7 +5,7 @@ import {
     ScrollView,
     SizedBox,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const controller = createScrollController({ initialOffset: 100 });
 

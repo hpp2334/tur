@@ -2,29 +2,29 @@
  * @tur/std — ambient type declarations for the native tur widget library.
  *
  * Runtime is a synthetic boa module registered by tur-engine under the
- * specifier `"builtin:tur/std"`. It re-exports everything from
- * `"builtin:tur/core"` (the reactive primitives + meta-types) and adds the
+ * specifier `"tur:std"`. It re-exports everything from
+ * `"tur:core"` (the reactive primitives + meta-types) and adds the
  * widget layer: view factories, prop interfaces, enums, value types (Color /
  * LinearGradient / SpanData), view controllers, resources, and the event
  * detail payloads.
  *
- * Consumers typically import from `builtin:tur/std` alone — it is the
+ * Consumers typically import from `tur:std` alone — it is the
  * convenience superset:
  * ```ts
- * import { Container, Column, source, Color, Axis } from "builtin:tur/std";
+ * import { Container, Column, source, Color, Axis } from "tur:std";
  * ```
  *
  * `@tur/animation` and other libraries that need only the reactive
- * substrate may import directly from `builtin:tur/core`.
+ * substrate may import directly from `tur:core`.
  */
 
-declare module "builtin:tur/std" {
+declare module "tur:std" {
     // Re-export the reactive core (source/derive/mutate/get/set/view/render,
     // Element/Atom/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
-    export * from "builtin:tur/core";
+    export * from "tur:core";
 
     // Core meta-types used by the prop interfaces below.
-    import type { Element, Mutation, Readable, Val } from "builtin:tur/core";
+    import type { Element, Mutation, Readable, Val } from "tur:core";
 
     // ---------------------------------------------------------------------------
     // Value types — Color / LinearGradient / Brush / SpanData
@@ -86,7 +86,7 @@ declare module "builtin:tur/std" {
 
     /** Engine-owned reactive atom holding the live canvas size
      *  (`{width, height}` in CSS pixels). Updated each frame from the resize
-     *  handler; import from `builtin:tur/std`. */
+     *  handler; import from `tur:std`. */
     export const viewportSize$: Atom<ViewportSize>;
 
     /** OS cursor keywords (CSS cursor names). Mirrors `tur_engine::core::platform::Cursor`. */

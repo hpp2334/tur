@@ -1,4 +1,4 @@
-//! `builtin:tur/clipboard` bridge: a `clipboard` object with `readText` /
+//! `tur:clipboard` bridge: a `clipboard` object with `readText` /
 //! `writeText` methods, each returning a `Promise`.
 //!
 //! The bridge fns are ctx-bound `Ptr`s that look up the [`crate::Clipboard`]
@@ -28,7 +28,7 @@ use tur_engine::core::bridge::module_loader::bound_native;
 
 use crate::Clipboard;
 
-/// Bridge function table entries for `builtin:tur/clipboard`.
+/// Bridge function table entries for `tur:clipboard`.
 ///
 /// Returns an empty list because the module's only export is a `clipboard`
 /// *object* (built by [`build_clipboard_object`]) registered as a const.

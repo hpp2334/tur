@@ -1,4 +1,4 @@
-import { tokenizeTsx, transpileTsx } from "builtin:demo-helper";
+import { tokenizeTsx, transpileTsx } from "tur-ext/demo-helper";
 import {
     Color,
     Column,
@@ -6,7 +6,7 @@ import {
     Expanded,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const SRC = "const x: number = 42;";
 const OUT = transpileTsx(SRC);
@@ -47,7 +47,7 @@ export default view(() =>
                 Column({
                     children: [
                         Text({
-                            text: "transpileTsx (via builtin:demo-helper):",
+                            text: "transpileTsx (via tur-ext/demo-helper):",
                             fontSize: 13,
                             color: Color.hex("#848da5"),
                         }),

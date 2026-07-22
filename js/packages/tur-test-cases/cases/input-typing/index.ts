@@ -3,7 +3,7 @@ import {
     createTextEditingController,
     Input,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 const controller = createTextEditingController({});
 

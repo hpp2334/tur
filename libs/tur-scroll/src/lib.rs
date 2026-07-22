@@ -6,10 +6,10 @@
 //! primitives (`ScrollEvent`, `ScrollPosition`, `ScrollPhysics`).
 //!
 //! Like `tur-text`, this crate is **not** a standalone plugin. It is installed
-//! into `builtin:tur/std` by `TurStdPlugin` via [`install_scroll_feature`],
+//! into `tur:std` by `TurStdPlugin` via [`install_scroll_feature`],
 //! which registers the boa class + subsystem and returns the JS factory fns to
 //! be merged into `std_fns`. From JS's perspective `ScrollView`,
-//! `createScrollController`, and `Scrollbar` ship as part of `builtin:tur/std`.
+//! `createScrollController`, and `Scrollbar` ship as part of `tur:std`.
 //!
 //! The engine retains the event protocol — `AppEvent::Scroll`,
 //! `AppEvent::ScrollTo`, `AppEvent::ScrollOverscroll` and the
@@ -32,7 +32,7 @@ use tur_engine::core::bridge::helpers::FnEntry;
 use tur_engine::core::plugin::PluginContext;
 use tur_engine::error::TurError;
 
-/// Wire the scroll feature into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire the scroll feature into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl — scroll is not a separate plugin, it's a feature installed
 /// into the std module.
 ///
@@ -44,7 +44,7 @@ use tur_engine::error::TurError;
 ///
 /// Returns: the `ScrollView` / `createScrollController` / `Scrollbar` factory
 /// fns, which the caller merges into `std_fns` before
-/// `register_module("builtin:tur/std", ...)`.
+/// `register_module("tur:std", ...)`.
 pub fn install_scroll_feature(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

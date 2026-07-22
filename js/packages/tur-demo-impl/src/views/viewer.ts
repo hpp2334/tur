@@ -9,7 +9,7 @@ import {
     SizedBox,
     Switch,
     Text,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     compileVersion$,
     errorMsg$,

@@ -5,10 +5,10 @@
 //! [`LazyListController`] boa class (drives programmatic `jumpTo` and reports
 //! `onScroll` / `onVisibleRangeChange` callbacks).
 //!
-//! Installed into `builtin:tur/std` by `TurStdPlugin` via
+//! Installed into `tur:std` by `TurStdPlugin` via
 //! [`install_lazy_container`], which registers the boa class and returns the
 //! JS factory fns to be merged into `std_fns`. From JS's perspective
-//! `LazyList` and `createLazyListController` ship as part of `builtin:tur/std`.
+//! `LazyList` and `createLazyListController` ship as part of `tur:std`.
 //!
 //! The scroll-position math (`ScrollPosition`) and the scroll-event payload
 //! (`ScrollEvent`) come from the sibling `scroll` plugin.
@@ -21,7 +21,7 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginContext;
 use crate::error::TurError;
 
-/// Wire the lazy-list plugin into `builtin:tur/std`. Called by
+/// Wire the lazy-list plugin into `tur:std`. Called by
 /// `TurStdPlugin`'s `register` impl.
 ///
 /// Side effects:
@@ -29,7 +29,7 @@ use crate::error::TurError;
 ///
 /// Returns: the `LazyList` / `createLazyListController` factory fns, which
 /// the caller merges into `std_fns` before
-/// `register_module("builtin:tur/std", ...)`.
+/// `register_module("tur:std", ...)`.
 pub fn install_lazy_container(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

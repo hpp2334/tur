@@ -522,7 +522,7 @@ impl TurEngineBuilder {
         // `TurAppInternal::flush`). The handle (`Source<JsValue>`, a `Copy`
         // `AtomId`) lives on `app_context.screen`; the `JsValue` opaque is
         // handed to plugins so `std` can export it as the `viewportSize$`
-        // const in `builtin:tur/std`.
+        // const in `tur:std`.
         let viewport_size_js: boa_engine::JsValue = {
             let (w, h) = internal.app_context.borrow().screen.logical_size;
             let init = core::screen::Screen::size_js(w, h, &mut boa_context);
@@ -542,7 +542,7 @@ impl TurEngineBuilder {
             &[],
             &[],
         );
-        module_loader.register("builtin:tur/core", core_module);
+        module_loader.register("tur:core", core_module);
 
         let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
         let et_fn = bound_native(

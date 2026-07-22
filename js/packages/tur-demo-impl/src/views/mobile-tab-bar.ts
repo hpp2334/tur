@@ -15,7 +15,7 @@ import {
     Row,
     set,
     Text,
-} from "builtin:tur/std";
+} from "tur:std";
 import { type MobileTab, mobileTab$ } from "../state";
 import { tokens } from "../theme/tokens";
 

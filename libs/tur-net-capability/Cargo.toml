@@ -1,6 +1,6 @@
 [package]
 name = "tur-net-capability"
-description = "HTTP networking capability for tur (Http + HttpBackend trait + builtin:tur/net bridge)"
+description = "HTTP networking capability for tur (Http + HttpBackend trait + tur:net bridge)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

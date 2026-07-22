@@ -1,5 +1,5 @@
 // utils.ts — shared helper for the multi-file demo case.
-import { Color } from "builtin:tur/std";
+import { Color } from "tur:std";
 
 export const COLORS = {
     primary: Color.hex("#6366f1"),

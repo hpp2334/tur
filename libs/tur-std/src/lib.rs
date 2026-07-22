@@ -1,6 +1,6 @@
 //! Standard widget library plugin for tur.
 //!
-//! Provides [`TurStdPlugin`], which registers the `builtin:tur/std` JS module
+//! Provides [`TurStdPlugin`], which registers the `tur:std` JS module
 //! (widget factories, controllers, color bridge) plus the engine's
 //! input-event handlers (gesture, keyboard, ime, paste, resize, wheel, scroll
 //! chaining, pointer region, scroll-to).
@@ -17,12 +17,12 @@
 //!
 //! - Most elements, controllers, handlers, and bridge fns live in `tur-engine`
 //!   (they're the engine's building blocks). This crate is a thin registration
-//!   layer that wires them into the `builtin:tur/std` module.
+//!   layer that wires them into the `tur:std` module.
 //! - Text feature (Text/Input elements, `TextEditingController`,
 //!   `UndoController`, `EnsureCaretVisibleHandler`, `extract_layout_data`) is
 //!   pulled in from the standalone `tur-text` crate via
 //!   [`tur_text::install_text_feature`] and merged into `std_fns` here — so
-//!   from JS's perspective Text/Input ship as part of `builtin:tur/std`. The
+//!   from JS's perspective Text/Input ship as part of `tur:std`. The
 //!   engine retains only the paint/layout contract types (`TextLayoutData`,
 //!   `FontManager`).
 //! - Scroll feature (`ScrollView`, `Scrollbar`, `ScrollController`,
@@ -42,7 +42,7 @@ use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::bridge::{reactive, render};
 use tur_engine::error::TurError;
 
-/// The standard widget library plugin. Registers the `builtin:tur/std`
+/// The standard widget library plugin. Registers the `tur:std`
 /// module (widget factories, controllers, color bridge), plus the
 /// input-event handlers (gesture, keyboard, ime, resize, wheel, scroll
 /// chaining, pointer region, paste).
@@ -81,20 +81,20 @@ impl Plugin for TurStdPlugin {
         let mut std_fns: Vec<FnEntry> = Vec::new();
         // Text feature (Text/Input elements, TextEditingController /
         // UndoController classes, ensure-caret-visible post-handler) is
-        // installed into `builtin:tur/std` rather than as a separate plugin.
+        // installed into `tur:std` rather than as a separate plugin.
         // tur-text owns all text logic; the engine keeps only the
         // paint/layout contract types (`TextLayoutData`, `FontManager`).
         std_fns.extend(tur_text::install_text_feature(ctx)?);
         // Image feature (Image element, createImageResource /
         // createSvgResource, PNG/JPEG/SVG decode) lives in the standalone
-        // `tur-image` crate; installed into `builtin:tur/std` here. The
+        // `tur-image` crate; installed into `tur:std` here. The
         // engine retains only the paint/layout contract types
         // (`ImageResourceId`, `ImageResourceMap`, `ImageResource`).
         std_fns.extend(tur_image::install_image_feature(ctx)?);
         // Scroll feature (ScrollView, Scrollbar, ScrollController,
         // ScrollSubsystem) and lazy-list feature (LazyList,
         // LazyListController) live in the standalone `tur-scroll` and
-        // `tur-lazy-container` crates; installed into `builtin:tur/std`
+        // `tur-lazy-container` crates; installed into `tur:std`
         // here. The engine retains only the `AppEvent::Scroll*` protocol and
         // `WheelEvent` primitive.
         std_fns.extend(tur_scroll::install_scroll_feature(ctx)?);
@@ -127,7 +127,7 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
-        ctx.register_module("builtin:tur/std", std_fns, vec![], std_consts);
+        ctx.register_module("tur:std", std_fns, vec![], std_consts);
 
         Ok(())
     }

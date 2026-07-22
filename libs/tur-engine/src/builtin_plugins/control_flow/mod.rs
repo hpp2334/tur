@@ -14,7 +14,7 @@ use crate::error::TurError;
 
 /// Install the control-flow plugin (`Condition` / `Switch` / `Each` /
 /// `Fragment`). Returns the JS factory fns to be merged into
-/// `builtin:tur/std` by the orchestrator (`TurStdPlugin`).
+/// `tur:std` by the orchestrator (`TurStdPlugin`).
 pub fn install_control_flow(
     _ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {

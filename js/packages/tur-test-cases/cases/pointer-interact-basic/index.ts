@@ -1,4 +1,4 @@
-import { Container, PointerInteract, view } from "builtin:tur/std";
+import { Container, PointerInteract, view } from "tur:std";
 
 export default view(() =>
     PointerInteract({

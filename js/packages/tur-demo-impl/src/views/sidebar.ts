@@ -20,7 +20,7 @@ import {
     set,
     Text,
     type Val,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     CASE_NAMES,
     edited$,

@@ -9,7 +9,7 @@ import {
     set,
     sleep,
     type Task,
-} from "builtin:tur/std";
+} from "tur:std";
 import { CASE_SOURCES, compileCase } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
 import {

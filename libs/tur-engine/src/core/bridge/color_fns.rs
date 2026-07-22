@@ -74,7 +74,7 @@ fn tur_create_color(
     context: &mut Context,
 ) -> boa_engine::JsResult<JsValue> {
     // `args[0]` is the bound bridge ctx (prepended by `bound_native` when the
-    // `builtin:tur/std` module is built); the real RGBA args follow at [1..].
+    // `tur:std` module is built); the real RGBA args follow at [1..].
     let r = args.get_or_undefined(1).as_number().unwrap_or(0.0) as u8;
     let g = args.get_or_undefined(2).as_number().unwrap_or(0.0) as u8;
     let b = args.get_or_undefined(3).as_number().unwrap_or(0.0) as u8;

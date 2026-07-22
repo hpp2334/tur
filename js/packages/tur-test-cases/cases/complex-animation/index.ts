@@ -4,7 +4,7 @@ import {
     createAnimationController,
     Transform,
     Tween,
-} from "builtin:tur/animation";
+} from "tur:animation";
 import {
     Alignment,
     Color,
@@ -30,7 +30,7 @@ import {
     source,
     Text,
     view,
-} from "builtin:tur/std";
+} from "tur:std";
 
 // ---------------------------------------------------------------------------
 // "Animated Card Studio" — a demo of tur's animation API.

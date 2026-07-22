@@ -6,7 +6,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Builds the self-hosted playground as a single ES-module bundle (`impl.js`)
 // that the thin `tur-demo` wrapper loads via `TurWasmApp.load_and_run_module`.
-// `builtin:tur/*` are external — resolved at run time by the engine's boa
+// `tur:*` are external — resolved at run time by the engine's boa
 // module loader — so the bundle keeps its `import` statements. The bundle
 // contains the Shell UI + inlined case sources; it calls `render(Shell)` on
 // evaluation.
@@ -22,11 +22,11 @@ export default defineConfig({
     },
     experiments: { outputModule: true },
     externals: {
-        "builtin:tur/std": "builtin:tur/std",
-        "builtin:tur/animation": "builtin:tur/animation",
-        "builtin:demo-helper": "builtin:demo-helper",
-        "builtin:tur/clipboard": "builtin:tur/clipboard",
-        "builtin:tur/net": "builtin:tur/net",
+        "tur:std": "tur:std",
+        "tur:animation": "tur:animation",
+        "tur-ext/demo-helper": "tur-ext/demo-helper",
+        "tur:clipboard": "tur:clipboard",
+        "tur:net": "tur:net",
     },
     optimization: {
         minimize: false,

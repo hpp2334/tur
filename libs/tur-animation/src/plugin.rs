@@ -1,5 +1,5 @@
 //! `TurAnimationPlugin` — registers the animation subsystem, the
-//! `AnimationController` boa class, and the `builtin:tur/animation` JS module.
+//! `AnimationController` boa class, and the `tur:animation` JS module.
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -27,7 +27,7 @@ use crate::manager::AnimationManager;
 ///   - the [`AnimationSubsystem`] flush participant (ticks active
 ///     controllers once per frame),
 ///   - the `Opacity` and `Transform` visual-effect elements (bridge fns),
-///   - the `builtin:tur/animation` JS module combining the native bridge
+///   - the `tur:animation` JS module combining the native bridge
 ///     fns with the JS-defined implicit-animation widgets
 ///     (`AnimatedContainer`, `AnimatedOpacity`, `AnimatedPositioned`,
 ///     `Tween`, `ColorTween`).
@@ -78,7 +78,7 @@ impl Plugin for TurAnimationPlugin {
         )));
 
         // 4. Register the hidden internal native module `tur:animation/native`.
-        //    The consumer-facing `builtin:tur/animation` JS source imports
+        //    The consumer-facing `tur:animation` JS source imports
         //    from here to access the native bridge fns.
         let mut native_fns: Vec<FnEntry> = Vec::new();
         native_fns.extend(effects::bridge::fns()); // Opacity, Transform (ctx-bound)
@@ -95,12 +95,12 @@ impl Plugin for TurAnimationPlugin {
             Vec::<ConstEntry>::new(),
         );
 
-        // 5. Register the consumer-facing `builtin:tur/animation` JS module.
+        // 5. Register the consumer-facing `tur:animation` JS module.
         //    It imports the native fns from `tur:animation/native`, imports
-        //    the reactive + layout primitives from `builtin:tur/std`, and
+        //    the reactive + layout primitives from `tur:std`, and
         //    defines + exports the implicit-animation widgets.
         ctx.register_js_module(
-            "builtin:tur/animation",
+            "tur:animation",
             include_str!("../js/index.js"),
             Path::new("libs/tur-animation/js/index.js"),
         )?;

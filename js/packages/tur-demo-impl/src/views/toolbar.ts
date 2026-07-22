@@ -16,7 +16,7 @@ import {
     Stack,
     set,
     Text,
-} from "builtin:tur/std";
+} from "tur:std";
 import {
     autoRun$,
     isMobile$,

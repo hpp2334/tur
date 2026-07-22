@@ -32,11 +32,11 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
 
     // Set up: create a source atom, kick off a read, chain `.then` to set
     // the source with the resolved text. `clipboard.readText` is exported
-    // by `builtin:tur/clipboard` as a method on the `clipboard` object.
+    // by `tur:clipboard` as a method on the `clipboard` object.
     app.eval_module_source(
         r#"
-        import { source, set, get } from "builtin:tur/std";
-        import { clipboard } from "builtin:tur/clipboard";
+        import { source, set, get } from "tur:std";
+        import { clipboard } from "tur:clipboard";
         globalThis.__sink$ = source("initial");
         clipboard.readText().then((text) => {
             set(globalThis.__sink$, text);
@@ -62,7 +62,7 @@ fn clipboard_write_logs_to_recording() {
 
     app.eval_module_source(
         r#"
-        import { clipboard } from "builtin:tur/clipboard";
+        import { clipboard } from "tur:clipboard";
         clipboard.writeText("payload");
         "#,
     )
@@ -79,8 +79,8 @@ fn http_request_resolves_with_canned_response() {
 
     app.eval_module_source(
         r#"
-        import { source, set } from "builtin:tur/std";
-        import { request } from "builtin:tur/net";
+        import { source, set } from "tur:std";
+        import { request } from "tur:net";
         globalThis.__status$ = source(0);
         globalThis.__body$ = source("");
         request({ url: "https://example.test/x", method: "GET" })

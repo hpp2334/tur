@@ -8,7 +8,7 @@ import {
     source,
     type ViewportSize,
     viewportSize$,
-} from "builtin:tur/std";
+} from "tur:std";
 import { CASE_SOURCES } from "../cases";
 import type { LayoutMode, MobileTab } from "./types";
 

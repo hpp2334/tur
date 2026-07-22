@@ -1,4 +1,4 @@
-import { Fragment, Text, view } from "builtin:tur/std";
+import { Fragment, Text, view } from "tur:std";
 
 export default view(() =>
     Fragment({

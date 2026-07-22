@@ -214,13 +214,13 @@ Each view is one file, one default export, no side effects at module load.
 ### 4.1 Import order
 
 ```ts
-// 1. builtin:tur/std primitives
-import { Color, Column, Container, /* ... */ } from "builtin:tur/std";
+// 1. tur:std primitives
+import { Color, Column, Container, /* ... */ } from "tur:std";
 // 2. Local utilities
 import { tokens } from "./tokens";
 import { Button } from "./views/Button";
 // 3. Types (type-only import)
-import type { Element } from "builtin:tur/std";
+import type { Element } from "tur:std";
 ```
 
 ### 4.2 The no-hex lint rule
@@ -251,7 +251,7 @@ This makes any new `Color.hex("...")` outside `tokens.ts` a lint error. The toke
 import {
     type Element, Container, PointerInteract, Row, Text,
     derive, get, mutate, set, source,
-} from "builtin:tur/std";
+} from "tur:std";
 import { tokens } from "../tokens";
 
 export interface ButtonProps {
@@ -568,7 +568,7 @@ Row({
 Auto-run debouncing uses the engine's `sleep` + `launch` task primitives (see `libs/tur-engine/src/core/bridge/task.rs`). `launch` runs a generator function as a cancellable coroutine; `yield sleep(ms)` suspends it. Each keystroke cancels the pending task and launches a fresh one — only the last survives:
 
 ```ts
-import { launch, mutate, sleep, type Task } from "builtin:tur/std";
+import { launch, mutate, sleep, type Task } from "tur:std";
 
 let autoRunTask: Task | null = null;
 

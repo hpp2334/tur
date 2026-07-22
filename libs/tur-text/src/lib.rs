@@ -7,10 +7,10 @@
 //! the `extract_layout_data` bridge helper.
 //!
 //! Unlike `tur-animation`, this crate is **not** a plugin. It is installed
-//! into `builtin:tur/std` by `TurStdPlugin` via [`install_text_feature`],
+//! into `tur:std` by `TurStdPlugin` via [`install_text_feature`],
 //! which registers the boa classes + subsystems and returns the JS factory
 //! fns to be merged into `std_fns`. From JS's perspective Text/Input ship as
-//! part of `builtin:tur/std`.
+//! part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract types —
 //! `tur_engine::core::text::TextLayoutData` and
@@ -35,7 +35,7 @@ use tur_engine::core::bridge::helpers::FnEntry;
 use tur_engine::core::plugin::PluginContext;
 use tur_engine::error::TurError;
 
-/// Wire text feature into `builtin:tur/std`. Called by `TurStdPlugin`'s
+/// Wire text feature into `tur:std`. Called by `TurStdPlugin`'s
 /// `register` impl — text is not a separate plugin, it's a feature installed
 /// into the std module.
 ///
@@ -51,7 +51,7 @@ use tur_engine::error::TurError;
 ///
 /// Returns: the `Text` / `Input` / `createTextEditingController` /
 /// `createUndoController` factory fns, which the caller merges into
-/// `std_fns` before `register_module("builtin:tur/std", ...)`.
+/// `std_fns` before `register_module("tur:std", ...)`.
 pub fn install_text_feature(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {
