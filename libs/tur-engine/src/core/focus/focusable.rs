@@ -1,4 +1,4 @@
-use crate::core::mutation::MutationHandle;
+use crate::core::edgy::mutation::MutationHandle;
 use crate::core::elements::AnyElement;
 use crate::core::focus::{BlurEvent, FocusEvent};
 

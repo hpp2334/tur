@@ -1,5 +1,5 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_text::elements::EditableTextElement;
+use tur_engine::builtin_plugins::text::elements::EditableTextElement;
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"

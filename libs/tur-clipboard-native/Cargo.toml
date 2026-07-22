@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-tur-clipboard-capability = { workspace = true }
+tur-engine = { workspace = true, default-features = false }
 tracing = { workspace = true }
 
 # `arboard` (the actual clipboard backend) only compiles on native targets.

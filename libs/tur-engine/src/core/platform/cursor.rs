@@ -2,8 +2,9 @@
 //! library's plugins.
 //!
 //! These describe host services the engine can't provide itself (cursor
-//! output). Clipboard moved to `tur-clipboard-capability`; HTTP lives in
-//! `tur-net`. The traits here are registered as capability newtypes via
+//! output). HTTP lives in `tur-net`; the clipboard plugin
+//! (`builtin_plugins::clipboard`) bundles its own backend trait +
+//! capability newtype + JS bridge. The traits here are registered as capability newtypes via
 //! [`crate::TurEngineBuilder::capability`] and looked up at runtime via the
 //! [`crate::core::capability::Capabilities`] registry.
 //!

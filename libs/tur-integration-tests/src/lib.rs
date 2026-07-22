@@ -13,21 +13,19 @@ use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_native::NativeFontLoader;
-use tur_engine::core::keyboard::{KeyEvent, KeyEventType, Modifiers};
-use tur_engine::elements::PointerInteractElement;
+use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
+use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{CursorBackend, CursorCap, TurApp, TurEngine};
-use tur_std::TurStdPlugin;
+use tur_engine::TurStdPlugin;
 use tur_net_capability::{
     Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin,
 };
-use tur_clipboard_capability::{
-    Clipboard, ClipboardBackend, TurClipboardPlugin,
-};
+use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::{Cursor};
 
@@ -601,7 +599,7 @@ impl TurTestApp {
     }
 
     pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
-        use tur_engine::elements::MouseRegionElement;
+        use tur_engine::builtin_plugins::gesture::MouseRegionElement;
         self.inner.with_element(id, |e| {
             e.cast::<MouseRegionElement>()
                 .map(|m| m.has_region_callbacks())
@@ -714,7 +712,7 @@ impl TurTestApp {
     /// inserts `text` into the focused editable.
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner
-            .push_platform_event(tur_clipboard_capability::platform_paste(text.to_string()));
+            .push_platform_event(tur_engine::platform_paste(text.to_string()));
         self.ensure_flushed();
     }
 

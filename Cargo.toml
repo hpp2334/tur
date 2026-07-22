@@ -3,13 +3,7 @@ resolver = "3"
 members = [
     "libs/tur-async",
     "libs/tur-engine",
-    "libs/tur-std",
     "libs/tur-animation",
-    "libs/tur-text",
-    "libs/tur-image",
-    "libs/tur-scroll",
-    "libs/tur-lazy-container",
-    "libs/tur-clipboard-capability",
     "libs/tur-clipboard-wasm",
     "libs/tur-clipboard-native",
     "libs/tur-net-capability",
@@ -31,13 +25,7 @@ repository = "https://github.com/hpp2334/tur"
 [workspace.dependencies]
 tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
-tur-std = { path = "libs/tur-std" }
 tur-animation = { path = "libs/tur-animation" }
-tur-text = { path = "libs/tur-text" }
-tur-image = { path = "libs/tur-image" }
-tur-scroll = { path = "libs/tur-scroll" }
-tur-lazy-container = { path = "libs/tur-lazy-container" }
-tur-clipboard-capability = { path = "libs/tur-clipboard-capability" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
 tur-clipboard-native = { path = "libs/tur-clipboard-native" }
 tur-net-capability = { path = "libs/tur-net-capability" }

@@ -28,7 +28,7 @@ fn std_module_imports_and_renders() {
     }
 
     let root = app.dev_tool_element_tree().expect("tree mounted");
-    assert_eq!(root.name, "tur_flex");
+    assert_eq!(root.name, "tur_root", "root is the engine's generic wrapper");
     let inner = app.dev_tool_get_element(root.children[0]).expect("inner");
     assert_eq!(inner.name, "tur_flex");
     assert_eq!(inner.children.len(), 2, "inner Column should have two SizedBoxes");

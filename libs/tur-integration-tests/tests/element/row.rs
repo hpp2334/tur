@@ -11,7 +11,7 @@ fn row_basic_horizontal_stacking() {
         let root = tree.root_element().unwrap();
         assert_eq!(
             root.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
+            ElementKind::new("tur_root")
         );
         assert_eq!(root.children.len(), 1);
 

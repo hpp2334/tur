@@ -1,11 +1,11 @@
 
 use boa_engine::{Context, JsValue};
 
-use crate::core::bridge::TurJsContext;
+use crate::core::js_runtime::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree};
 use crate::core::layout::SubscribeCx;
-use crate::core::reactive::{Readable, ReactiveReadStore, SubscriberId};
+use crate::core::edgy::reactive::{Readable, ReactiveReadStore, SubscriberId};
 use crate::core::view::build_cx::controller_handles;
 use crate::core::view::{ViewCx, View};
 
@@ -278,7 +278,7 @@ impl ViewCx for SharedViewCx {
     fn node_tree(&self) -> NodeTree {
         controller_handles(&self.js_ctx).0
     }
-    fn mutation_queue(&self) -> std::rc::Rc<std::cell::RefCell<crate::core::mutation::PendingMutationInvocationQueue>> {
+    fn mutation_queue(&self) -> std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>> {
         controller_handles(&self.js_ctx).1
     }
     fn dirty(&self) -> std::rc::Rc<std::cell::Cell<bool>> {

@@ -9,7 +9,7 @@ use tur_engine::core::capability::{Capability, CapabilityDecls};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 use tur_engine::TurEngine;
-use tur_std::TurStdPlugin;
+use tur_engine::TurStdPlugin;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_native::NativeFontLoader;
 

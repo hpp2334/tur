@@ -1,5 +1,5 @@
-use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::event::ImeEvent;
+use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
+use crate::core::platform::ImeEvent;
 use std::cell::Cell;
 
 pub struct ElementOnImeContext<'a> {

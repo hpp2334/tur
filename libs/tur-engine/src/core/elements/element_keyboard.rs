@@ -1,6 +1,6 @@
-use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::event::queue::AppEventQueue;
-use crate::core::keyboard::KeyEvent;
+use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
+use crate::core::app::AppEventQueue;
+use crate::core::platform::key_event::KeyEvent;
 use std::cell::Cell;
 
 pub struct ElementOnKeyboardContext<'a> {
@@ -31,7 +31,7 @@ impl<'a> ElementOnKeyboardContext<'a> {
     }
 
     /// Borrow the engine-internal event queue so callers can enqueue
-    /// domain-specific [`AppEvent::Custom`](crate::core::event::AppEvent::Custom)
+    /// domain-specific [`AppEvent::Custom`](crate::core::app::AppEvent::Custom)
     /// payloads (e.g. clipboard write requests) via the matching capability
     /// crate's helper. The engine itself no longer owns clipboard-specific
     /// event-construction helpers.

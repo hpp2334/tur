@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 
-use tur_engine::core::bridge::JsProps;
+use tur_engine::core::js_runtime::JsProps;
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::{AnyElement, ElementTrace};
 use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};

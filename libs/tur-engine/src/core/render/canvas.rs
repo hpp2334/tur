@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::core::render::{Brush, Color};
+use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{Geometry, Offset, Size};
 use vello_common::kurbo::Affine;
 

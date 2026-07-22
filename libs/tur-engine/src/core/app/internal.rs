@@ -3,14 +3,10 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::Clock;
-use boa_engine::object::JsObject;
-use boa_engine::{js_string, JsValue};
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::AsyncExecutor;
-use crate::core::reactive::Source;
-use crate::core::bridge::TurJobExecutor;
-use crate::core::bridge::TurJsContext;
+use crate::core::async_::{AsyncExecutor, TurJobExecutor};
+use crate::core::js_runtime::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::subsystem::Subsystem;
 
@@ -51,14 +47,6 @@ pub struct TurAppInternal {
     /// `ClipboardWriteSubsystem` to perform async platform work without
     /// blocking the sync flush loop.
     pub(crate) async_executor: Rc<AsyncExecutor>,
-    /// Engine-owned `viewportSize$` reactive source handle. `None` only until
-    /// `TurEngineBuilder::build` creates it (right after `new`). Synced each
-    /// frame in `flush` from `app_context.size`.
-    pub(crate) viewport_size: Option<Source<JsValue>>,
-    /// Last `(width, height)` pushed into `viewport_size` — guards against
-    /// spurious stale marking (`set_source` compares `JsValue` by object
-    /// identity, so a fresh `{w,h}` object would otherwise dirty every frame).
-    pub(crate) last_viewport: Cell<(f64, f64)>,
     /// Plugin-registered flush subsystems. Each is `flush`-ed once per
     /// `flush()` call (= once per frame), in registration order, before
     /// `flush_reactive`. The same `Rc<RefCell<…>>` is shared with
@@ -75,10 +63,10 @@ impl TurAppInternal {
         clock: std::rc::Rc<dyn Clock>,
     ) -> Self {
         use crate::core::elements::NodeTree;
-        use crate::core::mutation::PendingMutationInvocationQueue;
+        use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::focus::FocusManager;
         use crate::core::image_resource::ImageResourceMap;
-        use crate::core::reactive::Store;
+        use crate::core::edgy::reactive::Store;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
@@ -124,8 +112,6 @@ impl TurAppInternal {
             app_context: Rc::new(RefCell::new(app_context)),
             executor,
             async_executor,
-            viewport_size: None,
-            last_viewport: Cell::new((-1.0, -1.0)),
             subsystems: Rc::new(RefCell::new(Vec::new())),
         }
     }
@@ -153,9 +139,14 @@ impl TurAppInternal {
             let handled_events = self.flush_app_events(boa_context);
 
             // Keep the engine-owned `viewportSize$` atom in sync with the
-            // current canvas size (updated by `ResizeSubsystem` via `cx.size`).
-            // Runs before `flush_reactive` so subscribers re-layout in-frame.
-            self.sync_viewport_size(boa_context);
+            // current screen logical size (updated by `ResizeSubsystem` via
+            // `cx.screen_logical_size`). Runs before `flush_reactive` so
+            // subscribers re-layout in-frame.
+            {
+                let store = self.js_context.store.clone();
+                let ctx = self.app_context.borrow();
+                ctx.screen.sync_source(&store, boa_context);
+            }
 
             // Subsystem tick — runs once per `flush()` call (= once per
             // frame), in registration order. Each subsystem owns its own
@@ -182,7 +173,7 @@ impl TurAppInternal {
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
                     renderer: ctx.renderer.as_mut(),
-                    size: &mut ctx.size,
+                    screen_logical_size: &mut ctx.screen.logical_size,
                     need_paint: &need_paint,
                     async_executor: &ctx.async_executor,
                     capabilities: &ctx.capabilities,
@@ -288,38 +279,6 @@ impl TurAppInternal {
             rendered: needs_render,
             schedule,
         })
-    }
-
-    /// Build a `{width, height}` JS object (CSS pixels) — the value shape of
-    /// the `viewportSize$` atom. Consumed by `build` (initial value) and
-    /// `sync_viewport_size` (per-resize update).
-    pub(crate) fn viewport_js(
-        boa: &mut boa_engine::Context,
-        width: f64,
-        height: f64,
-    ) -> JsValue {
-        let obj = JsObject::with_object_proto(boa.intrinsics());
-        let _ = obj.create_data_property(js_string!("width"), JsValue::from(width), boa);
-        let _ = obj.create_data_property(js_string!("height"), JsValue::from(height), boa);
-        obj.into()
-    }
-
-    /// Push the current canvas size into the `viewportSize$` atom if it has
-    /// changed since the last sync. The `last_viewport` guard is essential:
-    /// `set_source` compares `JsValue` by object identity, so rebuilding the
-    /// `{width, height}` object every frame would mark the atom stale and
-    /// trigger a spurious re-layout on every frame.
-    fn sync_viewport_size(&self, boa: &mut boa_engine::Context) {
-        let Some(src) = self.viewport_size else {
-            return;
-        };
-        let (width, height) = self.app_context.borrow().size;
-        if (width, height) == self.last_viewport.get() {
-            return;
-        }
-        self.last_viewport.set((width, height));
-        let value = Self::viewport_js(boa, width, height);
-        self.js_context.store.bridge().set_source(src, value);
     }
 
     /// Drain the reactive store and mark affected tree nodes dirty via the

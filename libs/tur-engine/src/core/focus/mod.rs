@@ -6,7 +6,7 @@ pub use focusable::Focusable;
 use boa_engine::{Context, JsValue};
 
 use crate::core::element::ElementNodeId;
-use crate::core::mutation::IntoJsArgs;
+use crate::core::edgy::mutation::IntoJsArgs;
 
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
@@ -114,7 +114,7 @@ impl FocusManager {
     pub fn flush_pending(
         &mut self,
         tree: &crate::core::elements::NodeTreeData,
-        queue: &mut crate::core::mutation::PendingMutationInvocationQueue,
+        queue: &mut crate::core::edgy::mutation::PendingMutationInvocationQueue,
     ) -> Vec<(ElementNodeId, bool)> {
         let changes = self.drain_pending();
         if changes.is_empty() {

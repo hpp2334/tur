@@ -2,9 +2,9 @@ use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use boa_engine::context::time::{Clock, JsInstant};
 use tur_engine::core::app::NextFrame;
-use tur_engine::core::event::{ImeEvent, PlatformEvent, PointerInput};
+use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
 use crate::fonts::WasmFontLoader;
-use tur_engine::core::keyboard::{KeyEvent, KeyEventType, Modifiers};
+use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_engine::{CursorCap, LoopDriver, TurApp};
 use tur_engine::core::layout::Offset;
@@ -313,7 +313,7 @@ impl TurWasmApp {
                 }))
                 .capability(Clipboard::new(WasmClipboard))
                 .capability(Http::new(WasmHttp))
-                .plugin(tur_std::TurStdPlugin)
+                .plugin(tur_engine::TurStdPlugin)
                 .plugin(tur_animation::TurAnimationPlugin)
                 .plugin(TurClipboardPlugin)
                 .plugin(TurNetPlugin)
@@ -395,7 +395,7 @@ impl TurWasmApp {
                                 position: Offset::new(x, y),
                                 button,
                                 time_ms,
-                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
+                                device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -421,7 +421,7 @@ impl TurWasmApp {
                             PointerInput::PointerUp {
                                 position: Offset::new(x, y),
                                 button,
-                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
+                                device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -445,7 +445,7 @@ impl TurWasmApp {
                         s.app.push_platform_event(PlatformEvent::Pointer(
                             PointerInput::PointerMove {
                                 position: Offset::new(x, y),
-                                device: tur_engine::core::event::PointerDeviceKind::Mouse,
+                                device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             },
                         ));
                     }
@@ -529,7 +529,7 @@ impl TurWasmApp {
                             position: Offset::new(x, y),
                             button: tur_engine::core::layout::MouseButton::Left,
                             time_ms,
-                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                            device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         },
                     ));
                 });
@@ -558,7 +558,7 @@ impl TurWasmApp {
                     s.app.push_platform_event(PlatformEvent::Pointer(
                         PointerInput::PointerMove {
                             position: Offset::new(x, y),
-                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                            device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         },
                     ));
                 });
@@ -580,7 +580,7 @@ impl TurWasmApp {
                                 PointerInput::PointerUp {
                                     position: Offset::new(0.0, 0.0),
                                     button: tur_engine::core::layout::MouseButton::Left,
-                                    device: tur_engine::core::event::PointerDeviceKind::Touch,
+                                    device: tur_engine::core::platform::PointerDeviceKind::Touch,
                                 },
                             ));
                         }
@@ -597,7 +597,7 @@ impl TurWasmApp {
                         PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button: tur_engine::core::layout::MouseButton::Left,
-                            device: tur_engine::core::event::PointerDeviceKind::Touch,
+                            device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         },
                     ));
                 });
@@ -616,7 +616,7 @@ impl TurWasmApp {
                     if let Some(s) = guard.as_ref() {
                         s.app.push_platform_event(PlatformEvent::Pointer(
                             PointerInput::PointerCancel {
-                                device: tur_engine::core::event::PointerDeviceKind::Touch,
+                                device: tur_engine::core::platform::PointerDeviceKind::Touch,
                             },
                         ));
                     }
@@ -813,7 +813,7 @@ impl TurWasmApp {
                     }
                     let guard = paste_state.borrow();
                     if let Some(s) = guard.as_ref() {
-                        s.app.push_platform_event(tur_clipboard_capability::platform_paste(text));
+                        s.app.push_platform_event(tur_engine::platform_paste(text));
                     }
                 });
 

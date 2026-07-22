@@ -1,5 +1,5 @@
 use tur_engine::core::element::ElementNodeId;
-use tur_text::elements::TextElement;
+use tur_engine::builtin_plugins::text::elements::TextElement;
 use tur_integration_tests::TurTestApp;
 use tur_engine::core::platform::Cursor;
 

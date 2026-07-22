@@ -19,7 +19,7 @@ use boa_engine::object::JsObject;
 use boa_engine::property::PropertyKey;
 use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use tur_engine::core::bridge::helpers::{extract_ctx, FnEntry, Ptr};
+use tur_engine::core::js_runtime::helpers::{extract_ctx, FnEntry, Ptr};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 /// Bridge function table entries for `builtin:tur/net`.

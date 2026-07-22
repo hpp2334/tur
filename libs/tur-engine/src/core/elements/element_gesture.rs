@@ -1,9 +1,10 @@
 use crate::core::layout::{MouseButton, Offset};
 
 use crate::core::element::ElementNodeId;
-use crate::core::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::event::queue::AppEventQueue;
-use crate::core::event::{AppEvent, PointerDeviceKind};
+use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
+use crate::core::app::AppEventQueue;
+use crate::core::app::AppEvent;
+use crate::core::platform::PointerDeviceKind;
 use crate::core::focus::FocusManager;
 use std::cell::Cell;
 

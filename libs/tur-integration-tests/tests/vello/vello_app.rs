@@ -6,12 +6,12 @@ use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::event::PlatformEvent;
+use tur_engine::core::platform::PlatformEvent;
 use tur_native::NativeFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
-use tur_std::TurStdPlugin;
+use tur_engine::TurStdPlugin;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TurVelloError {
