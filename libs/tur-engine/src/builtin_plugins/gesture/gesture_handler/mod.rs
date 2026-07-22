@@ -1,10 +1,6 @@
 mod arena;
 mod composer;
 
-use std::rc::Rc;
-
-use boa_engine::context::time::Clock;
-
 use crate::core::elements::{ComposedGestureEvent, ElementOnGestureContext};
 use crate::core::app::AppEvent;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
@@ -25,20 +21,20 @@ use composer::GestureEventComposer;
 pub struct GestureSubsystem {
     arena: GestureArena,
     composer: GestureEventComposer,
-    /// Engine clock, sampled on each touch move/up to feed the arena's
-    /// velocity tracker. Touch input lacks timestamps on `PointerMove`/
-    /// `PointerUp` (only `PointerDown` carries one), so we sample here at
-    /// flush time instead of threading timestamps through `PointerInput`.
-    clock: Rc<dyn Clock>,
 }
 
 impl GestureSubsystem {
-    pub fn new(clock: Rc<dyn Clock>) -> Self {
+    pub fn new() -> Self {
         Self {
             arena: GestureArena::new(),
             composer: GestureEventComposer::new(),
-            clock,
         }
+    }
+}
+
+impl Default for GestureSubsystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -62,25 +58,25 @@ impl Subsystem for GestureSubsystem {
                     self.handle_touch_pointer_down(cx, *position, *time_ms);
                 }
             },
-            PlatformEvent::Pointer(PointerInput::PointerMove { position, device }) => match device {
+            PlatformEvent::Pointer(PointerInput::PointerMove { position, device, time_ms }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_move(cx, *position);
                 }
                 PointerDeviceKind::Touch => {
-                    let now_ms = self.clock.now().millis_since_epoch();
-                    self.handle_touch_pointer_move(cx, *position, now_ms);
+                    self.handle_touch_pointer_move(cx, *position, *time_ms);
                 }
             },
             PlatformEvent::Pointer(PointerInput::PointerUp {
                 position,
                 button,
                 device,
+                time_ms,
             }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_up(cx, *position, *button);
                 }
                 PointerDeviceKind::Touch => {
-                    self.handle_touch_pointer_up(cx, *position);
+                    self.handle_touch_pointer_up(cx, *position, *time_ms);
                 }
             },
             PlatformEvent::Pointer(PointerInput::PointerCancel { device }) => match device {
@@ -347,8 +343,9 @@ impl GestureSubsystem {
         &mut self,
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
+        time_ms: u64,
     ) {
-        let outcome = self.arena.on_touch_up();
+        let outcome = self.arena.on_touch_up(position, time_ms);
         match outcome {
             TouchUpOutcome::DragEnded => {
                 let path: Vec<ElementNodeId> = self.composer.pointer_down_path().to_vec();

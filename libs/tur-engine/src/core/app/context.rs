@@ -103,6 +103,7 @@ impl TurAppContext {
         if let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
+            time_ms: _,
         }) = event
         {
             self.shell.set_pointer_position(Some(*position));

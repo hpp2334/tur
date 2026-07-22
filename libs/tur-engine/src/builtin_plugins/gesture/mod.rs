@@ -31,7 +31,7 @@ use crate::error::TurError;
 pub fn install_gesture(
     ctx: &mut PluginContext<'_>,
 ) -> Result<Vec<FnEntry>, TurError> {
-    ctx.register_subsystem(Box::new(gesture_handler::GestureSubsystem::new(ctx.clock())));
+    ctx.register_subsystem(Box::new(gesture_handler::GestureSubsystem::new()));
     ctx.register_subsystem(Box::new(pointer_region_handler::PointerSubsystem::new()));
     let mut v: Vec<FnEntry> = Vec::new();
     v.extend(mouse_region::bridge::fns());

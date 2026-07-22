@@ -104,10 +104,12 @@ pub enum PointerInput {
         position: Offset,
         button: MouseButton,
         device: PointerDeviceKind,
+        time_ms: u64,
     },
     PointerMove {
         position: Offset,
         device: PointerDeviceKind,
+        time_ms: u64,
     },
     /// The platform cancelled an in-progress pointer sequence (e.g.
     /// `touchcancel` from the browser). The arena releases any captured drag

@@ -7,7 +7,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::FixedClock;
+use boa_engine::context::time::{Clock, FixedClock};
 use boa_engine::NativeFunction;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
@@ -415,11 +415,13 @@ impl TurTestApp {
                 device: PointerDeviceKind::Mouse,
             }));
         self.ensure_flushed();
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
         self.ensure_flushed();
     }
@@ -490,20 +492,24 @@ impl TurTestApp {
     }
 
     pub fn pointer_move(&mut self, x: f64, y: f64) {
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
         self.settle();
     }
 
     pub fn pointer_up(&mut self, x: f64, y: f64) {
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
         self.settle();
     }
@@ -523,11 +529,13 @@ impl TurTestApp {
     }
 
     pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button,
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
         self.settle();
     }
@@ -556,19 +564,23 @@ impl TurTestApp {
     }
 
     pub fn pointer_move_no_flush(&mut self, x: f64, y: f64) {
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
                 position: Offset::new(x, y),
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
     }
 
     pub fn pointer_up_no_flush(&mut self, x: f64, y: f64) {
+        let time_ms = self.synthetic_time_ms;
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
                 button: MouseButton::Left,
                 device: PointerDeviceKind::Mouse,
+                time_ms,
             }));
     }
 
@@ -580,6 +592,100 @@ impl TurTestApp {
                 position: Offset::new(x, y),
             });
         self.ensure_flushed();
+    }
+
+    /// Simulate a touch drag from `start` to `end` in `steps` moves, advancing
+    /// the deterministic clock by one frame (`FRAME_STEP_MS`) before each move
+    /// is drained so every event carries a distinct, increasing `time_ms`
+    /// (matching how a real browser stamps `event.timeStamp`). Ends with a
+    /// touch-up. Use for touch-scroll / fling tests.
+    pub fn touch_drag(&mut self, start: (f64, f64), end: (f64, f64), steps: usize) {
+        let time_ms = self.clock.now().millis_since_epoch();
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                position: Offset::new(start.0, start.1),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Touch,
+            }));
+        self.settle();
+        for i in 1..=steps {
+            self.clock.forward(FRAME_STEP_MS);
+            let t = i as f64 / steps as f64;
+            let x = start.0 + (end.0 - start.0) * t;
+            let y = start.1 + (end.1 - start.1) * t;
+            let time_ms = self.clock.now().millis_since_epoch();
+            self.inner
+                .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                    position: Offset::new(x, y),
+                    device: PointerDeviceKind::Touch,
+                    time_ms,
+                }));
+            let _ = self.inner.run_frame();
+        }
+        self.clock.forward(FRAME_STEP_MS);
+        let time_ms = self.clock.now().millis_since_epoch();
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                position: Offset::new(end.0, end.1),
+                button: MouseButton::Left,
+                device: PointerDeviceKind::Touch,
+                time_ms,
+            }));
+        let _ = self.inner.run_frame();
+        self.settle();
+    }
+
+    /// Push a touch pointer-down with an explicit event `time_ms` without
+    /// flushing. For the batched-moves fling regression test, which pushes a
+    /// whole down→moves→up sequence carrying distinct real timestamps but
+    /// drains it in a single `pump()` (simulating a mobile browser coalescing
+    /// several touchmoves into one frame).
+    pub fn push_touch_down(&mut self, x: f64, y: f64, time_ms: u64) {
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Touch,
+            }));
+    }
+
+    /// Push a touch pointer-move with an explicit event `time_ms` without
+    /// flushing. See [`Self::push_touch_down`].
+    pub fn push_touch_move(&mut self, x: f64, y: f64, time_ms: u64) {
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                position: Offset::new(x, y),
+                device: PointerDeviceKind::Touch,
+                time_ms,
+            }));
+    }
+
+    /// Push a touch pointer-up with an explicit event `time_ms` without
+    /// flushing. See [`Self::push_touch_down`].
+    pub fn push_touch_up(&mut self, x: f64, y: f64, time_ms: u64) {
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                device: PointerDeviceKind::Touch,
+                time_ms,
+            }));
+    }
+
+    /// Push a touch pointer-down at `(x, y)` and settle. Pairs with
+    /// [`Self::touch_up`] for tap / cancellation tests.
+    pub fn touch_down(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Touch,
+            }));
+        self.settle();
     }
 
     /// Drive `run_frame` for a few iterations to settle cascading reactive

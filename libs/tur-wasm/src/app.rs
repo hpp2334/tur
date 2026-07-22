@@ -417,11 +417,13 @@ impl TurWasmApp {
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
                         let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
+                        let time_ms = event.time_stamp() as u64;
                         s.app.push_platform_event(PlatformEvent::Pointer(
                             PointerInput::PointerUp {
                                 position: Offset::new(x, y),
                                 button,
                                 device: tur_engine::core::platform::PointerDeviceKind::Mouse,
+                                time_ms,
                             },
                         ));
                     }
@@ -442,10 +444,12 @@ impl TurWasmApp {
                         let rect = s._canvas.get_bounding_client_rect();
                         let x = event.client_x() as f64 - rect.left();
                         let y = event.client_y() as f64 - rect.top();
+                        let time_ms = event.time_stamp() as u64;
                         s.app.push_platform_event(PlatformEvent::Pointer(
                             PointerInput::PointerMove {
                                 position: Offset::new(x, y),
                                 device: tur_engine::core::platform::PointerDeviceKind::Mouse,
+                                time_ms,
                             },
                         ));
                     }
@@ -555,10 +559,12 @@ impl TurWasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = t.client_x() as f64 - rect.left();
                     let y = t.client_y() as f64 - rect.top();
+                    let time_ms = event.time_stamp() as u64;
                     s.app.push_platform_event(PlatformEvent::Pointer(
                         PointerInput::PointerMove {
                             position: Offset::new(x, y),
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
+                            time_ms,
                         },
                     ));
                 });
@@ -576,11 +582,13 @@ impl TurWasmApp {
                     let Some(t) = event.changed_touches().get(0) else {
                         let guard = touch_end_state.borrow();
                         if let Some(s) = guard.as_ref() {
+                            let time_ms = event.time_stamp() as u64;
                             s.app.push_platform_event(PlatformEvent::Pointer(
                                 PointerInput::PointerUp {
                                     position: Offset::new(0.0, 0.0),
                                     button: tur_engine::core::layout::MouseButton::Left,
                                     device: tur_engine::core::platform::PointerDeviceKind::Touch,
+                                    time_ms,
                                 },
                             ));
                         }
@@ -593,11 +601,13 @@ impl TurWasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = t.client_x() as f64 - rect.left();
                     let y = t.client_y() as f64 - rect.top();
+                    let time_ms = event.time_stamp() as u64;
                     s.app.push_platform_event(PlatformEvent::Pointer(
                         PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button: tur_engine::core::layout::MouseButton::Left,
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
+                            time_ms,
                         },
                     ));
                 });
