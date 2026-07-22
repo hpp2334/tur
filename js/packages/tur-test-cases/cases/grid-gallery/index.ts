@@ -1,27 +1,27 @@
 import {
     Axis,
     Color,
+    Column,
     Container,
+    CrossAxisAlignment,
+    derive,
     type Element,
     Expanded,
     Grid,
+    get,
     MainAxisSize,
     MouseRegion,
-    mutate,
     type Mutation,
+    mutate,
     PointerInteract,
     type PointerInteractEvent,
     type Readable,
     Row,
-    SizedBox,
     ScrollView,
-    Text,
-    Column,
-    CrossAxisAlignment,
-    derive,
-    get,
+    SizedBox,
     set,
     source,
+    Text,
     view,
 } from "tur:std";
 
@@ -51,13 +51,28 @@ function hslToHex(h: number, s: number, l: number): string {
     const c = (1 - Math.abs(2 * light - 1)) * sat;
     const hp = h / 60;
     const x = c * (1 - Math.abs((hp % 2) - 1));
-    let r1 = 0, g1 = 0, b1 = 0;
-    if (hp < 1) { r1 = c; g1 = x; }
-    else if (hp < 2) { r1 = x; g1 = c; }
-    else if (hp < 3) { g1 = c; b1 = x; }
-    else if (hp < 4) { g1 = x; b1 = c; }
-    else if (hp < 5) { r1 = x; b1 = c; }
-    else { r1 = c; b1 = x; }
+    let r1 = 0,
+        g1 = 0,
+        b1 = 0;
+    if (hp < 1) {
+        r1 = c;
+        g1 = x;
+    } else if (hp < 2) {
+        r1 = x;
+        g1 = c;
+    } else if (hp < 3) {
+        g1 = c;
+        b1 = x;
+    } else if (hp < 4) {
+        g1 = x;
+        b1 = c;
+    } else if (hp < 5) {
+        r1 = x;
+        b1 = c;
+    } else {
+        r1 = c;
+        b1 = x;
+    }
     const m = light - c / 2;
     const r = Math.round((r1 + m) * 255);
     const g = Math.round((g1 + m) * 255);
@@ -78,7 +93,9 @@ function Pill(props: {
                 padding: 7,
                 borderRadius: 7,
                 color: derive(() =>
-                    get(props.active) ? Color.hex("#6366f1") : Color.hex("#1e293b"),
+                    get(props.active)
+                        ? Color.hex("#6366f1")
+                        : Color.hex("#1e293b"),
                 ),
                 children: [
                     Text({
@@ -140,8 +157,9 @@ export default view(() =>
                     }),
                     SizedBox({ height: 4 }),
                     Text({
-                        text: derive(() =>
-                            `tile #${get(selected$)} · ${aspectLabel()} · maxExtent ${get(maxExtent$)}`,
+                        text: derive(
+                            () =>
+                                `tile #${get(selected$)} · ${aspectLabel()} · maxExtent ${get(maxExtent$)}`,
                         ),
                         fontSize: 12,
                         color: Color.hex("#94a3b8"),
@@ -152,20 +170,28 @@ export default view(() =>
                         children: [
                             Pill({
                                 label: "1:1",
-                                active: derive(() => Math.abs(get(aspect$) - 1) < 0.01),
-                                onClick: mutate((_ctx) => { set(aspect$, 1); }),
+                                active: derive(
+                                    () => Math.abs(get(aspect$) - 1) < 0.01,
+                                ),
+                                onClick: mutate((_ctx) => {
+                                    set(aspect$, 1);
+                                }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "16:9",
                                 active: derive(() => get(aspect$) > 1),
-                                onClick: mutate((_ctx) => { set(aspect$, 16 / 9); }),
+                                onClick: mutate((_ctx) => {
+                                    set(aspect$, 16 / 9);
+                                }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "9:16",
                                 active: derive(() => get(aspect$) < 1),
-                                onClick: mutate((_ctx) => { set(aspect$, 9 / 16); }),
+                                onClick: mutate((_ctx) => {
+                                    set(aspect$, 9 / 16);
+                                }),
                             }),
                         ],
                     }),
@@ -176,19 +202,25 @@ export default view(() =>
                             Pill({
                                 label: "Dense",
                                 active: derive(() => get(maxExtent$) === 95),
-                                onClick: mutate((_ctx) => { set(maxExtent$, 95); }),
+                                onClick: mutate((_ctx) => {
+                                    set(maxExtent$, 95);
+                                }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Normal",
                                 active: derive(() => get(maxExtent$) === 150),
-                                onClick: mutate((_ctx) => { set(maxExtent$, 150); }),
+                                onClick: mutate((_ctx) => {
+                                    set(maxExtent$, 150);
+                                }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Sparse",
                                 active: derive(() => get(maxExtent$) === 220),
-                                onClick: mutate((_ctx) => { set(maxExtent$, 220); }),
+                                onClick: mutate((_ctx) => {
+                                    set(maxExtent$, 220);
+                                }),
                             }),
                         ],
                     }),
@@ -202,12 +234,19 @@ export default view(() =>
                                 ScrollView({
                                     axis: Axis.Vertical,
                                     child: Grid({
-                                        maxCrossAxisExtent: derive(() => get(maxExtent$)),
-                                        childAspectRatio: derive(() => get(aspect$)),
+                                        maxCrossAxisExtent: derive(() =>
+                                            get(maxExtent$),
+                                        ),
+                                        childAspectRatio: derive(() =>
+                                            get(aspect$),
+                                        ),
                                         crossAxisSpacing: 8,
                                         mainAxisSpacing: 8,
                                         queryKey: ["grid-gallery"],
-                                        children: Array.from({ length: TILE_COUNT }, (_, i) => tile(i)),
+                                        children: Array.from(
+                                            { length: TILE_COUNT },
+                                            (_, i) => tile(i),
+                                        ),
                                     }),
                                 }),
                             ],
