@@ -47,12 +47,19 @@ pub struct TurAppInternal {
     /// `ClipboardWriteSubsystem` to perform async platform work without
     /// blocking the sync flush loop.
     pub(crate) async_executor: Rc<AsyncExecutor>,
-    /// Plugin-registered flush subsystems. Each is `flush`-ed once per
-    /// `flush()` call (= once per frame), in registration order, before
-    /// `flush_reactive`. The same `Rc<RefCell<…>>` is shared with
-    /// [`PluginContext`](crate::core::plugin::PluginContext) so plugins can
-    /// push into the vec during `register`.
+    /// Plugin-registered flush subsystems. Each is `flush`-ed **every
+    /// fixed-point iteration** of `flush()` (possibly several times per
+    /// frame), in registration order, before `flush_reactive`. Time-driven
+    /// subsystems self-gate via the per-`flush()` `frame_id` so the clock
+    /// advances at most once per frame. The same `Rc<RefCell<…>>` is shared
+    /// with [`PluginContext`](crate::core::plugin::PluginContext) so plugins
+    /// can push into the vec during `register`.
     pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
+    /// Per-`flush()` epoch exposed to subsystems via
+    /// [`crate::core::subsystem::SubsystemFlushContext::frame_id`].
+    /// Incremented once at the top of each `flush()` call; stable across the
+    /// fixed-point iterations within that call.
+    pub(crate) frame_id: Cell<u64>,
 }
 
 impl TurAppInternal {
@@ -114,6 +121,7 @@ impl TurAppInternal {
             executor,
             async_executor,
             subsystems: Rc::new(RefCell::new(Vec::new())),
+            frame_id: Cell::new(0),
         }
     }
 
@@ -122,12 +130,27 @@ impl TurAppInternal {
         boa_context: &mut boa_engine::Context,
     ) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
-        let mut subsystems_ticked = false;
-        // Aggregates across all iterations of the fixed-point loop. Once any
-        // subsystem requested a frame, the post-loop schedule decision must
-        // honour it; once any subsystem dirtied state, the post-loop
-        // `need_paint` decision must honour it.
-        let mut subsystem_request_frame = false;
+        // Per-`flush()` epoch, bumped once per call. Stable across the
+        // fixed-point iterations below so subsystems can self-gate "advance
+        // once per frame" (clock sampling) via `cx.frame_id()`.
+        let frame_id = {
+            let next = self.frame_id.get().wrapping_add(1);
+            self.frame_id.set(next);
+            next
+        };
+        // Per-iteration dirty flag (subsystems flip via `cx.mark_dirty`) and
+        // per-`flush()` schedule accumulator (subsystems flip via
+        // `cx.request_next_frame`). `sub_dirty` is taken after each iteration
+        // and folded into the per-iteration dirty decision; `sub_request_frame`
+        // accumulates across all iterations and feeds the post-loop schedule.
+        let sub_dirty = Cell::new(false);
+        let sub_request_frame = Cell::new(false);
+        // Bundled channels shared with every subsystem context this `flush()`.
+        let signals = crate::core::subsystem::FlushSignals {
+            frame_id,
+            sub_dirty: &sub_dirty,
+            sub_request_frame: &sub_request_frame,
+        };
 
         loop {
             // Drive spawned Rust futures one poll step. Completions they
@@ -137,22 +160,26 @@ impl TurAppInternal {
             let async_progress = self.async_executor.tick();
             self.async_executor.drain_completions(boa_context);
 
-            let handled_events = self.flush_app_events(boa_context);
+            let handled_events = self.flush_app_events(boa_context, &signals);
 
-            // Subsystem tick — runs once per `flush()` call (= once per
-            // frame), in registration order. Each subsystem owns its own
-            // clock + state; we feed it the boa context and aggregate the
-            // outcomes. Dirtied outcomes force another iteration (the loop
-            // continuation check below); request_frame outcomes carry
-            // forward into the post-loop schedule decision.
+            // Subsystem flush — runs every fixed-point iteration, in
+            // registration order. Each subsystem owns its own clock + state;
+            // time-driven ones self-gate via `cx.frame_id()` so the clock
+            // advances at most once per frame. Subsystems push intent back via
+            // `cx.mark_dirty()` / `cx.request_paint()` / `cx.request_next_frame()`
+            // instead of returning an outcome.
             //
             // Animation (registered via `tur-animation::TurAnimationPlugin`)
             // is the canonical example: it ticks active
-            // `AnimationController`s once per frame here, enqueuing
-            // `onTick`/`onEnd` mutations that fire later in
-            // `flush_pending_mutations`.
-            let subsystem_dirtied = if !subsystems_ticked {
-                subsystems_ticked = true;
+            // `AnimationController`s once per frame here (gated by frame_id),
+            // enqueuing `onTick`/`onEnd` mutations that fire later in
+            // `flush_pending_mutations`, and calls `request_next_frame()`
+            // every iteration a controller is active — including iterations
+            // where a controller was registered mid-frame (e.g. from an
+            // event/lifecycle handler). That is what keeps an animation
+            // started from a callback advancing without waiting for the next
+            // platform input.
+            let subsystem_dirtied = {
                 let need_paint = self.js_context.need_paint.clone();
                 let mut ctx_guard = self.app_context.borrow_mut();
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
@@ -168,20 +195,18 @@ impl TurAppInternal {
                     need_paint: &need_paint,
                     async_executor: &ctx.async_executor,
                     capabilities: &ctx.capabilities,
+                    frame_id: signals.frame_id,
+                    sub_dirty: signals.sub_dirty,
+                    sub_request_frame: signals.sub_request_frame,
                 };
-                let mut dirtied = false;
                 for sub in self.subsystems.borrow_mut().iter_mut() {
-                    let outcome = sub.flush(&mut cx);
-                    if outcome.dirtied {
-                        dirtied = true;
-                    }
-                    if outcome.request_frame {
-                        subsystem_request_frame = true;
-                    }
+                    sub.flush(&mut cx);
                 }
-                dirtied
-            } else {
-                false
+                // `cx` (and its `ctx_guard` borrow) drop here, before the
+                // layout/render borrows below.
+                drop(cx);
+                drop(ctx_guard);
+                sub_dirty.take()
             };
 
         // Reactive flush: drain the store, expand dirty atoms, and dispatch
@@ -256,7 +281,7 @@ impl TurAppInternal {
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
         let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if subsystem_request_frame
+        let schedule = if sub_request_frame.get()
             || (async_pending && async_timer_delay.is_none())
         {
             NextFrame::Vsync
@@ -445,7 +470,11 @@ impl TurAppInternal {
         }
     }
 
-    fn flush_app_events(&self, boa_context: &mut boa_engine::Context) -> bool {
+    fn flush_app_events(
+        &self,
+        boa_context: &mut boa_engine::Context,
+        signals: &crate::core::subsystem::FlushSignals<'_>,
+    ) -> bool {
         let (platform_events, app_events) = {
             let mut ctx = self.app_context.borrow_mut();
             (
@@ -460,15 +489,23 @@ impl TurAppInternal {
         let need_paint = self.js_context.need_paint.clone();
         let mut subsystems = self.subsystems.borrow_mut();
         for event in &platform_events {
-            self.app_context
-                .borrow_mut()
-                .dispatch_platform_event(boa_context, event, &need_paint, &mut subsystems);
+            self.app_context.borrow_mut().dispatch_platform_event(
+                boa_context,
+                event,
+                &need_paint,
+                &mut subsystems,
+                signals,
+            );
         }
 
         for event in &app_events {
-            self.app_context
-                .borrow_mut()
-                .dispatch_app_event(boa_context, event, &need_paint, &mut subsystems);
+            self.app_context.borrow_mut().dispatch_app_event(
+                boa_context,
+                event,
+                &need_paint,
+                &mut subsystems,
+                signals,
+            );
         }
 
         true

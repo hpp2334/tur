@@ -19,11 +19,16 @@
 //!
 //! ## Frequency
 //!
-//! - [`Subsystem::flush`](Subsystem::flush) is called **once per
-//!   `TurAppInternal::flush` call** (= once per frame), not once per
-//!   fixed-point iteration. The engine gates internally so the tick happens
-//!   at most once even when the flush loop iterates multiple times to reach
-//!   quiescence.
+//! - [`Subsystem::flush`](Subsystem::flush) is called **once per fixed-point
+//!   iteration** of `TurAppInternal::flush` (i.e. possibly several times per
+//!   frame, once per iteration until the loop reaches quiescence). A
+//!   subsystem that advances time-driven state (e.g. an animation manager
+//!   sampling the clock) must self-gate so it advances **at most once per
+//!   frame** — use [`SubsystemFlushContext::frame_id`], a per-`flush()` epoch
+//!   that is stable across iterations within one frame but differs across
+//!   frames, and record the last id it advanced for. Signals
+//!   (`mark_dirty` / `request_paint` / `request_next_frame`) are cheap and
+//!   idempotent, so calling them every iteration is fine.
 //! - [`Subsystem::handle_platform_event`] and [`Subsystem::handle_app_event`]
 //!   are called **per drained event**, every fixed-point iteration, in
 //!   registration order. This matches what `AppHandler` did before the
@@ -54,21 +59,26 @@ use crate::core::screen::Screen;
 /// [`handle_app_event`](Self::handle_app_event)). All three methods default to
 /// no-ops, so a subsystem overrides only the kind it cares about.
 ///
+/// `flush` returns nothing — subsystems push intent back into the engine via
+/// the context: [`SubsystemFlushContext::mark_dirty`] (re-layout + paint this
+/// frame), [`SubsystemFlushContext::request_paint`] (paint this frame), and
+/// [`SubsystemFlushContext::request_next_frame`] (schedule the next vsync).
 /// See the [module docs](crate::core::subsystem) for ordering and frequency
 /// guarantees.
 pub trait Subsystem {
-    /// Advance this subsystem's state by one frame. Called once per
-    /// [`TurAppInternal::flush`](crate::core::app::TurAppInternal::flush) —
-    /// not once per fixed-point iteration.
+    /// Advance this subsystem's state. Called **every fixed-point iteration**
+    /// of `TurAppInternal::flush` (possibly several times per frame), in
+    /// registration order across subsystems.
     ///
     /// Implementations should:
-    ///   - query time via their own `Rc<dyn Clock>` (obtained at registration),
+    ///   - gate time-driven work via [`SubsystemFlushContext::frame_id`] so
+    ///     the clock/state advances at most once per frame (a frame spans many
+    ///     iterations),
     ///   - mutate their own state,
-    ///   - return an outcome describing whether the engine should continue
-    ///     iterating the flush loop / schedule the next frame.
-    fn flush(&mut self, _cx: &mut SubsystemFlushContext<'_>) -> SubsystemOutcome {
-        SubsystemOutcome::idle()
-    }
+    ///   - signal the engine via [`SubsystemFlushContext::mark_dirty`] /
+    ///     [`SubsystemFlushContext::request_paint`] /
+    ///     [`SubsystemFlushContext::request_next_frame`].
+    fn flush(&mut self, _cx: &mut SubsystemFlushContext<'_>) {}
 
     /// React to a platform (input) event drained from
     /// [`PlatformEventQueue`](crate::core::platform::PlatformEventQueue).
@@ -88,8 +98,24 @@ pub trait Subsystem {
     fn handle_app_event(&mut self, _cx: &mut SubsystemFlushContext<'_>, _event: &AppEvent) {}
 }
 
+/// Per-`TurAppInternal::flush` signalling channels the engine exposes to
+/// subsystems, bundled so they can be threaded through the per-iteration
+/// `flush` tick and the per-event `dispatch_*` paths as a single reference.
+///
+/// Built once at the top of each `flush()` call; the same reference is shared
+/// with every [`SubsystemFlushContext`] constructed during that call.
+/// `frame_id` is a per-`flush()` epoch (stable across iterations, differs
+/// across calls); `sub_dirty` / `sub_request_frame` are the accumulators
+/// behind [`SubsystemFlushContext::mark_dirty`] /
+/// [`SubsystemFlushContext::request_next_frame`].
+pub struct FlushSignals<'a> {
+    pub frame_id: u64,
+    pub sub_dirty: &'a Cell<bool>,
+    pub sub_request_frame: &'a Cell<bool>,
+}
+
 /// Per-flush context passed to every [`Subsystem`] method. The same shape is
-/// used for the once-per-frame [`Subsystem::flush`] tick and the per-event
+/// used for the per-iteration [`Subsystem::flush`] tick and the per-event
 /// [`Subsystem::handle_platform_event`] / [`Subsystem::handle_app_event`]
 /// dispatch.
 ///
@@ -104,6 +130,22 @@ pub trait Subsystem {
 /// need [`Self::boa`]; subsystems that handle events use the element tree /
 /// focus manager / mutation queue / event queues / renderer /
 /// `screen` / async executor / capability fields.
+///
+/// ## Signalling the engine
+///
+/// Instead of returning an outcome, a `flush` (or event handler) pushes
+/// intent into the engine via:
+///   - [`Self::mark_dirty`] — the subsystem changed layout-affecting state;
+///     the engine re-lays-out and marks the frame for paint this iteration.
+///   - [`Self::request_paint`] — paint this frame (no re-layout necessarily).
+///   - [`Self::request_next_frame`] — schedule the next vsync (e.g. an
+///     animation is still running). This is the signal that keeps time-driven
+///     work advancing frame-to-frame; it accumulates across all iterations of
+///     a single `flush()` and feeds the post-loop schedule decision.
+///
+/// `frame_id` lets a subsystem self-gate "advance once per frame" work (clock
+/// sampling): it is stable across the fixed-point iterations of one
+/// `TurAppInternal::flush` call and differs across `flush` calls.
 pub struct SubsystemFlushContext<'a> {
     /// The engine's boa `Context`. Borrowed for the duration of one subsystem
     /// tick or event dispatch; the borrow is released before the next
@@ -134,6 +176,19 @@ pub struct SubsystemFlushContext<'a> {
     /// subsystems must handle absence gracefully (typically silent drop with
     /// a `tracing::warn!`).
     pub capabilities: &'a Capabilities,
+    /// Per-`flush()` epoch. Stable across the fixed-point iterations of one
+    /// `TurAppInternal::flush` call; differs across `flush` calls. A
+    /// subsystem that samples the clock should advance at most once per frame
+    /// by recording the last `frame_id` it advanced for.
+    pub frame_id: u64,
+    /// Accumulator for [`Self::mark_dirty`]: any subsystem that flips it
+    /// forces the engine to re-lay-out (and marks the frame for paint) this
+    /// iteration. Owned by the flush loop; `.take()`n after each iteration.
+    pub sub_dirty: &'a Cell<bool>,
+    /// Accumulator for [`Self::request_next_frame`]: any subsystem that flips
+    /// it makes the engine schedule the next vsync. Owned by the flush loop;
+    /// read once after the loop to decide the next-frame schedule.
+    pub sub_request_frame: &'a Cell<bool>,
 }
 
 impl<'a> SubsystemFlushContext<'a> {
@@ -142,36 +197,29 @@ impl<'a> SubsystemFlushContext<'a> {
     pub fn request_paint(&self) {
         self.need_paint.set(true);
     }
-}
 
-/// Outcome reported by a [`Subsystem`] after a flush tick.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct SubsystemOutcome {
-    /// This subsystem changed state in a way that requires another iteration
-    /// of the flush fixed-point loop (e.g. enqueued reactive mutations that
-    /// need to be drained). When any subsystem reports `dirtied = true`, the
-    /// engine treats the frame as dirty and re-arms `need_paint`.
-    pub dirtied: bool,
-    /// This subsystem wants the engine to schedule the next vsync frame
-    /// (e.g. an animation is still running). When any subsystem reports
-    /// `request_frame = true`, the engine schedules
-    /// [`NextFrame::Vsync`](crate::core::app::NextFrame::Vsync).
-    pub request_frame: bool,
-}
-
-impl SubsystemOutcome {
-    #[inline]
-    #[must_use]
-    pub fn idle() -> Self {
-        Self::default()
+    /// The subsystem changed state that requires another layout pass this
+    /// iteration (and a paint). The engine folds this into its per-iteration
+    /// dirty decision. Does NOT by itself keep the fixed-point loop iterating
+    /// — loop continuation is driven by pending mutations / events / reactive
+    /// changes, which a ticking subsystem typically enqueues.
+    pub fn mark_dirty(&self) {
+        self.sub_dirty.set(true);
     }
 
+    /// Request that the engine schedule the next vsync frame (e.g. because an
+    /// animation is still running). Accumulates across all iterations of a
+    /// single `flush()` call and feeds the post-loop schedule decision
+    /// (`NextFrame::Vsync`). Cheap and idempotent — safe to call every
+    /// iteration.
+    pub fn request_next_frame(&self) {
+        self.sub_request_frame.set(true);
+    }
+
+    /// Per-`flush()` epoch — see [`SubsystemFlushContext::frame_id`].
     #[inline]
     #[must_use]
-    pub fn from_active(active: bool) -> Self {
-        Self {
-            dirtied: active,
-            request_frame: active,
-        }
+    pub fn frame_id(&self) -> u64 {
+        self.frame_id
     }
 }

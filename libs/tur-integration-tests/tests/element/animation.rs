@@ -754,3 +754,41 @@ fn controller_repeat_three_then_completes() {
     assert_eq!(end_count, 1,
         "onEnd should fire exactly once when the finite repeat count is reached, got {end_count}");
 }
+
+#[test]
+fn animation_started_from_handler_schedules_next_frame() {
+    // Regression: when an AnimationController is started from within a frame
+    // (here an onMounted$ lifecycle mutation, which fires inside
+    // flush_pending_mutations), the engine must still schedule the next vsync
+    // so the controller advances. Previously the schedule signal was captured
+    // by the once-per-flush subsystem tick — which ran BEFORE the controller
+    // was registered — so the frame went Idle and the animation stalled until
+    // the next platform event (the playground's "white screen until click"
+    // case-switch FadeIn bug).
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(r#"
+        import { source, Container, render, mutate, set, lifecycleView } from "tur:std";
+        import { createAnimationController } from "tur:animation";
+
+        const width$ = source(100);
+        const ctrl = createAnimationController({
+            duration: 200,
+            curve: "linear",
+            onTick: mutate(function(_ctx, v) { set(width$, 100 + (200 - 100) * v); }),
+        });
+        render(lifecycleView(() => ({
+            element: Container({ width: width$ }),
+            onMounted$: mutate((_ctx) => { ctrl.forward(); }),
+        })));
+    "#)
+    .unwrap();
+
+    // First frame: mounts the tree -> onMounted$ -> ctrl.forward() registers
+    // the controller mid-frame. It is now active.
+    let outcome = app.pump().unwrap();
+    assert_eq!(
+        outcome.schedule,
+        tur_engine::core::app::NextFrame::Vsync,
+        "an animation started from a handler must schedule the next vsync"
+    );
+}
