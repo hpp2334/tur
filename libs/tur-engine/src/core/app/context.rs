@@ -98,6 +98,7 @@ impl TurAppContext {
         event: &PlatformEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
+        signals: &crate::core::subsystem::FlushSignals<'_>,
     ) {
         if let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
@@ -120,6 +121,9 @@ impl TurAppContext {
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
+            frame_id: signals.frame_id,
+            sub_dirty: signals.sub_dirty,
+            sub_request_frame: signals.sub_request_frame,
         };
         for sub in subsystems {
             sub.handle_platform_event(&mut cx, event);
@@ -134,6 +138,7 @@ impl TurAppContext {
         event: &AppEvent,
         need_paint: &Cell<bool>,
         subsystems: &mut [Box<dyn Subsystem>],
+        signals: &crate::core::subsystem::FlushSignals<'_>,
     ) {
         let mut cx = SubsystemFlushContext {
             boa,
@@ -147,6 +152,9 @@ impl TurAppContext {
             need_paint,
             async_executor: &self.async_executor,
             capabilities: &self.capabilities,
+            frame_id: signals.frame_id,
+            sub_dirty: signals.sub_dirty,
+            sub_request_frame: signals.sub_request_frame,
         };
         for sub in subsystems {
             sub.handle_app_event(&mut cx, event);

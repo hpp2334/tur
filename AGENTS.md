@@ -193,11 +193,11 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hook + `Clock` accessor — no animation code is in `tur-engine`.
 
 - **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, three methods, all defaulting to no-op:
-  - `fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) -> SubsystemOutcome` — called once per `flush()` call (= once per frame), in registration order. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and ticks the manager each flush.
+  - `fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_next_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_next_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
   - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard platform-bridge).
   - `fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent)` — called per drained engine-internal event, every fixed-point iteration, in registration order. Used by scroll-chaining / scroll-to / clipboard-write / clipboard-paste / caret-visibility subsystems.
 
-  `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, and the capability registry.
+  `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, the capability registry, plus the engine-signalling channels `mark_dirty` / `request_paint` / `request_next_frame` and the `frame_id()` self-gate. These channels are bundled in `FlushSignals` (built once per `flush()` and shared with every context constructed that call).
 - **`Curve`** (`tur-animation::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
 - **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
 - **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `tur:animation`.
@@ -312,7 +312,10 @@ libs/
         shell/               # Shell (engine-internal scheduler/clock holder)
         subsystem.rs         # Subsystem trait (flush +
                              #   handle_platform_event + handle_app_event) +
-                             #   SubsystemFlushContext + SubsystemOutcome
+                             #   SubsystemFlushContext + FlushSignals
+                             #   (subsystems signal via cx.mark_dirty /
+                             #    request_paint / request_next_frame; flush
+                             #    returns () — no SubsystemOutcome)
         text/                # TextLayoutData + LineInfo + TextRunData
                              #   (paint/layout contract types only — the
                              #   text plugin produces them)
@@ -411,6 +414,8 @@ cargo clippy --workspace -- -D warnings
 ```sh
 node scripts/prepare-js-fixtures.cjs
 ```
+
+**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo test --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo test --workspace --test element`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { rendered, schedule }`) instead of `settle()`/`advance()` when they need to inspect the schedule decision.
 
 ### tur-wasm (wasm)
 
