@@ -9,6 +9,7 @@ use crate::core::focus::helper::find_focusable_in_path;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::core::hit_test::HitTest;
 use crate::builtin_plugins::gesture::pointer_interact::PointerInteractElement;
+use crate::builtin_plugins::scroll::event::push_fling;
 use crate::core::elements::NodeTreeData;
 use crate::core::layout::{MouseButton, Offset};
 
@@ -22,18 +23,18 @@ pub struct GestureSubsystem {
     composer: GestureEventComposer,
 }
 
-impl Default for GestureSubsystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl GestureSubsystem {
     pub fn new() -> Self {
         Self {
             arena: GestureArena::new(),
             composer: GestureEventComposer::new(),
         }
+    }
+}
+
+impl Default for GestureSubsystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -57,24 +58,25 @@ impl Subsystem for GestureSubsystem {
                     self.handle_touch_pointer_down(cx, *position, *time_ms);
                 }
             },
-            PlatformEvent::Pointer(PointerInput::PointerMove { position, device }) => match device {
+            PlatformEvent::Pointer(PointerInput::PointerMove { position, device, time_ms }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_move(cx, *position);
                 }
                 PointerDeviceKind::Touch => {
-                    self.handle_touch_pointer_move(cx, *position);
+                    self.handle_touch_pointer_move(cx, *position, *time_ms);
                 }
             },
             PlatformEvent::Pointer(PointerInput::PointerUp {
                 position,
                 button,
                 device,
+                time_ms,
             }) => match device {
                 PointerDeviceKind::Mouse => {
                     self.handle_mouse_pointer_up(cx, *position, *button);
                 }
                 PointerDeviceKind::Touch => {
-                    self.handle_touch_pointer_up(cx, *position);
+                    self.handle_touch_pointer_up(cx, *position, *time_ms);
                 }
             },
             PlatformEvent::Pointer(PointerInput::PointerCancel { device }) => match device {
@@ -232,8 +234,9 @@ impl GestureSubsystem {
         &mut self,
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
+        now_ms: u64,
     ) {
-        let outcome = self.arena.on_touch_move(position);
+        let outcome = self.arena.on_touch_move(position, now_ms);
         match outcome {
             TouchMoveOutcome::Idle => {}
             TouchMoveOutcome::SlopExceeded => {
@@ -340,8 +343,9 @@ impl GestureSubsystem {
         &mut self,
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
+        time_ms: u64,
     ) {
-        let outcome = self.arena.on_touch_up();
+        let outcome = self.arena.on_touch_up(position, time_ms);
         match outcome {
             TouchUpOutcome::DragEnded => {
                 let path: Vec<ElementNodeId> = self.composer.pointer_down_path().to_vec();
@@ -360,7 +364,13 @@ impl GestureSubsystem {
                 }
                 self.composer.on_pointer_up(false);
             }
-            TouchUpOutcome::ScrollEnded => {}
+            TouchUpOutcome::ScrollEnded { vx, vy } => {
+                // Seed a kinetic-scroll fling from the drag's final velocity.
+                // Scroll delta is the negation of touch-movement direction
+                // (touch moves up → content scrolls down), matching the
+                // convention used by `TouchMoveOutcome::Scroll`.
+                push_fling(cx.app_event_queue, -vx, -vy, position);
+            }
             TouchUpOutcome::NeedsSyntheticClick { position, time_ms } => {
                 // The touch sequence ended below slop with a tiny move that the
                 // browser won't synthesize a click for. Drive the mouse

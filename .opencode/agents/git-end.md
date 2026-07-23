@@ -90,7 +90,7 @@ Check if a PR already exists for the current branch:
 gh pr list --head $currentBranch --json number,url --limit 1
 ```
 
-To write the PR title and body, you MUST use `git diff main...HEAD --stat` and `git diff main...HEAD` to review the actual codebase changes. Do NOT use git log. Do NOT read the existing PR title/body. Base your summary entirely on the code diff.
+To write the PR title and body, you MUST use `git diff origin/main...HEAD --stat` and `git diff origin/main...HEAD` to review the actual codebase changes. Do NOT use git log. Do NOT read the existing PR title/body. Base your summary entirely on the code diff.
 
 The title should be a semantic summary in `type: description` format.
 

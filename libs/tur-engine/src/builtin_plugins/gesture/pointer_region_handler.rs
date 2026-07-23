@@ -39,6 +39,7 @@ impl Subsystem for PointerSubsystem {
         let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
+            time_ms: _,
         }) = event
         else {
             return;
