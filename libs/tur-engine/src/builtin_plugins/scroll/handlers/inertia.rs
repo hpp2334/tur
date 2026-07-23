@@ -23,7 +23,7 @@ use boa_engine::context::time::Clock;
 
 use crate::core::app::AppEvent;
 use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
-use crate::core::subsystem::{Subsystem, SubsystemFlushContext, SubsystemOutcome};
+use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::scroll::event::ScrollFlingEvent;
 
@@ -57,15 +57,32 @@ struct InertiaState {
 /// after [`ScrollSubsystem`](super::ScrollSubsystem) so fling-seed events
 /// (which arrive via `handle_app_event`) are processed after the gesture
 /// plugin pushes them.
+///
+/// ## Flush frequency / self-gating
+///
+/// The engine calls [`Subsystem::flush`] **every fixed-point iteration** of a
+/// `flush` call (possibly several times per frame). Integrating the decay,
+/// however, must sample the clock **at most once per frame** — otherwise the
+/// same frame would apply the delta multiple times. We self-gate that via
+/// [`SubsystemFlushContext::frame_id`]: a per-`flush()` epoch stable across
+/// the iterations of one frame and differing across frames.
 pub struct ScrollInertiaSubsystem {
     clock: Rc<dyn Clock>,
     state: Option<InertiaState>,
+    /// Last `frame_id` we integrated for. Stable across the fixed-point
+    /// iterations of one `flush()` call, so repeated iterations within the
+    /// same frame skip re-integration.
+    last_frame: u64,
 }
 
 impl ScrollInertiaSubsystem {
     #[must_use]
     pub fn new(clock: Rc<dyn Clock>) -> Self {
-        Self { clock, state: None }
+        Self {
+            clock,
+            state: None,
+            last_frame: 0,
+        }
     }
 
     /// Returns `true` if there is no active fling. Used by tests.
@@ -109,44 +126,57 @@ impl Subsystem for ScrollInertiaSubsystem {
         }
     }
 
-    fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) -> SubsystemOutcome {
-        let Some(state) = self.state.as_mut() else {
-            return SubsystemOutcome::idle();
-        };
+    fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) {
+        // Integrate the decay at most once per frame: only when the engine's
+        // frame id has moved on since our last advance. `frame_id` is stable
+        // across the fixed-point iterations of one `flush()` call, so repeated
+        // iterations within the same frame skip re-integration (no double
+        // delta for one frame).
+        let id = cx.frame_id();
+        if id != self.last_frame {
+            self.last_frame = id;
+            if let Some(state) = self.state.as_mut() {
+                let now_ms = self.clock.now().millis_since_epoch();
+                let dt_ms_raw = now_ms.saturating_sub(state.last_ms);
+                if dt_ms_raw > 0 {
+                    let dt_ms = (dt_ms_raw as f64).min(MAX_FRAME_MS);
 
-        let now_ms = self.clock.now().millis_since_epoch();
-        let dt_ms_raw = now_ms.saturating_sub(state.last_ms);
-        if dt_ms_raw == 0 {
-            // Seeded this frame — no time has passed yet.
-            return SubsystemOutcome::from_active(true);
+                    // Exponential decay: v(t) = v0 * exp(-t/tau).
+                    // Exact delta over [0, dt]:
+                    //   ∫ v0*exp(-t/tau) dt = v0 * tau * (1 - exp(-dt/tau)).
+                    let decay = (-dt_ms / TIME_CONSTANT_MS).exp();
+                    let one_minus_decay = 1.0 - decay;
+                    let delta_x = state.vx * TIME_CONSTANT_MS * one_minus_decay;
+                    let delta_y = state.vy * TIME_CONSTANT_MS * one_minus_decay;
+
+                    state.vx *= decay;
+                    state.vy *= decay;
+                    state.last_ms = now_ms;
+
+                    // Route the delta through the same pipeline as live scroll
+                    // so hit-testing, overscroll chaining, and `onScroll` all
+                    // work. `ScrollSubsystem` (registered before us) drains
+                    // this `AppEvent::Scroll` next iteration.
+                    cx.app_event_queue.push(AppEvent::Scroll {
+                        delta_x,
+                        delta_y,
+                        position: state.position,
+                    });
+                    cx.mark_dirty();
+
+                    // Stop when velocity drops below threshold.
+                    let speed_sq = state.vx * state.vx + state.vy * state.vy;
+                    if speed_sq < VELOCITY_EPSILON_PX_PER_MS * VELOCITY_EPSILON_PX_PER_MS {
+                        self.state = None;
+                    }
+                }
+            }
         }
-        let dt_ms = (dt_ms_raw as f64).min(MAX_FRAME_MS);
-
-        // Exponential decay: v(t) = v0 * exp(-t/tau).
-        // Exact delta over [0, dt]: ∫ v0*exp(-t/tau) dt = v0 * tau * (1 - exp(-dt/tau)).
-        let decay = (-dt_ms / TIME_CONSTANT_MS).exp();
-        let one_minus_decay = 1.0 - decay;
-        let delta_x = state.vx * TIME_CONSTANT_MS * one_minus_decay;
-        let delta_y = state.vy * TIME_CONSTANT_MS * one_minus_decay;
-
-        state.vx *= decay;
-        state.vy *= decay;
-        state.last_ms = now_ms;
-
-        // Route the delta through the same pipeline as live scroll so
-        // hit-testing, overscroll chaining, and `onScroll` all work.
-        cx.app_event_queue.push(AppEvent::Scroll {
-            delta_x,
-            delta_y,
-            position: state.position,
-        });
-
-        // Stop when velocity drops below threshold.
-        let speed_sq = state.vx * state.vx + state.vy * state.vy;
-        if speed_sq < VELOCITY_EPSILON_PX_PER_MS * VELOCITY_EPSILON_PX_PER_MS {
-            self.state = None;
+        // Keep scheduling vsync while the fling is active. Emitted on every
+        // iteration (cheap + idempotent) so a fling seeded mid-frame (from a
+        // handler) still advances on the next frame.
+        if self.state.is_some() {
+            cx.request_next_frame();
         }
-
-        SubsystemOutcome::from_active(self.state.is_some())
     }
 }
