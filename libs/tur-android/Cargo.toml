@@ -1,0 +1,30 @@
+[package]
+name = "tur-android"
+description = "Android JNI binary for tur rendering engine (Compose integration runtime)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tur-engine = { workspace = true, features = ["wgpu-backend"], default-features = false }
+tur-animation = { workspace = true }
+tur-clipboard-android = { path = "../tur-clipboard-android" }
+tur-net-native = { workspace = true }
+tur-demo-plugin = { path = "../tur-demo-plugin", default-features = false }
+boa_engine = { workspace = true }
+parley = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+jni = "0.21"
+pollster = "0.4"
+wgpu = { workspace = true }
+raw-window-handle = "0.6"
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+log = "0.4"

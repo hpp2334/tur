@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- tur's HTTP backend (tur-net-native, reqwest) needs INTERNET for the
+         `tur:net` module (used by the `github-viewer` case and any JS doing
+         `request()`). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Vulkan (wgpu) requires API 24+. -->
+    <uses-feature
+        android:name="android.hardware.vulkan.level"
+        android:required="true" />
+</manifest>

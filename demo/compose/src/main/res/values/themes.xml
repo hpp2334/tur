@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Minimal theme — the entire UI is rendered by tur into a SurfaceView, so
+         the platform theme only needs to be fullscreen + no action bar. -->
+    <style name="Theme.TurDemo" parent="android:Theme.Material.Light.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+</resources>
