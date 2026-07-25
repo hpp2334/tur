@@ -6,16 +6,15 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  js/packages/tur-demo (playground web app)             │
-│  React-DOM web app with:                             │
-│  - Case selector (sidebar)                           │
-│  - Code editor (CodeMirror 6)                        │
-│  - Tur viewer (embedded WASM canvas)                 │
-│  - Browser-side bundling via @rspack/browser          │
+│  demo/website (web host app — @tur/website)            │
+│  Thin browser host: loads the tur WASM + the           │
+│  playground-view bundle. Co-located with its own        │
+│  wasm cdylib (demo/website/native → tur-website).       │
 ├─────────────────────────────────────────────────────┤
-│  js/packages/tur-demo-impl                            │
-│  Playground UI built with tur:animation +    │
-│  tur:std (Sidebar/Editor/Viewer)              │
+│  demo/playground-view (@tur/playground-view)           │
+│  The playground view: UI built with tur:animation +     │
+│  tur:std (Sidebar/Editor/Viewer) + inlined case         │
+│  sources. A reusable view the website renders.          │
 ├─────────────────────────────────────────────────────┤
 │  js/packages/tur-test-cases                          │
 │  ~60 test cases in cases/ — each calls into           │
@@ -135,20 +134,25 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
-│  libs/tur-wasm                                        │
-│  (wasm binary via wasm-pack: boajs + vello-hybrid)     │
-│  TurWasmApp::create() — full viewport                 │
-│  TurWasmApp::create_in(id) — embed in container       │
-│  clear_and_run_js() — clear tree + evaluate new JS    │
-│  Composes: Clipboard::new(WasmClipboard),             │
-│            Http::new(WasmHttp),                        │
-│            CursorCap::new(WasmCursor) + plugins.       │
-│            TurStdPlugin → TurAnimationPlugin →         │
-│            TurClipboardPlugin → TurNetPlugin.          │
-│            (TurStdPlugin + TurClipboardPlugin re-      │
-│            exported from tur_engine crate root — used  │
-│            to live in separate tur-std /               │
-│            tur-clipboard-capability crates.)           │
+│  libs/tur-wasm (pure rlib — the reusable wasm embedder) │
+│  No #[wasm_bindgen] surface, no playground code.       │
+│  Owns all DOM wiring + the WebGL2 renderer + WasmClock  │
+│  / WasmFontLoader / WasmCursor + the standard           │
+│  capability backends (WasmClipboard / WasmHttp).         │
+│  Exposes WasmAppHandle::create(WasmAppConfig) — a        │
+│  builder taking a `configure` callback (extra plugins)   │
+│  + optional after-frame hook. The host cdylib wraps it.  │
+│  Composes the default plugin chain:                       │
+│  TurStdPlugin → TurAnimationPlugin → TurClipboardPlugin │
+│  → TurNetPlugin.                                          │
+├─────────────────────────────────────────────────────┤
+│  demo/website/native (tur-website cdylib — the host .so) │
+│  The website's own wasm entry: wraps WasmAppHandle,      │
+│  adds TurDemoPlugin (swc + browser file IO) + the        │
+│  resolve_pending_picks after-frame hook. Exports          │
+│  #[wasm_bindgen] TurWebsiteApp (create / create_in /      │
+│  loadAndRunModule / dev_tool) → tur_website.js.           │
+│  Mirrors tur-android (rlib) + demo/compose/native (cdylib).│
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -375,28 +379,73 @@ libs/
                              #   re-exports
   tur-net-capability/        # HttpBackend trait + Http cap + tur:net
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
-  tur-net-native/            # NativeHttp (reqwest) backend
-  tur-wasm/                  # wasm binary (boa_engine + vello-hybrid +
-                             #   tur-engine). Composes Clipboard + Http +
-                             #   CursorCap backend capabilities with
-                             #   `tur_engine::TurStdPlugin` (re-exported
-                             #   from `builtin_plugins::std`) →
-                             #   TurAnimationPlugin → TurClipboardPlugin →
-                             #   TurNetPlugin.
-  tur-integration-tests/     # integration test harness + cases
-  tur-demo-plugin/           # playground-only plugin (swc compiler + file IO)
-  tur-native/                # native (non-wasm) embedder entry point
-js/
-  packages/
-    tur-animation/            # Ambient TS types for `tur:animation`
-                             #   (runtime provided by tur-animation crate)
-    tur-core/                # Ambient TS types for `tur:core`
-                             #   (engine-owned reactive primitives)
-    tur-demo/                # Playground: thin browser wrapper (loads wasm
-                             #   + impl bundle)
-    tur-demo-impl/           # Playground UI built with tur:animation
-                             #   + tur:std (Sidebar/Editor/Viewer)
-    tur-test-cases/          # Test cases (cases/, ~60 cases)
+   tur-net-native/            # NativeHttp (reqwest) backend
+   tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
+                             #   registers the process JavaVM for per-call attach
+   tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan
+                             #   over an Android Surface + the JNI event/loop
+                             #   bridge. Provides `ops::create_with_plugins`
+                             #   (engine build with an injectable plugin set +
+                             #   Android-default capabilities) + the standard-op
+                             #   `pub fn`s + the `standard_jni_exports!()` macro
+                             #   that generates `Java_org_tur_TurNative_*`
+                             #   trampolines inside an app's own cdylib. No
+                             #   plugins hardcoded (was: cdylib with demo plugin).
+    tur-wasm/                  # Pure reusable rlib (NOT a cdylib): the wasm
+                              #   embedder lib. Owns all DOM wiring + the
+                              #   WebGL2 renderer + WasmClock / WasmFontLoader /
+                              #   WasmCursor + standard capability backends
+                              #   (WasmClipboard / WasmHttp). NO
+                              #   #[wasm_bindgen] surface, NO playground code.
+                              #   Exposes WasmAppHandle::create(WasmAppConfig)
+                              #   (a builder with a `configure` callback for
+                              #   extra plugins + an optional after-frame hook).
+                              #   The host cdylib (demo/website/native) wraps it.
+    tur-integration-tests/     # integration test harness + cases
+    tur-demo-plugin/           # playground-only plugin (swc compiler + file IO)
+    tur-native/                # native (non-wasm) embedder entry point
+ integrations/
+   compose/                    # Pure-Kotlin Compose AAR (`org.tur`): TurView +
+                              #   TurEngine + FrameLoop + InputMapper + TurNative
+                              #   (external-fun bridge). Ships NO .so — accepts
+                              #   an engine handle via TurEngineFactory (the app
+                              #   loads its own .so and builds the engine).
+ demo/
+   compose/                    # Android playground app: MainActivity + DemoNative
+                              #   (loads libtur_demo.so, declares createEngine) +
+                              #   the gradle cargo-ndk pipeline
+     native/                   # `tur-demo` cdylib crate: the app's .so. Links
+                              #   tur-android (rlib) + standard_jni_exports!() +
+                              #   a createEngine fn with the demo plugin set
+                              #   (Std+Animation+Clipboard+Net+DemoHelper). The
+                              #   template users copy for their own app's .so.
+   website/                    # Web host app (@tur/website): thin browser
+                              #   wrapper that loads the wasm + the
+                              #   playground-view bundle. Its rspack runs
+                              #   wasm-pack on `native/` + bundles
+                              #   playground-view's dist/impl.js.
+     native/                   # `tur-website` cdylib: the host .wasm. Wraps
+                              #   tur-wasm's WasmAppHandle + adds TurDemoPlugin
+                              #   (swc + browser file IO) + the
+                              #   resolve_pending_picks after-frame hook.
+                              #   Exports #[wasm_bindgen] TurWebsiteApp
+                              #   (create / create_in / loadAndRunModule /
+                              #   dev_tool) → tur_website.js. The wasm mirror
+                              #   of demo/compose/native.
+   playground-view/            # @tur/playground-view: the playground UI
+                              #   bundle built with tur:animation + tur:std
+                              #   (Sidebar/Editor/Viewer) + inlined case
+                              #   sources. A reusable view the website
+                              #   renders. Owns the playground-only cases
+                              #   (cases/ — compiler-bridge-demo, github-viewer)
+                              #   + the folded-in @tur/demo-helper types.
+ js/
+   packages/
+     tur-animation/            # Ambient TS types for `tur:animation`
+                              #   (runtime provided by tur-animation crate)
+     tur-core/                # Ambient TS types for `tur:core`
+                              #   (engine-owned reactive primitives)
+     tur-test-cases/          # Test cases (cases/, ~60 cases) — pure
 ```
 
 ## Commands
@@ -417,38 +466,40 @@ node scripts/prepare-js-fixtures.cjs
 
 **Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo test --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo test --workspace --test element`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { rendered, schedule }`) instead of `settle()`/`advance()` when they need to inspect the schedule decision.
 
-### tur-wasm (wasm)
+### tur-website (wasm)
+
+The website's wasm entry is `demo/website/native` (a cdylib that wraps the pure `tur-wasm` rlib). Build it directly:
 
 ```sh
-cd libs/tur-wasm && wasm-pack build --target web
-cargo clippy --target wasm32-unknown-unknown --workspace -- -D warnings
+cd demo/website/native && wasm-pack build --target web
+cargo clippy --target wasm32-unknown-unknown -p tur-wasm -p tur-website -- -D warnings
 ```
 
-### tur-demo (playground)
+### website (web host)
 
-The playground is a React-DOM web app. Building it automatically runs `wasm-pack`, builds test cases, copies WASM assets + compiled cases + workspace deps into the output:
+The website is the browser host app. Building it automatically runs `wasm-pack` (on `demo/website/native`), builds the playground-view bundle, and copies WASM assets + the compiled `impl.js` into the output:
 
 ```sh
 cd js && pnpm build
-cd js/packages/tur-demo && rspack build
+cd demo/website && pnpm build
 # Or use the rspack dev server
-cd js/packages/tur-demo && rspack dev
+cd demo/website && TUR_TUNNEL=1 pnpm dev
 ```
 
-Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer).
+Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer; `TUR_TUNNEL=1` switches to HTTP so Playwright MCP can connect).
 
-### JS (js/ directory)
+### JS (js/ workspace — also covers demo/website + demo/playground-view)
 
 ```sh
 pnpm install
-pnpm build            # build all packages
-pnpm lint             # biome lint across all packages
+pnpm build            # build all packages (incl. website + playground-view)
+pnpm lint             # biome lint across js/ + demo/website + demo/playground-view
 ```
 
 ### Per-package JS builds
 
 ```sh
-cd js/packages/tur-demo-impl && pnpm build
+cd demo/playground-view && pnpm build
 cd js/packages/tur-test-cases && pnpm build
 ```
 
@@ -489,7 +540,7 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 
 ```sh
 node scripts/prepare-js-fixtures.cjs    # build JS fixtures once
-cd js/packages/tur-demo && TUR_TUNNEL=1 rspack dev
+cd demo/website && TUR_TUNNEL=1 pnpm dev
 # → http://localhost:8080/ (must be HTTP: Playwright MCP rejects the self-signed HTTPS cert)
 ```
 

@@ -1,0 +1,22 @@
+[package]
+name = "tur-website"
+description = "WebAssembly entry for the tur website — wraps the pure tur-wasm embedder lib and adds the playground-only demo plugin (swc compiler + browser file IO). Exported via #[wasm_bindgen] as TurWebsiteApp."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+tur-wasm = { workspace = true }
+tur-engine = { workspace = true, features = ["webgl"] }
+tur-demo-plugin = { workspace = true, features = ["web-io"] }
+boa_engine = { workspace = true }
+wasm-bindgen = { workspace = true }
+js-sys = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+console_error_panic_hook = { workspace = true }
+tracing = { workspace = true }
+tracing-wasm = { workspace = true }

@@ -3,7 +3,7 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const jsDir = path.join(root, 'js');
-const wasmDir = path.join(root, 'libs', 'tur-wasm');
+const wasmDir = path.join(root, 'demo', 'website', 'native');
 
 function run(label, cmd, opts) {
   console.log(`[prewarm] ${label}...`);

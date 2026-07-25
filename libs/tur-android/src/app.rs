@@ -16,14 +16,12 @@ mod imp {
     use boa_engine::context::time::StdClock;
     use jni::objects::GlobalRef;
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-    use tur_animation::TurAnimationPlugin;
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
-    use tur_demo_plugin::TurDemoPlugin;
     use tur_engine::core::platform::PlatformEvent;
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{CursorCap, NoopCursor, TurApp, TurEngine, TurStdPlugin};
-    use tur_net_native::{Http, NativeHttp, TurNetPlugin};
+    use tur_engine::{CursorCap, NoopCursor, TurApp, TurEngine, TurEngineBuilder};
+    use tur_net_native::{Http, NativeHttp};
 
     use tur_native::NativeFontLoader;
     use crate::loop_driver::{AndroidLoopDriver, FrameLoopRef};
@@ -52,13 +50,23 @@ mod imp {
         /// Build the engine over a freshly-created wgpu surface backed by the
         /// given Android `Surface`'s `ANativeWindow*`. `frame_loop` is a JNI
         /// global ref to Kotlin's `org.tur.FrameLoop` (drives the wake cadence).
-        pub fn create(
+        ///
+        /// `configure` receives the [`TurEngineBuilder`] (by value) AFTER the
+        /// Android defaults are installed (wgpu renderer, native font loader,
+        /// wall-clock `StdClock`, `NoopCursor`, `AndroidClipboard`,
+        /// `NativeHttp`), so the callback only needs to chain `.plugin(…)`
+        /// calls and return the builder (a later `.capability(…)` of the same
+        /// type replaces the default — `Capabilities::insert` is
+        /// last-writer-wins). This is the seam embedders use to inject custom
+        /// plugins; everything else is shared Android boilerplate.
+        pub fn build(
             context: GlobalRef,
             window_handle: AndroidWindowHandle,
             logical_width: u32,
             logical_height: u32,
             dpr: f64,
             frame_loop: FrameLoopRef,
+            configure: impl FnOnce(TurEngineBuilder) -> TurEngineBuilder,
         ) -> Result<Self, TurAndroidError> {
             // Register the process JavaVM for the clipboard backend (it attaches
             // per call to reach ClipboardManager).
@@ -73,6 +81,7 @@ mod imp {
                 logical_height,
                 dpr,
                 frame_loop,
+                configure,
             ))?;
             Ok(Self { app, loop_driver })
         }
@@ -84,6 +93,7 @@ mod imp {
             logical_height: u32,
             dpr: f64,
             frame_loop: FrameLoopRef,
+            configure: impl FnOnce(TurEngineBuilder) -> TurEngineBuilder,
         ) -> Result<(Rc<TurApp>, Rc<AndroidLoopDriver>), TurAndroidError> {
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::VULKAN,
@@ -133,19 +143,20 @@ mod imp {
                 dpr,
             );
 
-            let app = TurEngine::builder()
+            // Android defaults: renderer + native fonts + wall clock + the
+            // standard capability backends (cursor / clipboard / http). The
+            // embedder's `configure` callback adds plugins on top (and may
+            // replace any of these capabilities — `Capabilities::insert` is
+            // last-writer-wins per type).
+            let mut builder = TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(NativeFontLoader::new()))
                 .clock(Rc::new(StdClock::new()))
                 .capability(CursorCap::new(NoopCursor))
                 .capability(Clipboard::new(AndroidClipboard::new(context)))
-                .capability(Http::new(NativeHttp::default()))
-                .plugin(TurStdPlugin)
-                .plugin(TurAnimationPlugin)
-                .plugin(tur_engine::TurClipboardPlugin)
-                .plugin(TurNetPlugin)
-                .plugin(TurDemoPlugin)
-                .build()?;
+                .capability(Http::new(NativeHttp::default()));
+            builder = configure(builder);
+            let app = builder.build()?;
 
             app.push_platform_event(PlatformEvent::Resize {
                 logical_width,
@@ -171,6 +182,7 @@ pub use imp::{AndroidApp, TurAndroidError};
 #[cfg(not(target_os = "android"))]
 mod imp {
     use jni::objects::GlobalRef;
+    use tur_engine::TurEngineBuilder;
     use crate::loop_driver::FrameLoopRef;
     use crate::surface::AndroidWindowHandle;
 
@@ -184,13 +196,14 @@ mod imp {
     pub struct AndroidApp;
 
     impl AndroidApp {
-        pub fn create(
+        pub fn build(
             _context: GlobalRef,
             _window_handle: AndroidWindowHandle,
             _logical_width: u32,
             _logical_height: u32,
             _dpr: f64,
             _frame_loop: FrameLoopRef,
+            _configure: impl FnOnce(TurEngineBuilder) -> TurEngineBuilder,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
         }

@@ -20,6 +20,13 @@ mod app;
 mod loop_driver;
 mod surface;
 
+// Re-export the JNI primitive types so the `standard_jni_exports!()` macro
+// (expanded inside an embedder's cdylib) can name them via `$crate::…` without
+// forcing the embedder to add the `jni` crate as a direct dependency.
+pub use jni::JNIEnv;
+pub use jni::objects::{JClass, JObject, JString};
+pub use jni::sys::{jboolean, jdouble, jint, jlong};
+
 use std::sync::OnceLock;
 
 /// The process `JavaVM`, stashed on the first JNI call so the clipboard backend
@@ -201,37 +208,56 @@ fn init_logger_once() {
     logger::init();
 }
 
+/// Standard engine operations — the handle-based API the Kotlin integration
+/// drives (load JS, pump a frame, push input, query/edit IME, tear down).
+///
+/// Every function here is a plain `pub fn` (not a JNI entry point). The
+/// `standard_jni_exports!()` macro below generates the `#[unsafe(no_mangle)]`
+/// `Java_org_tur_TurNative_*` trampolines that forward to these, expanded
+/// inside the embedder's cdylib so the symbols are local (guaranteed
+/// link-retained, never stripped by GC-sections).
+///
+/// The one operation NOT here is engine creation — that varies per embedder
+/// (plugin set), so it lives in [`create_with_plugins`] and is called from the
+/// embedder's own `Java_…_createEngine` JNI function.
 #[cfg(target_os = "android")]
-mod exports {
+pub mod ops {
     use std::ffi::c_void;
 
-    use jni::objects::{JClass, JObject, JString};
+    use jni::objects::{JObject, JString};
     use jni::sys::{jdouble, jint, jlong};
     use jni::JNIEnv;
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
     use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput, PlatformEvent};
+    use tur_engine::TurEngineBuilder;
 
     use crate::app::AndroidApp;
 
-    /// `TurNative.nativeCreate(env, context, surface, width, height, dpr, frameLoop): long`
+    /// `createEngine(env, context, surface, width, height, dpr, frameLoop): long`
     ///
     /// Builds the engine over the Android `Surface` and returns an opaque
-    /// pointer handle (boxed `AndroidApp`) Kotlin holds as a `long`.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_create(
-        mut env: JNIEnv,
-        _class: JClass,
+    /// pointer handle (boxed `AndroidApp`) Kotlin holds as a `long`. Called from
+    /// the embedder's own `Java_<pkg>_<Class>_createEngine` JNI function, which
+    /// passes a `configure` closure that adds the embedder's plugin set. This
+    /// wrapper does all the shared Android boilerplate (logger, JavaVM stash,
+    /// ANativeWindow acquisition, wgpu surface) before delegating to
+    /// [`AndroidApp::build`].
+    ///
+    /// Returns `0` on failure (a `RuntimeException` is also thrown).
+    pub fn create_with_plugins(
+        env: &mut JNIEnv,
         context: JObject,
         surface: JObject,
         width: jint,
         height: jint,
         dpr: jdouble,
         frame_loop: JObject,
+        configure: impl FnOnce(TurEngineBuilder) -> TurEngineBuilder,
     ) -> jlong {
-        catch_into_zero(&mut env, "create", |env| {
+        catch_into_zero(env, "create", |env| {
             crate::init_logger_once();
-            stash_java_vm(&env)?;
+            stash_java_vm(env)?;
             let context_ref = env.new_global_ref(context)?;
             let surface_ref = env.new_global_ref(surface)?;
             let frame_loop_ref = env.new_global_ref(frame_loop)?;
@@ -250,13 +276,14 @@ mod exports {
             let window_handle = unsafe { crate::surface::AndroidWindowHandle::new(anw) };
             let frame_loop_handle = crate::loop_driver::FrameLoopRef::new(frame_loop_ref);
             log::info!("create: building engine ({}x{} @{}x)", width, height, dpr);
-            let app = AndroidApp::create(
+            let app = AndroidApp::build(
                 context_ref,
                 window_handle,
                 width.max(1) as u32,
                 height.max(1) as u32,
                 dpr.max(1.0),
                 frame_loop_handle,
+                configure,
             )?;
             log::info!("create: engine built OK");
             let boxed = Box::new(app);
@@ -264,20 +291,12 @@ mod exports {
         })
     }
 
-    /// `TurNative.nativeLoadModule(env, handle, js): void`
-    ///
     /// Evaluate `js` as an ES module (resolved by the engine's `TurModuleLoader`
     /// — `tur:std`, `tur:animation`, etc. must already be registered, which
-    /// `nativeCreate` does). Then request a paint so the bundle renders on the
+    /// `createEngine` does). Then request a paint so the bundle renders on the
     /// next frame.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_loadModule(
-        mut env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-        js: JString,
-    ) {
-        catch_void(&mut env, "loadModule", |env| {
+    pub fn load_module(env: &mut JNIEnv, handle: jlong, js: JString) {
+        catch_void(env, "loadModule", |env| {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             let js: String = env.get_string(&js)?.into();
             log::info!("loadModule: {} bytes", js.len());
@@ -289,8 +308,6 @@ mod exports {
         });
     }
 
-    /// `TurNative.pump(env, handle): int`
-    ///
     /// Fire one engine wake (the Kotlin `Choreographer` / `Handler` calls this
     /// when due). Returns `1` on success.
     ///
@@ -302,12 +319,7 @@ mod exports {
     /// logcat by the time `catch_unwind` returns; on `Err` we add a breadcrumb
     /// and abort cleanly so the failure stays visible and the engine never
     /// resumes a half-finished frame.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_pump(
-        _unused_env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-    ) -> jint {
+    pub fn pump(handle: jlong) -> jint {
         let Some(app) = handle_to_app(handle) else {
             return 0;
         };
@@ -344,21 +356,11 @@ mod exports {
         }
     }
 
-    /// `TurNative.nativeResize(env, handle, width, height, dpr): void`
-    ///
     /// Push a `Resize` event reflecting the new surface dimensions. (v1 keeps
     /// the original wgpu surface for the engine lifetime; full surface re-attach
     /// with a renderer swap is a follow-up.)
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_resize(
-        mut env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-        width: jint,
-        height: jint,
-        dpr: jdouble,
-    ) {
-        catch_void(&mut env, "nativeResize", |_env| {
+    pub fn resize(env: &mut JNIEnv, handle: jlong, width: jint, height: jint, dpr: jdouble) {
+        catch_void(env, "resize", |_env| {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             app.app.push_platform_event(PlatformEvent::Resize {
                 logical_width: width.max(1) as u32,
@@ -369,22 +371,18 @@ mod exports {
         });
     }
 
-    /// `TurNative.nativePushPointer(env, handle, action, x, y, timeMs): void`
-    ///
-    /// `action` matches Android `MotionEvent.ACTION_*` constants: 0=DOWN, 1=UP,
-    /// 2=MOVE, 3=CANCEL. We translate to engine `PointerInput` with
-    /// `PointerDeviceKind::Touch`.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_pushPointer(
-        mut env: JNIEnv,
-        _class: JClass,
+    /// Push a pointer event. `action` matches Android `MotionEvent.ACTION_*`
+    /// constants: 0=DOWN, 1=UP, 2=MOVE, 3=CANCEL. We translate to engine
+    /// `PointerInput` with `PointerDeviceKind::Touch`.
+    pub fn push_pointer(
+        env: &mut JNIEnv,
         handle: jlong,
         action: jint,
         x: jdouble,
         y: jdouble,
         time_ms: jlong,
     ) {
-        catch_void(&mut env, "nativePushPointer", |_env| {
+        catch_void(env, "pushPointer", |_env| {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             let device = PointerDeviceKind::Touch;
             let position = Offset::new(x, y);
@@ -401,14 +399,10 @@ mod exports {
         });
     }
 
-    /// `TurNative.nativePushKey(env, handle, key, code, action, ctrl, shift, alt, meta): void`
-    ///
-    /// `action`: 0=DOWN, 1=UP. `key`/`code` are browser-style strings (the
-    /// Kotlin side maps Android `KeyEvent.keyCode` → these).
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_pushKey(
-        mut env: JNIEnv,
-        _class: JClass,
+    /// Push a key event. `action`: 0=DOWN, 1=UP. `key`/`code` are browser-style
+    /// strings (the Kotlin side maps Android `KeyEvent.keyCode` → these).
+    pub fn push_key(
+        env: &mut JNIEnv,
         handle: jlong,
         key: JString,
         code: JString,
@@ -418,7 +412,7 @@ mod exports {
         alt: jni::sys::jboolean,
         meta: jni::sys::jboolean,
     ) {
-        catch_void(&mut env, "nativePushKey", |env| {
+        catch_void(env, "pushKey", |env| {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             let key: String = env.get_string(&key)?.into();
             let code: String = env.get_string(&code)?.into();
@@ -438,17 +432,10 @@ mod exports {
         });
     }
 
-    /// `TurNative.focusedIsEditable(handle): boolean`
-    ///
     /// True if the currently-focused element is an editable text field. The
     /// embedder polls this after each pump to decide whether to raise the soft
     /// keyboard (and `hideSoftInput` when it flips back to false).
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_focusedIsEditable(
-        _env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-    ) -> jni::sys::jboolean {
+    pub fn focused_is_editable(handle: jlong) -> jni::sys::jboolean {
         let Some(app) = handle_to_app(handle) else {
             return 0;
         };
@@ -459,23 +446,14 @@ mod exports {
         }
     }
 
-    /// `TurNative.pushIme(handle, kind, text): void`
-    ///
     /// Push an IME composition event onto the platform-event queue. `kind`:
     /// `0=CompositionStart`, `1=CompositionUpdate { text }`,
     /// `2=CompositionEnd { text }`. Routed to the focused editable's
     /// `on_ime_event` by the `ImeSubsystem`. Used by the embedder's
     /// `InputConnection` to deliver multi-char commits / composing text that
     /// can't be represented as a single key event.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_pushIme(
-        mut env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-        kind: jint,
-        text: JString,
-    ) {
-        catch_void(&mut env, "pushIme", |env| {
+    pub fn push_ime(env: &mut JNIEnv, handle: jlong, kind: jint, text: JString) {
+        catch_void(env, "pushIme", |env| {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             let text: String = env.get_string(&text)?.into();
             let ime = match kind {
@@ -491,16 +469,9 @@ mod exports {
         });
     }
 
-    /// `TurNative.nativeDestroy(env, handle): void`
-    ///
     /// Drop the engine. The boxed `AndroidApp` is reclaimed; its `Rc<TurApp>`
     /// (and the renderer, surface, etc.) drop in turn.
-    #[unsafe(no_mangle)]
-    pub extern "system" fn Java_org_tur_TurNative_destroy(
-        _env: JNIEnv,
-        _class: JClass,
-        handle: jlong,
-    ) {
+    pub fn destroy(handle: jlong) {
         if handle == 0 {
             return;
         }
@@ -514,10 +485,10 @@ mod exports {
             return None;
         }
         // SAFETY: the handle is a valid `Box<AndroidApp>` for the engine's
-        // lifetime (created by nativeCreate, freed by nativeDestroy). We return
+        // lifetime (created by createEngine, freed by destroy). We return
         // a `'static` reference because the JNI layer guarantees single-threaded
         // access (Android main thread) and the box outlives every call until
-        // nativeDestroy.
+        // destroy.
         unsafe { (&*(handle as *const AndroidApp)).into() }
     }
 
@@ -551,7 +522,7 @@ mod exports {
     }
 
     /// Run `f(env)` and, on error, throw a Java `RuntimeException` with the
-    /// message. For void-returning JNI fns.
+    /// message. For void-returning fns.
     fn catch_void<F>(env: &mut JNIEnv, name: &str, f: F)
     where
         F: FnOnce(&mut JNIEnv) -> Result<(), Box<dyn std::error::Error>>,
@@ -561,7 +532,115 @@ mod exports {
             let _ = env.throw_new("java/lang/RuntimeException", format!("{name}: {e}"));
         }
     }
+}
 
-    // Referenced by `nativeCreate`'s global-ref paths; keep the import live even
-    // though the refs are moved into the engine immediately.
+/// Generate the standard engine-operation JNI entry points inside the caller's
+/// cdylib. Emits the eight `Java_org_tur_TurNative_*` trampolines
+/// (`loadModule`, `pump`, `resize`, `pushPointer`, `pushKey`,
+/// `focusedIsEditable`, `pushIme`, `destroy`) that forward to
+/// [`ops`](crate::ops). Invoking this macro is all an embedder needs to make
+/// its `.so` drivable by the Kotlin `org.tur.TurNative` bridge — engine
+/// **creation** is NOT included (it varies per embedder; write your own
+/// `Java_<pkg>_<Class>_createEngine` that calls
+/// [`ops::create_with_plugins`](crate::ops::create_with_plugins)).
+///
+/// Invoke under `#[cfg(target_os = "android")]` (the trampolines reference
+/// android-only impls):
+///
+/// ```no_run
+/// #[cfg(target_os = "android")]
+/// tur_android::standard_jni_exports!();
+/// ```
+#[macro_export]
+macro_rules! standard_jni_exports {
+    () => {
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_loadModule(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            js: $crate::JString,
+        ) {
+            $crate::ops::load_module(&mut env, handle, js)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pump(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) -> $crate::jint {
+            $crate::ops::pump(handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_resize(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            width: $crate::jint,
+            height: $crate::jint,
+            dpr: $crate::jdouble,
+        ) {
+            $crate::ops::resize(&mut env, handle, width, height, dpr)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pushPointer(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            action: $crate::jint,
+            x: $crate::jdouble,
+            y: $crate::jdouble,
+            time_ms: $crate::jlong,
+        ) {
+            $crate::ops::push_pointer(&mut env, handle, action, x, y, time_ms)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pushKey(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            key: $crate::JString,
+            code: $crate::JString,
+            action: $crate::jint,
+            ctrl: $crate::jboolean,
+            shift: $crate::jboolean,
+            alt: $crate::jboolean,
+            meta: $crate::jboolean,
+        ) {
+            $crate::ops::push_key(&mut env, handle, key, code, action, ctrl, shift, alt, meta)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_focusedIsEditable(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) -> $crate::jboolean {
+            $crate::ops::focused_is_editable(handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pushIme(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+            kind: $crate::jint,
+            text: $crate::JString,
+        ) {
+            $crate::ops::push_ime(&mut env, handle, kind, text)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_destroy(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) {
+            $crate::ops::destroy(handle)
+        }
+    };
 }

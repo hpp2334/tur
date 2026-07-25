@@ -4314,7 +4314,6 @@ dependencies = [
  "tracing-subscriber",
  "tur-animation",
  "tur-clipboard-android",
- "tur-demo-plugin",
  "tur-engine",
  "tur-native",
  "tur-net-native",
@@ -4366,6 +4365,18 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "tur-demo"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "tur-android",
+ "tur-animation",
+ "tur-demo-plugin",
+ "tur-engine",
+ "tur-net-native",
 ]
 
 [[package]]
@@ -4476,12 +4487,27 @@ dependencies = [
  "tracing-wasm",
  "tur-animation",
  "tur-clipboard-wasm",
- "tur-demo-plugin",
  "tur-engine",
  "tur-net-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "tur-website"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "console_error_panic_hook",
+ "js-sys",
+ "tracing",
+ "tracing-wasm",
+ "tur-demo-plugin",
+ "tur-engine",
+ "tur-wasm",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

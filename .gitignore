@@ -4,9 +4,9 @@
 # Cargo.lock is committed for reproducible CI
 *.rs.bk
 
-# wasm-pack
-libs/tur-wasm/pkg/
-libs/tur-wasm/target/
+# wasm-pack (website wasm cdylib — built by the dev server's WasmBuildPlugin)
+demo/website/native/pkg/
+demo/website/native/target/
 
 # Node
 node_modules/
@@ -14,7 +14,7 @@ dist/
 *.tsbuildinfo
 
 # Generated TypeScript
-js/packages/tur-demo-impl/src/cases/generated.ts
+demo/playground-view/src/cases/generated.ts
 
 # Build output
 js/packages/tur-rspack-plugin/dist/
@@ -60,13 +60,13 @@ test-results/
 **/local.properties
 **/captures/
 
-# Generated native libraries — produced by the `buildTurNative`/`copyTurNative`
-# gradle tasks (cargo ndk → src/main/jniLibs/<abi>/libtur_android.so). Do NOT
+# Generated native libraries — produced by the `buildDemoNative`/`copyDemoNative`
+# gradle tasks (cargo ndk → src/main/jniLibs/<abi>/libtur_demo.so). Do NOT
 # commit; rebuilt on every assemble.
-integrations/compose/src/main/jniLibs/
+demo/compose/src/main/jniLibs/
 
 # Generated JS asset — produced by the `buildPlaygroundJs`/`copyPlaygroundJs`
-# gradle tasks (pnpm --filter @tur/demo-impl build → assets/playground.js).
+# gradle tasks (pnpm --filter @tur/playground-view build → assets/playground.js).
 # Scoped: only the demo app's asset, not any other file named playground.js.
 demo/compose/src/main/assets/playground.js
 .zcode/

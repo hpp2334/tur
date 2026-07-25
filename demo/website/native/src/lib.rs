@@ -1,0 +1,113 @@
+//! WebAssembly entry for the tur website.
+//!
+//! `tur-wasm` is a reusable embedder lib (it owns all the DOM wiring + engine
+//! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
+//! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
+//! [`tur_wasm::WasmAppHandle`] builder, adds the playground-only
+//! [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler + browser file IO), and
+//! registers the `resolve_pending_picks` after-frame hook. JS imports
+//! `TurWebsiteApp` from the generated `tur_website.js`.
+//!
+//! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
+//! (the app's own cdylib that adds the demo plugin set).
+
+// Everything is wasm32-only — on a host `cargo check --workspace` this is an
+// empty (but compiling) cdylib.
+#![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+
+#[cfg(target_arch = "wasm32")]
+use std::rc::Rc;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
+/// One-time wasm init (panic hook + tracing). Called automatically on module
+/// instantiation via the `#[wasm_bindgen(start)]` attribute.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen(start)]
+pub fn wasm_entry() {
+    tur_wasm::init();
+}
+
+/// A running tur website app. Construct via [`TurWebsiteApp::create`] (full
+/// viewport) or [`TurWebsiteApp::create_in`] (embedded in a container element).
+/// Load a view bundle (e.g. the playground-view `impl.js`) via
+/// `loadAndRunModule`.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub struct TurWebsiteApp {
+    handle: tur_wasm::WasmAppHandle,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl TurWebsiteApp {
+    /// Full-viewport canvas: the app owns the entire window.
+    pub fn create() -> js_sys::Promise {
+        Self::create_internal(None)
+    }
+
+    /// Embed the canvas inside the element with the given id.
+    pub fn create_in(container_id: String) -> js_sys::Promise {
+        Self::create_internal(Some(container_id))
+    }
+
+    fn create_internal(container_id: Option<String>) -> js_sys::Promise {
+        // Drain pending `pickFile` resolutions each frame (where a
+        // `&mut Context` is available). The plugin owns the queue + the
+        // ArrayBuffer/callback logic.
+        let after_frame: tur_wasm::AfterFrameHook = Rc::new(tur_demo_plugin::resolve_pending_picks);
+        wasm_bindgen_futures::future_to_promise(async move {
+            let handle = tur_wasm::WasmAppHandle::create(tur_wasm::WasmAppConfig {
+                container_id,
+                configure: Box::new(|b| b.plugin(tur_demo_plugin::TurDemoPlugin)),
+                after_frame: Some(after_frame),
+            })
+            .await?;
+            Ok(JsValue::from(TurWebsiteApp { handle }))
+        })
+    }
+
+    /// Evaluate `js_source` as an ES module (supports real
+    /// `import { ... } from "tur:..."`, resolved by the engine's module
+    /// loader), then render. Used to load the playground-view bundle.
+    #[wasm_bindgen(js_name = loadAndRunModule)]
+    pub fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
+        self.handle.load_and_run_module(js_source)
+    }
+
+    /// Return a host-side dev-tool handle. Methods eval the in-engine
+    /// `turDevTool` global, returning JSON strings for the host to parse.
+    pub fn dev_tool(&self) -> TurDevTool {
+        TurDevTool {
+            handle: self.handle.clone(),
+        }
+    }
+}
+
+/// Host-side dev-tool handle, exposed via `TurWebsiteApp.dev_tool()`. Methods
+/// return JSON strings (the data originates inside the boa engine, a separate
+/// JS realm, so JSON is the simplest cross-realm transport).
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub struct TurDevTool {
+    handle: tur_wasm::WasmAppHandle,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl TurDevTool {
+    /// JSON snapshot of the root node, or `""` if no tree is mounted.
+    /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
+    #[wasm_bindgen(js_name = elementTree)]
+    pub fn element_tree(&self) -> String {
+        self.handle.element_tree()
+    }
+
+    /// JSON snapshot of a single node by id (full subtree metadata; children
+    /// are returned as bare `{id}` handles). Returns `""` if not found.
+    #[wasm_bindgen(js_name = getElement)]
+    pub fn get_element(&self, id: u32) -> String {
+        self.handle.get_element(id)
+    }
+}

@@ -1,15 +1,14 @@
 {
-    "extends": "../../tsconfig.base.json",
+    "extends": "../../js/tsconfig.base.json",
     "compilerOptions": {
         "noEmit": true,
         "types": [
             "@tur/core",
             "@tur/std",
             "@tur/animation",
-            "@tur/demo-helper",
             "@tur/clipboard",
             "@tur/net"
         ]
     },
-    "include": ["src"]
+    "include": ["src", "cases"]
 }

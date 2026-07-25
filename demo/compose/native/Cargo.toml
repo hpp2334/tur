@@ -1,0 +1,28 @@
+[package]
+name = "tur-demo"
+description = "Native cdylib for the tur Android playground demo — an example of building a custom tur-android .so with the demo plugin set. Copy this crate as the template for your own app's native lib."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+# The single .so the demo app loads (`System.loadLibrary("tur_demo")`).
+# Links tur-android (rlib) + adds the demo's plugins; the standard engine-op
+# JNI symbols come from `tur_android::standard_jni_exports!()`.
+crate-type = ["cdylib"]
+
+[dependencies]
+tur-android.workspace = true
+tur-engine.workspace = true
+tur-animation.workspace = true
+tur-net-native.workspace = true
+# `default-features = false` (inherited from the workspace dep): the demo runs
+# on Android (non-browser), so the `web-io` feature is off — `pickFile`/
+# `saveFile` register as no-op stubs (the swc TS compiler fns still ship).
+tur-demo-plugin = { workspace = true }
+
+# Scoped to Android so a host `cargo check --workspace` produces an empty
+# (but compiling) cdylib — the JNI entry points and create fn are android-only.
+[target.'cfg(target_os = "android")'.dependencies]
+boa_engine = { workspace = true, features = ["jsvalue-enum"] }
