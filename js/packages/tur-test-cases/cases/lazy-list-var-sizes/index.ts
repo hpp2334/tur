@@ -28,7 +28,7 @@ import {
 // (heights in vertical mode, widths in horizontal mode). A toggle button at
 // the top flips the axis at runtime via an `Each`-keyed rebuild — the same
 // "rebuild-on-change" idiom used in
-// js/packages/tur-demo-impl/src/views/viewer.ts.
+// demo/playground-view/src/views/viewer.ts.
 //
 // Engine notes:
 //   * When `itemExtent` is OMITTED, LazyList measures each visible item,

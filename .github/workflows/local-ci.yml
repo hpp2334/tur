@@ -58,4 +58,4 @@ jobs:
 
       - name: wasm-pack build
         run: wasm-pack build --target web --no-opt -- --locked
-        working-directory: ./libs/tur-wasm
+        working-directory: ./demo/website/native

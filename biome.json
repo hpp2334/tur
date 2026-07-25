@@ -7,11 +7,17 @@
             "!!**/.rslib",
             "!!**/.runtime-build",
             "!!**/node_modules",
+            "!!**/target",
+            "!!**/pkg",
             "!!**/generated",
             "!!**/cases-generated.ts",
             "!!**/generated.ts",
             "!!**/test-results"
         ]
+    },
+    "vcs": {
+        "clientKind": "git",
+        "useIgnoreFile": true
     },
     "formatter": {
         "indentStyle": "space",

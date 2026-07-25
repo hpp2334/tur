@@ -7,10 +7,9 @@ import type { Compiler, RspackPluginInstance } from "@rspack/core";
 import * as rspack from "@rspack/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = resolve(__dirname, "../../..");
-const wasmDir = join(workspaceRoot, "libs", "tur-wasm");
+const wasmDir = resolve(__dirname, "native");
 const wasmPkgDir = join(wasmDir, "pkg");
-const implDir = join(__dirname, "../tur-demo-impl");
+const implDir = resolve(__dirname, "../playground-view");
 
 /** Build the tur WASM (boa + vello + swc) and copy the pkg assets to dist. */
 class WasmBuildPlugin implements RspackPluginInstance {
@@ -48,17 +47,18 @@ class WasmBuildPlugin implements RspackPluginInstance {
     }
 }
 
-/** Build the self-hosted playground (tur-demo-impl) and emit impl.js. */
+/** Build the playground-view bundle and emit impl.js. */
 class ImplBundlePlugin implements RspackPluginInstance {
-    /** Timestamp (ms) of the last successful `pnpm build` of tur-demo-impl. */
+    /** Timestamp (ms) of the last successful `pnpm build` of playground-view. */
     private lastBuilt = 0;
     apply(compiler: Compiler): void {
-        // tur-demo-impl is emitted as a pre-built asset (dist/impl.js), so its
-        // source is NOT part of tur-demo's module graph — rspack's watcher
-        // won't see edits there unless we explicitly register the directory as
-        // a context dependency (done in `afterCompile` below). Without that,
-        // regenerating case sources (gen-cases → src/cases/generated.ts) never
-        // reached the running dev server, requiring a manual restart.
+        // playground-view is emitted as a pre-built asset (dist/impl.js), so
+        // its source is NOT part of the website's module graph — rspack's
+        // watcher won't see edits there unless we explicitly register the
+        // directory as a context dependency (done in `afterCompile` below).
+        // Without that, regenerating case sources (gen-cases →
+        // src/cases/generated.ts) never reached the running dev server,
+        // requiring a manual restart.
         const implSrcDir = join(implDir, "src");
         const generatedCases = join(implSrcDir, "cases", "generated.ts");
 
@@ -72,7 +72,7 @@ class ImplBundlePlugin implements RspackPluginInstance {
         const buildImpl = () => {
             compiler
                 .getInfrastructureLogger("ImplBundlePlugin")
-                .info("Building tur-demo-impl...");
+                .info("Building playground-view...");
             execSync("pnpm build", { cwd: implDir, stdio: "inherit" });
             this.lastBuilt = Date.now();
         };
@@ -82,9 +82,9 @@ class ImplBundlePlugin implements RspackPluginInstance {
         );
         compiler.hooks.watchRun.tapPromise("ImplBundlePlugin", async () => {
             // `modifiedFiles` is the set of paths that triggered this watch
-            // run. Only rebuild impl when something under tur-demo-impl/src
+            // run. Only rebuild impl when something under playground-view/src
             // changed (e.g. a regenerated case manifest); otherwise skip so
-            // unrelated tur-demo edits don't pay the `pnpm build` cost. Fall
+            // unrelated website edits don't pay the `pnpm build` cost. Fall
             // back to an mtime check when modifiedFiles is unavailable.
             const changed = (
                 compiler as unknown as { modifiedFiles?: Set<string> }
@@ -95,7 +95,7 @@ class ImplBundlePlugin implements RspackPluginInstance {
             if (touched) buildImpl();
         });
         compiler.hooks.afterCompile.tap("ImplBundlePlugin", (compilation) => {
-            // Watch tur-demo-impl/src so edits there (incl. regenerated case
+            // Watch playground-view/src so edits there (incl. regenerated case
             // sources) trigger watchRun + an impl rebuild.
             compilation.contextDependencies.add(implSrcDir);
         });

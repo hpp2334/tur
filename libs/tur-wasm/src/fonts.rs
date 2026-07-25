@@ -1,5 +1,5 @@
-use parley::fontique::GenericFamily;
 use parley::FontContext;
+use parley::fontique::GenericFamily;
 use tur_engine::core::fonts::FontLoader;
 
 const DEFAULT_FONT: &[u8] = include_bytes!("../fonts/Roboto-Regular.ttf");

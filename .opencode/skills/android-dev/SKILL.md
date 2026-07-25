@@ -1,14 +1,16 @@
 ---
 name: android-dev
-description: Use when building, signing, installing, or debugging the tur Android app on a physical device or emulator. Covers `tur-android` / `demo/compose` (package `org.tur.demo`), the `cargo ndk` + `gradlew assembleRelease` build, the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), readable Rust panic backtraces in logcat (panic hook + `.symtab` preservation + `catch_unwind`), the touch physical↔logical coordinate mapping, and the macOS Sequoia `adb` local-network block workaround. Triggers: Android device, Mi 11 / M2011K2G, `adb connect`, `adb pair`, wireless debugging, `device offline`, `No route to host`, `libtur_android`, SIGABRT, `RefCell already borrowed`, panic stack.
+description: Use when building, signing, installing, or debugging the tur Android app on a physical device or emulator. Covers `tur-android` / `demo/compose` (package `org.tur.demo`), the demo's `tur-demo` cdylib (`demo/compose/native` → `libtur_demo.so`), the `cargo ndk` + `gradlew assembleRelease` build, the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), readable Rust panic backtraces in logcat (panic hook + `.symtab` preservation + `catch_unwind`), the touch physical↔logical coordinate mapping, and the macOS Sequoia `adb` local-network block workaround. Triggers: Android device, Mi 11 / M2011K2G, `adb connect`, `adb pair`, wireless debugging, `device offline`, `No route to host`, `libtur_demo`, SIGABRT, `RefCell already borrowed`, panic stack.
 ---
 
 # tur Android on-device debug
 
 Everything needed to get the tur playground running on an Android device and to
-keep `adb` talking to it from macOS. The native side is `libs/tur-android`
-(cdylib `libtur_android`); the shell is `demo/compose` (Kotlin/Compose); the
-Compose integration is `integrations/compose`.
+keep `adb` talking to it from macOS. The native engine glue is `libs/tur-android`
+(an **rlib** — no `.so` of its own); the demo's `.so` (`libtur_demo`) is built
+from `demo/compose/native` (a cdylib that links `tur-android` + the demo plugins);
+the shell is `demo/compose` (Kotlin/Compose); the Compose integration is
+`integrations/compose` (a pure-Kotlin AAR with no native code).
 
 Environment: Android cmdline-tools at `/usr/local/share/android-commandlinetools`,
 NDK `27.0.12077973`, JDK 17 at `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home`
@@ -16,10 +18,10 @@ NDK `27.0.12077973`, JDK 17 at `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Co
 
 ## Build
 
-Build the Rust cdylib (per ABI) + the demo APK:
+Build the demo's Rust cdylib (per ABI) + the demo APK:
 
 ```sh
-cargo ndk -t arm64-v8a build --release -p tur-android   # also: -t x86_64 for emulator
+cargo ndk -t arm64-v8a build --release -p tur-demo   # also: -t x86_64 for emulator
 cd demo/compose && JAVA_HOME=/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
     ANDROID_HOME=/usr/local/share/android-commandlinetools \
     ANDROID_NDK_HOME=/usr/local/share/android-commandlinetools/ndk/27.0.12077973 \
@@ -159,16 +161,16 @@ A real crash looks like `PANIC at <file>:<line>: <msg>` + `PANIC backtrace:`
 
 ## Rebuilding after an *engine* change
 
-`gradlew assembleRelease` runs `cargo ndk` via the `:tur-compose`
-`buildTurNative` task, but that task's inputs only watch `libs/tur-android/src`
-— a change in `libs/tur-engine/src` is **not** detected, so the task stays
-UP-TO-DATE and the old `.so` ships. After any engine edit, rebuild the `.so`
-directly first, then run gradle (its `copyTurNative` re-copies the changed
-artifact):
+`gradlew assembleRelease` runs `cargo ndk` via the demo's `:buildDemoNative`
+task, but that task's inputs only watch `demo/compose/native/src` — a change in
+`libs/tur-engine/src` (or `libs/tur-android/src`) is **not** detected, so the
+task stays UP-TO-DATE and the old `.so` ships. After any engine edit, rebuild
+the `.so` directly first, then run gradle (its `:copyDemoNative` re-copies the
+changed artifact):
 
 ```sh
-cargo ndk -t arm64-v8a build --release -p tur-android
-cd demo/compose && ./gradlew assembleRelease   # copyTurNative re-runs, APK rebuilt
+cargo ndk -t arm64-v8a build --release -p tur-demo
+cd demo/compose && ./gradlew assembleRelease   # copyDemoNative re-runs, APK rebuilt
 ```
 
 ## Driving the UI: touch coordinate mapping

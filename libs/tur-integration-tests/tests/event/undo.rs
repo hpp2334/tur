@@ -258,7 +258,7 @@ fn playground_select_all_cut_then_undo_restores_text() {
 // ---------------------------------------------------------------------------
 // Context-menu path: the playground's Cut menu action calls
 // `editorCtrl.deleteSelection()` directly through the JS bridge (see
-// tur-demo-impl/src/state/context-menu.ts). Unlike the Cmd+X keyboard path,
+// demo/playground-view/src/state/context-menu.ts). Unlike the Cmd+X keyboard path,
 // the JS-bridge `deleteSelection` does NOT push a snapshot onto the undo
 // stack, so a subsequent Cmd+Z has nothing to restore. This is the
 // reproduction for the reported "select all → cut → undo does nothing" bug.
@@ -301,7 +301,7 @@ fn context_menu_cut_then_undo_restores_text() {
 // ---------------------------------------------------------------------------
 // Context-menu Paste: the playground's Paste menu action calls
 // `editorCtrl.insertText(text)` through the JS bridge (see
-// tur-demo-impl/src/state/context-menu.ts `pasteFromClipboard`). This must
+// demo/playground-view/src/state/context-menu.ts `pasteFromClipboard`). This must
 // also be undoable now that JS-bridge mutations record to the undo stack.
 // ---------------------------------------------------------------------------
 

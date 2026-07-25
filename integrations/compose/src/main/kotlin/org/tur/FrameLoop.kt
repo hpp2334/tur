@@ -9,8 +9,8 @@ import android.view.Choreographer
  *
  * The engine decides when it wants the next wake-up ([NextFrame] verdict) and
  * calls one of `scheduleVsync` / `scheduleDelayed` / `cancel` back through JNI.
- * When the wake-up fires, [FrameLoop] invokes [onWake] (which the [TurEngine]
- * wires to `nativePump`), completing the loop:
+ * When the wake-up fires, [FrameLoop] invokes [onWake] (which [TurEngine]
+ * wires to the engine's `pump`), completing the loop:
  *
  * ```
  * engine run_frame() → LoopDriver.request_next(Vsync) → FrameLoop.scheduleVsync()
@@ -19,11 +19,19 @@ import android.view.Choreographer
  *
  * Lives on the main looper (where `SurfaceHolder.Callback` and input dispatch
  * arrive), matching the single-threaded assumption the native side relies on.
+ *
+ * [onWake] / [onAfterPump] are settable (default `null`) so a [FrameLoop] can be
+ * constructed before the engine handle exists and wired up by [TurEngine]
+ * afterwards — the [TurEngineFactory] needs a `FrameLoop` to hand to native
+ * `createEngine`, but the `pump` target only exists once `createEngine` returns.
  */
-class FrameLoop(private val onWake: () -> Unit) {
+class FrameLoop {
     private val handler = Handler(Looper.getMainLooper())
     private var frameCallback: Choreographer.FrameCallback? = null
     private var delayedToken: Runnable? = null
+
+    /** Fired when a scheduled wake-up is due. [TurEngine] sets this to `pump`. */
+    var onWake: (() -> Unit)? = null
 
     /**
      * Optional callback fired after [onWake] in each wake-up. The Compose
@@ -41,7 +49,7 @@ class FrameLoop(private val onWake: () -> Unit) {
         val cb = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 frameCallback = null
-                onWake()
+                onWake?.invoke()
                 onAfterPump?.invoke()
             }
         }
@@ -54,7 +62,7 @@ class FrameLoop(private val onWake: () -> Unit) {
         if (delayedToken != null) return // already armed (coalesce)
         val r = Runnable {
             delayedToken = null
-            onWake()
+            onWake?.invoke()
             onAfterPump?.invoke()
         }
         delayedToken = r

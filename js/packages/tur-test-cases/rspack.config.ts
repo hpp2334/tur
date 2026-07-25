@@ -41,7 +41,6 @@ export default defineConfig({
     externals: {
         "tur:std": "tur:std",
         "tur:animation": "tur:animation",
-        "tur-ext/demo-helper": "tur-ext/demo-helper",
         "tur:clipboard": "tur:clipboard",
         "tur:net": "tur:net",
     },

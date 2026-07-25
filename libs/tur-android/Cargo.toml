@@ -1,20 +1,23 @@
 [package]
 name = "tur-android"
-description = "Android JNI binary for tur rendering engine (Compose integration runtime)"
+description = "Embedder glue for running the tur engine on Android (wgpu/Vulkan over a Surface, JNI event/loop bridge). Link this as an rlib from your own cdylib to inject custom plugins."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+# rlib only: every app builds its own cdylib (so it can inject plugins). This
+# crate provides the engine-build helper, the standard-op implementations, and
+# the `standard_jni_exports!()` macro that generates the `Java_org_tur_TurNative_*`
+# forwarders inside the app's crate.
+crate-type = ["rlib"]
 
 [dependencies]
 tur-engine = { workspace = true, features = ["wgpu-backend"], default-features = false }
 tur-animation = { workspace = true }
 tur-clipboard-android = { path = "../tur-clipboard-android" }
 tur-net-native = { workspace = true }
-tur-demo-plugin = { path = "../tur-demo-plugin", default-features = false }
 boa_engine = { workspace = true }
 parley = { workspace = true }
 tur-native = { workspace = true }

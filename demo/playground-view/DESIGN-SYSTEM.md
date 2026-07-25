@@ -1,6 +1,6 @@
 # tur Playground — Design System
 
-**Status**: Normative · **Scope**: `@tur/demo-impl` (the playground shell — sidebar, editor, viewer, error chrome) · **Theme**: Light
+**Status**: Normative · **Scope**: `@tur/playground-view` (the playground shell — sidebar, editor, viewer, error chrome) · **Theme**: Light
 
 This document is the single source of truth for visual decisions in the tur playground. Every color, size, and view shape in `src/index.ts` and `src/compile.ts` must trace back to a token defined here. See [`STYLE-GUIDE.md`](./STYLE-GUIDE.md) for how to apply these tokens.
 

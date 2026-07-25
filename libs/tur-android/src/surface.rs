@@ -79,7 +79,7 @@ mod ffi {
 /// On non-Android targets this is a no-op stub.
 #[cfg(target_os = "android")]
 pub unsafe fn native_window_from_surface(env: *mut c_void, surface: *mut c_void) -> *mut c_void {
-    ffi::ANativeWindow_fromSurface(env, surface)
+    unsafe { ffi::ANativeWindow_fromSurface(env, surface) }
 }
 
 #[cfg(not(target_os = "android"))]
@@ -92,7 +92,7 @@ pub unsafe fn native_window_from_surface(_env: *mut c_void, _surface: *mut c_voi
 #[allow(dead_code)]
 pub unsafe fn release_native_window(window: *mut c_void) {
     if !window.is_null() {
-        ffi::ANativeWindow_release(window);
+        unsafe { ffi::ANativeWindow_release(window) };
     }
 }
 

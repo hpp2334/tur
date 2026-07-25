@@ -7,14 +7,13 @@ rust-version.workspace = true
 license.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
 tur-engine = { workspace = true, features = ["webgl"] }
 tur-animation = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
-tur-demo-plugin = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
 tracing = { workspace = true }

@@ -12,12 +12,12 @@ declare const require: NodeRequire & {
     };
 };
 
-declare module "*/tur_wasm.js" {
+declare module "*/tur_website.js" {
     export default function init(
         module_or_path: WebAssembly.Module,
     ): Promise<void>;
     // biome-ignore lint/complexity/noStaticOnlyClass: WASM module type declaration
-    export class TurWasmApp {
+    export class TurWebsiteApp {
         static create_in(id: string): Promise<Record<string, unknown>>;
     }
 }

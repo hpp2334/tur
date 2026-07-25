@@ -3,9 +3,9 @@
     "scripts": {
         "build": "pnpm -r --sort run build",
         "typecheck": "pnpm -r run typecheck",
-        "lint": "biome lint .",
-        "format": "biome format --write .",
-        "check": "biome check ."
+        "lint": "biome lint ../js ../demo/website ../demo/playground-view",
+        "format": "biome format --write ../js ../demo/website ../demo/playground-view",
+        "check": "biome check ../js ../demo/website ../demo/playground-view"
     },
     "devDependencies": {
         "@biomejs/biome": "^2.0.0",

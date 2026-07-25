@@ -1,6 +1,6 @@
 # tur Playground — Style Guide
 
-**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `@tur/demo-impl`
+**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `@tur/playground-view`
 
 The design system tells you *what* the tokens are. This guide tells you *how to think* about them — the principles behind product decisions, the patterns to reach for, and the mistakes to refuse in review.
 
@@ -417,10 +417,10 @@ There is exactly one editor surface in the playground. If a future feature needs
 
 ## 6. PR review checklist
 
-Before approving any PR that touches `@tur/demo-impl`, verify:
+Before approving any PR that touches `@tur/playground-view`, verify:
 
-- [ ] **No new `Color.hex(...)` outside `tokens.ts` / `compile.ts`.** Run `rg 'Color\.hex' js/packages/tur-demo-impl/src` and confirm the only matches are in those two files.
-- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' js/packages/tur-demo-impl/src/views` should return nothing.
+- [ ] **No new `Color.hex(...)` outside `tokens.ts` / `compile.ts`.** Run `rg 'Color\.hex' demo/playground-view/src` and confirm the only matches are in those two files.
+- [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' demo/playground-view/src/views` should return nothing.
 - [ ] **No `derive(() => ...)` wrapping static values.** Grep for `derive` and check each one reads at least one source via `get(...)`.
 - [ ] **No off-scale spacing.** Search for `padding:`, `margin:` (if introduced), and verify values are in `{0, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64}`. Documented exceptions allowed with a comment.
 - [ ] **No off-scale font sizes.** Values must be in `{10, 11, 13, 14, 18}` for UI, `13` for code.

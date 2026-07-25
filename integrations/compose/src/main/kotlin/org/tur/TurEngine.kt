@@ -1,59 +1,40 @@
 package org.tur
 
-import android.content.Context
-import android.view.Surface
 import java.io.Closeable
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Owns one native tur engine instance.
+ * Owns one native tur engine instance, identified by its opaque [handle].
  *
- * Built on top of [TurNative] (the JNI bridge): holds the engine `handle`,
- * drives frames via a [FrameLoop], and translates Android input into the
- * engine's platform-event stream. Construction is synchronous — [create]
- * blocks on wgpu adapter/device acquisition (done on the main looper, which is
- * the same thread `SurfaceHolder.Callback.surfaceCreated` arrives on).
+ * Built on top of [TurNative] (the JNI bridge): holds the engine handle, drives
+ * frames via a [FrameLoop], and translates Android input into the engine's
+ * platform-event stream. Unlike a typical engine wrapper, this class does **not**
+ * create the engine — the app builds it via a [TurEngineFactory] (which calls
+ * into the app's own `.so`) and hands the resulting handle here. This keeps the
+ * Kotlin lib decoupled from which `.so` / plugin set the app chose.
  *
  * Use [TurView] in Compose rather than this class directly — [TurView] wires
  * surface lifecycle, input dispatch, and the frame loop together.
+ *
+ * @param handle the opaque native engine pointer returned by the app's
+ *   `createEngine` JNI function. `0` is treated as "destroyed".
+ * @param frameLoop the per-view scheduler the native loop driver arms wake-ups
+ *   against; [pump] is wired to its wake callback.
  */
-class TurEngine private constructor(
+class TurEngine(
+    handle: Long,
     private val frameLoop: FrameLoop,
-    /** Atomic so the finalizer / close() race is safe even though we're single-threaded. */
-    private val handleCell: AtomicLong,
 ) : Closeable {
 
+    /** Atomic so the finalizer / close() race is safe even though we're single-threaded. */
+    private val handleCell: AtomicLong = AtomicLong(handle)
     private val handle: Long get() = handleCell.get()
 
-    companion object {
-        /**
-         * Build the engine over [surface]. Blocks on wgpu setup (adapter +
-         * device + surface configuration). Throws if the GPU is unavailable or
-         * surface creation fails.
-         *
-         * The [FrameLoop] wake callback is bound to [pump] for the instance
-         * returned, so the engine starts advancing as soon as JS is loaded.
-         */
-        fun create(
-            context: Context,
-            surface: Surface,
-            width: Int,
-            height: Int,
-            dpr: Double,
-        ): TurEngine {
-            // Holder so the FrameLoop's wake lambda can read the handle before
-            // nativeCreate has returned it (the lambda captures the cell, not
-            // the value).
-            val handleCell = AtomicLong(0L)
-            val loop = FrameLoop(onWake = {
-                val h = handleCell.get()
-                if (h != 0L) TurNative.pump(h)
-            })
-            val handle = TurNative.create(context, surface, width, height, dpr, loop)
-            require(handle != 0L) { "nativeCreate returned 0 (see logcat for the cause)" }
-            handleCell.set(handle)
-            return TurEngine(loop, handleCell)
-        }
+    init {
+        // Wire the frame loop's wake callback to pump this engine. Done at
+        // construction (the engine already exists by the time the handle reaches
+        // us) so the first Choreographer tick advances it.
+        frameLoop.onWake = { if (handle != 0L) TurNative.pump(handle) }
     }
 
     /** Evaluate [js] (an ES module) and request a paint. */

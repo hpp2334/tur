@@ -20,25 +20,36 @@ import androidx.compose.ui.viewinterop.AndroidView
  * A Compose surface that runs a tur engine instance and renders the given JS.
  *
  * The single-call integration point: drop this composable into any Compose UI,
- * pass a JS bundle string (an ES module importing from `tur:std` / `tur:animation`
- * / etc.), and tur renders into the surface. Pointer (touch), resize, and the
- * frame loop are wired automatically; basic key dispatch is wired when the
- * surface has focus.
+ * pass a JS bundle string (an ES module importing from `tur:std` /
+ * `tur:animation` / etc.) and an [TurEngineFactory] (which builds the native
+ * engine with the app's plugin set and returns its opaque handle), and tur
+ * renders into the surface. Pointer (touch), resize, and the frame loop are
+ * wired automatically; basic key dispatch is wired when the surface has focus.
+ *
+ * Multiple `TurView`s can coexist in one app — each builds its own engine
+ * (isolated JS context + plugins) via [engineFactory], so this is the basis for
+ * a tur-as-plugin-system setup.
  *
  * Example:
  * ```
  * val js = remember { context.assets.open("playground.js").bufferedReader().use { it.readText() } }
- * TurView(js = js, modifier = Modifier.fillMaxSize())
+ * TurView(js = js, engineFactory = TurEngineFactory { ctx, surface, w, h, dpr, loop ->
+ *     DemoNative.createEngine(ctx, surface, w, h, dpr, loop)
+ * }, modifier = Modifier.fillMaxSize())
  * ```
  *
  * @param js an ES module source (the bundle produced by rspack from
- *   `tur-demo-impl` or a `tur-test-cases` case). Imports of `tur:*` /
+ *   `playground-view` or a `tur-test-cases` case). Imports of `tur:*` /
  *   `tur-ext/demo-helper` are resolved by the engine's module loader.
+ * @param engineFactory builds the native engine over the surface and returns
+ *   its handle. The app owns this — it loads its `.so` and calls its own
+ *   `createEngine` JNI function inside.
  * @param dpr force a DPR (defaults to the window's `Resources.displayMetrics.density`).
  */
 @Composable
 fun TurView(
     js: String,
+    engineFactory: TurEngineFactory,
     modifier: Modifier = Modifier,
     dpr: Double? = null,
 ) {
@@ -53,7 +64,7 @@ fun TurView(
     )
 
     DisposableEffect(surfaceView) {
-        surfaceView.bind(js, context, resolvedDpr)
+        surfaceView.bind(js, context, resolvedDpr, engineFactory)
         onDispose { surfaceView.unbind() }
     }
 }
@@ -69,6 +80,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     private var engine: TurEngine? = null
     private var pendingJs: String? = null
     private var dprValue: Double = 0.0
+    private var engineFactory: TurEngineFactory? = null
     /** Tracks the last IME state we drove so we only call the IMM on
      *  show↔hide transitions (not every frame). */
     private var imeActive = false
@@ -88,11 +100,12 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
     }
 
-    /** Stash the JS + dpr and register the surface callback; create the engine
-     *  when the surface is ready. */
-    fun bind(js: String, context: android.content.Context, dpr: Double) {
+    /** Stash the JS + dpr + factory and register the surface callback; build the
+     *  engine (via the factory) when the surface is ready. */
+    fun bind(js: String, context: android.content.Context, dpr: Double, factory: TurEngineFactory) {
         pendingJs = js
         dprValue = dpr
+        engineFactory = factory
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
@@ -128,6 +141,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         override fun surfaceCreated(holder: SurfaceHolder) {
             if (engine != null) return
             val js = pendingJs ?: return
+            val factory = engineFactory ?: return
             // `SurfaceHolder.surfaceFrame` (and `surfaceChanged`'s width/height)
             // report *physical* pixels, but the engine's `viewportSize$` (and
             // thus JS-side layout thresholds like the playground's
@@ -141,11 +155,22 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
             val w = (holder.surfaceFrame.width() / dpr).toInt().coerceAtLeast(1)
             val h = (holder.surfaceFrame.height() / dpr).toInt().coerceAtLeast(1)
             engine = try {
-                TurEngine.create(context, holder.surface, w, h, dprValue).also {
-                    it.loadModule(js)
-                    // After each frame, sync the soft keyboard with the engine's
-                    // focused-element state (polls `focusedIsEditable`).
-                    it.setAfterPump { syncIme() }
+                // Build the engine via the app's factory (which calls into the
+                // app's .so with its plugin set). The FrameLoop is created here
+                // and handed both to native (the loop driver arms wake-ups
+                // against it) and to TurEngine (which wires its onWake → pump).
+                val frameLoop = FrameLoop()
+                val handle = factory.create(context, holder.surface, w, h, dprValue, frameLoop)
+                if (handle == 0L) {
+                    android.util.Log.e("TurView", "engineFactory.create returned 0 (see logcat)")
+                    null
+                } else {
+                    TurEngine(handle, frameLoop).also {
+                        it.loadModule(js)
+                        // After each frame, sync the soft keyboard with the
+                        // engine's focused-element state (polls `focusedIsEditable`).
+                        it.setAfterPump { syncIme() }
+                    }
                 }
             } catch (e: Throwable) {
                 android.util.Log.e("TurView", "engine create failed", e)

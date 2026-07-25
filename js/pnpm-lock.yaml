@@ -27,6 +27,46 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  ../demo/playground-view:
+    dependencies:
+      '@tur/animation':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-animation
+      '@tur/clipboard':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-clipboard
+      '@tur/core':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-core
+      '@tur/net':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-net
+      '@tur/std':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-std
+    devDependencies:
+      '@rspack/cli':
+        specifier: ^1.2.0
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+      '@rspack/core':
+        specifier: ^1.2.0
+        version: 1.7.11(@swc/helpers@0.5.21)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  ../demo/website:
+    devDependencies:
+      '@rspack/cli':
+        specifier: ^1.2.0
+        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
+      '@rspack/core':
+        specifier: ^1.2.0
+        version: 1.7.11(@swc/helpers@0.5.21)
+      concurrently:
+        specifier: ^10.0.3
+        version: 10.0.3
+
   packages/tur-animation:
     dependencies:
       '@tur/core':
@@ -44,51 +84,6 @@ importers:
 
   packages/tur-core: {}
 
-  packages/tur-demo:
-    devDependencies:
-      '@rspack/cli':
-        specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
-      '@rspack/core':
-        specifier: ^1.2.0
-        version: 1.7.11(@swc/helpers@0.5.21)
-      concurrently:
-        specifier: ^10.0.3
-        version: 10.0.3
-
-  packages/tur-demo-helper: {}
-
-  packages/tur-demo-impl:
-    dependencies:
-      '@tur/animation':
-        specifier: workspace:*
-        version: link:../tur-animation
-      '@tur/clipboard':
-        specifier: workspace:*
-        version: link:../tur-clipboard
-      '@tur/core':
-        specifier: workspace:*
-        version: link:../tur-core
-      '@tur/demo-helper':
-        specifier: workspace:*
-        version: link:../tur-demo-helper
-      '@tur/net':
-        specifier: workspace:*
-        version: link:../tur-net
-      '@tur/std':
-        specifier: workspace:*
-        version: link:../tur-std
-    devDependencies:
-      '@rspack/cli':
-        specifier: ^1.2.0
-        version: 1.7.11(@rspack/core@1.7.11(@swc/helpers@0.5.21))(@types/express@4.17.25)(tslib@2.8.1)
-      '@rspack/core':
-        specifier: ^1.2.0
-        version: 1.7.11(@swc/helpers@0.5.21)
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
   packages/tur-net: {}
 
   packages/tur-std: {}
@@ -101,9 +96,6 @@ importers:
       '@tur/core':
         specifier: workspace:*
         version: link:../tur-core
-      '@tur/demo-helper':
-        specifier: workspace:*
-        version: link:../tur-demo-helper
       '@tur/net':
         specifier: workspace:*
         version: link:../tur-net
