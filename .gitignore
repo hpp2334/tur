@@ -69,3 +69,4 @@ integrations/compose/src/main/jniLibs/
 # gradle tasks (pnpm --filter @tur/demo-impl build → assets/playground.js).
 # Scoped: only the demo app's asset, not any other file named playground.js.
 demo/compose/src/main/assets/playground.js
+.zcode/

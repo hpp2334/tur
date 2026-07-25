@@ -3,6 +3,7 @@ import {
     Color,
     Container,
     derive,
+    get,
     mutate,
     PointerInteract,
     set,
@@ -48,14 +49,14 @@ Object.assign(globalThis, {
 
 export default view(() =>
     Transform({
-        scale: derive(() => dragScale$.get()),
+        scale: derive(() => get(dragScale$)),
         child: PointerInteract({
             onPointerDown: mutate((_ctx, ev) => {
                 dragStart = { x: ev.global.x, y: ev.global.y };
                 lastEvent = "down";
                 liftCtrl.forward();
             }),
-            onPointerMove: mutate((_ctx, ev) => {
+            onPointerMove: mutate((_ctx, _ev) => {
                 if (!dragStart) return;
                 lastEvent = "move";
             }),
