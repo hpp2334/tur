@@ -20,6 +20,18 @@ use crate::core::layout::Offset;
 
 const TOUCH_SLOP: f64 = 18.0;
 
+/// Maximum total displacement (px, from the down position to the release
+/// position) for a touch sequence to qualify as a tap. Mirrors `TOUCH_SLOP`:
+/// movement under this never resolves the arena to drag/scroll, so a release
+/// here is a tap (not a drag that stayed sub-slop).
+const TAP_MAX_DISTANCE_PX: f64 = TOUCH_SLOP;
+
+/// Maximum duration (ms, down→up) for a touch sequence to qualify as a tap.
+/// A long press-and-release that stayed under slop should not fire a click.
+/// 500 ms matches the multi-click window in `composer.rs` and the typical
+/// long-press threshold on mobile platforms.
+const TAP_MAX_DURATION_MS: u64 = 500;
+
 /// Window (ms) of recent touch samples used to estimate fling velocity.
 /// Samples older than this are pruned. 100 ms matches the typical "last
 /// gesture snippet" window used by native velocity trackers (Android /
@@ -211,14 +223,22 @@ pub enum TouchUpOutcome {
     /// touch-movement velocity (px/ms) so the handler can seed a fling
     /// simulation. `(0, 0)` if there wasn't enough movement to estimate.
     ScrollEnded { vx: f64, vy: f64 },
-    /// No resolution but `touchmove` was seen (small movement < slop).
-    /// Synthesize a mouse `PointerDown` + `PointerUp` to fire click/focus.
-    NeedsSyntheticClick {
+    /// The touch sequence ended without resolving to drag or scroll, and it
+    /// qualifies as a tap (short duration, movement stayed within slop). The
+    /// handler synthesizes a mouse `PointerDown` + `PointerUp` to fire
+    /// click/focus — the engine owns tap→click synthesis on every host
+    /// (browser, Android, desktop), so embedders must NOT also forward a
+    /// browser-synthesized click for the same tap (double dispatch).
+    /// `position`/`time_ms` are the **down** position + **down** time, used
+    /// for multi-click classification.
+    Tap {
         position: Offset,
         time_ms: u64,
     },
-    /// No resolution and no `touchmove`. The browser synthesizes a click.
-    BrowserClick,
+    /// The touch sequence ended without resolving and does NOT qualify as a
+    /// tap (too long, or moved beyond slop without crossing the drag
+    /// threshold — e.g. a long-press-and-release). Nothing to dispatch.
+    Idle,
 }
 
 pub enum TouchCancelOutcome {
@@ -234,7 +254,6 @@ struct TouchState {
     time_ms: u64,
     hit_path: Vec<ElementNodeId>,
     winner: Option<ArenaWinnerKind>,
-    move_seen: bool,
     /// Recent touch-move samples used to estimate the drag velocity at
     /// release, so a scroll-resolved drag can seed an inertia fling.
     velocity: VelocityTracker,
@@ -273,7 +292,6 @@ impl GestureArena {
             time_ms,
             hit_path,
             winner: None,
-            move_seen: false,
             velocity,
         });
     }
@@ -291,7 +309,6 @@ impl GestureArena {
         let dx = position.x - ts.last_position.x;
         let dy = position.y - ts.last_position.y;
         ts.last_position = position;
-        ts.move_seen = true;
         ts.velocity.record(position, now_ms);
 
         if let Some(winner) = ts.winner {
@@ -326,10 +343,13 @@ impl GestureArena {
 
     /// Called on `PointerUp { device: Touch }`. Records a final sample at the
     /// release position so the velocity estimate reflects the moment of
-    /// lift-off, then computes the fling velocity.
+    /// lift-off, then computes the fling velocity. If the sequence did not
+    /// resolve to drag/scroll, classifies it as a tap (short + sub-slop) or
+    /// idle (too long / too far). The engine synthesizes the click for a tap
+    /// on every host — see `TouchUpOutcome::Tap`.
     pub fn on_touch_up(&mut self, position: Offset, time_ms: u64) -> TouchUpOutcome {
         let Some(mut ts) = self.touch.take() else {
-            return TouchUpOutcome::BrowserClick;
+            return TouchUpOutcome::Idle;
         };
         ts.velocity.record(position, time_ms);
         match ts.winner {
@@ -339,13 +359,23 @@ impl GestureArena {
                 TouchUpOutcome::ScrollEnded { vx, vy }
             }
             None => {
-                if ts.move_seen {
-                    TouchUpOutcome::NeedsSyntheticClick {
+                // No drag/scroll won. Decide tap vs idle from the gesture's
+                // total duration and displacement — the same gesture is a tap
+                // whether or not the finger jittered, so the former
+                // `move_seen` split (which assumed a host browser would
+                // synthesize the click for the no-move case) is gone. The
+                // engine synthesizes the click itself for any qualifying tap.
+                let dx = position.x - ts.down_position.x;
+                let dy = position.y - ts.down_position.y;
+                let distance = (dx * dx + dy * dy).sqrt();
+                let duration = time_ms.saturating_sub(ts.time_ms);
+                if distance <= TAP_MAX_DISTANCE_PX && duration <= TAP_MAX_DURATION_MS {
+                    TouchUpOutcome::Tap {
                         position: ts.down_position,
                         time_ms: ts.time_ms,
                     }
                 } else {
-                    TouchUpOutcome::BrowserClick
+                    TouchUpOutcome::Idle
                 }
             }
         }

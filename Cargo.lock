@@ -4316,6 +4316,7 @@ dependencies = [
  "tur-clipboard-android",
  "tur-demo-plugin",
  "tur-engine",
+ "tur-native",
  "tur-net-native",
  "wgpu",
 ]

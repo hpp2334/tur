@@ -25,7 +25,7 @@ mod imp {
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurEngine, TurStdPlugin};
     use tur_net_native::{Http, NativeHttp, TurNetPlugin};
 
-    use crate::fonts::AndroidFontLoader;
+    use tur_native::NativeFontLoader;
     use crate::loop_driver::{AndroidLoopDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
 
@@ -135,7 +135,7 @@ mod imp {
 
             let app = TurEngine::builder()
                 .renderer(Box::new(renderer))
-                .font_loader(Box::new(AndroidFontLoader::new()))
+                .font_loader(Box::new(NativeFontLoader::new()))
                 .clock(Rc::new(StdClock::new()))
                 .capability(CursorCap::new(NoopCursor))
                 .capability(Clipboard::new(AndroidClipboard::new(context)))

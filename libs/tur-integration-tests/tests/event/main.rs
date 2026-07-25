@@ -14,5 +14,7 @@ mod right_click_selection;
 mod scroll;
 mod scrollbar;
 mod touch_inertia;
+mod touch_redrag;
+mod touch_drag_over_text;
 mod caret_into_view;
 mod undo;

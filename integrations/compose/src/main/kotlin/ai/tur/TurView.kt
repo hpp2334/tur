@@ -84,7 +84,16 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.addCallback(surfaceCallback)
         setOnTouchListener { _, event ->
             val eng = engine ?: return@setOnTouchListener false
-            eng.pushPointer(event.actionMasked, event.x.toDouble(), event.y.toDouble(), event.eventTime)
+            // `MotionEvent.getX/Y` are in physical px (Android's view coord
+            // space); the engine hit-tests in logical px, so divide by dpr to
+            // land taps in the same space as the layout.
+            val dpr = dprValue.coerceAtLeast(1.0)
+            eng.pushPointer(
+                event.actionMasked,
+                event.x.toDouble() / dpr,
+                event.y.toDouble() / dpr,
+                event.eventTime,
+            )
             true
         }
     }
@@ -101,8 +110,18 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         override fun surfaceCreated(holder: SurfaceHolder) {
             if (engine != null) return
             val js = pendingJs ?: return
-            val w = holder.surfaceFrame.width().coerceAtLeast(1)
-            val h = holder.surfaceFrame.height().coerceAtLeast(1)
+            // `SurfaceHolder.surfaceFrame` (and `surfaceChanged`'s width/height)
+            // report *physical* pixels, but the engine's `viewportSize$` (and
+            // thus JS-side layout thresholds like the playground's
+            // `isMobile$ = width < 720`) is in *logical / CSS* pixels. Divide
+            // by the density to convert; the renderer re-applies `dpr` when
+            // scaling the scene to the physical surface. Without this, a 1440px-
+            // wide phone at density 3.5 reports a 1440px logical width and the
+            // playground renders its cramped desktop 3-pane layout instead of
+            // the mobile tab-bar layout.
+            val dpr = dprValue.coerceAtLeast(1.0)
+            val w = (holder.surfaceFrame.width() / dpr).toInt().coerceAtLeast(1)
+            val h = (holder.surfaceFrame.height() / dpr).toInt().coerceAtLeast(1)
             engine = try {
                 TurEngine.create(context, holder.surface, w, h, dprValue).also {
                     it.loadModule(js)
@@ -114,7 +133,15 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         }
 
         override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
-            engine?.resize(width.coerceAtLeast(1), height.coerceAtLeast(1), dprValue)
+            // `width`/`height` here are physical px (same unit as
+            // `surfaceFrame`); convert to logical px before pushing to the
+            // engine. See `surfaceCreated` for the unit rationale.
+            val dpr = dprValue.coerceAtLeast(1.0)
+            engine?.resize(
+                (width / dpr).toInt().coerceAtLeast(1),
+                (height / dpr).toInt().coerceAtLeast(1),
+                dprValue,
+            )
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {

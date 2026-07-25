@@ -17,7 +17,6 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 mod app;
-mod fonts;
 mod loop_driver;
 mod surface;
 
@@ -115,6 +114,30 @@ mod logger {
                 .with_writer(LogcatMakeWriter)
                 .finish();
             tracing::subscriber::set_global_default(subscriber).ok();
+
+            // Panic hook → logcat. On Android, stderr is `/dev/null`, so the
+            // default panic hook (which writes to stderr) makes panic messages
+            // invisible — a panic becomes an opaque SIGABRT. Install a hook that
+            // logs the panic payload + location at ERROR, then defers to the
+            // previous hook for the abort/backtrace. This is what surfaces the
+            // actual `wgpu`/`naga` panic message (e.g. shader-compile failures,
+            // surface-format negotiation) instead of just `Fatal signal 6`.
+            let prev_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                let location = info
+                    .location()
+                    .map(|l| format!("{}:{}", l.file(), l.line()))
+                    .unwrap_or_else(|| "<unknown>".into());
+                let payload = if let Some(s) = info.payload().downcast_ref::<&str>() {
+                    (*s).to_string()
+                } else if let Some(s) = info.payload().downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "<non-string panic payload>".to_string()
+                };
+                log::error!("PANIC at {location}: {payload}");
+                prev_hook(info);
+            }));
 
             tracing::info!("tur android logger initialized");
         });

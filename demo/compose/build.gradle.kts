@@ -101,6 +101,15 @@ android.applicationVariants.all {
     val variantCapitalized = name.replaceFirstChar { it.uppercase() }
     tasks.matching { it.name == "merge${variantCapitalized}Assets" }
         .configureEach { dependsOn(copyPlaygroundJs) }
+    // Lint-vital tasks (`generate<Variant>LintVitalReportModel`,
+    // `lintVitalAnalyze<Variant>`, …) also scan the source assets dir, so they
+    // must run after the playground bundle is copied in — otherwise Gradle 8.x
+    // rejects it as an undeclared implicit dependency. Match all lint-vital
+    // tasks for the variant rather than enumerate names.
+    tasks.matching {
+        it.name.lowercase().contains("lintvital") &&
+            it.name.contains(variantCapitalized)
+    }.configureEach { dependsOn(copyPlaygroundJs) }
 }
 
 // Ensure the assets dir exists so the Copy task has a target even on a clean
