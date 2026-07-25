@@ -47,3 +47,26 @@ logs/
 # Playwright test results
 test-results/
 .playwright-mcp/
+
+# Android (Compose integration + demo app)
+#
+# Gradle/AGP build outputs and per-machine SDK config. These live under the
+# standalone gradle roots demo/compose and integrations/compose (each has its
+# own settings.gradle.kts). `**/build/` and `**/.gradle/` have no tracked
+# collisions in this repo, so the broad globs are safe.
+**/build/
+**/.gradle/
+**/.kotlin/
+**/local.properties
+**/captures/
+
+# Generated native libraries — produced by the `buildTurNative`/`copyTurNative`
+# gradle tasks (cargo ndk → src/main/jniLibs/<abi>/libtur_android.so). Do NOT
+# commit; rebuilt on every assemble.
+integrations/compose/src/main/jniLibs/
+
+# Generated JS asset — produced by the `buildPlaygroundJs`/`copyPlaygroundJs`
+# gradle tasks (pnpm --filter @tur/demo-impl build → assets/playground.js).
+# Scoped: only the demo app's asset, not any other file named playground.js.
+demo/compose/src/main/assets/playground.js
+.zcode/

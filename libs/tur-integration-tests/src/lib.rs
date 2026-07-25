@@ -294,6 +294,14 @@ impl TurTestApp {
         let _ = self.bump_time(step_ms);
     }
 
+    /// Current synthetic-time stamp (ms), bumped via `bump_time`. Lets tests
+    /// that push their own platform events with explicit `time_ms` reuse the
+    /// same monotonically-increasing clock the high-level helpers use (so e.g.
+    /// the gesture arena's slop + fling velocity math sees realistic times).
+    pub fn last_synthetic_time_ms(&self) -> u64 {
+        self.synthetic_time_ms
+    }
+
     pub fn load_bundle(&mut self, name: &str) -> Result<(), TurError> {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let workspace_root = Path::new(&manifest_dir)

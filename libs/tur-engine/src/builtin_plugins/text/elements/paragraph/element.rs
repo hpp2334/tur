@@ -156,7 +156,16 @@ impl ElementOnGesture for TextElement {
         event: &ComposedGestureEvent,
     ) -> bool {
         if !self.view.selectable {
-            return true;
+            // Non-selectable text has no gesture behavior — do NOT claim, so
+            // the gesture arena's claim probe (touch drags) falls through to
+            // gesture-capable elements beneath (e.g. a wrapping
+            // `PointerInteract`). Returning `true` here used to let a static
+            // `Text` painted on top of a `PointerInteract` steal touch drags:
+            // the piece's number `Text` won the probe and the
+            // `PointerInteract` beneath never saw `onPointerDown` (the drag
+            // appeared dead on touch, while mouse drags — which bypass the
+            // probe — worked).
+            return false;
         }
         match event {
             ComposedGestureEvent::PointerDown { local, .. } => {

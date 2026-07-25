@@ -6,12 +6,14 @@ members = [
     "libs/tur-animation",
     "libs/tur-clipboard-wasm",
     "libs/tur-clipboard-native",
+    "libs/tur-clipboard-android",
     "libs/tur-net-capability",
     "libs/tur-net-wasm",
     "libs/tur-net-native",
     "libs/tur-demo-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
+    "libs/tur-android",
     "libs/tur-integration-tests",
 ]
 
@@ -28,11 +30,13 @@ tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-animation = { path = "libs/tur-animation" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
 tur-clipboard-native = { path = "libs/tur-clipboard-native" }
+tur-clipboard-android = { path = "libs/tur-clipboard-android" }
 tur-net-capability = { path = "libs/tur-net-capability" }
 tur-net-wasm = { path = "libs/tur-net-wasm" }
 tur-net-native = { path = "libs/tur-net-native" }
 tur-demo-plugin = { path = "libs/tur-demo-plugin" }
 tur-native = { path = "libs/tur-native" }
+tur-android = { path = "libs/tur-android" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
 
 num-derive = "0.4"

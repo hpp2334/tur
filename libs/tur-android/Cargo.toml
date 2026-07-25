@@ -1,0 +1,41 @@
+[package]
+name = "tur-android"
+description = "Android JNI binary for tur rendering engine (Compose integration runtime)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+tur-engine = { workspace = true, features = ["wgpu-backend"], default-features = false }
+tur-animation = { workspace = true }
+tur-clipboard-android = { path = "../tur-clipboard-android" }
+tur-net-native = { workspace = true }
+tur-demo-plugin = { path = "../tur-demo-plugin", default-features = false }
+boa_engine = { workspace = true }
+parley = { workspace = true }
+tur-native = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+jni = "0.21"
+pollster = "0.4"
+wgpu = { workspace = true }
+raw-window-handle = "0.6"
+thiserror = { workspace = true }
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.14"
+log = "0.4"
+# boa_engine's default NaN-boxed `JsValueInner` assumes pointer layouts that
+# don't hold on aarch64 Android (the allocator hands back addresses whose low
+# bits/length violate the 51-bit/4-bit-alignment tag invariant, so
+# `tag_pointer` panics at boot). boa's `jsvalue-enum` feature swaps in an
+# enum-backed `JsValueInner` that has no pointer-tagging assumptions — slower
+# but compatible (see boa-dev/boa#4275). Scoped to Android only: feature
+# unification pulls this into every `boa_engine` user *in this build* (i.e.
+# tur-engine, tur-animation, …), but only when `tur-android` is in the dep
+# graph, so desktop/wasm builds keep the fast NaN-boxed path.
+boa_engine = { workspace = true, features = ["jsvalue-enum"] }

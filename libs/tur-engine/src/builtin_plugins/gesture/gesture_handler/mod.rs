@@ -18,6 +18,16 @@ pub use composer::ClickKind;
 use arena::{ArenaWinnerKind, GestureArena, TouchCancelOutcome, TouchMoveOutcome, TouchUpOutcome};
 use composer::GestureEventComposer;
 
+/// Debug label for a `TouchUpOutcome` (the enum doesn't derive `Debug`).
+fn outcome_kind(o: &TouchUpOutcome) -> &'static str {
+    match o {
+        TouchUpOutcome::DragEnded => "DragEnded",
+        TouchUpOutcome::ScrollEnded { .. } => "ScrollEnded",
+        TouchUpOutcome::Tap { .. } => "Tap",
+        TouchUpOutcome::Idle => "Idle",
+    }
+}
+
 pub struct GestureSubsystem {
     arena: GestureArena,
     composer: GestureEventComposer,
@@ -172,11 +182,20 @@ impl GestureSubsystem {
             (focusable_id, hit_path)
         };
         let _ = hit_path;
+        // Hoist the `borrow()` out of the `let`-chain below: a `borrow()`
+        // temporary created inside a `let`-chain condition has its lifetime
+        // extended through the entire `if` block (temporary lifetime
+        // extension), which would keep the immutable borrow alive across the
+        // `borrow_mut()` and panic with "RefCell already borrowed" whenever a
+        // pointer-up lands outside any focusable while an element is focused
+        // (e.g. tapping a `PointerInteract` button in the github-viewer case).
+        let focused = cx.focus_manager.borrow().focused();
         if focusable_id.is_none()
-            && let Some(focused) = cx.focus_manager.borrow().focused()
-                && down_target != Some(focused) {
-                    cx.focus_manager.borrow_mut().clear_focus();
-                }
+            && focused.is_some()
+            && down_target != focused
+        {
+            cx.focus_manager.borrow_mut().clear_focus();
+        }
 
         let click_eligible = match down_target {
             Some(id) => HitTest::new(&cx.element_tree.borrow()).contains(position, id),
@@ -227,6 +246,10 @@ impl GestureSubsystem {
         time_ms: u64,
     ) {
         let path = HitTest::new(&cx.element_tree.borrow()).path(position);
+        tracing::info!(
+            "TOUCH DOWN at ({},{}) t={time_ms} path_len={}",
+            position.x, position.y, path.len()
+        );
         self.arena.on_touch_down(position, time_ms, path);
     }
 
@@ -280,6 +303,7 @@ impl GestureSubsystem {
 
                 if let Some(target) = drag_winner {
                     // Drag won — set up capture and dispatch PointerMove.
+                    tracing::info!("SLOP: drag won target={target:?}");
                     self.arena.resolve(ArenaWinnerKind::Drag);
                     self.composer
                         .on_pointer_down(Some(target), hit_path.clone());
@@ -297,6 +321,7 @@ impl GestureSubsystem {
                     }
                 } else {
                     // No drag element claimed — resolve to scroll.
+                    tracing::info!("SLOP: no drag claim -> SCROLL");
                     self.arena.resolve(ArenaWinnerKind::Scroll);
                     // Emit the derived scroll delta on the internal bus (not a
                     // fake platform wheel) so the wheel handler processes real
@@ -346,6 +371,10 @@ impl GestureSubsystem {
         time_ms: u64,
     ) {
         let outcome = self.arena.on_touch_up(position, time_ms);
+        tracing::info!(
+            "TOUCH UP at ({},{}) t={time_ms} outcome={:?}",
+            position.x, position.y, outcome_kind(&outcome)
+        );
         match outcome {
             TouchUpOutcome::DragEnded => {
                 let path: Vec<ElementNodeId> = self.composer.pointer_down_path().to_vec();
@@ -371,17 +400,19 @@ impl GestureSubsystem {
                 // convention used by `TouchMoveOutcome::Scroll`.
                 push_fling(cx.app_event_queue, -vx, -vy, position);
             }
-            TouchUpOutcome::NeedsSyntheticClick { position, time_ms } => {
-                // The touch sequence ended below slop with a tiny move that the
-                // browser won't synthesize a click for. Drive the mouse
-                // down→up path in-process (composer capture + click
-                // classification + dispatch) so the tap behaves exactly like a
-                // mouse click — without faking a platform pointer event or
-                // touching `PointerSubsystem` (no hover on touch).
+            TouchUpOutcome::Tap { position, time_ms } => {
+                // The touch sequence ended as a tap (short + sub-slop, no
+                // drag/scroll winner). The engine synthesizes the click on
+                // every host — drive the mouse down→up path in-process
+                // (composer capture + click classification + dispatch) so the
+                // tap behaves exactly like a mouse click, without faking a
+                // platform pointer event or touching `PointerSubsystem` (no
+                // hover on touch). Embedders must NOT also forward a
+                // host-synthesized click for the same tap (double dispatch).
                 self.handle_mouse_pointer_down(cx, position, MouseButton::Left, time_ms);
                 self.handle_mouse_pointer_up(cx, position, MouseButton::Left);
             }
-            TouchUpOutcome::BrowserClick => {}
+            TouchUpOutcome::Idle => {}
         }
     }
 

@@ -1,28 +1,43 @@
-//! Single-threaded async executor for tur.
+//! Single-threaded async executor for tur, backed by Tokio.
 //!
-//! Isolates the `unsafe` `RawWaker` machinery behind a focused, dependency-
-//! free API. The executor is strictly main-thread: all state is
-//! `Rc<RefCell<...>>` (never `Arc`/`Mutex`), no cross-thread API surface.
+//! The engine drives all async work from its main thread (the JNI thread on
+//! Android, the winit thread on desktop, the rAF callback on wasm). This
+//! executor wraps a Tokio **current-thread** runtime + [`LocalSet`] and is
+//! driven cooperatively: the engine calls [`Executor::tick`] once per frame
+//! inside `flush`, which runs `LocalSet::block_on(&rt, yield_now())` — one
+//! scheduler + reactor pass over the calling (main) thread.
 //!
-//! The only `unsafe` here is on [`WakerPayload`] — unavoidable because
-//! `std::task::Waker: Send + Sync`. Sound because the executor is
-//! single-threaded by construction: wakers are only ever woken from the same
-//! thread that owns the `Rc`s. On wasm, browser microtasks that resolve
-//! futures run on the same thread. On tests, everything is single-threaded
-//! by design.
+//! Why Tokio everywhere (wasm included): the previous hand-rolled `Rc`-waker
+//! executor duplicated a lot of `unsafe` `RawWaker` machinery and could not
+//! host futures whose wake-ups originate in a real reactor (e.g. native
+//! `reqwest`, whose I/O + DNS need a driven reactor). Tokio gives us sound,
+//! `Send` wakers for free; on wasm, `reqwest-wasm`'s browser wake-ups compose
+//! with Tokio wakers (both are just `std::task::Waker` invoked on the main
+//! thread — verified by a dedicated spike).
 //!
-//! The engine crate (`tur-engine`) wraps [`Executor`] and adds a
-//! JS-specific completion queue on top — see
-//! `tur_engine::core::async_::AsyncExecutor`.
+//! The engine-managed timer queue ([`TimerQueue`]) + [`Sleep`] stay
+//! hand-rolled so frame scheduling (`next_timer_deadline` → `NextFrame::After`)
+//! is uniform across platforms; `Sleep` is reactor-agnostic (it stores
+//! `cx.waker()`, which is a Tokio waker here).
+//!
+//! Public surface (preserved from the old executor):
+//! [`Executor::new`] / [`Executor::spawn`] / [`Executor::spawn_detached`] /
+//! [`Executor::spawn_task`] / [`Executor::sleep`] /
+//! [`Executor::next_timer_deadline`] / [`Executor::now`] / [`Executor::tick`]
+//! / [`Executor::has_pending`], plus the [`Task`] cancellation handle and the
+//! [`Sleep`] / [`Clock`] / [`TimerQueue`] types. The engine wrapper in
+//! `tur_engine::core::async_::AsyncExecutor` is unchanged.
 
-use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::cell::Cell;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
+use std::task::{Context, Poll};
 use std::time::Duration;
+
+use tokio::runtime::{Builder, Runtime};
+use tokio::task::LocalSet;
 
 mod sleep;
 
@@ -39,135 +54,83 @@ pub trait Clock: 'static {
     fn now(&self) -> Duration;
 }
 
+/// Timer queue: absolute deadline → wakers waiting for that deadline. Drained
+/// by [`Executor::tick`] (expired entries are woken) and read by
+/// [`Executor::next_timer_deadline`] for frame-loop scheduling. Stored wakers
+/// are whatever the polling executor handed `Sleep` (a Tokio waker here).
+pub(crate) type TimerQueue = Rc<std::cell::RefCell<BTreeMap<Duration, Vec<std::task::Waker>>>>;
+
 type BoxFuture = Pin<Box<dyn Future<Output = ()>>>;
-type TaskId = u64;
 
-/// Payload held inside a [`Waker`]. Carries a clone of the ready queue and
-/// the task id, so when `wake()` fires from anywhere (microtask, inline
-/// poll, etc.) the task gets re-enqueued for the next [`Executor::tick`].
-struct WakerPayload {
-    ready: Rc<RefCell<VecDeque<TaskId>>>,
-    task_id: TaskId,
+/// Cancellation handle for a spawned task. Dropping it requests cancellation:
+/// the wrapped future sees the shared `terminated` flag on its next poll and
+/// self-completes. This is a *soft* cancel (effective on the next tick), not
+/// an immediate `AbortHandle::abort` — deliberately, because `abort` would
+/// call into tokio's `LocalSet::schedule`, which accesses a thread-local that
+/// is unsafe to touch during teardown (e.g. when an element holding a `Task`
+/// is dropped inside boa's GC thread-local destructor). Soft-cancel avoids
+/// any thread-local access in `Drop`. Created by [`Executor::spawn_task`].
+/// For fire-and-forget tasks that don't need cancellation, use
+/// [`Executor::spawn`] instead.
+pub struct Task {
+    /// Shared with the [`Counted`] wrapper. Set by [`Task::drop`] (cancel) or
+    /// by `Counted` on natural completion. [`Task::is_alive`] reads it.
+    terminated: Rc<Cell<bool>>,
 }
-
-// SAFETY: `WakerPayload` holds `Rc<...>` which is `!Send + !Sync`. We assert
-// `Send + Sync` because `std::task::Waker` requires it. Sound because the
-// executor is strictly single-threaded: wakers are only ever woken from the
-// main thread (the same thread that owns the `Rc`s). On wasm, browser
-// microtasks that resolve futures run on the same thread. On tests,
-// everything is single-threaded by design.
-unsafe impl Send for WakerPayload {}
-unsafe impl Sync for WakerPayload {}
-
-const WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
-    waker_clone,
-    waker_wake,
-    waker_wake_by_ref,
-    waker_drop,
-);
-
-fn make_waker(payload: WakerPayload) -> Waker {
-    let ptr = Box::into_raw(Box::new(payload));
-    // SAFETY: the vtable functions are sound for the boxed `WakerPayload`
-    // pointer; see their individual safety comments.
-    unsafe { Waker::from_raw(RawWaker::new(ptr as *const (), &WAKER_VTABLE)) }
-}
-
-unsafe fn waker_clone(ptr: *const ()) -> RawWaker {
-    // SAFETY: caller upholds that `ptr` is a valid boxed `WakerPayload`.
-    let payload = unsafe { &*(ptr as *const WakerPayload) };
-    let cloned = WakerPayload {
-        ready: payload.ready.clone(),
-        task_id: payload.task_id,
-    };
-    let boxed = Box::new(cloned);
-    RawWaker::new(Box::into_raw(boxed) as *const (), &WAKER_VTABLE)
-}
-
-unsafe fn waker_wake(ptr: *const ()) {
-    // SAFETY: caller upholds that `ptr` is a valid boxed `WakerPayload`.
-    // `Box::from_raw` consumes the box (matching `wake`'s drop-ownership
-    // contract) and re-enqueues the task id.
-    let payload = unsafe { Box::from_raw(ptr as *mut WakerPayload) };
-    payload.ready.borrow_mut().push_back(payload.task_id);
-}
-
-unsafe fn waker_wake_by_ref(ptr: *const ()) {
-    // SAFETY: caller upholds that `ptr` is a valid boxed `WakerPayload`.
-    // We do NOT consume the box; just read the fields and re-enqueue.
-    let payload = unsafe { &*(ptr as *const WakerPayload) };
-    payload.ready.borrow_mut().push_back(payload.task_id);
-}
-
-unsafe fn waker_drop(ptr: *const ()) {
-    // SAFETY: caller upholds that `ptr` is a valid boxed `WakerPayload`
-    // whose ref count has dropped to zero.
-    unsafe { drop(Box::from_raw(ptr as *mut WakerPayload)) };
-}
-
-pub(crate) type TimerQueue = Rc<RefCell<BTreeMap<Duration, Vec<Waker>>>>;
-
-/// Cancellation handle for a spawned task. Dropping it removes the task from
-/// the executor's task map; any ready-queue or timer-queue entries for the
-/// task become no-ops (skipped by `tick`).
-pub(crate) struct TaskHandle {
-    id: TaskId,
-    tasks: Rc<RefCell<HashMap<TaskId, BoxFuture>>>,
-}
-
-impl Drop for TaskHandle {
-    fn drop(&mut self) {
-        self.tasks.borrow_mut().remove(&self.id);
-    }
-}
-
-/// A spawned task that can be cancelled by dropping. Created by
-/// [`Executor::spawn_task`]. For fire-and-forget tasks that don't need
-/// cancellation, use [`Executor::spawn`] instead.
-pub struct Task(TaskHandle);
 
 impl Task {
-    /// Returns `true` if the task is still alive (has not completed or been
-    /// cancelled).
+    /// Returns `true` if the task is still alive (not cancelled and not
+    /// completed).
     pub fn is_alive(&self) -> bool {
-        self.0.tasks.borrow().contains_key(&self.0.id)
+        !self.terminated.get()
     }
 }
 
-/// Engine-owned, engine-driven single-threaded executor with real wakers.
+impl Drop for Task {
+    fn drop(&mut self) {
+        // Soft-cancel: just flag the wrapper. No tokio thread-local access —
+        // safe even when this Drop runs inside another thread-local's
+        // destructor during teardown.
+        self.terminated.set(true);
+    }
+}
+
+/// Engine-owned, engine-driven single-threaded executor backed by a Tokio
+/// current-thread runtime + [`LocalSet`].
 ///
-/// Held as `Rc<Executor>` and exposed to spawned futures (which can capture
-/// the `Rc` to spawn nested tasks). The JS-binding wrapper in
-/// `tur-engine::core::async_` adds a Completion queue on top for settling
-/// JsPromises under `&mut boa_engine::Context`.
+/// Held as `Rc<Executor>` (via the engine's `AsyncExecutor` wrapper) and
+/// driven from the main thread: [`Executor::tick`] runs one cooperative
+/// scheduler + reactor pass there. Tasks are `!Send` (engine futures capture
+/// `Rc`), so they live on the `LocalSet` of the calling thread.
 pub struct Executor {
-    /// Live futures keyed by id. Removed when a future returns `Ready`.
-    /// Held as `Rc<RefCell<...>>` so wakers can outlive the borrowed
-    /// `&Executor` used during `tick`.
-    tasks: Rc<RefCell<HashMap<TaskId, BoxFuture>>>,
-    /// Task ids ready to be polled. Populated by `spawn` (initial enqueue)
-    /// and by wakers (re-enqueue on wake). Drained by `tick`.
-    ready: Rc<RefCell<VecDeque<TaskId>>>,
-    /// Monotonic task id source.
-    next_id: Rc<AtomicU64>,
-    /// Timer queue: absolute deadline → wakers waiting
-    /// for that deadline. Drained by `tick` (expired entries are woken)
-    /// and read by `next_timer_deadline` for frame-loop scheduling.
+    rt: Runtime,
+    local: LocalSet,
     timers: TimerQueue,
-    /// Wall-clock time source for `sleep` and timer management.
     clock: Rc<dyn Clock>,
+    /// Live (uncompleted) spawned-task count. Drives [`Executor::has_pending`],
+    /// which the frame loop uses to keep pumping frames while an async task is
+    /// in flight (e.g. an HTTP request).
+    live: Rc<Cell<usize>>,
+    /// Set to `true` by the [`Counted`] wrapper whenever a task is polled.
+    /// [`Executor::tick`] resets it before driving and reads it after, so its
+    /// return value reflects "did any task make progress" — which the flush
+    /// fixed-point loop relies on for its quiescence test.
+    tick_polled: Rc<Cell<bool>>,
 }
 
 impl Executor {
     /// Create an executor with a wall-clock time source for `sleep`/`tick`
-    /// timer management.
+    /// timer management. Builds a current-thread Tokio runtime (with I/O +
+    /// time drivers on native; scheduler-only on wasm — `reqwest-wasm` uses
+    /// the browser for I/O, and engine timers stay engine-managed).
     pub fn new(clock: Rc<dyn Clock>) -> Self {
         Executor {
-            tasks: Rc::new(RefCell::new(HashMap::new())),
-            ready: Rc::new(RefCell::new(VecDeque::new())),
-            next_id: Rc::new(AtomicU64::new(0)),
-            timers: Rc::new(RefCell::new(BTreeMap::new())),
+            rt: build_runtime(),
+            local: LocalSet::new(),
+            timers: Rc::new(std::cell::RefCell::new(BTreeMap::new())),
             clock,
+            live: Rc::new(Cell::new(0)),
+            tick_polled: Rc::new(Cell::new(false)),
         }
     }
 
@@ -178,9 +141,7 @@ impl Executor {
     where
         F: Future<Output = ()> + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.tasks.borrow_mut().insert(id, Box::pin(fut));
-        self.ready.borrow_mut().push_back(id);
+        self.spawn_counted(Box::pin(fut), None);
     }
 
     /// Alias for [`Self::spawn`]; spelling preserved for callers that
@@ -193,18 +154,38 @@ impl Executor {
     }
 
     /// Spawn a `!Send` future and return a cancellable [`Task`]. Dropping the
-    /// task removes it from the executor.
+    /// task requests a soft cancel (effective on the next tick).
     pub fn spawn_task<F>(&self, fut: F) -> Task
     where
         F: Future<Output = ()> + 'static,
     {
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.tasks.borrow_mut().insert(id, Box::pin(fut));
-        self.ready.borrow_mut().push_back(id);
-        Task(TaskHandle {
-            id,
-            tasks: self.tasks.clone(),
-        })
+        let terminated = Rc::new(Cell::new(false));
+        let _handle = self.spawn_counted(Box::pin(fut), Some(terminated.clone()));
+        // Detach the JoinHandle; cancellation is via the shared flag, not abort.
+        Task { terminated }
+    }
+
+    /// Shared spawn path: wrap the future in [`Counted`] (tracks live-task
+    /// count + tick-progress flag + soft-cancel), enter the `LocalSet` so
+    /// `spawn_local` targets it, and spawn. Returns the `JoinHandle` (unused
+    /// by callers — `spawn_task` cancels via the shared flag, not abort).
+    fn spawn_counted(
+        &self,
+        fut: BoxFuture,
+        terminated: Option<Rc<Cell<bool>>>,
+    ) -> tokio::task::JoinHandle<()> {
+        self.live.set(self.live.get() + 1);
+        let counted = Counted {
+            fut,
+            live: self.live.clone(),
+            tick_polled: self.tick_polled.clone(),
+            terminated,
+        };
+        // `spawn_local` requires the LocalSet's context; `enter()` provides it
+        // without us having to be inside `block_on` (the engine spawns from
+        // synchronous boa callbacks between ticks).
+        let _enter = self.local.enter();
+        self.local.spawn_local(counted)
     }
 
     /// Create a [`Sleep`] future that completes after `duration`.
@@ -223,9 +204,9 @@ impl Executor {
         }
     }
 
-    /// Returns the earliest pending timer deadline, if any.
-    /// Used by the engine frame loop to schedule `NextFrame::After(d)` for
-    /// timer-driven async tasks (e.g. caret blink).
+    /// Returns the earliest pending timer deadline, if any. Used by the engine
+    /// frame loop to schedule `NextFrame::After(d)` for timer-driven async
+    /// tasks (e.g. caret blink).
     pub fn next_timer_deadline(&self) -> Option<Duration> {
         self.timers.borrow().keys().next().copied()
     }
@@ -238,15 +219,18 @@ impl Executor {
     /// Drive all ready tasks one poll step. Returns `true` if any task was
     /// polled.
     ///
-    /// First, expired timer entries are woken (their wakers push task ids onto
-    /// the ready queue). Then all ready tasks are polled once. A task that
-    /// returns `Pending` parks; its waker (produced by [`make_waker`])
-    /// re-enqueues the task id on wake. A task that returns `Ready` is dropped
-    /// and removed from the registry.
+    /// First, expired timer entries are woken (their wakers — Tokio wakers —
+    /// re-enqueue the task in the runtime). Then `LocalSet::block_on(&rt,
+    /// yield_now())` runs one scheduler + reactor pass on the calling (main)
+    /// thread, polling every ready task once. The [`Counted`] wrapper sets
+    /// `tick_polled` if any task was polled; that flag is this function's
+    /// return value, which the flush fixed-point loop uses for quiescence
+    /// detection.
     pub fn tick(&self) -> bool {
-        // Wake expired timers.
+        // Wake expired timers (their stored wakers fire here, on the main
+        // thread — same-thread for the engine's single-threaded model).
         let now = self.clock.now();
-        let expired: Vec<Vec<Waker>> = {
+        let expired: Vec<Vec<std::task::Waker>> = {
             let mut timers = self.timers.borrow_mut();
             let keys: Vec<Duration> = timers
                 .keys()
@@ -263,37 +247,93 @@ impl Executor {
             }
         }
 
-        let ids: Vec<TaskId> = self.ready.borrow_mut().drain(..).collect();
-        if ids.is_empty() {
-            return false;
-        }
-        for id in ids {
-            // Take the future out of the registry before polling, so the
-            // registry can be safely re-borrowed by wakers / nested spawns
-            // inside the poll.
-            let mut fut = match self.tasks.borrow_mut().remove(&id) {
-                Some(f) => f,
-                None => continue, // task was already removed (cancel/drop)
-            };
-            let waker = make_waker(WakerPayload {
-                ready: self.ready.clone(),
-                task_id: id,
+        // Reset the progress flag, drive one cooperative step, read it back.
+        self.tick_polled.set(false);
+        self.local
+            .block_on(&self.rt, async {
+                tokio::task::yield_now().await;
             });
-            let mut cx = TaskContext::from_waker(&waker);
-            match fut.as_mut().poll(&mut cx) {
-                Poll::Ready(()) => {
-                    // Task complete — do not reinsert.
-                }
-                Poll::Pending => {
-                    self.tasks.borrow_mut().insert(id, fut);
-                }
-            }
-        }
-        true
+        self.tick_polled.get()
     }
 
-    /// True if there is pending work (ready tasks or live tasks).
+    /// True if there is pending work (any live spawned task). Used by the frame
+    /// loop to decide `NextFrame::Vsync` (continuous) vs `Idle`. A task
+    /// awaiting a `Sleep` timer is still live — it just isn't immediately-ready
+    /// work, so the schedule decision below combines this with
+    /// `next_timer_delay`.
     pub fn has_pending(&self) -> bool {
-        !self.ready.borrow().is_empty() || !self.tasks.borrow().is_empty()
+        self.live.get() > 0
     }
+}
+
+/// Wrapper applied to every spawned future. Sets the shared `tick_polled` flag
+/// on each poll (so [`Executor::tick`] can report progress) and maintains the
+/// shared `live` count (decremented on drop — covers both completion and the
+/// task being dropped with the runtime). `terminated` is the soft-cancel
+/// channel shared with [`Task`]: set externally (Task drop = cancel) or
+/// internally (natural completion) — the wrapper checks it on each poll and
+/// self-completes if set.
+///
+/// `Counted: Unpin` (all fields are `Unpin`), so `Pin<&mut Counted>` can freely
+/// project to the inner `BoxFuture` — no `unsafe`.
+struct Counted {
+    fut: BoxFuture,
+    live: Rc<Cell<usize>>,
+    tick_polled: Rc<Cell<bool>>,
+    /// `Some` for `spawn_task` tasks (shared with the returned [`Task`]);
+    /// `None` for fire-and-forget `spawn` tasks (no cancellation).
+    terminated: Option<Rc<Cell<bool>>>,
+}
+
+impl Future for Counted {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let this = self.get_mut();
+        // Soft-cancel: if the Task was dropped, terminate on the next poll.
+        if let Some(terminated) = &this.terminated
+            && terminated.get()
+        {
+            return Poll::Ready(());
+        }
+        this.tick_polled.set(true);
+        match this.fut.as_mut().poll(cx) {
+            Poll::Ready(()) => {
+                if let Some(terminated) = &this.terminated {
+                    terminated.set(true);
+                }
+                Poll::Ready(())
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        self.live.set(self.live.get().saturating_sub(1));
+    }
+}
+
+/// Build the current-thread Tokio runtime.
+///
+/// - **Native:** enable I/O + time drivers (`enable_all`) so `reqwest`/hyper's
+///   sockets + timeouts + `spawn_blocking` DNS work. Workers aren't used (it's
+///   current-thread); the blocking pool handles `spawn_blocking`.
+/// - **wasm:** scheduler-only (`net` is unavailable on `wasm32`; `reqwest-wasm`
+///   uses the browser for I/O, and engine timers are engine-managed so no
+///   Tokio time driver is needed either).
+#[cfg(not(target_family = "wasm"))]
+fn build_runtime() -> Runtime {
+    Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("failed to build tokio runtime")
+}
+
+#[cfg(target_family = "wasm")]
+fn build_runtime() -> Runtime {
+    Builder::new_current_thread()
+        .build()
+        .expect("failed to build tokio runtime")
 }

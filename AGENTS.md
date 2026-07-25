@@ -452,6 +452,10 @@ cd js/packages/tur-demo-impl && pnpm build
 cd js/packages/tur-test-cases && pnpm build
 ```
 
+### Android (on-device debug)
+
+Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), install/launch, and the **macOS Sequoia `adb` local-network block** workaround (Apple-signed `python3` localhost proxy — Sequoia silently denies the third-party `adb` daemon LAN access with `No route to host`) live in the **`android-dev` skill** at `.opencode/skills/android-dev/SKILL.md`. Load it (`@android-dev`) whenever working with `tur-android` / `demo/compose` on a device or emulator.
+
 ## Conventions
 
 - Rust edition 2024, MSRV 1.91

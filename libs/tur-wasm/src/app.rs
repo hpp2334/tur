@@ -218,9 +218,11 @@ impl TurWasmApp {
 
             // Claim touch gestures for the app. With `touch-action: none` the
             // browser will not pan/zoom the page on touch-drag (we translate
-            // touchmove → PlatformEvent::Wheel below). Taps still synthesize
-            // mousedown/click for caret placement, buttons, and the soft
-            // keyboard via the hidden textarea.
+            // touchmove → PlatformEvent::Wheel below). Taps are handled
+            // entirely in-engine: the gesture arena synthesizes the click
+            // (see `TouchUpOutcome::Tap`), and soft-keyboard focus flows from
+            // the engine's focus manager to the hidden textarea via the
+            // after-frame hook.
             canvas
                 .style()
                 .set_property("touch-action", "none")
@@ -490,14 +492,13 @@ impl TurWasmApp {
             // native touch pointer events (`device: Touch`) into the
             // engine's gesture arena, which resolves drag-vs-scroll
             // competition using a slop threshold (18px, matching Flutter's
-            // `kTouchSlop`).
+            // `kTouchSlop`) and — when no drag/scroll wins — synthesizes
+            // the tap→click itself (host-agnostic; same behavior on browser,
+            // Android, and desktop).
             //
             // - **touchstart**: push `PointerDown { device: Touch }`. The
             //   arena collects candidates from the hit-path but does NOT
-            //   dispatch to elements yet. We do NOT `preventDefault` so
-            //   that pure taps (no touchmove) still get browser-synthesized
-            //   `mousedown`→`mouseup`→`click` for caret placement, button
-            //   clicks, and soft-keyboard focus.
+            //   dispatch to elements yet. Not preventDefaulted.
             //
             // - **touchmove**: `preventDefault` (stops browser panning AND
             //   mouse-event synthesis for the entire touch sequence). Push
@@ -506,14 +507,22 @@ impl TurWasmApp {
             //   → resolve to drag winner (dispatch PointerDown+PointerMove)
             //   or scroll winner (dispatch Wheel).
             //
-            // - **touchend**: push `PointerUp { device: Touch }`. If the
-            //   arena resolved a drag → dispatch PointerUp to release
-            //   capture. If not resolved but touchmove was seen (small
-            //   movement) → synthesize a mouse click. If not resolved and
-            //   no touchmove → do nothing (browser click handles it).
+            // - **touchend**: `preventDefault` (suppresses the browser's
+            //   synthesized `mousedown`/`mouseup`/`click` so the tap doesn't
+            //   double-fire — the engine synthesizes it). Push
+            //   `PointerUp { device: Touch }`. If the arena resolved a drag
+            //   → dispatch PointerUp to release capture. Otherwise the arena
+            //   classifies the gesture as a tap (short + sub-slop) and the
+            //   handler synthesizes a mouse down→up to drive click/focus, or
+            //   idle (too long / too far).
             //
             // - **touchcancel**: push `PointerCancel { device: Touch }`.
             //   The arena releases any captured drag without firing a click.
+            //
+            // Soft-keyboard / caret focus does NOT depend on the browser's
+            // synthesized clicks: the engine's focus manager (driven by the
+            // engine-synthesized click) exposes `focused_is_editable()`,
+            // which the after-frame hook reads to call `textarea.focus()`.
             let touch_start_state = state_clone.clone();
             let touch_start_closure =
                 Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
@@ -579,6 +588,19 @@ impl TurWasmApp {
             let touch_end_state = state_clone.clone();
             let touch_end_closure =
                 Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
+                    // `preventDefault` so the browser does NOT synthesize the
+                    // trailing `mousedown`/`mouseup`/`click` for this tap. The
+                    // engine synthesizes the click itself (gesture arena
+                    // `TouchUpOutcome::Tap`), and without this suppression a
+                    // pure tap would fire twice (engine-synthesized click +
+                    // browser-synthesized mouse path). Soft-keyboard focus is
+                    // unaffected: it flows from the engine's focus manager
+                    // (driven by the engine-synthesized click) to the hidden
+                    // textarea via the after-frame hook, not via browser
+                    // `click` events. (Suppressing on `touchend` — rather than
+                    // `touchstart` — is the minimal change and matches what
+                    // `touchmove` already does.)
+                    event.prevent_default();
                     let Some(t) = event.changed_touches().get(0) else {
                         let guard = touch_end_state.borrow();
                         if let Some(s) = guard.as_ref() {

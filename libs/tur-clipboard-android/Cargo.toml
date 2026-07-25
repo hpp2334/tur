@@ -1,0 +1,15 @@
+[package]
+name = "tur-clipboard-android"
+description = "Android clipboard backend for tur (AndroidClipboard via JNI to android.content.ClipboardManager)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-engine = { workspace = true, default-features = false }
+tracing = { workspace = true }
+jni = "0.21"
+
+# Android-only. On other targets the crate compiles as a near-empty stub.
+[target.'cfg(target_os = "android")'.dependencies]

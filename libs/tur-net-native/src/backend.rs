@@ -1,7 +1,11 @@
-//! `HttpBackend` impl backed by native [`reqwest`]. Mirrors the Wasm
-//! `perform_request` flow but uses the native reqwest client. Errors are
-//! caught and returned as `HttpOutcome::Err(message)` so the JS bridge can
-//! surface them as Promise rejections.
+//! `HttpBackend` impl backed by native [`reqwest`].
+//!
+//! reqwest (hyper + hyper-util, DNS via `spawn_blocking`) needs a driven Tokio
+//! reactor. That reactor is now provided by the engine's executor
+//! (`tur-async`), which wraps a Tokio current-thread runtime + `LocalSet` and
+//! is driven on the main thread inside each `flush`/`tick`. So this backend is
+//! back to a plain async fn returning a reqwest future — the engine polls it
+//! inside a Tokio context, and reqwest's I/O + DNS just work.
 
 use std::future::Future;
 use std::pin::Pin;
