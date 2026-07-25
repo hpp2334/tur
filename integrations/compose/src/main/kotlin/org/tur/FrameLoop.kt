@@ -25,6 +25,16 @@ class FrameLoop(private val onWake: () -> Unit) {
     private var frameCallback: Choreographer.FrameCallback? = null
     private var delayedToken: Runnable? = null
 
+    /**
+     * Optional callback fired after [onWake] in each wake-up. The Compose
+     * integration sets this to sync the Android soft-keyboard / IME with the
+     * engine's focused-element state (poll `focusedIsEditable`, then
+     * `showSoftInput` / `hideSoftInput`). Runs on the main looper, same as
+     * [onWake]. `null` by default so non-IME embedders (and tests) are
+     * unaffected.
+     */
+    var onAfterPump: (() -> Unit)? = null
+
     /** Schedule a wake on the next display frame (Android `Choreographer`). */
     fun scheduleVsync() {
         if (frameCallback != null) return // already armed
@@ -32,6 +42,7 @@ class FrameLoop(private val onWake: () -> Unit) {
             override fun doFrame(frameTimeNanos: Long) {
                 frameCallback = null
                 onWake()
+                onAfterPump?.invoke()
             }
         }
         frameCallback = cb
@@ -44,6 +55,7 @@ class FrameLoop(private val onWake: () -> Unit) {
         val r = Runnable {
             delayedToken = null
             onWake()
+            onAfterPump?.invoke()
         }
         delayedToken = r
         handler.postDelayed(r, delayMs.coerceAtLeast(1))

@@ -210,7 +210,7 @@ mod exports {
     use jni::JNIEnv;
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-    use tur_engine::core::platform::{PointerDeviceKind, PointerInput, PlatformEvent};
+    use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput, PlatformEvent};
 
     use crate::app::AndroidApp;
 
@@ -434,6 +434,59 @@ mod exports {
                 },
                 event_type,
             }));
+            Ok(())
+        });
+    }
+
+    /// `TurNative.focusedIsEditable(handle): boolean`
+    ///
+    /// True if the currently-focused element is an editable text field. The
+    /// embedder polls this after each pump to decide whether to raise the soft
+    /// keyboard (and `hideSoftInput` when it flips back to false).
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_tur_TurNative_focusedIsEditable(
+        _env: JNIEnv,
+        _class: JClass,
+        handle: jlong,
+    ) -> jni::sys::jboolean {
+        let Some(app) = handle_to_app(handle) else {
+            return 0;
+        };
+        if app.app.focused_is_editable() {
+            1
+        } else {
+            0
+        }
+    }
+
+    /// `TurNative.pushIme(handle, kind, text): void`
+    ///
+    /// Push an IME composition event onto the platform-event queue. `kind`:
+    /// `0=CompositionStart`, `1=CompositionUpdate { text }`,
+    /// `2=CompositionEnd { text }`. Routed to the focused editable's
+    /// `on_ime_event` by the `ImeSubsystem`. Used by the embedder's
+    /// `InputConnection` to deliver multi-char commits / composing text that
+    /// can't be represented as a single key event.
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_org_tur_TurNative_pushIme(
+        mut env: JNIEnv,
+        _class: JClass,
+        handle: jlong,
+        kind: jint,
+        text: JString,
+    ) {
+        catch_void(&mut env, "pushIme", |env| {
+            let app = handle_to_app(handle).ok_or("invalid engine handle")?;
+            let text: String = env.get_string(&text)?.into();
+            let ime = match kind {
+                0 => PlatformEvent::Ime(ImeEvent::CompositionStart),
+                1 => PlatformEvent::Ime(ImeEvent::CompositionUpdate {
+                    text,
+                    cursor: None,
+                }),
+                _ => PlatformEvent::Ime(ImeEvent::CompositionEnd { text }),
+            };
+            app.app.push_platform_event(ime);
             Ok(())
         });
     }

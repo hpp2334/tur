@@ -61,6 +61,22 @@ object TurNative {
         meta: Boolean,
     )
 
+    /**
+     * Whether the currently-focused element is an editable text field. The
+     * embedder polls this after each pump to decide whether to raise the soft
+     * keyboard (and hide it when it flips back to false).
+     */
+    external fun focusedIsEditable(handle: Long): Boolean
+
+    /**
+     * Push an IME composition event. [kind]: `0=CompositionStart`,
+     * `1=CompositionUpdate { text }`, `2=CompositionEnd { text }`. Used by the
+     * embedder's [android.view.inputmethod.InputConnection] to deliver
+     * multi-char commits / composing text (paste, autocorrect, CJK) that can't
+     * be represented as a single key event.
+     */
+    external fun pushIme(handle: Long, kind: Int, text: String)
+
     /** Drop the engine and free its resources. */
     external fun destroy(handle: Long)
 }

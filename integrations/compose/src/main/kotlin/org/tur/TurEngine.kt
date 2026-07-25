@@ -94,6 +94,28 @@ class TurEngine private constructor(
         TurNative.pushKey(handle, key, code, action, ctrl, shift, alt, meta)
     }
 
+    /** Whether the focused element is an editable text field. */
+    fun focusedIsEditable(): Boolean =
+        handle != 0L && TurNative.focusedIsEditable(handle)
+
+    /**
+     * Push an IME composition event. [kind]: `0=Start`, `1=Update`, `2=End`.
+     */
+    fun pushIme(kind: Int, text: String) {
+        if (handle == 0L) return
+        TurNative.pushIme(handle, kind, text)
+    }
+
+    /**
+     * Install a callback fired after each engine pump (on the main looper,
+     * immediately after the frame runs). The Compose integration uses it to
+     * sync the soft keyboard with the engine's focused-element state. Pass
+     * `null` to clear.
+     */
+    fun setAfterPump(cb: (() -> Unit)?) {
+        frameLoop.onAfterPump = cb
+    }
+
     /** The opaque native handle (for advanced embedders / debugging). */
     fun nativeHandle(): Long = handle
 
