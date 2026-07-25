@@ -1,6 +1,6 @@
 ---
 name: android-dev
-description: Use when building, signing, installing, or debugging the tur Android app on a physical device or emulator. Covers `tur-android` / `demo/compose`, the `cargo ndk` + `gradlew assembleRelease` build, the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), and the macOS Sequoia `adb` local-network block workaround. Triggers: Android device, Mi 11 / M2011K2G, `adb connect`, `adb pair`, wireless debugging, `device offline`, `No route to host`, `libtur_android`.
+description: Use when building, signing, installing, or debugging the tur Android app on a physical device or emulator. Covers `tur-android` / `demo/compose` (package `org.tur.demo`), the `cargo ndk` + `gradlew assembleRelease` build, the unsigned-APK debug-sign flow (`apksigner`, `INSTALL_PARSE_FAILED_NO_CERTIFICATES`), readable Rust panic backtraces in logcat (panic hook + `.symtab` preservation + `catch_unwind`), the touch physical↔logical coordinate mapping, and the macOS Sequoia `adb` local-network block workaround. Triggers: Android device, Mi 11 / M2011K2G, `adb connect`, `adb pair`, wireless debugging, `device offline`, `No route to host`, `libtur_android`, SIGABRT, `RefCell already borrowed`, panic stack.
 ---
 
 # tur Android on-device debug
@@ -41,7 +41,7 @@ JAVA_HOME=/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home $BT/apksig
     --ks ~/.android/debug.keystore --ks-pass pass:android \
     --ks-key-alias androiddebugkey --key-pass pass:android /tmp/tur-signed.apk
 adb -s <device> install -r -t /tmp/tur-signed.apk
-adb -s <device> shell monkey -p ai.tur.demo -c android.intent.category.LAUNCHER 1   # launch
+adb -s <device> shell monkey -p org.tur.demo -c android.intent.category.LAUNCHER 1   # launch
 ```
 
 ## adb over wireless + the macOS Sequoia local-network block
@@ -119,4 +119,65 @@ From the device, the element tree is queryable through `turDevTool` (mirrors
 the playground's web path) — useful for confirming hit-test rects and whether
 `onPointerDown` fired without needing the gesture subsystem's `tracing::info!`
 logs (which may not be wired to logcat). Grab a logcat dump with
-`adb -s <device> logcat -d -v time --pid=$(adb -s <device> shell pidof ai.tur.demo)`.
+`adb -s <device> logcat -d -v time --pid=$(adb -s <device> shell pidof org.tur.demo)`.
+
+## Crash diagnostics (readable Rust panic stacks in logcat)
+
+A panic inside the engine frame pump used to be an opaque `Fatal signal 6
+(SIGABRT)` whose tombstone showed only the panic machinery, never the
+panicking call site. Three things together make on-device crashes fully
+diagnosable now:
+
+1. **Panic hook captures a backtrace** (`libs/tur-android/src/lib.rs`,
+   `logger::init`). On top of the message + location it logs
+   `std::backtrace::Backtrace::force_capture()` line-by-line at `ERROR` under
+   the `tur` tag. Function names resolve from the ELF `.symtab`.
+2. **`pump` is wrapped in `catch_unwind`** so a panic is caught *inside* Rust
+   before it unwinds across the `extern "system"` JNI boundary (which would
+   otherwise abort via `panic_cannot_unwind`). The hook has already logged the
+   message + stack; `catch_unwind`'s `Err` arm then logs a breadcrumb and
+   `std::process::abort()`s cleanly.
+3. **The `.symtab` is kept in the packaged `.so`.** AGP's
+   `stripReleaseDebugSymbols` strips it from prebuilt jniLibs by default
+   (`debugSymbolLevel` only affects cmake/ndk-build output, not prebuilt
+   `.so`). `demo/compose/build.gradle.kts` appends a `doLast` to
+   `stripReleaseDebugSymbols` that overwrites the stripped output with the
+   unstripped merged `.so`, so `Backtrace` resolves names on-device.
+
+Reproducible crash test (no rebuild to toggle — gated by a system property):
+
+```sh
+adb -s <device> shell setprop debug.tur.crash 1     # panic on next pump
+adb -s <device> logcat -c
+# launch / touch the app, then:
+adb -s <device> logcat -d -s tur:E | rg -A40 PANIC   # full symbolicated stack
+adb -s <device> shell setprop debug.tur.crash '""'   # disable
+```
+
+A real crash looks like `PANIC at <file>:<line>: <msg>` + `PANIC backtrace:`
+(0..N frame names) + `pump: panic caught at JNI boundary, aborting: <msg>`.
+
+## Rebuilding after an *engine* change
+
+`gradlew assembleRelease` runs `cargo ndk` via the `:tur-compose`
+`buildTurNative` task, but that task's inputs only watch `libs/tur-android/src`
+— a change in `libs/tur-engine/src` is **not** detected, so the task stays
+UP-TO-DATE and the old `.so` ships. After any engine edit, rebuild the `.so`
+directly first, then run gradle (its `copyTurNative` re-copies the changed
+artifact):
+
+```sh
+cargo ndk -t arm64-v8a build --release -p tur-android
+cd demo/compose && ./gradlew assembleRelease   # copyTurNative re-runs, APK rebuilt
+```
+
+## Driving the UI: touch coordinate mapping
+
+`adb shell input tap X Y` uses **physical** pixels; the engine hit-tests in
+**logical** pixels and `TurView` divides `MotionEvent` coords by `dpr`. So to
+hit logical `(lx, ly)` tap physical `(lx*dpr, ly*dpr + top_inset)`. On the Mi
+11 the surface starts below the ~137px system status bar, so
+`physical_y = ly*3.5 + 137` (and `physical_x = lx*3.5`). Verify the mapping by
+tapping and reading the gesture log: `adb logcat -d -s tur:V | rg 'TOUCH DOWN
+at'` prints the logical coord the engine received — adjust from there. (Bottom
+tab bar is ~logical y 785-829; Cases tab center ≈ physical `(238, 2962)`.)

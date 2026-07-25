@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "ai.tur.demo"
+    namespace = "org.tur.demo"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "ai.tur.demo"
+        applicationId = "org.tur.demo"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -115,3 +115,33 @@ android.applicationVariants.all {
 // Ensure the assets dir exists so the Copy task has a target even on a clean
 // checkout.
 assetsDir.mkdirs()
+
+// --- Keep `.symtab` in the packaged native lib --------------------------------
+//
+// AGP's `stripReleaseDebugSymbols` strips the ELF symbol table (`.symtab`) from
+// prebuilt jniLibs in release builds. `debugSymbolLevel = "symbol_table"` only
+// affects native code AGP builds itself (cmake/ndk-build) — for prebuilt `.so`
+// files like ours (built by `cargo ndk`), the strip always removes `.symtab`,
+// leaving on-device `std::backtrace::Backtrace` captures (the panic hook in
+// `tur-android/src/lib.rs`) unable to resolve function names.
+//
+// Append a `doLast` that overwrites the stripped output with the unstripped
+// merged `.so`, so the APK ships with the symbol table intact and panic
+// backtraces in logcat are symbolicated. The cargo release build has no DWARF
+// sections, so the only cost is the `.symtab`/`.strtab` size (~14 MB).
+tasks.matching { it.name == "stripReleaseDebugSymbols" }.configureEach {
+    val merged = layout.buildDirectory.file(
+        "intermediates/merged_native_libs/release/mergeReleaseNativeLibs/out/lib/arm64-v8a/libtur_android.so"
+    )
+    val strippedOut = layout.buildDirectory.file(
+        "intermediates/stripped_native_libs/release/stripReleaseDebugSymbols/out/lib/arm64-v8a/libtur_android.so"
+    )
+    doLast {
+        val src = merged.get().asFile
+        val dst = strippedOut.get().asFile
+        if (src.exists() && dst.parentFile.exists()) {
+            src.copyTo(dst, overwrite = true)
+            logger.lifecycle("strip: restored unstripped libtur_android.so (kept .symtab for panic backtraces): ${dst.length()} bytes")
+        }
+    }
+}

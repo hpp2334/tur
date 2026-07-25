@@ -1,6 +1,6 @@
 //! tur Android JNI runtime — the native side of the Compose integration.
 //!
-//! Exposes a C ABI (under the `Java_ai_tur_TurNative_*` JNI names) that Kotlin
+//! Exposes a C ABI (under the `Java_org_tur_TurNative_*` JNI names) that Kotlin
 //! (`integrations/compose`) calls to build, drive, and tear down a tur engine
 //! instance. The engine itself, the renderer, and all plugins come from
 //! `tur-engine` + `tur-animation` + `tur-demo-plugin` unchanged; this crate is
@@ -32,6 +32,35 @@ static JAVA_VM: OnceLock<Box<jni::JavaVM>> = OnceLock::new();
 /// borrow. Returns `None` before the first JNI call has run.
 pub(crate) fn java_vm() -> Option<&'static jni::JavaVM> {
     JAVA_VM.get().map(|b| &**b)
+}
+
+/// Read an Android system property (`adb shell setprop <name> <value>`). Used to
+/// gate on-device crash diagnostics without rebuilding — e.g. `debug.tur.crash`
+/// triggers a deliberate panic inside `pump` to verify the panic hook surfaces a
+/// readable backtrace in logcat. Returns `None` on Android-not-present or unset.
+#[cfg(target_os = "android")]
+fn system_prop(name: &str) -> Option<String> {
+    use std::ffi::CString;
+    use std::os::raw::c_char;
+    unsafe extern "C" {
+        fn __system_property_get(name: *const c_char, value: *mut c_char) -> i32;
+    }
+    let c_name = CString::new(name).ok()?;
+    // PROP_VALUE_MAX == 92.
+    let mut buf = [0 as c_char; 92];
+    let len = unsafe { __system_property_get(c_name.as_ptr(), buf.as_mut_ptr()) };
+    if len > 0 {
+        let bytes =
+            unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, len as usize) };
+        Some(String::from_utf8_lossy(bytes).into_owned())
+    } else {
+        None
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+fn system_prop(_name: &str) -> Option<String> {
+    None
 }
 
 /// Initialize logcat logging once on the first JNI call, so the engine's
@@ -118,10 +147,13 @@ mod logger {
             // Panic hook → logcat. On Android, stderr is `/dev/null`, so the
             // default panic hook (which writes to stderr) makes panic messages
             // invisible — a panic becomes an opaque SIGABRT. Install a hook that
-            // logs the panic payload + location at ERROR, then defers to the
-            // previous hook for the abort/backtrace. This is what surfaces the
-            // actual `wgpu`/`naga` panic message (e.g. shader-compile failures,
-            // surface-format negotiation) instead of just `Fatal signal 6`.
+            // logs the panic payload + location + a full `std::backtrace` at
+            // ERROR, then defers to the previous hook for the abort/backtrace.
+            // The backtrace is what surfaces the actual panicking call path
+            // (function names resolve from the release `.symtab`; the abort
+            // tombstone alone only shows the panic machinery). Each backtrace
+            // line is logged separately because android_logger truncates very
+            // long single messages.
             let prev_hook = std::panic::take_hook();
             std::panic::set_hook(Box::new(move |info| {
                 let location = info
@@ -136,6 +168,11 @@ mod logger {
                     "<non-string panic payload>".to_string()
                 };
                 log::error!("PANIC at {location}: {payload}");
+                let bt = std::backtrace::Backtrace::force_capture();
+                log::error!("PANIC backtrace:");
+                for line in format!("{bt}").lines() {
+                    log::error!("  {line}");
+                }
                 prev_hook(info);
             }));
 
@@ -182,7 +219,7 @@ mod exports {
     /// Builds the engine over the Android `Surface` and returns an opaque
     /// pointer handle (boxed `AndroidApp`) Kotlin holds as a `long`.
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_create(
+    pub extern "system" fn Java_org_tur_TurNative_create(
         mut env: JNIEnv,
         _class: JClass,
         context: JObject,
@@ -234,7 +271,7 @@ mod exports {
     /// `nativeCreate` does). Then request a paint so the bundle renders on the
     /// next frame.
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_loadModule(
+    pub extern "system" fn Java_org_tur_TurNative_loadModule(
         mut env: JNIEnv,
         _class: JClass,
         handle: jlong,
@@ -255,9 +292,18 @@ mod exports {
     /// `TurNative.pump(env, handle): int`
     ///
     /// Fire one engine wake (the Kotlin `Choreographer` / `Handler` calls this
-    /// when due). Returns `1`.
+    /// when due). Returns `1` on success.
+    ///
+    /// Panics raised inside the engine frame tick are caught here (rather than
+    /// letting them unwind across the `extern "system"` JNI boundary, which
+    /// aborts via `panic_cannot_unwind` → an opaque SIGABRT whose tombstone
+    /// shows only the panic machinery, not the panicking call site). The panic
+    /// hook (`logger::init`) has already logged the message + full backtrace to
+    /// logcat by the time `catch_unwind` returns; on `Err` we add a breadcrumb
+    /// and abort cleanly so the failure stays visible and the engine never
+    /// resumes a half-finished frame.
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_pump(
+    pub extern "system" fn Java_org_tur_TurNative_pump(
         _unused_env: JNIEnv,
         _class: JClass,
         handle: jlong,
@@ -265,9 +311,37 @@ mod exports {
         let Some(app) = handle_to_app(handle) else {
             return 0;
         };
-        log::trace!("pump: firing wake");
-        app.loop_driver.fire();
-        1
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // On-device crash-diagnostics test, gated by an Android system
+            // property so it never fires in normal use and needs no rebuild to
+            // toggle:
+            //   adb shell setprop debug.tur.crash 1   → panics on next pump
+            //   adb shell setprop debug.tur.crash ""  → disabled
+            if crate::system_prop("debug.tur.crash").as_deref() == Some("1") {
+                // A nested call stack so the captured backtrace is non-trivial
+                // and exercises real engine paths when verifying readability.
+                #[inline(never)]
+                #[track_caller]
+                fn panic_from_nested_call(msg: &str) {
+                    panic!("{msg}");
+                }
+                panic_from_nested_call("tur-android panic-hook backtrace test (debug.tur.crash=1)");
+            }
+            log::trace!("pump: firing wake");
+            app.loop_driver.fire();
+        }));
+        match result {
+            Ok(()) => 1,
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic payload>".into());
+                log::error!("pump: panic caught at JNI boundary, aborting: {msg}");
+                std::process::abort();
+            }
+        }
     }
 
     /// `TurNative.nativeResize(env, handle, width, height, dpr): void`
@@ -276,7 +350,7 @@ mod exports {
     /// the original wgpu surface for the engine lifetime; full surface re-attach
     /// with a renderer swap is a follow-up.)
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_resize(
+    pub extern "system" fn Java_org_tur_TurNative_resize(
         mut env: JNIEnv,
         _class: JClass,
         handle: jlong,
@@ -301,7 +375,7 @@ mod exports {
     /// 2=MOVE, 3=CANCEL. We translate to engine `PointerInput` with
     /// `PointerDeviceKind::Touch`.
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_pushPointer(
+    pub extern "system" fn Java_org_tur_TurNative_pushPointer(
         mut env: JNIEnv,
         _class: JClass,
         handle: jlong,
@@ -332,7 +406,7 @@ mod exports {
     /// `action`: 0=DOWN, 1=UP. `key`/`code` are browser-style strings (the
     /// Kotlin side maps Android `KeyEvent.keyCode` → these).
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_pushKey(
+    pub extern "system" fn Java_org_tur_TurNative_pushKey(
         mut env: JNIEnv,
         _class: JClass,
         handle: jlong,
@@ -369,7 +443,7 @@ mod exports {
     /// Drop the engine. The boxed `AndroidApp` is reclaimed; its `Rc<TurApp>`
     /// (and the renderer, surface, etc.) drop in turn.
     #[unsafe(no_mangle)]
-    pub extern "system" fn Java_ai_tur_TurNative_destroy(
+    pub extern "system" fn Java_org_tur_TurNative_destroy(
         _env: JNIEnv,
         _class: JClass,
         handle: jlong,

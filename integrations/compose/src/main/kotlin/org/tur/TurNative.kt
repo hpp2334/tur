@@ -1,4 +1,4 @@
-package ai.tur
+package org.tur
 
 import android.content.Context
 import android.view.Surface
@@ -6,7 +6,7 @@ import android.view.Surface
 /**
  * JNI bridge to the native tur engine (`libtur_android.so`).
  *
- * Every method is a thin `external fun` over the `Java_ai_tur_TurNative_*`
+ * Every method is a thin `external fun` over the `Java_org_tur_TurNative_*`
  * entry points exported by `libs/tur-android`. The Kotlin side ([TurView] /
  * [TurEngine]) owns the lifecycle: [create] on surface-ready, [loadModule] to
  * run JS, [pump] each Choreographer frame, [destroy] on teardown.

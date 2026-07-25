@@ -14,7 +14,7 @@ plugins {
 }
 
 android {
-    namespace = "ai.tur"
+    namespace = "org.tur"
     compileSdk = 34
 
     defaultConfig {

@@ -182,11 +182,20 @@ impl GestureSubsystem {
             (focusable_id, hit_path)
         };
         let _ = hit_path;
+        // Hoist the `borrow()` out of the `let`-chain below: a `borrow()`
+        // temporary created inside a `let`-chain condition has its lifetime
+        // extended through the entire `if` block (temporary lifetime
+        // extension), which would keep the immutable borrow alive across the
+        // `borrow_mut()` and panic with "RefCell already borrowed" whenever a
+        // pointer-up lands outside any focusable while an element is focused
+        // (e.g. tapping a `PointerInteract` button in the github-viewer case).
+        let focused = cx.focus_manager.borrow().focused();
         if focusable_id.is_none()
-            && let Some(focused) = cx.focus_manager.borrow().focused()
-                && down_target != Some(focused) {
-                    cx.focus_manager.borrow_mut().clear_focus();
-                }
+            && focused.is_some()
+            && down_target != focused
+        {
+            cx.focus_manager.borrow_mut().clear_focus();
+        }
 
         let click_eligible = match down_target {
             Some(id) => HitTest::new(&cx.element_tree.borrow()).contains(position, id),

@@ -4336,6 +4336,7 @@ dependencies = [
 name = "tur-async"
 version = "0.1.0"
 dependencies = [
+ "tokio",
  "tracing",
 ]
 
@@ -4449,7 +4450,6 @@ name = "tur-net-native"
 version = "0.1.0"
 dependencies = [
  "reqwest",
- "tokio",
  "tracing",
  "tur-net-capability",
 ]

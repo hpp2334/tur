@@ -51,7 +51,7 @@ mod imp {
     impl AndroidApp {
         /// Build the engine over a freshly-created wgpu surface backed by the
         /// given Android `Surface`'s `ANativeWindow*`. `frame_loop` is a JNI
-        /// global ref to Kotlin's `ai.tur.FrameLoop` (drives the wake cadence).
+        /// global ref to Kotlin's `org.tur.FrameLoop` (drives the wake cadence).
         pub fn create(
             context: GlobalRef,
             window_handle: AndroidWindowHandle,

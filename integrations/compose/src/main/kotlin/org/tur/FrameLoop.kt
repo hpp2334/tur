@@ -1,4 +1,4 @@
-package ai.tur
+package org.tur
 
 import android.os.Handler
 import android.os.Looper

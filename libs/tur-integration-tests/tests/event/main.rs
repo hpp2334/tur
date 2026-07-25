@@ -5,6 +5,7 @@ mod countdown;
 mod counter;
 mod drag_delta;
 mod editable_text;
+mod focus_clear_on_click;
 mod mouse_region;
 mod pointer_drag;
 mod pointer_region;

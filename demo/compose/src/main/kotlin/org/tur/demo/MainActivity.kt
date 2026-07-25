@@ -1,4 +1,4 @@
-package ai.tur.demo
+package org.tur.demo
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -8,7 +8,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import ai.tur.TurView
+import org.tur.TurView
 import java.io.IOException
 
 /**

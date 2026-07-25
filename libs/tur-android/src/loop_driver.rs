@@ -19,7 +19,7 @@ use jni::JNIEnv;
 use tur_engine::core::app::NextFrame;
 use tur_engine::LoopDriver;
 
-/// Handle to Kotlin's `ai.tur.FrameLoop` object, stashed at create time so the
+/// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so the
 /// `LoopDriver` (which the engine calls from its own frame tick) can reach it.
 #[derive(Clone)]
 pub struct FrameLoopRef {
