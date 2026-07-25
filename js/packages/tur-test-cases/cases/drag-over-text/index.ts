@@ -1,11 +1,4 @@
-import {
-    Color,
-    Container,
-    mutate,
-    PointerInteract,
-    Text,
-    view,
-} from "tur:std";
+import { Color, Container, mutate, PointerInteract, Text, view } from "tur:std";
 
 // ---------------------------------------------------------------------------
 // Regression fixture for the touch-drag-stealing bug.

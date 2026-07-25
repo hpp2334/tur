@@ -7,9 +7,9 @@ import {
     mutate,
     PointerInteract,
     Positioned,
+    Stack,
     set,
     source,
-    Stack,
     view,
 } from "tur:std";
 
@@ -130,7 +130,8 @@ function makeTile(id: number) {
                 child: Container({
                     width: TILE,
                     height: TILE,
-                    color: id === 0 ? Color.hex("#6366f1") : Color.hex("#ef4444"),
+                    color:
+                        id === 0 ? Color.hex("#6366f1") : Color.hex("#ef4444"),
                     queryKey: [`tile-${id}`],
                 }),
             }),
