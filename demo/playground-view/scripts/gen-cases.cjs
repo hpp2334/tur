@@ -1,5 +1,5 @@
 // Generates `src/cases/generated.ts` — inlines every case source as a files map
-// so the self-hosted playground (@tur/playground-view) has all case sources
+// so the self-hosted playground (@tur-ng/playground-view) has all case sources
 // in-memory without any fetch/host I/O. Run via `pnpm gen-cases` or the
 // prebuild step.
 //

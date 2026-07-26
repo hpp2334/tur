@@ -1,6 +1,6 @@
 # tur Playground — Style Guide
 
-**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `@tur/playground-view`
+**Companion to**: [`DESIGN-SYSTEM.md`](./DESIGN-SYSTEM.md) · **Scope**: `@tur-ng/playground-view`
 
 The design system tells you *what* the tokens are. This guide tells you *how to think* about them — the principles behind product decisions, the patterns to reach for, and the mistakes to refuse in review.
 
@@ -417,7 +417,7 @@ There is exactly one editor surface in the playground. If a future feature needs
 
 ## 6. PR review checklist
 
-Before approving any PR that touches `@tur/playground-view`, verify:
+Before approving any PR that touches `@tur-ng/playground-view`, verify:
 
 - [ ] **No new `Color.hex(...)` outside `tokens.ts` / `compile.ts`.** Run `rg 'Color\.hex' demo/playground-view/src` and confirm the only matches are in those two files.
 - [ ] **No primitive tokens used directly in views.** `rg 'ink\.\d|teal\.\d|coral\.\d' demo/playground-view/src/views` should return nothing.

@@ -1,5 +1,5 @@
 /**
- * @tur/std — ambient type declarations for the native tur widget library.
+ * @tur-ng/std — ambient type declarations for the native tur widget library.
  *
  * Runtime is a synthetic boa module registered by tur-engine under the
  * specifier `"tur:std"`. It re-exports everything from
@@ -14,7 +14,7 @@
  * import { Container, Column, source, Color, Axis } from "tur:std";
  * ```
  *
- * `@tur/animation` and other libraries that need only the reactive
+ * `@tur-ng/animation` and other libraries that need only the reactive
  * substrate may import directly from `tur:core`.
  */
 

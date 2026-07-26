@@ -10,5 +10,5 @@ function run(cmd, opts) {
 }
 
 run("pnpm install", { cwd: jsDir });
-run("pnpm --filter @tur/rspack-plugin build", { cwd: jsDir });
-run("pnpm --filter @tur/react build", { cwd: jsDir });
+run("pnpm --filter @tur-ng/rspack-plugin build", { cwd: jsDir });
+run("pnpm --filter @tur-ng/react build", { cwd: jsDir });

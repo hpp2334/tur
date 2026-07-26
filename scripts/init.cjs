@@ -12,4 +12,4 @@ run('cargo build --workspace', { cwd: root });
 
 run('pnpm install', { cwd: path.join(root, 'js') });
 
-run('pnpm --filter @tur/rspack-plugin build', { cwd: path.join(root, 'js') });
+run('pnpm --filter @tur-ng/rspack-plugin build', { cwd: path.join(root, 'js') });

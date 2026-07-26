@@ -1,5 +1,5 @@
 /**
- * @tur/animation — Flutter-style animation toolkit.
+ * @tur-ng/animation — Flutter-style animation toolkit.
  *
  * This module is the consumer-facing surface of `tur-animation`. It exposes
  * both the native bridge fns (`Opacity`, `Transform`, `createAnimationController`,

@@ -3,11 +3,11 @@
     "compilerOptions": {
         "noEmit": true,
         "types": [
-            "@tur/core",
-            "@tur/std",
-            "@tur/animation",
-            "@tur/clipboard",
-            "@tur/net"
+            "@tur-ng/core",
+            "@tur-ng/std",
+            "@tur-ng/animation",
+            "@tur-ng/clipboard",
+            "@tur-ng/net"
         ]
     },
     "include": ["src", "cases"]

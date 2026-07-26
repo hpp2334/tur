@@ -1,6 +1,6 @@
 {
-    "name": "@tur/test-cases",
-    "version": "0.1.0",
+    "name": "@tur-ng/test-cases",
+    "version": "0.0.1",
     "type": "module",
     "private": true,
     "scripts": {
@@ -8,10 +8,10 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
-        "@tur/animation": "workspace:*",
-        "@tur/core": "workspace:*",
-        "@tur/std": "workspace:*",
-        "@tur/net": "workspace:*"
+        "@tur-ng/animation": "workspace:*",
+        "@tur-ng/core": "workspace:*",
+        "@tur-ng/std": "workspace:*",
+        "@tur-ng/net": "workspace:*"
     },
     "devDependencies": {
         "@rspack/cli": "^1.2.0",
