@@ -10,11 +10,12 @@ use crate::core::platform::key_event::KeyEvent;
 use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
-use crate::core::platform::ImeEvent;
+use crate::core::platform::{ImeEvent, PointerDeviceKind};
 use crate::core::focus::Focusable;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &KeyEvent);
-type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent) -> bool;
+type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
+type AcceptsDeviceFn = fn(&dyn Any, PointerDeviceKind) -> bool;
 type WheelFn = fn(&mut dyn Any, &mut ElementOnWheelContext, &WheelEvent) -> f64;
 type ImeFn = fn(&mut dyn Any, &mut ElementOnImeContext, &ImeEvent);
 type CursorRectFn = fn(&dyn Any) -> Option<(f64, f64, f64, f64)>;
@@ -23,7 +24,7 @@ type FocusableCastFn = fn(&dyn Any) -> Option<&dyn Focusable>;
 pub struct AnyElement {
     inner: Box<dyn Erased>,
     on_keyboard: Option<KeyboardFn>,
-    on_gesture: Option<GestureFn>,
+    on_gesture: Option<(GestureFn, AcceptsDeviceFn)>,
     on_wheel: Option<WheelFn>,
     on_ime: Option<ImeFn>,
     cursor_rect_fn: Option<CursorRectFn>,
@@ -108,9 +109,17 @@ fn gesture_dispatch<E: ElementOnGesture + 'static>(
     any: &mut dyn Any,
     cx: &mut ElementOnGestureContext,
     event: &ComposedGestureEvent,
-) -> bool {
+) {
     let element = any.downcast_mut::<E>().unwrap();
-    ElementOnGesture::on_gesture_event(element, cx, event)
+    ElementOnGesture::on_gesture_event(element, cx, event);
+}
+
+fn accepts_device_dispatch<E: ElementOnGesture + 'static>(
+    any: &dyn Any,
+    device: PointerDeviceKind,
+) -> bool {
+    let element = any.downcast_ref::<E>().unwrap();
+    ElementOnGesture::accepts_device(element, device)
 }
 
 fn wheel_dispatch<E: ElementOnWheel + 'static>(
@@ -261,7 +270,7 @@ impl AnyElement {
         AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
-            on_gesture: Some(gesture_dispatch::<E>),
+            on_gesture: Some((gesture_dispatch::<E>, accepts_device_dispatch::<E>)),
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
@@ -284,7 +293,7 @@ impl AnyElement {
         AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
-            on_gesture: Some(gesture_dispatch::<E>),
+            on_gesture: Some((gesture_dispatch::<E>, accepts_device_dispatch::<E>)),
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
@@ -354,7 +363,7 @@ impl AnyElement {
         AnyElement {
             inner: Box::new(element),
             on_keyboard: None,
-            on_gesture: Some(gesture_dispatch::<E>),
+            on_gesture: Some((gesture_dispatch::<E>, accepts_device_dispatch::<E>)),
             on_wheel: None,
             on_ime: None,
             cursor_rect_fn: None,
@@ -380,7 +389,7 @@ impl AnyElement {
         AnyElement {
             inner: Box::new(element),
             on_keyboard: Some(keyboard_dispatch::<E>),
-            on_gesture: Some(gesture_dispatch::<E>),
+            on_gesture: Some((gesture_dispatch::<E>, accepts_device_dispatch::<E>)),
             on_wheel: None,
             on_ime: Some(ime_dispatch::<E>),
             cursor_rect_fn: None,
@@ -521,11 +530,16 @@ impl AnyElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
-        if let Some(handler) = self.on_gesture {
-            handler(self.inner.as_any_mut(), cx, event)
-        } else {
-            false
+    ) {
+        if let Some((handler, _)) = self.on_gesture {
+            handler(self.inner.as_any_mut(), cx, event);
+        }
+    }
+
+    pub fn accepts_device(&self, device: PointerDeviceKind) -> bool {
+        match self.on_gesture {
+            Some((_, accepts_fn)) => accepts_fn(self.inner.as_any(), device),
+            None => false,
         }
     }
 

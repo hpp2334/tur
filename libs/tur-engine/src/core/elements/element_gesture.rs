@@ -12,21 +12,21 @@ pub enum ComposedGestureEvent {
     PointerDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
     /// Double-click — computed from two `PointerDown`s within ≤500 ms and
     /// ≤5 px. Used by EditableText for word selection.
-    PointerDoubleDown { local: Offset, global: Offset, button: MouseButton },
+    PointerDoubleDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
     /// Triple-click — computed from three consecutive clicks in the same
     /// time/position window. Used by EditableText for line selection.
-    PointerTripleDown { local: Offset, global: Offset, button: MouseButton },
+    PointerTripleDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
     PointerMove { local: Offset, global: Offset, device: PointerDeviceKind },
     PointerUp { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
     /// Click — dispatched after a `PointerUp` that landed on the same
     /// element as the `PointerDown`. `PointerInteractElement` handles this
     /// by invoking its `on_click` mutation. Dispatch stops at the first
     /// click-opaque element in the hit-path.
-    Click { local: Offset, global: Offset },
+    Click { local: Offset, global: Offset, device: PointerDeviceKind },
     /// Right-click. `local` is relative to the element; `global` is canvas-
     /// relative. Dispatched to every element in the hit-path (deepest first)
     /// so layered views can each inspect the event.
-    ContextMenu { local: Offset, global: Offset },
+    ContextMenu { local: Offset, global: Offset, device: PointerDeviceKind },
 }
 
 pub struct ElementOnGestureContext<'a> {
@@ -82,20 +82,27 @@ impl<'a> ElementOnGestureContext<'a> {
 /// Trait for elements that handle gesture events (pointer down/move/up,
 /// click, context menu).
 ///
-/// `on_gesture_event` returns `bool`: `true` means the element claims the
-/// gesture (the arena will route subsequent move/up events to it); `false`
-/// means the element is not interested (the arena falls through to the next
-/// candidate or to scroll). The return value is only meaningful for
-/// `PointerDown` — other events are only dispatched to the already-captured
-/// path. Default: `true` (claim).
+/// `accepts_device` declares which device kinds the element will accept a
+/// drag-gesture claim from. The gesture arena consults this during the
+/// touch-slop probe to skip elements that want touch drags to fall through
+/// to the enclosing ScrollView (e.g. an editable text field lets the
+/// scroll view handle touch drags). It is *not* consulted for activation
+/// events (`Click` / `ContextMenu` / `PointerDoubleDown` / `PointerTripleDown`)
+/// — those always dispatch. Default: accept all devices.
+///
+/// `on_gesture_event` returns nothing; the element handles the event purely
+/// for its side effects (pushing mutations, requesting focus/paint/scroll).
 pub trait ElementOnGesture: 'static {
+    fn accepts_device(&self, _device: PointerDeviceKind) -> bool {
+        true
+    }
+
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         let _ = cx;
         let _ = event;
-        true
     }
 }

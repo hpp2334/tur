@@ -106,7 +106,7 @@ impl ElementOnGesture for PointerInteractElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         let (mutation, payload) = match event {
             ComposedGestureEvent::PointerDown { local, global, .. } => {
                 let m = self.view.on_pointer_down;
@@ -129,12 +129,12 @@ impl ElementOnGesture for PointerInteractElement {
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            ComposedGestureEvent::Click { local, global } => {
+            ComposedGestureEvent::Click { local, global, .. } => {
                 let m = self.view.on_click;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
             }
-            ComposedGestureEvent::ContextMenu { local, global } => {
+            ComposedGestureEvent::ContextMenu { local, global, .. } => {
                 let m = self.view.on_context_menu;
                 let ev = PointerInteractEvent { local: *local, global: *global };
                 (m, ev)
@@ -143,7 +143,6 @@ impl ElementOnGesture for PointerInteractElement {
         if let Some(m) = mutation {
             cx.push_event(m, payload);
         }
-        true
     }
 }
 
