@@ -41,3 +41,6 @@ RUN unzip /tmp/prewarm.zip -d /tmp/prewarm && \
 
 RUN git config --global user.email "hpp2334@outlook.com" && \
     git config --global user.name "hpp2334"
+
+RUN --mount=type=ssh mkdir -p /root/.ssh && ssh-keyscan github.com >> /root/.ssh/known_hosts
+ENV GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=yes"
