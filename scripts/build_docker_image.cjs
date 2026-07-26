@@ -7,6 +7,6 @@ const contextDir = rootDir;
 const imageName = 'tur-ci:latest';
 
 execSync(
-  `docker build --network=host -t ${imageName} -f ${dockerfilePath} ${contextDir}`,
-  { stdio: 'inherit' },
+  `docker build --ssh default --network=host -t ${imageName} -f ${dockerfilePath} ${contextDir}`,
+  { stdio: 'inherit', env: { ...process.env, DOCKER_BUILDKIT: '1' } },
 );
