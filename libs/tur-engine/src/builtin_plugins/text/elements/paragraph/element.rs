@@ -5,6 +5,7 @@ use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::platform::PointerDeviceKind;
 use crate::core::elements::{
     AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
     ElementOnGestureContext, ElementTrace, TraceValue,
@@ -150,22 +151,25 @@ impl ElementTrace for TextElement {
 impl ElementOnFocus for TextElement {}
 
 impl ElementOnGesture for TextElement {
+    fn accepts_device(&self, _device: PointerDeviceKind) -> bool {
+        // Non-selectable text rejects all devices so the touch-slop probe
+        // falls through to gesture-capable elements beneath (e.g. a wrapping
+        // `PointerInteract`). Without this, a static `Text` painted on top of
+        // a `PointerInteract` would steal touch drags: the piece's number
+        // `Text` won the probe and the `PointerInteract` beneath never saw
+        // `onPointerDown` (the drag appeared dead on touch, while mouse drags
+        // — which bypass the probe — worked).
+        self.view.selectable
+    }
+
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
+        // Mouse/Click dispatch bypasses accepts_device; bail for non-selectable.
         if !self.view.selectable {
-            // Non-selectable text has no gesture behavior — do NOT claim, so
-            // the gesture arena's claim probe (touch drags) falls through to
-            // gesture-capable elements beneath (e.g. a wrapping
-            // `PointerInteract`). Returning `true` here used to let a static
-            // `Text` painted on top of a `PointerInteract` steal touch drags:
-            // the piece's number `Text` won the probe and the
-            // `PointerInteract` beneath never saw `onPointerDown` (the drag
-            // appeared dead on touch, while mouse drags — which bypass the
-            // probe — worked).
-            return false;
+            return;
         }
         match event {
             ComposedGestureEvent::PointerDown { local, .. } => {
@@ -198,7 +202,6 @@ impl ElementOnGesture for TextElement {
             ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
-        true
     }
 }
 

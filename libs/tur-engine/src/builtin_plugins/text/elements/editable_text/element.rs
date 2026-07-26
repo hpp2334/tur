@@ -763,18 +763,23 @@ impl ElementTrace for EditableTextElement {
 impl ElementOnFocus for EditableTextElement {}
 
 impl ElementOnGesture for EditableTextElement {
+    fn accepts_device(&self, device: PointerDeviceKind) -> bool {
+        // Touch drags should scroll the enclosing ScrollView, not select
+        // text. Reject touch so the touch-slop probe falls through to the
+        // nearest scroll-capable ancestor. Mouse is accepted for selection
+        // and caret placement. (Tap-to-focus still works: a touch tap is
+        // funneled through the mouse path as a `PointerDown`/`Click`, which
+        // dispatch unconditionally — `accepts_device` only gates the drag-
+        // claim probe.)
+        matches!(device, PointerDeviceKind::Mouse)
+    }
+
     fn on_gesture_event(
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         match event {
-            // Touch drag should scroll the enclosing ScrollView, not select
-            // text. Reject touch PointerDown so the arena falls through to
-            // the nearest scroll-capable ancestor.
-            ComposedGestureEvent::PointerDown { device: PointerDeviceKind::Touch, .. } => {
-                return false;
-            }
             ComposedGestureEvent::PointerDoubleDown { local, .. } => {
                 cx.request_own_focus();
                 let byte_pos = self.char_index_at(local);
@@ -855,7 +860,7 @@ impl ElementOnGesture for EditableTextElement {
             }
             ComposedGestureEvent::PointerUp { .. } => {}
             ComposedGestureEvent::Click { .. } => {}
-            ComposedGestureEvent::ContextMenu { local, global } => {
+            ComposedGestureEvent::ContextMenu { local, global, .. } => {
                 if let Some(m) = self.view.on_context_menu {
                     cx.push_event(
                         m,
@@ -864,7 +869,6 @@ impl ElementOnGesture for EditableTextElement {
                 }
             }
         }
-        true
     }
 }
 

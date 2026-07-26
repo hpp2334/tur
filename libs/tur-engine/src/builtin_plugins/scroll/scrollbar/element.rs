@@ -151,22 +151,22 @@ impl ElementOnGesture for ScrollbarElement {
         &mut self,
         cx: &mut ElementOnGestureContext,
         event: &ComposedGestureEvent,
-    ) -> bool {
+    ) {
         let track = self.cached_track.height;
         if track <= 0.0 {
-            return true;
+            return;
         }
         let (node, _offset, max_extent, viewport) = match self.metrics() {
             Some(v) => v,
-            None => return true,
+            None => return,
         };
         if max_extent <= 0.0 {
-            return true;
+            return;
         }
         let thumb = Self::thumb_height(track, max_extent, viewport);
         let thumb_range = track - thumb;
         if thumb_range <= 0.0 {
-            return true;
+            return;
         }
 
         match event {
@@ -193,7 +193,7 @@ impl ElementOnGesture for ScrollbarElement {
                 }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
-                let Some(d) = self.drag else { return true; };
+                let Some(d) = self.drag else { return; };
                 let delta = local.y - d.start_y;
                 let new_offset =
                     (d.start_offset + delta * max_extent / thumb_range).clamp(0.0, max_extent);
@@ -207,7 +207,6 @@ impl ElementOnGesture for ScrollbarElement {
             ComposedGestureEvent::Click { .. } => {}
             ComposedGestureEvent::ContextMenu { .. } => {}
         }
-        true
     }
 }
 

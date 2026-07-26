@@ -62,7 +62,7 @@ impl Subsystem for GestureSubsystem {
                 device,
             }) => match device {
                 PointerDeviceKind::Mouse => {
-                    self.handle_mouse_pointer_down(cx, *position, *button, *time_ms);
+                    self.handle_mouse_pointer_down(cx, *position, *button, *time_ms, *device);
                 }
                 PointerDeviceKind::Touch => {
                     self.handle_touch_pointer_down(cx, *position, *time_ms);
@@ -70,7 +70,7 @@ impl Subsystem for GestureSubsystem {
             },
             PlatformEvent::Pointer(PointerInput::PointerMove { position, device, time_ms }) => match device {
                 PointerDeviceKind::Mouse => {
-                    self.handle_mouse_pointer_move(cx, *position);
+                    self.handle_mouse_pointer_move(cx, *position, *device);
                 }
                 PointerDeviceKind::Touch => {
                     self.handle_touch_pointer_move(cx, *position, *time_ms);
@@ -83,7 +83,7 @@ impl Subsystem for GestureSubsystem {
                 time_ms,
             }) => match device {
                 PointerDeviceKind::Mouse => {
-                    self.handle_mouse_pointer_up(cx, *position, *button);
+                    self.handle_mouse_pointer_up(cx, *position, *button, *device);
                 }
                 PointerDeviceKind::Touch => {
                     self.handle_touch_pointer_up(cx, *position, *time_ms);
@@ -91,7 +91,7 @@ impl Subsystem for GestureSubsystem {
             },
             PlatformEvent::Pointer(PointerInput::PointerCancel { device }) => match device {
                 PointerDeviceKind::Mouse => {
-                    self.handle_mouse_pointer_cancel(cx);
+                    self.handle_mouse_pointer_cancel(cx, *device);
                 }
                 PointerDeviceKind::Touch => {
                     self.handle_touch_pointer_cancel(cx);
@@ -111,6 +111,7 @@ impl GestureSubsystem {
         position: Offset,
         button: MouseButton,
         time_ms: u64,
+        device: PointerDeviceKind,
     ) {
         let path = HitTest::new(&cx.element_tree.borrow()).path(position);
         let target = path.first().copied();
@@ -121,13 +122,13 @@ impl GestureSubsystem {
             let local = local_position(cx, *id, position);
             let event = match kind {
                 ClickKind::Single => {
-                    ComposedGestureEvent::PointerDown { local, global: position, button, device: PointerDeviceKind::Mouse }
+                    ComposedGestureEvent::PointerDown { local, global: position, button, device }
                 }
                 ClickKind::Double => {
-                    ComposedGestureEvent::PointerDoubleDown { local, global: position, button }
+                    ComposedGestureEvent::PointerDoubleDown { local, global: position, button, device }
                 }
                 ClickKind::Triple => {
-                    ComposedGestureEvent::PointerTripleDown { local, global: position, button }
+                    ComposedGestureEvent::PointerTripleDown { local, global: position, button, device }
                 }
             };
             dispatch_gesture_event(cx, *id, &event);
@@ -138,6 +139,7 @@ impl GestureSubsystem {
         &mut self,
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
+        device: PointerDeviceKind,
     ) {
         if !self.composer.is_tracking_drag() {
             return;
@@ -149,7 +151,7 @@ impl GestureSubsystem {
             dispatch_gesture_event(
                 cx,
                 *id,
-                &ComposedGestureEvent::PointerMove { local, global: position, device: PointerDeviceKind::Mouse },
+                &ComposedGestureEvent::PointerMove { local, global: position, device },
             );
         }
     }
@@ -159,6 +161,7 @@ impl GestureSubsystem {
         cx: &mut SubsystemFlushContext<'_>,
         position: Offset,
         button: MouseButton,
+        device: PointerDeviceKind,
     ) {
         let down_target = self.composer.pointer_down_target();
         let down_path: Vec<ElementNodeId> = self.composer.pointer_down_path().to_vec();
@@ -168,7 +171,7 @@ impl GestureSubsystem {
             dispatch_gesture_event(
                 cx,
                 *id,
-                &ComposedGestureEvent::PointerUp { local, global: position, button, device: PointerDeviceKind::Mouse },
+                &ComposedGestureEvent::PointerUp { local, global: position, button, device },
             );
         }
 
@@ -210,14 +213,14 @@ impl GestureSubsystem {
             // platform event, so it is produced here rather than carried in
             // from the embedder.
             match button {
-                MouseButton::Left => dispatch_click(cx, position),
-                MouseButton::Right => dispatch_context_menu(cx, position),
+                MouseButton::Left => dispatch_click(cx, position, device),
+                MouseButton::Right => dispatch_context_menu(cx, position, device),
                 _ => {}
             }
         }
     }
 
-    fn handle_mouse_pointer_cancel(&mut self, cx: &mut SubsystemFlushContext<'_>) {
+    fn handle_mouse_pointer_cancel(&mut self, cx: &mut SubsystemFlushContext<'_>, device: PointerDeviceKind) {
         let down_path: Vec<ElementNodeId> = self.composer.pointer_down_path().to_vec();
         for id in &down_path {
             let local = local_position(cx, *id, Offset::new(0.0, 0.0));
@@ -228,7 +231,7 @@ impl GestureSubsystem {
                     local,
                     global: Offset::new(0.0, 0.0),
                     button: MouseButton::Left,
-                    device: PointerDeviceKind::Mouse,
+                    device,
                 },
             );
         }
@@ -270,22 +273,22 @@ impl GestureSubsystem {
                     .touch_down_position()
                     .unwrap_or(position);
 
-                // Probe gesture elements: dispatch PointerDown { device: Touch }
-                // to each until one claims (returns true).
+                // Probe gesture elements: find the first that accepts a touch
+                // drag claim, then dispatch PointerDown { device: Touch } to it.
                 let mut drag_winner = None;
                 for &id in &hit_path {
-                    let has_gesture = cx
+                    let accepts = cx
                         .element_tree
                         .borrow()
                         .get_element(id)
                         .and_then(|n| n.element.as_ref())
-                        .map(|e| e.has_on_gesture())
+                        .map(|e| e.has_on_gesture() && e.accepts_device(PointerDeviceKind::Touch))
                         .unwrap_or(false);
-                    if !has_gesture {
+                    if !accepts {
                         continue;
                     }
                     let local = local_position(cx, id, down_position);
-                    let claimed = dispatch_gesture_event(
+                    dispatch_gesture_event(
                         cx,
                         id,
                         &ComposedGestureEvent::PointerDown {
@@ -295,10 +298,8 @@ impl GestureSubsystem {
                             device: PointerDeviceKind::Touch,
                         },
                     );
-                    if claimed {
-                        drag_winner = Some(id);
-                        break;
-                    }
+                    drag_winner = Some(id);
+                    break;
                 }
 
                 if let Some(target) = drag_winner {
@@ -409,8 +410,8 @@ impl GestureSubsystem {
                 // platform pointer event or touching `PointerSubsystem` (no
                 // hover on touch). Embedders must NOT also forward a
                 // host-synthesized click for the same tap (double dispatch).
-                self.handle_mouse_pointer_down(cx, position, MouseButton::Left, time_ms);
-                self.handle_mouse_pointer_up(cx, position, MouseButton::Left);
+                self.handle_mouse_pointer_down(cx, position, MouseButton::Left, time_ms, PointerDeviceKind::Touch);
+                self.handle_mouse_pointer_up(cx, position, MouseButton::Left, PointerDeviceKind::Touch);
             }
             TouchUpOutcome::Idle => {}
         }
@@ -445,14 +446,14 @@ impl GestureSubsystem {
 
 /// Dispatch `ComposedGestureEvent::Click` to every `PointerInteractElement`
 /// in the hit-path, stopping at the first click-opaque element.
-fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset) {
+fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: PointerDeviceKind) {
     let hit_path = HitTest::new(&cx.element_tree.borrow()).path(position);
     for node_id in &hit_path {
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(
             cx,
             *node_id,
-            &ComposedGestureEvent::Click { local, global: position },
+            &ComposedGestureEvent::Click { local, global: position, device },
         );
         if is_click_opaque(&cx.element_tree.borrow(), *node_id) {
             break;
@@ -462,14 +463,14 @@ fn dispatch_click(cx: &mut SubsystemFlushContext<'_>, position: Offset) {
 
 /// Dispatch `ComposedGestureEvent::ContextMenu` to every element in the
 /// hit-path (mirrors how the web `contextmenu` event bubbles).
-fn dispatch_context_menu(cx: &mut SubsystemFlushContext<'_>, position: Offset) {
+fn dispatch_context_menu(cx: &mut SubsystemFlushContext<'_>, position: Offset, device: PointerDeviceKind) {
     let hit_path = HitTest::new(&cx.element_tree.borrow()).path(position);
     for node_id in &hit_path {
         let local = local_position(cx, *node_id, position);
         dispatch_gesture_event(
             cx,
             *node_id,
-            &ComposedGestureEvent::ContextMenu { local, global: position },
+            &ComposedGestureEvent::ContextMenu { local, global: position, device },
         );
     }
 }
@@ -508,20 +509,19 @@ fn local_position(
     Offset::new(global.x - abs_x, global.y - abs_y)
 }
 
-/// Dispatch a gesture event to an element. Returns `true` if the element
-/// claimed the gesture (only meaningful for `PointerDown`). Only marks the
-/// element dirty if claimed.
+/// Dispatch a gesture event to an element and mark it dirty for re-layout
+/// (the handler may have pushed mutations / requested focus or paint).
 fn dispatch_gesture_event(
     cx: &mut SubsystemFlushContext<'_>,
     id: ElementNodeId,
     event: &ComposedGestureEvent,
-) -> bool {
+) {
     let mut tree = cx.element_tree.borrow_mut();
     let Some(node) = tree.get_element_mut(id) else {
-        return false;
+        return;
     };
     let Some(ref mut element) = node.element else {
-        return false;
+        return;
     };
     let mut fm = cx.focus_manager.borrow_mut();
     let mut mq = cx.mutation_queue.borrow_mut();
@@ -532,9 +532,6 @@ fn dispatch_gesture_event(
         cx.need_paint,
         id,
     );
-    let claimed = element.on_gesture_event(&mut el_cx, event);
-    if claimed {
-        tree.mark_dirty(id.into());
-    }
-    claimed
+    element.on_gesture_event(&mut el_cx, event);
+    tree.mark_dirty(id.into());
 }
