@@ -1,9 +1,15 @@
 {
-    "name": "@tur/animation",
-    "version": "0.1.0",
+    "name": "@tur-ng/animation",
+    "version": "0.0.1",
     "type": "module",
-    "private": true,
     "types": "src/index.d.ts",
+    "files": [
+        "src"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
     "scripts": {
         "build": "tsc --noEmit",
         "typecheck": "tsc --noEmit"
@@ -12,7 +18,7 @@
         "typescript": "^5.7.0"
     },
     "dependencies": {
-        "@tur/core": "workspace:*",
-        "@tur/std": "workspace:*"
+        "@tur-ng/core": "workspace:*",
+        "@tur-ng/std": "workspace:*"
     }
 }

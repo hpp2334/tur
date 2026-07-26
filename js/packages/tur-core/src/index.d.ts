@@ -1,5 +1,5 @@
 /**
- * @tur/core — ambient type declarations for the native tur reactive core.
+ * @tur-ng/core — ambient type declarations for the native tur reactive core.
  *
  * Runtime is a synthetic boa module registered by tur-engine
  * (`core::bridge::module_loader`) under the specifier `"tur:core"`.
@@ -9,9 +9,9 @@
  * `Val`/`ReadonlyStoreCtx`/`StoreCtx`).
  *
  * This is the authoritative contract for the engine's reactive layer. The
- * widget library (`tur:std`, declared in `@tur/std`) re-exports
+ * widget library (`tur:std`, declared in `@tur-ng/std`) re-exports
  * everything here and adds views, value types, enums, and event details.
- * Consumers normally import from `tur:std`; `@tur/animation` and
+ * Consumers normally import from `tur:std`; `@tur-ng/animation` and
  * other low-level libraries may import directly from `tur:core`.
  *
  * Handles (`Element`, `Atom`, `Mutation`) are opaque — the engine hands out

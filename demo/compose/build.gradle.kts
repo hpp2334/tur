@@ -150,7 +150,7 @@ val buildPlaygroundJs by tasks.registering(Exec::class) {
     inputs.dir(File(playgroundPkg, "src"))
 
     workingDir = File(workspaceRoot, "js")
-    commandLine("pnpm", "--filter", "@tur/playground-view", "build")
+    commandLine("pnpm", "--filter", "@tur-ng/playground-view", "build")
 }
 
 val copyPlaygroundJs by tasks.registering(Copy::class) {

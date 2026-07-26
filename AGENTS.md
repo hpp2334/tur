@@ -6,12 +6,12 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  demo/website (web host app — @tur/website)            │
+│  demo/website (web host app — @tur-ng/website)            │
 │  Thin browser host: loads the tur WASM + the           │
 │  playground-view bundle. Co-located with its own        │
 │  wasm cdylib (demo/website/native → tur-website).       │
 ├─────────────────────────────────────────────────────┤
-│  demo/playground-view (@tur/playground-view)           │
+│  demo/playground-view (@tur-ng/playground-view)           │
 │  The playground view: UI built with tur:animation +     │
 │  tur:std (Sidebar/Editor/Viewer) + inlined case         │
 │  sources. A reusable view the website renders.          │
@@ -419,7 +419,7 @@ libs/
                               #   a createEngine fn with the demo plugin set
                               #   (Std+Animation+Clipboard+Net+DemoHelper). The
                               #   template users copy for their own app's .so.
-   website/                    # Web host app (@tur/website): thin browser
+   website/                    # Web host app (@tur-ng/website): thin browser
                               #   wrapper that loads the wasm + the
                               #   playground-view bundle. Its rspack runs
                               #   wasm-pack on `native/` + bundles
@@ -432,13 +432,13 @@ libs/
                               #   (create / create_in / loadAndRunModule /
                               #   dev_tool) → tur_website.js. The wasm mirror
                               #   of demo/compose/native.
-   playground-view/            # @tur/playground-view: the playground UI
+   playground-view/            # @tur-ng/playground-view: the playground UI
                               #   bundle built with tur:animation + tur:std
                               #   (Sidebar/Editor/Viewer) + inlined case
                               #   sources. A reusable view the website
                               #   renders. Owns the playground-only cases
                               #   (cases/ — compiler-bridge-demo, github-viewer)
-                              #   + the folded-in @tur/demo-helper types.
+                              #   + the folded-in @tur-ng/demo-helper types.
  js/
    packages/
      tur-animation/            # Ambient TS types for `tur:animation`

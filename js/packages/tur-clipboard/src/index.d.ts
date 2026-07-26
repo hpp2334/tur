@@ -1,5 +1,5 @@
 /**
- * @tur/clipboard — ambient type declarations for the clipboard module.
+ * @tur-ng/clipboard — ambient type declarations for the clipboard module.
  *
  * The runtime is a synthetic boa module registered by `tur-clipboard`
  * (Rust crate) under the specifier `"tur:clipboard"`. It exports a

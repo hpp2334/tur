@@ -1,5 +1,5 @@
 /**
- * @tur/net — ambient type declarations for the networking module.
+ * @tur-ng/net — ambient type declarations for the networking module.
  *
  * The runtime is a synthetic boa module registered by tur-wasm
  * (`register_all_services`) under the specifier `"tur:net"`. It

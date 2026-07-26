@@ -1,7 +1,13 @@
 {
-    "name": "@tur/std",
-    "version": "0.1.0",
+    "name": "@tur-ng/std",
+    "version": "0.0.1",
     "type": "module",
-    "private": true,
-    "types": "src/index.d.ts"
+    "types": "src/index.d.ts",
+    "files": [
+        "src"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    }
 }

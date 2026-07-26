@@ -29,19 +29,19 @@ importers:
 
   ../demo/playground-view:
     dependencies:
-      '@tur/animation':
+      '@tur-ng/animation':
         specifier: workspace:*
         version: link:../../js/packages/tur-animation
-      '@tur/clipboard':
+      '@tur-ng/clipboard':
         specifier: workspace:*
         version: link:../../js/packages/tur-clipboard
-      '@tur/core':
+      '@tur-ng/core':
         specifier: workspace:*
         version: link:../../js/packages/tur-core
-      '@tur/net':
+      '@tur-ng/net':
         specifier: workspace:*
         version: link:../../js/packages/tur-net
-      '@tur/std':
+      '@tur-ng/std':
         specifier: workspace:*
         version: link:../../js/packages/tur-std
     devDependencies:
@@ -69,10 +69,10 @@ importers:
 
   packages/tur-animation:
     dependencies:
-      '@tur/core':
+      '@tur-ng/core':
         specifier: workspace:*
         version: link:../tur-core
-      '@tur/std':
+      '@tur-ng/std':
         specifier: workspace:*
         version: link:../tur-std
     devDependencies:
@@ -90,16 +90,16 @@ importers:
 
   packages/tur-test-cases:
     dependencies:
-      '@tur/animation':
+      '@tur-ng/animation':
         specifier: workspace:*
         version: link:../tur-animation
-      '@tur/core':
+      '@tur-ng/core':
         specifier: workspace:*
         version: link:../tur-core
-      '@tur/net':
+      '@tur-ng/net':
         specifier: workspace:*
         version: link:../tur-net
-      '@tur/std':
+      '@tur-ng/std':
         specifier: workspace:*
         version: link:../tur-std
     devDependencies:

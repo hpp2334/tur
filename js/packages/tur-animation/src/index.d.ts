@@ -1,5 +1,5 @@
 /**
- * @tur/animation — ambient type declarations for the animation library.
+ * @tur-ng/animation — ambient type declarations for the animation library.
  *
  * Runtime is a synthetic boa module registered by `tur-animation` under the
  * specifier `"tur:animation"`. It is a single combined module that:

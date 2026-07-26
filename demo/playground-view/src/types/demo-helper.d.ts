@@ -1,5 +1,5 @@
 /**
- * @tur/demo-helper — ambient type declarations for the demo-helper module.
+ * @tur-ng/demo-helper — ambient type declarations for the demo-helper module.
  *
  * The runtime is a synthetic boa module registered by `tur-demo-plugin`
  * (`TurDemoPlugin`) under the specifier `"tur-ext/demo-helper"`. It exposes
