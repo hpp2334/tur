@@ -1,4 +1,11 @@
-import { Color, Column, Container, CrossAxisAlignment, Text, view } from "tur:std";
+import {
+    Color,
+    Column,
+    Container,
+    CrossAxisAlignment,
+    Text,
+    view,
+} from "tur:std";
 
 // Repro: Column(crossAlignment: Stretch) > Container(padding, color, no size)
 // > Text. Expected: full-width red strip with white text, visible.
