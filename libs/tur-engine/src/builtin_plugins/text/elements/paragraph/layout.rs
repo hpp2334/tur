@@ -99,13 +99,23 @@ fn compute_trunc_byte(
     for stop in &nth.stops {
         let right = stop.x + stop.advance;
         if right + ellipsis_width <= max {
-            // The char at `stop.byte` fits; advance `best` past it (char-safe).
-            let char_len = full_text[stop.byte..]
-                .chars()
+            // Advance `best` past the entire grapheme cluster whose first
+            // codepoint sits at `stop.byte`. parley shapes a multi-codepoint
+            // grapheme (decomposed "é" = 'e' + U+0301, a ZWJ emoji sequence,
+            // a regional-indicator flag) as a single glyph, but the per-glyph
+            // stop records only the first codepoint's byte offset — so slicing
+            // at `byte + char_len` would split the cluster and silently strip
+            // the combining mark (turning "é" into "e"). Walking to the
+            // cluster's end (UAX#29 grapheme boundary) keeps the prefix
+            // visually intact. ASCII/Latin-1 text is unaffected (grapheme
+            // length == char length).
+            use unicode_segmentation::UnicodeSegmentation;
+            let cluster_end = full_text[stop.byte..]
+                .graphemes(true)
                 .next()
-                .map(|c| c.len_utf8())
-                .unwrap_or(0);
-            best = stop.byte + char_len;
+                .map(|g| stop.byte + g.len())
+                .unwrap_or(stop.byte);
+            best = cluster_end.min(nth.end_byte);
         } else {
             break;
         }
@@ -313,5 +323,162 @@ impl ElementLayout for TextElement {
         );
         self.cached_layout = Some(layout_data);
         constraints.constrain(Size::new(width as f64, height as f64))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::text::text_layout::{LineGlyphStop, LineInfo};
+    use unicode_segmentation::UnicodeSegmentation;
+
+    /// Build a minimal `LineInfo` covering `[start_byte, end_byte)` with the
+    /// given `(byte, x, advance)` glyph stops. `y` is unused by
+    /// `compute_trunc_byte` so it's set to 0.
+    fn line(start_byte: usize, end_byte: usize, stops: &[(usize, f32, f32)]) -> LineInfo {
+        LineInfo {
+            top: 0.0,
+            height: 16.0,
+            baseline: 12.0,
+            start_byte,
+            end_byte,
+            right_x: 0.0,
+            stops: stops
+                .iter()
+                .map(|&(byte, x, advance)| LineGlyphStop {
+                    byte,
+                    x,
+                    y: 0.0,
+                    advance,
+                })
+                .collect(),
+        }
+    }
+
+    /// ASCII text: grapheme boundaries == char boundaries == byte
+    /// boundaries, so the grapheme-aware logic must produce the same result
+    /// as the original char-based advance.
+    #[test]
+    fn trunc_byte_ascii_no_overshoot() {
+        let text = "Hello";
+        // One glyph per char, advances 10/8/8/5/8 (right edges 10/18/26/31/39).
+        let line = line(
+            0,
+            5,
+            &[
+                (0, 0.0, 10.0),
+                (1, 10.0, 8.0),
+                (2, 18.0, 8.0),
+                (3, 26.0, 5.0),
+                (4, 31.0, 8.0),
+            ],
+        );
+        // Budget 30: glyphs with right + ellipsis(5) <= 30 fit.
+        //   stop 0: 10+5=15 ✓ → best = 1
+        //   stop 1: 18+5=23 ✓ → best = 2
+        //   stop 2: 26+5=31 ✗ → break
+        assert_eq!(compute_trunc_byte(text, &line, 5.0, Some(30.0)), 2);
+    }
+
+    /// The last fitting glyph is the second codepoint of a decomposed
+    /// grapheme cluster (e.g. "é" = 'e' + U+0301). The char-based advance
+    /// would land between 'e' and U+0301, corrupting "é" into "e" in the
+    /// truncated prefix. The grapheme-aware advance must include the
+    /// combining mark.
+    #[test]
+    fn trunc_byte_preserves_decomposed_combining_mark() {
+        // "résumé" in NFD: r(1) e(1) U+0301(2) s(1) u(1) m(1) e(1) U+0301(2) = 10 bytes.
+        let text = "re\u{0301}sume\u{0301}";
+        assert_eq!(text.len(), 10);
+        assert_eq!(text.graphemes(true).count(), 6);
+
+        // parley would shape each "é" as a single glyph covering 3 bytes,
+        // but `extract_layout_data` records the first codepoint's byte offset
+        // per glyph (see the per-`line_chars.next()` walk). So stop bytes are
+        // 0, 1, 4, 5, 6, 7 — NOT aligned to grapheme ends (which would be
+        // 1, 4, 5, 6, 7, 10).
+        let line = line(
+            0,
+            10,
+            &[
+                (0, 0.0, 10.0),  // 'r'  → right 10
+                (1, 10.0, 10.0), // 'é'  → right 20 (glyph covers bytes 1..4)
+                (4, 20.0, 10.0), // 's'  → right 30
+                (5, 30.0, 10.0), // 'u'  → right 40
+                (6, 40.0, 10.0), // 'm'  → right 50
+                (7, 50.0, 10.0), // 'é'  → right 60 (glyph covers bytes 7..10)
+            ],
+        );
+
+        // Budget 25: only 'r' (right 10) and 'é' (right 20) fit (with 5-wide
+        // ellipsis). The char-based advance would set best=2 (between 'e' and
+        // U+0301), corrupting "ré" → "re". The grapheme-aware advance sets
+        // best=4 (end of the "é" cluster).
+        let b = compute_trunc_byte(text, &line, 5.0, Some(25.0));
+        assert_eq!(b, 4, "must end at grapheme boundary, not mid-cluster");
+        // The kept prefix is exactly the source's first 4 bytes ("re" + U+0301,
+        // NFD "ré") — i.e. the combining mark is preserved, not stripped.
+        assert_eq!(&text[..b], "re\u{0301}", "kept prefix must preserve the combining mark");
+        assert_eq!(text[..b].graphemes(true).count(), 2);
+        assert_ne!(b, 2, "regression: char-based advance would split the cluster");
+    }
+
+    /// A ZWJ emoji sequence shaped as a single multi-byte glyph must remain
+    /// intact — the truncation byte advances past the whole sequence, not
+    /// just its first codepoint.
+    #[test]
+    fn trunc_byte_preserves_zwj_emoji_sequence() {
+        // "👨‍👩‍👧" = man + ZWJ + woman + ZWJ + girl = 5 codepoints, 1 grapheme,
+        // 11 bytes UTF-8 (each emoji codepoint = 4 bytes, ZWJ = 3 bytes:
+        // 4 + 3 + 4 + 3 + 4 = 18 — let me just trust String::len).
+        let emoji = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        let text = format!("Hi {emoji}!");
+        // 5 graphemes: "H", "i", " ", the whole family-emoji cluster, "!".
+        assert_eq!(text.graphemes(true).count(), 5);
+
+        // Manually construct stops mirroring how parley +
+        // extract_layout_data would tag them: 1 stop per glyph, byte = first
+        // codepoint of the cluster.
+        let emoji_byte = text.find(emoji).unwrap();
+        let emoji_end = emoji_byte + emoji.len();
+        let exclamation_byte = emoji_end;
+        let line = line(
+            0,
+            text.len(),
+            &[
+                (0, 0.0, 10.0),                       // 'H'
+                (1, 10.0, 8.0),                       // 'i'
+                (2, 18.0, 5.0),                       // ' '
+                (emoji_byte, 23.0, 24.0),             // 👨‍👩‍👧 (1 glyph, covers whole cluster)
+                (exclamation_byte, 47.0, 6.0),        // '!'
+            ],
+        );
+
+        // Budget that admits the emoji (right 47) but not the trailing '!'
+        // (right 53). Char-based advance would set best = emoji_byte + 4
+        // (just past the first 👨 codepoint), corrupting the family emoji
+        // into a lone "man". Grapheme-aware advance lands at emoji_end.
+        let b = compute_trunc_byte(&text, &line, 5.0, Some(52.0));
+        assert_eq!(b, emoji_end, "must end at the emoji cluster's boundary");
+        assert_eq!(&text[..b], format!("Hi {emoji}"));
+    }
+
+    /// Unconstrained width (no `max_width`) short-circuits to the whole line.
+    #[test]
+    fn trunc_byte_unconstrained_returns_line_end() {
+        let text = "Hello";
+        let line = line(0, 5, &[(0, 0.0, 10.0), (1, 10.0, 8.0)]);
+        assert_eq!(compute_trunc_byte(text, &line, 5.0, None), 5);
+    }
+
+    /// Budget too small for any glyph: `best` stays at the line start (the
+    /// ellipsis alone will be rendered, overflowing slightly — matches
+    /// Flutter's behavior of always showing the ellipsis).
+    #[test]
+    fn trunc_byte_tiny_budget_keeps_line_start() {
+        let text = "Hello";
+        let line = line(0, 5, &[(0, 0.0, 10.0), (1, 10.0, 8.0)]);
+        // Budget 5, ellipsis 5: even the first glyph (right 10 + 5 = 15) doesn't fit.
+        assert_eq!(compute_trunc_byte(text, &line, 5.0, Some(5.0)), 0);
     }
 }
