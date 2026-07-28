@@ -286,15 +286,20 @@ impl EditableTextElement {
         self.cached_layout.as_ref().map(|ld| ld.cursor_x_at(byte))
     }
 
-    /// Build the masked display string (each char of the value — and any
-    /// in-progress IME composition — replaced by `obscuringCharacter`) plus a
-    /// map from each display char index to the corresponding byte offset in
-    /// the controller's real value. Returns `None` when `obscureText` is off.
+    /// Build the masked display string (each *grapheme cluster* of the value
+    /// — and any in-progress IME composition — replaced by one
+    /// `obscuringCharacter`) plus a map from each display char index to the
+    /// corresponding byte offset in the controller's real value. Returns
+    /// `None` when `obscureText` is off.
     ///
-    /// The map lets the layout speak in *value* byte space (the same space as
-    /// the controller's cursor/selection): layout builds the masked string,
-    /// then remaps every glyph-stop / line byte offset via this map, so all
-    /// cursor/caret/selection/click math works unchanged.
+    /// Masking is per grapheme cluster (UAX #29), not per code point, so
+    /// multi-code-point graphemes (combining marks, flag emoji, ZWJ sequences,
+    /// skin-tone modifiers) collapse to a single bullet — matching the
+    /// engine's own grapheme-based cursor/backspace model and Flutter/web
+    /// password fields. The map lets the layout speak in *value* byte space
+    /// (the same space as the controller's cursor/selection): layout builds
+    /// the masked string, then remaps every glyph-stop / line byte offset via
+    /// this map, so all cursor/caret/selection/click math works unchanged.
     pub(super) fn build_masked(&self) -> Option<(String, Vec<usize>, usize)> {
         if !self.resolved_obscured {
             return None;
@@ -308,20 +313,20 @@ impl EditableTextElement {
                 c.composing_start().min(base.len()),
             )
         };
-        // Display chars, in order: base[..cs] (each masked), then the
+        // Display graphemes, in order: base[..cs] (each masked), then the
         // composition (each masked), then base[cs..] (each masked). Each
         // records the value byte a cursor placed there must map to.
         let mut out = String::new();
         let mut map = Vec::new();
-        for (i, _) in base[..cs_byte].char_indices() {
+        for (i, _g) in base[..cs_byte].grapheme_indices(true) {
             out.push(mask_char);
             map.push(i);
         }
-        for _ in comp.chars() {
+        for _g in comp.grapheme_indices(true) {
             out.push(mask_char);
             map.push(cs_byte);
         }
-        for (i, _) in base[cs_byte..].char_indices() {
+        for (i, _g) in base[cs_byte..].grapheme_indices(true) {
             out.push(mask_char);
             map.push(cs_byte + i);
         }

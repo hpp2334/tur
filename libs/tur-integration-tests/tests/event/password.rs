@@ -315,3 +315,69 @@ fn password_click_resolves_in_value_byte_space() {
         "inserted one char in value space: {text}");
     assert_eq!(text, "abcZdef", "inserted at value byte 3");
 }
+
+// ---------------------------------------------------------------------------
+// Multi-code-point graphemes: one bullet per *grapheme*, not per code point.
+// Combining marks, flag emoji, and ZWJ sequences are each a single grapheme
+// cluster (UAX #29) and must collapse to a single bullet — matching the
+// engine's own grapheme-based cursor/backspace model and Flutter/web password
+// fields.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn password_combining_mark_is_one_bullet() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    app.render();
+
+    // 'é' as 'e' + U+0301 combining acute: 2 code points, 1 grapheme.
+    app.push_paste_event("e\u{0301}");
+    app.render();
+    assert_eq!(get_value(&app, id), "e\u{0301}");
+    assert_eq!(get_displayed(&app, id), "•", "one grapheme → one bullet");
+
+    // Backspace deletes the whole grapheme: both code points go, display empty.
+    app.send_key("Backspace");
+    app.render();
+    assert_eq!(get_value(&app, id), "", "whole grapheme deleted");
+    assert_eq!(get_displayed(&app, id), "");
+}
+
+#[test]
+fn password_flag_emoji_is_one_bullet() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    app.render();
+
+    // US flag = U+1F1FA U+1F1F8 (regional indicators): 2 code points, 1 grapheme.
+    app.push_paste_event("\u{1F1FA}\u{1F1F8}");
+    app.render();
+    assert_eq!(get_value(&app, id), "\u{1F1FA}\u{1F1F8}");
+    assert_eq!(get_displayed(&app, id), "•", "flag emoji → one bullet");
+}
+
+#[test]
+fn password_mixed_graphemes_mask_per_grapheme() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.eval_module_source(PASSWORD_BUNDLE).unwrap();
+    app.render();
+
+    let id = find_editable(&app, &["input"]);
+    focus(&mut app, id);
+    app.render();
+
+    // 'a' + US flag + 'b' = 3 graphemes → 3 bullets, even though it's
+    // 1 + 2 + 1 = 4 code points.
+    app.push_paste_event("a\u{1F1FA}\u{1F1F8}b");
+    app.render();
+    assert_eq!(get_value(&app, id), "a\u{1F1FA}\u{1F1F8}b");
+    assert_eq!(get_displayed(&app, id), "•••", "3 graphemes → 3 bullets");
+}
