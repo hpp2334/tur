@@ -3,4 +3,4 @@ mod layout;
 mod render;
 pub mod bridge;
 
-pub use element::{TextElement, TextView};
+pub use element::{TextElement, TextView, TextOverflow};

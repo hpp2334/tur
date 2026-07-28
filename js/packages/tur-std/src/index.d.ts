@@ -284,7 +284,27 @@ declare module "tur:std" {
         /** When `true`, the text can be drag-selected with the pointer. */
         selectable?: boolean;
         queryKey?: Val<string[]>;
+        /**
+         * Maximum number of lines to render. Ignored when `overflow` is
+         * `"visible"`. When omitted (or `0`), the text wraps without limit.
+         */
+        maxLines?: Val<number>;
+        /**
+         * How content beyond `maxLines` is handled. Defaults to `"clip"`
+         * when `maxLines` is set.
+         * - `"clip"`     — render at most `maxLines` lines, discard the rest.
+         * - `"ellipsis"` — render at most `maxLines` lines, appending `…`
+         *                  to the last visible line (trimmed to fit).
+         * - `"visible"`  — render all lines; `maxLines` is ignored.
+         */
+        overflow?: Val<TextOverflow>;
     }
+
+    /**
+     * How `Text` handles content beyond `maxLines`. Mirrors Flutter's
+     * `TextOverflow`.
+     */
+    export type TextOverflow = "clip" | "ellipsis" | "visible";
 
     export interface PointerInteractProps {
         onClick?: Mutation<[PointerInteractEvent]>;

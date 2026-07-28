@@ -1,7 +1,8 @@
 use boa_engine::object::JsObject;
-use boa_engine::Context;
+use boa_engine::{Context, JsError, JsValue};
 
 use crate::core::js_runtime::JsProps;
+use crate::core::js_runtime::js_value::{type_error, FromJs};
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
@@ -15,6 +16,37 @@ use crate::core::view::{ViewCx, Lifecycle, Val, View};
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 use crate::core::text::text_layout::TextLayoutData;
 use crate::core::render::brush::Color;
+
+/// How `Text` handles content that exceeds [`TextView::max_lines`].
+///
+/// Mirrors Flutter's `TextOverflow`:
+/// - `Clip`     — render at most `maxLines` lines, discard the rest.
+/// - `Ellipsis` — render at most `maxLines` lines, append an ellipsis (`…`)
+///   to the last visible line (trimmed to fit).
+/// - `Visible`  — render all lines; `maxLines` is ignored.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum TextOverflow {
+    #[default]
+    Clip,
+    Ellipsis,
+    Visible,
+}
+
+impl FromJs for TextOverflow {
+    fn from_js(v: &JsValue) -> Result<Self, JsError> {
+        let s = v
+            .as_string()
+            .ok_or_else(|| type_error("a TextOverflow keyword string"))?;
+        match s.to_std_string_escaped().as_str() {
+            "clip" => Ok(TextOverflow::Clip),
+            "ellipsis" => Ok(TextOverflow::Ellipsis),
+            "visible" => Ok(TextOverflow::Visible),
+            _ => Err(type_error(
+                "a recognized TextOverflow keyword (clip|ellipsis|visible)",
+            )),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // TextView — the user's declaration. Pure Rust, no JsValues.
@@ -40,6 +72,13 @@ pub struct TextView {
     /// `<span>`/`<div>` text. Read directly from the spec by the gesture
     /// handler (no reactivity — toggle by rebuilding the element).
     pub(crate) selectable: bool,
+    /// Maximum number of lines to render. `None` (or `0`) means no limit.
+    /// Honored when [`TextView::overflow`] is `Clip` or `Ellipsis`; ignored
+    /// when it is `Visible`.
+    pub(crate) max_lines: Option<Val<u32>>,
+    /// How content past [`TextView::max_lines`] is handled. Defaults to
+    /// `Clip` (matches Flutter's `TextOverflow.clip`).
+    pub(crate) overflow: Option<Val<TextOverflow>>,
 }
 
 impl View for TextView {
@@ -108,6 +147,8 @@ impl ElementSubscribe for TextElement {
         if let Some(v) = c.text.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.max_lines.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.overflow.as_ref() { cx.subscribe_val(v); }
     }
 }
 
@@ -240,6 +281,8 @@ impl TextView {
             query_key: p.query_key("queryKey"),
             on_selection_change,
             selectable,
+            max_lines: p.val::<u32>("maxLines"),
+            overflow: p.val::<TextOverflow>("overflow"),
         }
     }
 }
