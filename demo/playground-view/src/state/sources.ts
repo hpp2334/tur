@@ -33,6 +33,7 @@ const WHITELIST = new Set([
     "countdown",
     "github-viewer",
     "lifecycle-hooks",
+    "text-overflow-demo",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)
