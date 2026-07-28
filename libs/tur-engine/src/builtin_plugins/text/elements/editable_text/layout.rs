@@ -48,6 +48,19 @@ impl ElementLayout for EditableTextElement {
         };
         let color = self.painting.color;
 
+        // Resolve password-mode props (refreshed each layout so the gesture/
+        // keyboard/IME/render handlers — which lack store access — read the
+        // latest values). When obscured, layout builds from a masked display
+        // string (each char → obscuringCharacter) and then remaps the
+        // layout's byte offsets back into the controller's value-byte space,
+        // so all cursor/selection/caret/click math works unchanged.
+        self.resolved_obscured = cx.read_val_opt(self.view.obscure_text.as_ref()).unwrap_or(false);
+        self.resolved_obscuring_char = cx
+            .read_val_opt(self.view.obscuring_character.as_ref())
+            .and_then(|s| s.chars().next())
+            .unwrap_or('\u{2022}');
+        let obscured = self.resolved_obscured;
+
         let display_text = self.composition_display_text();
 
         // Always build a layout (even for empty text with no placeholder) so
@@ -78,11 +91,33 @@ impl ElementLayout for EditableTextElement {
         // colors from syntax highlighting are visible). We fall back to a flat
         // single-color layout during IME composition (the composition text is
         // substituted into the display string, so byte offsets from the base
-        // spans no longer line up) or when the controller has no spans yet.
-        let build_from_spans = !is_composing && !base_spans.is_empty() && !display_text.is_empty();
+        // spans no longer line up), when password mode is active (the masked
+        // display string shares no byte offsets with the span tree), or when
+        // the controller has no spans yet (placeholder display).
+        let build_from_spans = !obscured
+            && !is_composing
+            && !base_spans.is_empty()
+            && !display_text.is_empty();
+
+        // When obscured, render the masked display string (each char of the
+        // value — and any in-progress composition — replaced by the obscuring
+        // char) and remember the char→value-byte map so we can remap the
+        // layout below. An empty masked value falls through to the placeholder
+        // path so the hint still shows (unmasked).
+        let masked: Option<(String, Vec<usize>, usize)> =
+            if obscured { self.build_masked() } else { None };
+        // Active mask: a non-empty masked value to render.
+        let active_mask: Option<&(String, Vec<usize>, usize)> = match masked.as_ref() {
+            Some((m, _, _)) if !m.is_empty() => masked.as_ref(),
+            _ => None,
+        };
+        let remap: Option<(Vec<usize>, usize)> =
+            active_mask.map(|(_, map, ml)| (map.clone(), *ml));
 
         let full_text: String = if build_from_spans {
             base_spans.iter().map(|s| s.text.as_str()).collect()
+        } else if let Some((m, _, _)) = active_mask {
+            m.clone()
         } else if display_text.is_empty() {
             placeholder.as_deref().unwrap_or("").to_string()
         } else {
@@ -136,11 +171,45 @@ impl ElementLayout for EditableTextElement {
         layout.break_all_lines(max_width);
         layout.align(Alignment::Start, AlignmentOptions::default());
 
-        let (layout_data, width, height) =
+        let (mut layout_data, width, height) =
             text_layout::extract_layout_data(&mut layout, &underline_ranges, &full_text);
+
+        // Remap the masked layout's byte offsets back into the controller's
+        // value-byte space so cursor/selection/caret/click math (all of which
+        // operate in value bytes) works unchanged.
+        if let Some((map, ml)) = remap {
+            remap_layout_bytes(&mut layout_data, &map, ml);
+        }
 
         self.cached_layout = Some(layout_data);
 
         constraints.constrain(Size::new(width as f64, height as f64))
+    }
+}
+
+/// Remap a masked-display layout's byte offsets back into the controller's
+/// value-byte space. Every glyph stop / line boundary sits at a display-char
+/// boundary (each mask char is `mask_len` bytes), so display byte `b` maps to
+/// `map[b / mask_len]`. `map` holds one entry per display char plus a final
+/// entry for the end-of-string position.
+fn remap_layout_bytes(
+    layout_data: &mut crate::core::text::text_layout::TextLayoutData,
+    map: &[usize],
+    mask_len: usize,
+) {
+    let len = map.len();
+    if len == 0 || mask_len == 0 {
+        return;
+    }
+    let at = |display_byte: usize| -> usize {
+        let idx = (display_byte / mask_len).min(len - 1);
+        map[idx]
+    };
+    for line in &mut layout_data.line_infos {
+        line.start_byte = at(line.start_byte);
+        line.end_byte = at(line.end_byte);
+        for stop in &mut line.stops {
+            stop.byte = at(stop.byte);
+        }
     }
 }

@@ -432,6 +432,11 @@ declare module "tur:std" {
         width?: Val<number>;
         height?: Val<number>;
         multiline?: Val<boolean>;
+        /** When true, each character is rendered as `obscuringCharacter`
+         *  (password mode). The controller's `text` keeps the real value. */
+        obscureText?: Val<boolean>;
+        /** Mask glyph used when `obscureText` is on (default `"•"`). */
+        obscuringCharacter?: Val<string>;
         onContextMenu?: Mutation<[PointerInteractEvent]>;
         queryKey?: Val<string[]>;
     }

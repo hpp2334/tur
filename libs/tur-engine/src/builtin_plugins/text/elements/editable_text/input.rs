@@ -33,6 +33,8 @@ pub struct InputView {
     font_size: Option<Val<f64>>,
     font_family: Option<Val<String>>,
     multiline: Option<Val<bool>>,
+    obscure_text: Option<Val<bool>>,
+    obscuring_character: Option<Val<String>>,
     on_context_menu: Option<crate::core::edgy::mutation::MutationHandle<ContextMenuEvent>>,
     query_key: Option<Vec<String>>,
 }
@@ -50,6 +52,8 @@ impl View for InputView {
             font_size: self.font_size.clone(),
             font_family: self.font_family.clone(),
             multiline: self.multiline.clone(),
+            obscure_text: self.obscure_text.clone(),
+            obscuring_character: self.obscuring_character.clone(),
             on_context_menu: self.on_context_menu,
             query_key: None,
         });
@@ -81,6 +85,8 @@ impl InputView {
             font_size: p.val::<f64>("fontSize"),
             font_family: p.val::<String>("fontFamily"),
             multiline: p.val::<bool>("multiline"),
+            obscure_text: p.val::<bool>("obscureText"),
+            obscuring_character: p.val::<String>("obscuringCharacter"),
             on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
             query_key: p.query_key("queryKey"),
         }
