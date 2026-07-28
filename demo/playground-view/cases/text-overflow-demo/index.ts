@@ -16,6 +16,7 @@ import {
     type StoreCtx,
     source,
     Text,
+    type Val,
     view,
 } from "tur:std";
 
@@ -51,7 +52,7 @@ function PrimaryButton({
     label,
     onClick,
 }: {
-    label: string;
+    label: Val<string>;
     onClick: (ctx: StoreCtx) => void;
 }): Element {
     return MouseRegion({
