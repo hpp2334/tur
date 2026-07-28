@@ -131,7 +131,8 @@ export default view(() =>
                     SizedBox({ height: 4 }),
                     Text({
                         text: derive(
-                            () => `maxLines = ${get(maxLines$)}  ·  width = 140px`,
+                            () =>
+                                `maxLines = ${get(maxLines$)}  ·  width = 140px`,
                         ),
                         fontSize: 12,
                         color: COLORS.textMuted,
