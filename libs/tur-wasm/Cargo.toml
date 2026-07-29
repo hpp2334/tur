@@ -14,6 +14,7 @@ tur-engine = { workspace = true, features = ["webgl"] }
 tur-animation = { workspace = true }
 tur-clipboard-wasm = { workspace = true }
 tur-net-wasm = { workspace = true }
+tur-filepicker-wasm = { workspace = true }
 boa_engine = { workspace = true, features = ["js"] }
 parley = { workspace = true }
 tracing = { workspace = true }

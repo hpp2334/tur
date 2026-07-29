@@ -10,6 +10,7 @@ license.workspace = true
 tur-engine = { workspace = true, features = ["wgpu-backend", "trace"] }
 tur-animation = { workspace = true }
 tur-net-capability = { workspace = true }
+tur-filepicker-capability = { workspace = true }
 tur-native = { workspace = true }
 boa_engine = { workspace = true }
 libc = "0.2"

@@ -40,7 +40,7 @@ use tur_engine::error::TurError;
 // ---------------------------------------------------------------------------
 
 /// Request body kind. Mirrors what JS can pass via `request({ body })`:
-/// either a string or an `ArrayBuffer` (from `pickFile`).
+/// either a string or an `ArrayBuffer` (e.g. from `filePicker.pick()`).
 #[derive(Debug, Clone)]
 pub enum HttpBody {
     Text(String),

@@ -3,9 +3,9 @@
  *
  * The runtime is a synthetic boa module registered by `tur-demo-plugin`
  * (`TurDemoPlugin`) under the specifier `"tur-ext/demo-helper"`. It exposes
- * swc-backed compiler services (transpile / tokenize / AST) and file IO
- * (browser picker + download). These are demo/playground-only and depend on
- * swc and the browser DOM — they are not part of the core engine surface.
+ * swc-backed compiler services (transpile / tokenize / AST). These are
+ * demo/playground-only and depend on swc — they are not part of the core
+ * engine surface. File IO now lives in `tur:filepicker` (@tur-ng/filepicker).
  */
 
 declare module "tur-ext/demo-helper" {
@@ -50,21 +50,4 @@ declare module "tur-ext/demo-helper" {
 
     /** Parse source into top-level AST nodes. */
     export function generateAst(src: string): AstNode[];
-
-    // --- File IO ---------------------------------------------------------------
-
-    /** Result of a successful file pick: file name + raw bytes. */
-    export interface PickedFile {
-        name: string;
-        bytes: ArrayBuffer;
-    }
-
-    /** Open the native file picker; `callback` is invoked asynchronously with
-     *  `{ name, bytes }` or `null` if cancelled. */
-    export function pickFile(
-        callback: (result: PickedFile | null) => void,
-    ): void;
-
-    /** Trigger a browser download of `bytes` under file name `name`. */
-    export function saveFile(name: string, bytes: ArrayBuffer): void;
 }

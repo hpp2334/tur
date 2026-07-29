@@ -12,7 +12,7 @@ declare module "tur:net" {
         url: string;
         method?: string;
         headers?: Record<string, string>;
-        /** A string or an ArrayBuffer (e.g. from `pickFile`). */
+        /** A string or an ArrayBuffer (e.g. from `filePicker.pick()`). */
         body?: string | ArrayBuffer;
         /** "text" (default; fills `bodyText`) or "bytes" (fills `bodyBytes`). */
         responseType?: "text" | "bytes";

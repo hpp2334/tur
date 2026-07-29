@@ -147,7 +147,11 @@ mod imp {
             // standard capability backends (cursor / clipboard / http). The
             // embedder's `configure` callback adds plugins on top (and may
             // replace any of these capabilities — `Capabilities::insert` is
-            // last-writer-wins per type).
+            // last-writer-wins per type). File picking is intentionally NOT
+            // wired here: `tur:filepicker` is opt-in, so an embedder that wants
+            // it registers a `FilePicker` backend + `TurFilePickerPlugin` in
+            // its own `configure` callback (a Storage Access Framework backend
+            // is the eventual target).
             let mut builder = TurEngine::builder()
                 .renderer(Box::new(renderer))
                 .font_loader(Box::new(NativeFontLoader::new()))

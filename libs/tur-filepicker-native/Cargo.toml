@@ -1,0 +1,17 @@
+[package]
+name = "tur-filepicker-native"
+description = "Native (win/mac/linux) file-picker backend for tur (NativeFilePicker via rfd)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-filepicker-capability = { workspace = true }
+tracing = { workspace = true }
+
+# `rfd` (the actual file-dialog backend) only compiles on native targets. On
+# wasm the crate compiles as a near-empty stub so the workspace still builds
+# for wasm32 — embedders pick `tur-filepicker-wasm` instead.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+rfd = "0.17"

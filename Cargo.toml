@@ -10,6 +10,9 @@ members = [
     "libs/tur-net-capability",
     "libs/tur-net-wasm",
     "libs/tur-net-native",
+    "libs/tur-filepicker-capability",
+    "libs/tur-filepicker-wasm",
+    "libs/tur-filepicker-native",
     "libs/tur-demo-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
@@ -36,6 +39,9 @@ tur-clipboard-android = { path = "libs/tur-clipboard-android" }
 tur-net-capability = { path = "libs/tur-net-capability" }
 tur-net-wasm = { path = "libs/tur-net-wasm" }
 tur-net-native = { path = "libs/tur-net-native" }
+tur-filepicker-capability = { path = "libs/tur-filepicker-capability" }
+tur-filepicker-wasm = { path = "libs/tur-filepicker-wasm" }
+tur-filepicker-native = { path = "libs/tur-filepicker-native" }
 tur-demo-plugin = { path = "libs/tur-demo-plugin", default-features = false }
 tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }

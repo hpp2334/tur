@@ -9,6 +9,7 @@ use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_engine::{CursorCap, LoopDriver, TurApp};
+use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
@@ -84,8 +85,8 @@ pub type AfterFrameHook = Rc<dyn Fn(&mut boa_engine::Context)>;
 ///
 /// `tur-wasm` is a reusable embedder lib (no playground / demo-plugin code):
 /// the host cdylib supplies the engine-customization callback (extra plugins)
-/// and an optional after-frame hook (e.g. draining pending `pickFile`
-/// resolutions), while `tur-wasm` owns all the generic DOM wiring.
+/// and an optional after-frame hook (run with a live `&mut boa Context`
+/// between frames), while `tur-wasm` owns all the generic DOM wiring.
 pub struct WasmAppConfig {
     /// `None` ⇒ full-viewport canvas (own wrapper `div`); `Some(id)` ⇒ embed
     /// the canvas inside the element with that id.
@@ -93,10 +94,11 @@ pub struct WasmAppConfig {
     /// Customize the [`tur_engine::TurEngineBuilder`] before `build()` — the
     /// caller adds its own plugins (and may override the default capabilities).
     /// `tur-wasm` has already registered the standard plugin set + clipboard /
-    /// http / cursor backends before invoking this.
+    /// http / filepicker / cursor backends before invoking this.
     pub configure: Box<dyn FnOnce(tur_engine::TurEngineBuilder) -> tur_engine::TurEngineBuilder>,
-    /// Extra after-frame work (e.g. draining pending `pickFile` resolutions).
-    /// `None` for embedders with no such work.
+    /// Extra after-frame work run inside the engine's after-frame hook (where
+    /// a `&mut boa Context` is available). `None` for embedders with no such
+    /// work.
     pub after_frame: Option<AfterFrameHook>,
 }
 
@@ -343,10 +345,12 @@ impl WasmAppHandle {
             }))
             .capability(Clipboard::new(WasmClipboard))
             .capability(Http::new(WasmHttp))
+            .capability(FilePicker::new(WasmFilePicker))
             .plugin(tur_engine::TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin)
-            .plugin(TurNetPlugin);
+            .plugin(TurNetPlugin)
+            .plugin(TurFilePickerPlugin);
         // Let the embedder add its own plugins / override capabilities.
         let app = configure(builder)
             .build()
@@ -911,10 +915,9 @@ impl WasmAppHandle {
                     return;
                 };
 
-                // Embedder-supplied after-frame work (e.g. draining pending
-                // `pickFile` resolutions via the demo plugin). Runs with a
-                // `&mut Context` available; the generic textarea / caret
-                // focus logic below runs after it.
+                // Embedder-supplied after-frame work (run with a live
+                // `&mut Context` between frames). The generic textarea /
+                // caret focus logic below runs after it.
                 if let Some(hook) = after_frame_hook.as_ref() {
                     s.app.with_boa_context(|ctx| hook(ctx));
                 }

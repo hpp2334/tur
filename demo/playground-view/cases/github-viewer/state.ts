@@ -1,4 +1,5 @@
 import { createAnimationController } from "tur:animation";
+import { filePicker } from "tur:filepicker";
 import { request } from "tur:net";
 import {
     createSvgResource,
@@ -14,7 +15,6 @@ import {
     source,
     type Task,
 } from "tur:std";
-import { saveFile } from "tur-ext/demo-helper";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -35,9 +35,9 @@ export interface DirEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Host bridge — HTTP via `tur:net`, file save via `tur-ext/demo-helper`.
-// Both are registered by tur-wasm (playground). The case is playground-only,
-// so `hasHttp` is true whenever the case loads.
+// Host bridge — HTTP via `tur:net`, file save via `tur:filepicker`.
+// Both are registered by the embedder (tur-wasm wires the browser backends;
+// tur-android wires NoopFilePicker). `hasHttp` is true whenever the case loads.
 // ---------------------------------------------------------------------------
 
 interface HttpResponse {
@@ -461,12 +461,7 @@ function flashStatus(status: DownloadStatus): void {
 export function doDownload(): void {
     // Guard re-entry: ignore clicks while a download or its flash is active.
     if (get(downloadStatus$) !== "idle") return;
-    const save = saveFile;
-    if (!save) {
-        set(error$, "Save not available in this host");
-        flashStatus("error");
-        return;
-    }
+    const save = filePicker.saveFile;
     const entry = get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
     // Capture the narrowed string before the closure — TS does not preserve

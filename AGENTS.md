@@ -1,6 +1,6 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` modules registered by engine plugins.
+A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
 
 ## Architecture
 
@@ -120,7 +120,12 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │     ├── tur-net-capability (Http + HttpBackend trait + │
 │     │   tur:net)                               │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
-│     └── tur-net-native         (NativeHttp via reqwest)│
+│     ├── tur-net-native         (NativeHttp via reqwest)│
+│     ├── tur-filepicker-capability (FilePicker +         │
+│     │   FilePickerBackend trait + tur:filepicker bridge │
+│     │   — opt-in, requires a backend)                    │
+│     ├── tur-filepicker-wasm   (WasmFilePicker via web-sys)│
+│     └── tur-filepicker-native (NativeFilePicker via rfd)│
 │  Backend crates for the inlined Clipboard cap:         │
 │     ├── tur-clipboard-wasm  (WasmClipboard — re-exports│
 │     │                       Clipboard/ClipboardBackend/│
@@ -131,6 +136,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  Embedders register backends via                       │
 │    TurEngineBuilder::capability(Clipboard::new(backend))│
 │    TurEngineBuilder::capability(Http::new(backend))    │
+│    TurEngineBuilder::capability(FilePicker::new(backend))│
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -138,52 +144,58 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  No #[wasm_bindgen] surface, no playground code.       │
 │  Owns all DOM wiring + the WebGL2 renderer + WasmClock  │
 │  / WasmFontLoader / WasmCursor + the standard           │
-│  capability backends (WasmClipboard / WasmHttp).         │
+│  capability backends (WasmClipboard / WasmHttp /        │
+│  WasmFilePicker).                                       │
 │  Exposes WasmAppHandle::create(WasmAppConfig) — a        │
 │  builder taking a `configure` callback (extra plugins)   │
 │  + optional after-frame hook. The host cdylib wraps it.  │
 │  Composes the default plugin chain:                       │
 │  TurStdPlugin → TurAnimationPlugin → TurClipboardPlugin │
-│  → TurNetPlugin.                                          │
+│  → TurNetPlugin → TurFilePickerPlugin.                   │
 ├─────────────────────────────────────────────────────┤
 │  demo/website/native (tur-website cdylib — the host .so) │
 │  The website's own wasm entry: wraps WasmAppHandle,      │
-│  adds TurDemoPlugin (swc + browser file IO) + the        │
-│  resolve_pending_picks after-frame hook. Exports          │
-│  #[wasm_bindgen] TurWebsiteApp (create / create_in /      │
-│  loadAndRunModule / dev_tool) → tur_website.js.           │
+│  adds TurDemoPlugin (swc compiler only). File IO now     │
+│  lives in tur:filepicker (registered by tur-wasm).       │
+│  Exports #[wasm_bindgen] TurWebsiteApp (create /         │
+│  create_in / loadAndRunModule / dev_tool) → tur_website.js.│
 │  Mirrors tur-android (rlib) + demo/compose/native (cdylib).│
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, cursor) on the engine builder:
+Embedders register swappable backends (clipboard, http, filepicker, cursor) on the engine builder:
 
 ```rust
 TurEngine::builder()
     .capability(Clipboard::new(WasmClipboard))   // tur-clipboard-wasm
     .capability(Http::new(WasmHttp))             // tur-net-wasm
+    .capability(FilePicker::new(WasmFilePicker)) // tur-filepicker-wasm
     .capability(CursorCap::new(WasmCursor))      // engine-internal
     .plugin(TurStdPlugin)
     .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
     .plugin(TurClipboardPlugin)                  // requires: Clipboard
     .plugin(TurNetPlugin)                        // Http optional (skips tur:net if absent)
+    .plugin(TurFilePickerPlugin)                 // requires: FilePicker
     .build()
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
-  newtype (`Clipboard`, `Http`, `CursorCap`).
+  newtype (`Clipboard`, `Http`, `FilePicker`, `CursorCap`).
 - `Plugin::requires(&mut CapabilityDecls)` — declare hard deps; the builder
   validates them BEFORE any plugin's `register` runs, so missing capabilities
-  fail fast at `build()` with a clear error.
+  fail fast at `build()` with a clear error. (`TurNetPlugin` is the exception —
+  it feature-detects `Http` at `register` and skips `tur:net` if absent, rather
+  than declaring `requires`; `TurClipboardPlugin` / `TurFilePickerPlugin` use
+  the strict `requires` form.)
 - `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
   time (bridge fns) or event dispatch time (subsystems via
   `SubsystemFlushContext.capabilities`).
-- Convention: capability newtypes use base names (`Clipboard`, `Http`);
-  backend traits use `*Backend` suffix (`ClipboardBackend`, `HttpBackend`,
-  `CursorBackend`). `CursorCap` is the lone exception because
-  `core::platform::Cursor` already names the cursor-kind enum.
+- Convention: capability newtypes use base names (`Clipboard`, `Http`,
+  `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
+  `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
+  exception because `core::platform::Cursor` already names the cursor-kind enum.
 
 
 ### Element types
@@ -395,15 +407,23 @@ libs/
                               #   embedder lib. Owns all DOM wiring + the
                               #   WebGL2 renderer + WasmClock / WasmFontLoader /
                               #   WasmCursor + standard capability backends
-                              #   (WasmClipboard / WasmHttp). NO
+                              #   (WasmClipboard / WasmHttp / WasmFilePicker). NO
                               #   #[wasm_bindgen] surface, NO playground code.
                               #   Exposes WasmAppHandle::create(WasmAppConfig)
                               #   (a builder with a `configure` callback for
                               #   extra plugins + an optional after-frame hook).
                               #   The host cdylib (demo/website/native) wraps it.
     tur-integration-tests/     # integration test harness + cases
-    tur-demo-plugin/           # playground-only plugin (swc compiler + file IO)
+    tur-demo-plugin/           # playground-only plugin (swc compiler services
+                              #   only — file IO now lives in tur:filepicker)
     tur-native/                # native (non-wasm) embedder entry point
+    tur-filepicker-capability/ # FilePicker capability + FilePickerBackend trait
+                              #   + tur:filepicker bridge (exports `filePicker`
+                              #   { pick, saveFile }). Opt-in: requires a real
+                              #   backend (no no-op default).
+    tur-filepicker-wasm/       # WasmFilePicker backend (web-sys <input type=file>
+                              #   + <a download>).
+    tur-filepicker-native/     # NativeFilePicker backend (rfd async dialog).
  integrations/
    compose/                    # Pure-Kotlin Compose AAR (`org.tur`): TurView +
                               #   TurEngine + FrameLoop + InputMapper + TurNative
@@ -414,20 +434,21 @@ libs/
    compose/                    # Android playground app: MainActivity + DemoNative
                               #   (loads libtur_demo.so, declares createEngine) +
                               #   the gradle cargo-ndk pipeline
-     native/                   # `tur-demo` cdylib crate: the app's .so. Links
+      native/                   # `tur-demo` cdylib crate: the app's .so. Links
                               #   tur-android (rlib) + standard_jni_exports!() +
                               #   a createEngine fn with the demo plugin set
-                              #   (Std+Animation+Clipboard+Net+DemoHelper). The
-                              #   template users copy for their own app's .so.
+                              #   (Std+Animation+Clipboard+Net+FilePicker+
+                              #   DemoHelper). The template users copy for their
+                              #   own app's .so.
    website/                    # Web host app (@tur-ng/website): thin browser
                               #   wrapper that loads the wasm + the
                               #   playground-view bundle. Its rspack runs
                               #   wasm-pack on `native/` + bundles
                               #   playground-view's dist/impl.js.
-     native/                   # `tur-website` cdylib: the host .wasm. Wraps
+      native/                   # `tur-website` cdylib: the host .wasm. Wraps
                               #   tur-wasm's WasmAppHandle + adds TurDemoPlugin
-                              #   (swc + browser file IO) + the
-                              #   resolve_pending_picks after-frame hook.
+                              #   (swc compiler only). File IO lives in
+                              #   tur:filepicker (registered by tur-wasm).
                               #   Exports #[wasm_bindgen] TurWebsiteApp
                               #   (create / create_in / loadAndRunModule /
                               #   dev_tool) → tur_website.js. The wasm mirror

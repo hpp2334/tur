@@ -1,0 +1,25 @@
+[package]
+name = "tur-filepicker-wasm"
+description = "Browser file-picker backend for tur (WasmFilePicker via web-sys <input type=file> + <a download>)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+tur-filepicker-capability = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "Window",
+    "Document",
+    "Element",
+    "Event",
+    "File",
+    "FileList",
+    "Blob",
+    "HtmlInputElement",
+    "HtmlAnchorElement",
+    "Url",
+] }

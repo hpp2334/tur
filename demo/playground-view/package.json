@@ -14,7 +14,8 @@
         "@tur-ng/core": "workspace:*",
         "@tur-ng/std": "workspace:*",
         "@tur-ng/clipboard": "workspace:*",
-        "@tur-ng/net": "workspace:*"
+        "@tur-ng/net": "workspace:*",
+        "@tur-ng/filepicker": "workspace:*"
     },
     "devDependencies": {
         "@rspack/cli": "^1.2.0",

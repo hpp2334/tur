@@ -1,17 +1,10 @@
 [package]
 name = "tur-demo-plugin"
-description = "Demo-only plugin for tur (TurDemoPlugin — registers tur-ext/demo-helper: swc compiler + file IO)"
+description = "Demo-only plugin for tur (TurDemoPlugin — registers tur-ext/demo-helper: swc compiler services)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-
-[features]
-# Default: include browser file IO (`pickFile`/`saveFile`) via web-sys/wasm-bindgen.
-# Embedders on non-browser targets (e.g. tur-android) disable this and the
-# plugin registers the swc compiler fns only, with no-op file-IO stubs.
-default = ["web-io"]
-web-io = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:web-sys", "dep:js-sys"]
 
 [dependencies]
 tur-engine = { workspace = true }
@@ -24,21 +17,3 @@ swc_ecma_parser = { version = "41.1.0", features = ["typescript", "unstable"] }
 swc_ecma_transforms_base = "44.0.2"
 swc_ecma_transforms_typescript = "49.0.0"
 swc_ecma_codegen = "28.0.1"
-
-# Browser file IO — optional, only enabled by the `web-io` feature.
-wasm-bindgen = { workspace = true, optional = true }
-wasm-bindgen-futures = { workspace = true, optional = true }
-js-sys = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = [
-    "Window",
-    "Document",
-    "Element",
-    "Event",
-    "File",
-    "FileList",
-    "Blob",
-    "BlobPropertyBag",
-    "HtmlInputElement",
-    "HtmlAnchorElement",
-    "Url",
-] }
