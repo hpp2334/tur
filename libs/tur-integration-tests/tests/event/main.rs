@@ -10,6 +10,7 @@ mod mouse_region;
 mod pointer_drag;
 mod pointer_region;
 mod pointer_region_enter_exit;
+mod password;
 mod resize;
 mod right_click_selection;
 mod scroll;

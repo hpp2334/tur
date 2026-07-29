@@ -34,6 +34,7 @@ const WHITELIST = new Set([
     "github-viewer",
     "lifecycle-hooks",
     "text-overflow-demo",
+    "password-input",
 ]);
 
 export const CASE_NAMES = Object.keys(CASE_SOURCES)

@@ -103,6 +103,13 @@ pub struct EditableTextView {
     pub(crate) font_size: Option<Val<f64>>,
     pub(crate) font_family: Option<Val<String>>,
     pub(crate) multiline: Option<Val<bool>>,
+    /// When `Some(true)`, every character of the value (and any in-progress
+    /// IME composition) is rendered as `obscuring_character` — the
+    /// controller's stored value stays the real input. Mirrors Flutter's
+    /// `obscureText`.
+    pub(crate) obscure_text: Option<Val<bool>>,
+    /// The mask glyph used when `obscure_text` is active (default `•`).
+    pub(crate) obscuring_character: Option<Val<String>>,
     pub(crate) on_context_menu: Option<MutationHandle<ContextMenuEvent>>,
     pub(crate) query_key: Option<Vec<String>>,
 }
@@ -145,6 +152,8 @@ impl View for EditableTextView {
                 view: spec,
                 cached_layout: None,
                 resolved_multiline: false,
+                resolved_obscured: false,
+                resolved_obscuring_char: '\u{2022}',
                 painting: EditableTextPainting::default(),
                 blink_task: None,
             })
@@ -179,6 +188,12 @@ pub struct EditableTextElement {
     pub(crate) view: EditableTextView,
     pub(crate) cached_layout: Option<TextLayoutData>,
     pub(crate) resolved_multiline: bool,
+    /// Last-resolved `obscureText` flag (refreshed during layout). Read by
+    /// the keyboard handler (to suppress copy/cut) and the render path (to
+    /// skip the composition underline).
+    pub(crate) resolved_obscured: bool,
+    /// Last-resolved `obscuringCharacter` (default `•`).
+    pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
     /// Handle to the async caret-blink task. `Some` while focused (task is
     /// alive and periodically requesting paints); `None` when unfocused
@@ -252,6 +267,72 @@ impl EditableTextElement {
 
     pub fn composition_display_text(&self) -> String {
         self.controller().composition_display_text()
+    }
+
+    /// The text currently being rendered. When `obscureText` is active this is
+    /// the masked form (each character → `obscuringCharacter`); the stored
+    /// value ([`text`](Self::text)) stays the real input. Exposed for
+    /// tests/inspection.
+    pub fn displayed_text(&self) -> String {
+        match self.build_masked() {
+            Some((masked, _, _)) => masked,
+            None => self.composition_display_text(),
+        }
+    }
+
+    /// x of the caret at the given value-byte offset, from the cached layout.
+    /// Exposed for tests so they can target a click precisely.
+    pub fn cursor_x_at(&self, byte: usize) -> Option<f32> {
+        self.cached_layout.as_ref().map(|ld| ld.cursor_x_at(byte))
+    }
+
+    /// Build the masked display string (each *grapheme cluster* of the value
+    /// — and any in-progress IME composition — replaced by one
+    /// `obscuringCharacter`) plus a map from each display char index to the
+    /// corresponding byte offset in the controller's real value. Returns
+    /// `None` when `obscureText` is off.
+    ///
+    /// Masking is per grapheme cluster (UAX #29), not per code point, so
+    /// multi-code-point graphemes (combining marks, flag emoji, ZWJ sequences,
+    /// skin-tone modifiers) collapse to a single bullet — matching the
+    /// engine's own grapheme-based cursor/backspace model and Flutter/web
+    /// password fields. The map lets the layout speak in *value* byte space
+    /// (the same space as the controller's cursor/selection): layout builds
+    /// the masked string, then remaps every glyph-stop / line byte offset via
+    /// this map, so all cursor/caret/selection/click math works unchanged.
+    pub(super) fn build_masked(&self) -> Option<(String, Vec<usize>, usize)> {
+        if !self.resolved_obscured {
+            return None;
+        }
+        let mask_char = self.resolved_obscuring_char;
+        let mask_len = mask_char.len_utf8();
+        let base = self.text();        let (comp, cs_byte) = {
+            let c = self.controller();
+            (
+                c.composing_text().cloned().unwrap_or_default(),
+                c.composing_start().min(base.len()),
+            )
+        };
+        // Display graphemes, in order: base[..cs] (each masked), then the
+        // composition (each masked), then base[cs..] (each masked). Each
+        // records the value byte a cursor placed there must map to.
+        let mut out = String::new();
+        let mut map = Vec::new();
+        for (i, _g) in base[..cs_byte].grapheme_indices(true) {
+            out.push(mask_char);
+            map.push(i);
+        }
+        for _g in comp.grapheme_indices(true) {
+            out.push(mask_char);
+            map.push(cs_byte);
+        }
+        for (i, _g) in base[cs_byte..].grapheme_indices(true) {
+            out.push(mask_char);
+            map.push(cs_byte + i);
+        }
+        // End-of-string cursor position.
+        map.push(base.len());
+        Some((out, map, mask_len))
     }
 
     fn handle_key_event(
@@ -435,15 +516,18 @@ impl EditableTextElement {
             "c" if ctrl || meta => {
                 // Copy: fire the host clipboard bridge with the selected text.
                 // The buffer is unchanged; only the system clipboard is written.
-                if has_sel {
+                // Suppressed in password mode so the real value can't be
+                // exfiltrated via the clipboard (matches Flutter).
+                if !self.resolved_obscured && has_sel {
                     let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
                     new_clipboard_write = Some(full[s..e].to_string());
                 }
                 true
             }
             "x" if ctrl || meta => {
-                // Cut: write selection to clipboard then delete it.
-                if has_sel {
+                // Cut: write selection to clipboard then delete it. Suppressed
+                // in password mode (same reason as copy).
+                if !self.resolved_obscured && has_sel {
                     let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
                     new_clipboard_write = Some(full[s..e].to_string());
                     c.delete_range(s, e);
@@ -716,6 +800,8 @@ impl ElementSubscribe for EditableTextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
         if let Some(v) = c.multiline.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.obscure_text.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.obscuring_character.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.font_family.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.placeholder.as_ref() { cx.subscribe_val(v); }
@@ -1021,6 +1107,8 @@ impl EditableTextView {
             font_size: p.val::<f64>("fontSize"),
             font_family: p.val::<String>("fontFamily"),
             multiline: p.val::<bool>("multiline"),
+            obscure_text: p.val::<bool>("obscureText"),
+            obscuring_character: p.val::<String>("obscuringCharacter"),
             on_context_menu: p.mutation::<ContextMenuEvent>("onContextMenu"),
             query_key: p.query_key("queryKey"),
         }

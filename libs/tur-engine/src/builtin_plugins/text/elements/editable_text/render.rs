@@ -25,6 +25,7 @@ impl ElementRender for EditableTextElement {
     ) {
         let color = self.painting.color;
         let cursor_color = self.painting.cursor_color;
+        let obscured = self.resolved_obscured;
 
         let c = self.controller();
         let cursor_pos = c.cursor_position();
@@ -60,7 +61,13 @@ impl ElementRender for EditableTextElement {
             canvas.fill_text_layout(offset, layout_data);
         }
 
-        if let Some(ref comp) = composing_text {
+        // The composition underline's byte math targets the composition-
+        // substituted display string; under password mode the layout is built
+        // from the masked string (and composition is rendered as bullets), so
+        // skip it.
+        if !obscured
+            && let Some(ref comp) = composing_text
+        {
             let comp_start_byte = composing_start;
             let comp_end_byte = composing_start + comp.len();
             if comp_start_byte != comp_end_byte {
