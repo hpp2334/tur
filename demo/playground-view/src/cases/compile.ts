@@ -1,7 +1,7 @@
 import * as Anim from "tur:animation";
 import * as Clipboard from "tur:clipboard";
-import * as Net from "tur:net";
 import * as FilePicker from "tur:filepicker";
+import * as Net from "tur:net";
 import type { Color, SpanData } from "tur:std";
 import * as Std from "tur:std";
 import type { AstNode, TokenSpan } from "tur-ext/demo-helper";
