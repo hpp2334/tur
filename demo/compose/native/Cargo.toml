@@ -18,8 +18,10 @@ tur-engine.workspace = true
 tur-animation.workspace = true
 tur-net-native.workspace = true
 # `default-features = false` (inherited from the workspace dep): the demo runs
-# on Android (non-browser), so the `web-io` feature is off — `pickFile`/
-# `saveFile` register as no-op stubs (the swc TS compiler fns still ship).
+# on Android (non-browser), so the swc TS compiler fns ship but no browser file
+# IO. File picking (`tur:filepicker`) is not wired on Android yet — there is no
+# native backend, so the plugin is intentionally omitted (opt-in: code that
+# imports `tur:filepicker` without a backend installed fails fast).
 tur-demo-plugin = { workspace = true }
 
 # Scoped to Android so a host `cargo check --workspace` produces an empty

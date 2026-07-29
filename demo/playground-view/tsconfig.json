@@ -7,7 +7,8 @@
             "@tur-ng/std",
             "@tur-ng/animation",
             "@tur-ng/clipboard",
-            "@tur-ng/net"
+            "@tur-ng/net",
+            "@tur-ng/filepicker"
         ]
     },
     "include": ["src", "cases"]

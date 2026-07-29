@@ -26,6 +26,7 @@ export default defineConfig({
         "tur-ext/demo-helper": "tur-ext/demo-helper",
         "tur:clipboard": "tur:clipboard",
         "tur:net": "tur:net",
+        "tur:filepicker": "tur:filepicker",
     },
     optimization: {
         minimize: false,

@@ -1,5 +1,6 @@
 import * as Anim from "tur:animation";
 import * as Clipboard from "tur:clipboard";
+import * as FilePicker from "tur:filepicker";
 import * as Net from "tur:net";
 import type { Color, SpanData } from "tur:std";
 import * as Std from "tur:std";
@@ -81,6 +82,8 @@ function importTarget(source: string): string {
             return "Net";
         case "tur:clipboard":
             return "Clipboard";
+        case "tur:filepicker":
+            return "FilePicker";
         default:
             return `__modules["${moduleKey(source)}"]`;
     }
@@ -197,10 +200,11 @@ function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
         "Host",
         "Net",
         "Clipboard",
+        "FilePicker",
         "__modules",
         body,
     );
-    return fn(Std, Anim, Host, Net, Clipboard, modules);
+    return fn(Std, Anim, Host, Net, Clipboard, FilePicker, modules);
 }
 
 export function compileCase(files: Record<string, string>): CaseCompileResult {
@@ -359,8 +363,9 @@ function topoSort(
     return result;
 }
 
-// Silence unused-import warnings for Net and Clipboard (referenced only
-// inside generated case bodies via the `runCaseBody` injection, not directly
-// here).
+// Silence unused-import warnings for Net, Clipboard and FilePicker
+// (referenced only inside generated case bodies via the `runCaseBody`
+// injection, not directly here).
 void Net;
 void Clipboard;
+void FilePicker;

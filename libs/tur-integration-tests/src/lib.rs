@@ -26,6 +26,9 @@ use tur_net_capability::{
     Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin,
 };
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
+use tur_filepicker_capability::{
+    FilePicker, FilePickerBackend, PickedFile, PickOptions, SaveOptions, TurFilePickerPlugin,
+};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::{Cursor};
 
@@ -167,6 +170,66 @@ pub fn text_response(status: u16, body: impl Into<String>) -> HttpOutcome {
     }
 }
 
+/// `FilePicker` impl for tests. Returns a pre-canned `Vec<PickedFile>` (set
+/// via [`Self::set_next_pick`]); logs each `saveFile` call for assertion via
+/// [`Self::last_save`] / [`Self::take_saves`]. Resolves eagerly so tests stay
+/// deterministic.
+#[derive(Default, Clone)]
+pub struct RecordingFilePicker {
+    inner: Rc<RecordingFilePickerInner>,
+}
+
+#[derive(Default)]
+struct RecordingFilePickerInner {
+    next_pick: RefCell<Vec<PickedFile>>,
+    saves: RefCell<Vec<RecordedSave>>,
+}
+
+/// Simplified view of a `saveFile` call captured by [`RecordingFilePicker`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordedSave {
+    pub name: String,
+    pub bytes: Vec<u8>,
+}
+
+impl RecordingFilePicker {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Pre-canned files returned by the next `pick(opts).await`. Returned
+    /// unchanged on every subsequent pick until replaced.
+    pub fn set_next_pick(&self, files: Vec<PickedFile>) {
+        *self.inner.next_pick.borrow_mut() = files;
+    }
+
+    /// Drain all `saveFile` calls logged so far, in insertion order.
+    pub fn take_saves(&self) -> Vec<RecordedSave> {
+        std::mem::take(&mut *self.inner.saves.borrow_mut())
+    }
+
+    /// Drain all saves and return the last one.
+    pub fn last_save(&self) -> Option<RecordedSave> {
+        self.take_saves().pop()
+    }
+}
+
+impl FilePickerBackend for RecordingFilePicker {
+    fn pick(&self, _opts: PickOptions) -> Pin<Box<dyn Future<Output = Vec<PickedFile>>>> {
+        let files = self.inner.next_pick.borrow().clone();
+        Box::pin(std::future::ready(files))
+    }
+    fn save(
+        &self,
+        name: String,
+        bytes: Vec<u8>,
+        _opts: SaveOptions,
+    ) -> Pin<Box<dyn Future<Output = ()>>> {
+        self.inner.saves.borrow_mut().push(RecordedSave { name, bytes });
+        Box::pin(std::future::ready(()))
+    }
+}
+
 pub struct Rect {
     pub left: f64,
     pub top: f64,
@@ -199,6 +262,10 @@ pub struct TurTestApp {
     /// constructed via [`Self::new_with_http`]). `None` for the default
     /// constructor — those tests don't register `tur:net`.
     http: Option<RecordingHttp>,
+    /// Shared with the `RecordingFilePicker` installed in the engine (only
+    /// when constructed via [`Self::new_with_filepicker`]). `None` for the
+    /// default constructor — those tests don't register `tur:filepicker`.
+    filepicker: Option<RecordingFilePicker>,
     /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
     /// events for engine-side multi-click classification. Advanced in small
     /// steps (well under the 500 ms threshold) on each pointer-down so
@@ -209,7 +276,7 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, None, Vec::new())
+        Self::build(width, height, None, None, Vec::new())
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -217,7 +284,27 @@ impl TurTestApp {
     /// responses via [`Self::set_http_response`]; capture requests via
     /// [`Self::last_http_request`].
     pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, Some(RecordingHttp::new()), Vec::new())
+        Self::build(
+            width,
+            height,
+            Some(RecordingHttp::new()),
+            None,
+            Vec::new(),
+        )
+    }
+
+    /// Construct with `TurFilePickerPlugin` registered against a fresh
+    /// [`RecordingFilePicker`], so tests can drive `filePicker.pick()` /
+    /// `saveFile()` from JS. Pre-canned picks via [`Self::set_next_pick`];
+    /// capture saves via [`Self::last_save`].
+    pub fn new_with_filepicker(width: f64, height: f64) -> Result<Self, TurError> {
+        Self::build(
+            width,
+            height,
+            None,
+            Some(RecordingFilePicker::new()),
+            Vec::new(),
+        )
     }
 
     /// Construct with additional plugins registered beyond the default
@@ -229,7 +316,7 @@ impl TurTestApp {
         height: f64,
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, extra_plugins)
+        Self::build(width, height, None, None, extra_plugins)
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -237,6 +324,7 @@ impl TurTestApp {
         width: f64,
         height: f64,
         http: Option<RecordingHttp>,
+        filepicker: Option<RecordingFilePicker>,
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
@@ -258,6 +346,11 @@ impl TurTestApp {
                 .capability(Http::new(http_impl))
                 .plugin(TurNetPlugin);
         }
+        if let Some(filepicker_impl) = filepicker.clone() {
+            builder = builder
+                .capability(FilePicker::new(filepicker_impl))
+                .plugin(TurFilePickerPlugin);
+        }
         for p in extra_plugins {
             builder = builder.plugin_boxed(p);
         }
@@ -274,6 +367,7 @@ impl TurTestApp {
             cursor_slot,
             clipboard,
             http,
+            filepicker,
             synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
         })
     }
@@ -816,6 +910,24 @@ impl TurTestApp {
             .as_ref()
             .expect("TurTestApp::last_http_request requires new_with_http")
             .last_request()
+    }
+
+    /// Pre-canned files for the next `filePicker.pick()` call from JS. Panics
+    /// if this app wasn't constructed via [`Self::new_with_filepicker`].
+    pub fn set_next_pick(&self, files: Vec<PickedFile>) {
+        self.filepicker
+            .as_ref()
+            .expect("TurTestApp::set_next_pick requires new_with_filepicker")
+            .set_next_pick(files);
+    }
+
+    /// The most recent `saveFile(name, bytes)` captured by the recording, or
+    /// `None` if none. Panics if not constructed with filepicker.
+    pub fn last_save(&self) -> Option<RecordedSave> {
+        self.filepicker
+            .as_ref()
+            .expect("TurTestApp::last_save requires new_with_filepicker")
+            .last_save()
     }
 
     /// Push a synthetic paste event — equivalent to the embedder firing

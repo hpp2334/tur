@@ -7,6 +7,7 @@ mod core_module_check;
 mod debug;
 mod each_in_row;
 mod expanded;
+mod filepicker;
 mod grid;
 mod host_module_check;
 mod image;

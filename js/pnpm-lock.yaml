@@ -38,6 +38,9 @@ importers:
       '@tur-ng/core':
         specifier: workspace:*
         version: link:../../js/packages/tur-core
+      '@tur-ng/filepicker':
+        specifier: workspace:*
+        version: link:../../js/packages/tur-filepicker
       '@tur-ng/net':
         specifier: workspace:*
         version: link:../../js/packages/tur-net
@@ -83,6 +86,8 @@ importers:
   packages/tur-clipboard: {}
 
   packages/tur-core: {}
+
+  packages/tur-filepicker: {}
 
   packages/tur-net: {}
 

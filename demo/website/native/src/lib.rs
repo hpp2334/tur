@@ -3,9 +3,8 @@
 //! `tur-wasm` is a reusable embedder lib (it owns all the DOM wiring + engine
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
-//! [`tur_wasm::WasmAppHandle`] builder, adds the playground-only
-//! [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler + browser file IO), and
-//! registers the `resolve_pending_picks` after-frame hook. JS imports
+//! [`tur_wasm::WasmAppHandle`] builder and adds the playground-only
+//! [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler). JS imports
 //! `TurWebsiteApp` from the generated `tur_website.js`.
 //!
 //! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
@@ -14,9 +13,6 @@
 // Everything is wasm32-only — on a host `cargo check --workspace` this is an
 // empty (but compiling) cdylib.
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
-
-#[cfg(target_arch = "wasm32")]
-use std::rc::Rc;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -53,15 +49,11 @@ impl TurWebsiteApp {
     }
 
     fn create_internal(container_id: Option<String>) -> js_sys::Promise {
-        // Drain pending `pickFile` resolutions each frame (where a
-        // `&mut Context` is available). The plugin owns the queue + the
-        // ArrayBuffer/callback logic.
-        let after_frame: tur_wasm::AfterFrameHook = Rc::new(tur_demo_plugin::resolve_pending_picks);
         wasm_bindgen_futures::future_to_promise(async move {
             let handle = tur_wasm::WasmAppHandle::create(tur_wasm::WasmAppConfig {
                 container_id,
                 configure: Box::new(|b| b.plugin(tur_demo_plugin::TurDemoPlugin)),
-                after_frame: Some(after_frame),
+                after_frame: None,
             })
             .await?;
             Ok(JsValue::from(TurWebsiteApp { handle }))
