@@ -55,7 +55,11 @@ declare module "tur:filepicker" {
         pick(opts?: PickOptions): Promise<PickedFile[]>;
         /** Persist `bytes` under file name `name` (via the platform save dialog
          *  or a browser download). Resolves when written. */
-        saveFile(name: string, bytes: ArrayBuffer, opts?: SaveOptions): Promise<void>;
+        saveFile(
+            name: string,
+            bytes: ArrayBuffer,
+            opts?: SaveOptions,
+        ): Promise<void>;
     }
 
     export const filePicker: FilePicker;
