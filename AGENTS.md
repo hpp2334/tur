@@ -517,6 +517,7 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
 - When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
+- Publishable npm packages (the `@tur-ng/*` packages under `js/packages/` that carry a `publishConfig` block — `tur-core`, `tur-std`, `tur-animation`, `tur-clipboard`, `tur-net`): whenever you modify one, bump its **patch** version by exactly +1 over what is on `main` (`git show main:<path-to-package.json>` → read `version`, then set the branch's `version` to that + one patch). Never bump twice on the same branch for the same change; never bump minor/major unless asked.
 
 ### Renderer trait
 
