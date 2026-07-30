@@ -17,20 +17,24 @@ use crate::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_v
 use crate::core::js_runtime::JsProps;
 use crate::core::layout::{
     Alignment, ComputedLayout, Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset,
-    Size,
+    Size, SubscribeCx,
 };
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::view::{Lifecycle, View, ViewCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 use super::link::{extract_link_state, CompositedLinkState};
 
 #[derive(Clone)]
 pub struct FollowerView {
     pub(super) link: Option<Rc<CompositedLinkState>>,
-    pub(super) target_anchor: Alignment,
-    pub(super) follower_anchor: Alignment,
-    pub(super) target_offset: Offset,
+    pub(super) target_anchor: Val<Alignment>,
+    pub(super) follower_anchor: Val<Alignment>,
+    /// `targetOffset` is a `{ x, y }` object (Flutter's `offset`), held as a
+    /// `Val<JsValue>` because the object can only be field-read WITH a `Context`
+    /// (`FromJs` is context-free by design). Resolved to an `Offset` during
+    /// layout and cached on the element for the subsystem to read.
+    pub(super) target_offset: Option<Val<JsValue>>,
     pub(super) show_when_unlinked: bool,
     pub(super) child: Option<Rc<dyn View>>,
 }
@@ -38,7 +42,19 @@ pub struct FollowerView {
 impl View for FollowerView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(FollowerElement { view: self.clone() }), boa);
+        cx.insert_node(
+            id,
+            AnyElement::new(FollowerElement {
+                view: self.clone(),
+                // Defaults match the Val defaults (TopLeft/TopLeft/zero); the
+                // first `perform_layout` overwrites them with the resolved
+                // values before the subsystem reads them.
+                resolved_target_anchor: Alignment::TopLeft,
+                resolved_follower_anchor: Alignment::TopLeft,
+                resolved_target_offset: Offset::ZERO,
+            }),
+            boa,
+        );
         if let Some(state) = &self.link {
             state.follower_node.set(Some(id));
         }
@@ -52,6 +68,11 @@ impl View for FollowerView {
 
 pub struct FollowerElement {
     pub(super) view: FollowerView,
+    /// Resolved (reactive-decoded) anchor on the target — read by the
+    /// subsystem via [`Self::desired_origin`]. Refreshed each `perform_layout`.
+    pub(super) resolved_target_anchor: Alignment,
+    pub(super) resolved_follower_anchor: Alignment,
+    pub(super) resolved_target_offset: Offset,
 }
 
 impl FollowerElement {
@@ -70,14 +91,19 @@ impl FollowerElement {
         target_size: Size,
         follower_size: Size,
     ) -> Offset {
-        let target_anchor_pt = self.view.target_anchor.align_offset(target_size, Size::ZERO);
+        // Anchors/offset are resolved reactively in `perform_layout` and cached
+        // here — the subsystem (which has no reactive store access) reads the
+        // cache. The fixed-point flush loop guarantees a fresh value is laid
+        // out before the subsystem reads it within the same frame.
+        let target_anchor_pt = self
+            .resolved_target_anchor
+            .align_offset(target_size, Size::ZERO);
         let follower_anchor_pt = self
-            .view
-            .follower_anchor
+            .resolved_follower_anchor
             .align_offset(follower_size, Size::ZERO);
         let target_local = Point::new(
-            target_anchor_pt.x + self.view.target_offset.x,
-            target_anchor_pt.y + self.view.target_offset.y,
+            target_anchor_pt.x + self.resolved_target_offset.x,
+            target_anchor_pt.y + self.resolved_target_offset.y,
         );
         let global = target_world * target_local;
         Offset::new(global.x - follower_anchor_pt.x, global.y - follower_anchor_pt.y)
@@ -93,7 +119,15 @@ impl FollowerElement {
 }
 
 impl Lifecycle for FollowerElement {}
-impl ElementSubscribe for FollowerElement {}
+impl ElementSubscribe for FollowerElement {
+    fn subscribe(&self, cx: &mut SubscribeCx) {
+        cx.subscribe_val(&self.view.target_anchor);
+        cx.subscribe_val(&self.view.follower_anchor);
+        if let Some(v) = self.view.target_offset.as_ref() {
+            cx.subscribe_val(v);
+        }
+    }
+}
 
 impl ElementTrace for FollowerElement {
     fn trace_label(&self) -> String {
@@ -108,6 +142,25 @@ impl ElementLayout for FollowerElement {
         children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
+        // Resolve reactive props and cache for the subsystem. `targetOffset`
+        // is a `{ x, y }` object held as `Val<JsValue>` — decode it with the
+        // layout JS face (object field access needs a `Context`).
+        self.resolved_target_anchor = cx
+            .read_val(&self.view.target_anchor)
+            .unwrap_or(Alignment::TopLeft);
+        self.resolved_follower_anchor = cx
+            .read_val(&self.view.follower_anchor)
+            .unwrap_or(Alignment::TopLeft);
+        let offset_js: Option<JsValue> = self
+            .view
+            .target_offset
+            .as_ref()
+            .and_then(|v| cx.read_val(v));
+        self.resolved_target_offset = match &offset_js {
+            Some(v) => decode_offset(v, cx.js.boa_mut()),
+            None => Offset::ZERO,
+        };
+
         // The follower's own offset is assigned by the subsystem each flush
         // (it tracks the target); here we only size + place the child.
         let size = if let Some(child_id) = children.first() {
@@ -148,17 +201,20 @@ impl FollowerView {
     pub fn from_js(props: &JsObject, ctx: &mut Context) -> Option<Self> {
         let link = extract_link_state(props, ctx)?;
         let mut p = JsProps::new(props, ctx);
-        let target_anchor = p.opt::<Alignment>("targetAnchor").unwrap_or(Alignment::TopLeft);
+        let target_anchor = p
+            .val::<Alignment>("targetAnchor")
+            .unwrap_or(Val::Static(Alignment::TopLeft));
         let follower_anchor = p
-            .opt::<Alignment>("followerAnchor")
-            .unwrap_or(Alignment::TopLeft);
+            .val::<Alignment>("followerAnchor")
+            .unwrap_or(Val::Static(Alignment::TopLeft));
         let show_when_unlinked = p
             .opt::<bool>("showWhenUnlinked")
             .unwrap_or(true);
         let child = p.child("child");
-        // `targetOffset` is a static `{x, y}` object (Flutter's `offset` is a
-        // plain Offset). Decoded here with the context (object field access).
-        let target_offset = read_offset(props, "targetOffset", p.ctx());
+        // `targetOffset` is a static `{ x, y }` object or a `Val` of one; held
+        // as a raw `Val<JsValue>` and field-decoded at layout time (see
+        // `perform_layout` / `decode_offset`).
+        let target_offset = p.val::<JsValue>("targetOffset");
         Some(FollowerView {
             link: Some(link),
             target_anchor,
@@ -170,10 +226,10 @@ impl FollowerView {
     }
 }
 
-fn read_offset(props: &JsObject, key: &str, ctx: &mut Context) -> Offset {
-    let Ok(v) = props.get(js_string!(key), ctx) else {
-        return Offset::ZERO;
-    };
+/// Decode a `{ x, y }` JS object into an `Offset`. Requires a `Context`
+/// (object field access), so this runs at layout time via the JS face rather
+/// than in the context-free `FromJs` path.
+fn decode_offset(v: &JsValue, ctx: &mut Context) -> Offset {
     let Some(obj) = v.as_object() else {
         return Offset::ZERO;
     };

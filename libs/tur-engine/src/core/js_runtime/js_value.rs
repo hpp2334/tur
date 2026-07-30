@@ -122,6 +122,16 @@ impl FromJs for Cursor {
     }
 }
 
+// --- JsValue: identity decode. Lets an element hold a `Val<JsValue>` for props
+// whose runtime value is a plain JS object that can only be decoded WITH a
+// `Context` (e.g. a `{ x, y }` offset). The element resolves the `Val` to a
+// `JsValue` via `read_val`, then field-reads with the layout JS face. ---
+impl FromJs for JsValue {
+    fn from_js(v: &JsValue) -> Result<Self, JsError> {
+        Ok(v.clone())
+    }
+}
+
 // --- enums (stored as JS numbers, decoded via FromPrimitive) ---
 
 macro_rules! impl_from_js_enum {

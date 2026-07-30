@@ -699,14 +699,16 @@ declare module "tur:std" {
         link: LayerLink;
         /** Anchor point on the target that the follower aligns to. The
          *  follower is translated so its `followerAnchor` lands here in global
-         *  space. Defaults to `Alignment.TopLeft`. */
-        targetAnchor?: Alignment;
+         *  space. Defaults to `Alignment.TopLeft`. Reactive: pass a `derive`
+         *  to change it at runtime. */
+        targetAnchor?: Val<Alignment>;
         /** Anchor point on this follower that lines up with `targetAnchor`.
-         *  Defaults to `Alignment.TopLeft`. */
-        followerAnchor?: Alignment;
+         *  Defaults to `Alignment.TopLeft`. Reactive. */
+        followerAnchor?: Val<Alignment>;
         /** Additional offset (in the target's local coordinate space) applied
-         *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. */
-        targetOffset?: { x: number; y: number };
+         *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. Reactive: pass a
+         *  `derive` to change it at runtime (e.g. steppers). */
+        targetOffset?: Val<{ x: number; y: number }>;
         /** Whether to keep rendering at the follower's layout position when no
          *  target is linked. Defaults to `true`. */
         showWhenUnlinked?: boolean;

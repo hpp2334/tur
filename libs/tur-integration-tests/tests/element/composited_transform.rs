@@ -98,6 +98,46 @@ fn follower_tracks_target_through_transform() {
     let _ = target_id;
 }
 
+/// `targetAnchor` is reactive (`Val<Alignment>`): flipping the source from
+/// `TopLeft` to `BottomRight` (via a button click) must relocate the follower
+/// from the target's top-left to its bottom-right on the next frame.
+#[test]
+fn follower_tracks_reactive_anchor_change() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("composited-transform-reactive-anchor").unwrap();
+    app.render();
+
+    let follower_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        find_by_kind(
+            &tree,
+            root.id,
+            &ElementKind::new("tur_composited_transform_follower"),
+        )
+        .expect("follower mounted")
+    };
+
+    // Initially TopLeft/TopLeft, zero offset → follower at target's top-left
+    // (100, 80).
+    let (fx0, fy0) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx0 - 100.0).abs() < 1e-3 && (fy0 - 80.0).abs() < 1e-3,
+        "follower should start at target top-left (100, 80) — got ({fx0}, {fy0})"
+    );
+
+    // Click the button at (30, 550) → sets targetAnchor to BottomRight.
+    app.click(30.0, 550.0);
+
+    // Target at (100, 80), size 60×40 → bottom-right at (160, 120). The
+    // follower's own anchor is still TopLeft, so its top-left lands there.
+    let (fx1, fy1) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx1 - 160.0).abs() < 1e-3 && (fy1 - 120.0).abs() < 1e-3,
+        "follower should relocate to target bottom-right (160, 120) after anchor change — got ({fx1}, {fy1})"
+    );
+}
+
 /// The follower continuously tracks the target: scrolling the target's
 /// ScrollView shifts the target's absolute position, and the follower must
 /// move with it (follower origin stays equal to the target origin).

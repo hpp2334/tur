@@ -20,6 +20,7 @@ const WHITELIST = new Set([
     "counter",
     "todolist",
     "complex-animation",
+    "composited-transform-anchor-playground",
     "implicit-animations",
     "lazy-list-virtualized",
     "lazy-list-var-sizes",
