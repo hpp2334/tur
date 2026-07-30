@@ -145,6 +145,32 @@ impl NodeTreeData {
         self.fragments.contains_key(&FragmentNodeId::new(id.as_u64()))
     }
 
+    /// The node's absolute (canvas-space) origin, computed by summing
+    /// `computed_layout.offset` up the ancestor chain (hopping through
+    /// zero-offset fragments). Layout-only — does NOT include ancestor
+    /// paint-only transforms (e.g. `Transform`). Returns `Offset::ZERO` for
+    /// an unknown id.
+    pub fn absolute_offset_of(&self, id: ElementNodeId) -> Offset {
+        let mut acc = Offset::ZERO;
+        // Start from the node's own offset, then walk parents.
+        let mut current: Option<NodeId> = Some(id.into());
+        while let Some(cid) = current {
+            if let Some(n) = self.elements.get(&ElementNodeId::new(cid.as_u64())) {
+                acc = Offset::new(
+                    acc.x + n.computed_layout.offset.x,
+                    acc.y + n.computed_layout.offset.y,
+                );
+                current = n.parent;
+            } else if let Some(f) = self.fragments.get(&FragmentNodeId::new(cid.as_u64())) {
+                // Fragments have zero offset; hop to their parent.
+                current = Some(f.parent);
+            } else {
+                break;
+            }
+        }
+        acc
+    }
+
     /// Remove a `child_id` entry from a parent's children vec (node or fragment).
     pub fn remove_child_entry(&mut self, parent_id: NodeId, child_id: NodeId) {
         if let Some(node) = self.elements.get_mut(&ElementNodeId::new(parent_id.as_u64())) {
@@ -721,21 +747,7 @@ impl NodeTreeData {
         if let Some(node) = self.elements.get(&ElementNodeId::new(id.as_u64())) {
             let element = node.element.as_ref()?;
             let relative = node.computed_layout.offset;
-            let mut absolute = relative;
-            let mut ancestor = node.parent;
-            while let Some(pid) = ancestor {
-                // Walk through both real elements and fragments. Fragments
-                // have zero offset (never laid out) but we must hop to their
-                // `.parent` to reach the real ancestor.
-                if let Some(p) = self.elements.get(&ElementNodeId::new(pid.as_u64())) {
-                    absolute = Offset::new(absolute.x + p.computed_layout.offset.x, absolute.y + p.computed_layout.offset.y);
-                    ancestor = p.parent;
-                } else if let Some(f) = self.fragments.get(&FragmentNodeId::new(pid.as_u64())) {
-                    ancestor = Some(f.parent);
-                } else {
-                    break;
-                }
-            }
+            let absolute = self.absolute_offset_of(ElementNodeId::new(id.as_u64()));
             return Some(DevNodeData {
                 id: node.id.into(),
                 name: element.type_name(),
@@ -752,7 +764,9 @@ impl NodeTreeData {
         // Fragment node:
         if let Some(frag) = self.fragments.get(&FragmentNodeId::new(id.as_u64())) {
             let relative = Offset::ZERO;
-            let mut absolute = relative;
+            // Fragments have zero offset; their absolute origin equals the
+            // nearest real ancestor's accumulated offset.
+            let mut absolute = Offset::ZERO;
             let mut ancestor = Some(frag.parent);
             while let Some(pid) = ancestor {
                 if let Some(p) = self.elements.get(&ElementNodeId::new(pid.as_u64())) {

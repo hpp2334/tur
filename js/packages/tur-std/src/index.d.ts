@@ -640,6 +640,93 @@ declare module "tur:std" {
     export function ReadableSubscribe(props: ReadableSubscribeProps): Element;
 
     // ---------------------------------------------------------------------------
+    // Visual-effect elements (Opacity / Transform)
+    // ---------------------------------------------------------------------------
+
+    export interface OpacityProps {
+        value: Val<number>;
+        child?: Element;
+        queryKey?: Val<string[]>;
+    }
+
+    export interface TransformProps {
+        scale?: Val<number>;
+        scaleX?: Val<number>;
+        scaleY?: Val<number>;
+        rotate?: Val<number>;
+        translateX?: Val<number>;
+        translateY?: Val<number>;
+        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
+         *  `Alignment.Center` (matches Flutter's `Transform`). */
+        alignment?: Val<Alignment>;
+        child?: Element;
+        queryKey?: Val<string[]>;
+    }
+
+    /** Alpha-mask its child subtree by `value` (0.0..=1.0). */
+    export function Opacity(props: OpacityProps): Element;
+
+    /** Apply a 2D affine rotate/scale/translate to its child subtree. */
+    export function Transform(props: TransformProps): Element;
+
+    // ---------------------------------------------------------------------------
+    // CompositedTransformTarget / Follower — Flutter-style anchor linking.
+    // A follower renders at a target's global position (tracked continuously
+    // through layout / scroll / reactive / transform changes). Create a shared
+    // link via `createLayerLink()` and pass it to one target + one follower.
+    // Place the follower in a root overlay slot so it isn't clipped and paints
+    // on top (the Flutter `Overlay` pattern).
+    // ---------------------------------------------------------------------------
+
+    /** Shared handle connecting one `CompositedTransformTarget` to one
+     *  `CompositedTransformFollower`. Create via `createLayerLink()`. */
+    export interface LayerLink {
+        readonly _layerLinkBrand: unique symbol;
+    }
+
+    /** Create a shared `LayerLink` connecting a target and a follower. */
+    export function createLayerLink(): LayerLink;
+
+    export interface CompositedTransformTargetProps {
+        /** A link created via `createLayerLink()`, shared with the follower. */
+        link: LayerLink;
+        child?: Element;
+        queryKey?: Val<string[]>;
+    }
+
+    export interface CompositedTransformFollowerProps {
+        /** A link created via `createLayerLink()`, shared with the target. */
+        link: LayerLink;
+        /** Anchor point on the target that the follower aligns to. The
+         *  follower is translated so its `followerAnchor` lands here in global
+         *  space. Defaults to `Alignment.TopLeft`. */
+        targetAnchor?: Alignment;
+        /** Anchor point on this follower that lines up with `targetAnchor`.
+         *  Defaults to `Alignment.TopLeft`. */
+        followerAnchor?: Alignment;
+        /** Additional offset (in the target's local coordinate space) applied
+         *  to `targetAnchor`. Defaults to `{x: 0, y: 0}`. */
+        targetOffset?: { x: number; y: number };
+        /** Whether to keep rendering at the follower's layout position when no
+         *  target is linked. Defaults to `true`. */
+        showWhenUnlinked?: boolean;
+        child?: Element;
+        queryKey?: Val<string[]>;
+    }
+
+    /** Marks a spot in the tree for a `CompositedTransformFollower` to track.
+     *  A transparent passthrough. */
+    export function CompositedTransformTarget(
+        props: CompositedTransformTargetProps,
+    ): Element;
+
+    /** Renders at a target's anchor (tracked continuously). Place in a root
+     *  overlay slot. */
+    export function CompositedTransformFollower(
+        props: CompositedTransformFollowerProps,
+    ): Element;
+
+    // ---------------------------------------------------------------------------
     // Controllers / resources / colors / focus
     // ---------------------------------------------------------------------------
 

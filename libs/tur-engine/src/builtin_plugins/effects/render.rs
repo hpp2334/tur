@@ -1,7 +1,8 @@
-use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
-use tur_engine::core::layout::{ComputedLayout, Offset, Size};
 use vello_common::kurbo::Affine;
+
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{ComputedLayout, Offset, Size};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::{OpacityElement, TransformElement, TransformPainting};
 
@@ -36,7 +37,7 @@ impl TransformElement {
     /// is expressed inside the child box as `alignment.align_offset(size, 0)`.
     /// `translateX/Y` are plain outer shifts applied to the already-pivoted
     /// element (they are not themselves pivoted).
-    fn transform_matrix(p: &TransformPainting, size: Size) -> Affine {
+    pub(crate) fn transform_matrix(p: &TransformPainting, size: Size) -> Affine {
         let sx = p.scale_x.or(p.scale).unwrap_or(1.0);
         let sy = p.scale_y.or(p.scale).unwrap_or(1.0);
         let angle = p.rotate.unwrap_or(0.0);
@@ -76,12 +77,19 @@ impl ElementRender for TransformElement {
         }
         canvas.pop_transform();
     }
+
+    /// Expose the resolved affine so compositing consumers (e.g.
+    /// `CompositedTransformFollower`) can compose this element's contribution
+    /// into a descendant's full world transform without downcasting.
+    fn paint_transform(&self, layout: &ComputedLayout) -> Option<Affine> {
+        Some(Self::transform_matrix(&self.painting, layout.size))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tur_engine::core::layout::{Alignment, Size};
+    use crate::core::layout::{Alignment, Size};
     use vello_common::kurbo::Point;
 
     fn approx(a: Point, b: Point) -> bool {
@@ -127,7 +135,10 @@ mod tests {
             mids.iter().any(|q| approx(mapped, *q)),
             "rotated point {mapped:?} should be an edge-midpoint"
         );
-        assert!(!approx(mapped, Point::new(10.0, 5.0)), "point should have moved");
+        assert!(
+            !approx(mapped, Point::new(10.0, 5.0)),
+            "point should have moved"
+        );
     }
 
     /// Scale must pivot around the center: the center is invariant and the

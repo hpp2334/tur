@@ -2,6 +2,7 @@ mod animation;
 mod async_bridge;
 mod capability;
 mod column;
+mod composited_transform;
 mod container;
 mod core_module_check;
 mod debug;

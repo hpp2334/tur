@@ -2,14 +2,15 @@
  * @tur-ng/animation — Flutter-style animation toolkit.
  *
  * This module is the consumer-facing surface of `tur-animation`. It exposes
- * both the native bridge fns (`Opacity`, `Transform`, `createAnimationController`,
- * re-exported from the internal `tur:animation/native` module) and the
- * JS-defined implicit-animation widgets (`AnimatedContainer`,
- * `AnimatedOpacity`, `AnimatedPositioned`, `Tween`, `ColorTween`).
+ * the native bridge fn (`createAnimationController`, re-exported from the
+ * internal `tur:animation/native` module) and the JS-defined implicit-
+ * animation widgets (`AnimatedContainer`, `AnimatedOpacity`,
+ * `AnimatedPositioned`, `Tween`, `ColorTween`).
  *
  * The widgets are composed entirely from `tur:std` primitives
- * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — no native
- * element beyond `Opacity`/`Transform`/`Container`/`Positioned` is involved.
+ * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — the only
+ * native elements involved (`Opacity`/`Transform`/`Container`/`Positioned`)
+ * all ship as part of `tur:std`.
  *
  * Each animatable prop becomes a "channel": a Tween/ColorTween seeded at the
  * prop's initial value, displayed as `tween.lerp(progress)`. One
@@ -20,16 +21,14 @@
  * retarget — they pass through.
  */
 
-import {
-    Opacity,
-    Transform,
-    createAnimationController,
-} from "tur:animation/native";
+import { createAnimationController } from "tur:animation/native";
 
 import {
     Container,
+    Opacity,
     Positioned,
     ReadableSubscribe,
+    Transform,
     colorLerp,
     derive,
     get,
@@ -38,9 +37,10 @@ import {
     source,
 } from "tur:std";
 
-// Re-export the native bridge fns so consumers can import everything from
-// `tur:animation`.
-export { Opacity, Transform, createAnimationController };
+// `Opacity` / `Transform` are visual effects that now ship as part of
+// `tur:std`; import them directly from there. This module re-exports only
+// its own animation surface.
+export { createAnimationController };
 
 // ---------------------------------------------------------------------------
 // Tween / ColorTween — Flutter-style begin/end interpolation with mutable

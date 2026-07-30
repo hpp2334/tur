@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use boa_engine::Context;
+use vello_common::kurbo::Affine;
 use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
@@ -70,6 +71,8 @@ trait Erased: 'static {
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+
+    fn paint_transform(&self, layout: &ComputedLayout) -> Option<Affine>;
 
     fn subscribe(&self, cx: &mut SubscribeCx);
 
@@ -199,6 +202,10 @@ where
 
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         <Self as ElementRender>::hit_test(self, position, layout)
+    }
+
+    fn paint_transform(&self, layout: &ComputedLayout) -> Option<Affine> {
+        <Self as ElementRender>::paint_transform(self, layout)
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
@@ -464,6 +471,12 @@ impl AnyElement {
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
+    }
+
+    /// The paint-only affine this element contributes to its subtree, if any
+    /// (see [`crate::core::render::ElementRender::paint_transform`]).
+    pub fn paint_transform(&self, layout: &ComputedLayout) -> Option<Affine> {
+        self.inner.paint_transform(layout)
     }
 
     /// Declare this element's reactive atom dependencies into `cx` (the

@@ -4,21 +4,20 @@
  * Runtime is a synthetic boa module registered by `tur-animation` under the
  * specifier `"tur:animation"`. It is a single combined module that:
  *
- * 1. Re-exports the native bridge fns `Opacity`, `Transform`, and
- *    `createAnimationController` from the engine-internal `tur:animation/native`
- *    module.
+ * 1. Re-exports the native bridge fn `createAnimationController` from the
+ *    engine-internal `tur:animation/native` module.
  * 2. Defines the JS-only implicit-animation widgets `AnimatedContainer`,
  *    `AnimatedOpacity`, `AnimatedPositioned` plus the `Tween` / `ColorTween`
  *    interpolation channels.
  *
  * The widgets are composed entirely from `tur:std` primitives
- * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — no native
- * element beyond `Opacity`/`Transform`/`Container`/`Positioned` is involved.
+ * (`ReadableSubscribe` + `Tween` + `createAnimationController`) — the only
+ * native elements involved (`Opacity`/`Transform`/`Container`/`Positioned`)
+ * all ship as part of `tur:std`.
  */
 
 declare module "tur:animation" {
     import type {
-        Alignment,
         Color,
         ContainerProps,
         Element,
@@ -69,33 +68,6 @@ declare module "tur:animation" {
     export function createAnimationController(
         opts?: AnimationControllerOpts,
     ): AnimationController;
-
-    // ---------------------------------------------------------------------------
-    // Opacity / Transform effect elements (native).
-    // ---------------------------------------------------------------------------
-
-    export interface OpacityProps {
-        value: Val<number>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export interface TransformProps {
-        scale?: Val<number>;
-        scaleX?: Val<number>;
-        scaleY?: Val<number>;
-        rotate?: Val<number>;
-        translateX?: Val<number>;
-        translateY?: Val<number>;
-        /** Pivot for `rotate`/`scale`, within the child box. Defaults to
-         *  `Alignment.Center` (matches Flutter's `Transform`). */
-        alignment?: Val<Alignment>;
-        child?: Element;
-        queryKey?: Val<string[]>;
-    }
-
-    export function Opacity(props: OpacityProps): Element;
-    export function Transform(props: TransformProps): Element;
 
     // ---------------------------------------------------------------------------
     // Tween / ColorTween — Flutter-style begin/end interpolation with mutable

@@ -1,14 +1,13 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use tur_engine::core::js_runtime::JsProps;
-use tur_engine::core::element::{ElementNodeId, NodeId};
-use tur_engine::core::elements::{AnyElement, ElementTrace};
-use tur_engine::core::layout::{ElementSubscribe, SubscribeCx};
-use tur_engine::core::view::{Lifecycle, Val, View, ViewCx};
-use tur_engine::core::layout::Alignment;
+use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::js_runtime::JsProps;
+use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::layout::{Alignment, ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // OpacityView — applies an alpha multiplier to its child subtree.
@@ -26,7 +25,14 @@ pub struct OpacityView {
 impl View for OpacityView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(OpacityElement { view: self.clone(), painting: OpacityPainting::default() }), boa);
+        cx.insert_node(
+            id,
+            AnyElement::new(OpacityElement {
+                view: self.clone(),
+                painting: OpacityPainting::default(),
+            }),
+            boa,
+        );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -114,7 +120,14 @@ pub struct TransformView {
 impl View for TransformView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(TransformElement { view: self.clone(), painting: TransformPainting::default() }), boa);
+        cx.insert_node(
+            id,
+            AnyElement::new(TransformElement {
+                view: self.clone(),
+                painting: TransformPainting::default(),
+            }),
+            boa,
+        );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -148,21 +161,39 @@ impl Lifecycle for TransformElement {}
 impl ElementSubscribe for TransformElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.scale.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.scale_x.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.scale_y.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.rotate.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.translate_x.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.translate_y.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.scale.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.scale_x.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.scale_y.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.rotate.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.translate_x.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.translate_y.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.alignment.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 
 impl ElementTrace for TransformElement {
     fn trace_label(&self) -> String {
         let mut parts = Vec::new();
-        if let Some(Val::Static(v)) = &self.view.scale { parts.push(format!("scale={v}")); }
-        if let Some(Val::Static(v)) = &self.view.rotate { parts.push(format!("rotate={v}")); }
+        if let Some(Val::Static(v)) = &self.view.scale {
+            parts.push(format!("scale={v}"));
+        }
+        if let Some(Val::Static(v)) = &self.view.rotate {
+            parts.push(format!("rotate={v}"));
+        }
         parts.join(" ")
     }
 }

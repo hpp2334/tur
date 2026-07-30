@@ -15,7 +15,6 @@ use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 
 use crate::controller::AnimationController;
-use crate::effects;
 use crate::flush_hook::AnimationSubsystem;
 use crate::manager::AnimationManager;
 
@@ -26,11 +25,11 @@ use crate::manager::AnimationManager;
 ///     would skip manager + mutation-queue injection),
 ///   - the [`AnimationSubsystem`] flush participant (ticks active
 ///     controllers once per frame),
-///   - the `Opacity` and `Transform` visual-effect elements (bridge fns),
-///   - the `tur:animation` JS module combining the native bridge
-///     fns with the JS-defined implicit-animation widgets
+///   - the `tur:animation` JS module combining the native `createAnimationController`
+///     bridge fn with the JS-defined implicit-animation widgets
 ///     (`AnimatedContainer`, `AnimatedOpacity`, `AnimatedPositioned`,
-///     `Tween`, `ColorTween`).
+///     `Tween`, `ColorTween`). The visual effects `Opacity` / `Transform`
+///     used by those widgets are imported from `tur:std`.
 ///
 /// `TurAnimationPlugin` carries no per-instance state; the animation manager
 /// lives inside the registered [`AnimationSubsystem`] for the app's lifetime.
@@ -80,8 +79,7 @@ impl Plugin for TurAnimationPlugin {
         // 4. Register the hidden internal native module `tur:animation/native`.
         //    The consumer-facing `tur:animation` JS source imports
         //    from here to access the native bridge fns.
-        let mut native_fns: Vec<FnEntry> = Vec::new();
-        native_fns.extend(effects::bridge::fns()); // Opacity, Transform (ctx-bound)
+        let native_fns: Vec<FnEntry> = Vec::new();
 
         let create_animation_controller = build_create_animation_controller(
             manager.clone(),

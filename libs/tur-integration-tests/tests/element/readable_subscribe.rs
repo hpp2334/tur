@@ -198,8 +198,8 @@ fn animated_container_pattern_inner_text_still_updates() {
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, render } from "tur:std";
-        import { Opacity, createAnimationController } from "tur:animation";
+        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, render, Opacity } from "tur:std";
+        import { createAnimationController } from "tur:animation";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         // Sink captures the cardText derive's recomputed value (ground truth,

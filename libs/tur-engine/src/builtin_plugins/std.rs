@@ -8,9 +8,10 @@
 //! `TurStdPlugin` carries no per-instance state. Backend injection
 //! (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
 //! and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`). Animation
-//! (`Opacity`, `Transform`, `createAnimationController`, `AnimatedContainer`
-//! /`AnimatedOpacity`/`AnimatedPositioned`) is provided by the separate
-//! `tur-animation` crate via `tur_animation::TurAnimationPlugin`.
+//! (`createAnimationController`, `AnimatedContainer`/`AnimatedOpacity`/
+//! `AnimatedPositioned`, `Tween`, `ColorTween`) is provided by the separate
+//! `tur-animation` crate via `tur_animation::TurAnimationPlugin`. The visual
+//! effects `Opacity` / `Transform` ship as part of `tur:std`.
 //!
 //! ## Architecture
 //!
@@ -28,8 +29,9 @@
 //!   (renderer/async/edgy infra, not plugin affinity).
 
 use crate::builtin_plugins::{
-    console::install_console, control_flow::install_control_flow, focus::install_focus,
-    gesture::install_gesture, image::install_image, input::install_input, layout::enums,
+    console::install_console, control_flow::install_control_flow, effects::install_effects,
+    focus::install_focus, gesture::install_gesture, image::install_image, input::install_input,
+    layout::composited_transform::install_composited_transform, layout::enums,
     layout::install_layout, lazy_container::install_lazy_container, lifecycle::install_lifecycle,
     scroll::install_scroll, text::install_text,
 };
@@ -39,6 +41,7 @@ use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::plugin::{Plugin, PluginContext};
 use crate::core::screen::ResizeSubsystem;
 use crate::error::TurError;
+use boa_engine::native_function::NativeFunction;
 
 /// The standard widget library plugin. Registers the `tur:std`
 /// module (widget factories, controllers, color bridge), plus the
@@ -47,9 +50,10 @@ use crate::error::TurError;
 /// `TurStdPlugin` carries no per-instance state. Backend injection
 /// (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
 /// and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`). Animation
-/// (`Opacity`, `Transform`, `createAnimationController`, `AnimatedContainer`
-/// /`AnimatedOpacity`/`AnimatedPositioned`) is provided by the separate
-/// `tur-animation` crate via `tur_animation::TurAnimationPlugin`.
+/// (`createAnimationController`, `AnimatedContainer`/`AnimatedOpacity`/
+/// `AnimatedPositioned`, `Tween`, `ColorTween`) is provided by the separate
+/// `tur-animation` crate via `tur_animation::TurAnimationPlugin`. The visual
+/// effects `Opacity` / `Transform` ship as part of `tur:std`.
 pub struct TurStdPlugin;
 
 impl Default for TurStdPlugin {
@@ -73,6 +77,7 @@ impl Plugin for TurStdPlugin {
         // the clipboard backend through a single `.capability(...)` call.
 
         let mut std_fns: Vec<FnEntry> = Vec::new();
+        let mut std_closures: Vec<(&str, usize, NativeFunction)> = Vec::new();
         // Inlined feature plugins (text, image, scroll, lazy_container used
         // to be external `tur-*` crates; they now live inside
         // `builtin_plugins/` and follow the same `install_xxx` pattern as
@@ -94,7 +99,14 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(install_focus(ctx)?);
         std_fns.extend(install_gesture(ctx)?);
         std_fns.extend(install_input(ctx)?);
+        std_fns.extend(install_effects(ctx)?);
         std_fns.extend(install_layout(ctx)?);
+        // CompositedTransformTarget/Follower + createLayerLink + tracking
+        // subsystem. Returns element FnEntries + a state-capturing closure
+        // (createLayerLink), both merged into `tur:std`.
+        let (ct_fns, ct_closures) = install_composited_transform(ctx)?;
+        std_fns.extend(ct_fns);
+        std_closures.extend(ct_closures);
         std_fns.extend(install_lifecycle(ctx)?);
         // Render mount + async task primitives stay in `core::app::render`
         // and `core::async_::task` (renderer/async infra, not element-plugin
@@ -112,7 +124,7 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
 
-        ctx.register_module("tur:std", std_fns, vec![], std_consts);
+        ctx.register_module("tur:std", std_fns, std_closures, std_consts);
 
         Ok(())
     }

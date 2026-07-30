@@ -1,6 +1,5 @@
-use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::layout::{ElementLayout, LayoutContext};
-use tur_engine::core::layout::{Constraints, Offset, Size};
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{Constraints, ElementLayout, LayoutContext, Offset, Size};
 
 use super::element::{OpacityElement, TransformElement};
 
@@ -13,7 +12,9 @@ impl ElementLayout for OpacityElement {
     ) -> Size {
         // Resolve the paint-time opacity here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
-        self.painting.value = cx.read_val_opt(self.view.value.as_ref()).unwrap_or(1.0);
+        self.painting.value = cx
+            .read_val_opt(self.view.value.as_ref())
+            .unwrap_or(1.0);
         let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
@@ -39,7 +40,7 @@ impl ElementLayout for TransformElement {
         // Layout the child untransformed; the transform is applied at paint
         // time only. (For non-uniform scale this means layout uses the
         // untransformed size, which is correct for hit-testing but not for
-        // visual bounds. Acceptable for animation effects.)
+        // visual bounds. Acceptable for visual effects.)
         let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {
@@ -58,7 +59,7 @@ impl ElementLayout for TransformElement {
             // Default pivot is the child center (Flutter `Transform` parity).
             alignment: cx
                 .read_val_opt(self.view.alignment.as_ref())
-                .unwrap_or(tur_engine::core::layout::Alignment::Center),
+                .unwrap_or(crate::core::layout::Alignment::Center),
         };
 
         // --- position ---
