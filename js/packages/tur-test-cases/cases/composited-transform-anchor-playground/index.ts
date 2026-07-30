@@ -7,22 +7,22 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    createLayerLink,
     derive,
     get,
     HitTestBehavior,
-    type Mutation,
     MainAxisSize,
+    type Mutation,
     mutate,
-    type PointerInteractEvent,
     PointerInteract,
+    type PointerInteractEvent,
     Positioned,
     Row,
-    set,
     SizedBox,
-    source,
     Stack,
+    set,
+    source,
     Text,
-    createLayerLink,
     view,
 } from "tur:std";
 
@@ -82,7 +82,9 @@ const C = {
     targetLabel: Color.hex("#94a3b8"),
 };
 
-const click = (m: Mutation<[], unknown>): Mutation<[PointerInteractEvent], void> =>
+const click = (
+    m: Mutation<[], unknown>,
+): Mutation<[PointerInteractEvent], void> =>
     m as unknown as Mutation<[PointerInteractEvent], void>;
 
 // Layout constants (deterministic — menus float at known coords below their
@@ -122,7 +124,11 @@ export default view(() => {
                         color: C.target,
                         alignment: Alignment.Center,
                         children: [
-                            Text({ text: "Target", fontSize: 12, color: C.targetLabel }),
+                            Text({
+                                text: "Target",
+                                fontSize: 12,
+                                color: C.targetLabel,
+                            }),
                         ],
                     }),
                 }),
@@ -133,14 +139,19 @@ export default view(() => {
                 link,
                 targetAnchor: derive(() => get(targetAnchor$)),
                 followerAnchor: derive(() => get(followerAnchor$)),
-                targetOffset: derive(() => ({ x: get(offsetX$), y: get(offsetY$) })),
+                targetOffset: derive(() => ({
+                    x: get(offsetX$),
+                    y: get(offsetY$),
+                })),
                 child: Container({
                     width: 48,
                     height: 36,
                     borderRadius: 6,
                     color: C.red,
                     alignment: Alignment.Center,
-                    children: [Text({ text: "F", fontSize: 13, color: C.white })],
+                    children: [
+                        Text({ text: "F", fontSize: 13, color: C.white }),
+                    ],
                 }),
             }),
 
@@ -244,13 +255,19 @@ function TriggerChip(
             borderRadius: 6,
             borderWidth: 1,
             borderColor: C.slate,
-            color: derive(() => (get(openMenu$) === menuKey ? C.indigoSoft : C.white)),
+            color: derive(() =>
+                get(openMenu$) === menuKey ? C.indigoSoft : C.white,
+            ),
             padding: 6,
             alignment: Alignment.CenterLeft,
             children: [
                 Row({
                     children: [
-                        Text({ text: `${label}: `, fontSize: 11, color: C.textMid }),
+                        Text({
+                            text: `${label}: `,
+                            fontSize: 11,
+                            color: C.textMid,
+                        }),
                         Text({
                             text: derive(() => labelFor(get(value$))),
                             fontSize: 11,
@@ -282,7 +299,10 @@ function MenuList(value$: typeof targetAnchor$) {
     });
 }
 
-function OptionRow(opt: { label: string; value: Alignment }, value$: typeof targetAnchor$) {
+function OptionRow(
+    opt: { label: string; value: Alignment },
+    value$: typeof targetAnchor$,
+) {
     return PointerInteract({
         onClick: click(
             mutate(() => {
@@ -294,12 +314,16 @@ function OptionRow(opt: { label: string; value: Alignment }, value$: typeof targ
             width: MENU_W,
             height: ROW_H,
             padding: 6,
-            color: derive(() => (get(value$) === opt.value ? C.indigo : C.white)),
+            color: derive(() =>
+                get(value$) === opt.value ? C.indigo : C.white,
+            ),
             children: [
                 Text({
                     text: opt.label,
                     fontSize: 11,
-                    color: derive(() => (get(value$) === opt.value ? C.white : C.text)),
+                    color: derive(() =>
+                        get(value$) === opt.value ? C.white : C.text,
+                    ),
                 }),
             ],
         }),
@@ -311,7 +335,10 @@ function Stepper(label: string, value$: typeof offsetX$, step: number) {
         children: [
             Text({ text: `${label}:`, fontSize: 11, color: C.textMid }),
             SizedBox({ width: 6 }),
-            SmallButton("−", mutate(() => set(value$, get(value$) - step))),
+            SmallButton(
+                "−",
+                mutate(() => set(value$, get(value$) - step)),
+            ),
             SizedBox({ width: 6 }),
             Text({
                 text: derive(() => `${get(value$)}`),
@@ -319,7 +346,10 @@ function Stepper(label: string, value$: typeof offsetX$, step: number) {
                 color: C.text,
             }),
             SizedBox({ width: 6 }),
-            SmallButton("+", mutate(() => set(value$, get(value$) + step))),
+            SmallButton(
+                "+",
+                mutate(() => set(value$, get(value$) + step)),
+            ),
         ],
     });
 }

@@ -8,13 +8,13 @@ import {
     get,
     type Mutation,
     mutate,
-    type PointerInteractEvent,
     PointerInteract,
+    type PointerInteractEvent,
     Positioned,
-    set,
     SizedBox,
-    source,
     Stack,
+    set,
+    source,
     view,
 } from "tur:std";
 
@@ -49,7 +49,11 @@ export default view(() => {
                     onClick: mutate(() =>
                         set(anchor$, Alignment.BottomRight),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
-                    child: Container({ width: 60, height: 30, color: "#4f46e5" }),
+                    child: Container({
+                        width: 60,
+                        height: 30,
+                        color: "#4f46e5",
+                    }),
                 }),
             }),
         ],
