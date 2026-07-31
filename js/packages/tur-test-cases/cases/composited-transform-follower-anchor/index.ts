@@ -7,7 +7,7 @@ import {
     Positioned,
     SizedBox,
     Stack,
-    view
+    view,
 } from "tur:std";
 
 // Regression: `followerAnchor` must be honored. Target (blue, 60×40) sits at
