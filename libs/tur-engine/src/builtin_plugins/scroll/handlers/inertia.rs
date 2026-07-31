@@ -126,7 +126,7 @@ impl Subsystem for ScrollInertiaSubsystem {
         }
     }
 
-    fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) {
+    fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>) {
         // Integrate the decay at most once per frame: only when the engine's
         // frame id has moved on since our last advance. `frame_id` is stable
         // across the fixed-point iterations of one `flush()` call, so repeated

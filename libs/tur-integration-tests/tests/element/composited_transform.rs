@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::core::elements::NodeTreeData;
 use tur_integration_tests::TurTestApp;
@@ -285,5 +287,58 @@ fn follower_no_flash_on_sibling_relayout() {
     assert!(
         (fx1 - 100.0).abs() < 1e-3 && (fy1 - 80.0).abs() < 1e-3,
         "follower must still paint at the tracked target (100, 80) — got ({fx1}, {fy1})"
+    );
+}
+
+/// Regression: the follower's tracked transform must be computed from FRESH
+/// (post-layout) geometry on the very first frame. Before the fix the
+/// `CompositedTransformSubsystem` ran in the pre-layout phase of the flush
+/// loop and read zero/stale target+follower sizes plus the default `TopLeft`
+/// anchor cache; the loop then quiesced before recomputing, so a follower
+/// with non-`TopLeft` anchors painted at the wrong offset until the next
+/// input event (tap/click) triggered a fresh flush — visibly wrong on real
+/// devices (one flush per input, then idle).
+///
+/// This loads the module WITHOUT the `settle()` that `load_bundle` performs
+/// (so the tree is built but not yet flushed) and then pumps EXACTLY ONE
+/// frame, asserting the follower is already at its anchor-aligned position.
+#[test]
+fn follower_correct_on_first_frame_non_topleft_anchor() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    // Load the case module WITHOUT settling — we want to observe the very
+    // first flush frame, which `load_bundle` would mask via its `settle()`.
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let workspace_root = Path::new(&manifest_dir)
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("failed to resolve workspace root");
+    let source = std::fs::read_to_string(
+        workspace_root
+            .join("js/packages/tur-test-cases/dist/composited-transform-follower-anchor.js"),
+    )
+    .unwrap();
+    app.with_app(|a| a.load_module(&source)).unwrap();
+    // Exactly one frame.
+    let _ = app.pump();
+
+    let follower_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        find_by_kind(
+            &tree,
+            root.id,
+            &ElementKind::new("tur_composited_transform_follower"),
+        )
+        .expect("follower mounted")
+    };
+
+    // Target at (100, 80), size 60×40 → its bottom-right is (160, 120). The
+    // follower (60×40) with `followerAnchor: TopRight` aligns its top-right
+    // there → its top-left lands at (100, 120).
+    let (fx, fy) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx - 100.0).abs() < 1e-3 && (fy - 120.0).abs() < 1e-3,
+        "follower with non-TopLeft anchors should be at (100, 120) on the FIRST \
+         frame — got ({fx}, {fy})"
     );
 }
