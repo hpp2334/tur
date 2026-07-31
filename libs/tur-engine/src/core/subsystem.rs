@@ -17,18 +17,32 @@
 //! must observe effects of an earlier subsystem's tick or event handler
 //! (within the same `flush` iteration) should be registered after it.
 //!
+//! Within one fixed-point iteration there are two flush phases, straddling
+//! the layout step:
+//!
+//! 1. [`Subsystem::flush_pre_layout`] — runs **before** layout. Used for
+//!    time-driven state advance (e.g. an animation manager that ticks its
+//!    controllers and enqueues mutations drained later in the iteration).
+//! 2. **layout** — the engine lays out dirty nodes.
+//! 3. [`Subsystem::flush_post_layout`] — runs **after** layout. Used for
+//!    layout-derived recomputation that must read fresh geometry (e.g. the
+//!    `CompositedTransformSubsystem` mapping a target's world position onto
+//!    its follower). Without this post-layout phase, a follower would read
+//!    zero/stale sizes on the first frame and only self-correct on the next
+//!    input event.
+//!
 //! ## Frequency
 //!
-//! - [`Subsystem::flush`](Subsystem::flush) is called **once per fixed-point
-//!   iteration** of `TurAppInternal::flush` (i.e. possibly several times per
-//!   frame, once per iteration until the loop reaches quiescence). A
-//!   subsystem that advances time-driven state (e.g. an animation manager
-//!   sampling the clock) must self-gate so it advances **at most once per
-//!   frame** — use [`SubsystemFlushContext::frame_id`], a per-`flush()` epoch
-//!   that is stable across iterations within one frame but differs across
-//!   frames, and record the last id it advanced for. Signals
-//!   (`mark_dirty` / `request_paint` / `request_next_frame`) are cheap and
-//!   idempotent, so calling them every iteration is fine.
+//! - Both flush phases are called **once per fixed-point iteration** of
+//!   `TurAppInternal::flush` (i.e. possibly several times per frame, once per
+//!   iteration until the loop reaches quiescence). A subsystem that advances
+//!   time-driven state (e.g. an animation manager sampling the clock) must
+//!   self-gate so it advances **at most once per frame** — use
+//!   [`SubsystemFlushContext::frame_id`], a per-`flush()` epoch that is stable
+//!   across iterations within one frame but differs across frames, and record
+//!   the last id it advanced for. Signals (`mark_dirty` / `request_paint` /
+//!   `request_next_frame`) are cheap and idempotent, so calling them every
+//!   iteration is fine.
 //! - [`Subsystem::handle_platform_event`] and [`Subsystem::handle_app_event`]
 //!   are called **per drained event**, every fixed-point iteration, in
 //!   registration order. This matches what `AppHandler` did before the
@@ -53,22 +67,29 @@ use crate::core::screen::Screen;
 /// A long-lived participant in the engine's per-frame flush loop.
 ///
 /// Implementations either advance their own time-driven state (e.g. animation
-/// controllers, audio buffers — override [`flush`](Self::flush)) or react to
-/// drained platform/app events (e.g. wheel/scroll, keyboard/IME — override
+/// controllers, audio buffers — override
+/// [`flush_pre_layout`](Self::flush_pre_layout)) or react to drained
+/// platform/app events (e.g. wheel/scroll, keyboard/IME — override
 /// [`handle_platform_event`](Self::handle_platform_event) /
-/// [`handle_app_event`](Self::handle_app_event)). All three methods default to
+/// [`handle_app_event`](Self::handle_app_event)). Layout-derived
+/// recomputation that needs fresh post-layout geometry goes in
+/// [`flush_post_layout`](Self::flush_post_layout). All four methods default to
 /// no-ops, so a subsystem overrides only the kind it cares about.
 ///
-/// `flush` returns nothing — subsystems push intent back into the engine via
-/// the context: [`SubsystemFlushContext::mark_dirty`] (re-layout + paint this
-/// frame), [`SubsystemFlushContext::request_paint`] (paint this frame), and
-/// [`SubsystemFlushContext::request_next_frame`] (schedule the next vsync).
-/// See the [module docs](crate::core::subsystem) for ordering and frequency
-/// guarantees.
+/// Neither flush phase returns anything — subsystems push intent back into the
+/// engine via the context:
+/// [`SubsystemFlushContext::mark_dirty`](crate::core::subsystem::SubsystemFlushContext::mark_dirty)
+/// (re-layout + paint this frame),
+/// [`SubsystemFlushContext::request_paint`](crate::core::subsystem::SubsystemFlushContext::request_paint)
+/// (paint this frame), and
+/// [`SubsystemFlushContext::request_next_frame`](crate::core::subsystem::SubsystemFlushContext::request_next_frame)
+/// (schedule the next vsync). See the [module docs](crate::core::subsystem)
+/// for ordering and frequency guarantees.
 pub trait Subsystem {
     /// Advance this subsystem's state. Called **every fixed-point iteration**
     /// of `TurAppInternal::flush` (possibly several times per frame), in
-    /// registration order across subsystems.
+    /// registration order across subsystems, and **before** the layout step
+    /// of that iteration.
     ///
     /// Implementations should:
     ///   - gate time-driven work via [`SubsystemFlushContext::frame_id`] so
@@ -78,7 +99,22 @@ pub trait Subsystem {
     ///   - signal the engine via [`SubsystemFlushContext::mark_dirty`] /
     ///     [`SubsystemFlushContext::request_paint`] /
     ///     [`SubsystemFlushContext::request_next_frame`].
-    fn flush(&mut self, _cx: &mut SubsystemFlushContext<'_>) {}
+    fn flush_pre_layout(&mut self, _cx: &mut SubsystemFlushContext<'_>) {}
+
+    /// Recompute layout-derived state. Called **every fixed-point iteration**,
+    /// in registration order across subsystems, **after** the layout step of
+    /// that iteration — so `computed_layout` and
+    /// [`crate::core::elements::NodeTreeData::absolute_affine_of`] reflect the
+    /// freshly-laid-out tree. Use this for anything that must read final
+    /// geometry (e.g. `CompositedTransformSubsystem` mapping a target's world
+    /// position onto its follower). Default: no-op.
+    ///
+    /// Signalling is the same as for [`Self::flush_pre_layout`]. Writing
+    /// paint-only state (e.g. a link-tracked transform read via
+    /// [`crate::core::render::ElementRender::relative_transform`]) does not
+    /// require another layout pass; the engine paints with whatever this phase
+    /// last wrote.
+    fn flush_post_layout(&mut self, _cx: &mut SubsystemFlushContext<'_>) {}
 
     /// React to a platform (input) event drained from
     /// [`PlatformEventQueue`](crate::core::platform::PlatformEventQueue).
@@ -126,9 +162,9 @@ pub struct FlushSignals<'a> {
 /// `onTick` mutations directly) don't panic on a double-borrow. Subsystems
 /// borrow on demand via `cx.element_tree.borrow_mut()` etc.
 ///
-/// Subsystems that just override [`Subsystem::flush`] (e.g. animation) only
-/// need [`Self::boa`]; subsystems that handle events use the element tree /
-/// focus manager / mutation queue / event queues / renderer /
+/// Subsystems that just override [`Subsystem::flush_pre_layout`] (e.g.
+/// animation) only need [`Self::boa`]; subsystems that handle events use the
+/// element tree / focus manager / mutation queue / event queues / renderer /
 /// `screen` / async executor / capability fields.
 ///
 /// ## Signalling the engine

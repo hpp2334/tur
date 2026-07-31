@@ -162,12 +162,13 @@ impl TurAppInternal {
 
             let handled_events = self.flush_app_events(boa_context, &signals);
 
-            // Subsystem flush — runs every fixed-point iteration, in
-            // registration order. Each subsystem owns its own clock + state;
-            // time-driven ones self-gate via `cx.frame_id()` so the clock
-            // advances at most once per frame. Subsystems push intent back via
-            // `cx.mark_dirty()` / `cx.request_paint()` / `cx.request_next_frame()`
-            // instead of returning an outcome.
+            // Pre-layout subsystem flush — runs every fixed-point iteration,
+            // in registration order, BEFORE the layout step. Each subsystem
+            // owns its own clock + state; time-driven ones self-gate via
+            // `cx.frame_id()` so the clock advances at most once per frame.
+            // Subsystems push intent back via `cx.mark_dirty()` /
+            // `cx.request_paint()` / `cx.request_next_frame()` instead of
+            // returning an outcome.
             //
             // Animation (registered via `tur-animation::TurAnimationPlugin`)
             // is the canonical example: it ticks active
@@ -200,7 +201,7 @@ impl TurAppInternal {
                     sub_request_frame: signals.sub_request_frame,
                 };
                 for sub in self.subsystems.borrow_mut().iter_mut() {
-                    sub.flush(&mut cx);
+                    sub.flush_pre_layout(&mut cx);
                 }
                 // `cx` (and its `ctx_guard` borrow) drop here, before the
                 // layout/render borrows below.
@@ -225,6 +226,42 @@ impl TurAppInternal {
             self.app_context
                 .borrow_mut()
                 .layout(self.js_context.dirty.clone(), boa_context);
+        }
+        // Post-layout subsystem flush — runs every fixed-point iteration, in
+        // registration order, AFTER the layout step, so subscribers read the
+        // freshly-laid-out tree. This is where layout-derived recomputation
+        // lives: e.g. `CompositedTransformSubsystem` maps each target's world
+        // position onto its follower using final geometry + the follower's
+        // just-resolved anchor cache. Without this phase a follower would read
+        // zero/stale sizes on the first frame and only self-correct on the
+        // next input event (see `follower_correct_on_first_frame_non_topleft_anchor`).
+        {
+            let need_paint = self.js_context.need_paint.clone();
+            let mut ctx_guard = self.app_context.borrow_mut();
+            let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
+            let mut cx = crate::core::subsystem::SubsystemFlushContext {
+                boa: boa_context,
+                element_tree: ctx.element_tree.clone(),
+                focus_manager: ctx.focus_manager.clone(),
+                mutation_queue: ctx.mutation_queue.clone(),
+                platform_event_queue: &mut ctx.platform_event_queue,
+                app_event_queue: &mut ctx.app_event_queue,
+                renderer: ctx.renderer.as_mut(),
+                screen: &mut ctx.screen,
+                need_paint: &need_paint,
+                async_executor: &ctx.async_executor,
+                capabilities: &ctx.capabilities,
+                frame_id: signals.frame_id,
+                sub_dirty: signals.sub_dirty,
+                sub_request_frame: signals.sub_request_frame,
+            };
+            for sub in self.subsystems.borrow_mut().iter_mut() {
+                sub.flush_post_layout(&mut cx);
+            }
+            // `cx` (and its `ctx_guard` borrow) drop here before the
+            // lifecycle/render borrows below.
+            drop(cx);
+            drop(ctx_guard);
         }
         // Lifecycle hooks fire after layout: on_mounted for inserted
         // elements, on_updated for dirtied elements, before_destroy for

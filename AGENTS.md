@@ -57,7 +57,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   │             PlatformEvent/PointerInput/Ime +    │
 │  │   │             key_event: KeyEvent/Modifiers/      │
 │  │   │             KeydownEvent/KeyupEvent)            │
-│  │   ├── subsystem.rs (Subsystem trait + flush hook)   │
+│  │   ├── subsystem.rs (Subsystem trait + flush_pre/post_layout hooks)   │
 │  │   ├── text/     (TextLayoutData, FontManager —      │
 │  │   │             paint/layout contract types only)   │
 │  │   ├── image_resource.rs (ImageResourceId,           │
@@ -206,10 +206,11 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 
 ### Animation model (Flutter-aligned)
 
-Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hook + `Clock` accessor — no animation code is in `tur-engine`.
+Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hooks (`flush_pre_layout` / `flush_post_layout`) + `Clock` accessor — no animation code is in `tur-engine`.
 
-- **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, three methods, all defaulting to no-op:
-  - `fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_next_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_next_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
+- **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, four methods, all defaulting to no-op:
+  - `fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order, **before** the layout step. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_next_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_next_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
+  - `fn flush_post_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — same cadence + registration order, but **after** the layout step, so it reads the freshly-laid-out tree (`computed_layout`, `absolute_affine_of`). Used for layout-derived recomputation — e.g. `CompositedTransformSubsystem` maps each target's world position onto its follower with final geometry + the follower's just-resolved anchor cache. Without this phase a follower read zero/stale sizes on the first frame and only self-corrected on the next input event (tap/click) — see `follower_correct_on_first_frame_non_topleft_anchor`.
   - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard platform-bridge).
   - `fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent)` — called per drained engine-internal event, every fixed-point iteration, in registration order. Used by scroll-chaining / scroll-to / clipboard-write / clipboard-paste / caret-visibility subsystems.
 
@@ -326,8 +327,9 @@ libs/
                              #   source atom) + ResizeSubsystem (handles
                              #   PlatformEvent::Resize)
         shell/               # Shell (engine-internal scheduler/clock holder)
-        subsystem.rs         # Subsystem trait (flush +
-                             #   handle_platform_event + handle_app_event) +
+        subsystem.rs         # Subsystem trait (flush_pre_layout +
+                             #   flush_post_layout + handle_platform_event +
+                             #   handle_app_event) +
                              #   SubsystemFlushContext + FlushSignals
                              #   (subsystems signal via cx.mark_dirty /
                              #    request_paint / request_next_frame; flush

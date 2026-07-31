@@ -11,6 +11,14 @@
 //! this subsystem) — never in `computed_layout.offset` (which layout owns) — so
 //! a parent relayout can't clobber it and there is no layout/subsystem fight
 //! (no "flash to top-left").
+//!
+//! This recomputation runs in [`Subsystem::flush_post_layout`] (after the
+//! layout step of each fixed-point iteration) so it reads **fresh** target +
+//! follower geometry (`computed_layout.size`, `absolute_affine_of`) and the
+//! follower's just-resolved anchor cache. Running it pre-layout left it reading
+//! zero/stale sizes on the first frame, so a follower with non-`TopLeft` anchors
+//! painted at the wrong offset until the next input event triggered a fresh
+//! flush.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -29,7 +37,7 @@ pub struct CompositedTransformSubsystem {
 }
 
 impl Subsystem for CompositedTransformSubsystem {
-    fn flush(&mut self, cx: &mut SubsystemFlushContext<'_>) {
+    fn flush_post_layout(&mut self, cx: &mut SubsystemFlushContext<'_>) {
         if self.links.borrow().is_empty() {
             return;
         }
