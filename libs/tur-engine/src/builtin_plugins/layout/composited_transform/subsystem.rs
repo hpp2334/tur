@@ -1,21 +1,23 @@
 //! `CompositedTransformSubsystem` — recomputes each follower's tracked
-//! position every flush so it tracks its target through layout / scroll /
+//! transform every flush so it tracks its target through layout / scroll /
 //! reactive / transform changes.
 //!
 //! For each active link it composes the target's full world affine (ancestor
 //! `relative_transform`s), maps the target anchor into canvas space, and writes
-//! the follower's tracked offset onto the **link** (`follower_offset`,
-//! parent-relative). The follower exposes that offset via its
-//! `relative_transform` (a pure translation), so paint, hit-test, and bounds
-//! all resolve to the tracked position. The tracked offset lives on the link
-//! (single owner: this subsystem) — never in `computed_layout.offset` (which
-//! layout owns) — so a parent relayout can't clobber it and there is no
-//! layout/subsystem offset fight (no "flash to top-left").
+//! the follower's tracked **relative affine** onto the **link**
+//! (`follower_transform`). The follower returns that affine verbatim from its
+//! `relative_transform`, so paint, hit-test, and bounds all resolve to the
+//! tracked position. The tracked transform lives on the link (single owner:
+//! this subsystem) — never in `computed_layout.offset` (which layout owns) — so
+//! a parent relayout can't clobber it and there is no layout/subsystem fight
+//! (no "flash to top-left").
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::core::layout::Offset;
+use vello_common::kurbo::Affine;
+
+use crate::core::element::ElementNodeId;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use super::follower::FollowerElement;
@@ -81,25 +83,27 @@ impl Subsystem for CompositedTransformSubsystem {
                 follower_node.computed_layout.size,
             );
 
-            // Convert the canvas-space `desired` origin to a PARENT-relative
-            // offset (the form `relative_transform` consumes) by subtracting
-            // the follower's ancestor accumulated offset. `computed_layout.offset`
-            // is layout-owned (typically (0,0) for an overlay slot) and is NOT
-            // read for tracking — only the ancestor chain matters here.
-            let current_abs = tree.absolute_offset_of(follower_id);
-            let current_rel = follower_node.computed_layout.offset;
-            let ancestor_abs = Offset::new(
-                current_abs.x - current_rel.x,
-                current_abs.y - current_rel.y,
-            );
-            let new_offset = Offset::new(desired.x - ancestor_abs.x, desired.y - ancestor_abs.y);
+            // Solve the follower's relative affine: we want the follower's
+            // world origin at `desired`, so compose `parent_world⁻¹ ·
+            // translate(desired)`. Using the full parent affine (not summed
+            // offsets) means a follower living under a rotated/scaled
+            // `Transform` is tracked correctly — the inverse maps the desired
+            // world point back into the parent's frame, exactly as
+            // `relative_transform` will compose it during paint/hit-test.
+            let parent_world = follower_node
+                .parent
+                .map(|pid| tree.absolute_affine_of(ElementNodeId::new(pid.as_u64())))
+                .unwrap_or(Affine::IDENTITY);
+            let new_transform =
+                parent_world.inverse() * Affine::translate((desired.x, desired.y));
 
-            let prev = state.follower_offset.get();
-            let changed = (new_offset.x - prev.x).abs() > 1e-9
-                || (new_offset.y - prev.y).abs() > 1e-9;
-            // Write the tracked offset onto the link (single owner). No tree
-            // mutation — the follower reads this via `relative_transform`.
-            state.follower_offset.set(new_offset);
+            let prev = state.follower_transform.get();
+            let pm = prev.as_coeffs();
+            let nm = new_transform.as_coeffs();
+            let changed = pm.iter().zip(nm.iter()).any(|(a, b)| (a - b).abs() > 1e-9);
+            // Write the tracked transform onto the link (single owner). No
+            // tree mutation — the follower reads this via `relative_transform`.
+            state.follower_transform.set(new_transform);
             if changed {
                 any_changed = true;
             }

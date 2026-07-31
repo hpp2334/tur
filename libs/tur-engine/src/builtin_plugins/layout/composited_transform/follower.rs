@@ -1,10 +1,11 @@
 //! `CompositedTransformFollower` — renders at a target's anchor, tracked
 //! continuously by [`super::subsystem::CompositedTransformSubsystem`].
 //!
-//! The follower's `computed_layout.offset` is written by the subsystem each
-//! flush (a pure translation), so paint + hit-testing work through the normal
-//! offset accumulation. Place the follower in a root overlay slot (the Flutter
-//! `Overlay` pattern) so it isn't clipped and paints on top.
+//! The follower's tracked transform is written onto the **link** each flush and
+//! returned verbatim from `relative_transform`, so paint + hit-testing resolve
+//! to the tracked position through the normal transform stack. Place the
+//! follower in a root overlay slot (the Flutter `Overlay` pattern) so it isn't
+//! clipped and paints on top.
 
 use std::rc::Rc;
 
@@ -180,20 +181,18 @@ impl ElementRender for FollowerElement {
         "tur_composited_transform_follower"
     }
 
-    /// The follower's position is the link-tracked offset (written each flush
-    /// by `CompositedTransformSubsystem`), NOT its layout offset. Exposing it
-    /// here as a pure translation means paint, hit-test, and bounds all
-    /// resolve to the tracked position from one source — and layout freely
-    /// owns `computed_layout.offset` (the follower ignores it), so a parent
-    /// relayout can never clobber the tracking offset (no flash).
+    /// The follower's position is the link-tracked transform (written each flush
+    /// by `CompositedTransformSubsystem`), NOT its layout offset. Returning the
+    /// stored affine verbatim means paint, hit-test, and bounds all resolve to
+    /// the tracked position from one source — and layout freely owns
+    /// `computed_layout.offset` (the follower ignores it), so a parent relayout
+    /// can never clobber the tracking transform (no flash).
     fn relative_transform(&self, _layout: &ComputedLayout) -> Affine {
-        let off = self
-            .view
+        self.view
             .link
             .as_ref()
-            .map(|l| l.follower_offset.get())
-            .unwrap_or(Offset::ZERO);
-        Affine::translate((off.x, off.y))
+            .map(|l| l.follower_transform.get())
+            .unwrap_or(Affine::IDENTITY)
     }
 
     fn paint(

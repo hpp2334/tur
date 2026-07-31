@@ -98,6 +98,39 @@ fn follower_tracks_target_through_transform() {
     let _ = target_id;
 }
 
+/// The follower's OWN ancestor chain carries a paint-only `Transform` translate
+/// (translateX 50, translateY 30) — `computed_layout.offset` stays (0,0). The
+/// subsystem must solve `parent_world⁻¹ · translate(desired)` so the follower
+/// still lands on the target's top-left in WORLD space (100, 80). With the old
+/// offset-subtraction math the ancestor translate was ignored and the follower
+/// landed at (150, 110) — the translate stacked on top of the desired point.
+#[test]
+fn follower_tracks_through_own_ancestor_transform() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("composited-transform-follower-under-transform")
+        .unwrap();
+    app.render();
+
+    let follower_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        find_by_kind(
+            &tree,
+            root.id,
+            &ElementKind::new("tur_composited_transform_follower"),
+        )
+        .expect("follower mounted")
+    };
+
+    let (fx, fy) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx - 100.0).abs() < 1e-3 && (fy - 80.0).abs() < 1e-3,
+        "follower under an ancestor Transform translate should still land on the \
+         target's world position (100, 80) — got ({fx}, {fy}) \
+         (offset-subtraction math would give (150, 110))"
+    );
+}
+
 /// `targetAnchor` is reactive (`Val<Alignment>`): flipping the source from
 /// `TopLeft` to `BottomRight` (via a button click) must relocate the follower
 /// from the target's top-left to its bottom-right on the next frame.
@@ -246,7 +279,7 @@ fn follower_no_flash_on_sibling_relayout() {
     );
 
     // (b) Yet the follower still PAINTS at the tracked (100, 80) — resolved
-    // through relative_transform (the link's follower_offset), not the layout
+    // through relative_transform (the link's follower_transform), not the layout
     // offset.
     let (fx1, fy1) = abs_top_left(&app, follower_id);
     assert!(

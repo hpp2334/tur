@@ -146,38 +146,13 @@ impl NodeTreeData {
         self.fragments.contains_key(&FragmentNodeId::new(id.as_u64()))
     }
 
-    /// The node's absolute (canvas-space) origin, computed by summing
-    /// `computed_layout.offset` up the ancestor chain (hopping through
-    /// zero-offset fragments). Layout-only — does NOT include ancestor
-    /// paint-only transforms (e.g. `Transform`). Returns `Offset::ZERO` for
-    /// an unknown id.
-    pub fn absolute_offset_of(&self, id: ElementNodeId) -> Offset {
-        let mut acc = Offset::ZERO;
-        // Start from the node's own offset, then walk parents.
-        let mut current: Option<NodeId> = Some(id.into());
-        while let Some(cid) = current {
-            if let Some(n) = self.elements.get(&ElementNodeId::new(cid.as_u64())) {
-                acc = Offset::new(
-                    acc.x + n.computed_layout.offset.x,
-                    acc.y + n.computed_layout.offset.y,
-                );
-                current = n.parent;
-            } else if let Some(f) = self.fragments.get(&FragmentNodeId::new(cid.as_u64())) {
-                // Fragments have zero offset; hop to their parent.
-                current = Some(f.parent);
-            } else {
-                break;
-            }
-        }
-        acc
-    }
-
     /// The node's absolute (world) affine: the product of each ancestor's
     /// `relative_transform` from root → leaf (hopping zero-offset fragments),
     /// so it includes ancestor `Transform` rotate/scale and (for followers)
-    /// link-tracked translations. This is the single source of truth consulted
-    /// by paint positioning, hit-test coordinate conversion, and bounds — and
-    /// by `CompositedTransformSubsystem` to read a target's world position.
+    /// link-tracked translations. This is the **single** source of truth
+    /// consulted by paint positioning, hit-test coordinate conversion, bounds,
+    /// and the `CompositedTransformSubsystem` (to read both a target's world
+    /// position and a follower's parent frame).
     pub fn absolute_affine_of(&self, id: ElementNodeId) -> Affine {
         // Collect the chain node → root.
         let mut chain: Vec<ElementNodeId> = Vec::new();
