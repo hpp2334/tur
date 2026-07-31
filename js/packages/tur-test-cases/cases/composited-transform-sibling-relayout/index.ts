@@ -55,11 +55,14 @@ export default view(() => {
                 left: 300,
                 top: 540,
                 child: PointerInteract({
-                    onClick: mutate(() => set(tall$, true)) as unknown as Mutation<
-                        [PointerInteractEvent],
-                        void
-                    >,
-                    child: Container({ width: 60, height: 30, color: "#16a34a" }),
+                    onClick: mutate(() =>
+                        set(tall$, true),
+                    ) as unknown as Mutation<[PointerInteractEvent], void>,
+                    child: Container({
+                        width: 60,
+                        height: 30,
+                        color: "#16a34a",
+                    }),
                 }),
             }),
         ],
