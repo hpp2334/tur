@@ -5,8 +5,8 @@
  * (`core::bridge::module_loader`) under the specifier `"tur:core"`.
  * It exports only the reactive substrate + event framework: atom primitives
  * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the `render` mount entry
- * point, and the opaque meta-types (`Element`/`Atom`/`Mutation`/`Readable`/
- * `Val`/`ReadonlyStoreCtx`/`StoreCtx`).
+ * point, and the opaque meta-types (`Element`/`Source`/`Derived`/`Mutation`/
+ * `Readable`/`Val`/`ReadonlyStoreCtx`/`StoreCtx`).
  *
  * This is the authoritative contract for the engine's reactive layer. The
  * widget library (`tur:std`, declared in `@tur-ng/std`) re-exports
@@ -14,8 +14,8 @@
  * Consumers normally import from `tur:std`; `@tur-ng/animation` and
  * other low-level libraries may import directly from `tur:core`.
  *
- * Handles (`Element`, `Atom`, `Mutation`) are opaque — the engine hands out
- * Rust-owned `JsObject` opaques; callers must treat them as opaque.
+ * Handles (`Element`, `Source`, `Derived`, `Mutation`) are opaque — the engine
+ * hands out Rust-owned `JsObject` opaques; callers must treat them as opaque.
  *
  * The event framework is two functions: `mutate` (declare a handler as a
  * deferred `Mutation` atom) and `set` (dispatch it). The concrete event
@@ -35,16 +35,22 @@ declare module "tur:core" {
      *  Opaque — the engine owns the underlying `ElementTree` node. */
     export interface Element {}
 
-    /** A writable reactive atom holding a value of type `T`. `T` is recovered at
-     *  the call site by the generic primitives (`get`, `set`) — no runtime field. */
-    export interface Atom<T> {}
+    /** A writable reactive atom holding a value of type `T` — created via
+     *  `source()`. `T` is recovered at the call site by the generic primitives
+     *  (`get`, `set`) — no runtime field. */
+    export interface Source<T> {}
+
+    /** A read-only computed atom holding a value of type `T` — created via
+     *  `derive()`. Its value is recomputed by the engine from its declared
+     *  dependencies; `set` rejects derived atoms at runtime. */
+    export interface Derived<T> {}
 
     /** A mutation atom: a deferred callback `(ctx, ...Args) => R`. This is the
      *  event-handler type — `mutate` creates one, `set` invokes it. */
     export interface Mutation<Args extends unknown[] = [], R = void> {}
 
-    /** Anything you can read a current value from (an `Atom` or derived atom). */
-    export type Readable<T> = Atom<T>;
+    /** Anything you can read a current value from (a source or derived atom). */
+    export type Readable<T> = Source<T> | Derived<T>;
 
     /** A value-or-reactive: either a plain `T` or a `Readable<T>`. The engine
      *  re-reads reactives each layout pass; plain values are fixed at build time. */
@@ -66,7 +72,7 @@ declare module "tur:core" {
     /** Read/write store context. Handed to `mutate` and other side-effecting
      *  closures (`onTick`, event handlers, …). Extends `ReadonlyStoreCtx`. */
     export interface StoreCtx extends ReadonlyStoreCtx {
-        set<T>(s: Atom<T>, value: T): void;
+        set<T>(s: Source<T>, value: T): void;
         set<Args extends unknown[], R>(m: Mutation<Args, R>, ...args: Args): R;
     }
 
@@ -74,13 +80,13 @@ declare module "tur:core" {
     // Reactive primitives
     // ---------------------------------------------------------------------------
 
-    export function source<T>(value: T): Atom<T>;
-    export function derive<T>(fn: (ctx: ReadonlyStoreCtx) => T): Readable<T>;
+    export function source<T>(value: T): Source<T>;
+    export function derive<T>(fn: (ctx: ReadonlyStoreCtx) => T): Derived<T>;
     export function mutate<Args extends unknown[], R>(
         fn: (ctx: StoreCtx, ...args: Args) => R,
     ): Mutation<Args, R>;
     export function get<T>(a: Readable<T>): T;
-    export function set<T>(s: Atom<T>, value: T): void;
+    export function set<T>(s: Source<T>, value: T): void;
     export function set<Args extends unknown[], R>(
         m: Mutation<Args, R>,
         ...args: Args

@@ -1,8 +1,8 @@
 import {
-    type Atom,
     derive,
     get,
     launch,
+    type Source,
     set,
     sleep,
     source,
@@ -91,7 +91,7 @@ export const editorWidth$ = source(600);
 // "Compiled Xs ago" — `now$` ticks every 5s so the relative timestamp in the
 // status bar stays fresh without manual refresh.
 export const lastCompiledAtMs$ = source<number>(Date.now());
-export const now$: Atom<number> = source<number>(Date.now());
+export const now$: Source<number> = source<number>(Date.now());
 // Permanent ticker: never cancelled. A `launch` coroutine loop replaces the
 // old `setInterval` — no timer id to manage.
 launch(function* () {
