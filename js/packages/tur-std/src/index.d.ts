@@ -20,7 +20,7 @@
 
 declare module "tur:std" {
     // Re-export the reactive core (source/derive/mutate/get/set/view/render,
-    // Element/Atom/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
+    // Element/Source/Derived/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
     export * from "tur:core";
 
     // Core meta-types used by the prop interfaces below.
@@ -86,8 +86,9 @@ declare module "tur:std" {
 
     /** Engine-owned reactive atom holding the live canvas size
      *  (`{width, height}` in CSS pixels). Updated each frame from the resize
-     *  handler; import from `tur:std`. */
-    export const viewportSize$: Atom<ViewportSize>;
+     *  handler; import from `tur:std`. Read-only to app code — typed as a
+     *  `Derived` so `set(viewportSize$, …)` is rejected at compile time. */
+    export const viewportSize$: Derived<ViewportSize>;
 
     /** OS cursor keywords (CSS cursor names). Mirrors `tur_engine::core::platform::Cursor`. */
     export type Cursor =

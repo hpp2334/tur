@@ -1,5 +1,4 @@
 import {
-    type Atom,
     createSvgResource,
     createTextEditingController,
     mutate,
@@ -134,9 +133,6 @@ export function toggleTask(ctx: StoreCtx, index: number): void {
 export function requestRemove(ctx: StoreCtx, index: number): void {
     ctx.set(removeTarget$, index);
 }
-
-// Re-export for type-only imports in views.
-export type { Atom };
 
 // --- SVG icon resources ----------------------------------------------------
 //
