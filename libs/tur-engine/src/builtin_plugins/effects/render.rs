@@ -1,7 +1,8 @@
-use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::render::{Canvas, ElementRender, PaintContext};
-use tur_engine::core::layout::{ComputedLayout, Offset, Size};
 use vello_common::kurbo::Affine;
+
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{ComputedLayout, Size};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::{OpacityElement, TransformElement, TransformPainting};
 
@@ -13,7 +14,6 @@ impl ElementRender for OpacityElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -21,7 +21,7 @@ impl ElementRender for OpacityElement {
         let opacity: f32 = self.painting.value;
         canvas.push_opacity(opacity);
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
         canvas.pop_opacity();
     }
@@ -36,7 +36,7 @@ impl TransformElement {
     /// is expressed inside the child box as `alignment.align_offset(size, 0)`.
     /// `translateX/Y` are plain outer shifts applied to the already-pivoted
     /// element (they are not themselves pivoted).
-    fn transform_matrix(p: &TransformPainting, size: Size) -> Affine {
+    pub(crate) fn transform_matrix(p: &TransformPainting, size: Size) -> Affine {
         let sx = p.scale_x.or(p.scale).unwrap_or(1.0);
         let sy = p.scale_y.or(p.scale).unwrap_or(1.0);
         let angle = p.rotate.unwrap_or(0.0);
@@ -61,27 +61,32 @@ impl ElementRender for TransformElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
-        layout: &ComputedLayout,
+        _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let local = Self::transform_matrix(&self.painting, layout.size);
-        // Combine the canvas offset (parent-relative origin) with the local
-        // transform so the child paints in the right place.
-        let combined = Affine::translate((offset.x, offset.y)) * local;
-        canvas.push_transform(combined);
+        // The rotate/scale/translate matrix is exposed via
+        // `relative_transform`; the paint walk pushes it onto the canvas
+        // transform stack, so children already paint in the transformed
+        // space — no manual `push_transform` here.
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, Offset::ZERO);
+            paint_ctx.paint_child(child_id, canvas);
         }
-        canvas.pop_transform();
+    }
+
+    /// The element's full transform relative to its parent: the layout
+    /// translation composed with the resolved rotate/scale/translate matrix.
+    /// Paint, hit-test, and bounds all consult this (see `relative_transform`).
+    fn relative_transform(&self, layout: &ComputedLayout) -> Affine {
+        Affine::translate((layout.offset.x, layout.offset.y))
+            * Self::transform_matrix(&self.painting, layout.size)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tur_engine::core::layout::{Alignment, Size};
+    use crate::core::layout::{Alignment, Size};
     use vello_common::kurbo::Point;
 
     fn approx(a: Point, b: Point) -> bool {
@@ -127,7 +132,10 @@ mod tests {
             mids.iter().any(|q| approx(mapped, *q)),
             "rotated point {mapped:?} should be an edge-midpoint"
         );
-        assert!(!approx(mapped, Point::new(10.0, 5.0)), "point should have moved");
+        assert!(
+            !approx(mapped, Point::new(10.0, 5.0)),
+            "point should have moved"
+        );
     }
 
     /// Scale must pivot around the center: the center is invariant and the

@@ -1,6 +1,7 @@
 use std::any::Any;
 
 use boa_engine::Context;
+use vello_common::kurbo::Affine;
 use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
@@ -64,12 +65,13 @@ trait Erased: 'static {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     );
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool;
+
+    fn relative_transform(&self, layout: &ComputedLayout) -> Affine;
 
     fn subscribe(&self, cx: &mut SubscribeCx);
 
@@ -189,16 +191,19 @@ where
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        <Self as ElementRender>::paint(self, canvas, offset, layout, children, paint_ctx);
+        <Self as ElementRender>::paint(self, canvas, layout, children, paint_ctx);
     }
 
     fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         <Self as ElementRender>::hit_test(self, position, layout)
+    }
+
+    fn relative_transform(&self, layout: &ComputedLayout) -> Affine {
+        <Self as ElementRender>::relative_transform(self, layout)
     }
 
     fn subscribe(&self, cx: &mut SubscribeCx) {
@@ -453,17 +458,21 @@ impl AnyElement {
     pub fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        self.inner
-            .paint(canvas, offset, layout, children, paint_ctx);
+        self.inner.paint(canvas, layout, children, paint_ctx);
     }
 
     pub fn hit_test(&self, position: Offset, layout: &ComputedLayout) -> bool {
         self.inner.hit_test(position, layout)
+    }
+
+    /// This element's transform relative to its parent (see
+    /// [`crate::core::render::ElementRender::relative_transform`]).
+    pub fn relative_transform(&self, layout: &ComputedLayout) -> Affine {
+        self.inner.relative_transform(layout)
     }
 
     /// Declare this element's reactive atom dependencies into `cx` (the

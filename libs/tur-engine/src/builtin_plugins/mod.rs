@@ -17,6 +17,7 @@
 pub mod clipboard;
 pub mod console;
 pub mod control_flow;
+pub mod effects;
 pub mod focus;
 pub mod gesture;
 pub mod image;

@@ -7,7 +7,6 @@ const DEFAULT_SELECTION_COLOR: Color = Color::rgba(56, 132, 255, 140);
 
 pub fn paint_selection(
     canvas: &mut dyn crate::core::render::Canvas,
-    offset: Offset,
     layout_data: &TextLayoutData,
     start_byte: usize,
     end_byte: usize,
@@ -44,11 +43,10 @@ pub fn paint_selection(
         };
         let line_info = &layout_data.line_infos[line_idx];
 
+        // Local coordinates — the canvas transform already positions the text
+        // box at its absolute origin.
         canvas.fill_geometry(
-            Offset::new(
-                offset.x + x_start as f64,
-                offset.y + line_info.top as f64,
-            ),
+            Offset::new(x_start as f64, line_info.top as f64),
             &Geometry::Rect(Size::new(
                 (x_end - x_start) as f64,
                 line_info.height as f64,

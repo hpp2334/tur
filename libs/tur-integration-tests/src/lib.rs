@@ -10,7 +10,7 @@ use std::time::Duration;
 use boa_engine::context::time::{Clock, FixedClock};
 use boa_engine::NativeFunction;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
-use tur_engine::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
@@ -528,6 +528,32 @@ impl TurTestApp {
         self.ensure_flushed();
     }
 
+    /// Enqueue a full click (pointer-down + pointer-up) **without** flushing,
+    /// so the caller can observe a single intermediate frame via [`Self::pump`].
+    /// The down/up land in the same platform-event drain, which the gesture
+    /// recognizer processes sequentially (down sets composer state, up reads
+    /// it) — so a click is produced. Use this to catch transient single-frame
+    /// artifacts (e.g. a follower flashing to its layout-default offset before
+    /// a subsystem re-corrects it) that [`Self::click`] would step past.
+    pub fn enqueue_click(&mut self, x: f64, y: f64) {
+        let time_ms = self.bump_time(40);
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Mouse,
+            }));
+        let time_ms = self.bump_time(40);
+        self.inner
+            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                position: Offset::new(x, y),
+                button: MouseButton::Left,
+                time_ms,
+                device: PointerDeviceKind::Mouse,
+            }));
+    }
+
     pub fn send_key(&mut self, key: &str) {
         self.inner.push_platform_event(PlatformEvent::Key(KeyEvent {
             key: key.to_string(),
@@ -822,21 +848,12 @@ impl TurTestApp {
     pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
         let tree = self.inner.element_tree();
         let node = tree.get_element(id)?;
-        let mut x = node.computed_layout.offset.x;
-        let mut y = node.computed_layout.offset.y;
-        let mut current = node.parent;
-        while let Some(cid) = current {
-            if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
-                x += n.computed_layout.offset.x;
-                y += n.computed_layout.offset.y;
-                current = n.parent;
-            } else if let Some(f) = tree.get_fragment(FragmentNodeId::new(cid.as_u64())) {
-                // Fragments have zero offset; hop to their real-ancestor parent.
-                current = Some(f.parent);
-            } else {
-                break;
-            }
-        }
+        // The node's painted canvas origin = the translation of its absolute
+        // (world) affine. This includes ancestor `Transform` rotate/scale and
+        // (for followers) link-tracked translations, so the bounds match where
+        // the element is actually painted + hit-tested.
+        let origin = tree.absolute_affine_of(id).translation();
+        let (x, y) = (origin.x, origin.y);
         Some(Rect {
             left: x,
             top: y,

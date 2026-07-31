@@ -17,7 +17,6 @@ impl ElementRender for ScrollbarElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         _children: &[ElementNodeId],
         _paint_ctx: &PaintContext,
@@ -49,7 +48,7 @@ impl ElementRender for ScrollbarElement {
         // when idle, light-gray when hovered).
         if let Some(track_brush) = p.track_color.as_ref() {
             let track_geometry = Geometry::Rect(Size::new(track_w, track_h));
-            canvas.fill_geometry(offset, &track_geometry, track_brush);
+            canvas.fill_geometry(Offset::ZERO, &track_geometry, track_brush);
         }
 
         let brush = p
@@ -66,10 +65,8 @@ impl ElementRender for ScrollbarElement {
             size: Size::new(track_w, thumb_h),
             radius,
         };
-        canvas.fill_geometry(
-            Offset::new(offset.x, offset.y + thumb_top),
-            &geometry,
-            &brush,
-        );
+        // Thumb sits at a local `thumb_top` within the track; the canvas
+        // transform already positions the track at its absolute origin.
+        canvas.fill_geometry(Offset::new(0.0, thumb_top), &geometry, &brush);
     }
 }

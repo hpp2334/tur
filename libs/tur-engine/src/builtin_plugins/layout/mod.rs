@@ -5,6 +5,7 @@
 //! - `Container` / `SizedBox` (explicit width/height + decoration).
 //! - `Grid` (row-major tiling of static children into a max-extent grid).
 
+pub(in crate::builtin_plugins) mod composited_transform;
 pub(in crate::builtin_plugins) mod container;
 pub mod enums;
 pub(in crate::builtin_plugins) mod flex;

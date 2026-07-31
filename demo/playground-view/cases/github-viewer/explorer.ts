@@ -1,4 +1,3 @@
-import { Transform } from "tur:animation";
 import {
     Alignment,
     Axis,
@@ -25,6 +24,7 @@ import {
     set,
     source,
     Text,
+    Transform,
 } from "tur:std";
 import {
     type DirEntry,

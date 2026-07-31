@@ -5,18 +5,17 @@
 //!   - the `AnimationSubsystem` flush participant (ticks active controllers
 //!     once per frame via the engine's [`Subsystem`](tur_engine::core::subsystem::Subsystem)
 //!     mechanism),
-//!   - the `Opacity` and `Transform` visual-effect elements,
-//!   - the `tur:animation` JS module combining the native bridge fns
-//!     (`createAnimationController`, `Opacity`, `Transform`) with the JS-defined
-//!     implicit-animation widgets (`AnimatedContainer`, `AnimatedOpacity`,
-//!     `AnimatedPositioned`, `Tween`, `ColorTween`).
+//!   - the `tur:animation` JS module combining the native bridge fn
+//!     (`createAnimationController`) with the JS-defined implicit-animation
+//!     widgets (`AnimatedContainer`, `AnimatedOpacity`, `AnimatedPositioned`,
+//!     `Tween`, `ColorTween`). The visual effects `Opacity` / `Transform`
+//!     used by those widgets ship as part of `tur:std`.
 //!
 //! `TurAnimationPlugin` carries no per-instance state; the animation manager
 //! lives inside the `AnimationSubsystem` for the lifetime of the app.
 
 pub mod controller;
 pub mod curve;
-pub mod effects;
 pub mod event;
 pub mod flush_hook;
 pub mod manager;

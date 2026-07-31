@@ -90,13 +90,12 @@ impl ElementRender for RootElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
     }
 }

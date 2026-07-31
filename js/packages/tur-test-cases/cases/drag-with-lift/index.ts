@@ -1,4 +1,4 @@
-import { createAnimationController, Transform } from "tur:animation";
+import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
@@ -9,6 +9,7 @@ import {
     set,
     source,
     Text,
+    Transform,
     view,
 } from "tur:std";
 

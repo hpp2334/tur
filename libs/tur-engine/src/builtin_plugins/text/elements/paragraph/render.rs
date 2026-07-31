@@ -14,7 +14,6 @@ impl ElementRender for TextElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -29,9 +28,9 @@ impl ElementRender for TextElement {
             } else {
                 (self.selection_end, self.selection_anchor)
             };
-            paint_helpers::paint_selection(canvas, offset, layout_data, s, e);
+            paint_helpers::paint_selection(canvas, layout_data, s, e);
         }
 
-        canvas.fill_text_layout(offset, layout_data);
+        canvas.fill_text_layout(Offset::ZERO, layout_data);
     }
 }

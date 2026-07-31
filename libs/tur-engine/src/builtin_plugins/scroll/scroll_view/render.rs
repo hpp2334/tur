@@ -13,18 +13,17 @@ impl ElementRender for ScrollViewElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
         if let Some(ref brush) = self.painting.color {
-            canvas.fill_geometry(offset, &Geometry::Rect(layout.size), brush);
+            canvas.fill_geometry(Offset::ZERO, &Geometry::Rect(layout.size), brush);
         }
 
-        canvas.push_clip(offset, layout.size);
+        canvas.push_clip(Offset::ZERO, layout.size);
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
         canvas.pop_clip();
     }
