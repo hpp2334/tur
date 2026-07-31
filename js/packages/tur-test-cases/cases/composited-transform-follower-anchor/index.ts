@@ -2,13 +2,13 @@ import {
     Alignment,
     CompositedTransformFollower,
     CompositedTransformTarget,
+    Container,
     createLayerLink,
     Positioned,
     SizedBox,
     Stack,
-    view,
+    view
 } from "tur:std";
-import { Container } from "tur:std";
 
 // Regression: `followerAnchor` must be honored. Target (blue, 60×40) sits at
 // (100, 80) → its bottom-right is (160, 120). The follower (red, 60×40) with
