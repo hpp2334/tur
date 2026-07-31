@@ -41,6 +41,7 @@ use crate::error::TurError;
 
 use link::CompositedLinkState;
 use subsystem::CompositedTransformSubsystem;
+
 /// A JS-side closure entry: `(js_name, length, native_function)`.
 pub(crate) type ClosureEntry = (&'static str, usize, NativeFunction);
 

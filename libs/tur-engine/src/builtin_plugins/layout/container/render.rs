@@ -13,7 +13,6 @@ impl ElementRender for ContainerElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -30,7 +29,7 @@ impl ElementRender for ContainerElement {
             && sb > 0.0 {
                 let radius = border_radius.unwrap_or(0.0);
                 canvas.draw_shadow(
-                    offset,
+                    Offset::ZERO,
                     layout.size,
                     sc,
                     radius,
@@ -47,7 +46,7 @@ impl ElementRender for ContainerElement {
                 },
                 _ => Geometry::Rect(layout.size),
             };
-            canvas.fill_geometry(offset, &geometry, brush);
+            canvas.fill_geometry(Offset::ZERO, &geometry, brush);
         }
 
         if let (Some(bc), Some(bw)) = (border_color, border_width)
@@ -67,7 +66,9 @@ impl ElementRender for ContainerElement {
                     ),
                     BorderPosition::Center => (0.0, 0.0, s),
                 };
-                let border_offset = Offset::new(offset.x + ox, offset.y + oy);
+                // Local inset/outset — the canvas transform already positions
+                // the box at its absolute origin.
+                let border_offset = Offset::new(ox, oy);
                 let geometry = match border_radius {
                     Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
                     _ => Geometry::Rect(size),
@@ -76,7 +77,7 @@ impl ElementRender for ContainerElement {
             }
 
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
     }
 }

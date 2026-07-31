@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::{js_string, Context, JsResult, JsValue};
-use vello_common::kurbo::Point;
+use vello_common::kurbo::{Affine, Point};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_view, Ptr};
@@ -180,10 +180,25 @@ impl ElementRender for FollowerElement {
         "tur_composited_transform_follower"
     }
 
+    /// The follower's position is the link-tracked offset (written each flush
+    /// by `CompositedTransformSubsystem`), NOT its layout offset. Exposing it
+    /// here as a pure translation means paint, hit-test, and bounds all
+    /// resolve to the tracked position from one source — and layout freely
+    /// owns `computed_layout.offset` (the follower ignores it), so a parent
+    /// relayout can never clobber the tracking offset (no flash).
+    fn relative_transform(&self, _layout: &ComputedLayout) -> Affine {
+        let off = self
+            .view
+            .link
+            .as_ref()
+            .map(|l| l.follower_offset.get())
+            .unwrap_or(Offset::ZERO);
+        Affine::translate((off.x, off.y))
+    }
+
     fn paint(
         &self,
         _canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -192,7 +207,7 @@ impl ElementRender for FollowerElement {
             return;
         }
         for &child_id in children {
-            paint_ctx.paint_child(child_id, _canvas, offset);
+            paint_ctx.paint_child(child_id, _canvas);
         }
     }
 }

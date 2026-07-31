@@ -187,3 +187,70 @@ fn follower_tracks_target_through_scroll() {
         "follower should track target after scroll ({tx1}, {ty1}) — got ({fx1}, {fy1})"
     );
 }
+
+/// Regression for the follower "flash to top-left" bug. The follower's tracked
+/// position must be **single-owner** state: the link owns it (read via
+/// `relative_transform`), layout owns `computed_layout.offset`. Before the
+/// fix, the subsystem wrote `computed_layout.offset` and layout clobbered it
+/// on every sibling relayout — two writers fighting, oscillating within a
+/// frame (the flash).
+///
+/// This pins the invariant structurally: after an unrelated sibling relayout,
+/// (a) the follower's `computed_layout.offset` is the **layout** value
+/// `(0,0)` — the subsystem never touches it, and (b) the follower's painted
+/// position (absolute transform) is still the tracked `(100,80)`. RED on the
+/// original code and on the `is_self_positioning` hack (there
+/// `computed_layout.offset` ends at `(100,80)`); GREEN only with the
+/// link-based `relative_transform` design.
+#[test]
+fn follower_no_flash_on_sibling_relayout() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("composited-transform-sibling-relayout").unwrap();
+
+    let follower_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        find_by_kind(
+            &tree,
+            root.id,
+            &ElementKind::new("tur_composited_transform_follower"),
+        )
+        .expect("follower mounted")
+    };
+
+    // Settled: follower tracks the target's top-left (100, 80).
+    let (fx0, fy0) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx0 - 100.0).abs() < 1e-3 && (fy0 - 80.0).abs() < 1e-3,
+        "follower should start on target (100, 80) — got ({fx0}, {fy0})"
+    );
+
+    // Flip the reactive sibling (button at (300, 540) → center 330, 555)
+    // WITHOUT settling, then pump exactly one frame. The sibling resize forces
+    // the common Stack ancestor to relayout.
+    app.enqueue_click(330.0, 555.0);
+    let _ = app.pump();
+
+    // (a) Layout owns computed_layout.offset — it is the Stack-assigned
+    // (0,0), NOT a tracking value. The subsystem must not have written it.
+    let layout_offset = {
+        let tree = app.element_tree();
+        let n = tree.get_element(follower_id).unwrap();
+        n.computed_layout.offset
+    };
+    assert!(
+        layout_offset.x.abs() < 1e-3 && layout_offset.y.abs() < 1e-3,
+        "computed_layout.offset should be layout's (0,0) (subsystem must not own it) — got ({}, {})",
+        layout_offset.x,
+        layout_offset.y
+    );
+
+    // (b) Yet the follower still PAINTS at the tracked (100, 80) — resolved
+    // through relative_transform (the link's follower_offset), not the layout
+    // offset.
+    let (fx1, fy1) = abs_top_left(&app, follower_id);
+    assert!(
+        (fx1 - 100.0).abs() < 1e-3 && (fy1 - 80.0).abs() < 1e-3,
+        "follower must still paint at the tracked target (100, 80) — got ({fx1}, {fy1})"
+    );
+}

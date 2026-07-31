@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use parley::LayoutContext as ParleyLayoutContext;
 use crate::core::layout::{Constraints, Offset, Size};
+use vello_common::kurbo::{Affine, Point};
 
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
@@ -169,6 +170,46 @@ impl NodeTreeData {
             }
         }
         acc
+    }
+
+    /// The node's absolute (world) affine: the product of each ancestor's
+    /// `relative_transform` from root → leaf (hopping zero-offset fragments),
+    /// so it includes ancestor `Transform` rotate/scale and (for followers)
+    /// link-tracked translations. This is the single source of truth consulted
+    /// by paint positioning, hit-test coordinate conversion, and bounds — and
+    /// by `CompositedTransformSubsystem` to read a target's world position.
+    pub fn absolute_affine_of(&self, id: ElementNodeId) -> Affine {
+        // Collect the chain node → root.
+        let mut chain: Vec<ElementNodeId> = Vec::new();
+        let mut cursor: Option<NodeId> = Some(id.into());
+        while let Some(cid) = cursor {
+            let eid = ElementNodeId::new(cid.as_u64());
+            let fid = FragmentNodeId::new(cid.as_u64());
+            if let Some(n) = self.elements.get(&eid) {
+                chain.push(eid);
+                cursor = n.parent;
+            } else if let Some(f) = self.fragments.get(&fid) {
+                cursor = Some(f.parent);
+            } else {
+                break;
+            }
+        }
+        // Fold root → leaf, composing each node's relative transform.
+        let mut world = Affine::IDENTITY;
+        for eid in chain.into_iter().rev() {
+            let Some(n) = self.elements.get(&eid) else {
+                continue;
+            };
+            let rel = n
+                .element
+                .as_ref()
+                .map(|e| e.relative_transform(&n.computed_layout))
+                .unwrap_or_else(|| {
+                    Affine::translate((n.computed_layout.offset.x, n.computed_layout.offset.y))
+                });
+            world *= rel;
+        }
+        world
     }
 
     /// Remove a `child_id` entry from a parent's children vec (node or fragment).
@@ -507,7 +548,7 @@ impl NodeTreeData {
         self.paint_element(
             root_id,
             canvas,
-            Offset::ZERO,
+            Affine::IDENTITY,
             focused_node_id,
             image_resource_map,
             shell,
@@ -519,7 +560,7 @@ impl NodeTreeData {
         &self,
         id: ElementNodeId,
         canvas: &mut dyn Canvas,
-        parent_offset: Offset,
+        parent_absolute: Affine,
         focused_node_id: Option<ElementNodeId>,
         image_resource_map: &ImageResourceMap,
         shell: PaintShell<'_>,
@@ -534,7 +575,14 @@ impl NodeTreeData {
             None => return,
         };
 
-        let absolute_offset = parent_offset + node.computed_layout.offset;
+        // The node's relative transform (default: translate(layout.offset);
+        // `Transform` folds in rotate/scale; the follower uses its link-tracked
+        // offset). Push it so the element paints in its own local space; the
+        // canvas transform stack accumulates the absolute position. `absolute`
+        // is threaded through `PaintContext` for pointer-space conversions.
+        let rel = element.relative_transform(&node.computed_layout);
+        let absolute = parent_absolute * rel;
+        canvas.push_transform(rel);
 
         let paint_ctx = PaintContext::new(
             self,
@@ -542,16 +590,13 @@ impl NodeTreeData {
             id,
             image_resource_map,
             shell,
+            absolute,
         );
         // Flatten: paint fragment children as direct children of this node.
         let children = self.flatten_children(&node.children);
-        element.paint(
-            canvas,
-            absolute_offset,
-            &node.computed_layout,
-            &children,
-            &paint_ctx,
-        );
+        element.paint(canvas, &node.computed_layout, &children, &paint_ctx);
+
+        canvas.pop_transform();
     }
 
     pub fn hit_test(&self, position: Offset) -> bool {
@@ -679,10 +724,15 @@ impl NodeTreeData {
             None => return false,
         };
 
-        let local_position = Offset::new(
-            position.x - node.computed_layout.offset.x,
-            position.y - node.computed_layout.offset.y,
-        );
+        // Map the parent-space pointer into this node's local space through
+        // the inverse of its relative transform (default: subtract the layout
+        // offset; for `Transform`/follower this also undoes rotate/scale and
+        // link-tracked translation, so hit-testing matches the painted region).
+        let local_position = {
+            let p = element.relative_transform(&node.computed_layout).inverse()
+                * Point::new(position.x, position.y);
+            Offset::new(p.x, p.y)
+        };
 
         if !element.hit_test(local_position, &node.computed_layout) {
             return false;
@@ -715,10 +765,11 @@ impl NodeTreeData {
             None => return false,
         };
 
-        let local_position = Offset::new(
-            position.x - node.computed_layout.offset.x,
-            position.y - node.computed_layout.offset.y,
-        );
+        let local_position = {
+            let p = element.relative_transform(&node.computed_layout).inverse()
+                * Point::new(position.x, position.y);
+            Offset::new(p.x, p.y)
+        };
 
         if !element.hit_test(local_position, &node.computed_layout) {
             return false;
@@ -747,7 +798,12 @@ impl NodeTreeData {
         if let Some(node) = self.elements.get(&ElementNodeId::new(id.as_u64())) {
             let element = node.element.as_ref()?;
             let relative = node.computed_layout.offset;
-            let absolute = self.absolute_offset_of(ElementNodeId::new(id.as_u64()));
+            // Painted canvas origin via the absolute (world) affine — matches
+            // where the node is painted + hit-tested (includes ancestor
+            // `Transform` rotate/scale and follower link-tracked translation).
+            let abs = self
+                .absolute_affine_of(ElementNodeId::new(id.as_u64()))
+                .translation();
             return Some(DevNodeData {
                 id: node.id.into(),
                 name: element.type_name(),
@@ -755,7 +811,7 @@ impl NodeTreeData {
                 props: element.trace_props(),
                 layout_extra: element.trace_layout_extra(),
                 relative: (relative.x, relative.y),
-                absolute: (absolute.x, absolute.y),
+                absolute: (abs.x, abs.y),
                 size: (node.computed_layout.size.width, node.computed_layout.size.height),
                 query_key: node.query_key.clone(),
                 children: node.children.to_vec(),

@@ -18,7 +18,6 @@ impl ElementRender for EditableTextElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         _children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -49,7 +48,7 @@ impl ElementRender for EditableTextElement {
             } else {
                 (sel_end, sel_anchor)
             };
-            paint_helpers::paint_selection(canvas, offset, layout_data, a, b);
+            paint_helpers::paint_selection(canvas, layout_data, a, b);
         }
 
         // Hide the placeholder text when the input is focused and empty —
@@ -58,7 +57,7 @@ impl ElementRender for EditableTextElement {
         // anchored at the right position.
         let suppress_text_fill = is_focused && text_is_empty;
         if !suppress_text_fill {
-            canvas.fill_text_layout(offset, layout_data);
+            canvas.fill_text_layout(Offset::ZERO, layout_data);
         }
 
         // The composition underline's byte math targets the composition-
@@ -71,7 +70,7 @@ impl ElementRender for EditableTextElement {
             let comp_start_byte = composing_start;
             let comp_end_byte = composing_start + comp.len();
             if comp_start_byte != comp_end_byte {
-                paint_composition_underline(canvas, offset, layout_data, comp_start_byte, comp_end_byte);
+                paint_composition_underline(canvas, layout_data, comp_start_byte, comp_end_byte);
             }
         }
 
@@ -85,7 +84,6 @@ impl ElementRender for EditableTextElement {
             if blink_visible {
                 paint_cursor(
                     canvas,
-                    offset,
                     layout_data,
                     cursor_pos,
                     cursor_color.or(color).unwrap_or(DEFAULT_TEXT_COLOR),
@@ -97,7 +95,6 @@ impl ElementRender for EditableTextElement {
 
 fn paint_composition_underline(
     canvas: &mut dyn Canvas,
-    offset: Offset,
     layout_data: &text_layout::TextLayoutData,
     start_byte: usize,
     end_byte: usize,
@@ -128,10 +125,11 @@ fn paint_composition_underline(
         };
         let line_info = &layout_data.line_infos[line_idx];
 
-        let underline_y = offset.y + line_info.top as f64 + line_info.height as f64 - 2.0;
+        // Local coordinates — the canvas transform positions the text box.
+        let underline_y = line_info.top as f64 + line_info.height as f64 - 2.0;
 
         canvas.fill_geometry(
-            Offset::new(offset.x + x_start as f64, underline_y),
+            Offset::new(x_start as f64, underline_y),
             &Geometry::Rect(Size::new((x_end - x_start) as f64, 2.0)),
             &Brush::SolidColor(COMPOSITION_UNDERLINE_COLOR),
         );
@@ -140,7 +138,6 @@ fn paint_composition_underline(
 
 fn paint_cursor(
     canvas: &mut dyn Canvas,
-    offset: Offset,
     layout_data: &text_layout::TextLayoutData,
     cursor_byte: usize,
     cursor_color: Color,
@@ -149,8 +146,9 @@ fn paint_cursor(
     let line_idx = layout_data.line_index_for_byte(cursor_byte);
     let line_info = &layout_data.line_infos[line_idx];
 
+    // Local coordinates — the canvas transform positions the text box.
     canvas.fill_geometry(
-        Offset::new(offset.x + cursor_x as f64, offset.y + line_info.top as f64),
+        Offset::new(cursor_x as f64, line_info.top as f64),
         &Geometry::Rect(Size::new(2.0, line_info.height as f64)),
         &Brush::SolidColor(cursor_color),
     );

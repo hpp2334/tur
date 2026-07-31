@@ -1,4 +1,4 @@
-use crate::core::layout::{ComputedLayout, Offset};
+use crate::core::layout::ComputedLayout;
 use crate::core::platform::{Cursor};
 
 use crate::core::element::ElementNodeId;
@@ -14,7 +14,6 @@ impl ElementRender for MouseRegionElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -24,7 +23,7 @@ impl ElementRender for MouseRegionElement {
         // An opaque region under the pointer claims `Default` first, dropping
         // any cursor already written by its ancestors (which painted
         // earlier) — mirroring `filter_opaque_path`'s ancestor exclusion.
-        if paint_ctx.pointer_inside(offset, &layout.size) {
+        if paint_ctx.pointer_inside(&layout.size) {
             if self.is_region_opaque() {
                 paint_ctx.set_cursor(Cursor::Default);
             }
@@ -34,7 +33,7 @@ impl ElementRender for MouseRegionElement {
         }
 
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
     }
 }

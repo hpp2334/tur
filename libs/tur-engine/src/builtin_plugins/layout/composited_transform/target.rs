@@ -76,13 +76,12 @@ impl ElementRender for TargetElement {
     fn paint(
         &self,
         _canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &crate::core::layout::ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
         for &child_id in children {
-            paint_ctx.paint_child(child_id, _canvas, offset);
+            paint_ctx.paint_child(child_id, _canvas);
         }
     }
 }

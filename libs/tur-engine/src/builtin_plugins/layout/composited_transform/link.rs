@@ -11,7 +11,7 @@ use vello_common::kurbo::Affine;
 
 use crate::core::element::ElementNodeId;
 use crate::core::js_runtime::{BoaOpaque, JsProps};
-use crate::core::layout::Size;
+use crate::core::layout::{Offset, Size};
 
 /// Shared, GC-pinned state backing a `LayerLink`. One per
 /// `createLayerLink()` call; held by the target element, the follower
@@ -34,6 +34,14 @@ pub struct CompositedLinkState {
     pub target_world: Cell<Affine>,
     /// The target's laid-out size (for resolving `targetAnchor`).
     pub target_size: Cell<Size>,
+    /// The follower's tracked offset **relative to its parent** (the position
+    /// where the follower should paint + be hit-tested), written by the
+    /// subsystem each flush. The follower exposes this via
+    /// `relative_transform` (a pure translation), so paint, hit-test, and
+    /// bounds all resolve to the tracked position WITHOUT storing it in
+    /// `computed_layout.offset` (which layout owns). Single ownership — no
+    /// two writers, so no "flash to top-left" oscillation.
+    pub follower_offset: Cell<Offset>,
     /// `true` once at least one flush has resolved a valid target. The
     /// follower uses this to implement `showWhenUnlinked`.
     pub linked: Cell<bool>,
@@ -46,6 +54,7 @@ impl Default for CompositedLinkState {
             follower_node: Cell::new(None),
             target_world: Cell::new(Affine::IDENTITY),
             target_size: Cell::new(Size::ZERO),
+            follower_offset: Cell::new(Offset::ZERO),
             linked: Cell::new(false),
         }
     }

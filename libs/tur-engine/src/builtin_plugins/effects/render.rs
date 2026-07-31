@@ -1,7 +1,7 @@
 use vello_common::kurbo::Affine;
 
 use crate::core::element::ElementNodeId;
-use crate::core::layout::{ComputedLayout, Offset, Size};
+use crate::core::layout::{ComputedLayout, Size};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
 use super::element::{OpacityElement, TransformElement, TransformPainting};
@@ -14,7 +14,6 @@ impl ElementRender for OpacityElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -22,7 +21,7 @@ impl ElementRender for OpacityElement {
         let opacity: f32 = self.painting.value;
         canvas.push_opacity(opacity);
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
         canvas.pop_opacity();
     }
@@ -62,27 +61,25 @@ impl ElementRender for TransformElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
-        layout: &ComputedLayout,
+        _layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
     ) {
-        let local = Self::transform_matrix(&self.painting, layout.size);
-        // Combine the canvas offset (parent-relative origin) with the local
-        // transform so the child paints in the right place.
-        let combined = Affine::translate((offset.x, offset.y)) * local;
-        canvas.push_transform(combined);
+        // The rotate/scale/translate matrix is exposed via
+        // `relative_transform`; the paint walk pushes it onto the canvas
+        // transform stack, so children already paint in the transformed
+        // space — no manual `push_transform` here.
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, Offset::ZERO);
+            paint_ctx.paint_child(child_id, canvas);
         }
-        canvas.pop_transform();
     }
 
-    /// Expose the resolved affine so compositing consumers (e.g.
-    /// `CompositedTransformFollower`) can compose this element's contribution
-    /// into a descendant's full world transform without downcasting.
-    fn paint_transform(&self, layout: &ComputedLayout) -> Option<Affine> {
-        Some(Self::transform_matrix(&self.painting, layout.size))
+    /// The element's full transform relative to its parent: the layout
+    /// translation composed with the resolved rotate/scale/translate matrix.
+    /// Paint, hit-test, and bounds all consult this (see `relative_transform`).
+    fn relative_transform(&self, layout: &ComputedLayout) -> Affine {
+        Affine::translate((layout.offset.x, layout.offset.y))
+            * Self::transform_matrix(&self.painting, layout.size)
     }
 }
 

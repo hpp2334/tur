@@ -13,9 +13,11 @@ import {
     HitTestBehavior,
     MainAxisSize,
     type Mutation,
+    MouseRegion,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
+    type PointerRegionEvent,
     Positioned,
     Row,
     SizedBox,
@@ -47,6 +49,8 @@ const offsetX$ = source(0);
 const offsetY$ = source(0);
 // Single-open: opening one menu closes the other. `null` = none.
 const openMenu$ = source<null | "target" | "follower">(null);
+// Hovered option label within whichever menu is open (`null` = none).
+const hoveredOpt$ = source<string | null>(null);
 
 const ANCHORS: { label: string; value: Alignment }[] = [
     { label: "TopLeft", value: Alignment.TopLeft },
@@ -73,9 +77,11 @@ const C = {
     white: Color.hex("#ffffff"),
     indigo: Color.hex("#6366f1"),
     indigoSoft: Color.hex("#e0e7ff"),
+    indigoSofter: Color.hex("#eef2ff"),
     slate: Color.hex("#94a3b8"),
     slateLight: Color.hex("#cbd5e1"),
     grayLight: Color.hex("#e2e8f0"),
+    shadow: Color.hex("#1e293b"),
     text: Color.hex("#0f172a"),
     textMid: Color.hex("#475569"),
     textMuted: Color.hex("#64748b"),
@@ -86,6 +92,12 @@ const click = (
     m: Mutation<[], unknown>,
 ): Mutation<[PointerInteractEvent], void> =>
     m as unknown as Mutation<[PointerInteractEvent], void>;
+
+// `MouseRegion` hover callbacks carry a `PointerRegionEvent`; we ignore it.
+const hover = (
+    m: Mutation<[], unknown>,
+): Mutation<[PointerRegionEvent], void> =>
+    m as unknown as Mutation<[PointerRegionEvent], void>;
 
 // Layout constants (deterministic — menus float at known coords below their
 // triggers, so no portal/composited-transform is needed for the UI itself).
@@ -285,9 +297,12 @@ function TriggerChip(
 function MenuList(value$: typeof targetAnchor$) {
     return Container({
         width: MENU_W,
-        borderRadius: 6,
+        borderRadius: 8,
         borderWidth: 1,
         borderColor: C.slateLight,
+        shadowColor: C.shadow,
+        shadowBlur: 14,
+        shadowOffset: [0, 4],
         color: C.white,
         children: [
             Column({
@@ -303,29 +318,40 @@ function OptionRow(
     opt: { label: string; value: Alignment },
     value$: typeof targetAnchor$,
 ) {
-    return PointerInteract({
-        onClick: click(
+    const isSel = () => get(value$) === opt.value;
+    const isHover = () => get(hoveredOpt$) === opt.label;
+    return MouseRegion({
+        cursor: "pointer",
+        behavior: HitTestBehavior.Translucent,
+        onEnter: hover(mutate(() => set(hoveredOpt$, opt.label))),
+        onExit: hover(
             mutate(() => {
-                set(value$, opt.value);
-                set(openMenu$, null);
+                if (get(hoveredOpt$) === opt.label) set(hoveredOpt$, null);
             }),
         ),
-        child: Container({
-            width: MENU_W,
-            height: ROW_H,
-            padding: 6,
-            color: derive(() =>
-                get(value$) === opt.value ? C.indigo : C.white,
-            ),
-            children: [
-                Text({
-                    text: opt.label,
-                    fontSize: 11,
-                    color: derive(() =>
-                        get(value$) === opt.value ? C.white : C.text,
-                    ),
+        child: PointerInteract({
+            onClick: click(
+                mutate(() => {
+                    set(value$, opt.value);
+                    set(openMenu$, null);
+                    set(hoveredOpt$, null);
                 }),
-            ],
+            ),
+            child: Container({
+                width: MENU_W,
+                height: ROW_H,
+                padding: 6,
+                color: derive(() =>
+                    isSel() ? C.indigo : isHover() ? C.indigoSofter : C.white,
+                ),
+                children: [
+                    Text({
+                        text: opt.label,
+                        fontSize: 11,
+                        color: derive(() => (isSel() ? C.white : C.text)),
+                    }),
+                ],
+            }),
         }),
     });
 }

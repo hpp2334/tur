@@ -1,4 +1,4 @@
-use crate::core::layout::{BoxFit, ComputedLayout, Offset};
+use crate::core::layout::{BoxFit, ComputedLayout};
 
 use crate::core::element::ElementNodeId;
 use crate::core::image_resource::ImageResourceId;
@@ -14,7 +14,6 @@ impl ElementRender for ImageElement {
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
-        offset: Offset,
         layout: &ComputedLayout,
         children: &[ElementNodeId],
         paint_ctx: &PaintContext,
@@ -23,7 +22,7 @@ impl ElementRender for ImageElement {
             Some(id) => id,
             None => {
                 for &child_id in children {
-                    paint_ctx.paint_child(child_id, canvas, offset);
+                    paint_ctx.paint_child(child_id, canvas);
                 }
                 return;
             }
@@ -33,7 +32,7 @@ impl ElementRender for ImageElement {
             Some(r) => r,
             None => {
                 for &child_id in children {
-                    paint_ctx.paint_child(child_id, canvas, offset);
+                    paint_ctx.paint_child(child_id, canvas);
                 }
                 return;
             }
@@ -53,16 +52,17 @@ impl ElementRender for ImageElement {
             let scale_x = draw_w / natural_w;
             let scale_y = draw_h / natural_h;
 
-            let transform = vello_common::kurbo::Affine::translate((
-                offset.x + offset_x,
-                offset.y + offset_y,
-            )) * vello_common::kurbo::Affine::scale_non_uniform(scale_x, scale_y);
+            // Local BoxFit transform: the canvas transform already positions
+            // the element at its absolute origin, so only the BoxFit
+            // letterbox/pillarbox offset + scale remain.
+            let transform = vello_common::kurbo::Affine::translate((offset_x, offset_y))
+                * vello_common::kurbo::Affine::scale_non_uniform(scale_x, scale_y);
 
             canvas.draw_image(rid, img_res.natural_size, transform);
         }
 
         for &child_id in children {
-            paint_ctx.paint_child(child_id, canvas, offset);
+            paint_ctx.paint_child(child_id, canvas);
         }
     }
 }

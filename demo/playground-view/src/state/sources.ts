@@ -33,7 +33,6 @@ const WHITELIST = new Set([
     "jigsaw-puzzle",
     "countdown",
     "github-viewer",
-    "lifecycle-hooks",
     "text-overflow-demo",
     "password-input",
 ]);

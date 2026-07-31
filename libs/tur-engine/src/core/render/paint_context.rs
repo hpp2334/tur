@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use crate::core::layout::{Offset, Size};
+use vello_common::kurbo::{Affine, Point};
+
+use crate::core::layout::Size;
 use crate::core::platform::{Cursor};
 
 use crate::core::element::ElementNodeId;
@@ -17,6 +19,13 @@ pub struct PaintContext<'a> {
     /// Shell face for this paint pass: cursor claims, time, pointer position.
     /// See [`PaintShell`] for the (deliberately limited) surface.
     shell: PaintShell<'a>,
+    /// This node's absolute (world) affine — the product of its ancestors'
+    /// `relative_transform` and its own. The paint walk pushes each node's
+    /// `relative_transform` onto the canvas transform stack, so element `paint`
+    /// bodies draw in their own local space; this field lets them map
+    /// canvas-space quantities (e.g. the pointer position) back into local
+    /// space (see [`Self::pointer_inside`]).
+    current_transform: Affine,
 }
 
 impl<'a> PaintContext<'a> {
@@ -26,6 +35,7 @@ impl<'a> PaintContext<'a> {
         current_node_id: ElementNodeId,
         image_resource_map: &'a ImageResourceMap,
         shell: PaintShell<'a>,
+        current_transform: Affine,
     ) -> Self {
         PaintContext {
             tree,
@@ -33,19 +43,22 @@ impl<'a> PaintContext<'a> {
             focused_node_id,
             current_node_id: Some(current_node_id),
             shell,
+            current_transform,
         }
     }
 
+    /// Paint a child. The child's `relative_transform` is pushed onto the
+    /// canvas transform stack inside [`NodeTreeData::paint_element`], so no
+    /// offset is passed — the child paints in its own local space.
     pub fn paint_child(
         &self,
         child_id: ElementNodeId,
         canvas: &mut dyn Canvas,
-        parent_offset: Offset,
     ) {
         self.tree.paint_element(
             child_id,
             canvas,
-            parent_offset,
+            self.current_transform,
             self.focused_node_id,
             self.image_resource_map,
             self.shell,
@@ -66,17 +79,20 @@ impl<'a> PaintContext<'a> {
         self.image_resource_map.get_image(id)
     }
 
-    /// True if the last known pointer position lies within the rectangle at
-    /// `offset` with the given `size` (both in canvas-local logical pixels).
+    /// True if the last known pointer position (canvas-space) lies within this
+    /// node's local `[0, size]` box. The pointer is mapped into local space
+    /// through the inverse of [`Self::current_transform`], so this is correct
+    /// for translated / rotated / scaled subtrees (used for cursor claims).
     /// Returns `false` when no pointer position is known.
-    pub fn pointer_inside(&self, offset: Offset, size: &Size) -> bool {
+    pub fn pointer_inside(&self, size: &Size) -> bool {
         let Some(p) = self.shell.pointer_position() else {
             return false;
         };
-        p.x >= offset.x
-            && p.x < offset.x + size.width
-            && p.y >= offset.y
-            && p.y < offset.y + size.height
+        let local = self.current_transform.inverse() * Point::new(p.x, p.y);
+        local.x >= 0.0
+            && local.x < size.width
+            && local.y >= 0.0
+            && local.y < size.height
     }
 
     /// Claim the host cursor for this frame. See [`PaintShell::set_cursor`].
