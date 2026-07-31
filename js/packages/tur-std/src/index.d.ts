@@ -230,6 +230,13 @@ declare module "tur:std" {
         Outside = 2,
     }
 
+    export enum ClipBehavior {
+        None = 0,
+        HardEdge = 1,
+        AntiAlias = 2,
+        AntiAliasWithSaveLayer = 3,
+    }
+
     // ---------------------------------------------------------------------------
     // Prop interfaces
     // ---------------------------------------------------------------------------
@@ -243,6 +250,7 @@ declare module "tur:std" {
         borderWidth?: Val<number>;
         borderRadius?: Val<number>;
         borderPosition?: Val<BorderPosition>;
+        clipBehavior?: Val<ClipBehavior>;
         shadowColor?: Val<Brush | null>;
         shadowOffset?: Val<[number, number]>;
         shadowBlur?: Val<number>;

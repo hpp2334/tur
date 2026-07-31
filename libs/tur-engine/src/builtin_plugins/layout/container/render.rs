@@ -1,4 +1,4 @@
-use crate::core::layout::{BorderPosition, ComputedLayout, Geometry, Offset, Size};
+use crate::core::layout::{BorderPosition, ClipBehavior, ComputedLayout, Geometry, Offset, Size};
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
@@ -24,6 +24,7 @@ impl ElementRender for ContainerElement {
         let border_width = self.painting.border_width;
         let border_radius = self.painting.border_radius;
         let border_position = self.painting.border_position;
+        let clip_behavior = self.painting.clip_behavior;
 
         if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur)
             && sb > 0.0 {
@@ -76,8 +77,27 @@ impl ElementRender for ContainerElement {
                 canvas.stroke_geometry(border_offset, &geometry, bc, bw);
             }
 
+        // Clip the child subtree to the container's border geometry when
+        // `clipBehavior != None` (Flutter parity). The shape matches the fill
+        // geometry: rounded when `borderRadius > 0`, else a plain rect. The
+        // decoration (shadow/fill/border) is painted outside the clip, so it
+        // is never cut off by its own radius.
+        let clip = clip_behavior != ClipBehavior::None;
+        if clip {
+            let geometry = match border_radius {
+                Some(r) if r > 0.0 => Geometry::RoundedRect {
+                    size: layout.size,
+                    radius: r,
+                },
+                _ => Geometry::Rect(layout.size),
+            };
+            canvas.push_clip_geometry(Offset::ZERO, &geometry);
+        }
         for &child_id in children {
             paint_ctx.paint_child(child_id, canvas);
+        }
+        if clip {
+            canvas.pop_clip();
         }
     }
 }

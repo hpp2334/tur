@@ -3,7 +3,7 @@ use std::rc::Rc;
 use boa_engine::object::JsObject;
 use boa_engine::Context;
 use crate::core::render::brush::{Brush, Color};
-use crate::core::layout::{Alignment, BorderPosition};
+use crate::core::layout::{Alignment, BorderPosition, ClipBehavior};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
@@ -25,6 +25,7 @@ pub struct ContainerView {
     pub border_width: Option<Val<f64>>,
     pub border_radius: Option<Val<f64>>,
     pub border_position: Option<Val<BorderPosition>>,
+    pub clip_behavior: Option<Val<ClipBehavior>>,
     pub shadow_color: Option<Val<Color>>,
     pub shadow_blur: Option<Val<f64>>,
     pub alignment: Option<Val<Alignment>>,
@@ -69,6 +70,7 @@ pub struct ContainerPainting {
     pub(crate) border_width: Option<f64>,
     pub(crate) border_radius: Option<f64>,
     pub(crate) border_position: BorderPosition,
+    pub(crate) clip_behavior: ClipBehavior,
 }
 
 pub struct ContainerElement {
@@ -128,6 +130,7 @@ impl ElementSubscribe for ContainerElement {
         if let Some(v) = c.border_width.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.border_radius.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.border_position.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.clip_behavior.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.shadow_color.as_ref() { cx.subscribe_val(v); }
         if let Some(v) = c.shadow_blur.as_ref() { cx.subscribe_val(v); }
     }
@@ -199,6 +202,7 @@ impl ContainerView {
             border_width: p.val::<f64>("borderWidth"),
             border_radius: p.val::<f64>("borderRadius"),
             border_position: p.val::<BorderPosition>("borderPosition"),
+            clip_behavior: p.val::<ClipBehavior>("clipBehavior"),
             shadow_color: p.val::<Color>("shadowColor"),
             shadow_blur: p.val::<f64>("shadowBlur"),
             alignment: p.val::<Alignment>("alignment"),

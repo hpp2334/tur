@@ -29,6 +29,13 @@ pub trait Canvas: fmt::Debug {
         shadow_offset: (f64, f64),
     );
     fn push_clip(&mut self, offset: Offset, size: Size);
+    /// Push a clip layer defined by an arbitrary `Geometry` (rect, rounded
+    /// rect, or circle) at the given local offset. The shape lives in this
+    /// node's local space; the canvas transform stack (already positioning
+    /// the node) applies. Used by `Container`'s `clipBehavior` to clip
+    /// children to a rounded decoration shape — `push_clip` only handles
+    /// plain rects (overflow clipping).
+    fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry);
     fn pop_clip(&mut self);
     /// Push an opacity layer: subsequent draws are alpha-composited with the
     /// given opacity (0.0..=1.0) until `pop_opacity` is called. Vello
@@ -72,6 +79,7 @@ impl Canvas for NullCanvas {
     ) {
     }
     fn push_clip(&mut self, _offset: Offset, _size: Size) {}
+    fn push_clip_geometry(&mut self, _offset: Offset, _geometry: &Geometry) {}
     fn pop_clip(&mut self) {}
     fn push_opacity(&mut self, _opacity: f32) {}
     fn pop_opacity(&mut self) {}

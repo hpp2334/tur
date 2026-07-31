@@ -255,6 +255,20 @@ impl Canvas for VelloPaintContext<'_> {
             .push_layer(Some(&clip), None, None, None, None);
     }
 
+    fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
+        let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
+        let clip = match geometry {
+            Geometry::Rect(size) => Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE),
+            Geometry::RoundedRect { size, radius } => {
+                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE)
+            }
+            Geometry::Circle { radius } => Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE),
+        };
+        self.scene.set_transform(transform);
+        self.scene
+            .push_layer(Some(&clip), None, None, None, None);
+    }
+
     fn pop_clip(&mut self) {
         self.scene.pop_layer();
     }

@@ -16,6 +16,7 @@ boa_engine = { workspace = true }
 libc = "0.2"
 
 [dev-dependencies]
+image = { workspace = true }
 minifb = "0.28"
 pollster = "0.4"
 raw-window-handle = "0.6"

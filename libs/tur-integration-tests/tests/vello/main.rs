@@ -1,4 +1,5 @@
 mod raw;
+mod snapshot;
 mod vello_app;
 
 fn main() {
@@ -9,6 +10,14 @@ fn main() {
         ("vello_dpr_2_renders_colors", raw::vello_dpr_2_renders_colors),
         ("vello_dpr_3_renders_colors", raw::vello_dpr_3_renders_colors),
         ("vello_image_renders", raw::vello_image_renders),
+        (
+            "vello_snapshot_reported_stretch_bug",
+            snapshot::reported_stretch_bug_renders_red_strip,
+        ),
+        (
+            "vello_container_clip_rounded",
+            snapshot::container_clip_rounded_corner_clipped,
+        ),
     ];
 
     let mut passed = 0;

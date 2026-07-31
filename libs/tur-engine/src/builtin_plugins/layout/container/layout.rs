@@ -27,6 +27,9 @@ impl ElementLayout for ContainerElement {
             border_position: cx
                 .read_val_opt(self.view.border_position.as_ref())
                 .unwrap_or_default(),
+            clip_behavior: cx
+                .read_val_opt(self.view.clip_behavior.as_ref())
+                .unwrap_or_default(),
             shadow_color: cx.read_val_opt(self.view.shadow_color.as_ref()),
             shadow_blur: cx.read_val_opt(self.view.shadow_blur.as_ref()),
         };
