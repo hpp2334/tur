@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::Context;
 use crate::core::layout::BoxFit;
+use boa_engine::Context;
+use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // ImageView — the user's declaration. Pure Rust, no JsValues.
@@ -32,7 +32,14 @@ pub struct ImageView {
 impl View for ImageView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(ImageElement { view: self.clone(), painting: ImagePainting::default() }), boa);
+        cx.insert_node(
+            id,
+            AnyElement::new(ImageElement {
+                view: self.clone(),
+                painting: ImagePainting::default(),
+            }),
+            boa,
+        );
         if let Some(qk) = &self.query_key {
             cx.set_query_key(id, qk.clone());
         }
@@ -65,10 +72,18 @@ impl Lifecycle for ImageElement {}
 impl ElementSubscribe for ImageElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.resource_id.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.resource_id.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.fit.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.width.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.height.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 

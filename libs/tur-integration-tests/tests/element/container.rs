@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::layout::ContainerElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::core::layout::BorderPosition;
 use tur_integration_tests::TurTestApp;
 
@@ -11,14 +11,18 @@ fn container_with_padding() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
         );
         assert_eq!(container.children.len(), 1);
 
-        let sb = tree.get_element(ElementNodeId::new(container.children[0].as_u64())).unwrap();
+        let sb = tree
+            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             sb.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
@@ -43,9 +47,15 @@ fn container_update_clears_removed_props() {
     let checkbox_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        let pointer = tree.get_element(ElementNodeId::new(container.children[0].as_u64())).unwrap();
-        let checkbox = tree.get_element(ElementNodeId::new(pointer.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let pointer = tree
+            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .unwrap();
+        let checkbox = tree
+            .get_element(ElementNodeId::new(pointer.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             checkbox.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container"),
@@ -59,7 +69,10 @@ fn container_update_clears_removed_props() {
         assert!(c.color().is_some(), "checked state should have color");
     });
 
-    let (cx, cy) = app.get_element_absolute_bounds(checkbox_id).unwrap().center();
+    let (cx, cy) = app
+        .get_element_absolute_bounds(checkbox_id)
+        .unwrap()
+        .center();
     eprintln!("[test] clicking at ({}, {})", cx, cy);
     app.click(cx, cy);
     app.render();
@@ -68,8 +81,16 @@ fn container_update_clears_removed_props() {
     let checkbox_node = tree.get_element(checkbox_id).unwrap();
     let checkbox_el = checkbox_node.element.as_ref().unwrap();
     let c = checkbox_el.cast::<ContainerElement>().unwrap();
-    eprintln!("[test] after toggle: color={:?}, border_color={:?}", c.color(), c.border_color());
-    assert!(c.color().is_none(), "unchecked state should NOT have color, got {:?}", c.color());
+    eprintln!(
+        "[test] after toggle: color={:?}, border_color={:?}",
+        c.color(),
+        c.border_color()
+    );
+    assert!(
+        c.color().is_none(),
+        "unchecked state should NOT have color, got {:?}",
+        c.color()
+    );
 }
 
 #[test]
@@ -80,7 +101,9 @@ fn container_with_border() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
@@ -115,9 +138,15 @@ fn container_padding_offsets_child() {
     let (container_id, row_id, sb_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        let row = tree.get_element(ElementNodeId::new(container.children[0].as_u64())).unwrap();
-        let sb = tree.get_element(ElementNodeId::new(row.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let row = tree
+            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .unwrap();
+        let sb = tree
+            .get_element(ElementNodeId::new(row.children[0].as_u64()))
+            .unwrap();
         (container.id, row.id, sb.id)
     };
 
@@ -129,10 +158,14 @@ fn container_padding_offsets_child() {
     assert_eq!(container.computed_layout.size.height, 100.0);
 
     let row = rt.get_element(row_id).unwrap();
-    assert_eq!(row.computed_layout.offset.x, 20.0,
-        "Row should be offset by padding=20");
-    assert_eq!(row.computed_layout.offset.y, 20.0,
-        "Row should be offset by padding=20");
+    assert_eq!(
+        row.computed_layout.offset.x, 20.0,
+        "Row should be offset by padding=20"
+    );
+    assert_eq!(
+        row.computed_layout.offset.y, 20.0,
+        "Row should be offset by padding=20"
+    );
 
     let sb = rt.get_element(sb_id).unwrap();
     assert_eq!(sb.computed_layout.offset.x, 0.0);
@@ -147,9 +180,15 @@ fn container_with_explicit_size_in_flex() {
     let btn_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        let row = tree.get_element(ElementNodeId::new(col.children[0].as_u64())).unwrap();
-        let container = tree.get_element(ElementNodeId::new(row.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let row = tree
+            .get_element(ElementNodeId::new(col.children[0].as_u64()))
+            .unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(row.children[0].as_u64()))
+            .unwrap();
         container.id
     };
 
@@ -167,7 +206,8 @@ fn container_with_explicit_size_in_flex() {
         "container height should be 44, got {}",
         btn.computed_layout.size.height,
     );
-}#[test]
+}
+#[test]
 fn container_with_shadow() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("container-shadow").unwrap();
@@ -175,7 +215,9 @@ fn container_with_shadow() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")

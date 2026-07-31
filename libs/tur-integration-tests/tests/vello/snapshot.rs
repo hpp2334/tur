@@ -29,7 +29,12 @@ fn dump_snapshot_if_requested(name: &str, pixels: &[u8], w: u32, h: u32) {
 
 fn get_pixel(pixels: &[u8], phys_w: u32, px: u32, py: u32) -> (u8, u8, u8, u8) {
     let idx = ((py * phys_w + px) * 4) as usize;
-    (pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3])
+    (
+        pixels[idx],
+        pixels[idx + 1],
+        pixels[idx + 2],
+        pixels[idx + 3],
+    )
 }
 
 fn assert_color_approx(actual: (u8, u8, u8, u8), expected: (u8, u8, u8, u8), tolerance: u8) {

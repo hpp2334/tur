@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::lazy_container::LazyGridElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Build a 10,000-item virtualized grid inline: 400x600 viewport,
@@ -26,8 +26,10 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
 }
 
 fn with_lg<R>(app: &TurTestApp, id: ElementNodeId, f: impl FnOnce(&LazyGridElement) -> R) -> R {
-    app.with_element(id, |e| f(e.cast::<LazyGridElement>().expect("not a LazyGridElement")))
-        .expect("element not found")
+    app.with_element(id, |e| {
+        f(e.cast::<LazyGridElement>().expect("not a LazyGridElement"))
+    })
+    .expect("element not found")
 }
 
 #[test]
@@ -48,10 +50,14 @@ fn lazy_grid_virtualizes_large_item_count() {
     let (app, id) = setup_virtualized();
 
     let built = with_lg(&app, id, |lg| lg.built_count());
-    assert!(built < 50,
-        "virtualized grid should mount < 50 cells, got {built}");
-    assert!(built >= 28,
-        "virtualized grid should mount at least ~viewport rows * cols, got {built}");
+    assert!(
+        built < 50,
+        "virtualized grid should mount < 50 cells, got {built}"
+    );
+    assert!(
+        built >= 28,
+        "virtualized grid should mount at least ~viewport rows * cols, got {built}"
+    );
 }
 
 /// Each mounted cell's viewport position must match the analytic formula:
@@ -158,8 +164,10 @@ fn lazy_grid_scroll_clamps_at_content_end() {
 
     let max_extent = (10000.0_f64 / 4.0) * 100.0 - 600.0; // 2500 rows * 100 - 600
     let scroll = with_lg(&app, id, |lg| lg.scroll_offset());
-    assert!(scroll <= max_extent + 1.0,
-        "scroll should clamp at max extent ({max_extent}), got {scroll}");
+    assert!(
+        scroll <= max_extent + 1.0,
+        "scroll should clamp at max extent ({max_extent}), got {scroll}"
+    );
     assert!(scroll > 0.0);
 }
 
@@ -187,7 +195,10 @@ fn lazy_grid_horizontal_axis() {
 
     // viewport height 600, maxExtent 100 → 6 cross-axis slots.
     let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
-    assert_eq!(cols, 6, "horizontal grid should derive 6 cross-axis slots from height 600 / maxExtent 100");
+    assert_eq!(
+        cols, 6,
+        "horizontal grid should derive 6 cross-axis slots from height 600 / maxExtent 100"
+    );
 
     // Scroll horizontally; verify a cell lands at viewport x≈0.
     app.wheel(500.0, 0.0, 200.0, 300.0);
@@ -206,7 +217,10 @@ fn lazy_grid_horizontal_axis() {
             (-100.0..=0.0).contains(&x)
         })
     };
-    assert!(found, "expected at least one cell within one stride of viewport left edge after horizontal scroll");
+    assert!(
+        found,
+        "expected at least one cell within one stride of viewport left edge after horizontal scroll"
+    );
 }
 
 /// Parent's children count must equal the grid's mounted count (no
@@ -225,7 +239,9 @@ fn lazy_grid_parent_children_count_matches_mounted() {
             tree.get_element(id).unwrap().children.len()
         };
         let built = with_lg(&app, id, |lg| lg.built_count());
-        assert_eq!(parent_count, built,
-            "parent.children.len() ({parent_count}) should equal mounted count ({built})");
+        assert_eq!(
+            parent_count, built,
+            "parent.children.len() ({parent_count}) should equal mounted count ({built})"
+        );
     }
 }

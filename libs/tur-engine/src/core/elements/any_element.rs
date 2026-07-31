@@ -1,18 +1,22 @@
 use std::any::Any;
 
+use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 use boa_engine::Context;
 use vello_common::kurbo::Affine;
-use crate::core::layout::{ComputedLayout, Constraints, Offset, Size};
 
 use crate::core::element::{ElementKind, ElementNodeId};
+use crate::core::elements::{
+    ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext, ElementOnIme,
+    ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementOnWheel,
+    ElementOnWheelContext, WheelEvent,
+};
 use crate::core::elements::{ElementTrace, TraceValue};
-use crate::core::view::Lifecycle;
-use crate::core::platform::key_event::KeyEvent;
-use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
-use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::elements::{ElementOnIme, ElementOnKeyboard, ElementOnGesture, ElementOnFocus, ElementOnWheel, ComposedGestureEvent, ElementOnGestureContext, ElementOnKeyboardContext, ElementOnImeContext, ElementOnWheelContext, WheelEvent};
-use crate::core::platform::{ImeEvent, PointerDeviceKind};
 use crate::core::focus::Focusable;
+use crate::core::layout::{ElementLayout, ElementSubscribe, LayoutContext, SubscribeCx};
+use crate::core::platform::key_event::KeyEvent;
+use crate::core::platform::{ImeEvent, PointerDeviceKind};
+use crate::core::render::{Canvas, ElementRender, PaintContext};
+use crate::core::view::Lifecycle;
 
 type KeyboardFn = fn(&mut dyn Any, &mut ElementOnKeyboardContext, &KeyEvent);
 type GestureFn = fn(&mut dyn Any, &mut ElementOnGestureContext, &ComposedGestureEvent);
@@ -40,7 +44,8 @@ pub trait ElementCursorRect {
 fn cursor_rect_dispatch<E: ElementCursorRect + 'static>(
     any: &dyn Any,
 ) -> Option<(f64, f64, f64, f64)> {
-    any.downcast_ref::<E>().and_then(|e: &E| e.cursor_rect_relative())
+    any.downcast_ref::<E>()
+        .and_then(|e: &E| e.cursor_rect_relative())
 }
 
 fn focus_cast_dispatch<E: Focusable + 'static>(any: &dyn Any) -> Option<&dyn Focusable> {
@@ -75,27 +80,15 @@ trait Erased: 'static {
 
     fn subscribe(&self, cx: &mut SubscribeCx);
 
-    fn run_on_mounted(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    );
-    fn run_on_updated(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    );
+    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
+    fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
     fn run_on_focus_changed(
         &mut self,
         focused: bool,
         cx: &mut crate::core::view::SharedViewCx,
         boa: &mut Context,
     );
-    fn run_before_destroy(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    );
+    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context);
 }
 
 fn keyboard_dispatch<E: ElementOnKeyboard + 'static>(
@@ -210,19 +203,11 @@ where
         <Self as ElementSubscribe>::subscribe(self, cx)
     }
 
-    fn run_on_mounted(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
+    fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         <Self as Lifecycle>::on_mounted(self, cx, boa);
     }
 
-    fn run_on_updated(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
+    fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         <Self as Lifecycle>::on_updated(self, cx, boa);
     }
 
@@ -235,17 +220,15 @@ where
         <Self as Lifecycle>::on_focus_changed(self, focused, cx, boa);
     }
 
-    fn run_before_destroy(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
+    fn run_before_destroy(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         <Self as Lifecycle>::before_destroy(self, cx, boa);
     }
 }
 
 impl AnyElement {
-    pub fn new<E: ElementLayout + ElementRender + ElementTrace + Lifecycle + ElementSubscribe + 'static>(
+    pub fn new<
+        E: ElementLayout + ElementRender + ElementTrace + Lifecycle + ElementSubscribe + 'static,
+    >(
         element: E,
     ) -> Self {
         AnyElement {
@@ -483,22 +466,14 @@ impl AnyElement {
 
     /// Fire the element's `on_mounted` lifecycle hook (called once, right
     /// after the element is inserted into the tree). No-op for most elements.
-    pub fn run_on_mounted(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
+    pub fn run_on_mounted(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         self.inner.run_on_mounted(cx, boa);
     }
 
     /// Fire the element's `on_updated` lifecycle hook (called after layout,
     /// for elements whose subscribed atoms were dirtied this flush).
     /// No-op for most elements.
-    pub fn run_on_updated(
-        &mut self,
-        cx: &mut crate::core::view::SharedViewCx,
-        boa: &mut Context,
-    ) {
+    pub fn run_on_updated(&mut self, cx: &mut crate::core::view::SharedViewCx, boa: &mut Context) {
         self.inner.run_on_updated(cx, boa);
     }
 
@@ -525,11 +500,7 @@ impl AnyElement {
         self.inner.run_before_destroy(cx, boa);
     }
 
-    pub fn on_keyboard_event(
-        &mut self,
-        cx: &mut ElementOnKeyboardContext,
-        event: &KeyEvent,
-    ) {
+    pub fn on_keyboard_event(&mut self, cx: &mut ElementOnKeyboardContext, event: &KeyEvent) {
         if let Some(handler) = self.on_keyboard {
             handler(self.inner.as_any_mut(), cx, event);
         }
@@ -552,11 +523,7 @@ impl AnyElement {
         }
     }
 
-    pub fn on_wheel_event(
-        &mut self,
-        cx: &mut ElementOnWheelContext,
-        event: &WheelEvent,
-    ) -> f64 {
+    pub fn on_wheel_event(&mut self, cx: &mut ElementOnWheelContext, event: &WheelEvent) -> f64 {
         if let Some(handler) = self.on_wheel {
             handler(self.inner.as_any_mut(), cx, event)
         } else {
@@ -572,11 +539,7 @@ impl AnyElement {
         self.on_gesture.is_some()
     }
 
-    pub fn on_ime_event(
-        &mut self,
-        cx: &mut ElementOnImeContext,
-        event: &ImeEvent,
-    ) {
+    pub fn on_ime_event(&mut self, cx: &mut ElementOnImeContext, event: &ImeEvent) {
         if let Some(handler) = self.on_ime {
             handler(self.inner.as_any_mut(), cx, event);
         }

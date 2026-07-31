@@ -1,11 +1,11 @@
-use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
-use crate::core::render::brush::{Color};
 use crate::core::layout::{Constraints, Size};
+use crate::core::render::brush::Color;
+use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
 
-use crate::core::element::ElementNodeId;
-use crate::core::layout::{ElementLayout, LayoutContext};
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 use crate::builtin_plugins::text::text_layout;
+use crate::core::element::ElementNodeId;
+use crate::core::layout::{ElementLayout, LayoutContext};
 
 use super::element::{DEFAULT_TEXT_COLOR, EditableTextElement};
 
@@ -33,8 +33,12 @@ impl ElementLayout for EditableTextElement {
     ) -> Size {
         // Resolve reactive props and cache `multiline` for the gesture/keyboard
         // handlers (those contexts lack store access).
-        self.resolved_multiline = cx.read_val_opt(self.view.multiline.as_ref()).unwrap_or(false);
-        let font_size = cx.read_val_opt(self.view.font_size.as_ref()).unwrap_or(14.0);
+        self.resolved_multiline = cx
+            .read_val_opt(self.view.multiline.as_ref())
+            .unwrap_or(false);
+        let font_size = cx
+            .read_val_opt(self.view.font_size.as_ref())
+            .unwrap_or(14.0);
         let font_family = cx.read_val_opt(self.view.font_family.as_ref());
         let placeholder = cx.read_val_opt(self.view.placeholder.as_ref());
         let color = cx.read_val_opt(self.view.color.as_ref());
@@ -54,7 +58,9 @@ impl ElementLayout for EditableTextElement {
         // string (each char → obscuringCharacter) and then remaps the
         // layout's byte offsets back into the controller's value-byte space,
         // so all cursor/selection/caret/click math works unchanged.
-        self.resolved_obscured = cx.read_val_opt(self.view.obscure_text.as_ref()).unwrap_or(false);
+        self.resolved_obscured = cx
+            .read_val_opt(self.view.obscure_text.as_ref())
+            .unwrap_or(false);
         self.resolved_obscuring_char = cx
             .read_val_opt(self.view.obscuring_character.as_ref())
             .and_then(|s| s.chars().next())
@@ -94,10 +100,8 @@ impl ElementLayout for EditableTextElement {
         // spans no longer line up), when password mode is active (the masked
         // display string shares no byte offsets with the span tree), or when
         // the controller has no spans yet (placeholder display).
-        let build_from_spans = !obscured
-            && !is_composing
-            && !base_spans.is_empty()
-            && !display_text.is_empty();
+        let build_from_spans =
+            !obscured && !is_composing && !base_spans.is_empty() && !display_text.is_empty();
 
         // When obscured, render the masked display string (each char of the
         // value — and any in-progress composition — replaced by the obscuring
@@ -111,8 +115,7 @@ impl ElementLayout for EditableTextElement {
             Some((m, _, _)) if !m.is_empty() => masked.as_ref(),
             _ => None,
         };
-        let remap: Option<(Vec<usize>, usize)> =
-            active_mask.map(|(_, map, ml)| (map.clone(), *ml));
+        let remap: Option<(Vec<usize>, usize)> = active_mask.map(|(_, map, ml)| (map.clone(), *ml));
 
         let full_text: String = if build_from_spans {
             base_spans.iter().map(|s| s.text.as_str()).collect()
@@ -126,12 +129,17 @@ impl ElementLayout for EditableTextElement {
 
         let mut builder = text_layout_cx.ranged_builder(font_cx, &full_text, 1.0, false);
         builder.push_default(StyleProperty::FontSize(font_size as f32));
-        builder.push_default(StyleProperty::from(generic_family_for(font_family.as_deref())));
+        builder.push_default(StyleProperty::from(generic_family_for(
+            font_family.as_deref(),
+        )));
         // Base color over the whole text; per-span colors override below.
         // An empty range (`start == end`) makes parley panic with
         // `style_run.range.start < style_run.range.end`, so guard it.
         if !full_text.is_empty() {
-            builder.push(StyleProperty::Brush(brush_arr(text_color)), 0..full_text.len());
+            builder.push(
+                StyleProperty::Brush(brush_arr(text_color)),
+                0..full_text.len(),
+            );
         }
 
         if build_from_spans {

@@ -1,10 +1,10 @@
-use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
+use crate::core::render::brush::{Brush, Color};
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 
-use super::element::{ScrollbarElement, MIN_THUMB};
+use super::element::{MIN_THUMB, ScrollbarElement};
 
 /// Default thumb color — a semi-transparent neutral gray.
 const DEFAULT_THUMB_COLOR: Color = Color::rgba(130, 130, 130, 160);
@@ -35,7 +35,9 @@ impl ElementRender for ScrollbarElement {
             return;
         }
 
-        let thumb_h = Self::thumb_height(track_h, max_extent, viewport).max(MIN_THUMB).min(track_h);
+        let thumb_h = Self::thumb_height(track_h, max_extent, viewport)
+            .max(MIN_THUMB)
+            .min(track_h);
         let thumb_top = if max_extent > 0.0 {
             (scroll_offset / max_extent) * (track_h - thumb_h)
         } else {

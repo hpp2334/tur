@@ -1,7 +1,7 @@
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
-use crate::core::app::AppEventQueue;
 use crate::core::app::AppEvent;
+use crate::core::app::AppEventQueue;
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
+use crate::core::element::ElementNodeId;
 use std::cell::Cell;
 
 pub struct WheelEvent {

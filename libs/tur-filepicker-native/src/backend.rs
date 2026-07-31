@@ -7,7 +7,7 @@ use std::pin::Pin;
 
 use rfd::AsyncFileDialog;
 
-use tur_filepicker_capability::{FilePickerBackend, PickedFile, PickOptions, SaveOptions};
+use tur_filepicker_capability::{FilePickerBackend, PickOptions, PickedFile, SaveOptions};
 
 /// Native file-picker backend. A unit struct — `rfd` dialogs are created
 /// per-call, so there's no handle to hold.

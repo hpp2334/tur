@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::Context;
 use crate::core::render::brush::Color;
+use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
-use crate::core::element::NodeId;
-use crate::core::view::{ViewCx, View, Val};
-use crate::core::edgy::reactive::AnyReadable;
 use crate::builtin_plugins::layout::ContainerView;
+use crate::core::edgy::reactive::AnyReadable;
+use crate::core::element::NodeId;
+use crate::core::js_runtime::JsProps;
+use crate::core::view::{Val, View, ViewCx};
 
 use super::element::{ContextMenuEvent, EditableTextView};
 use crate::builtin_plugins::text::controller::{TextEditingController, UndoController};

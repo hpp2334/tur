@@ -1,6 +1,6 @@
+use crate::builtin_plugins::clipboard::ClipboardPasteEvent;
 use crate::core::app::AppEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
-use crate::builtin_plugins::clipboard::ClipboardPasteEvent;
 
 use crate::builtin_plugins::text::controller::{CursorChangeEvent, InputEvent};
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
@@ -25,11 +25,7 @@ use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 pub struct ClipboardPasteSubsystem;
 
 impl Subsystem for ClipboardPasteSubsystem {
-    fn handle_app_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &AppEvent,
-    ) {
+    fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent) {
         let Some(ev) = event.as_custom::<ClipboardPasteEvent>() else {
             return;
         };
@@ -81,7 +77,13 @@ impl Subsystem for ClipboardPasteSubsystem {
                 && let Some(m) = editable.controller().on_input()
             {
                 let mut mq = cx.mutation_queue.borrow_mut();
-                mq.push(m, InputEvent { value: new_text, enter: false });
+                mq.push(
+                    m,
+                    InputEvent {
+                        value: new_text,
+                        enter: false,
+                    },
+                );
             }
             let cursor = editable.controller().cursor_position();
             if let Some(m) = editable.controller().on_cursor_change() {

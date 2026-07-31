@@ -5,11 +5,7 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 pub struct ImeSubsystem;
 
 impl Subsystem for ImeSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let PlatformEvent::Ime(ime_event) = event else {
             return;
         };

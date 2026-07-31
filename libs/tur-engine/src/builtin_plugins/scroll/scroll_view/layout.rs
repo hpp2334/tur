@@ -66,7 +66,9 @@ impl ElementLayout for ScrollViewElement {
         if let Some(&child_id) = children.first() {
             let padding = cx.read_val_opt(self.view.padding.as_ref()).unwrap_or(0.0);
             let scroll_offset = match self.axis {
-                crate::core::layout::Axis::Vertical => Offset::new(padding, padding - self.position.pixels()),
+                crate::core::layout::Axis::Vertical => {
+                    Offset::new(padding, padding - self.position.pixels())
+                }
                 crate::core::layout::Axis::Horizontal => {
                     Offset::new(padding - self.position.pixels(), padding)
                 }

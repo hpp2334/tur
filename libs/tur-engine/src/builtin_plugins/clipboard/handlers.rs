@@ -39,11 +39,7 @@ use super::event::{ClipboardPlatformPasteEvent, ClipboardWriteEvent, push_paste}
 pub(in crate::builtin_plugins) struct ClipboardPlatformSubsystem;
 
 impl Subsystem for ClipboardPlatformSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let Some(ev) = event.as_custom::<ClipboardPlatformPasteEvent>() else {
             return;
         };

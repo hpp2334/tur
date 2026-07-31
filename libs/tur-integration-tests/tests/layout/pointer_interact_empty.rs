@@ -9,7 +9,9 @@ fn pointer_interact_no_child_zero_size() {
     let pi_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let pi = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let pi = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             pi.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_pointer_interact")

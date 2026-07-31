@@ -19,7 +19,10 @@
 pub mod lazy_grid;
 pub mod lazy_list;
 
-pub use lazy_grid::{LazyGridController, LazyGridElement, LazyGridView, VisibleRangeChangeEvent as LazyGridVisibleRangeChangeEvent};
+pub use lazy_grid::{
+    LazyGridController, LazyGridElement, LazyGridView,
+    VisibleRangeChangeEvent as LazyGridVisibleRangeChangeEvent,
+};
 pub use lazy_list::{LazyListController, LazyListElement, LazyListView, VisibleRangeChangeEvent};
 
 use crate::core::js_runtime::helpers::FnEntry;
@@ -36,9 +39,7 @@ use crate::error::TurError;
 /// Returns: the `LazyList` / `createLazyListController` / `LazyGrid` /
 /// `createLazyGridController` factory fns, which the caller merges into
 /// `std_fns` before `register_module("tur:std", ...)`.
-pub fn install_lazy_container(
-    ctx: &mut PluginContext<'_>,
-) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_lazy_container(ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     ctx.register_class::<LazyListController>()
         .map_err(|e| TurError::Other(format!("failed to register LazyListController: {e}")))?;
     ctx.register_class::<LazyGridController>()

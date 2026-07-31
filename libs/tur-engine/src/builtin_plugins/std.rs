@@ -117,7 +117,10 @@ impl Plugin for TurStdPlugin {
 
         let mut std_consts: Vec<ConstEntry> = Vec::new();
         let js_ctx_value = ctx.js_ctx_value.clone();
-        std_consts.extend(crate::core::render::brush::bridge::consts(ctx.boa_mut(), js_ctx_value));
+        std_consts.extend(crate::core::render::brush::bridge::consts(
+            ctx.boa_mut(),
+            js_ctx_value,
+        ));
         std_consts.extend(enums::consts(ctx.boa_mut()));
         // Engine-owned reactive source exposing the live canvas size as
         // `{width, height}` (CSS pixels). The engine syncs it each frame in

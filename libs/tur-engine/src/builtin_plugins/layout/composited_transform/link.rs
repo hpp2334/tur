@@ -87,9 +87,7 @@ struct LinkRegistryCaptures {
 /// Build the `createLayerLink` native closure. Captures the shared link
 /// registry (the same `Rc` held by the subsystem) so each newly-created link
 /// is tracked for the per-flush recompute.
-pub fn build_create_layer_link(
-    links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>>,
-) -> NativeFunction {
+pub fn build_create_layer_link(links: Rc<RefCell<Vec<Rc<CompositedLinkState>>>>) -> NativeFunction {
     NativeFunction::from_copy_closure_with_captures(
         move |_this, _args, caps, ctx| create_layer_link(&caps.links, ctx),
         LinkRegistryCaptures { links },

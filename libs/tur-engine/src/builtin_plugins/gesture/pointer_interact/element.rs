@@ -1,15 +1,17 @@
 use std::rc::Rc;
 
+use crate::core::layout::{HitTestBehavior, Offset};
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use crate::core::layout::{HitTestBehavior, Offset};
 
-use crate::core::js_runtime::JsProps;
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs};
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
+use crate::core::elements::{
+    ComposedGestureEvent, ElementOnGesture, ElementOnGestureContext, TraceValue,
+};
+use crate::core::js_runtime::JsProps;
+use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 // ---------------------------------------------------------------------------
 // PointerInteractView — the user's declaration. Pure Rust, no JsValues.
@@ -102,41 +104,55 @@ impl ElementTrace for PointerInteractElement {
 }
 
 impl ElementOnGesture for PointerInteractElement {
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
+    fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
         let (mutation, payload) = match event {
             ComposedGestureEvent::PointerDown { local, global, .. } => {
                 let m = self.view.on_pointer_down;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
             ComposedGestureEvent::PointerDoubleDown { local, global, .. }
             | ComposedGestureEvent::PointerTripleDown { local, global, .. } => {
                 let m = self.view.on_pointer_down;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
             ComposedGestureEvent::PointerMove { local, global, .. } => {
                 let m = self.view.on_pointer_move;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
             ComposedGestureEvent::PointerUp { local, global, .. } => {
                 let m = self.view.on_pointer_up;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
             ComposedGestureEvent::Click { local, global, .. } => {
                 let m = self.view.on_click;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
             ComposedGestureEvent::ContextMenu { local, global, .. } => {
                 let m = self.view.on_context_menu;
-                let ev = PointerInteractEvent { local: *local, global: *global };
+                let ev = PointerInteractEvent {
+                    local: *local,
+                    global: *global,
+                };
                 (m, ev)
             }
         };

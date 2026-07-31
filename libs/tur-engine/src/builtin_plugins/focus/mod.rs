@@ -15,8 +15,6 @@ use crate::error::TurError;
 
 /// Install the focus widget plugin (`Focusable` / `requestFocus`). Returns
 /// the JS factory fns to be merged into `tur:std` by the orchestrator.
-pub fn install_focus(
-    _ctx: &mut PluginContext<'_>,
-) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_focus(_ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     Ok(focusable::bridge::fns())
 }

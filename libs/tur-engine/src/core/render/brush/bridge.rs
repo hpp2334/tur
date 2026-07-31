@@ -1,13 +1,13 @@
+use crate::core::render::brush::{Brush, Color, GradientStop};
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsValue};
-use crate::core::render::brush::{Brush, Color, GradientStop};
 
-use crate::core::render::brush::opaque::{BrushOpaque, ColorOpaque};
-use crate::core::js_runtime::helpers::{ConstEntry, FnEntry, Ptr};
-use crate::core::js_runtime::module_loader::bound_native;
-use crate::core::js_runtime::js_value::FromJs;
 use crate::core::js_runtime::BoaOpaque;
+use crate::core::js_runtime::helpers::{ConstEntry, FnEntry, Ptr};
+use crate::core::js_runtime::js_value::FromJs;
+use crate::core::js_runtime::module_loader::bound_native;
+use crate::core::render::brush::opaque::{BrushOpaque, ColorOpaque};
 use std::str::FromStr;
 
 /// Bridge function table entries for the color domain.
@@ -27,17 +27,35 @@ pub fn consts(context: &mut Context, ctx_val: JsValue) -> Vec<ConstEntry> {
     let color_obj = JsObject::with_object_proto(context.intrinsics());
     let _ = color_obj.create_data_property(
         js_string!("rgb"),
-        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_rgb, 3, "rgb")),
+        JsValue::from(bound_native(
+            context,
+            ctx_val.clone(),
+            tur_color_rgb,
+            3,
+            "rgb",
+        )),
         context,
     );
     let _ = color_obj.create_data_property(
         js_string!("rgba"),
-        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_rgba, 4, "rgba")),
+        JsValue::from(bound_native(
+            context,
+            ctx_val.clone(),
+            tur_color_rgba,
+            4,
+            "rgba",
+        )),
         context,
     );
     let _ = color_obj.create_data_property(
         js_string!("hex"),
-        JsValue::from(bound_native(context, ctx_val.clone(), tur_color_hex, 1, "hex")),
+        JsValue::from(bound_native(
+            context,
+            ctx_val.clone(),
+            tur_color_hex,
+            1,
+            "hex",
+        )),
         context,
     );
 
@@ -123,27 +141,47 @@ fn tur_create_linear_gradient(
     );
     let mut stops: Vec<GradientStop> = Vec::new();
     if let Some(stops_val) = args.get_or_undefined(5).as_object()
-        && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone()) {
-            let len = arr.length(context).unwrap_or(0);
-            for i in 0..len {
-                if let Ok(stop_val) = arr.at(i as i64, context) {
-                    let stop_obj = match stop_val.as_object() {
-                        Some(o) => o,
-                        None => continue,
-                    };
-                    let offset = stop_obj
-                        .get(js_string!("offset"), context)
-                        .ok()
-                        .and_then(|v| v.as_number())
-                        .unwrap_or(0.0) as f32;
-                    let r = stop_obj.get(js_string!("r"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
-                    let g = stop_obj.get(js_string!("g"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
-                    let b = stop_obj.get(js_string!("b"), context).ok().and_then(|v| v.as_number()).unwrap_or(0.0) as u8;
-                    let a = stop_obj.get(js_string!("a"), context).ok().and_then(|v| v.as_number()).unwrap_or(255.0) as u8;
-                    stops.push(GradientStop { offset, color: Color::rgba(r, g, b, a) });
-                }
+        && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_val.clone())
+    {
+        let len = arr.length(context).unwrap_or(0);
+        for i in 0..len {
+            if let Ok(stop_val) = arr.at(i as i64, context) {
+                let stop_obj = match stop_val.as_object() {
+                    Some(o) => o,
+                    None => continue,
+                };
+                let offset = stop_obj
+                    .get(js_string!("offset"), context)
+                    .ok()
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(0.0) as f32;
+                let r = stop_obj
+                    .get(js_string!("r"), context)
+                    .ok()
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(0.0) as u8;
+                let g = stop_obj
+                    .get(js_string!("g"), context)
+                    .ok()
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(0.0) as u8;
+                let b = stop_obj
+                    .get(js_string!("b"), context)
+                    .ok()
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(0.0) as u8;
+                let a = stop_obj
+                    .get(js_string!("a"), context)
+                    .ok()
+                    .and_then(|v| v.as_number())
+                    .unwrap_or(255.0) as u8;
+                stops.push(GradientStop {
+                    offset,
+                    color: Color::rgba(r, g, b, a),
+                });
             }
         }
+    }
     let brush = Brush::LinearGradient { start, end, stops };
     let opaque = BoaOpaque::new(BrushOpaque(brush), context);
     Ok(opaque.object().clone().into())
@@ -226,27 +264,28 @@ fn tur_linear_gradient_create(
     let mut stops: Vec<GradientStop> = Vec::new();
     if let Ok(stops_val) = opts.get(js_string!("stops"), context)
         && let Some(stops_obj) = stops_val.as_object()
-            && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_obj.clone()) {
-                let len = arr.length(context).unwrap_or(0);
-                for i in 0..len {
-                    let Ok(stop_val) = arr.at(i as i64, context) else {
-                        continue;
-                    };
-                    let Some(stop_obj) = stop_val.as_object() else {
-                        continue;
-                    };
-                    let offset = stop_obj
-                        .get(js_string!("offset"), context)
-                        .ok()
-                        .and_then(|v| v.as_number())
-                        .unwrap_or(0.0) as f32;
-                    let color_val = stop_obj
-                        .get(js_string!("color"), context)
-                        .unwrap_or(JsValue::undefined());
-                    let color = Color::from_js(&color_val).unwrap_or(Color::rgba(0, 0, 0, 0));
-                    stops.push(GradientStop { offset, color });
-                }
-            }
+        && let Ok(arr) = boa_engine::object::builtins::JsArray::from_object(stops_obj.clone())
+    {
+        let len = arr.length(context).unwrap_or(0);
+        for i in 0..len {
+            let Ok(stop_val) = arr.at(i as i64, context) else {
+                continue;
+            };
+            let Some(stop_obj) = stop_val.as_object() else {
+                continue;
+            };
+            let offset = stop_obj
+                .get(js_string!("offset"), context)
+                .ok()
+                .and_then(|v| v.as_number())
+                .unwrap_or(0.0) as f32;
+            let color_val = stop_obj
+                .get(js_string!("color"), context)
+                .unwrap_or(JsValue::undefined());
+            let color = Color::from_js(&color_val).unwrap_or(Color::rgba(0, 0, 0, 0));
+            stops.push(GradientStop { offset, color });
+        }
+    }
 
     let brush = Brush::LinearGradient { start, end, stops };
     let opaque = BoaOpaque::new(BrushOpaque(brush), context);

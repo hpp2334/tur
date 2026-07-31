@@ -3,23 +3,23 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
-use boa_engine::context::time::Clock;
-use boa_engine::js_string;
-use boa_engine::property::Attribute;
-use boa_engine::class::Class;
 use boa_engine::Context;
 use boa_engine::JsError;
 use boa_engine::JsValue;
 use boa_engine::Module;
 use boa_engine::NativeFunction;
 use boa_engine::Source;
+use boa_engine::class::Class;
+use boa_engine::context::time::Clock;
+use boa_engine::js_string;
+use boa_engine::property::Attribute;
 
 use crate::core::app::TurAppContext;
+use crate::core::capability::{Capabilities, CapabilityDecls};
+use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::js_runtime::module_loader::{build_fn_module, build_native_module};
 use crate::core::js_runtime::{TurJsContext, TurModuleLoader};
-use crate::core::capability::{Capabilities, CapabilityDecls};
-use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::subsystem::Subsystem;
 use crate::error::TurError;
 /// A plugin that extends the engine with elements, bridge modules, subsystems,
@@ -92,8 +92,13 @@ impl<'a> PluginContext<'a> {
         closures: Vec<(&str, usize, NativeFunction)>,
         consts: Vec<ConstEntry>,
     ) {
-        let module =
-            build_native_module(self.boa, self.js_ctx_value.clone(), &fns, &closures, &consts);
+        let module = build_native_module(
+            self.boa,
+            self.js_ctx_value.clone(),
+            &fns,
+            &closures,
+            &consts,
+        );
         self.loader.register(specifier, module);
         tracing::info!(
             "registered module {specifier} ({} fns, {} closures, {} consts)",
@@ -116,7 +121,10 @@ impl<'a> PluginContext<'a> {
             .collect();
         let module = build_fn_module(self.boa, &owned);
         self.loader.register(specifier, module);
-        tracing::info!("registered host module {specifier} ({} exports)", owned.len());
+        tracing::info!(
+            "registered host module {specifier} ({} exports)",
+            owned.len()
+        );
     }
 
     /// Register a boa `JsData` global class (e.g. `TextEditingController`).
@@ -193,12 +201,8 @@ impl<'a> PluginContext<'a> {
         source: &str,
         path: &Path,
     ) -> Result<(), TurError> {
-        let module = Module::parse(
-            Source::from_bytes(source).with_path(path),
-            None,
-            self.boa,
-        )
-        .map_err(|e| TurError::Other(format!("failed to parse JS module {specifier}: {e}")))?;
+        let module = Module::parse(Source::from_bytes(source).with_path(path), None, self.boa)
+            .map_err(|e| TurError::Other(format!("failed to parse JS module {specifier}: {e}")))?;
         self.loader.register(specifier, module);
         tracing::info!("registered JS module {specifier} ({} bytes)", source.len());
         Ok(())

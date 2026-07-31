@@ -4,7 +4,9 @@ use std::rc::Rc;
 
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_view, FnEntry, Ptr};
+use crate::core::js_runtime::helpers::{
+    FnEntry, Ptr, extract_ctx, require_props_object, wrap_view,
+};
 
 use super::decode::{decode_image_bytes, decode_svg};
 
@@ -16,11 +18,7 @@ pub fn fns() -> Vec<FnEntry> {
     ]
 }
 
-fn tur_image(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
+fn tur_image(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let _ = extract_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
     let spec = super::ImageView::from_js(&props, context);
@@ -63,8 +61,7 @@ fn tur_create_image_resource(
     };
     let image = decode_image_bytes(&bytes).ok_or_else(|| {
         JsError::from(
-            JsNativeError::range()
-                .with_message("failed to decode image (supported: PNG, JPEG)"),
+            JsNativeError::range().with_message("failed to decode image (supported: PNG, JPEG)"),
         )
     })?;
     let id = js_ctx.image_resource_map().borrow_mut().insert_image(image);

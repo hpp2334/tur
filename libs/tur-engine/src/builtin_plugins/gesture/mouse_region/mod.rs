@@ -1,6 +1,6 @@
+pub mod bridge;
 mod element;
 mod layout;
 mod render;
-pub mod bridge;
 
-pub use element::{MouseRegionView, MouseRegionElement, PointerRegionEvent};
+pub use element::{MouseRegionElement, MouseRegionView, PointerRegionEvent};

@@ -26,29 +26,29 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use boa_engine::Context;
+use boa_engine::Source;
 use boa_engine::context::time::Clock;
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
-use boa_engine::Context;
-use boa_engine::Source;
 
 use error::TurError;
 
 use core::app::{FrameOutcome, TurAppInternal};
 
-use core::js_runtime::helpers::FnEntry;
-use core::js_runtime::module_loader::{build_native_module, bound_native};
 use core::app::render;
-use core::dev::dev_tool;
-use core::js_runtime::{BoaOpaque, TurModuleLoader};
 use core::async_::TurJobExecutor;
 use core::capability::{Capability, CapabilityDecls};
+use core::dev::dev_tool;
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
 use core::fonts::FontLoader;
-use core::plugin::{Plugin, PluginContext};
+use core::js_runtime::helpers::FnEntry;
 use core::js_runtime::js_value::IntoJs;
+use core::js_runtime::module_loader::{bound_native, build_native_module};
+use core::js_runtime::{BoaOpaque, TurModuleLoader};
+use core::plugin::{Plugin, PluginContext};
 use core::render::Renderer;
 
 #[cfg(feature = "trace")]
@@ -279,7 +279,11 @@ impl TurApp {
         &self,
         id: core::element::NodeId,
     ) -> Option<core::elements::DevNodeData> {
-        self.internal.js_context.element_tree.borrow().dev_tool_node(id)
+        self.internal
+            .js_context
+            .element_tree
+            .borrow()
+            .dev_tool_node(id)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
@@ -323,12 +327,7 @@ impl TurApp {
         let element = node.element.as_ref()?;
         let (cx, cy, cw, ch) = element.cursor_rect_relative()?;
 
-        Some((
-            abs_x + cx,
-            abs_y + cy,
-            cw,
-            ch,
-        ))
+        Some((abs_x + cx, abs_y + cy, cw, ch))
     }
 
     /// True if the currently-focused element is an editable text element.
@@ -464,18 +463,17 @@ impl TurEngineBuilder {
     /// Plugins declare hard dependencies via [`Plugin::requires`]; the engine
     /// validates those before any plugin side effects.
     pub fn capability<C: Capability>(mut self, cap: C) -> Self {
-        self.capabilities
-            .push(Box::new(move |registry: &core::capability::Capabilities| {
+        self.capabilities.push(Box::new(
+            move |registry: &core::capability::Capabilities| {
                 registry.insert::<C>(cap);
-            }));
+            },
+        ));
         self
     }
 
     pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let renderer = self.renderer.expect("renderer must be set");
-        let font_loader = self
-            .font_loader
-            .expect("font_loader must be set");
+        let font_loader = self.font_loader.expect("font_loader must be set");
         let clock = self
             .clock
             .expect("clock must be set (use TurEngineBuilder::clock)");
@@ -506,12 +504,7 @@ impl TurEngineBuilder {
             .build()
             .expect("failed to build boa context");
 
-        let internal = TurAppInternal::new(
-            renderer,
-            font_loader,
-            executor.clone(),
-            clock,
-        );
+        let internal = TurAppInternal::new(renderer, font_loader, executor.clone(), clock);
 
         let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
         let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
@@ -571,8 +564,11 @@ impl TurEngineBuilder {
             boa_engine::JsValue::from(ge_fn),
             &mut boa_context,
         );
-        let _ = boa_context
-            .register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
+        let _ = boa_context.register_global_property(
+            js_string!("turDevTool"),
+            dt_obj,
+            Attribute::all(),
+        );
 
         // Insert every builder-level capability into the shared registry
         // BEFORE plugins run, so plugin call-site order (`capability` before
@@ -631,10 +627,7 @@ impl TurEngineBuilder {
                 .set_cursor_platform(cursor_backend);
         }
 
-        tracing::info!(
-            "TurApp initialized ({} plugins)",
-            self.plugins.len()
-        );
+        tracing::info!("TurApp initialized ({} plugins)", self.plugins.len());
 
         Ok(Rc::new(TurApp {
             boa_context: RefCell::new(boa_context),

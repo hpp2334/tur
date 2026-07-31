@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::{JsArray, JsFunction};
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::{JsArray, JsFunction};
 use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::JsProps;
+use crate::core::edgy::reactive::AnyReadable;
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
+use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
-use crate::core::edgy::reactive::AnyReadable;
-use crate::core::view::{ViewCx, read_atom_raw, extract_view, View};
+use crate::core::view::{View, ViewCx, extract_view, read_atom_raw};
 
 // ---------------------------------------------------------------------------
 // EachView — render one child per item of a reactive array.
@@ -60,7 +60,10 @@ impl EachView {
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
         let raw = read_atom_raw(cx, self.items, boa);
-        let Some(arr) = raw.as_object().and_then(|o| JsArray::from_object(o.clone()).ok()) else {
+        let Some(arr) = raw
+            .as_object()
+            .and_then(|o| JsArray::from_object(o.clone()).ok())
+        else {
             return Vec::new();
         };
         let len = arr.length(boa).unwrap_or(0);
@@ -84,9 +87,7 @@ impl View for EachView {
         let id = cx.alloc_node();
         let frag_id = FragmentNodeId::new(id.as_u64());
 
-        let kind = EachFragment {
-            view: self.clone(),
-        };
+        let kind = EachFragment { view: self.clone() };
 
         // Register the fragment's reactive deps in the subscriber graph.
         {

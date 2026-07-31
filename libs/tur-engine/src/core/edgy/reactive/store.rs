@@ -3,12 +3,12 @@ use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::rc::{Rc, Weak};
 
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsResult, JsValue};
 
-use super::atom_id_of;
 use super::any_readable_of;
+use super::atom_id_of;
 use super::{AnyReadable, AtomId, Derived, Mutation, Readable, Source, SubscriberId};
 
 // ---------------------------------------------------------------------------

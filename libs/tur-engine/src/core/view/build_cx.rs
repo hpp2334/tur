@@ -3,12 +3,12 @@ use std::rc::Rc;
 
 use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::TurJsContext;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::reactive::{ReactiveReadStore, Readable};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
+use crate::core::js_runtime::TurJsContext;
 use crate::core::layout::SubscribeCx;
-use crate::core::edgy::reactive::{Readable, ReactiveReadStore};
 use crate::core::view::{FromJs, Val};
 
 // ---------------------------------------------------------------------------
@@ -42,12 +42,7 @@ pub trait ViewCx {
 
     /// Insert `child` into `parent` immediately before the existing
     /// `ref_child`. Used to keep tree children ordered by logical index.
-    fn link_child_before(
-        &mut self,
-        parent: ElementNodeId,
-        child: NodeId,
-        ref_child: ElementNodeId,
-    );
+    fn link_child_before(&mut self, parent: ElementNodeId, child: NodeId, ref_child: ElementNodeId);
 
     /// Reorder an already-linked `child` under `parent` so that it sits
     /// immediately before `ref_child`.
@@ -118,11 +113,7 @@ pub fn read_val_opt<T: FromJs + Clone + 'static>(
 
 /// Read an atom's current value as a raw `JsValue` (untracked), via the
 /// build context's reactive store.
-pub fn read_atom_raw<T>(
-    cx: &dyn ViewCx,
-    readable: Readable<T>,
-    boa: &mut Context,
-) -> JsValue {
+pub fn read_atom_raw<T>(cx: &dyn ViewCx, readable: Readable<T>, boa: &mut Context) -> JsValue {
     cx.store_read_only().read(readable, boa)
 }
 

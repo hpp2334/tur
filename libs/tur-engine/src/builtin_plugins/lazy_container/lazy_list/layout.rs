@@ -31,8 +31,7 @@ impl ElementLayout for LazyListElement {
             self.position.set_extents(0.0, 0.0);
             // Drop any mounted items.
             if !self.visible.is_empty() {
-                let to_destroy: Vec<NodeId> =
-                    self.visible.iter().map(|&(_, id)| id).collect();
+                let to_destroy: Vec<NodeId> = self.visible.iter().map(|&(_, id)| id).collect();
                 self.visible.clear();
                 let mut vcx = LayoutViewCx::new(
                     cx.tree,

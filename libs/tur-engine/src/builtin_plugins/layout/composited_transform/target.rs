@@ -9,12 +9,14 @@ use boa_engine::{Context, JsResult, JsValue};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_view, Ptr};
-use crate::core::layout::{Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset, Size};
+use crate::core::js_runtime::helpers::{Ptr, extract_ctx, require_props_object, wrap_view};
+use crate::core::layout::{
+    Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset, Size,
+};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::view::{Lifecycle, View, ViewCx};
 
-use super::link::{extract_link_state, CompositedLinkState};
+use super::link::{CompositedLinkState, extract_link_state};
 
 #[derive(Clone, Default)]
 pub struct TargetView {

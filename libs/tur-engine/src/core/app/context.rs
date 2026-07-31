@@ -3,22 +3,22 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use crate::core::layout::Constraints;
 use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
-use crate::core::layout::Constraints;
 
+use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
-use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
-use crate::core::screen::Screen;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
+use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
 use crate::core::render::Renderer;
+use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 

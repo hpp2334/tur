@@ -55,7 +55,10 @@ fn second_touch_drag_after_release_still_registers() {
     // After the second drag the deltas should be non-zero (the second drag's
     // moves registered). drag-delta-tracking exposes deltas via __getDragInfo.
     let s = app.eval_js("globalThis.__getDragInfo()");
-    let parts: Vec<f64> = s.split(',').map(|p| p.trim().parse().unwrap_or(9999.0)).collect();
+    let parts: Vec<f64> = s
+        .split(',')
+        .map(|p| p.trim().parse().unwrap_or(9999.0))
+        .collect();
     let (dsx, dsy, _, _) = (parts[0], parts[1], parts[2], parts[3]);
     assert!(
         dsx.abs() > 0.0 || dsy.abs() > 0.0,
@@ -79,7 +82,11 @@ fn drag_with_lift_second_drag_after_release_registers() {
 
     // First drag — should fire down + move + up.
     touch_drag(&mut app, (cx, cy), (cx + 40.0, cy + 40.0), 4);
-    assert_eq!(last_event(&app), "up", "first drag should have ended with up");
+    assert_eq!(
+        last_event(&app),
+        "up",
+        "first drag should have ended with up"
+    );
 
     // Immediately start a second drag (the lift's reverse animation is still
     // settling — LIFT_MS = 180ms, well within the second drag's window).

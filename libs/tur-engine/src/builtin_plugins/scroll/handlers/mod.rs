@@ -1,9 +1,9 @@
+use crate::core::app::AppEvent;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{ElementOnWheelContext, NodeTreeData, WheelEvent};
-use crate::core::app::AppEvent;
-use crate::core::platform::PlatformEvent;
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
+use crate::core::platform::PlatformEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 mod inertia;
@@ -36,11 +36,7 @@ use crate::builtin_plugins::scroll::scroll_view::ScrollViewElement;
 pub struct ScrollSubsystem;
 
 impl Subsystem for ScrollSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         // Real device wheel / trackpad scroll from the platform.
         let PlatformEvent::Wheel {
             delta_x,
@@ -123,9 +119,10 @@ fn find_deepest_with_wheel(
     for &id in hit_path {
         if let Some(node) = tree.get_element(id)
             && let Some(ref element) = node.element
-                && element.has_on_wheel() {
-                    return Some(id);
-                }
+            && element.has_on_wheel()
+        {
+            return Some(id);
+        }
     }
     None
 }
@@ -153,17 +150,15 @@ fn chain_overscroll(cx: &mut SubsystemFlushContext<'_>, source_id: ElementNodeId
 /// Walk parents from `start` to find the nearest ancestor with an `onWheel`
 /// handler. Hops through fragment ancestors transparently (fragments can't
 /// carry wheel handlers, so they're skipped without inspection).
-fn find_ancestor_with_wheel(
-    tree: &NodeTreeData,
-    start: ElementNodeId,
-) -> Option<ElementNodeId> {
+fn find_ancestor_with_wheel(tree: &NodeTreeData, start: ElementNodeId) -> Option<ElementNodeId> {
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             if let Some(ref element) = node.element
-                && element.has_on_wheel() {
-                    return Some(ElementNodeId::new(id.as_u64()));
-                }
+                && element.has_on_wheel()
+            {
+                return Some(ElementNodeId::new(id.as_u64()));
+            }
             current = node.parent;
         } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
             current = Some(frag.parent);
@@ -212,12 +207,8 @@ pub fn dispatch_wheel(
         return 0.0;
     };
     let mut mq = cx.mutation_queue.borrow_mut();
-    let mut el_cx = ElementOnWheelContext::new(
-        &mut *cx.app_event_queue,
-        &mut mq,
-        cx.need_paint,
-        id,
-    );
+    let mut el_cx =
+        ElementOnWheelContext::new(&mut *cx.app_event_queue, &mut mq, cx.need_paint, id);
     let overscroll = element.on_wheel_event(&mut el_cx, &WheelEvent { delta_x, delta_y });
     tree.mark_dirty(id.into());
     overscroll

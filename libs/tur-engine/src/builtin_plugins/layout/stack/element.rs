@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::Context;
 use crate::core::layout::{Alignment, Size, StackFit};
+use boa_engine::Context;
+use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // StackView — the user's declaration. Pure Rust, no JsValues.
@@ -60,8 +60,12 @@ impl Lifecycle for StackElement {}
 impl ElementSubscribe for StackElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.fit.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.fit.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.alignment.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 

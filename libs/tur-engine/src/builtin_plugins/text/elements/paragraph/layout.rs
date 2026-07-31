@@ -41,7 +41,10 @@ fn build_parley_layout(
             // Fall back to opaque black when no color is set — without an
             // explicit brush, parley/vello render text invisibly.
             let c = span.color.unwrap_or(Color::rgb(0, 0, 0));
-            builder.push(StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]), range.clone());
+            builder.push(
+                StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]),
+                range.clone(),
+            );
             if span.bold {
                 builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
             }
@@ -176,7 +179,9 @@ impl ElementLayout for TextElement {
         _children: &[ElementNodeId],
         cx: &mut LayoutContext,
     ) -> Size {
-        let base_font_size = cx.read_val_opt(self.view.font_size.as_ref()).unwrap_or(14.0);
+        let base_font_size = cx
+            .read_val_opt(self.view.font_size.as_ref())
+            .unwrap_or(14.0);
 
         // Resolve the spans to lay out. If the spec carries explicit spans,
         // use them; otherwise build a single anonymous span from the `text`
@@ -214,7 +219,9 @@ impl ElementLayout for TextElement {
         };
 
         let max_lines = cx.read_val_opt(self.view.max_lines.as_ref());
-        let overflow = cx.read_val_opt(self.view.overflow.as_ref()).unwrap_or_default();
+        let overflow = cx
+            .read_val_opt(self.view.overflow.as_ref())
+            .unwrap_or_default();
         // Resolve the default color once, up-front: `cx` is mutably borrowed by
         // `text_layout_contexts()` for the rest of the function, so we can't
         // touch it again after that point.
@@ -299,8 +306,7 @@ impl ElementLayout for TextElement {
             return constraints.constrain(Size::new(width as f64, height as f64));
         };
 
-        let ellipsis_w =
-            measure_ellipsis_width(font_cx, text_layout_cx, base_font_size as f32);
+        let ellipsis_w = measure_ellipsis_width(font_cx, text_layout_cx, base_font_size as f32);
         let trunc_byte = compute_trunc_byte(&full_text, nth, ellipsis_w, max_width);
 
         let (truncated_text, truncated_spans) =
@@ -316,11 +322,8 @@ impl ElementLayout for TextElement {
         trunc_layout.break_all_lines(max_width);
         trunc_layout.align(Alignment::Start, AlignmentOptions::default());
 
-        let (layout_data, width, height) = text_layout::extract_layout_data(
-            &mut trunc_layout,
-            &trunc_underlines,
-            &truncated_text,
-        );
+        let (layout_data, width, height) =
+            text_layout::extract_layout_data(&mut trunc_layout, &trunc_underlines, &truncated_text);
         self.cached_layout = Some(layout_data);
         constraints.constrain(Size::new(width as f64, height as f64))
     }
@@ -418,9 +421,16 @@ mod tests {
         assert_eq!(b, 4, "must end at grapheme boundary, not mid-cluster");
         // The kept prefix is exactly the source's first 4 bytes ("re" + U+0301,
         // NFD "ré") — i.e. the combining mark is preserved, not stripped.
-        assert_eq!(&text[..b], "re\u{0301}", "kept prefix must preserve the combining mark");
+        assert_eq!(
+            &text[..b],
+            "re\u{0301}",
+            "kept prefix must preserve the combining mark"
+        );
         assert_eq!(text[..b].graphemes(true).count(), 2);
-        assert_ne!(b, 2, "regression: char-based advance would split the cluster");
+        assert_ne!(
+            b, 2,
+            "regression: char-based advance would split the cluster"
+        );
     }
 
     /// A ZWJ emoji sequence shaped as a single multi-byte glyph must remain
@@ -446,11 +456,11 @@ mod tests {
             0,
             text.len(),
             &[
-                (0, 0.0, 10.0),                       // 'H'
-                (1, 10.0, 8.0),                       // 'i'
-                (2, 18.0, 5.0),                       // ' '
-                (emoji_byte, 23.0, 24.0),             // 👨‍👩‍👧 (1 glyph, covers whole cluster)
-                (exclamation_byte, 47.0, 6.0),        // '!'
+                (0, 0.0, 10.0),                // 'H'
+                (1, 10.0, 8.0),                // 'i'
+                (2, 18.0, 5.0),                // ' '
+                (emoji_byte, 23.0, 24.0),      // 👨‍👩‍👧 (1 glyph, covers whole cluster)
+                (exclamation_byte, 47.0, 6.0), // '!'
             ],
         );
 

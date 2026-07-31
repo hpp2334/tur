@@ -13,11 +13,11 @@
 //! Scroll math (`ScrollPosition`) + event payload (`ScrollEvent`) come from the
 //! sibling `scroll` plugin.
 
+pub mod bridge;
 pub mod controller;
 mod element;
 mod layout;
 mod render;
-pub mod bridge;
 
 pub use controller::LazyGridController;
 pub use element::{LazyGridElement, LazyGridView, VisibleRangeChangeEvent};

@@ -21,7 +21,7 @@
 //! registry (populated by the plugins during `register`). No `unsafe`
 //! closures are involved.
 
-use tur_integration_tests::{text_response, TurTestApp};
+use tur_integration_tests::{TurTestApp, text_response};
 
 #[test]
 fn clipboard_read_resolves_and_drives_reactive_set() {
@@ -53,7 +53,10 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
     // drain the completion, run the PromiseJob, fire the `.then`.
     app.wait_for(|a| a.eval_js("globalThis.__result_text") == "hello from clipboard");
 
-    assert_eq!(app.eval_js("globalThis.__result_text"), "hello from clipboard");
+    assert_eq!(
+        app.eval_js("globalThis.__result_text"),
+        "hello from clipboard"
+    );
 }
 
 #[test]

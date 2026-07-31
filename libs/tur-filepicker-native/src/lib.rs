@@ -11,7 +11,7 @@
 //! wasm should depend on `tur-filepicker-wasm` instead.
 
 pub use tur_filepicker_capability::{
-    FilePicker, FilePickerBackend, PickedFile, PickOptions, SaveOptions, TurFilePickerPlugin,
+    FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
 
 #[cfg(not(target_family = "wasm"))]

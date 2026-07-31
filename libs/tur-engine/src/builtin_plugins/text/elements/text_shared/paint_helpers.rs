@@ -1,5 +1,5 @@
-use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{Geometry, Offset, Size};
+use crate::core::render::brush::{Brush, Color};
 
 use crate::core::text::text_layout::TextLayoutData;
 
@@ -47,10 +47,7 @@ pub fn paint_selection(
         // box at its absolute origin.
         canvas.fill_geometry(
             Offset::new(x_start as f64, line_info.top as f64),
-            &Geometry::Rect(Size::new(
-                (x_end - x_start) as f64,
-                line_info.height as f64,
-            )),
+            &Geometry::Rect(Size::new((x_end - x_start) as f64, line_info.height as f64)),
             &Brush::SolidColor(DEFAULT_SELECTION_COLOR),
         );
     }

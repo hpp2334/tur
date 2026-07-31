@@ -1,8 +1,8 @@
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::ElementOnKeyboardContext;
 use crate::core::platform::PlatformEvent;
-use crate::core::platform::key_event::KeydownEvent;
 use crate::core::platform::key_event::KeyEvent;
+use crate::core::platform::key_event::KeydownEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::focus::focusable::FocusableElement;
@@ -18,11 +18,7 @@ use crate::builtin_plugins::focus::focusable::FocusableElement;
 pub struct KeyboardSubsystem;
 
 impl Subsystem for KeyboardSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let PlatformEvent::Key(key_event) = event else {
             return;
         };
@@ -45,11 +41,7 @@ fn dispatch_key_event(cx: &mut SubsystemFlushContext<'_>, event: &KeyEvent) {
         return;
     };
     let mut mq = cx.mutation_queue.borrow_mut();
-    let mut el_cx = ElementOnKeyboardContext::new(
-        &mut mq,
-        &mut *cx.app_event_queue,
-        cx.need_paint,
-    );
+    let mut el_cx = ElementOnKeyboardContext::new(&mut mq, &mut *cx.app_event_queue, cx.need_paint);
     element.on_keyboard_event(&mut el_cx, event);
     tree.mark_dirty(focused_id.into());
 }
@@ -70,17 +62,17 @@ fn bubble_on_key_down(cx: &mut SubsystemFlushContext<'_>, key_event: &KeyEvent) 
         if let Some(node) = tree.get_element(ElementNodeId::new(nid.as_u64())) {
             if let Some(ref element) = node.element
                 && let Some(f) = element.cast::<FocusableElement>()
-                    && let Some(m) = f.view.on_key_down
-                        {
-                            mq.push(
-                                m,
-                                KeydownEvent {
-                                    key: key.clone(),
-                                    code: code.clone(),
-                                    modifiers,
-                                },
-                            );
-                        }
+                && let Some(m) = f.view.on_key_down
+            {
+                mq.push(
+                    m,
+                    KeydownEvent {
+                        key: key.clone(),
+                        code: code.clone(),
+                        modifiers,
+                    },
+                );
+            }
             current = node.parent;
         } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(nid.as_u64())) {
             current = Some(frag.parent);

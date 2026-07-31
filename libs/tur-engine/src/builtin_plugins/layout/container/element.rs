@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::Context;
-use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{Alignment, BorderPosition, ClipBehavior};
+use crate::core::render::brush::{Brush, Color};
+use boa_engine::Context;
+use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // ContainerView — the user's declaration. Pure Rust, no JsValues.
@@ -40,7 +40,10 @@ impl View for ContainerView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
-            AnyElement::new(ContainerElement { view: self.clone(), painting: ContainerPainting::default() }),
+            AnyElement::new(ContainerElement {
+                view: self.clone(),
+                painting: ContainerPainting::default(),
+            }),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -86,12 +89,24 @@ fn static_f64(val: &Option<Val<f64>>) -> Option<f64> {
 }
 
 impl ContainerElement {
-    pub fn width(&self) -> Option<f64> { static_f64(&self.view.width) }
-    pub fn height(&self) -> Option<f64> { static_f64(&self.view.height) }
-    pub fn padding(&self) -> Option<f64> { static_f64(&self.view.padding) }
-    pub fn border_width(&self) -> Option<f64> { static_f64(&self.view.border_width) }
-    pub fn border_radius(&self) -> Option<f64> { static_f64(&self.view.border_radius) }
-    pub fn shadow_blur(&self) -> Option<f64> { static_f64(&self.view.shadow_blur) }
+    pub fn width(&self) -> Option<f64> {
+        static_f64(&self.view.width)
+    }
+    pub fn height(&self) -> Option<f64> {
+        static_f64(&self.view.height)
+    }
+    pub fn padding(&self) -> Option<f64> {
+        static_f64(&self.view.padding)
+    }
+    pub fn border_width(&self) -> Option<f64> {
+        static_f64(&self.view.border_width)
+    }
+    pub fn border_radius(&self) -> Option<f64> {
+        static_f64(&self.view.border_radius)
+    }
+    pub fn shadow_blur(&self) -> Option<f64> {
+        static_f64(&self.view.shadow_blur)
+    }
     pub fn color(&self) -> Option<Brush> {
         match &self.view.color {
             Some(Val::Static(v)) => Some(v.clone()),
@@ -105,9 +120,14 @@ impl ContainerElement {
         }
     }
     pub fn shadow_color(&self) -> Option<Color> {
-        match &self.view.shadow_color { Some(Val::Static(v)) => Some(*v), _ => None }
+        match &self.view.shadow_color {
+            Some(Val::Static(v)) => Some(*v),
+            _ => None,
+        }
     }
-    pub fn shadow_offset(&self) -> Option<(f64, f64)> { self.view.shadow_offset }
+    pub fn shadow_offset(&self) -> Option<(f64, f64)> {
+        self.view.shadow_offset
+    }
     pub fn border_position(&self) -> BorderPosition {
         match &self.view.border_position {
             Some(Val::Static(v)) => *v,
@@ -121,18 +141,42 @@ impl Lifecycle for ContainerElement {}
 impl ElementSubscribe for ContainerElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.padding.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.alignment.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.border_color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.border_width.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.border_radius.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.border_position.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.clip_behavior.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.shadow_color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.shadow_blur.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.width.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.height.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.padding.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.alignment.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.border_color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.border_width.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.border_radius.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.border_position.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.clip_behavior.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.shadow_color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.shadow_blur.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 

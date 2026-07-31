@@ -14,12 +14,12 @@
 //! the needed state lives in the capability registry (populated by
 //! [`crate::TurNetPlugin`] during `register`).
 
-use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::{JsArrayBuffer, JsPromise};
 use boa_engine::property::PropertyKey;
-use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsResult, JsValue};
+use boa_engine::{JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 
-use tur_engine::core::js_runtime::helpers::{extract_ctx, FnEntry, Ptr};
+use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
 
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 /// Bridge function table entries for `tur:net`.
@@ -62,10 +62,9 @@ fn tur_net_request(
                 JsValue::from(js_string!(msg.as_str())),
                 ctx,
             );
-            let _ =
-                resolvers
-                    .reject
-                    .call(&JsValue::undefined(), &[e.into()], ctx);
+            let _ = resolvers
+                .reject
+                .call(&JsValue::undefined(), &[e.into()], ctx);
             return Ok(promise.into());
         }
     };
@@ -151,11 +150,7 @@ fn parse_request_opts(
     })
 }
 
-fn js_opt_str(
-    obj: &JsObject,
-    key: &str,
-    ctx: &mut boa_engine::Context,
-) -> Option<String> {
+fn js_opt_str(obj: &JsObject, key: &str, ctx: &mut boa_engine::Context) -> Option<String> {
     obj.get(js_string!(key), ctx)
         .ok()
         .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
@@ -177,11 +172,8 @@ fn resolve_outcome(
         } => {
             let o = JsObject::with_object_proto(ctx.intrinsics());
             let _ = o.create_data_property(js_string!("ok"), JsValue::from(true), ctx);
-            let _ = o.create_data_property(
-                js_string!("status"),
-                JsValue::from(*status as f64),
-                ctx,
-            );
+            let _ =
+                o.create_data_property(js_string!("status"), JsValue::from(*status as f64), ctx);
             let _ = o.create_data_property(
                 js_string!("statusText"),
                 JsValue::from(js_string!(status_text.as_str())),
@@ -209,11 +201,8 @@ fn resolve_outcome(
                     if let Ok(ab) =
                         JsArrayBuffer::from_byte_block(AlignedVec::from_iter(0, b.clone()), ctx)
                     {
-                        let _ = o.create_data_property(
-                            js_string!("bodyBytes"),
-                            JsValue::from(ab),
-                            ctx,
-                        );
+                        let _ =
+                            o.create_data_property(js_string!("bodyBytes"), JsValue::from(ab), ctx);
                     }
                 }
             }

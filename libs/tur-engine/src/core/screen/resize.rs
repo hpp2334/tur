@@ -4,11 +4,7 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 pub struct ResizeSubsystem;
 
 impl Subsystem for ResizeSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let PlatformEvent::Resize {
             logical_width,
             logical_height,
@@ -18,8 +14,7 @@ impl Subsystem for ResizeSubsystem {
             return;
         };
 
-        cx.renderer
-            .resize(*logical_width, *logical_height, *dpr);
+        cx.renderer.resize(*logical_width, *logical_height, *dpr);
         cx.screen.logical_size = (*logical_width as f64, *logical_height as f64);
         // Push the new size into the `viewportSize$` source atom now
         // (event-driven), so subscribers re-layout in this same fixed-point

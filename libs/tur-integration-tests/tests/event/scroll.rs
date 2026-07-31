@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::builtin_plugins::scroll::ScrollViewElement;
+use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_integration_tests::TurTestApp;
 
 fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
@@ -9,7 +9,9 @@ fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
     let (sv_id, col_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let sv = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         (sv.id, sv.children[0])
     };
 
@@ -97,11 +99,21 @@ fn wheel_chains_to_parent_at_boundary() {
     let (outer_id, inner_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let row = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        let outer = tree.get_element(ElementNodeId::new(row.children[1].as_u64())).unwrap();
-        let col = tree.get_element(ElementNodeId::new(outer.children[0].as_u64())).unwrap();
-        let wrapper = tree.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
-        let inner = tree.get_element(ElementNodeId::new(wrapper.children[0].as_u64())).unwrap();
+        let row = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let outer = tree
+            .get_element(ElementNodeId::new(row.children[1].as_u64()))
+            .unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(outer.children[0].as_u64()))
+            .unwrap();
+        let wrapper = tree
+            .get_element(ElementNodeId::new(col.children[1].as_u64()))
+            .unwrap();
+        let inner = tree
+            .get_element(ElementNodeId::new(wrapper.children[0].as_u64()))
+            .unwrap();
         (outer.id, inner.id)
     };
 
@@ -120,10 +132,12 @@ fn wheel_chains_to_parent_at_boundary() {
         );
     });
 
-    let inner_max = app.with_element(inner_id, |e| {
-        let sv = e.cast::<ScrollViewElement>().unwrap();
-        sv.scroll_offset()
-    }).unwrap();
+    let inner_max = app
+        .with_element(inner_id, |e| {
+            let sv = e.cast::<ScrollViewElement>().unwrap();
+            sv.scroll_offset()
+        })
+        .unwrap();
 
     app.wheel(0.0, 100.0, 300.0, 200.0);
 
@@ -138,7 +152,8 @@ fn wheel_chains_to_parent_at_boundary() {
     app.with_element(inner_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
         assert_eq!(
-            sv.scroll_offset(), inner_max,
+            sv.scroll_offset(),
+            inner_max,
             "inner should still be at max"
         );
     });

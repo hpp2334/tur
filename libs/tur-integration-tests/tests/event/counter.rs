@@ -1,5 +1,5 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_engine::builtin_plugins::text::elements::TextElement;
+use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
@@ -7,7 +7,12 @@ fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = ElementNodeId::new(id.as_u64());
     app.with_element(id, |e| {
         e.cast::<TextElement>()
-            .map(|c| c.spans().iter().map(|s| s.text.as_str()).collect::<String>())
+            .map(|c| {
+                c.spans()
+                    .iter()
+                    .map(|s| s.text.as_str())
+                    .collect::<String>()
+            })
             .unwrap_or_default()
     })
     .unwrap_or_default()
@@ -33,5 +38,9 @@ fn counter_basic() {
     app.click(cx, cy);
     app.render();
 
-    assert_eq!(get_text(&app, &["count"]), "Count: 1", "should be 1 after click");
+    assert_eq!(
+        get_text(&app, &["count"]),
+        "Count: 1",
+        "should be 1 after click"
+    );
 }

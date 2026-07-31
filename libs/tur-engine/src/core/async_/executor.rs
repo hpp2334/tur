@@ -5,9 +5,9 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context as TaskContext, Poll, RawWaker, RawWakerVTable, Waker};
 
-use boa_engine::job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob};
 use boa_engine::Context;
 use boa_engine::JsResult;
+use boa_engine::job::{GenericJob, Job, JobExecutor, NativeAsyncJob, PromiseJob};
 
 #[derive(Default)]
 pub struct TurJobExecutor {
@@ -116,7 +116,8 @@ fn poll_async_job_to_completion(
 /// A `Waker` that does nothing — module-load futures are self-completing on
 /// poll, so no real wake-up machinery is required.
 fn noop_waker() -> Waker {
-    const VTABLE: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_action, noop_action, noop_drop);
+    const VTABLE: RawWakerVTable =
+        RawWakerVTable::new(noop_clone, noop_action, noop_action, noop_drop);
     const fn noop_clone(_: *const ()) -> RawWaker {
         RawWaker::new(std::ptr::null(), &VTABLE)
     }

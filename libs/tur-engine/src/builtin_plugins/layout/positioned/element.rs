@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // PositionedView — the user's declaration. Pure Rust, no JsValues.
@@ -32,7 +32,11 @@ pub struct PositionedView {
 impl View for PositionedView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
-        cx.insert_node(id, AnyElement::new(PositionedElement { view: self.clone() }), boa);
+        cx.insert_node(
+            id,
+            AnyElement::new(PositionedElement { view: self.clone() }),
+            boa,
+        );
         let _child_id = self.child.build(cx, boa, id.into());
         cx.link_child(parent, id.into());
         id.into()
@@ -53,12 +57,24 @@ impl Lifecycle for PositionedElement {}
 impl ElementSubscribe for PositionedElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.left.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.top.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.right.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.bottom.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.width.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.height.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.left.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.top.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.right.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.bottom.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.width.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.height.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 

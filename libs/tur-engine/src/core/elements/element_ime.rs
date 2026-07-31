@@ -1,4 +1,4 @@
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
 use crate::core::platform::ImeEvent;
 use std::cell::Cell;
 

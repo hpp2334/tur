@@ -15,14 +15,22 @@ fn row_with_each_does_not_inflate() {
     let (col_id, row_id, each_id, marker_id, expanded_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             col.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_flex")
         );
-        let row = tree.get_element(ElementNodeId::new(col.children[0].as_u64())).unwrap();
-        let marker = tree.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
-        let expanded = tree.get_element(ElementNodeId::new(col.children[2].as_u64())).unwrap();
+        let row = tree
+            .get_element(ElementNodeId::new(col.children[0].as_u64()))
+            .unwrap();
+        let marker = tree
+            .get_element(ElementNodeId::new(col.children[1].as_u64()))
+            .unwrap();
+        let expanded = tree
+            .get_element(ElementNodeId::new(col.children[2].as_u64()))
+            .unwrap();
         // The Each sits after the sized box inside the Row. It is now a
         // Fragment (no layout box of its own), so take its id directly
         // instead of looking it up as an element.

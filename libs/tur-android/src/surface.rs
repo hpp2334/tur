@@ -44,7 +44,9 @@ impl AndroidWindowHandle {
 }
 
 impl HasWindowHandle for AndroidWindowHandle {
-    fn window_handle(&self) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
         // SAFETY: the `ANativeWindow*` is valid for the lifetime of this
         // `AndroidWindowHandle` (the embedder guarantees the Android `Surface`
         // is alive), satisfying `WindowHandle`'s validity invariant.
@@ -53,7 +55,9 @@ impl HasWindowHandle for AndroidWindowHandle {
 }
 
 impl HasDisplayHandle for AndroidWindowHandle {
-    fn display_handle(&self) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
         // SAFETY: the Android display handle carries no pointers (it's a
         // zero-sized marker), so borrowing it raw is always sound.
         Ok(unsafe { raw_window_handle::DisplayHandle::borrow_raw(self.raw_display_handle()) })

@@ -1,20 +1,19 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
-use boa_engine::Context;
-use crate::core::render::brush::{Brush};
 use crate::core::layout::{Axis, Size};
+use crate::core::render::brush::Brush;
+use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
-    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
-    TraceValue, WheelEvent,
-};
-use crate::builtin_plugins::scroll::core::controller::ScrollController;
 use crate::builtin_plugins::scroll::ScrollEvent;
-use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
+use crate::builtin_plugins::scroll::core::controller::ScrollController;
+use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::elements::{
+    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
+};
+use crate::core::js_runtime::JsProps;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 use super::scroll_position::ScrollPosition;
 
@@ -65,12 +64,13 @@ impl View for ScrollViewView {
         // Bind the controller to this node so `jumpTo` (and drag-driven
         // `ScrollTo` events from a sibling Scrollbar) can locate this element.
         if let Some(ctrl_obj) = &self.controller
-            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() {
-                ctrl.bound_node = Some(id);
-                ctrl.element_tree = Some(cx.node_tree());
-                ctrl.mutation_queue = Some(cx.mutation_queue());
-                ctrl.dirty_flag = Some(cx.dirty());
-            }
+            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>()
+        {
+            ctrl.bound_node = Some(id);
+            ctrl.element_tree = Some(cx.node_tree());
+            ctrl.mutation_queue = Some(cx.mutation_queue());
+            ctrl.dirty_flag = Some(cx.dirty());
+        }
         let _child_id = self.child.build(cx, boa, id.into());
         cx.link_child(parent, id.into());
         id.into()
@@ -119,7 +119,9 @@ impl ScrollViewElement {
     }
 
     pub fn update_controller_metrics(&mut self) {
-        let Some(ref ctrl_obj) = self.view.controller else { return };
+        let Some(ref ctrl_obj) = self.view.controller else {
+            return;
+        };
         let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
             return;
         };
@@ -134,7 +136,9 @@ impl ScrollViewElement {
     }
 
     pub fn apply_pending_initial_offset(&mut self) {
-        let Some(ref ctrl_obj) = self.view.controller else { return };
+        let Some(ref ctrl_obj) = self.view.controller else {
+            return;
+        };
         let Some(mut ctrl) = ctrl_obj.downcast_mut::<ScrollController>() else {
             return;
         };
@@ -152,8 +156,12 @@ impl Lifecycle for ScrollViewElement {}
 impl ElementSubscribe for ScrollViewElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.padding.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.padding.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.color.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 
@@ -181,7 +189,10 @@ impl ElementTrace for ScrollViewElement {
         let ct = self.content_size();
         vec![
             ("offset", TraceValue::Num(self.position.pixels())),
-            ("maxScrollExtent", TraceValue::Num(self.position.max_scroll_extent())),
+            (
+                "maxScrollExtent",
+                TraceValue::Num(self.position.max_scroll_extent()),
+            ),
             ("viewportWidth", TraceValue::Num(vp.width)),
             ("viewportHeight", TraceValue::Num(vp.height)),
             ("contentWidth", TraceValue::Num(ct.width)),
@@ -205,16 +216,17 @@ impl ElementOnWheel for ScrollViewElement {
             self.update_controller_metrics();
             if let Some(ref ctrl_obj) = self.view.controller
                 && let Some(ctrl) = ctrl_obj.downcast_ref::<ScrollController>()
-                    && let Some(m) = ctrl.on_scroll {
-                        cx.push_event(
-                            m,
-                            ScrollEvent {
-                                offset: ctrl.offset,
-                                max_extent: ctrl.max_scroll_extent,
-                                viewport_dimension: ctrl.viewport_dimension,
-                            },
-                        );
-                    }
+                && let Some(m) = ctrl.on_scroll
+            {
+                cx.push_event(
+                    m,
+                    ScrollEvent {
+                        offset: ctrl.offset,
+                        max_extent: ctrl.max_scroll_extent,
+                        viewport_dimension: ctrl.viewport_dimension,
+                    },
+                );
+            }
             cx.request_paint();
         }
 

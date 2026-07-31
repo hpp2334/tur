@@ -1,17 +1,17 @@
-use boa_engine::object::JsObject;
+use crate::core::layout::Size;
+use crate::core::render::brush::Brush;
 use boa_engine::Context;
-use crate::core::render::brush::{Brush};
-use crate::core::layout::{Size};
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementTrace, TraceValue,
-};
 use crate::builtin_plugins::scroll::core::controller::ScrollController;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::elements::{
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementTrace, TraceValue,
+};
+use crate::core::js_runtime::JsProps;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 /// Minimum thumb height so it stays grabbable even for very tall content.
 pub(crate) const MIN_THUMB: f64 = 24.0;
@@ -97,7 +97,12 @@ impl ScrollbarElement {
         let ctrl = self.view.controller.as_ref()?;
         let ctrl = ctrl.downcast_ref::<ScrollController>()?;
         let node = ctrl.bound_node?;
-        Some((node, ctrl.offset, ctrl.max_scroll_extent, ctrl.viewport_dimension))
+        Some((
+            node,
+            ctrl.offset,
+            ctrl.max_scroll_extent,
+            ctrl.viewport_dimension,
+        ))
     }
 
     /// Thumb height for the given track length.
@@ -115,19 +120,25 @@ impl Lifecycle for ScrollbarElement {}
 impl ElementSubscribe for ScrollbarElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.thickness.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.track_color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.thumb_radius.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.thickness.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.track_color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.thumb_radius.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 
 impl ElementTrace for ScrollbarElement {
     fn trace_label(&self) -> String {
         self.metrics()
-            .map(|(_, offset, max, vp)| {
-                format!("offset={offset:.1} max={max:.1} vp={vp:.1}")
-            })
+            .map(|(_, offset, max, vp)| format!("offset={offset:.1} max={max:.1} vp={vp:.1}"))
             .unwrap_or_default()
     }
 
@@ -147,11 +158,7 @@ impl ElementTrace for ScrollbarElement {
 impl ElementOnFocus for ScrollbarElement {}
 
 impl ElementOnGesture for ScrollbarElement {
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
+    fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
         let track = self.cached_track.height;
         if track <= 0.0 {
             return;
@@ -183,8 +190,8 @@ impl ElementOnGesture for ScrollbarElement {
                         start_offset: current_offset,
                     });
                 } else {
-                    let target = ((local.y - thumb / 2.0) / thumb_range * max_extent)
-                        .clamp(0.0, max_extent);
+                    let target =
+                        ((local.y - thumb / 2.0) / thumb_range * max_extent).clamp(0.0, max_extent);
                     cx.request_scroll_to(node, target);
                     self.drag = Some(DragState {
                         start_y: local.y,
@@ -193,7 +200,9 @@ impl ElementOnGesture for ScrollbarElement {
                 }
             }
             ComposedGestureEvent::PointerMove { local, .. } => {
-                let Some(d) = self.drag else { return; };
+                let Some(d) = self.drag else {
+                    return;
+                };
                 let delta = local.y - d.start_y;
                 let new_offset =
                     (d.start_offset + delta * max_extent / thumb_range).clamp(0.0, max_extent);

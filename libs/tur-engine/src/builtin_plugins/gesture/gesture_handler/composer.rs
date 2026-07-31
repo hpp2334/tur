@@ -41,11 +41,7 @@ impl GestureEventComposer {
         }
     }
 
-    pub fn on_pointer_down(
-        &mut self,
-        target: Option<ElementNodeId>,
-        path: Vec<ElementNodeId>,
-    ) {
+    pub fn on_pointer_down(&mut self, target: Option<ElementNodeId>, path: Vec<ElementNodeId>) {
         self.pointer_down_target = target;
         self.pointer_down_path = path;
         self.is_tracking_drag = target.is_some();
@@ -79,8 +75,8 @@ impl GestureEventComposer {
                 && (dx * dx + dy * dy).sqrt() <= MULTI_CLICK_MAX_DISTANCE_PX
         };
 
-        let streak_continues = !self.click_history.is_empty()
-            && self.click_history.iter().all(in_window);
+        let streak_continues =
+            !self.click_history.is_empty() && self.click_history.iter().all(in_window);
 
         if streak_continues {
             self.click_history.push((now_ms, position));

@@ -1,7 +1,7 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_engine::builtin_plugins::text::elements::TextElement;
-use tur_integration_tests::TurTestApp;
+use tur_engine::core::element::ElementNodeId;
 use tur_engine::core::platform::Cursor;
+use tur_integration_tests::TurTestApp;
 
 fn build(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("mouse-region-cursor").unwrap();
@@ -12,7 +12,9 @@ fn build(app: &mut TurTestApp) -> ElementNodeId {
 fn find_region(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let col = tree
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
     ElementNodeId::new(col.children[0].as_u64())
 }
 
@@ -63,10 +65,7 @@ fn hover_cursor_applies() {
     // No cursor before pointer enters.
     assert_eq!(app.take_current_cursor(), None);
 
-    let (cx, cy) = app
-        .get_element_absolute_bounds(region_id)
-        .unwrap()
-        .center();
+    let (cx, cy) = app.get_element_absolute_bounds(region_id).unwrap().center();
     app.pointer_move(cx, cy);
     flush(&mut app);
 
@@ -101,10 +100,7 @@ fn reactive_cursor_updates() {
     // No cursor before pointer enters.
     assert_eq!(app.take_current_cursor(), None);
 
-    let (cx, cy) = app
-        .get_element_absolute_bounds(region_id)
-        .unwrap()
-        .center();
+    let (cx, cy) = app.get_element_absolute_bounds(region_id).unwrap().center();
 
     // Initial cursor resolves to the source's initial value ("pointer").
     app.pointer_move(cx, cy);

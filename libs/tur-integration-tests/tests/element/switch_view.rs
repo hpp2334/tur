@@ -21,8 +21,14 @@ fn switch_mounts_initial_branch() {
     app.render();
 
     // The "a" branch should be mounted; "b" and fallback should not.
-    assert!(app.query_element(&["case_a"]).is_some(), "case_a should be mounted");
-    assert!(app.query_element(&["case_b"]).is_none(), "case_b should NOT be mounted");
+    assert!(
+        app.query_element(&["case_a"]).is_some(),
+        "case_a should be mounted"
+    );
+    assert!(
+        app.query_element(&["case_b"]).is_none(),
+        "case_b should NOT be mounted"
+    );
     assert!(
         app.query_element(&["case_fallback"]).is_none(),
         "fallback should NOT be mounted",
@@ -38,13 +44,14 @@ fn switch_swaps_branch_on_value_change() {
     assert!(app.query_element(&["case_a"]).is_some());
 
     // Flip the value atom to "b".
-    app.eval_module_source(
-        r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#,
-    )
-    .unwrap();
+    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#)
+        .unwrap();
     app.render();
 
-    assert!(app.query_element(&["case_a"]).is_none(), "case_a should be torn down");
+    assert!(
+        app.query_element(&["case_a"]).is_none(),
+        "case_a should be torn down"
+    );
     assert!(
         app.query_element(&["case_b"]).is_some(),
         "case_b should now be mounted",
@@ -58,10 +65,8 @@ fn switch_uses_fallback_when_no_case_matches() {
     app.render();
 
     // Value with no matching case → fallback branch.
-    app.eval_module_source(
-        r#"import { set } from "tur:std"; set(globalThis.__key, "zzz");"#,
-    )
-    .unwrap();
+    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "zzz");"#)
+        .unwrap();
     app.render();
 
     assert!(app.query_element(&["case_a"]).is_none());
@@ -80,10 +85,8 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
-    app.eval_module_source(
-        r#"import { set } from "tur:std"; set(globalThis.__key, "a");"#,
-    )
-    .unwrap();
+    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "a");"#)
+        .unwrap();
     app.render();
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
@@ -117,10 +120,8 @@ fn switch_swaps_branch_on_derived_value_change() {
 
     // Flip the source atom — the derived should go stale and the Switch
     // should swap via the subscriber graph (not a full-scan try_rebuild).
-    app.eval_module_source(
-        r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#,
-    )
-    .unwrap();
+    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#)
+        .unwrap();
     app.render();
 
     assert!(

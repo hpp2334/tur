@@ -1,21 +1,21 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsError, JsValue};
 
-use crate::core::js_runtime::JsProps;
-use crate::core::js_runtime::js_value::{type_error, FromJs};
+use crate::builtin_plugins::text::controller::SelectionChangeEvent;
+use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::elements::{
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementTrace, TraceValue,
+};
+use crate::core::js_runtime::JsProps;
+use crate::core::js_runtime::js_value::{FromJs, type_error};
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::platform::PointerDeviceKind;
-use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture,
-    ElementOnGestureContext, ElementTrace, TraceValue,
-};
-use crate::builtin_plugins::text::controller::SelectionChangeEvent;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
-use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
-use crate::core::text::text_layout::TextLayoutData;
 use crate::core::render::brush::Color;
+use crate::core::text::text_layout::TextLayoutData;
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 /// How `Text` handles content that exceeds [`TextView::max_lines`].
 ///
@@ -86,8 +86,7 @@ impl View for TextView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
-            AnyElement::with_gesture_and_focus(TextElement::new(self.clone()))
-                .with_callbacks(),
+            AnyElement::with_gesture_and_focus(TextElement::new(self.clone())).with_callbacks(),
             boa,
         );
         if let Some(qk) = &self.query_key {
@@ -144,11 +143,21 @@ impl Lifecycle for TextElement {}
 impl ElementSubscribe for TextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.text.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.max_lines.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.overflow.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.text.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.font_size.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.max_lines.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.overflow.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 
@@ -203,11 +212,7 @@ impl ElementOnGesture for TextElement {
         self.view.selectable
     }
 
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
+    fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
         // Mouse/Click dispatch bypasses accepts_device; bail for non-selectable.
         if !self.view.selectable {
             return;
@@ -257,8 +262,15 @@ fn prop_spans(props: &JsObject, key: &str, ctx: &mut Context) -> Option<Vec<Span
     if v.is_null() || v.is_undefined() {
         return None;
     }
-    let parsed = crate::builtin_plugins::text::elements::text_shared::span_data::extract_spans_from_js(&v, ctx);
-    if parsed.is_empty() { None } else { Some(parsed) }
+    let parsed =
+        crate::builtin_plugins::text::elements::text_shared::span_data::extract_spans_from_js(
+            &v, ctx,
+        );
+    if parsed.is_empty() {
+        None
+    } else {
+        Some(parsed)
+    }
 }
 
 impl TextView {

@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::text::elements::EditableTextElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
@@ -131,8 +131,11 @@ fn cmd_c_copies_selected_text_to_clipboard_slot() {
     app.send_key_with_modifiers_full("c", false, false, true);
 
     let written = app.take_clipboard_write();
-    assert_eq!(written.as_deref(), Some("ll"),
-        "Cmd+C should write the selected text to the clipboard slot");
+    assert_eq!(
+        written.as_deref(),
+        Some("ll"),
+        "Cmd+C should write the selected text to the clipboard slot"
+    );
 
     // Subsequent polls return None (slot is drained).
     assert!(app.take_clipboard_write().is_none());
@@ -156,8 +159,10 @@ fn cmd_c_with_no_selection_writes_nothing() {
 
     app.send_key_with_modifiers_full("c", false, false, true);
 
-    assert!(app.take_clipboard_write().is_none(),
-        "Cmd+C with no selection should not write to the clipboard");
+    assert!(
+        app.take_clipboard_write().is_none(),
+        "Cmd+C with no selection should not write to the clipboard"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -172,13 +177,22 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
     app.send_key_with_modifiers_full("x", false, false, true);
 
     let written = app.take_clipboard_write();
-    assert_eq!(written.as_deref(), Some("ll"),
-        "Cmd+X should write the cut text to the clipboard slot");
+    assert_eq!(
+        written.as_deref(),
+        Some("ll"),
+        "Cmd+X should write the cut text to the clipboard slot"
+    );
 
-    assert_eq!(get_text(&app, id), "heo",
-        "Cmd+X should delete the selection from the buffer");
-    assert_eq!(get_cursor(&app, id), 2,
-        "Cursor should land at the cut start position");
+    assert_eq!(
+        get_text(&app, id),
+        "heo",
+        "Cmd+X should delete the selection from the buffer"
+    );
+    assert_eq!(
+        get_cursor(&app, id),
+        2,
+        "Cursor should land at the cut start position"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -197,10 +211,16 @@ fn paste_event_inserts_at_cursor() {
     // Simulate the embedder firing a paste event.
     app.push_paste_event("XY");
 
-    assert_eq!(get_text(&app, id), "abXYc",
-        "Paste should insert at the cursor");
-    assert_eq!(get_cursor(&app, id), 4,
-        "Cursor should advance past the inserted text");
+    assert_eq!(
+        get_text(&app, id),
+        "abXYc",
+        "Paste should insert at the cursor"
+    );
+    assert_eq!(
+        get_cursor(&app, id),
+        4,
+        "Cursor should advance past the inserted text"
+    );
 }
 
 #[test]
@@ -211,10 +231,16 @@ fn paste_event_replaces_selection() {
 
     app.push_paste_event("there");
 
-    assert_eq!(get_text(&app, id), "hello there",
-        "Paste over a selection should replace it");
-    assert_eq!(get_cursor(&app, id), 11,
-        "Cursor should land at the end of the pasted text");
+    assert_eq!(
+        get_text(&app, id),
+        "hello there",
+        "Paste over a selection should replace it"
+    );
+    assert_eq!(
+        get_cursor(&app, id),
+        11,
+        "Cursor should land at the end of the pasted text"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -237,6 +263,9 @@ fn cut_then_paste_roundtrips_text() {
     // the paste event channel.
     app.push_paste_event(&cut_text);
 
-    assert_eq!(get_text(&app, id), "hello",
-        "Pasting the cut text back should restore the buffer");
+    assert_eq!(
+        get_text(&app, id),
+        "hello",
+        "Pasting the cut text back should restore the buffer"
+    );
 }

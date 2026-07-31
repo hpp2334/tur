@@ -1,8 +1,8 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::js_value::{FromJs, IntoJsArgs};
 use crate::core::edgy::reactive::Mutation;
+use crate::core::js_runtime::js_value::{FromJs, IntoJsArgs};
 
 use super::handle::MutationHandle;
 

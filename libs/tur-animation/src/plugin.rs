@@ -5,12 +5,12 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+use boa_engine::JsValue;
 use boa_engine::class::Class;
 use boa_engine::native_function::NativeFunction;
-use boa_engine::JsValue;
 use boa_gc::{Finalize, Trace};
-use tur_engine::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use tur_engine::core::edgy::mutation::PendingMutationInvocationQueue;
+use tur_engine::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 
@@ -71,20 +71,15 @@ impl Plugin for TurAnimationPlugin {
         // 3. Register the AnimationSubsystem. It runs in registration order
         //    relative to other subsystems; this plugin should be added
         //    immediately after TurStdPlugin so animation ticks first.
-        ctx.register_subsystem(Box::new(AnimationSubsystem::new(
-            manager.clone(),
-            clock,
-        )));
+        ctx.register_subsystem(Box::new(AnimationSubsystem::new(manager.clone(), clock)));
 
         // 4. Register the hidden internal native module `tur:animation/native`.
         //    The consumer-facing `tur:animation` JS source imports
         //    from here to access the native bridge fns.
         let native_fns: Vec<FnEntry> = Vec::new();
 
-        let create_animation_controller = build_create_animation_controller(
-            manager.clone(),
-            mutation_queue.clone(),
-        );
+        let create_animation_controller =
+            build_create_animation_controller(manager.clone(), mutation_queue.clone());
 
         ctx.register_module(
             "tur:animation/native",
@@ -130,11 +125,8 @@ fn build_create_animation_controller(
         move |_this, args, state, context| {
             let mgr = state.manager.clone();
             let mq = state.mutation_queue.clone();
-            let data = AnimationController::data_constructor(
-                &JsValue::undefined(),
-                &args[0..],
-                context,
-            )?;
+            let data =
+                AnimationController::data_constructor(&JsValue::undefined(), &args[0..], context)?;
             let obj = AnimationController::from_data(data, context)?;
             if let Some(mut ctrl) = obj.downcast_mut::<AnimationController>() {
                 ctrl.set_animation_manager(mgr);

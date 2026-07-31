@@ -9,7 +9,9 @@ fn text_content_and_measurement() {
     let text_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let container = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             container.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_paragraph")
@@ -33,7 +35,9 @@ fn text_empty_content_zero_size() {
     app.render();
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let text_node = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let text_node = rt
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
     let layout = &text_node.computed_layout;
     assert_eq!(layout.size.width, 0.0);
     assert_eq!(layout.size.height, 0.0);
@@ -47,8 +51,12 @@ fn text_font_size_affects_height() {
     app.render();
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let small = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-    let large = rt.get_element(ElementNodeId::new(root.children[1].as_u64())).unwrap();
+    let small = rt
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
+    let large = rt
+        .get_element(ElementNodeId::new(root.children[1].as_u64()))
+        .unwrap();
     assert!(
         large.computed_layout.size.height > small.computed_layout.size.height,
         "28px ({}) should be taller than 14px ({})",
@@ -65,7 +73,9 @@ fn text_wrapping_with_narrow_constraints() {
     app.render();
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let text_node = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let text_node = rt
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
     let layout = &text_node.computed_layout;
     assert!(
         layout.size.height > 30.0,
@@ -123,9 +133,15 @@ fn text_in_column_vertical_stacking() {
     app.render();
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let col = rt.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-    let t1 = rt.get_element(ElementNodeId::new(col.children[0].as_u64())).unwrap();
-    let t2 = rt.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
+    let col = rt
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
+    let t1 = rt
+        .get_element(ElementNodeId::new(col.children[0].as_u64()))
+        .unwrap();
+    let t2 = rt
+        .get_element(ElementNodeId::new(col.children[1].as_u64()))
+        .unwrap();
 
     assert_eq!(t1.computed_layout.offset.y, 0.0);
     assert!(
@@ -223,7 +239,10 @@ fn text_ellipsis_truncates_to_one_line() {
             .unwrap();
         let elem = node.element.as_ref().unwrap();
         assert_eq!(elem.kind(), ElementKind::new("tur_paragraph"));
-        (node.computed_layout.size.height, node.computed_layout.size.width)
+        (
+            node.computed_layout.size.height,
+            node.computed_layout.size.width,
+        )
     };
 
     // Reference: the clip case at the same width/maxLines.

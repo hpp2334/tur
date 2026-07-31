@@ -1,8 +1,8 @@
 use crate::core::layout::{ComputedLayout, Offset};
 
+use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
 
 use super::element::TextElement;
 

@@ -3,9 +3,9 @@
 //! registered by `TurDemoPlugin` as part of the `tur-ext/demo-helper` module.
 
 use boa_engine::native_function::NativeFunction;
-use boa_engine::object::builtins::JsArray;
 use boa_engine::object::JsObject;
-use boa_engine::{js_string, JsArgs, JsError, JsNativeError, JsValue};
+use boa_engine::object::builtins::JsArray;
+use boa_engine::{JsArgs, JsError, JsNativeError, JsValue, js_string};
 
 use crate::compiler;
 
@@ -74,22 +74,46 @@ pub fn build_host_service_fns() -> Vec<(&'static str, boa_engine::NativeFunction
                 compiler::AstNodeKind::Statement => "statement",
             };
             obj.create_data_property(js_string!("kind"), JsValue::from(js_string!(kind_str)), ctx)?;
-            obj.create_data_property(js_string!("text"), JsValue::from(js_string!(node.text.as_str())), ctx)?;
+            obj.create_data_property(
+                js_string!("text"),
+                JsValue::from(js_string!(node.text.as_str())),
+                ctx,
+            )?;
             if let Some(body) = &node.body {
-                obj.create_data_property(js_string!("body"), JsValue::from(js_string!(body.as_str())), ctx)?;
+                obj.create_data_property(
+                    js_string!("body"),
+                    JsValue::from(js_string!(body.as_str())),
+                    ctx,
+                )?;
             }
 
             match &node.kind {
                 compiler::AstNodeKind::Import { source, specifiers } => {
-                    obj.create_data_property(js_string!("source"), JsValue::from(js_string!(source.as_str())), ctx)?;
+                    obj.create_data_property(
+                        js_string!("source"),
+                        JsValue::from(js_string!(source.as_str())),
+                        ctx,
+                    )?;
                     let spec_arr = JsArray::new(ctx)?;
                     for spec in specifiers {
                         let spec_obj = JsObject::with_object_proto(ctx.intrinsics());
-                        spec_obj.create_data_property(js_string!("local"), JsValue::from(js_string!(spec.local.as_str())), ctx)?;
-                        spec_obj.create_data_property(js_string!("imported"), JsValue::from(js_string!(spec.imported.as_str())), ctx)?;
+                        spec_obj.create_data_property(
+                            js_string!("local"),
+                            JsValue::from(js_string!(spec.local.as_str())),
+                            ctx,
+                        )?;
+                        spec_obj.create_data_property(
+                            js_string!("imported"),
+                            JsValue::from(js_string!(spec.imported.as_str())),
+                            ctx,
+                        )?;
                         spec_arr.push(spec_obj, ctx)?;
                     }
-                    obj.create_data_property(js_string!("specifiers"), JsValue::from(spec_arr), ctx)?;
+                    obj.create_data_property(
+                        js_string!("specifiers"),
+                        JsValue::from(spec_arr),
+                        ctx,
+                    )?;
                 }
                 compiler::AstNodeKind::ExportDecl { names }
                 | compiler::AstNodeKind::ExportNamed { names }

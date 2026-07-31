@@ -10,14 +10,14 @@
 
 use std::rc::Rc;
 
-use boa_engine::object::builtins::{JsArray, JsFunction};
 use boa_engine::object::JsObject;
-use boa_engine::{js_string, Context, JsResult, JsValue};
+use boa_engine::object::builtins::{JsArray, JsFunction};
+use boa_engine::{Context, JsResult, JsValue, js_string};
 
-use crate::core::edgy::mutation::{mutation_from_js, MutationHandle, IntoJsArgs};
-use crate::core::js_runtime::js_value::{type_error, FromJs};
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, mutation_from_js};
 use crate::core::edgy::reactive::AnyReadable;
-use crate::core::view::{extract_view, val_from_js, JsViewFactory, Val, View, ViewFactory};
+use crate::core::js_runtime::js_value::{FromJs, type_error};
+use crate::core::view::{JsViewFactory, Val, View, ViewFactory, extract_view, val_from_js};
 
 /// Borrowed view over a JS props object + the context needed to read it.
 ///
@@ -68,9 +68,10 @@ impl<'a> JsProps<'a> {
         let mut out = Vec::with_capacity(len);
         for i in 0..len {
             if let Ok(val) = arr.at(i as i64, self.ctx)
-                && let Some(s) = val.as_string() {
-                    out.push(s.to_std_string_escaped());
-                }
+                && let Some(s) = val.as_string()
+            {
+                out.push(s.to_std_string_escaped());
+            }
         }
         (!out.is_empty()).then_some(out)
     }
@@ -97,9 +98,10 @@ impl<'a> JsProps<'a> {
         let mut out = Vec::with_capacity(len as usize);
         for i in 0..len {
             if let Ok(item) = arr.at(i as i64, self.ctx)
-                && let Some(spec) = extract_view(&item) {
-                    out.push(spec);
-                }
+                && let Some(spec) = extract_view(&item)
+            {
+                out.push(spec);
+            }
         }
         out
     }
@@ -127,9 +129,10 @@ impl<'a> JsProps<'a> {
         let mut out = Vec::with_capacity(len as usize);
         for i in 0..len {
             if let Ok(item) = arr.at(i as i64, self.ctx)
-                && let Ok(readable) = AnyReadable::from_js(&item) {
-                    out.push(readable);
-                }
+                && let Ok(readable) = AnyReadable::from_js(&item)
+            {
+                out.push(readable);
+            }
         }
         out
     }

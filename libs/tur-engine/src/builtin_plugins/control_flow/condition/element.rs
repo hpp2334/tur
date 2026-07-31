@@ -1,13 +1,13 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::layout::SubscribeCx;
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{Val, View, ViewFactory, ViewCx, read_val};
+use crate::core::layout::SubscribeCx;
+use crate::core::view::{Val, View, ViewCx, ViewFactory, read_val};
 
 // ---------------------------------------------------------------------------
 // ConditionView — the user's declaration. Pure Rust, no JsValues.
@@ -113,9 +113,10 @@ impl ConditionFragment {
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
         if let Some(factory) = self.current_factory()
-            && let Some(view) = factory.create(boa) {
-                return vec![view.build(cx, boa, NodeId::from(fragment_id))];
-            }
+            && let Some(view) = factory.create(boa)
+        {
+            return vec![view.build(cx, boa, NodeId::from(fragment_id))];
+        }
         Vec::new()
     }
 }

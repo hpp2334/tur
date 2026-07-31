@@ -15,20 +15,26 @@ fn column_basic_vertical_stacking() {
         );
         assert_eq!(root.children.len(), 1);
 
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             col.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_flex")
         );
         assert_eq!(col.children.len(), 2);
 
-        let sb1 = tree.get_element(ElementNodeId::new(col.children[0].as_u64())).unwrap();
+        let sb1 = tree
+            .get_element(ElementNodeId::new(col.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             sb1.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
         );
 
-        let sb2 = tree.get_element(ElementNodeId::new(col.children[1].as_u64())).unwrap();
+        let sb2 = tree
+            .get_element(ElementNodeId::new(col.children[1].as_u64()))
+            .unwrap();
         assert_eq!(
             sb2.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
@@ -60,7 +66,9 @@ fn column_main_alignment_end() {
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(col.children.len(), 2);
         (col.children[0], col.children[1])
     };
@@ -85,7 +93,9 @@ fn column_cross_alignment_start() {
     let sb1_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         col.children[0]
     };
 
@@ -103,9 +113,13 @@ fn column_nested_children_do_not_overlap() {
     let (_outer_col_id, sb1_id, inner_col_id, sb3_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let outer_col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let outer_col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(outer_col.children.len(), 3);
-        let inner_col = tree.get_element(ElementNodeId::new(outer_col.children[1].as_u64())).unwrap();
+        let inner_col = tree
+            .get_element(ElementNodeId::new(outer_col.children[1].as_u64()))
+            .unwrap();
         (
             outer_col.id,
             outer_col.children[0],
@@ -150,7 +164,9 @@ fn column_overflow_children_keep_natural_height() {
     let (col_id, c0, c1, c2) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(col.children.len(), 3);
         (col.id, col.children[0], col.children[1], col.children[2])
     };
@@ -165,13 +181,16 @@ fn column_overflow_children_keep_natural_height() {
     );
 
     for (i, &child_id) in [c0, c1, c2].iter().enumerate() {
-        let child = rt.get_element(ElementNodeId::new(child_id.as_u64())).unwrap();
+        let child = rt
+            .get_element(ElementNodeId::new(child_id.as_u64()))
+            .unwrap();
         assert_eq!(
             child.computed_layout.size.height, 300.0,
             "child {i} should keep its natural 300px height, not be squished"
         );
         assert_eq!(
-            child.computed_layout.offset.y, (i * 300) as f64,
+            child.computed_layout.offset.y,
+            (i * 300) as f64,
             "child {i} offset should be {i}*300"
         );
     }

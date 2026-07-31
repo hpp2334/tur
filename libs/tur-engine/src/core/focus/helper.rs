@@ -2,13 +2,17 @@ use crate::core::element::{ElementKind, ElementNodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::focus::FocusManager;
 
-pub fn find_focusable_in_path(tree: &NodeTreeData, path: &[ElementNodeId]) -> Option<ElementNodeId> {
+pub fn find_focusable_in_path(
+    tree: &NodeTreeData,
+    path: &[ElementNodeId],
+) -> Option<ElementNodeId> {
     for &id in path {
         if let Some(node) = tree.get_element(id)
             && let Some(ref element) = node.element
-                && element.has_focus() {
-                    return Some(id);
-                }
+            && element.has_focus()
+        {
+            return Some(id);
+        }
     }
     None
 }

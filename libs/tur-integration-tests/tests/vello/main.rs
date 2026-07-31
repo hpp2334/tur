@@ -5,10 +5,22 @@ mod vello_app;
 fn main() {
     let tests: &[(&str, fn())] = &[
         ("vello_counter_app", raw::vello_counter_app),
-        ("vello_dpr_1_renders_colors", raw::vello_dpr_1_renders_colors),
-        ("vello_dpr_1_5_renders_colors", raw::vello_dpr_1_5_renders_colors),
-        ("vello_dpr_2_renders_colors", raw::vello_dpr_2_renders_colors),
-        ("vello_dpr_3_renders_colors", raw::vello_dpr_3_renders_colors),
+        (
+            "vello_dpr_1_renders_colors",
+            raw::vello_dpr_1_renders_colors,
+        ),
+        (
+            "vello_dpr_1_5_renders_colors",
+            raw::vello_dpr_1_5_renders_colors,
+        ),
+        (
+            "vello_dpr_2_renders_colors",
+            raw::vello_dpr_2_renders_colors,
+        ),
+        (
+            "vello_dpr_3_renders_colors",
+            raw::vello_dpr_3_renders_colors,
+        ),
         ("vello_image_renders", raw::vello_image_renders),
         (
             "vello_snapshot_reported_stretch_bug",

@@ -21,11 +21,11 @@ use boa_engine::Context;
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::layout::ComputedLayout;
 use crate::core::layout::{
     Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset, Size, SubscribeCx,
 };
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::core::layout::ComputedLayout;
 use crate::core::view::{Lifecycle, View, ViewCx};
 
 /// The wrapper view. Has exactly one child (the user's view); the wrapper
@@ -86,7 +86,9 @@ impl ElementLayout for RootElement {
 }
 
 impl ElementRender for RootElement {
-    fn type_name(&self) -> &'static str { "tur_root" }
+    fn type_name(&self) -> &'static str {
+        "tur_root"
+    }
     fn paint(
         &self,
         canvas: &mut dyn Canvas,
@@ -105,6 +107,10 @@ impl ElementSubscribe for RootElement {
 }
 
 impl ElementTrace for RootElement {
-    fn trace_label(&self) -> String { String::new() }
-    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> { Vec::new() }
+    fn trace_label(&self) -> String {
+        String::new()
+    }
+    fn trace_props(&self) -> Vec<(&'static str, TraceValue)> {
+        Vec::new()
+    }
 }

@@ -1,8 +1,8 @@
+use crate::core::render::brush::{Brush, Color};
 use boa_engine::JsValue;
 use boa_gc::{Finalize, Trace};
-use crate::core::render::brush::{Brush, Color};
 
-use crate::core::js_runtime::js_value::{type_error, FromJs};
+use crate::core::js_runtime::js_value::{FromJs, type_error};
 
 #[derive(Debug, Clone, Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]

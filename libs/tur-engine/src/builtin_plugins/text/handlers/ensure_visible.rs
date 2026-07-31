@@ -1,12 +1,12 @@
+use crate::builtin_plugins::clipboard::ClipboardPasteEvent;
+use crate::builtin_plugins::scroll::ScrollViewElement;
+use crate::builtin_plugins::scroll::dispatch_wheel;
+use crate::core::app::AppEvent;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
-use crate::core::app::AppEvent;
-use crate::core::platform::PlatformEvent;
 use crate::core::layout::Axis;
+use crate::core::platform::PlatformEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
-use crate::builtin_plugins::scroll::dispatch_wheel;
-use crate::builtin_plugins::scroll::ScrollViewElement;
-use crate::builtin_plugins::clipboard::ClipboardPasteEvent;
 
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 
@@ -37,11 +37,7 @@ use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 pub struct CaretVisibilitySubsystem;
 
 impl Subsystem for CaretVisibilitySubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         // Only caret-moving events warrant a scroll. Resize / pointer / wheel
         // events don't move the caret. (Paste is handled in
         // `handle_app_event` — see the struct doc for why.)
@@ -53,11 +49,7 @@ impl Subsystem for CaretVisibilitySubsystem {
         }
     }
 
-    fn handle_app_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &AppEvent,
-    ) {
+    fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent) {
         if event.as_custom::<ClipboardPasteEvent>().is_some() {
             ensure_caret_visible(cx);
         }
@@ -90,14 +82,31 @@ pub fn ensure_caret_visible(cx: &mut SubsystemFlushContext<'_>) {
         let caret_abs_top = abs_offset_y(&tree, focused) + line_top as f64;
         let scroll_abs_top = abs_offset_y(&tree, scroll_id);
 
-        let Some((axis, current, viewport_main, max_extent)) =
-            scroll_metrics(&tree, scroll_id)
+        let Some((axis, current, viewport_main, max_extent)) = scroll_metrics(&tree, scroll_id)
         else {
             return;
         };
-        (axis, current, viewport_main, max_extent, scroll_id, caret_abs_top, scroll_abs_top, line_height)
+        (
+            axis,
+            current,
+            viewport_main,
+            max_extent,
+            scroll_id,
+            caret_abs_top,
+            scroll_abs_top,
+            line_height,
+        )
     };
-    let (axis, current, viewport_main, max_extent, scroll_id, caret_abs_top, scroll_abs_top, line_height) = metrics;
+    let (
+        axis,
+        current,
+        viewport_main,
+        max_extent,
+        scroll_id,
+        caret_abs_top,
+        scroll_abs_top,
+        line_height,
+    ) = metrics;
 
     if axis != Axis::Vertical {
         return;
@@ -149,9 +158,10 @@ fn nearest_scroll_ancestor(tree: &NodeTreeData, start: ElementNodeId) -> Option<
     while let Some(id) = current {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             if let Some(ref element) = node.element
-                && element.cast::<ScrollViewElement>().is_some() {
-                    return Some(ElementNodeId::new(id.as_u64()));
-                }
+                && element.cast::<ScrollViewElement>().is_some()
+            {
+                return Some(ElementNodeId::new(id.as_u64()));
+            }
             current = node.parent;
         } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
             // Fragments can't be ScrollView; hop to the next ancestor.
@@ -183,10 +193,7 @@ fn abs_offset_y(tree: &NodeTreeData, start: ElementNodeId) -> f64 {
 }
 
 /// `(axis, current_offset, viewport_main_extent, max_scroll_extent)`.
-fn scroll_metrics(
-    tree: &NodeTreeData,
-    id: ElementNodeId,
-) -> Option<(Axis, f64, f64, f64)> {
+fn scroll_metrics(tree: &NodeTreeData, id: ElementNodeId) -> Option<(Axis, f64, f64, f64)> {
     let node = tree.get_element(id)?;
     let element = node.element.as_ref()?;
     let scroll = element.cast::<ScrollViewElement>()?;

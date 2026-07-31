@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
+use crate::core::layout::{HitTestBehavior, Offset};
+use crate::core::platform::Cursor;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use crate::core::layout::{HitTestBehavior, Offset};
-use crate::core::platform::{Cursor};
 
-use crate::core::js_runtime::JsProps;
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs};
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
+use crate::core::js_runtime::JsProps;
 use crate::core::layout::SubscribeCx;
-use crate::core::view::{ViewCx, read_val, Lifecycle, Val, View};
+use crate::core::view::{Lifecycle, Val, View, ViewCx, read_val};
 
 // ---------------------------------------------------------------------------
 // MouseRegionView — the user's declaration. Pure Rust, no JsValues.

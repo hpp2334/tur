@@ -1,7 +1,7 @@
 use std::fmt;
 
-use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{Geometry, Offset, Size};
+use crate::core::render::brush::{Brush, Color};
 use vello_common::kurbo::Affine;
 
 use crate::core::image_resource::ImageResourceId;
@@ -67,7 +67,13 @@ impl Canvas for NullCanvas {
     }
     #[allow(private_interfaces)]
     fn fill_text_layout(&mut self, _offset: Offset, _layout: &TextLayoutData) {}
-    fn draw_image(&mut self, _resource_id: ImageResourceId, _natural_size: Size, _transform: Affine) {}
+    fn draw_image(
+        &mut self,
+        _resource_id: ImageResourceId,
+        _natural_size: Size,
+        _transform: Affine,
+    ) {
+    }
     fn draw_shadow(
         &mut self,
         _offset: Offset,

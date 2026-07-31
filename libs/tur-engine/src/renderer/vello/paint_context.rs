@@ -1,9 +1,9 @@
 use std::fmt;
 
+use crate::core::layout::{Geometry, Offset, Size};
+use crate::core::render::brush::{Brush, Color};
 use glifo::Glyph;
 use std::collections::HashMap;
-use crate::core::render::brush::{Brush, Color};
-use crate::core::layout::{Geometry, Offset, Size};
 use vello_common::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Shape, Stroke};
 use vello_common::paint::{Image, ImageId, ImageSource, PaintType};
 use vello_common::peniko::{BlendMode, Color as PenikoColor, Fill, Gradient};
@@ -39,7 +39,7 @@ impl<'a> VelloPaintContext<'a> {
         scene: &'a mut Scene,
         resources: &'a mut Resources,
         root_transform: Affine,
-    image_uploads: &'a HashMap<ImageResourceId, ImageId>,
+        image_uploads: &'a HashMap<ImageResourceId, ImageId>,
     ) -> Self {
         // Seed the transform stack with the root transform (the dpr scale). The
         // hybrid scene has a single global transform state that layers do not
@@ -73,11 +73,7 @@ impl fmt::Debug for VelloPaintContext<'_> {
 fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
     match brush {
         Brush::SolidColor(color) => PaintType::Solid(to_peniko_color(color)),
-        Brush::LinearGradient {
-            start,
-            end,
-            stops,
-        } => {
+        Brush::LinearGradient { start, end, stops } => {
             let size = geometry_size(geometry);
             let x0 = start.0 * size.width;
             let y0 = start.1 * size.height;
@@ -87,7 +83,8 @@ fn to_paint(brush: &Brush, geometry: &Geometry) -> PaintType {
                 .iter()
                 .map(|s| (s.offset, to_peniko_color(&s.color)))
                 .collect();
-            let gradient = Gradient::new_linear((x0, y0), (x1, y1)).with_stops(peniko_stops.as_slice());
+            let gradient =
+                Gradient::new_linear((x0, y0), (x1, y1)).with_stops(peniko_stops.as_slice());
             PaintType::Gradient(gradient)
         }
     }
@@ -102,7 +99,8 @@ fn fill_geometry(scene: &mut Scene, transform: Affine, geometry: &Geometry, pain
             scene.fill_rect(&Rect::new(0.0, 0.0, size.width, size.height));
         }
         Geometry::RoundedRect { size, radius } => {
-            let path = RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
+            let path =
+                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
             scene.fill_path(&path);
         }
         Geometry::Circle { radius } => {
@@ -127,7 +125,8 @@ fn stroke_geometry(
             scene.stroke_rect(&Rect::new(0.0, 0.0, size.width, size.height));
         }
         Geometry::RoundedRect { size, radius } => {
-            let path = RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
+            let path =
+                RoundedRect::new(0.0, 0.0, size.width, size.height, *radius).to_path(TOLERANCE);
             scene.stroke_path(&path);
         }
         Geometry::Circle { radius } => {
@@ -156,12 +155,8 @@ impl Canvas for VelloPaintContext<'_> {
     fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData) {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         for run in &layout.runs {
-            let brush_color = PenikoColor::from_rgba8(
-                run.brush[0],
-                run.brush[1],
-                run.brush[2],
-                run.brush[3],
-            );
+            let brush_color =
+                PenikoColor::from_rgba8(run.brush[0], run.brush[1], run.brush[2], run.brush[3]);
             // Text color comes from the scene's current paint.
             self.scene.set_transform(transform);
             self.scene.set_paint(PaintType::Solid(brush_color));
@@ -173,29 +168,30 @@ impl Canvas for VelloPaintContext<'_> {
             builder
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
-                .fill_glyphs(
-                    run.glyphs
-                        .iter()
-                        .map(|g| Glyph { id: g.id, x: g.x, y: g.y }),
-                );
+                .fill_glyphs(run.glyphs.iter().map(|g| Glyph {
+                    id: g.id,
+                    x: g.x,
+                    y: g.y,
+                }));
 
             if run.underline
-                && let Some(first) = run.glyphs.first() {
-                    let last_x = run
-                        .glyphs
-                        .last()
-                        .map(|g| g.x + g.advance)
-                        .unwrap_or(first.x + first.advance);
-                    let underline_y = first.y + run.font_size * 0.15;
-                    self.scene.set_stroke(Stroke::new(1.0));
-                    self.scene.stroke_path(
-                        &Line::new(
-                            (first.x as f64, underline_y as f64),
-                            (last_x as f64, underline_y as f64),
-                        )
-                        .to_path(TOLERANCE),
-                    );
-                }
+                && let Some(first) = run.glyphs.first()
+            {
+                let last_x = run
+                    .glyphs
+                    .last()
+                    .map(|g| g.x + g.advance)
+                    .unwrap_or(first.x + first.advance);
+                let underline_y = first.y + run.font_size * 0.15;
+                self.scene.set_stroke(Stroke::new(1.0));
+                self.scene.stroke_path(
+                    &Line::new(
+                        (first.x as f64, underline_y as f64),
+                        (last_x as f64, underline_y as f64),
+                    )
+                    .to_path(TOLERANCE),
+                );
+            }
         }
     }
 
@@ -211,7 +207,12 @@ impl Canvas for VelloPaintContext<'_> {
         self.scene.set_transform(transform);
         self.scene.set_paint(PaintType::Image(image_brush));
         self.scene.set_fill_rule(Fill::NonZero);
-        self.scene.fill_rect(&Rect::new(0.0, 0.0, natural_size.width, natural_size.height));
+        self.scene.fill_rect(&Rect::new(
+            0.0,
+            0.0,
+            natural_size.width,
+            natural_size.height,
+        ));
     }
 
     fn stroke_geometry(
@@ -251,8 +252,7 @@ impl Canvas for VelloPaintContext<'_> {
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         let clip = Rect::new(0.0, 0.0, size.width, size.height).to_path(TOLERANCE);
         self.scene.set_transform(transform);
-        self.scene
-            .push_layer(Some(&clip), None, None, None, None);
+        self.scene.push_layer(Some(&clip), None, None, None, None);
     }
 
     fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
@@ -265,8 +265,7 @@ impl Canvas for VelloPaintContext<'_> {
             Geometry::Circle { radius } => Circle::new((0.0, 0.0), *radius).to_path(TOLERANCE),
         };
         self.scene.set_transform(transform);
-        self.scene
-            .push_layer(Some(&clip), None, None, None, None);
+        self.scene.push_layer(Some(&clip), None, None, None, None);
     }
 
     fn pop_clip(&mut self) {

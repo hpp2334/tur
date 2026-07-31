@@ -5,11 +5,9 @@ use boa_engine::{Context, JsValue};
 
 use crate::core::element::{FragmentNodeId, NodeId};
 use crate::core::elements::{FragmentHost, FragmentKind, TraceValue};
-use crate::core::layout::SubscribeCx;
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{
-    FromJs, JsViewFactory, Val, View, ViewFactory, ViewCx, read_val,
-};
+use crate::core::layout::SubscribeCx;
+use crate::core::view::{FromJs, JsViewFactory, Val, View, ViewCx, ViewFactory, read_val};
 
 // ---------------------------------------------------------------------------
 // SwitchKey — a raw JS comparison key. Stores the original `JsValue` verbatim
@@ -150,9 +148,10 @@ impl SwitchFragment {
         fragment_id: FragmentNodeId,
     ) -> Vec<NodeId> {
         if let Some(factory) = self.mounted.factory(&self.view)
-            && let Some(view) = factory.create(boa) {
-                return vec![view.build(cx, boa, NodeId::from(fragment_id))];
-            }
+            && let Some(view) = factory.create(boa)
+        {
+            return vec![view.build(cx, boa, NodeId::from(fragment_id))];
+        }
         Vec::new()
     }
 }

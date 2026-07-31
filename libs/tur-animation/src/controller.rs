@@ -1,17 +1,17 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::Curve;
 use boa_engine::class::{Class, ClassBuilder};
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
 use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
-use tur_engine::core::js_runtime::js_value::{type_error, FromJs};
 use tur_engine::core::edgy::mutation::{
-    extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue,
+    MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts,
 };
-use crate::Curve;
+use tur_engine::core::js_runtime::js_value::{FromJs, type_error};
 
 use crate::event::{AnimationEndEvent, AnimationTickEvent};
 use crate::manager::AnimationManager;
@@ -66,7 +66,9 @@ impl FromJs for RepeatMode {
             }
             return Ok(RepeatMode::Finite(n as u64));
         }
-        Err(type_error("a repeat count (positive number) or \"infinite\""))
+        Err(type_error(
+            "a repeat count (positive number) or \"infinite\"",
+        ))
     }
 }
 
@@ -288,20 +290,21 @@ impl Class for AnimationController {
 
         if let Some(opts) = args.get_or_undefined(0).as_object() {
             if let Ok(val) = opts.get(js_string!("duration"), ctx)
-                && let Some(n) = val.as_number() {
-                    duration_ms = n as u64;
-                }
+                && let Some(n) = val.as_number()
+            {
+                duration_ms = n as u64;
+            }
             if let Ok(val) = opts.get(js_string!("curve"), ctx)
-                && let Some(s) = val.as_string() {
-                    curve = s
-                        .to_std_string_escaped()
-                        .parse()
-                        .unwrap_or(Curve::Linear);
-                }
+                && let Some(s) = val.as_string()
+            {
+                curve = s.to_std_string_escaped().parse().unwrap_or(Curve::Linear);
+            }
             if let Ok(val) = opts.get(js_string!("repeat"), ctx)
-                && !val.is_undefined() && !val.is_null() {
-                    repeat_mode = RepeatMode::from_js(&val)?;
-                }
+                && !val.is_undefined()
+                && !val.is_null()
+            {
+                repeat_mode = RepeatMode::from_js(&val)?;
+            }
             on_tick = extract_mutation_from_opts(&opts, "onTick", ctx);
             on_end = extract_mutation_from_opts(&opts, "onEnd", ctx);
         }
@@ -316,21 +319,16 @@ impl Class for AnimationController {
     fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
         macro_rules! controller_getter {
             ($name:expr, $body:expr) => {
-                let getter = NativeFunction::from_fn_ptr($body)
-                    .to_js_function(class.context().realm());
-                class.accessor(
-                    js_string!($name),
-                    Some(getter),
-                    None,
-                    Attribute::default(),
-                );
+                let getter =
+                    NativeFunction::from_fn_ptr($body).to_js_function(class.context().realm());
+                class.accessor(js_string!($name), Some(getter), None, Attribute::default());
             };
         }
 
         controller_getter!("value", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -338,9 +336,9 @@ impl Class for AnimationController {
         });
 
         controller_getter!("status", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -355,9 +353,9 @@ impl Class for AnimationController {
         });
 
         controller_getter!("duration", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -365,9 +363,9 @@ impl Class for AnimationController {
         });
 
         controller_getter!("speed", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<AnimationController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -378,9 +376,9 @@ impl Class for AnimationController {
             js_string!("forward"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -408,9 +406,9 @@ impl Class for AnimationController {
             js_string!("reverse"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -436,9 +434,9 @@ impl Class for AnimationController {
             js_string!("stop"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, _ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -455,9 +453,9 @@ impl Class for AnimationController {
             js_string!("pause"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -484,9 +482,9 @@ impl Class for AnimationController {
             js_string!("resume"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -494,9 +492,7 @@ impl Class for AnimationController {
                 if ctrl.status != AnimationStatus::Paused {
                     return Ok(JsValue::undefined());
                 }
-                let direction = ctrl
-                    .paused_direction
-                    .unwrap_or(AnimationStatus::Forward);
+                let direction = ctrl.paused_direction.unwrap_or(AnimationStatus::Forward);
                 ctrl.status = direction;
                 ctrl.value_at_start = ctrl.value;
                 ctrl.start_time_ms = Some(ctx.clock().now().millis_since_epoch());
@@ -514,14 +510,18 @@ impl Class for AnimationController {
             js_string!("seek"),
             1,
             NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
-                let t = args.get_or_undefined(0).as_number().unwrap_or(0.0).clamp(0.0, 1.0);
+                let t = args
+                    .get_or_undefined(0)
+                    .as_number()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, 1.0);
                 ctrl.value = t;
                 ctrl.value_at_start = t;
 
@@ -541,17 +541,18 @@ impl Class for AnimationController {
             js_string!("setSpeed"),
             1,
             NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
                 let s = args.get_or_undefined(0).as_number().unwrap_or(1.0);
                 if s <= 0.0 {
-                    return Err(boa_engine::JsError::from(JsNativeError::range()
-                        .with_message("setSpeed: speed must be positive")));
+                    return Err(boa_engine::JsError::from(
+                        JsNativeError::range().with_message("setSpeed: speed must be positive"),
+                    ));
                 }
 
                 if ctrl.is_active() {
@@ -575,9 +576,9 @@ impl Class for AnimationController {
             js_string!("repeat"),
             0,
             NativeFunction::from_fn_ptr(|this, args, _ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<AnimationController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;

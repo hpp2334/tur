@@ -232,14 +232,8 @@ impl Executor {
         let now = self.clock.now();
         let expired: Vec<Vec<std::task::Waker>> = {
             let mut timers = self.timers.borrow_mut();
-            let keys: Vec<Duration> = timers
-                .keys()
-                .take_while(|&&k| k <= now)
-                .copied()
-                .collect();
-            keys.into_iter()
-                .filter_map(|k| timers.remove(&k))
-                .collect()
+            let keys: Vec<Duration> = timers.keys().take_while(|&&k| k <= now).copied().collect();
+            keys.into_iter().filter_map(|k| timers.remove(&k)).collect()
         };
         for wakers in expired {
             for waker in wakers {
@@ -249,10 +243,9 @@ impl Executor {
 
         // Reset the progress flag, drive one cooperative step, read it back.
         self.tick_polled.set(false);
-        self.local
-            .block_on(&self.rt, async {
-                tokio::task::yield_now().await;
-            });
+        self.local.block_on(&self.rt, async {
+            tokio::task::yield_now().await;
+        });
         self.tick_polled.get()
     }
 

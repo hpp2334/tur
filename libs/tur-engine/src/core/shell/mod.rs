@@ -3,9 +3,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::core::layout::Offset;
+use crate::core::platform::Cursor;
 use boa_engine::context::time::Clock;
-use crate::core::layout::{Offset};
-use crate::core::platform::{Cursor};
 
 use crate::core::platform::CursorBackend;
 

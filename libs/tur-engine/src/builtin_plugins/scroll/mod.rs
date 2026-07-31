@@ -25,12 +25,10 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginContext;
 use crate::error::TurError;
 
-pub use self::core::controller::ScrollController;
 pub use self::core::ScrollEvent;
-pub use self::handlers::{dispatch_wheel, ScrollInertiaSubsystem, ScrollSubsystem};
-pub use self::scroll_view::{
-    ScrollPhysics, ScrollPosition, ScrollViewElement, ScrollViewView,
-};
+pub use self::core::controller::ScrollController;
+pub use self::handlers::{ScrollInertiaSubsystem, ScrollSubsystem, dispatch_wheel};
+pub use self::scroll_view::{ScrollPhysics, ScrollPosition, ScrollViewElement, ScrollViewView};
 pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 
 /// Wire the scroll plugin into `tur:std`. Called by `TurStdPlugin`'s
@@ -45,9 +43,7 @@ pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 /// Returns: the `ScrollView` / `createScrollController` / `Scrollbar` factory
 /// fns, which the caller merges into `std_fns` before
 /// `register_module("tur:std", ...)`.
-pub fn install_scroll(
-    ctx: &mut PluginContext<'_>,
-) -> Result<Vec<FnEntry>, TurError> {
+pub fn install_scroll(ctx: &mut PluginContext<'_>) -> Result<Vec<FnEntry>, TurError> {
     ctx.register_class::<ScrollController>()
         .map_err(|e| TurError::Other(format!("failed to register ScrollController: {e}")))?;
     ctx.register_subsystem(Box::new(ScrollSubsystem));

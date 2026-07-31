@@ -114,9 +114,7 @@ pub enum PointerInput {
     /// The platform cancelled an in-progress pointer sequence (e.g.
     /// `touchcancel` from the browser). The arena releases any captured drag
     /// without firing a click.
-    PointerCancel {
-        device: PointerDeviceKind,
-    },
+    PointerCancel { device: PointerDeviceKind },
 }
 
 #[derive(Clone, Debug)]

@@ -63,7 +63,10 @@ mod tests {
     fn ease_endpoints() {
         for c in [Curve::EaseIn, Curve::EaseOut, Curve::EaseInOut] {
             assert!((c.transform(0.0)).abs() < 1e-9, "0 endpoint for {c:?}");
-            assert!((c.transform(1.0) - 1.0).abs() < 1e-9, "1 endpoint for {c:?}");
+            assert!(
+                (c.transform(1.0) - 1.0).abs() < 1e-9,
+                "1 endpoint for {c:?}"
+            );
         }
     }
 

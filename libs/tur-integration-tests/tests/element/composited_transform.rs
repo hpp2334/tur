@@ -5,7 +5,11 @@ use tur_engine::core::elements::NodeTreeData;
 use tur_integration_tests::TurTestApp;
 
 /// Depth-first walk; return the first node whose element `kind()` matches.
-fn find_by_kind(tree: &NodeTreeData, id: ElementNodeId, kind: &ElementKind) -> Option<ElementNodeId> {
+fn find_by_kind(
+    tree: &NodeTreeData,
+    id: ElementNodeId,
+    kind: &ElementKind,
+) -> Option<ElementNodeId> {
     let node = tree.get_element(id)?;
     if node.element.as_ref().map(|e| e.kind()) == Some(kind.clone()) {
         return Some(id);
@@ -139,7 +143,8 @@ fn follower_tracks_through_own_ancestor_transform() {
 #[test]
 fn follower_tracks_reactive_anchor_change() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle("composited-transform-reactive-anchor").unwrap();
+    app.load_bundle("composited-transform-reactive-anchor")
+        .unwrap();
     app.render();
 
     let follower_id = {
@@ -240,7 +245,8 @@ fn follower_tracks_target_through_scroll() {
 #[test]
 fn follower_no_flash_on_sibling_relayout() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.load_bundle("composited-transform-sibling-relayout").unwrap();
+    app.load_bundle("composited-transform-sibling-relayout")
+        .unwrap();
 
     let follower_id = {
         let tree = app.element_tree();

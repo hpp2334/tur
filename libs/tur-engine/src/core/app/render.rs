@@ -3,18 +3,14 @@
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::core::app::root::RootView;
-use crate::core::js_runtime::helpers::{extract_ctx, FnEntry, Ptr};
-use crate::core::view::{extract_view, SharedViewCx, View};
+use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
+use crate::core::view::{SharedViewCx, View, extract_view};
 
 pub fn fns() -> Vec<FnEntry> {
     vec![("render", 2, tur_render as Ptr)]
 }
 
-fn tur_render(
-    _this: &JsValue,
-    args: &[JsValue],
-    context: &mut Context,
-) -> JsResult<JsValue> {
+fn tur_render(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let user_view = extract_view(args.get_or_undefined(1)).ok_or_else(|| {
         JsError::from(

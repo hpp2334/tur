@@ -14,10 +14,10 @@
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use jni::objects::{GlobalRef, JObject};
 use jni::JNIEnv;
-use tur_engine::core::app::NextFrame;
+use jni::objects::{GlobalRef, JObject};
 use tur_engine::LoopDriver;
+use tur_engine::core::app::NextFrame;
 
 /// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so the
 /// `LoopDriver` (which the engine calls from its own frame tick) can reach it.
@@ -100,7 +100,13 @@ impl LoopDriver for AndroidLoopDriver {
     }
 }
 
-fn call_void(env: &mut JNIEnv, obj: &JObject, name: &str, sig: &str, args: &[jni::objects::JValue]) {
+fn call_void(
+    env: &mut JNIEnv,
+    obj: &JObject,
+    name: &str,
+    sig: &str,
+    args: &[jni::objects::JValue],
+) {
     if let Err(e) = env.call_method(obj, name, sig, args) {
         tracing::warn!("loop driver: {name} failed: {e}");
     }

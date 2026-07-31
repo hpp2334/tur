@@ -10,21 +10,21 @@
 use std::rc::Rc;
 
 use boa_engine::object::JsObject;
-use boa_engine::{js_string, Context, JsResult, JsValue};
+use boa_engine::{Context, JsResult, JsValue, js_string};
 use vello_common::kurbo::{Affine, Point};
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::js_runtime::helpers::{extract_ctx, require_props_object, wrap_view, Ptr};
+use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::js_runtime::JsProps;
+use crate::core::js_runtime::helpers::{Ptr, extract_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Alignment, ComputedLayout, Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset,
     Size, SubscribeCx,
 };
-use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::render::{Canvas, ElementRender, PaintContext};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
-use super::link::{extract_link_state, CompositedLinkState};
+use super::link::{CompositedLinkState, extract_link_state};
 
 #[derive(Clone)]
 pub struct FollowerView {
@@ -107,7 +107,10 @@ impl FollowerElement {
             target_anchor_pt.y + self.resolved_target_offset.y,
         );
         let global = target_world * target_local;
-        Offset::new(global.x - follower_anchor_pt.x, global.y - follower_anchor_pt.y)
+        Offset::new(
+            global.x - follower_anchor_pt.x,
+            global.y - follower_anchor_pt.y,
+        )
     }
 
     pub(crate) fn linked(&self) -> bool {
@@ -221,9 +224,7 @@ impl FollowerView {
         let follower_anchor = p
             .val::<Alignment>("followerAnchor")
             .unwrap_or(Val::Static(Alignment::TopLeft));
-        let show_when_unlinked = p
-            .opt::<bool>("showWhenUnlinked")
-            .unwrap_or(true);
+        let show_when_unlinked = p.opt::<bool>("showWhenUnlinked").unwrap_or(true);
         let child = p.child("child");
         // `targetOffset` is a static `{ x, y }` object or a `Val` of one; held
         // as a raw `Val<JsValue>` and field-decoded at layout time (see

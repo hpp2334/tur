@@ -1,13 +1,12 @@
-
 use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::TurJsContext;
+use crate::core::edgy::reactive::{ReactiveReadStore, Readable, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree};
+use crate::core::js_runtime::TurJsContext;
 use crate::core::layout::SubscribeCx;
-use crate::core::edgy::reactive::{Readable, ReactiveReadStore, SubscriberId};
 use crate::core::view::build_cx::controller_handles;
-use crate::core::view::{ViewCx, View};
+use crate::core::view::{View, ViewCx};
 
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
@@ -109,7 +108,10 @@ impl SharedViewCx {
             .element_tree
             .borrow_mut()
             .insert_before(parent, child, ref_child);
-        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent.into());
+        self.js_ctx
+            .element_tree
+            .borrow_mut()
+            .mark_dirty(parent.into());
         self.js_ctx.dirty.set(true);
     }
 
@@ -119,13 +121,10 @@ impl SharedViewCx {
     /// `parent` pointer intact. Used after `View::build` (which already
     /// appends the new child) to splice it into the correct slot when
     /// scrolling up mounts lower-index items.
-    pub fn move_child_before(
-        &self,
-        parent: ElementNodeId,
-        child: NodeId,
-        ref_child: NodeId,
-    ) {
-        self.js_ctx.element_tree.move_child_before(parent, child, ref_child);
+    pub fn move_child_before(&self, parent: ElementNodeId, child: NodeId, ref_child: NodeId) {
+        self.js_ctx
+            .element_tree
+            .move_child_before(parent, child, ref_child);
         self.js_ctx.dirty.set(true);
     }
 
@@ -186,7 +185,10 @@ impl SharedViewCx {
     }
 
     /// Read the computed layout of a node (for scroll controllers etc.).
-    pub fn computed_layout(&self, id: ElementNodeId) -> Option<crate::core::layout::ComputedLayout> {
+    pub fn computed_layout(
+        &self,
+        id: ElementNodeId,
+    ) -> Option<crate::core::layout::ComputedLayout> {
         self.js_ctx
             .element_tree
             .get_element(id)
@@ -278,7 +280,10 @@ impl ViewCx for SharedViewCx {
     fn node_tree(&self) -> NodeTree {
         controller_handles(&self.js_ctx).0
     }
-    fn mutation_queue(&self) -> std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>> {
+    fn mutation_queue(
+        &self,
+    ) -> std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>
+    {
         controller_handles(&self.js_ctx).1
     }
     fn dirty(&self) -> std::rc::Rc<std::cell::Cell<bool>> {

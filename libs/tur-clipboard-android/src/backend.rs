@@ -115,16 +115,25 @@ fn read_text_sync(env: &mut JNIEnv, context: &JObject) -> Result<String, String>
                 &[JValue::Object(&service)],
             )
             .str_err()?;
-        v.l().map_err(|e| format!("getSystemService cast: {e}"))?.as_raw()
+        v.l()
+            .map_err(|e| format!("getSystemService cast: {e}"))?
+            .as_raw()
     };
     let clipboard = unsafe { JObject::from_raw(clipboard_raw) };
 
     // getPrimaryClip() returns android.content.ClipData (or null).
     let clip_raw = {
         let v = env
-            .call_method(&clipboard, "getPrimaryClip", "()Landroid/content/ClipData;", &[])
+            .call_method(
+                &clipboard,
+                "getPrimaryClip",
+                "()Landroid/content/ClipData;",
+                &[],
+            )
             .str_err()?;
-        v.l().map_err(|e| format!("getPrimaryClip cast: {e}"))?.as_raw()
+        v.l()
+            .map_err(|e| format!("getPrimaryClip cast: {e}"))?
+            .as_raw()
     };
     if clip_raw.is_null() {
         return Ok(String::new());
@@ -134,7 +143,12 @@ fn read_text_sync(env: &mut JNIEnv, context: &JObject) -> Result<String, String>
     // clip.getItemAt(0) -> android.content.ClipData$Item
     let item_raw = {
         let v = env
-            .call_method(&clip, "getItemAt", "(I)Landroid/content/ClipData$Item;", &[JValue::Int(0)])
+            .call_method(
+                &clip,
+                "getItemAt",
+                "(I)Landroid/content/ClipData$Item;",
+                &[JValue::Int(0)],
+            )
             .str_err()?;
         v.l().map_err(|e| format!("getItemAt cast: {e}"))?.as_raw()
     };
@@ -153,7 +167,9 @@ fn read_text_sync(env: &mut JNIEnv, context: &JObject) -> Result<String, String>
                 &[JValue::Object(context)],
             )
             .str_err()?;
-        v.l().map_err(|e| format!("coerceToText cast: {e}"))?.as_raw()
+        v.l()
+            .map_err(|e| format!("coerceToText cast: {e}"))?
+            .as_raw()
     };
     if cs_raw.is_null() {
         return Ok(String::new());
@@ -214,7 +230,12 @@ fn write_text_sync(env: &mut JNIEnv, context: &JObject, text: &str) -> Result<()
         obj.as_raw()
     };
     let clip = unsafe { JObject::from_raw(clip_raw) };
-    env.call_method(&clipboard, "setPrimaryClip", "(Landroid/content/ClipData;)V", &[JValue::Object(&clip)])
-        .str_err()?;
+    env.call_method(
+        &clipboard,
+        "setPrimaryClip",
+        "(Landroid/content/ClipData;)V",
+        &[JValue::Object(&clip)],
+    )
+    .str_err()?;
     Ok(())
 }

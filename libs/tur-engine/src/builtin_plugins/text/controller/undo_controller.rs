@@ -18,7 +18,9 @@ pub struct TextEditingValue {
 }
 
 impl TextEditingValue {
-    pub fn from_controller(c: &crate::builtin_plugins::text::controller::TextEditingController) -> Self {
+    pub fn from_controller(
+        c: &crate::builtin_plugins::text::controller::TextEditingController,
+    ) -> Self {
         TextEditingValue {
             text: c.text(),
             cursor_position: c.cursor_position(),
@@ -116,12 +118,12 @@ impl Class for UndoController {
     fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
         // canUndo / canRedo getters — cheap booleans for menu-item enabling.
         let can_undo_getter = NativeFunction::from_fn_ptr(|this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<UndoController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<UndoController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.can_undo()))
         })
         .to_js_function(class.context().realm());
@@ -133,12 +135,12 @@ impl Class for UndoController {
         );
 
         let can_redo_getter = NativeFunction::from_fn_ptr(|this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<UndoController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<UndoController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.can_redo()))
         })
         .to_js_function(class.context().realm());
@@ -154,12 +156,12 @@ impl Class for UndoController {
             js_string!("clear"),
             0,
             NativeFunction::from_fn_ptr(|this, _, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<UndoController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<UndoController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 ctrl.clear();
                 Ok(JsValue::undefined())
             }),

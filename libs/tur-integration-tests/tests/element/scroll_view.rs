@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::scroll::ScrollViewElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -10,14 +10,18 @@ fn scroll_view_viewport_constrained() {
     let (sv_id, col_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let sv = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             sv.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_scroll_view")
         );
         assert_eq!(sv.children.len(), 1);
 
-        let col = tree.get_element(ElementNodeId::new(sv.children[0].as_u64())).unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(sv.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             col.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_flex")
@@ -46,7 +50,9 @@ fn scroll_view_child_offset_zero() {
     let col_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let sv = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         sv.children[0]
     };
 
@@ -66,7 +72,9 @@ fn scroll_view_child_offset_with_prop() {
     let col_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let sv = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         sv.children[0]
     };
 
@@ -106,8 +114,12 @@ fn scroll_view_children_stacked_correctly() {
     let (sb1_id, sb2_id, sb3_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        let col = tree.get_element(ElementNodeId::new(sv.children[0].as_u64())).unwrap();
+        let sv = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        let col = tree
+            .get_element(ElementNodeId::new(sv.children[0].as_u64()))
+            .unwrap();
         (col.children[0], col.children[1], col.children[2])
     };
 

@@ -1,18 +1,17 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
-use boa_engine::object::JsObject;
-use boa_engine::{Context, JsValue};
 use crate::core::layout::Axis;
+use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
+use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
-    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace,
-    TraceValue, WheelEvent,
+    AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::view::{ViewCx, read_val, Val, View, extract_view};
+use crate::core::js_runtime::JsProps;
+use crate::core::view::{Val, View, ViewCx, extract_view, read_val};
 
 use crate::builtin_plugins::lazy_container::lazy_list::controller::LazyListController;
 use crate::builtin_plugins::scroll::ScrollPosition;
@@ -62,10 +61,7 @@ impl View for LazyListView {
             .as_ref()
             .and_then(|v| read_val(cx, v, boa))
             .unwrap_or(3);
-        let item_extent = self
-            .item_extent
-            .as_ref()
-            .and_then(|v| read_val(cx, v, boa));
+        let item_extent = self.item_extent.as_ref().and_then(|v| read_val(cx, v, boa));
 
         // Build only the first INITIAL_BUILD_COUNT items (or fewer if
         // item_count is smaller). After the first layout, the remount pass
@@ -115,11 +111,7 @@ impl View for LazyListView {
 }
 
 /// Invoke the JS builder closure for `index`, returning the produced spec.
-fn build_item_spec(
-    builder: &JsFunction,
-    index: u64,
-    boa: &mut Context,
-) -> Option<Rc<dyn View>> {
+fn build_item_spec(builder: &JsFunction, index: u64, boa: &mut Context) -> Option<Rc<dyn View>> {
     let result = builder
         .call(&JsValue::undefined(), &[JsValue::from(index as f64)], boa)
         .ok()?;
@@ -366,12 +358,7 @@ impl LazyListElement {
     /// Called from `perform_layout` with the **real** viewport (from
     /// constraints) via a `LayoutViewCx` — so remount runs during layout,
     /// not as a separate pre-layout pass.
-    pub fn remount(
-        &mut self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        viewport_main: f64,
-    ) {
+    pub fn remount(&mut self, cx: &mut dyn ViewCx, boa: &mut Context, viewport_main: f64) {
         // Defer remount until we have a real viewport size. Until then keep
         // the initial set mounted so the first paint isn't blank.
         if viewport_main <= 0.0 {
@@ -381,8 +368,7 @@ impl LazyListElement {
         let count = self.item_count();
         if count == 0 {
             // Tear down any stragglers.
-            let to_destroy: Vec<NodeId> =
-                self.visible.iter().map(|&(_, id)| id).collect();
+            let to_destroy: Vec<NodeId> = self.visible.iter().map(|&(_, id)| id).collect();
             for id in to_destroy {
                 cx.destroy_child(id);
             }
@@ -402,7 +388,8 @@ impl LazyListElement {
         for id in to_destroy {
             cx.destroy_child(id);
         }
-        self.visible.retain(|(i, _)| *i >= new_start && *i <= new_end);
+        self.visible
+            .retain(|(i, _)| *i >= new_start && *i <= new_end);
 
         // Mount newly-visible items.
         let existing: std::collections::HashSet<u64> =
@@ -426,7 +413,11 @@ impl LazyListElement {
                 // Using `link_child_before` here would double-add the id
                 // and crash layout; `move_child_before` removes the
                 // existing slot first, then re-inserts.
-                let next_higher = self.visible.iter().find(|(i, _)| *i > index).map(|(_, id)| *id);
+                let next_higher = self
+                    .visible
+                    .iter()
+                    .find(|(i, _)| *i > index)
+                    .map(|(_, id)| *id);
                 if let Some(ref_id) = next_higher {
                     cx.move_child_before(node_id, item_id, ref_id);
                 }
@@ -531,7 +522,10 @@ impl ElementTrace for LazyListElement {
     fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
         vec![
             ("offset", TraceValue::Num(self.position.pixels())),
-            ("maxScrollExtent", TraceValue::Num(self.position.max_scroll_extent())),
+            (
+                "maxScrollExtent",
+                TraceValue::Num(self.position.max_scroll_extent()),
+            ),
             ("rangeStart", TraceValue::Num(self.reported_start as f64)),
             ("rangeEnd", TraceValue::Num(self.reported_end as f64)),
         ]

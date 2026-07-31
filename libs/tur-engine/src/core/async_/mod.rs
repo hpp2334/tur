@@ -28,9 +28,9 @@ use std::future::Future;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::Clock as BoaClock;
 use boa_engine::Context;
 use boa_engine::JsResult;
+use boa_engine::context::time::Clock as BoaClock;
 
 pub use tur_async::{Sleep, Task};
 

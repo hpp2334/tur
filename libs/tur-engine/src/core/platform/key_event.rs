@@ -8,7 +8,7 @@
 
 use boa_engine::object::JsObject;
 use boa_engine::property::Attribute;
-use boa_engine::{js_string, Context, JsValue};
+use boa_engine::{Context, JsValue, js_string};
 
 use crate::core::edgy::mutation::IntoJsArgs;
 
@@ -74,10 +74,13 @@ fn build_key_event_object(
     let obj = JsObject::from_proto_and_data(proto, ());
     let _ = obj.create_data_property_or_throw(js_string!("key"), js_string!(key), ctx);
     let _ = obj.create_data_property_or_throw(js_string!("code"), js_string!(code), ctx);
-    let _ = obj.create_data_property_or_throw(js_string!("ctrl"), JsValue::from(modifiers.ctrl), ctx);
-    let _ = obj.create_data_property_or_throw(js_string!("shift"), JsValue::from(modifiers.shift), ctx);
+    let _ =
+        obj.create_data_property_or_throw(js_string!("ctrl"), JsValue::from(modifiers.ctrl), ctx);
+    let _ =
+        obj.create_data_property_or_throw(js_string!("shift"), JsValue::from(modifiers.shift), ctx);
     let _ = obj.create_data_property_or_throw(js_string!("alt"), JsValue::from(modifiers.alt), ctx);
-    let _ = obj.create_data_property_or_throw(js_string!("meta"), JsValue::from(modifiers.meta), ctx);
+    let _ =
+        obj.create_data_property_or_throw(js_string!("meta"), JsValue::from(modifiers.meta), ctx);
     let _ = Attribute::all();
     vec![obj.into()]
 }

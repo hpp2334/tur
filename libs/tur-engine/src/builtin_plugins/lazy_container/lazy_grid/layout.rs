@@ -1,8 +1,8 @@
-use crate::core::layout::{Axis, Constraints, Offset, Size};
+use crate::builtin_plugins::layout::{compute_grid_metrics, cross_offset};
 use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::layout::{Axis, Constraints, Offset, Size};
 use crate::core::layout::{ElementLayout, LayoutContext, LayoutViewCx};
 use crate::core::view::ViewCx;
-use crate::builtin_plugins::layout::{compute_grid_metrics, cross_offset};
 
 use super::element::LazyGridElement;
 
@@ -50,11 +50,17 @@ impl ElementLayout for LazyGridElement {
         }
 
         // Compute geometry from the real viewport.
-        let max_cross_axis_extent = cx.read_val(&self.view.max_cross_axis_extent).unwrap_or(100.0);
+        let max_cross_axis_extent = cx
+            .read_val(&self.view.max_cross_axis_extent)
+            .unwrap_or(100.0);
         let child_aspect_ratio = cx.read_val_opt(self.view.child_aspect_ratio.as_ref());
         let main_axis_extent = cx.read_val_opt(self.view.main_axis_extent.as_ref());
-        let cross_axis_spacing = cx.read_val_opt(self.view.cross_axis_spacing.as_ref()).unwrap_or(0.0);
-        let main_axis_spacing = cx.read_val_opt(self.view.main_axis_spacing.as_ref()).unwrap_or(0.0);
+        let cross_axis_spacing = cx
+            .read_val_opt(self.view.cross_axis_spacing.as_ref())
+            .unwrap_or(0.0);
+        let main_axis_spacing = cx
+            .read_val_opt(self.view.main_axis_spacing.as_ref())
+            .unwrap_or(0.0);
 
         let metrics = compute_grid_metrics(
             cross_axis_size,
@@ -90,8 +96,7 @@ impl ElementLayout for LazyGridElement {
             // On column-count change, unmount everything so the visible set is
             // rebuilt against the new line/slot mapping with no stragglers.
             if count_changed {
-                let to_destroy: Vec<NodeId> =
-                    self.visible.iter().map(|&(_, id)| id).collect();
+                let to_destroy: Vec<NodeId> = self.visible.iter().map(|&(_, id)| id).collect();
                 for id in to_destroy {
                     vcx.destroy_child(id);
                 }
@@ -115,7 +120,11 @@ impl ElementLayout for LazyGridElement {
         // Total content length along the main axis (exact: uniform cells).
         let count = self.cross_axis_count.max(1) as u64;
         let item_count = self.item_count();
-        let total_lines = if item_count == 0 { 0 } else { item_count.div_ceil(count) };
+        let total_lines = if item_count == 0 {
+            0
+        } else {
+            item_count.div_ceil(count)
+        };
         let total_main = if total_lines == 0 {
             0.0
         } else {

@@ -7,8 +7,8 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::js_runtime::{BoaOpaque, TurJsContext};
 use crate::core::element::ElementNodeId;
+use crate::core::js_runtime::{BoaOpaque, TurJsContext};
 use crate::core::view::{View, ViewHandle};
 
 /// Native function pointer type used by the bridge table.
