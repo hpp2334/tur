@@ -17,7 +17,7 @@
 
 use boa_engine::{Context, JsError, JsNativeError, JsValue};
 use num_traits::FromPrimitive;
-use crate::core::layout::{Alignment, Axis, BorderPosition, BoxFit, CrossAxisAlignment, FlexDirection, FlexFit, HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit};
+use crate::core::layout::{Alignment, Axis, BorderPosition, ClipBehavior, BoxFit, CrossAxisAlignment, FlexDirection, FlexFit, HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit};
 use crate::core::platform::{Cursor};
 
 /// Decode a Rust value from a [`JsValue`] WITHOUT a boa [`Context`].
@@ -152,6 +152,7 @@ impl_from_js_enum!(
     Alignment,
     Axis,
     BorderPosition,
+    ClipBehavior,
     BoxFit,
     CrossAxisAlignment,
     FlexDirection,

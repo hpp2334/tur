@@ -79,3 +79,38 @@ pub fn reported_stretch_bug_renders_red_strip() {
 
     dump_snapshot_if_requested("reported-stretch-bug", &pixels, logical_w, logical_h);
 }
+
+/// `Container({ borderRadius: 40, clipBehavior: ClipBehavior.HardEdge })`
+/// must clip its child subtree to the rounded decoration shape (Flutter
+/// parity). The child is a solid red 200x200 square that fills the
+/// container; without clipping its square corner would paint red right up
+/// to (0,0). With clipping, the area outside the 40px rounded arc is left
+/// unpainted (page background = white), while the center stays red (the
+/// child still paints inside the rounded shape).
+pub fn container_clip_rounded_corner_clipped() {
+    let logical_w = 200u32;
+    let logical_h = 200u32;
+
+    let app = TurVelloApp::new(logical_w as f64, logical_h as f64, 1.0).unwrap();
+    app.load_bundle("container-clip-rounded").unwrap();
+    app.render();
+
+    let pixels = app.render_to_pixels();
+    assert_eq!(
+        pixels.len(),
+        (logical_w * logical_h * 4) as usize,
+        "pixel buffer size mismatch"
+    );
+
+    // Corner (3,3) is well outside the 40px rounded arc — its distance from
+    // the arc center at (40,40) is ~52 > 40 — so the red child must have
+    // been clipped away, leaving the unpainted page background (white).
+    let corner = get_pixel(&pixels, logical_w, 3, 3);
+    assert_color_approx(corner, (255, 255, 255, 255), 8);
+
+    // Center is inside the rounded rect — the red child still paints there.
+    let center = get_pixel(&pixels, logical_w, 100, 100);
+    assert_color_approx(center, (255, 0, 0, 255), 8);
+
+    dump_snapshot_if_requested("container-clip-rounded", &pixels, logical_w, logical_h);
+}

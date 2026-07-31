@@ -304,6 +304,25 @@ pub enum BorderPosition {
     Outside,
 }
 
+/// How a `Container` clips its child subtree to its decoration shape.
+/// Mirrors Flutter's `Clip` enum. The default is `None` (no clipping),
+/// matching Flutter's `Container.clipBehavior` default. When non-`None`,
+/// children are clipped to the container's border geometry (rounded rect
+/// when `borderRadius > 0`, else the plain rect).
+///
+/// Note: the vello backend implements every non-`None` mode as a single
+/// anti-aliased clip layer, so `HardEdge` / `AntiAlias` /
+/// `AntiAliasWithSaveLayer` are visually identical here — the variants
+/// exist for API parity with Flutter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
+pub enum ClipBehavior {
+    #[default]
+    None,
+    HardEdge,
+    AntiAlias,
+    AntiAliasWithSaveLayer,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, FromPrimitive, Default)]
 pub enum Alignment {
     #[default]

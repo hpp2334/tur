@@ -76,6 +76,18 @@ pub fn consts(context: &mut Context) -> Vec<ConstEntry> {
             build_enum(context, &[("Inside", 0), ("Center", 1), ("Outside", 2)]),
         ),
         (
+            "ClipBehavior",
+            build_enum(
+                context,
+                &[
+                    ("None", 0),
+                    ("HardEdge", 1),
+                    ("AntiAlias", 2),
+                    ("AntiAliasWithSaveLayer", 3),
+                ],
+            ),
+        ),
+        (
             "Alignment",
             build_enum(
                 context,
