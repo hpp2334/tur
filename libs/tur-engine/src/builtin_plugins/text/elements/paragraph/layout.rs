@@ -23,10 +23,14 @@ fn build_parley_layout(
     text: &str,
     spans: &[SpanData],
     base_font_size: f32,
+    base_weight: Option<f32>,
 ) -> (Layout<[u8; 4]>, Vec<(usize, usize)>) {
     let mut builder = text_layout_cx.ranged_builder(font_cx, text, 1.0, false);
     builder.push_default(StyleProperty::FontSize(base_font_size));
     builder.push_default(StyleProperty::from(GenericFamily::SansSerif));
+    if let Some(w) = base_weight {
+        builder.push_default(StyleProperty::FontWeight(FontWeight::new(w)));
+    }
 
     let mut underline_ranges: Vec<(usize, usize)> = Vec::new();
     let mut byte_offset = 0usize;
@@ -45,8 +49,11 @@ fn build_parley_layout(
                 StyleProperty::Brush([c.r(), c.g(), c.b(), c.a()]),
                 range.clone(),
             );
-            if span.bold {
-                builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+            if let Some(w) = span.weight {
+                builder.push(
+                    StyleProperty::FontWeight(FontWeight::new(w as f32)),
+                    range.clone(),
+                );
             }
             if span.italic {
                 builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());
@@ -162,7 +169,7 @@ fn build_truncated(
     }
     out.push(SpanData {
         text: "…".to_string(),
-        bold: false,
+        weight: None,
         italic: false,
         underline: false,
         font_size: None,
@@ -182,6 +189,9 @@ impl ElementLayout for TextElement {
         let base_font_size = cx
             .read_val_opt(self.view.font_size.as_ref())
             .unwrap_or(14.0);
+        let base_weight = cx
+            .read_val_opt(self.view.font_weight.as_ref())
+            .map(|w| w as f32);
 
         // Resolve the spans to lay out. If the spec carries explicit spans,
         // use them; otherwise build a single anonymous span from the `text`
@@ -193,7 +203,7 @@ impl ElementLayout for TextElement {
             let color = cx.read_val_opt(self.view.color.as_ref());
             vec![SpanData {
                 text,
-                bold: false,
+                weight: None,
                 italic: false,
                 underline: false,
                 font_size: None,
@@ -243,6 +253,7 @@ impl ElementLayout for TextElement {
                 &full_text,
                 &spans,
                 base_font_size as f32,
+                base_weight,
             );
             layout.break_all_lines(max_width);
             layout.align(Alignment::Start, AlignmentOptions::default());
@@ -262,6 +273,7 @@ impl ElementLayout for TextElement {
             &full_text,
             &spans,
             base_font_size as f32,
+            base_weight,
         );
         let leftover = {
             let mut breaker = layout.break_lines();
@@ -318,6 +330,7 @@ impl ElementLayout for TextElement {
             &truncated_text,
             &truncated_spans,
             base_font_size as f32,
+            base_weight,
         );
         trunc_layout.break_all_lines(max_width);
         trunc_layout.align(Alignment::Start, AlignmentOptions::default());

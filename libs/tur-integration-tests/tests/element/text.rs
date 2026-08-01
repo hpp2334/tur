@@ -66,6 +66,28 @@ fn text_font_size_affects_height() {
 }
 
 #[test]
+fn text_font_weight_affects_width() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("text-font-weight").unwrap();
+
+    app.render();
+    let rt = app.element_tree();
+    let root = rt.root_element().unwrap();
+    let normal = rt
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
+    let bold = rt
+        .get_element(ElementNodeId::new(root.children[1].as_u64()))
+        .unwrap();
+    assert!(
+        bold.computed_layout.size.width > normal.computed_layout.size.width,
+        "weight 700 ({}) should be wider than weight 400 ({})",
+        bold.computed_layout.size.width,
+        normal.computed_layout.size.width,
+    );
+}
+
+#[test]
 fn text_wrapping_with_narrow_constraints() {
     let mut app = TurTestApp::new(80.0, 600.0).unwrap();
     app.load_bundle("text-wrapping").unwrap();

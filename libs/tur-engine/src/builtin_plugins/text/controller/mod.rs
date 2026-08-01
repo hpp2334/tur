@@ -341,7 +341,7 @@ impl TextEditingController {
         if self.spans.is_empty() {
             self.spans.push(SpanData {
                 text: text.to_string(),
-                bold: false,
+                weight: None,
                 italic: false,
                 underline: false,
                 font_size: None,
@@ -394,7 +394,7 @@ impl TextEditingController {
             let can_merge = {
                 let a = &self.spans[i];
                 let b = &self.spans[i + 1];
-                a.bold == b.bold
+                a.weight == b.weight
                     && a.italic == b.italic
                     && a.underline == b.underline
                     && a.font_size == b.font_size
@@ -460,7 +460,7 @@ impl Class for TextEditingController {
                 ctrl.set_spans(vec![
                     crate::builtin_plugins::text::controller::span_data::SpanData {
                         text: initial,
-                        bold: false,
+                        weight: None,
                         italic: false,
                         underline: false,
                         font_size: None,

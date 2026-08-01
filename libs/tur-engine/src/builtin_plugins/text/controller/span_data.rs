@@ -5,7 +5,11 @@ use crate::core::js_runtime::js_value::FromJs;
 #[derive(Clone)]
 pub struct SpanData {
     pub text: String,
-    pub(crate) bold: bool,
+    /// CSS-style numeric font weight (100–1000). `None` inherits the
+    /// element's default (which is itself 400 — `FontWeight::NORMAL` — when
+    /// unset). Parley resolves this to a face for static fonts or to a
+    /// variation-axis coordinate for variable fonts.
+    pub(crate) weight: Option<f64>,
     pub(crate) italic: bool,
     pub(crate) underline: bool,
     pub(crate) font_size: Option<f64>,
@@ -42,11 +46,10 @@ pub fn extract_spans_from_js(
             .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
             .unwrap_or_default();
 
-        let bold = span_obj
-            .get(boa_engine::js_string!("bold"), context)
+        let weight = span_obj
+            .get(boa_engine::js_string!("weight"), context)
             .ok()
-            .and_then(|v| v.as_boolean())
-            .unwrap_or(false);
+            .and_then(|v| v.as_number());
 
         let italic = span_obj
             .get(boa_engine::js_string!("italic"), context)
@@ -72,7 +75,7 @@ pub fn extract_spans_from_js(
 
         spans.push(SpanData {
             text: content,
-            bold,
+            weight,
             italic,
             underline,
             font_size,

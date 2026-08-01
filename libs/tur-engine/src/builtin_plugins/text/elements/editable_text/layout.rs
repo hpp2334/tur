@@ -40,6 +40,9 @@ impl ElementLayout for EditableTextElement {
             .read_val_opt(self.view.font_size.as_ref())
             .unwrap_or(14.0);
         let font_family = cx.read_val_opt(self.view.font_family.as_ref());
+        let font_weight = cx
+            .read_val_opt(self.view.font_weight.as_ref())
+            .map(|w| w as f32);
         let placeholder = cx.read_val_opt(self.view.placeholder.as_ref());
         let color = cx.read_val_opt(self.view.color.as_ref());
         let placeholder_color = cx.read_val_opt(self.view.placeholder_color.as_ref());
@@ -132,6 +135,9 @@ impl ElementLayout for EditableTextElement {
         builder.push_default(StyleProperty::from(generic_family_for(
             font_family.as_deref(),
         )));
+        if let Some(w) = font_weight {
+            builder.push_default(StyleProperty::FontWeight(FontWeight::new(w)));
+        }
         // Base color over the whole text; per-span colors override below.
         // An empty range (`start == end`) makes parley panic with
         // `style_run.range.start < style_run.range.end`, so guard it.
@@ -152,8 +158,11 @@ impl ElementLayout for EditableTextElement {
                     if let Some(c) = &span.color {
                         builder.push(StyleProperty::Brush(brush_arr(*c)), range.clone());
                     }
-                    if span.bold {
-                        builder.push(StyleProperty::FontWeight(FontWeight::BOLD), range.clone());
+                    if let Some(w) = span.weight {
+                        builder.push(
+                            StyleProperty::FontWeight(FontWeight::new(w as f32)),
+                            range.clone(),
+                        );
                     }
                     if span.italic {
                         builder.push(StyleProperty::FontStyle(FontStyle::Italic), range.clone());

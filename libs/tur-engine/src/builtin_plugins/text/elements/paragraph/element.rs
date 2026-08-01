@@ -61,6 +61,10 @@ impl FromJs for TextOverflow {
 pub struct TextView {
     pub(crate) text: Option<Val<String>>,
     pub(crate) font_size: Option<Val<f64>>,
+    /// Default CSS-style font weight (100–1000) applied to the whole element.
+    /// Per-span `weight` overrides this for that span's range. `None` falls
+    /// back to parley's default (400 — `FontWeight::NORMAL`).
+    pub(crate) font_weight: Option<Val<f64>>,
     /// Default color applied to the anonymous span in the plain-text case.
     pub(crate) color: Option<Val<Color>>,
     /// Parsed eagerly at factory time (not reactive).
@@ -147,6 +151,9 @@ impl ElementSubscribe for TextElement {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.font_size.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.font_weight.as_ref() {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.color.as_ref() {
@@ -288,6 +295,7 @@ impl TextView {
         TextView {
             text: p.val::<String>("text"),
             font_size: p.val::<f64>("fontSize"),
+            font_weight: p.val::<f64>("fontWeight"),
             color: p.val::<Color>("color"),
             spans,
             query_key: p.query_key("queryKey"),
