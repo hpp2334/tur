@@ -1,4 +1,6 @@
+use std::any::TypeId;
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -60,6 +62,12 @@ pub struct TurAppInternal {
     /// Incremented once at the top of each `flush()` call; stable across the
     /// fixed-point iterations within that call.
     pub(crate) frame_id: Cell<u64>,
+    /// Per-instance plugin data: a type-keyed map (`TypeId → Rc<dyn Any>`)
+    /// that plugins populate during `register` and embedders retrieve via
+    /// [`TurApp::instance_data`](crate::TurApp::instance_data). Each entry is
+    /// an `Rc<T>` so all sides (bridge fns, subsystems, host code) share one
+    /// handle without re-borrowing the `RefCell`.
+    pub(crate) instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn std::any::Any>>>>,
 }
 
 impl TurAppInternal {
@@ -126,6 +134,7 @@ impl TurAppInternal {
             async_executor,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
+            instance_data: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 

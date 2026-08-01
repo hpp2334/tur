@@ -788,4 +788,10 @@ declare module "tur:std" {
     ): LinearGradient;
     export function colorLerp(a: Color, b: Color, t: number): Color;
     export function requestFocus(target: TextController | Element): void;
+
+    export interface EventBus {
+        on(callback: (payload: Uint8Array) => void): void;
+        send(payload: Uint8Array): void;
+    }
+    export const eventBus: EventBus;
 }

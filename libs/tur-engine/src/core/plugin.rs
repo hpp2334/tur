@@ -109,6 +109,11 @@ pub struct PluginContext<'a> {
     /// [`TurAppInternal::subsystems`](crate::core::app::TurAppInternal) —
     /// plugins push here, the engine iterates the same vec during flush.
     pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
+    /// Per-instance plugin data map. Plugins store typed state here during
+    /// `register`; embedders retrieve it via
+    /// [`TurApp::instance_data`](crate::TurApp::instance_data).
+    pub(crate) instance_data:
+        Rc<RefCell<std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any>>>>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
     /// `import { viewportSize$ } from "tur:std"` and read the live
@@ -223,6 +228,17 @@ impl<'a> PluginContext<'a> {
     /// [`subsystem`](crate::core::subsystem) module docs for details.
     pub fn register_subsystem(&mut self, sub: Box<dyn Subsystem>) {
         self.subsystems.borrow_mut().push(sub);
+    }
+
+    /// Store per-instance typed data retrievable via
+    /// [`TurApp::instance_data`](crate::TurApp::instance_data). Plugins call
+    /// this during `register` to expose a typed handle (e.g. `EventBus`) that
+    /// embedders access after the app is built. The value is an `Rc<T>` so all
+    /// sides share one handle.
+    pub fn store_instance_data<T: 'static>(&mut self, data: Rc<T>) {
+        self.instance_data
+            .borrow_mut()
+            .insert(std::any::TypeId::of::<T>(), Box::new(data));
     }
 
     /// Register a JS source module under a bare specifier (e.g.

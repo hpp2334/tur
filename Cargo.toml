@@ -50,6 +50,7 @@ tur-wasm = { path = "libs/tur-wasm" }
 
 num-derive = "0.4"
 num-traits = "0.2"
+futures = "0.3"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"

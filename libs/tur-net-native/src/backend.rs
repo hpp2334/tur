@@ -7,10 +7,11 @@
 //! back to a plain async fn returning a reqwest future — the engine polls it
 //! inside a Tokio context, and reqwest's I/O + DNS just work.
 
-use std::future::Future;
-use std::pin::Pin;
-
-use tur_net_capability::{HttpBackend, HttpBody, HttpOutcome, RequestOpts, ResponseType};
+use futures::StreamExt;
+use tur_net_capability::{
+    HttpBackend, HttpBody, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse,
+    RequestOpts, ResponseType,
+};
 
 /// Native HTTP backend. Wraps a `reqwest::Client` (cheap to clone — it
 /// reuses a connection pool internally).
@@ -27,13 +28,24 @@ impl NativeHttp {
 }
 
 impl HttpBackend for NativeHttp {
-    fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>> {
+    fn request(&self, opts: RequestOpts) -> HttpFuture {
         Box::pin(perform_request(
             opts.url,
             opts.method,
             opts.headers,
             opts.body,
             opts.response_type == ResponseType::Bytes,
+            opts.username,
+            opts.password,
+        ))
+    }
+
+    fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
+        Box::pin(perform_request_stream(
+            opts.url,
+            opts.method,
+            opts.headers,
+            opts.body,
             opts.username,
             opts.password,
         ))
@@ -92,4 +104,52 @@ async fn perform_request(
     }
     .await;
     result.unwrap_or_else(HttpOutcome::Err)
+}
+
+async fn perform_request_stream(
+    url: String,
+    method: String,
+    headers: Vec<(String, String)>,
+    body: Option<HttpBody>,
+    username: Option<String>,
+    password: Option<String>,
+) -> Result<HttpStreamResponse, String> {
+    let client = reqwest::Client::new();
+    let m = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|e| format!("invalid method {method:?}: {e}"))?;
+    let mut rb = client.request(m, &url);
+    if let (Some(u), Some(p)) = (username.as_deref(), password.as_deref()) {
+        rb = rb.basic_auth(u, Some(p));
+    }
+    for (k, v) in &headers {
+        if let (Ok(name), Ok(val)) = (
+            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+            reqwest::header::HeaderValue::from_str(v),
+        ) {
+            rb = rb.header(name, val);
+        }
+    }
+    rb = match body {
+        Some(HttpBody::Text(s)) => rb.body(s),
+        Some(HttpBody::Bytes(b)) => rb.body(b),
+        None => rb,
+    };
+    let resp = rb.send().await.map_err(|e| format!("{e}"))?;
+    let status = resp.status().as_u16();
+    let status_text = resp.status().canonical_reason().unwrap_or("").to_string();
+    let hdrs: Vec<(String, String)> = resp
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+    let body_stream = resp
+        .bytes_stream()
+        .map(|chunk| chunk.map(|c| c.to_vec()).map_err(|e| format!("{e}")))
+        .boxed_local();
+    Ok(HttpStreamResponse {
+        status,
+        status_text,
+        headers: hdrs,
+        body: body_stream,
+    })
 }

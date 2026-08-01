@@ -8,7 +8,10 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::NativeFunction;
+use boa_engine::Source;
 use boa_engine::context::time::{Clock, FixedClock};
+use futures::StreamExt;
+use tur_engine::TurEncodePlugin;
 use tur_engine::TurStdPlugin;
 use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
@@ -27,7 +30,10 @@ use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
 use tur_native::NativeFontLoader;
-use tur_net_capability::{Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
+use tur_net_capability::{
+    Http, HttpBackend, HttpBody, HttpFuture, HttpOutcome, HttpStreamFuture, HttpStreamResponse,
+    RequestOpts, TurNetPlugin,
+};
 
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
 /// build time. Test-only convenience for the cases that previously used the
@@ -113,6 +119,7 @@ pub struct RecordingHttp {
 #[derive(Default)]
 struct RecordingHttpInner {
     next_response: RefCell<Option<HttpOutcome>>,
+    next_stream_chunks: RefCell<Option<(u16, Vec<Vec<u8>>)>>,
     last_request: RefCell<Option<RecordedRequest>>,
 }
 
@@ -134,6 +141,12 @@ impl RecordingHttp {
         *self.inner.next_response.borrow_mut() = Some(outcome);
     }
 
+    /// Pre-canned streaming response: returns the given status + chunks via
+    /// `request_stream`. The next `request_stream` call drains these.
+    pub fn set_next_stream(&self, status: u16, chunks: Vec<Vec<u8>>) {
+        *self.inner.next_stream_chunks.borrow_mut() = Some((status, chunks));
+    }
+
     /// The most recent request seen by the recording (or `None` if no
     /// request has been issued).
     pub fn last_request(&self) -> Option<RecordedRequest> {
@@ -142,7 +155,7 @@ impl RecordingHttp {
 }
 
 impl HttpBackend for RecordingHttp {
-    fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>> {
+    fn request(&self, opts: RequestOpts) -> HttpFuture {
         *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
             url: opts.url.clone(),
             method: opts.method.clone(),
@@ -154,6 +167,27 @@ impl HttpBackend for RecordingHttp {
             .clone()
             .unwrap_or_else(|| HttpOutcome::Err("no canned response".to_string()));
         Box::pin(std::future::ready(outcome))
+    }
+
+    fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
+        use futures::stream;
+        *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
+            url: opts.url.clone(),
+            method: opts.method.clone(),
+        });
+        let canned = self.inner.next_stream_chunks.borrow().clone();
+        match canned {
+            Some((status, chunks)) => {
+                let body_stream = stream::iter(chunks.into_iter().map(Ok)).boxed_local();
+                Box::pin(std::future::ready(Ok(HttpStreamResponse {
+                    status,
+                    status_text: "OK".to_string(),
+                    headers: Vec::new(),
+                    body: body_stream,
+                })))
+            }
+            None => Box::pin(std::future::ready(Err("no canned stream".to_string()))),
+        }
     }
 }
 
@@ -335,6 +369,7 @@ impl TurTestApp {
             }))
             .capability(Clipboard::new(clipboard.clone()))
             .plugin(TurStdPlugin)
+            .plugin(TurEncodePlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {
@@ -411,6 +446,12 @@ impl TurTestApp {
     /// in-process WebDAV server) before loading a bundle.
     pub fn with_app<R>(&self, f: impl FnOnce(&TurApp) -> R) -> R {
         f(&self.inner)
+    }
+
+    /// Direct reference to the underlying `TurApp` — for host-side APIs like
+    /// `EventBus::of(app)` that need `&TurApp`.
+    pub fn app(&self) -> &TurApp {
+        &self.inner
     }
 
     /// Run exactly one frame: advance the engine's fixed-point flush (events,
@@ -916,6 +957,15 @@ impl TurTestApp {
             .set_next_response(outcome);
     }
 
+    /// Pre-canned streaming response for the next `requestStream(opts).await`.
+    /// Panics if this app wasn't constructed via [`Self::new_with_http`].
+    pub fn set_http_stream(&self, status: u16, chunks: Vec<Vec<u8>>) {
+        self.http
+            .as_ref()
+            .expect("TurTestApp::set_http_stream requires new_with_http")
+            .set_next_stream(status, chunks);
+    }
+
     /// The most recent request seen by the recording, or `None` if no
     /// request has been issued. Panics if not constructed with http.
     pub fn last_http_request(&self) -> Option<RecordedRequest> {
@@ -956,7 +1006,14 @@ impl TurTestApp {
     }
 
     pub fn eval_js(&self, source: &str) -> String {
-        self.inner.eval_js(source).unwrap_or_default()
+        self.inner
+            .with_boa_context(|ctx| match ctx.eval(Source::from_bytes(source)) {
+                Ok(r) => r
+                    .as_string()
+                    .map(|s| s.to_std_string_escaped())
+                    .unwrap_or_else(|| r.display().to_string()),
+                Err(_) => String::new(),
+            })
     }
 
     pub fn load_bundle_source(&self, source: &str) -> Result<(), TurError> {

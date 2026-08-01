@@ -126,6 +126,8 @@ impl Plugin for TurStdPlugin {
         // `{width, height}` (CSS pixels). The engine syncs it each frame in
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
+        // Event bus: bidirectional byte-channel between host and JS.
+        std_consts.extend(crate::builtin_plugins::event_bus::install_event_bus(ctx)?);
 
         ctx.register_module("tur:std", std_fns, std_closures, std_consts);
 

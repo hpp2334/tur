@@ -18,6 +18,8 @@ pub mod clipboard;
 pub mod console;
 pub mod control_flow;
 pub mod effects;
+pub mod encode;
+pub mod event_bus;
 pub mod focus;
 pub mod gesture;
 pub mod image;
@@ -30,4 +32,5 @@ pub mod std;
 pub mod text;
 
 pub use clipboard::TurClipboardPlugin;
+pub use encode::TurEncodePlugin;
 pub use std::TurStdPlugin;

@@ -13,6 +13,7 @@ tur-net-capability = { workspace = true }
 tur-filepicker-capability = { workspace = true }
 tur-native = { workspace = true }
 boa_engine = { workspace = true }
+futures = { workspace = true }
 libc = "0.2"
 
 [dev-dependencies]
