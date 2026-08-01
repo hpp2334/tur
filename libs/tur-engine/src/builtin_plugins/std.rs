@@ -6,7 +6,7 @@
 //! respective `install_xxx` calls).
 //!
 //! `TurStdPlugin` carries no per-instance state. Backend injection
-//! (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
+//! (clipboard, http, cursor) happens via `TurRuntimeBuilder::capability(...)`
 //! and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`). Animation
 //! (`createAnimationController`, `AnimatedContainer`/`AnimatedOpacity`/
 //! `AnimatedPositioned`, `Tween`, `ColorTween`) is provided by the separate
@@ -48,7 +48,7 @@ use boa_engine::native_function::NativeFunction;
 /// input-event subsystems (gesture, keyboard, ime, resize, pointer region).
 ///
 /// `TurStdPlugin` carries no per-instance state. Backend injection
-/// (clipboard, http, cursor) happens via `TurEngineBuilder::capability(...)`
+/// (clipboard, http, cursor) happens via `TurRuntimeBuilder::capability(...)`
 /// and dedicated plugins (`TurClipboardPlugin`, `TurNetPlugin`). Animation
 /// (`createAnimationController`, `AnimatedContainer`/`AnimatedOpacity`/
 /// `AnimatedPositioned`, `Tween`, `ColorTween`) is provided by the separate

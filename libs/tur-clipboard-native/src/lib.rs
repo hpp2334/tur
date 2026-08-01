@@ -4,7 +4,7 @@
 //! Re-exports the clipboard plugin surface from [`tur_engine`] so native
 //! embedders only need this one crate. The backend
 //! ([`NativeClipboard`]) is registered via
-//! `TurEngineBuilder::capability(Clipboard::new(NativeClipboard::new()?))`.
+//! `TurRuntimeBuilder::capability(Clipboard::new(NativeClipboard::new()?))`.
 //!
 //! On wasm this crate compiles as a near-empty stub (the `arboard` dep is
 //! target-gated to `cfg(not(target_family = "wasm"))`). Embedders targeting

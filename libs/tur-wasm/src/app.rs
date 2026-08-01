@@ -8,7 +8,7 @@ use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
-use tur_engine::{CursorCap, LoopDriver, TurApp};
+use tur_engine::{LoopDriver, TurApp};
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::JsCast;
@@ -81,33 +81,79 @@ impl tur_engine::CursorBackend for WasmCursor {
 /// runs after this.
 pub type AfterFrameHook = Rc<dyn Fn(&mut boa_engine::Context)>;
 
-/// Configuration for building a wasm tur app via [`WasmAppHandle::create`].
+/// Configuration for building a shared wasm tur runtime via
+/// [`WasmRuntime::create`].
 ///
 /// `tur-wasm` is a reusable embedder lib (no playground / demo-plugin code):
 /// the host cdylib supplies the engine-customization callback (extra plugins)
-/// and an optional after-frame hook (run with a live `&mut boa Context`
-/// between frames), while `tur-wasm` owns all the generic DOM wiring.
+/// while `tur-wasm` owns all the generic capability backends.
+pub struct WasmRuntimeConfig {
+    /// Customize the [`tur_engine::TurRuntimeBuilder`] before `build()` — the
+    /// caller adds its own plugins (and may override the default capabilities).
+    /// `tur-wasm` has already registered the standard plugin set + clipboard /
+    /// http / filepicker / cursor backends before invoking this.
+    pub configure: Box<dyn FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder>,
+}
+
+/// The shared wasm runtime — created once via [`WasmRuntime::create`]. Owns the
+/// [`tur_engine::TurRuntime`] (fonts, clock, capabilities, plugins). Spawn
+/// isolated instances (each with its own canvas/DOM or headless) via
+/// [`WasmRuntime::create_app`] / [`WasmRuntime::create_headless_app`].
+pub struct WasmRuntime {
+    runtime: Rc<tur_engine::TurRuntime>,
+}
+
+impl WasmRuntime {
+    /// Build the shared runtime with the wasm-default capabilities (WasmClock,
+    /// WasmFontLoader, WasmClipboard, WasmHttp, WasmFilePicker) + the standard
+    /// plugin set, then apply the embedder's `configure` callback (extra
+    /// plugins / capability overrides). No canvas/DOM — instances are spawned
+    /// separately.
+    pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
+        let builder = tur_engine::TurRuntime::builder()
+            .font_loader(Rc::new(WasmFontLoader::new()))
+            .clock(Rc::new(WasmClock))
+            .capability(Clipboard::new(WasmClipboard))
+            .capability(Http::new(WasmHttp))
+            .capability(FilePicker::new(WasmFilePicker))
+            .plugin(tur_engine::TurStdPlugin)
+            .plugin(tur_animation::TurAnimationPlugin)
+            .plugin(TurClipboardPlugin)
+            .plugin(TurNetPlugin)
+            .plugin(TurFilePickerPlugin);
+        // Let the embedder add its own plugins / override capabilities.
+        let runtime = (cfg.configure)(builder)
+            .build()
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(Self { runtime })
+    }
+
+    /// Access the underlying [`tur_engine::TurRuntime`] (for spawning raw
+    /// instances outside the wasm DOM-wired helpers).
+    pub fn runtime(&self) -> &Rc<tur_engine::TurRuntime> {
+        &self.runtime
+    }
+}
+
+/// Configuration for building a DOM-wired wasm app instance via
+/// [`WasmApp::create`].
 pub struct WasmAppConfig {
     /// `None` ⇒ full-viewport canvas (own wrapper `div`); `Some(id)` ⇒ embed
     /// the canvas inside the element with that id.
     pub container_id: Option<String>,
-    /// Customize the [`tur_engine::TurEngineBuilder`] before `build()` — the
-    /// caller adds its own plugins (and may override the default capabilities).
-    /// `tur-wasm` has already registered the standard plugin set + clipboard /
-    /// http / filepicker / cursor backends before invoking this.
-    pub configure: Box<dyn FnOnce(tur_engine::TurEngineBuilder) -> tur_engine::TurEngineBuilder>,
     /// Extra after-frame work run inside the engine's after-frame hook (where
     /// a `&mut boa Context` is available). `None` for embedders with no such
     /// work.
     pub after_frame: Option<AfterFrameHook>,
 }
 
-/// Owning handle to a running wasm tur app. Built via [`WasmAppHandle::create`]
-/// from a [`WasmAppConfig`]. The embedder cdylib wraps this in its own
-/// `#[wasm_bindgen]` struct (e.g. `TurWebsiteApp`) and delegates its exported
-/// methods here — `tur-wasm` itself exports no `#[wasm_bindgen]` surface.
+/// Owning handle to a running wasm tur app instance. Built via
+/// [`WasmApp::create`] from a [`WasmRuntime`] + [`WasmAppConfig`]. The embedder
+/// cdylib wraps this in its own `#[wasm_bindgen]` struct (e.g.
+/// `TurWebsiteApp`) and delegates its exported methods here — `tur-wasm` itself
+/// exports no `#[wasm_bindgen]` surface.
 #[derive(Clone)]
-pub struct WasmAppHandle {
+pub struct WasmApp {
     state: Rc<RefCell<Option<WasmState>>>,
 }
 
@@ -138,15 +184,15 @@ fn normalize_mouse_button(
     }
 }
 
-impl WasmAppHandle {
-    /// Build a DOM-wired wasm tur app: create the canvas (+ wrapper / hidden
-    /// textarea), wire all DOM event listeners, build the engine via
-    /// `cfg.configure`, register the after-frame hook, and start the autonomous
-    /// rAF loop. Resolves to the owning handle.
-    pub async fn create(cfg: WasmAppConfig) -> Result<Self, JsValue> {
+impl WasmApp {
+    /// Build a DOM-wired wasm tur app instance from a [`WasmRuntime`]: create
+    /// the canvas (+ wrapper / hidden textarea), wire all DOM event listeners,
+    /// spawn an isolated instance via `runtime.create_app(renderer, …)`,
+    /// register the after-frame hook, and start the autonomous rAF loop.
+    /// Resolves to the owning handle.
+    pub async fn create(runtime: &WasmRuntime, cfg: WasmAppConfig) -> Result<Self, JsValue> {
         let WasmAppConfig {
             container_id,
-            configure,
             after_frame: after_frame_hook,
         } = cfg;
         let state: Rc<RefCell<Option<WasmState>>> = Rc::new(RefCell::new(None));
@@ -336,31 +382,23 @@ impl WasmAppHandle {
 
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
 
-        let builder = tur_engine::TurEngine::builder()
-            .renderer(Box::new(renderer))
-            .font_loader(Box::new(WasmFontLoader::new()))
-            .clock(Rc::new(WasmClock))
-            .capability(CursorCap::new(WasmCursor {
-                canvas: canvas.clone(),
-            }))
-            .capability(Clipboard::new(WasmClipboard))
-            .capability(Http::new(WasmHttp))
-            .capability(FilePicker::new(WasmFilePicker))
-            .plugin(tur_engine::TurStdPlugin)
-            .plugin(tur_animation::TurAnimationPlugin)
-            .plugin(TurClipboardPlugin)
-            .plugin(TurNetPlugin)
-            .plugin(TurFilePickerPlugin);
-        // Let the embedder add its own plugins / override capabilities.
-        let app = configure(builder)
-            .build()
+        // Spawn an isolated instance from the shared runtime, attached to this
+        // canvas's renderer. `create_app` pushes the initial Resize internally.
+        let app = runtime
+            .runtime
+            .create_app(
+                Box::new(renderer),
+                (logical_width as f64, logical_height as f64),
+                dpr,
+            )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        app.push_platform_event(PlatformEvent::Resize {
-            logical_width,
-            logical_height,
-            dpr,
-        });
+        // The cursor backend is per-instance (it targets this canvas's DOM
+        // element), so it can't be a shared runtime capability. Override the
+        // shell's cursor backend now that the instance exists.
+        app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor {
+            canvas: canvas.clone(),
+        })));
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -937,7 +975,7 @@ impl WasmAppHandle {
         // engine's verdict.
         app.start(WasmLoopDriver::new());
 
-        Ok(WasmAppHandle { state: state_clone })
+        Ok(WasmApp { state: state_clone })
     }
 
     pub fn load_and_run_js(&self, js_source: &str) -> Result<(), JsValue> {

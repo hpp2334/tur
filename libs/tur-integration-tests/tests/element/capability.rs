@@ -5,12 +5,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use tur_engine::TurEngine;
+use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::{Capability, CapabilityDecls};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
-use tur_engine::renderer::noop::NoopRenderer;
 use tur_native::NativeFontLoader;
 
 // ---------- Test capability newtype ---------------------------------------
@@ -105,17 +104,17 @@ fn capability_chain_order_irrelevant() {
     );
 }
 
-// Helper: build a TurEngine instance with a custom builder closure. Uses
-// NoopRenderer + NativeFontLoader + FixedClock to match the test harness.
+// Helper: build a headless TurApp instance with a custom builder closure.
+// Uses NativeFontLoader + FixedClock to match the test harness.
 fn build_app(
-    configure: impl FnOnce(tur_engine::TurEngineBuilder) -> tur_engine::TurEngineBuilder,
+    configure: impl FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder,
 ) -> Result<Rc<tur_engine::TurApp>, TurError> {
     use boa_engine::context::time::FixedClock;
     use std::rc::Rc;
-    let builder = TurEngine::builder()
-        .renderer(Box::new(NoopRenderer::new()))
-        .font_loader(Box::new(NativeFontLoader::new()))
+    let builder = TurRuntime::builder()
+        .font_loader(Rc::new(NativeFontLoader::new()))
         .clock(Rc::new(FixedClock::from_millis(0)));
-    let app = configure(builder).build()?;
+    let runtime = configure(builder).build()?;
+    let app = runtime.create_headless_app((400.0, 600.0))?;
     Ok(app)
 }

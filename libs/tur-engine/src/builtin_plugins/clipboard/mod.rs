@@ -7,11 +7,11 @@
 //! ## Public API (re-exported at the `tur_engine` crate root)
 //!
 //! - [`Clipboard`] — capability newtype; embedders register via
-//!   `Clipboard::new(backend)` on `TurEngineBuilder::capability`.
+//!   `Clipboard::new(backend)` on `TurRuntimeBuilder::capability`.
 //! - [`ClipboardBackend`] — trait external backends implement
 //!   (`tur-clipboard-wasm::WasmClipboard`, `tur-clipboard-native::NativeClipboard`).
 //! - [`TurClipboardPlugin`] — plugin struct embedders register via
-//!   `TurEngineBuilder::plugin`.
+//!   `TurRuntimeBuilder::plugin`.
 //! - [`platform_paste`] — embedder helper wrapping a paste text as a
 //!   `PlatformEvent::Custom`.
 //!

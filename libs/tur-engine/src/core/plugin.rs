@@ -17,6 +17,7 @@ use boa_engine::property::Attribute;
 use crate::core::app::TurAppContext;
 use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::fonts::FontContext;
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::js_runtime::module_loader::{build_fn_module, build_native_module};
 use crate::core::js_runtime::{TurJsContext, TurModuleLoader};
@@ -25,22 +26,34 @@ use crate::error::TurError;
 /// A plugin that extends the engine with elements, bridge modules, subsystems,
 /// and/or platform capabilities.
 ///
-/// Each plugin is registered via [`TurEngineBuilder::plugin`](crate::TurEngineBuilder::plugin)
-/// and installed once during `build()`. The [`register`](Plugin::register)
-/// method is the build-time entry point — it receives a [`PluginContext`]
-/// exposing all registration primitives (modules, subsystems, classes, globals).
+/// A plugin is registered on the [`TurRuntime`](crate::TurRuntime) once (via
+/// [`TurRuntimeBuilder::plugin`](crate::TurRuntimeBuilder::plugin)). The runtime
+/// then drives the plugin through two phases:
+///
+/// 1. [`compile`](Plugin::compile) — called **once** on the runtime after
+///    capabilities are inserted and `requires` is validated. Use it for any
+///    one-time, instance-independent work: pre-validating JS module sources,
+///    caching descriptor tables, etc. Defaults to a no-op.
+///
+/// 2. [`register`](Plugin::register) — called **once per instance** (per
+///    [`TurRuntime::create_app`](crate::TurRuntime::create_app)) into that
+///    instance's fresh boa `Context`. Because `register` takes `&self`, the
+///    **same** plugin object is reused across every instance — no factory
+///    needed. Stateful per-instance artifacts (subsystems, handles) are created
+///    fresh inside `register` and pushed into the per-instance
+///    [`PluginContext`].
 ///
 /// Plugins declare hard-required capabilities via
-/// [`requires`](Plugin::requires); the engine builder validates every
-/// declaration against the registered capabilities before any plugin's
-/// `register` runs, so a missing capability fails fast at `build()` with a
-/// clear error (naming the missing type and the fix) instead of midway
-/// through side-effecting registration.
+/// [`requires`](Plugin::requires); the runtime validates every declaration
+/// against the registered capabilities before any plugin's `compile`/`register`
+/// runs, so a missing capability fails fast at runtime build with a clear error
+/// (naming the missing type and the fix) instead of midway through
+/// side-effecting registration.
 pub trait Plugin {
-    /// Declare capabilities this plugin hard-requires. Called by the engine
-    /// builder BEFORE any plugin's `register` runs. If a declared capability
-    /// is missing, `build()` returns `TurError::Other(...)` naming the
-    /// missing type.
+    /// Declare capabilities this plugin hard-requires. Called by the runtime
+    /// builder BEFORE any plugin's `compile`/`register` runs. If a declared
+    /// capability is missing, runtime `build()` returns `TurError::Other(...)`
+    /// naming the missing type.
     ///
     /// Default: no requirements. Optional capabilities should NOT be declared
     /// here — the plugin should look them up via
@@ -48,14 +61,40 @@ pub trait Plugin {
     /// gracefully.
     fn requires(&self, _decls: &mut CapabilityDecls) {}
 
-    /// Build-time registration. Called once during `build()` after capability
-    /// validation. Register modules, handlers, classes, globals via
+    /// One-time, runtime-level compilation. Called once after capabilities are
+    /// inserted and `requires` is validated, before any instance is created.
+    /// Use it to pre-validate JS module sources, build descriptor tables, or
+    /// do any work that is identical across every instance. Defaults to a
+    /// no-op.
+    ///
+    /// Note: boa `Module`s are realm-bound (a `Module::parse` needs a
+    /// `&mut Context`), so cross-instance sharing of *parsed* modules is not
+    /// possible today — the actual parse still happens per instance in
+    /// [`register`](Self::register). `compile` is the seam for future
+    /// caching and for failing fast on bad module sources at runtime build
+    /// time.
+    fn compile(&self, _cx: &mut CompileContext) -> Result<(), TurError> {
+        Ok(())
+    }
+
+    /// Per-instance registration. Called once per
+    /// [`TurRuntime::create_app`](crate::TurRuntime::create_app) into a fresh
+    /// boa `Context`. Register modules, handlers, classes, globals via
     /// `ctx.register_*()`.
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError>;
 }
 
-/// Build-time context passed to [`Plugin::register`]. Only available during
-/// `build()` — after the app is constructed, no further registration is possible.
+/// Context passed to [`Plugin::compile`]. Provides read access to the
+/// runtime-level shared resources: the capability registry (for ad-hoc
+/// validation beyond `requires`) and the shared font context.
+pub struct CompileContext<'a> {
+    pub capabilities: &'a Capabilities,
+    pub font_context: &'a FontContext,
+}
+
+/// Per-instance context passed to [`Plugin::register`]. Only available while an
+/// instance is being constructed — after the app is built, no further
+/// registration is possible.
 ///
 /// Exposes registration primitives for JS modules, boa classes, subsystems,
 /// and global properties. Each `register_*` method is self-contained: call them
@@ -171,7 +210,7 @@ impl<'a> PluginContext<'a> {
     }
 
     /// The engine's shared clock (set via
-    /// [`TurEngineBuilder::clock`](crate::TurEngineBuilder::clock)). Plugins
+    /// [`TurRuntimeBuilder::clock`](crate::TurRuntimeBuilder::clock)). Plugins
     /// that own time-driven subsystems (animation, audio, etc.) stash this
     /// handle at registration time and query `clock.now()` during their tick.
     pub fn clock(&self) -> Rc<dyn Clock> {

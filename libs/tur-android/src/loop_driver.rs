@@ -7,7 +7,7 @@
 //! - [`NextFrame::After(d)`] → `FrameLoop.scheduleDelayed(millis)`
 //! - [`NextFrame::Idle`] → `FrameLoop.cancel()`
 //!
-//! The Kotlin side fires the engine's wake trampoline (`TurEngine.wake()` via
+//! The Kotlin side fires the engine's wake trampoline (`TurRuntime.wake()` via
 //! `nativePump`) when due. The wake trampoline and the Kotlin callback live in
 //! a `Mutex` so the engine can set the wake after the driver is installed.
 

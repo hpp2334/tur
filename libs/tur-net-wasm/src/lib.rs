@@ -2,7 +2,7 @@
 //!
 //! Re-exports the full net surface from [`tur_net_capability`] so browser
 //! embedders only need this one crate. The backend ([`WasmHttp`]) is
-//! registered via `TurEngineBuilder::capability(Http::new(WasmHttp))`.
+//! registered via `TurRuntimeBuilder::capability(Http::new(WasmHttp))`.
 
 mod backend;
 

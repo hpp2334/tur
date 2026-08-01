@@ -5,7 +5,7 @@
 //! `tur-integration-tests::RecordingClipboard`) implement
 //! [`ClipboardBackend`], and embedders construct the [`Clipboard`] capability
 //! newtype via `Clipboard::new(backend)` to register on
-//! [`TurEngineBuilder::capability`](crate::TurEngineBuilder::capability).
+//! [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder::capability).
 //!
 //! Both types are re-exported at the engine crate root
 //! (`tur_engine::Clipboard`, `tur_engine::ClipboardBackend`) so external
@@ -23,7 +23,7 @@ use crate::core::capability::Capability;
 /// stub) return `std::future::ready(...)`.
 ///
 /// Backends are registered as the [`Clipboard`] capability via
-/// `tur_engine::TurEngineBuilder::capability(Clipboard::new(backend))`.
+/// `tur_engine::TurRuntimeBuilder::capability(Clipboard::new(backend))`.
 /// Bridge fns look up the cap at JS call time and call these methods.
 ///
 /// On wasm, `navigator.clipboard.readText/writeText` are inherently async
@@ -39,11 +39,11 @@ pub trait ClipboardBackend: 'static {
 }
 
 /// Capability newtype wrapping an `Rc<dyn ClipboardBackend>`. Registered via
-/// [`tur_engine::TurEngineBuilder::capability`] with
+/// [`tur_engine::TurRuntimeBuilder::capability`] with
 /// `Clipboard::new(backend)`; bridge fns look it up at JS call time via
 /// `js_ctx.capability().of::<Clipboard>()`.
 ///
-/// [`tur_engine::TurEngineBuilder::capability`]: crate::TurEngineBuilder::capability
+/// [`tur_engine::TurRuntimeBuilder::capability`]: crate::TurRuntimeBuilder::capability
 #[derive(Clone)]
 pub struct Clipboard(Rc<dyn ClipboardBackend>);
 

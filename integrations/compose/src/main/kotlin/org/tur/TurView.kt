@@ -17,39 +17,39 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 
 /**
- * A Compose surface that runs a tur engine instance and renders the given JS.
+ * A Compose surface that spawns an isolated tur instance from [runtime] and
+ * renders the given JS into it.
  *
- * The single-call integration point: drop this composable into any Compose UI,
- * pass a JS bundle string (an ES module importing from `tur:std` /
- * `tur:animation` / etc.) and an [TurEngineFactory] (which builds the native
- * engine with the app's plugin set and returns its opaque handle), and tur
- * renders into the surface. Pointer (touch), resize, and the frame loop are
- * wired automatically; basic key dispatch is wired when the surface has focus.
+ * The single-call integration point: obtain a [TurRuntime] once (e.g. via
+ * [rememberTurRuntime]), drop this composable into any Compose UI, pass a JS
+ * bundle string (an ES module importing from `tur:std` / `tur:animation` /
+ * etc.), and tur renders into the surface. When the surface becomes ready the
+ * view spawns an instance via [TurRuntime.createInstance]; when the surface is
+ * destroyed the instance is torn down (the runtime survives). Pointer (touch),
+ * resize, and the frame loop are wired automatically; basic key dispatch is
+ * wired when the surface has focus.
  *
- * Multiple `TurView`s can coexist in one app — each builds its own engine
- * (isolated JS context + plugins) via [engineFactory], so this is the basis for
- * a tur-as-plugin-system setup.
+ * Multiple `TurView`s sharing one [runtime] coexist as isolated instances
+ * (each its own JS realm) while sharing fonts/clock/capabilities/plugins — the
+ * basis for a tur-as-plugin-system setup.
  *
  * Example:
  * ```
+ * val runtime = rememberTurRuntime { ctx -> DemoNative.createRuntime(ctx) }
  * val js = remember { context.assets.open("playground.js").bufferedReader().use { it.readText() } }
- * TurView(js = js, engineFactory = TurEngineFactory { ctx, surface, w, h, dpr, loop ->
- *     DemoNative.createEngine(ctx, surface, w, h, dpr, loop)
- * }, modifier = Modifier.fillMaxSize())
+ * TurView(runtime = runtime, js = js, modifier = Modifier.fillMaxSize())
  * ```
  *
+ * @param runtime the shared [TurRuntime] to spawn the instance from.
  * @param js an ES module source (the bundle produced by rspack from
  *   `playground-view` or a `tur-test-cases` case). Imports of `tur:*` /
  *   `tur-ext/demo-helper` are resolved by the engine's module loader.
- * @param engineFactory builds the native engine over the surface and returns
- *   its handle. The app owns this — it loads its `.so` and calls its own
- *   `createEngine` JNI function inside.
  * @param dpr force a DPR (defaults to the window's `Resources.displayMetrics.density`).
  */
 @Composable
 fun TurView(
+    runtime: TurRuntime,
     js: String,
-    engineFactory: TurEngineFactory,
     modifier: Modifier = Modifier,
     dpr: Double? = null,
 ) {
@@ -64,23 +64,43 @@ fun TurView(
     )
 
     DisposableEffect(surfaceView) {
-        surfaceView.bind(js, context, resolvedDpr, engineFactory)
+        surfaceView.bind(runtime, js, resolvedDpr)
         onDispose { surfaceView.unbind() }
     }
 }
 
 /**
- * `SurfaceView` subclass that owns the [TurEngine] lifecycle + input dispatch.
+ * Create a [TurRuntime] once via [factory] and remember it across recomposition,
+ * disposing (destroying) it when [factory]'s key changes or the composable
+ * leaves the composition.
  *
- * The engine is created lazily via [bind] (called once the surface is ready —
+ * The typical entry point: the app loads its `.so` and supplies a factory that
+ * calls its `createRuntime` JNI function with its plugin set.
+ */
+@Composable
+fun rememberTurRuntime(
+    factory: (Context) -> Long,
+): TurRuntime {
+    val context = LocalContext.current
+    val runtime = remember { TurRuntime(factory(context)) }
+    DisposableEffect(runtime) {
+        onDispose { runtime.close() }
+    }
+    return runtime
+}
+
+/**
+ * `SurfaceView` subclass that owns the [TurInstance] lifecycle + input dispatch.
+ *
+ * The instance is created lazily via [bind] (called once the surface is ready —
  * see [TurView]'s `DisposableEffect`). All methods must be called on the main
  * looper (where `SurfaceHolder.Callback` and input dispatch arrive).
  */
 private class TurSurfaceView(context: android.content.Context) : SurfaceView(context) {
-    private var engine: TurEngine? = null
+    private var instance: TurInstance? = null
     private var pendingJs: String? = null
     private var dprValue: Double = 0.0
-    private var engineFactory: TurEngineFactory? = null
+    private var runtime: TurRuntime? = null
     /** Tracks the last IME state we drove so we only call the IMM on
      *  show↔hide transitions (not every frame). */
     private var imeActive = false
@@ -100,24 +120,24 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
     }
 
-    /** Stash the JS + dpr + factory and register the surface callback; build the
-     *  engine (via the factory) when the surface is ready. */
-    fun bind(js: String, context: android.content.Context, dpr: Double, factory: TurEngineFactory) {
+    /** Stash the JS + dpr + runtime and register the surface callback; spawn the
+     *  instance when the surface is ready. */
+    fun bind(runtime: TurRuntime, js: String, dpr: Double) {
         pendingJs = js
         dprValue = dpr
-        engineFactory = factory
+        this.runtime = runtime
         isFocusable = true
         isFocusableInTouchMode = true
         requestFocus()
         holder.addCallback(surfaceCallback)
         setOnTouchListener { _, event ->
             userInteracted = true
-            val eng = engine ?: return@setOnTouchListener false
+            val inst = instance ?: return@setOnTouchListener false
             // `MotionEvent.getX/Y` are in physical px (Android's view coord
             // space); the engine hit-tests in logical px, so divide by dpr to
             // land taps in the same space as the layout.
             val dpr = dprValue.coerceAtLeast(1.0)
-            eng.pushPointer(
+            inst.pushPointer(
                 event.actionMasked,
                 event.x.toDouble() / dpr,
                 event.y.toDouble() / dpr,
@@ -127,21 +147,21 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         }
     }
 
-    /** Tear down: remove callbacks + destroy the engine. */
+    /** Tear down: remove callbacks + destroy the instance (runtime survives). */
     fun unbind() {
         holder.removeCallback(surfaceCallback)
         setOnTouchListener(null)
-        engine?.setAfterPump(null)
-        engine?.close()
-        engine = null
+        instance?.setAfterPump(null)
+        instance?.close()
+        instance = null
         imeActive = false
     }
 
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
-            if (engine != null) return
+            if (instance != null) return
             val js = pendingJs ?: return
-            val factory = engineFactory ?: return
+            val rt = runtime ?: return
             // `SurfaceHolder.surfaceFrame` (and `surfaceChanged`'s width/height)
             // report *physical* pixels, but the engine's `viewportSize$` (and
             // thus JS-side layout thresholds like the playground's
@@ -154,26 +174,18 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
             val dpr = dprValue.coerceAtLeast(1.0)
             val w = (holder.surfaceFrame.width() / dpr).toInt().coerceAtLeast(1)
             val h = (holder.surfaceFrame.height() / dpr).toInt().coerceAtLeast(1)
-            engine = try {
-                // Build the engine via the app's factory (which calls into the
-                // app's .so with its plugin set). The FrameLoop is created here
-                // and handed both to native (the loop driver arms wake-ups
-                // against it) and to TurEngine (which wires its onWake → pump).
-                val frameLoop = FrameLoop()
-                val handle = factory.create(context, holder.surface, w, h, dprValue, frameLoop)
-                if (handle == 0L) {
-                    android.util.Log.e("TurView", "engineFactory.create returned 0 (see logcat)")
-                    null
-                } else {
-                    TurEngine(handle, frameLoop).also {
-                        it.loadModule(js)
-                        // After each frame, sync the soft keyboard with the
-                        // engine's focused-element state (polls `focusedIsEditable`).
-                        it.setAfterPump { syncIme() }
-                    }
+            instance = try {
+                // Spawn an isolated instance from the runtime (which calls
+                // TurNative.createInstance under the hood — the runtime's loop
+                // driver arms wake-ups against the instance's FrameLoop).
+                rt.createInstance(holder.surface, w, h, dprValue).also {
+                    it.loadModule(js)
+                    // After each frame, sync the soft keyboard with the
+                    // engine's focused-element state (polls `focusedIsEditable`).
+                    it.setAfterPump { syncIme() }
                 }
             } catch (e: Throwable) {
-                android.util.Log.e("TurView", "engine create failed", e)
+                android.util.Log.e("TurView", "instance create failed", e)
                 null
             }
         }
@@ -183,7 +195,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
             // `surfaceFrame`); convert to logical px before pushing to the
             // engine. See `surfaceCreated` for the unit rationale.
             val dpr = dprValue.coerceAtLeast(1.0)
-            engine?.resize(
+            instance?.resize(
                 (width / dpr).toInt().coerceAtLeast(1),
                 (height / dpr).toInt().coerceAtLeast(1),
                 dprValue,
@@ -191,15 +203,15 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         }
 
         override fun surfaceDestroyed(holder: SurfaceHolder) {
-            engine?.close()
-            engine = null
+            instance?.close()
+            instance = null
         }
     }
 
     override fun onKeyDown(keyCode: Int, event: android.view.KeyEvent): Boolean {
-        val eng = engine ?: return super.onKeyDown(keyCode, event)
+        val inst = instance ?: return super.onKeyDown(keyCode, event)
         val mapped = InputMapper.map(keyCode) ?: return super.onKeyDown(keyCode, event)
-        eng.pushKey(
+        inst.pushKey(
             key = mapped.first,
             code = mapped.second,
             action = 0, // DOWN
@@ -212,9 +224,9 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     }
 
     override fun onKeyUp(keyCode: Int, event: android.view.KeyEvent): Boolean {
-        val eng = engine ?: return super.onKeyUp(keyCode, event)
+        val inst = instance ?: return super.onKeyUp(keyCode, event)
         val mapped = InputMapper.map(keyCode) ?: return super.onKeyUp(keyCode, event)
-        eng.pushKey(
+        inst.pushKey(
             key = mapped.first,
             code = mapped.second,
             action = 1, // UP
@@ -238,7 +250,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     override fun onCheckIsTextEditor(): Boolean = true
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection? {
-        val eng = engine ?: return null
+        val inst = instance ?: return null
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT
         // Avoid the fullscreen extract pane (phones, landscape) — the real
         // editor is our canvas; the extract UI would diverge from it.
@@ -252,15 +264,15 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
                     // Single ASCII printable char → key-event path (matches
                     // direct keyboard typing; the engine inserts `key` on
                     // keydown). DOWN then UP.
-                    eng.pushKey(s, "", 0, false, false, false, false)
-                    eng.pushKey(s, "", 1, false, false, false, false)
+                    inst.pushKey(s, "", 0, false, false, false, false)
+                    inst.pushKey(s, "", 1, false, false, false, false)
                 } else {
                     // Multi-char / non-ASCII → composition insert (paste,
                     // autocorrect, CJK direct-commit). CompositionStart then
                     // CompositionEnd{ text } makes the engine insert the whole
                     // string in one shot.
-                    eng.pushIme(0, "")
-                    eng.pushIme(2, s)
+                    inst.pushIme(0, "")
+                    inst.pushIme(2, s)
                 }
                 return true
             }
@@ -270,8 +282,8 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
                 afterChars: Int,
             ): Boolean {
                 // Backspace → existing key path (engine deletes on "Backspace").
-                eng.pushKey("Backspace", "Backspace", 0, false, false, false, false)
-                eng.pushKey("Backspace", "Backspace", 1, false, false, false, false)
+                inst.pushKey("Backspace", "Backspace", 0, false, false, false, false)
+                inst.pushKey("Backspace", "Backspace", 1, false, false, false, false)
                 return true
             }
         }
@@ -285,10 +297,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
      * programmatic focus doesn't pop the keyboard unprompted.
      */
     private fun syncIme() {
-        val eng = engine ?: return
+        val inst = instance ?: return
         val imm = context
             .getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-        if (eng.focusedIsEditable() && userInteracted) {
+        if (inst.focusedIsEditable() && userInteracted) {
             if (!hasFocus()) requestFocus()
             if (!imeActive) {
                 imm.showSoftInput(this, 0)

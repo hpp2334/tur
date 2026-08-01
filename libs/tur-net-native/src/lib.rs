@@ -3,7 +3,7 @@
 //! Re-exports the full net surface from [`tur_net_capability`] so native
 //! embedders only need this one crate. The backend ([`NativeHttp`]) is
 //! registered via
-//! `TurEngineBuilder::capability(Http::new(NativeHttp::default()))`.
+//! `TurRuntimeBuilder::capability(Http::new(NativeHttp::default()))`.
 //!
 //! On wasm this crate compiles as a near-empty stub (the `reqwest` dep is
 //! target-gated to `cfg(not(target_family = "wasm"))`). Embedders targeting

@@ -64,13 +64,14 @@ impl TurAppContext {
         focus_manager: Rc<RefCell<FocusManager>>,
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
         renderer: Box<dyn Renderer>,
-        font_loader: Box<dyn crate::core::fonts::FontLoader>,
+        font_context: crate::core::fonts::FontContext,
+        font_loader: Rc<dyn crate::core::fonts::FontLoader>,
         async_executor: Rc<AsyncExecutor>,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
         store: Store,
     ) -> Self {
-        let font_manager = FontManager::new(font_loader);
+        let font_manager = FontManager::from_context(font_context, font_loader);
         Self {
             element_tree,
             mutation_queue,

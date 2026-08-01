@@ -13,7 +13,7 @@
 //! ## Ordering
 //!
 //! Subsystems run in **registration order** — i.e. the order plugins are
-//! added to [`TurEngineBuilder`](crate::TurEngineBuilder). A subsystem that
+//! added to [`TurRuntimeBuilder`](crate::TurRuntimeBuilder). A subsystem that
 //! must observe effects of an earlier subsystem's tick or event handler
 //! (within the same `flush` iteration) should be registered after it.
 //!

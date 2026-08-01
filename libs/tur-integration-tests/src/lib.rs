@@ -21,9 +21,8 @@ use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
-use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
-use tur_engine::{CursorBackend, CursorCap, TurApp, TurEngine};
+use tur_engine::{CursorBackend, CursorCap, TurApp, TurRuntime};
 use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
@@ -328,9 +327,8 @@ impl TurTestApp {
         let cursor_slot = Rc::new(Cell::new(None));
         let clipboard = RecordingClipboard::new();
         let clock = Rc::new(FixedClock::from_millis(0));
-        let mut builder = TurEngine::builder()
-            .renderer(Box::new(NoopRenderer::new()))
-            .font_loader(Box::new(NativeFontLoader::new()))
+        let mut builder = TurRuntime::builder()
+            .font_loader(Rc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .capability(CursorCap::new(RecordingCursor {
                 last: cursor_slot.clone(),
@@ -352,12 +350,9 @@ impl TurTestApp {
         for p in extra_plugins {
             builder = builder.plugin_boxed(p);
         }
-        let inner = builder.build()?;
-        inner.push_platform_event(PlatformEvent::Resize {
-            logical_width: width as u32,
-            logical_height: height as u32,
-            dpr: 1.0,
-        });
+        let runtime = builder.build()?;
+        // Headless instance — the test harness renders via NoopRenderer.
+        let inner = runtime.create_headless_app((width, height))?;
         let _ = inner.run_frame();
         Ok(Self {
             inner,

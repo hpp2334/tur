@@ -3,7 +3,7 @@ mod app;
 pub mod fonts;
 
 #[cfg(target_arch = "wasm32")]
-pub use app::{AfterFrameHook, WasmAppConfig, WasmAppHandle};
+pub use app::{AfterFrameHook, WasmApp, WasmAppConfig, WasmRuntime, WasmRuntimeConfig};
 pub use fonts::WasmFontLoader;
 
 /// One-time wasm runtime init: install the panic hook (readable backtraces in

@@ -4,7 +4,7 @@
 //! The bridge fns are ctx-bound `Ptr`s that look up the
 //! [`Clipboard`](super::capability::Clipboard) capability from `TurJsContext`'s
 //! capability registry (populated by the embedder via
-//! `TurEngineBuilder::capability(Clipboard::new(...))`).
+//! `TurRuntimeBuilder::capability(Clipboard::new(...))`).
 //!
 //! Promise settlement flow:
 //!

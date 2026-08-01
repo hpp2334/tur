@@ -10,7 +10,7 @@ use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
 use crate::core::subsystem::Subsystem;
 
-use crate::core::fonts::FontLoader;
+use crate::core::fonts::{FontContext, FontLoader};
 use crate::core::render::Renderer;
 use crate::error::TurError;
 
@@ -65,9 +65,11 @@ pub struct TurAppInternal {
 impl TurAppInternal {
     pub fn new(
         renderer: Box<dyn Renderer>,
-        font_loader: Box<dyn FontLoader>,
+        font_context: FontContext,
+        font_loader: Rc<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<dyn Clock>,
+        capabilities: crate::core::capability::Capabilities,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
@@ -95,6 +97,7 @@ impl TurAppInternal {
             image_resource_map.clone(),
             store.clone(),
             async_executor.clone(),
+            capabilities,
         );
 
         // Share the capability registry between the JS context (bridge fns)
@@ -108,6 +111,7 @@ impl TurAppInternal {
             focus_manager,
             image_resource_map,
             renderer,
+            font_context,
             font_loader,
             async_executor.clone(),
             capabilities,

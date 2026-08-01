@@ -9,7 +9,7 @@ import android.view.Choreographer
  *
  * The engine decides when it wants the next wake-up ([NextFrame] verdict) and
  * calls one of `scheduleVsync` / `scheduleDelayed` / `cancel` back through JNI.
- * When the wake-up fires, [FrameLoop] invokes [onWake] (which [TurEngine]
+ * When the wake-up fires, [FrameLoop] invokes [onWake] (which [TurInstance]
  * wires to the engine's `pump`), completing the loop:
  *
  * ```
@@ -21,16 +21,17 @@ import android.view.Choreographer
  * arrive), matching the single-threaded assumption the native side relies on.
  *
  * [onWake] / [onAfterPump] are settable (default `null`) so a [FrameLoop] can be
- * constructed before the engine handle exists and wired up by [TurEngine]
- * afterwards — the [TurEngineFactory] needs a `FrameLoop` to hand to native
- * `createEngine`, but the `pump` target only exists once `createEngine` returns.
+ * constructed before the instance handle exists and wired up by [TurInstance]
+ * afterwards — the runtime needs a `FrameLoop` to hand to native
+ * `createInstance`, but the `pump` target only exists once `createInstance`
+ * returns.
  */
 class FrameLoop {
     private val handler = Handler(Looper.getMainLooper())
     private var frameCallback: Choreographer.FrameCallback? = null
     private var delayedToken: Runnable? = null
 
-    /** Fired when a scheduled wake-up is due. [TurEngine] sets this to `pump`. */
+    /** Fired when a scheduled wake-up is due. [TurInstance] sets this to `pump`. */
     var onWake: (() -> Unit)? = null
 
     /**

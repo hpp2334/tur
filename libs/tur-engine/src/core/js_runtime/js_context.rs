@@ -47,6 +47,10 @@ pub struct TurJsContext {
 
 impl TurJsContext {
     #[allow(clippy::too_many_arguments)]
+    /// `capabilities` is the shared registry owned by the
+    /// [`TurRuntime`](crate::TurRuntime) — every instance spawned from one
+    /// runtime shares the same capability backends (Clipboard/Http/etc.).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
@@ -56,6 +60,7 @@ impl TurJsContext {
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
         store: Store,
         async_executor: Rc<AsyncExecutor>,
+        capabilities: Capabilities,
     ) -> Self {
         Self {
             element_tree,
@@ -66,7 +71,7 @@ impl TurJsContext {
             image_resource_map,
             store,
             async_executor,
-            capabilities: Capabilities::new(),
+            capabilities,
         }
     }
 

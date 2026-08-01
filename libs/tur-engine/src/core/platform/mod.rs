@@ -4,7 +4,7 @@
 //!
 //! 1. **Cursor output** (`cursor` submodule) — `Cursor` enum +
 //!    `CursorBackend` trait + `CursorCap` capability newtype. Registered
-//!    via `TurEngineBuilder::capability(CursorCap::new(...))`; the engine
+//!    via `TurRuntimeBuilder::capability(CursorCap::new(...))`; the engine
 //!    builder installs the backend on the [`Shell`](crate::core::shell::Shell)
 //!    at build time.
 //!

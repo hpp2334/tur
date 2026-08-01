@@ -4,7 +4,7 @@
 //! Re-exports the file-picker plugin surface from [`tur_filepicker_capability`]
 //! so browser embedders only need this one crate. The backend
 //! ([`WasmFilePicker`]) is registered via
-//! `TurEngineBuilder::capability(FilePicker::new(WasmFilePicker))`.
+//! `TurRuntimeBuilder::capability(FilePicker::new(WasmFilePicker))`.
 
 mod backend;
 
