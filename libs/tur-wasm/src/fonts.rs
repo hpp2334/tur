@@ -2,16 +2,19 @@ use parley::FontContext;
 use parley::fontique::GenericFamily;
 use tur_engine::core::fonts::FontLoader;
 
-const DEFAULT_FONT: &[u8] = include_bytes!("../fonts/Roboto-Regular.ttf");
+const DEFAULT_FONT: &[u8] = include_bytes!("../fonts/Roboto-VF.ttf");
 const MONO_FONT: &[u8] = include_bytes!("../fonts/RobotoMono-VF.ttf");
 
 /// [`FontLoader`] for the wasm embedder: registers the two fonts bundled
-/// into the wasm binary (Roboto + Roboto Mono) and maps the generic
-/// families to them.
+/// into the wasm binary (a variable Roboto + Roboto Mono) and maps the
+/// generic families to them.
 ///
-/// On native targets the integration tests use [`tur_native::NativeFontLoader`]
-/// instead, which discovers installed system fonts. The browser has no
-/// filesystem access, so we ship a minimal, predictable face set here.
+/// Roboto is a **variable** font (`wght` axis 100–900), so a requested
+/// `fontWeight` (100–1000) renders a true face on the web instead of
+/// falling back to a single static weight. On native targets the
+/// integration tests use [`tur_native::NativeFontLoader`] instead, which
+/// discovers installed system fonts. The browser has no filesystem access,
+/// so we ship a minimal, predictable face set here.
 ///
 /// [`tur_native::NativeFontLoader`]: https://docs.rs/tur-native
 pub struct WasmFontLoader;

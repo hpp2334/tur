@@ -69,7 +69,9 @@ declare module "tur:std" {
      *  `SpanData` struct (the JS field is `content`; Rust maps it to `text`). */
     export interface SpanData {
         content: string;
-        bold?: boolean;
+        /** CSS-style numeric font weight (100–1000). Omit for the default
+         *  (400). Overrides the element's `fontWeight` for this run. */
+        weight?: number;
         italic?: boolean;
         underline?: boolean;
         fontSize?: number;
@@ -288,6 +290,10 @@ declare module "tur:std" {
     export interface TextProps {
         text: Val<string>;
         fontSize?: Val<number>;
+        /** CSS-style numeric font weight (100–1000) applied to the whole
+         *  element. Per-span `weight` overrides it for that range. Omit for
+         *  the default (400). */
+        fontWeight?: Val<number>;
         color?: Val<Brush | null>;
         spans?: Val<SpanData[]>;
         /** When `true`, the text can be drag-selected with the pointer. */
@@ -438,6 +444,9 @@ declare module "tur:std" {
         cursorColor?: Val<Brush | null>;
         fontSize?: Val<number>;
         fontFamily?: Val<string>;
+        /** CSS-style numeric font weight (100–1000). Omit for the default
+         *  (400). Per-span `weight` overrides it. */
+        fontWeight?: Val<number>;
         width?: Val<number>;
         height?: Val<number>;
         multiline?: Val<boolean>;

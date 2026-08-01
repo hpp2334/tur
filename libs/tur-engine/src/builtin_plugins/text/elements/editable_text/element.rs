@@ -102,6 +102,9 @@ pub struct EditableTextView {
     pub(crate) cursor_color: Option<Val<Color>>,
     pub(crate) font_size: Option<Val<f64>>,
     pub(crate) font_family: Option<Val<String>>,
+    /// Default CSS-style font weight (100–1000). `None` falls back to
+    /// parley's default (400). Per-span `weight` overrides this.
+    pub(crate) font_weight: Option<Val<f64>>,
     pub(crate) multiline: Option<Val<bool>>,
     /// When `Some(true)`, every character of the value (and any in-progress
     /// IME composition) is rendered as `obscuring_character` — the
@@ -612,7 +615,7 @@ impl EditableTextElement {
                     c.set_suppress_undo(true);
                     c.set_spans_preserve_cursor(vec![SpanData {
                         text: value.text,
-                        bold: false,
+                        weight: None,
                         italic: false,
                         underline: false,
                         font_size: None,
@@ -639,7 +642,7 @@ impl EditableTextElement {
                     c.set_suppress_undo(true);
                     c.set_spans_preserve_cursor(vec![SpanData {
                         text: value.text,
-                        bold: false,
+                        weight: None,
                         italic: false,
                         underline: false,
                         font_size: None,
@@ -861,6 +864,9 @@ impl ElementSubscribe for EditableTextElement {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.font_family.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.font_weight.as_ref() {
             cx.subscribe_val(v);
         }
         if let Some(v) = c.placeholder.as_ref() {
@@ -1184,6 +1190,7 @@ impl EditableTextView {
             cursor_color: p.val::<Color>("cursorColor"),
             font_size: p.val::<f64>("fontSize"),
             font_family: p.val::<String>("fontFamily"),
+            font_weight: p.val::<f64>("fontWeight"),
             multiline: p.val::<bool>("multiline"),
             obscure_text: p.val::<bool>("obscureText"),
             obscuring_character: p.val::<String>("obscuringCharacter"),

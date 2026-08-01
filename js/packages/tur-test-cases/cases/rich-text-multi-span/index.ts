@@ -5,7 +5,7 @@ export default view(() =>
         fontSize: 14,
         spans: [
             { content: "Hello " },
-            { content: "Bold", bold: true },
+            { content: "Bold", weight: 700 },
             { content: " World" },
         ],
     } as never),
