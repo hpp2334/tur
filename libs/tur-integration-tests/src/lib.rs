@@ -11,7 +11,6 @@ use boa_engine::NativeFunction;
 use boa_engine::Source;
 use boa_engine::context::time::{Clock, FixedClock};
 use futures::StreamExt;
-use tur_engine::TurEncodePlugin;
 use tur_engine::TurStdPlugin;
 use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
@@ -369,7 +368,6 @@ impl TurTestApp {
             }))
             .capability(Clipboard::new(clipboard.clone()))
             .plugin(TurStdPlugin)
-            .plugin(TurEncodePlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {

@@ -32,5 +32,4 @@ pub mod std;
 pub mod text;
 
 pub use clipboard::TurClipboardPlugin;
-pub use encode::TurEncodePlugin;
 pub use std::TurStdPlugin;

@@ -30,10 +30,10 @@
 
 use crate::builtin_plugins::{
     console::install_console, control_flow::install_control_flow, effects::install_effects,
-    focus::install_focus, gesture::install_gesture, image::install_image, input::install_input,
-    layout::composited_transform::install_composited_transform, layout::enums,
-    layout::install_layout, lazy_container::install_lazy_container, lifecycle::install_lifecycle,
-    scroll::install_scroll, text::install_text,
+    encode::install_encode, focus::install_focus, gesture::install_gesture, image::install_image,
+    input::install_input, layout::composited_transform::install_composited_transform,
+    layout::enums, layout::install_layout, lazy_container::install_lazy_container,
+    lifecycle::install_lifecycle, scroll::install_scroll, text::install_text,
 };
 use crate::core::app::render;
 use crate::core::async_::task;
@@ -108,6 +108,7 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(ct_fns);
         std_closures.extend(ct_closures);
         std_fns.extend(install_lifecycle(ctx)?);
+        std_fns.extend(install_encode()?);
         // Render mount + async task primitives stay in `core::app::render`
         // and `core::async_::task` (renderer/async infra, not element-plugin
         // affinity).

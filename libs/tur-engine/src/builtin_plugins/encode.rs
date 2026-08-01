@@ -1,6 +1,6 @@
-//! `tur:encode` plugin — UTF-8 text encoding/decoding utilities.
+//! UTF-8 text encoding/decoding utilities — merged into `tur:std`.
 //!
-//! Registers the `tur:encode` JS module exporting:
+//! Exposes:
 //! - `decodeUtf8(bytes: Uint8Array | ArrayBuffer): string`
 //! - `encodeUtf8(text: string): Uint8Array`
 //!
@@ -13,14 +13,13 @@ use boa_engine::object::builtins::{JsArrayBuffer, JsTypedArray, JsUint8Array};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 
 use crate::core::js_runtime::helpers::{FnEntry, Ptr};
-use crate::core::plugin::{Plugin, PluginContext};
 use crate::error::TurError;
 
-pub fn fns() -> Vec<FnEntry> {
-    vec![
+pub fn install_encode() -> Result<Vec<FnEntry>, TurError> {
+    Ok(vec![
         ("decodeUtf8", 1, tur_decode_utf8 as Ptr),
         ("encodeUtf8", 1, tur_encode_utf8 as Ptr),
-    ]
+    ])
 }
 
 fn tur_decode_utf8(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
@@ -65,19 +64,4 @@ fn extract_bytes(args: &[JsValue], ctx: &mut Context) -> JsResult<Vec<u8>> {
     Err(JsError::from(JsNativeError::typ().with_message(
         "decodeUtf8: expected Uint8Array or ArrayBuffer",
     )))
-}
-
-pub struct TurEncodePlugin;
-
-impl Default for TurEncodePlugin {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Plugin for TurEncodePlugin {
-    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        ctx.register_module("tur:encode", fns(), vec![], vec![]);
-        Ok(())
-    }
 }

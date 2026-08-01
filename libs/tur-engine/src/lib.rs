@@ -20,7 +20,6 @@ pub use crate::builtin_plugins::clipboard::{
 };
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
-pub use crate::builtin_plugins::TurEncodePlugin;
 pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::builtin_plugins::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point

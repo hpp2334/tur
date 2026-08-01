@@ -7,6 +7,7 @@ mod container;
 mod core_module_check;
 mod debug;
 mod each_in_row;
+mod encode;
 mod event_bus;
 mod expanded;
 mod filepicker;
