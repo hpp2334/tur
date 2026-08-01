@@ -288,7 +288,7 @@ declare module "tur:std" {
     }
 
     export interface TextProps {
-        text: Val<string>;
+        text?: Val<string>;
         fontSize?: Val<number>;
         /** CSS-style numeric font weight (100–1000) applied to the whole
          *  element. Per-span `weight` overrides it for that range. Omit for
