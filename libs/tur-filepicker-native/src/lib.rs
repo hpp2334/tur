@@ -4,7 +4,7 @@
 //! Re-exports the file-picker plugin surface from [`tur_filepicker_capability`]
 //! so native embedders only need this one crate. The backend
 //! ([`NativeFilePicker`]) is registered via
-//! `TurEngineBuilder::capability(FilePicker::new(NativeFilePicker::default()))`.
+//! `TurRuntimeBuilder::capability(FilePicker::new(NativeFilePicker::default()))`.
 //!
 //! On wasm this crate compiles as a near-empty stub (the `rfd` dep is
 //! target-gated to `cfg(not(target_family = "wasm"))`). Embedders targeting

@@ -5,7 +5,7 @@
 //! output). HTTP lives in `tur-net`; the clipboard plugin
 //! (`builtin_plugins::clipboard`) bundles its own backend trait +
 //! capability newtype + JS bridge. The traits here are registered as capability newtypes via
-//! [`crate::TurEngineBuilder::capability`] and looked up at runtime via the
+//! [`crate::TurRuntimeBuilder::capability`] and looked up at runtime via the
 //! [`crate::core::capability::Capabilities`] registry.
 //!
 //! [`Cursor`] lives here because it is the single typed representation
@@ -162,7 +162,7 @@ impl Cursor {
 /// tur-wasm).
 ///
 /// Backends are registered via
-/// [`crate::TurEngineBuilder::capability`](`CursorCap::new(...)`); the engine
+/// [`crate::TurRuntimeBuilder::capability`](`CursorCap::new(...)`); the engine
 /// builder looks the cap up after all plugins register and installs the
 /// backend on [`crate::core::shell::Shell`]. If absent, the engine falls
 /// back to [`NoopCursor`] (cursor never changes).
@@ -187,7 +187,7 @@ impl CursorBackend for NoopCursor {
 /// naming preference. This is the lone exception to the "capability
 /// newtypes use base names" convention.
 ///
-/// Registered via [`crate::TurEngineBuilder::capability`] with
+/// Registered via [`crate::TurRuntimeBuilder::capability`] with
 /// `CursorCap::new(backend)`; the engine builder installs the backend on the
 /// Shell at `build()` time.
 #[derive(Clone)]

@@ -7,10 +7,9 @@ use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
 use tur_engine::core::elements::NodeTreeData;
-use tur_engine::core::platform::PlatformEvent;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
-use tur_engine::{TurApp, TurEngine};
+use tur_engine::{TurApp, TurRuntime};
 use tur_native::NativeFontLoader;
 
 #[derive(Debug, thiserror::Error)]
@@ -110,18 +109,13 @@ impl TurVelloApp {
             dpr,
         );
 
-        let app = TurEngine::builder()
-            .renderer(Box::new(renderer))
-            .font_loader(Box::new(NativeFontLoader::new()))
+        let runtime = TurRuntime::builder()
+            .font_loader(Rc::new(NativeFontLoader::new()))
             .clock(Rc::new(StdClock::new()))
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
-        app.push_platform_event(PlatformEvent::Resize {
-            logical_width: width as u32,
-            logical_height: height as u32,
-            dpr,
-        });
+        let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
         let _ = app.run_frame();
 
         Ok(TurVelloApp {

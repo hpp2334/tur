@@ -1,7 +1,7 @@
 // tur Compose integration library — a pure-Kotlin Android AAR that wraps the
 // tur engine's Compose UI. It ships **no native code**: the app links its own
 // `.so` (built from `libs/tur-android` as an rlib + the app's plugins) and
-// hands the resulting engine handle to `TurView` via a `TurEngineFactory`. See
+// hands the resulting runtime handle to `TurView` via `rememberTurRuntime`. See
 // `demo/compose` for a complete wiring example.
 
 plugins {

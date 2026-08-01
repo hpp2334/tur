@@ -3,9 +3,9 @@
 //! `tur-wasm` is a reusable embedder lib (it owns all the DOM wiring + engine
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
-//! [`tur_wasm::WasmAppHandle`] builder and adds the playground-only
-//! [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler). JS imports
-//! `TurWebsiteApp` from the generated `tur_website.js`.
+//! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and adds the
+//! playground-only [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler). JS
+//! imports `TurWebsiteApp` from the generated `tur_website.js`.
 //!
 //! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
 //! (the app's own cdylib that adds the demo plugin set).
@@ -32,7 +32,11 @@ pub fn wasm_entry() {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurWebsiteApp {
-    handle: tur_wasm::WasmAppHandle,
+    /// The shared runtime (fonts, clock, capabilities, plugins). Kept alive
+    /// for the app's lifetime so the instance can reference it.
+    _runtime: tur_wasm::WasmRuntime,
+    /// The DOM-wired instance (canvas + renderer + loop).
+    app: tur_wasm::WasmApp,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -50,13 +54,23 @@ impl TurWebsiteApp {
 
     fn create_internal(container_id: Option<String>) -> js_sys::Promise {
         wasm_bindgen_futures::future_to_promise(async move {
-            let handle = tur_wasm::WasmAppHandle::create(tur_wasm::WasmAppConfig {
-                container_id,
+            // Build the shared runtime once with the demo plugin.
+            let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
                 configure: Box::new(|b| b.plugin(tur_demo_plugin::TurDemoPlugin)),
-                after_frame: None,
-            })
+            })?;
+            // Spawn an isolated DOM-wired instance from it.
+            let app = tur_wasm::WasmApp::create(
+                &runtime,
+                tur_wasm::WasmAppConfig {
+                    container_id,
+                    after_frame: None,
+                },
+            )
             .await?;
-            Ok(JsValue::from(TurWebsiteApp { handle }))
+            Ok(JsValue::from(TurWebsiteApp {
+                _runtime: runtime,
+                app,
+            }))
         })
     }
 
@@ -65,14 +79,14 @@ impl TurWebsiteApp {
     /// loader), then render. Used to load the playground-view bundle.
     #[wasm_bindgen(js_name = loadAndRunModule)]
     pub fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
-        self.handle.load_and_run_module(js_source)
+        self.app.load_and_run_module(js_source)
     }
 
     /// Return a host-side dev-tool handle. Methods eval the in-engine
     /// `turDevTool` global, returning JSON strings for the host to parse.
     pub fn dev_tool(&self) -> TurDevTool {
         TurDevTool {
-            handle: self.handle.clone(),
+            app: self.app.clone(),
         }
     }
 }
@@ -83,7 +97,7 @@ impl TurWebsiteApp {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurDevTool {
-    handle: tur_wasm::WasmAppHandle,
+    app: tur_wasm::WasmApp,
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -93,13 +107,13 @@ impl TurDevTool {
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
     #[wasm_bindgen(js_name = elementTree)]
     pub fn element_tree(&self) -> String {
-        self.handle.element_tree()
+        self.app.element_tree()
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
     /// are returned as bare `{id}` handles). Returns `""` if not found.
     #[wasm_bindgen(js_name = getElement)]
     pub fn get_element(&self, id: u32) -> String {
-        self.handle.get_element(id)
+        self.app.get_element(id)
     }
 }

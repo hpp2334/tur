@@ -4,7 +4,7 @@
 //! Re-exports the clipboard plugin surface from [`tur_engine`] so Android
 //! embedders only need this one crate. The backend ([`AndroidClipboard`]) is
 //! registered via
-//! `TurEngineBuilder::capability(Clipboard::new(AndroidClipboard::new(context)))`,
+//! `TurRuntimeBuilder::capability(Clipboard::new(AndroidClipboard::new(context)))`,
 //! where `context` is a JNI global ref to the Android app `Context`.
 //!
 //! The process `JavaVM` must be registered once via [`set_java_vm`] from the

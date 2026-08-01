@@ -8,9 +8,11 @@ frame loop, and IME.
 
 **This library ships no native code.** The app links its own `.so` (built from
 [`libs/tur-android`](../../libs/tur-android) as an rlib + the app's plugin set)
-and hands the resulting engine handle to `TurView` via a `TurEngineFactory`. This
-keeps the Kotlin lib reusable across apps with different plugin sets, and
-supports multiple independent `TurView`s in one app (tur-as-plugin-system).
+and creates a shared `TurRuntime` once (via `rememberTurRuntime`). From that
+runtime, `TurView` spawns isolated instances — each its own JS realm, attached
+to a `Surface`. This keeps the Kotlin lib reusable across apps with different
+plugin sets, and supports multiple `TurView`s sharing one runtime (isolated JS
+state, shared fonts/clock/capabilities — tur-as-plugin-system).
 
 ## Quick start
 
@@ -18,7 +20,8 @@ supports multiple independent `TurView`s in one app (tur-as-plugin-system).
 
 Create a `cdylib` crate that depends on `tur-android` and adds your plugins. The
 `tur_android::standard_jni_exports!()` macro generates the standard engine-op
-JNI symbols; you write one `createEngine` fn with your plugin set:
+JNI symbols (instance creation, pump, input, …); you write one `createRuntime`
+fn with your plugin set:
 
 ```rust
 // your-app/native/src/lib.rs
@@ -29,24 +32,17 @@ tur_android::standard_jni_exports!();
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_org_yourapp_AppNative_createEngine(
+pub extern "system" fn Java_org_yourapp_AppNative_createRuntime(
     mut env: tur_android::JNIEnv,
     _class: tur_android::JClass,
     context: tur_android::JObject,
-    surface: tur_android::JObject,
-    width: tur_android::jint,
-    height: tur_android::jint,
-    dpr: tur_android::jdouble,
-    frame_loop: tur_android::JObject,
 ) -> tur_android::jlong {
-    tur_android::ops::create_with_plugins(
-        &mut env, context, surface, width, height, dpr, frame_loop,
-        |b| b
-            .plugin(tur_engine::TurStdPlugin)
-            .plugin(tur_animation::TurAnimationPlugin)
-            .plugin(tur_engine::TurClipboardPlugin)
-            .plugin(tur_net_native::TurNetPlugin)
-            // …your custom plugins here…
+    tur_android::ops::create_runtime(&mut env, context, |b| b
+        .plugin(tur_engine::TurStdPlugin)
+        .plugin(tur_animation::TurAnimationPlugin)
+        .plugin(tur_engine::TurClipboardPlugin)
+        .plugin(tur_net_native::TurNetPlugin)
+        // …your custom plugins here…
     )
 }
 ```
@@ -59,10 +55,7 @@ crate — copy it as your template.
 ```kotlin
 object AppNative {
     init { System.loadLibrary("your_app") }
-    external fun createEngine(
-        context: Context, surface: Surface, width: Int, height: Int,
-        dpr: Double, frameLoop: FrameLoop,
-    ): Long
+    external fun createRuntime(context: Context): Long
 }
 
 // MainActivity.kt
@@ -70,13 +63,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
+            // Build the shared runtime once (the .so registers your plugins).
+            val runtime = rememberTurRuntime { ctx -> AppNative.createRuntime(ctx) }
             val js = remember { assets.open("bundle.js").bufferedReader().use { it.readText() } }
-            val factory = remember {
-                TurEngineFactory { ctx, surface, w, h, dpr, loop ->
-                    AppNative.createEngine(ctx, surface, w, h, dpr, loop)
-                }
-            }
-            TurView(js = js, engineFactory = factory, modifier = Modifier.fillMaxSize())
+            // TurView spawns an isolated instance from the runtime per surface.
+            TurView(runtime = runtime, js = js, modifier = Modifier.fillMaxSize())
         }
     }
 }
@@ -109,10 +100,19 @@ The engine ships with every standard plugin available to register from your
 | `tur:clipboard` | `TurClipboardPlugin` | requires the `Clipboard` capability (Android default: `AndroidClipboard` via JNI to `ClipboardManager`) |
 | `tur:net` | `TurNetPlugin` | requires the `Http` capability (default: `NativeHttp` — reqwest + rustls) |
 
-`tur_android::ops::create_with_plugins` pre-registers Android-default
-capabilities (`NoopCursor`, `AndroidClipboard`, `NativeHttp`) + the wgpu
-renderer, native fonts, and wall-clock — your `configure` callback only adds
-plugins (and may override any capability).
+`tur_android::ops::create_runtime` pre-registers Android-default capabilities
+(`NoopCursor`, `AndroidClipboard`, `NativeHttp`) + native fonts and wall-clock
+— your `configure` callback only adds plugins (and may override any capability).
+
+## Multi-instance
+
+One `TurRuntime` (built once via `rememberTurRuntime`) can spawn any number of
+isolated instances. Each `TurView` spawns its own instance from the shared
+runtime when its surface becomes ready, and tears it down when the surface is
+destroyed (the runtime survives). Multiple `TurView`s sharing one runtime keep
+fully isolated JS state while sharing fonts/clock/capabilities/plugins. You can
+also spawn **headless** instances via `runtime.createHeadlessInstance()` for
+off-screen JS computation.
 
 ## Native build prerequisites
 
@@ -128,17 +128,10 @@ export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973  # or newer
 code, so adding `x86_64-linux-android` / `armv7-linux-androideabi` Rust targets
 and `abiFilters` entries is straightforward if you need them.
 
-## Multi-view
-
-Each `TurView` builds its own engine via the factory (isolated JS context +
-plugins) and its own `FrameLoop`. `TurNative` is stateless and handle-based, so
-the same bridge safely drives any number of engines. Drop multiple `TurView`s
-into one Compose UI for a tur-as-plugin-system setup.
-
 ## Limitations (v1)
 
 - **Surface re-attach** on `surfaceDestroyed` → `surfaceCreated` tears down and
-  rebuilds the engine; a live-edit-friendly renderer swap (preserving JS state)
+  rebuilds the instance; a live-edit-friendly renderer swap (preserving JS state)
   is a follow-up.
 - **Multi-touch** is single-pointer (the engine's `PlatformEvent::Pointer` is
   single-position). The primary pointer is tracked.

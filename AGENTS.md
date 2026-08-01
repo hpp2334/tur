@@ -134,9 +134,9 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │     └── tur-clipboard-native (NativeClipboard via      │
 │                                arboard, same re-exports)│
 │  Embedders register backends via                       │
-│    TurEngineBuilder::capability(Clipboard::new(backend))│
-│    TurEngineBuilder::capability(Http::new(backend))    │
-│    TurEngineBuilder::capability(FilePicker::new(backend))│
+│    TurRuntimeBuilder::capability(Clipboard::new(backend))│
+│    TurRuntimeBuilder::capability(Http::new(backend))    │
+│    TurRuntimeBuilder::capability(FilePicker::new(backend))│
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -165,20 +165,28 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker, cursor) on the engine builder:
+Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). The cursor is per-instance (set via `TurApp::set_cursor_backend` after `create_app`, since it targets a specific surface):
 
 ```rust
-TurEngine::builder()
+let runtime = TurRuntime::builder()
+    .font_loader(Rc::new(WasmFontLoader::new()))
+    .clock(Rc::new(WasmClock))
     .capability(Clipboard::new(WasmClipboard))   // tur-clipboard-wasm
     .capability(Http::new(WasmHttp))             // tur-net-wasm
     .capability(FilePicker::new(WasmFilePicker)) // tur-filepicker-wasm
-    .capability(CursorCap::new(WasmCursor))      // engine-internal
     .plugin(TurStdPlugin)
     .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
     .plugin(TurClipboardPlugin)                  // requires: Clipboard
     .plugin(TurNetPlugin)                        // Http optional (skips tur:net if absent)
     .plugin(TurFilePickerPlugin)                 // requires: FilePicker
-    .build()
+    .build()?;                                    // Rc<TurRuntime>
+
+// Spawn isolated instances (each its own JS realm + renderer):
+let app = runtime.create_app(Box::new(renderer), (800.0, 600.0), 2.0)?;
+app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
+
+// Or a headless instance (no rendering):
+let headless = runtime.create_headless_app((0.0, 0.0))?;
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
@@ -196,6 +204,39 @@ TurEngine::builder()
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
   `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
   exception because `core::platform::Cursor` already names the cursor-kind enum.
+
+
+### Multi-instance model (TurRuntime + TurApp)
+
+The engine has a **one runtime, many instances** architecture:
+
+- **`TurRuntime`** (`tur-engine::core::runtime`) — the shared, created-once
+  substrate. Owns the `FontContext` (system-font discovery + preset fonts, built
+  once — each instance clones it cheaply; `FontContext`/`fontique::Collection`/
+  `System` are all `Arc`-backed), the `Clock` (one shared time source), the
+  `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
+  registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
+- **`TurApp`** — an isolated instance spawned from a runtime via
+  `runtime.create_app(renderer, viewport, dpr)` (rendering, attached to a
+  surface) or `runtime.create_headless_app(viewport)` (no rendering — JS +
+  capabilities + events only, backed by `NoopRenderer`). Each instance gets its
+  own boa `Context` (JS realm), element tree, reactive store, focus manager,
+  event queues, subsystems, screen, and LoopDriver. Plugins are re-registered
+  into each instance's fresh realm (the same plugin objects — `register` takes
+  `&self`, so no factory needed).
+
+The `Plugin` trait has two phases: `compile` (called once on the runtime —
+pre-validate/cache) and `register` (called per instance — into the fresh boa
+`Context`). boa `Module`s are realm-bound, so the actual JS parse happens per
+instance in `register`; `compile` is the seam for future caching + fail-fast
+validation. The renderer is **not** on the runtime builder — it's passed to
+`create_app` (one per surface). The cursor backend is per-instance (set via
+`TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
+
+Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
+`WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +
+`rememberTurRuntime` (Compose). The integration tests under
+`tests/element/multi_instance.rs` pin the isolation guarantees.
 
 
 ### Element types
@@ -428,9 +469,9 @@ libs/
     tur-filepicker-native/     # NativeFilePicker backend (rfd async dialog).
  integrations/
    compose/                    # Pure-Kotlin Compose AAR (`org.tur`): TurView +
-                              #   TurEngine + FrameLoop + InputMapper + TurNative
+                              #   TurRuntime + TurInstance + FrameLoop + InputMapper + TurNative
                               #   (external-fun bridge). Ships NO .so — accepts
-                              #   an engine handle via TurEngineFactory (the app
+                              #   a runtime handle via TurRuntimeFactory (the app
                               #   loads its own .so and builds the engine).
  demo/
    compose/                    # Android playground app: MainActivity + DemoNative

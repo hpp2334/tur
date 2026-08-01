@@ -37,7 +37,7 @@ pub struct Screen {
     /// same reactive state engine-wide.
     pub(crate) store: Store,
     /// The reactive source atom that publishes `{width, height}` to JS.
-    /// `None` until `TurEngineBuilder::build` creates it.
+    /// `None` until `TurRuntimeBuilder::build` creates it.
     pub(crate) source: Option<Source<JsValue>>,
     /// Last `(width, height)` pushed into `source` — guards against
     /// spurious stale marking (`set_source` compares `JsValue` by object
@@ -70,7 +70,7 @@ impl Screen {
     }
 
     /// Install the `viewportSize$` source atom. Called once from
-    /// `TurEngineBuilder::build` after the `Source` is created on the
+    /// `TurRuntimeBuilder::build` after the `Source` is created on the
     /// reactive store.
     pub(crate) fn set_source(&mut self, src: Source<JsValue>) {
         self.last.set((-1.0, -1.0));

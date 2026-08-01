@@ -4,7 +4,7 @@
 //! The bridge fns are ctx-bound `Ptr`s that look up the
 //! [`FilePicker`](crate::FilePicker) capability from `TurJsContext`'s
 //! capability registry (populated by the embedder via
-//! `TurEngineBuilder::capability(FilePicker::new(...))`).
+//! `TurRuntimeBuilder::capability(FilePicker::new(...))`).
 //!
 //! Promise settlement flow:
 //!

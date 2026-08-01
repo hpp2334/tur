@@ -3,7 +3,7 @@
 //! Re-exports the clipboard plugin surface from [`tur_engine`] so browser
 //! embedders only need this one crate. The backend
 //! ([`WasmClipboard`]) is registered via
-//! `TurEngineBuilder::capability(Clipboard::new(WasmClipboard))`.
+//! `TurRuntimeBuilder::capability(Clipboard::new(WasmClipboard))`.
 
 mod backend;
 

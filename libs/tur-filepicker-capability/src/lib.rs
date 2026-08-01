@@ -6,7 +6,7 @@
 //!   ([`PickOptions`], [`SaveOptions`], [`PickedFile`]).
 //! - The [`FilePicker`] capability newtype wrapping `Rc<dyn FilePickerBackend>`,
 //!   registered via
-//!   [`tur_engine::TurEngineBuilder::capability`](`FilePicker::new(backend)`).
+//!   [`tur_engine::TurRuntimeBuilder::capability`](`FilePicker::new(backend)`).
 //! - The [`TurFilePickerPlugin`] (unit struct) that registers the
 //!   `tur:filepicker` module (exporting a single `filePicker` object with
 //!   `pick` / `saveFile` methods). The plugin declares a hard `requires` on
@@ -81,7 +81,7 @@ pub struct SaveOptions {
 /// Async file-picker backend. Backends provide an impl (`WasmFilePicker` via
 /// web-sys on wasm; `NativeFilePicker` via `rfd` on native; `RecordingFilePicker`
 /// for tests) and register it via
-/// `TurEngineBuilder::capability(FilePicker::new(backend))`. The bridge fns
+/// `TurRuntimeBuilder::capability(FilePicker::new(backend))`. The bridge fns
 /// `pick` / `saveFile` in `tur:filepicker` consume it.
 pub trait FilePickerBackend: 'static {
     /// Open the platform file picker. Resolves with the picked files (empty
@@ -100,7 +100,7 @@ pub trait FilePickerBackend: 'static {
 }
 
 /// Capability newtype wrapping an `Rc<dyn FilePickerBackend>`. Registered via
-/// [`tur_engine::TurEngineBuilder::capability`] with `FilePicker::new(backend)`;
+/// [`tur_engine::TurRuntimeBuilder::capability`] with `FilePicker::new(backend)`;
 /// the bridge fns look it up at call time via
 /// `js_ctx.capability().of::<FilePicker>()`.
 #[derive(Clone)]

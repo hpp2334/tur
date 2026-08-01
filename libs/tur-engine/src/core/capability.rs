@@ -129,7 +129,7 @@ impl CapabilityDecls {
 
     /// Declare that the calling plugin requires capability `C`. The engine
     /// verifies `C` is registered (via
-    /// [`crate::TurEngineBuilder::capability`]) before calling the plugin's
+    /// [`crate::TurRuntimeBuilder::capability`]) before calling the plugin's
     /// `register`.
     ///
     /// Optional dependencies should NOT be declared here — the plugin should

@@ -14,6 +14,7 @@ mod host_module_check;
 mod image;
 mod lazy_grid;
 mod lazy_list;
+mod multi_instance;
 mod positioned;
 mod reactive;
 mod readable_subscribe;

@@ -6,7 +6,7 @@
 //!   ([`RequestOpts`], [`HttpOutcome`], [`HttpBody`], [`ResponseType`]).
 //! - The [`Http`] capability newtype wrapping `Rc<dyn HttpBackend>`,
 //!   registered via
-//!   [`tur_engine::TurEngineBuilder::capability`](`Http::new(backend)`).
+//!   [`tur_engine::TurRuntimeBuilder::capability`](`Http::new(backend)`).
 //! - The [`NoopHttp`] default.
 //! - The [`TurNetPlugin`] (unit struct) that conditionally registers the
 //!   `tur:net` module (with the `request` bridge fn) when an [`Http`]
@@ -84,7 +84,7 @@ pub enum HttpOutcome {
 /// Async HTTP backend. Backends provide an impl (`WasmHttp` via
 /// `reqwest_wasm` on wasm; `NativeHttp` via native `reqwest`; `RecordingHttp`
 /// for tests) and register it via
-/// `TurEngineBuilder::capability(Http::new(backend))`. The bridge fn
+/// `TurRuntimeBuilder::capability(Http::new(backend))`. The bridge fn
 /// `request` in `tur:net` consumes it.
 pub trait HttpBackend: 'static {
     fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>>;
@@ -105,7 +105,7 @@ impl HttpBackend for NoopHttp {
 }
 
 /// Capability newtype wrapping an `Rc<dyn HttpBackend>`. Registered via
-/// [`tur_engine::TurEngineBuilder::capability`] with `Http::new(backend)`;
+/// [`tur_engine::TurRuntimeBuilder::capability`] with `Http::new(backend)`;
 /// the bridge fn `request` in `tur:net` looks it up at call time.
 #[derive(Clone)]
 pub struct Http(Rc<dyn HttpBackend>);
