@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::text::elements::EditableTextElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
@@ -86,8 +86,11 @@ fn right_click_inside_selection_preserves_selection() {
     app.render();
 
     let (anchor, end) = get_selection(&app, input_id);
-    assert_eq!((anchor, end), (6, 11),
-        "precondition: 'world' should be selected");
+    assert_eq!(
+        (anchor, end),
+        (6, 11),
+        "precondition: 'world' should be selected"
+    );
 
     // Find a click position that lands inside the selected text region.
     // The selection spans roughly the right half of the input (bytes 6..11
@@ -99,8 +102,11 @@ fn right_click_inside_selection_preserves_selection() {
     app.right_click(inside_x, cy);
 
     let (anchor2, end2) = get_selection(&app, input_id);
-    assert_eq!((anchor2, end2), (6, 11),
-        "right-click inside selection should preserve selection (got ({anchor2}, {end2}))");
+    assert_eq!(
+        (anchor2, end2),
+        (6, 11),
+        "right-click inside selection should preserve selection (got ({anchor2}, {end2}))"
+    );
 }
 
 /// Right-click OUTSIDE the existing selection should move the caret to the
@@ -139,15 +145,19 @@ fn right_click_outside_selection_moves_caret() {
     app.right_click(outside_x, cy);
 
     let (anchor2, end2) = get_selection(&app, input_id);
-    assert_eq!(anchor2, end2,
-        "right-click outside selection should collapse the selection (got ({anchor2}, {end2}))");
+    assert_eq!(
+        anchor2, end2,
+        "right-click outside selection should collapse the selection (got ({anchor2}, {end2}))"
+    );
 
     // Cursor should have moved to roughly byte 0 (the click was at the
     // leftmost edge). We don't assert exact byte position because character
     // hit-testing depends on layout, but the selection must be collapsed.
     let cursor = get_cursor(&app, input_id);
-    assert!(cursor <= 3,
-        "cursor should be near the start of the input, got {cursor}");
+    assert!(
+        cursor <= 3,
+        "cursor should be near the start of the input, got {cursor}"
+    );
 }
 
 /// Left-click inside a selection should ALSO collapse it (existing behavior,
@@ -186,6 +196,8 @@ fn left_click_inside_selection_collapses() {
     app.click(inside_x, cy);
 
     let (anchor2, end2) = get_selection(&app, input_id);
-    assert_eq!(anchor2, end2,
-        "left-click inside selection should collapse the selection");
+    assert_eq!(
+        anchor2, end2,
+        "left-click inside selection should collapse the selection"
+    );
 }

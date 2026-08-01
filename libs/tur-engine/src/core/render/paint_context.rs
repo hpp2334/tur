@@ -3,11 +3,11 @@ use std::time::Duration;
 use vello_common::kurbo::{Affine, Point};
 
 use crate::core::layout::Size;
-use crate::core::platform::{Cursor};
+use crate::core::platform::Cursor;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
-use crate::core::image_resource::{ImageResourceId, ImageResource, ImageResourceMap};
+use crate::core::image_resource::{ImageResource, ImageResourceId, ImageResourceMap};
 use crate::core::render::Canvas;
 use crate::core::shell::PaintShell;
 
@@ -50,11 +50,7 @@ impl<'a> PaintContext<'a> {
     /// Paint a child. The child's `relative_transform` is pushed onto the
     /// canvas transform stack inside [`NodeTreeData::paint_element`], so no
     /// offset is passed — the child paints in its own local space.
-    pub fn paint_child(
-        &self,
-        child_id: ElementNodeId,
-        canvas: &mut dyn Canvas,
-    ) {
+    pub fn paint_child(&self, child_id: ElementNodeId, canvas: &mut dyn Canvas) {
         self.tree.paint_element(
             child_id,
             canvas,
@@ -89,10 +85,7 @@ impl<'a> PaintContext<'a> {
             return false;
         };
         let local = self.current_transform.inverse() * Point::new(p.x, p.y);
-        local.x >= 0.0
-            && local.x < size.width
-            && local.y >= 0.0
-            && local.y < size.height
+        local.x >= 0.0 && local.x < size.width && local.y >= 0.0 && local.y < size.height
     }
 
     /// Claim the host cursor for this frame. See [`PaintShell::set_cursor`].

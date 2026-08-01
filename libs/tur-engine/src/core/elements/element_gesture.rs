@@ -1,32 +1,64 @@
 use crate::core::layout::{MouseButton, Offset};
 
-use crate::core::element::ElementNodeId;
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
-use crate::core::app::AppEventQueue;
 use crate::core::app::AppEvent;
-use crate::core::platform::PointerDeviceKind;
+use crate::core::app::AppEventQueue;
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
+use crate::core::element::ElementNodeId;
 use crate::core::focus::FocusManager;
+use crate::core::platform::PointerDeviceKind;
 use std::cell::Cell;
 
 pub enum ComposedGestureEvent {
-    PointerDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
+    PointerDown {
+        local: Offset,
+        global: Offset,
+        button: MouseButton,
+        device: PointerDeviceKind,
+    },
     /// Double-click — computed from two `PointerDown`s within ≤500 ms and
     /// ≤5 px. Used by EditableText for word selection.
-    PointerDoubleDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
+    PointerDoubleDown {
+        local: Offset,
+        global: Offset,
+        button: MouseButton,
+        device: PointerDeviceKind,
+    },
     /// Triple-click — computed from three consecutive clicks in the same
     /// time/position window. Used by EditableText for line selection.
-    PointerTripleDown { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
-    PointerMove { local: Offset, global: Offset, device: PointerDeviceKind },
-    PointerUp { local: Offset, global: Offset, button: MouseButton, device: PointerDeviceKind },
+    PointerTripleDown {
+        local: Offset,
+        global: Offset,
+        button: MouseButton,
+        device: PointerDeviceKind,
+    },
+    PointerMove {
+        local: Offset,
+        global: Offset,
+        device: PointerDeviceKind,
+    },
+    PointerUp {
+        local: Offset,
+        global: Offset,
+        button: MouseButton,
+        device: PointerDeviceKind,
+    },
     /// Click — dispatched after a `PointerUp` that landed on the same
     /// element as the `PointerDown`. `PointerInteractElement` handles this
     /// by invoking its `on_click` mutation. Dispatch stops at the first
     /// click-opaque element in the hit-path.
-    Click { local: Offset, global: Offset, device: PointerDeviceKind },
+    Click {
+        local: Offset,
+        global: Offset,
+        device: PointerDeviceKind,
+    },
     /// Right-click. `local` is relative to the element; `global` is canvas-
     /// relative. Dispatched to every element in the hit-path (deepest first)
     /// so layered views can each inspect the event.
-    ContextMenu { local: Offset, global: Offset, device: PointerDeviceKind },
+    ContextMenu {
+        local: Offset,
+        global: Offset,
+        device: PointerDeviceKind,
+    },
 }
 
 pub struct ElementOnGestureContext<'a> {
@@ -97,11 +129,7 @@ pub trait ElementOnGesture: 'static {
         true
     }
 
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
+    fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
         let _ = cx;
         let _ = event;
     }

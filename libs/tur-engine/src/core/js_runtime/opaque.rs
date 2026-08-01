@@ -1,5 +1,5 @@
-use boa_engine::object::NativeObject;
 use boa_engine::JsObject;
+use boa_engine::object::NativeObject;
 use std::marker::PhantomData;
 
 #[derive(Debug)]

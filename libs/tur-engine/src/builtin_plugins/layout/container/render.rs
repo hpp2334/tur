@@ -27,17 +27,18 @@ impl ElementRender for ContainerElement {
         let clip_behavior = self.painting.clip_behavior;
 
         if let (Some(sc), Some(sb)) = (shadow_color, shadow_blur)
-            && sb > 0.0 {
-                let radius = border_radius.unwrap_or(0.0);
-                canvas.draw_shadow(
-                    Offset::ZERO,
-                    layout.size,
-                    sc,
-                    radius,
-                    sb,
-                    self.view.shadow_offset.unwrap_or((0.0, 0.0)),
-                );
-            }
+            && sb > 0.0
+        {
+            let radius = border_radius.unwrap_or(0.0);
+            canvas.draw_shadow(
+                Offset::ZERO,
+                layout.size,
+                sc,
+                radius,
+                sb,
+                self.view.shadow_offset.unwrap_or((0.0, 0.0)),
+            );
+        }
 
         if let Some(brush) = color {
             let geometry = match border_radius {
@@ -51,31 +52,28 @@ impl ElementRender for ContainerElement {
         }
 
         if let (Some(bc), Some(bw)) = (border_color, border_width)
-            && bw > 0.0 {
-                let half = bw / 2.0;
-                let s = layout.size;
-                let (ox, oy, size) = match border_position {
-                    BorderPosition::Inside => (
-                        half,
-                        half,
-                        Size::new((s.width - bw).max(0.0), (s.height - bw).max(0.0)),
-                    ),
-                    BorderPosition::Outside => (
-                        -half,
-                        -half,
-                        Size::new(s.width + bw, s.height + bw),
-                    ),
-                    BorderPosition::Center => (0.0, 0.0, s),
-                };
-                // Local inset/outset — the canvas transform already positions
-                // the box at its absolute origin.
-                let border_offset = Offset::new(ox, oy);
-                let geometry = match border_radius {
-                    Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
-                    _ => Geometry::Rect(size),
-                };
-                canvas.stroke_geometry(border_offset, &geometry, bc, bw);
-            }
+            && bw > 0.0
+        {
+            let half = bw / 2.0;
+            let s = layout.size;
+            let (ox, oy, size) = match border_position {
+                BorderPosition::Inside => (
+                    half,
+                    half,
+                    Size::new((s.width - bw).max(0.0), (s.height - bw).max(0.0)),
+                ),
+                BorderPosition::Outside => (-half, -half, Size::new(s.width + bw, s.height + bw)),
+                BorderPosition::Center => (0.0, 0.0, s),
+            };
+            // Local inset/outset — the canvas transform already positions
+            // the box at its absolute origin.
+            let border_offset = Offset::new(ox, oy);
+            let geometry = match border_radius {
+                Some(r) if r > 0.0 => Geometry::RoundedRect { size, radius: r },
+                _ => Geometry::Rect(size),
+            };
+            canvas.stroke_geometry(border_offset, &geometry, bc, bw);
+        }
 
         // Clip the child subtree to the container's border geometry when
         // `clipBehavior != None` (Flutter parity). The shape matches the fill

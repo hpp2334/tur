@@ -49,7 +49,11 @@ impl ScrollPosition {
         }
     }
 
-    pub fn apply_dimensions(&mut self, viewport: crate::core::layout::Size, content: crate::core::layout::Size) {
+    pub fn apply_dimensions(
+        &mut self,
+        viewport: crate::core::layout::Size,
+        content: crate::core::layout::Size,
+    ) {
         self.viewport_size = viewport;
         self.content_size = content;
     }

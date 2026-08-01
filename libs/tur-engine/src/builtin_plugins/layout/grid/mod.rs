@@ -9,10 +9,10 @@
 //! [`LazyGrid`](crate::builtin_plugins::lazy_container::lazy_grid) for exact
 //! virtualization.
 
+pub mod bridge;
 mod element;
 mod layout;
 mod render;
-pub mod bridge;
 
 pub use element::{GridElement, GridView};
 

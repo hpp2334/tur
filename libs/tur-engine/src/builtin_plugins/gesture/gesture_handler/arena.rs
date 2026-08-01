@@ -173,9 +173,9 @@ fn fit_quadratic(pts: &[(f64, f64, f64)], t_eval: f64) -> Option<(f64, f64)> {
 /// window. Robust fallback that still uses every sample.
 fn linear_slope(pts: &[(f64, f64, f64)]) -> (f64, f64) {
     let n = pts.len() as f64;
-    let (sum_t, sum_x, sum_y) =
-        pts.iter()
-            .fold((0.0, 0.0, 0.0), |(st, sx, sy), (t, x, y)| (st + t, sx + x, sy + y));
+    let (sum_t, sum_x, sum_y) = pts.iter().fold((0.0, 0.0, 0.0), |(st, sx, sy), (t, x, y)| {
+        (st + t, sx + x, sy + y)
+    });
     let (tbar, xbar, ybar) = (sum_t / n, sum_x / n, sum_y / n);
     let (mut num_x, mut num_y, mut den) = (0.0, 0.0, 0.0);
     for (t, x, y) in pts {
@@ -231,10 +231,7 @@ pub enum TouchUpOutcome {
     /// browser-synthesized click for the same tap (double dispatch).
     /// `position`/`time_ms` are the **down** position + **down** time, used
     /// for multi-click classification.
-    Tap {
-        position: Offset,
-        time_ms: u64,
-    },
+    Tap { position: Offset, time_ms: u64 },
     /// The touch sequence ended without resolving and does NOT qualify as a
     /// tap (too long, or moved beyond slop without crossing the drag
     /// threshold — e.g. a long-press-and-release). Nothing to dispatch.
@@ -278,12 +275,7 @@ impl GestureArena {
     /// for later probing. Does NOT dispatch anything. Also seeds the velocity
     /// tracker with the down position so the fling estimate has a baseline
     /// (Flutter records every pointer event, including down).
-    pub fn on_touch_down(
-        &mut self,
-        position: Offset,
-        time_ms: u64,
-        hit_path: Vec<ElementNodeId>,
-    ) {
+    pub fn on_touch_down(&mut self, position: Offset, time_ms: u64, hit_path: Vec<ElementNodeId>) {
         let mut velocity = VelocityTracker::default();
         velocity.record(position, time_ms);
         self.touch = Some(TouchState {

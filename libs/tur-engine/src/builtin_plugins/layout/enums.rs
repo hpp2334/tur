@@ -15,11 +15,7 @@ fn build_enum(context: &mut Context, pairs: &[(&str, u32)]) -> JsValue {
     let obj = JsObject::with_object_proto(context.intrinsics());
     for (name, val) in pairs {
         // forward: name -> number
-        let _ = obj.create_data_property(
-            js_string!(*name),
-            JsValue::from(*val as f64),
-            context,
-        );
+        let _ = obj.create_data_property(js_string!(*name), JsValue::from(*val as f64), context);
         // reverse: number (as string key) -> name
         let _ = obj.create_data_property(
             js_string!(val.to_string()),
@@ -33,7 +29,10 @@ fn build_enum(context: &mut Context, pairs: &[(&str, u32)]) -> JsValue {
 /// All enum const-objects, ready to merge into the module's const exports.
 pub fn consts(context: &mut Context) -> Vec<ConstEntry> {
     vec![
-        ("Axis", build_enum(context, &[("Vertical", 0), ("Horizontal", 1)])),
+        (
+            "Axis",
+            build_enum(context, &[("Vertical", 0), ("Horizontal", 1)]),
+        ),
         (
             "MainAxisAlignment",
             build_enum(
@@ -50,9 +49,15 @@ pub fn consts(context: &mut Context) -> Vec<ConstEntry> {
         ),
         (
             "CrossAxisAlignment",
-            build_enum(context, &[("Start", 0), ("Center", 1), ("End", 2), ("Stretch", 3)]),
+            build_enum(
+                context,
+                &[("Start", 0), ("Center", 1), ("End", 2), ("Stretch", 3)],
+            ),
         ),
-        ("MainAxisSize", build_enum(context, &[("Max", 0), ("Min", 1)])),
+        (
+            "MainAxisSize",
+            build_enum(context, &[("Max", 0), ("Min", 1)]),
+        ),
         (
             "HitTestBehavior",
             build_enum(context, &[("Opaque", 0), ("Translucent", 1)]),

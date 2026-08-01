@@ -8,12 +8,12 @@
 //! natives on `__tur`, auto-passing `__tur.__ctx` — matching the layering
 //! every other `__tur.*` API uses.
 
-use boa_engine::object::builtins::JsArray;
 use boa_engine::object::JsObject;
-use boa_engine::{js_string, Context, JsArgs, JsResult, JsValue};
+use boa_engine::object::builtins::JsArray;
+use boa_engine::{Context, JsArgs, JsResult, JsValue, js_string};
 
-use crate::core::js_runtime::helpers::extract_ctx;
 use crate::core::elements::{DevNodeData, TraceValue};
+use crate::core::js_runtime::helpers::extract_ctx;
 
 fn trace_value_to_js(v: &TraceValue) -> JsValue {
     match v {
@@ -34,9 +34,21 @@ fn offset_object(ctx: &mut Context, x: f64, y: f64) -> JsResult<JsValue> {
 fn dev_node_to_js(node: DevNodeData, ctx: &mut Context) -> JsResult<JsValue> {
     let obj = JsObject::with_object_proto(ctx.intrinsics());
 
-    obj.create_data_property(js_string!("id"), JsValue::from(node.id.as_u64() as f64), ctx)?;
-    obj.create_data_property(js_string!("name"), JsValue::from(js_string!(node.name)), ctx)?;
-    obj.create_data_property(js_string!("label"), JsValue::from(js_string!(node.label.as_str())), ctx)?;
+    obj.create_data_property(
+        js_string!("id"),
+        JsValue::from(node.id.as_u64() as f64),
+        ctx,
+    )?;
+    obj.create_data_property(
+        js_string!("name"),
+        JsValue::from(js_string!(node.name)),
+        ctx,
+    )?;
+    obj.create_data_property(
+        js_string!("label"),
+        JsValue::from(js_string!(node.label.as_str())),
+        ctx,
+    )?;
 
     // props
     let props = JsObject::with_object_proto(ctx.intrinsics());
@@ -47,8 +59,16 @@ fn dev_node_to_js(node: DevNodeData, ctx: &mut Context) -> JsResult<JsValue> {
 
     // layout: { relative, absolute, width, height, extra }
     let layout = JsObject::with_object_proto(ctx.intrinsics());
-    layout.create_data_property(js_string!("relative"), offset_object(ctx, node.relative.0, node.relative.1)?, ctx)?;
-    layout.create_data_property(js_string!("absolute"), offset_object(ctx, node.absolute.0, node.absolute.1)?, ctx)?;
+    layout.create_data_property(
+        js_string!("relative"),
+        offset_object(ctx, node.relative.0, node.relative.1)?,
+        ctx,
+    )?;
+    layout.create_data_property(
+        js_string!("absolute"),
+        offset_object(ctx, node.absolute.0, node.absolute.1)?,
+        ctx,
+    )?;
     layout.create_data_property(js_string!("width"), JsValue::from(node.size.0), ctx)?;
     layout.create_data_property(js_string!("height"), JsValue::from(node.size.1), ctx)?;
     if !node.layout_extra.is_empty() {
@@ -73,7 +93,11 @@ fn dev_node_to_js(node: DevNodeData, ctx: &mut Context) -> JsResult<JsValue> {
     let children = JsArray::new(ctx)?;
     for child_id in &node.children {
         let child_obj = JsObject::with_object_proto(ctx.intrinsics());
-        child_obj.create_data_property(js_string!("id"), JsValue::from(child_id.as_u64() as f64), ctx)?;
+        child_obj.create_data_property(
+            js_string!("id"),
+            JsValue::from(child_id.as_u64() as f64),
+            ctx,
+        )?;
         children.push(JsValue::from(child_obj), ctx)?;
     }
     obj.create_data_property(js_string!("children"), JsValue::from(children), ctx)?;

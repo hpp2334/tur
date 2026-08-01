@@ -35,7 +35,12 @@ impl WebGlVelloRenderer {
     ///
     /// The canvas's backing buffer (`width`/`height` attributes) must already
     /// be set to the physical pixel dimensions (`logical * dpr`).
-    pub fn new(canvas: HtmlCanvasElement, logical_width: u32, logical_height: u32, dpr: f64) -> Self {
+    pub fn new(
+        canvas: HtmlCanvasElement,
+        logical_width: u32,
+        logical_height: u32,
+        dpr: f64,
+    ) -> Self {
         let physical_width = (logical_width as f64 * dpr) as u32;
         let physical_height = (logical_height as f64 * dpr) as u32;
 

@@ -1,12 +1,12 @@
+use crate::builtin_plugins::gesture::mouse_region::{MouseRegionElement, PointerRegionEvent};
+use crate::builtin_plugins::gesture::pointer_region_tracker::PointerRegionTracker;
+use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
-use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
-use crate::core::edgy::mutation::MutationHandle;
-use crate::builtin_plugins::gesture::pointer_region_tracker::PointerRegionTracker;
+use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
-use crate::builtin_plugins::gesture::mouse_region::{MouseRegionElement, PointerRegionEvent};
 
 /// Tracks `onEnter` / `onExit` callbacks for `MouseRegion`s as the pointer
 /// moves. Cursor resolution lives in the paint pass (see `MouseRegion::paint`
@@ -31,11 +31,7 @@ impl PointerSubsystem {
 }
 
 impl Subsystem for PointerSubsystem {
-    fn handle_platform_event(
-        &mut self,
-        cx: &mut SubsystemFlushContext<'_>,
-        event: &PlatformEvent,
-    ) {
+    fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
         let PlatformEvent::Pointer(PointerInput::PointerMove {
             position,
             device: PointerDeviceKind::Mouse,
@@ -65,7 +61,13 @@ impl Subsystem for PointerSubsystem {
                 continue;
             };
             let local = local_position(&tree, *id, position);
-            mq.push(m, PointerRegionEvent { local, global: position });
+            mq.push(
+                m,
+                PointerRegionEvent {
+                    local,
+                    global: position,
+                },
+            );
         }
 
         for id in &entered {
@@ -73,7 +75,13 @@ impl Subsystem for PointerSubsystem {
                 continue;
             };
             let local = local_position(&tree, *id, position);
-            mq.push(m, PointerRegionEvent { local, global: position });
+            mq.push(
+                m,
+                PointerRegionEvent {
+                    local,
+                    global: position,
+                },
+            );
         }
     }
 }

@@ -14,7 +14,12 @@ pub fn vello_counter_app() {
 
 fn get_pixel(pixels: &[u8], phys_w: u32, px: u32, py: u32) -> (u8, u8, u8, u8) {
     let idx = ((py * phys_w + px) * 4) as usize;
-    (pixels[idx], pixels[idx + 1], pixels[idx + 2], pixels[idx + 3])
+    (
+        pixels[idx],
+        pixels[idx + 1],
+        pixels[idx + 2],
+        pixels[idx + 3],
+    )
 }
 
 fn assert_color_approx(actual: (u8, u8, u8, u8), expected: (u8, u8, u8, u8), tolerance: u8) {
@@ -40,8 +45,11 @@ fn test_dpr_render(dpr: f64) {
     app.render();
 
     let pixels = app.render_to_pixels();
-    assert_eq!(pixels.len(), (phys_w * phys_h * 4) as usize,
-        "dpr={dpr}: pixel buffer size mismatch");
+    assert_eq!(
+        pixels.len(),
+        (phys_w * phys_h * 4) as usize,
+        "dpr={dpr}: pixel buffer size mismatch"
+    );
 
     let red = (255, 0, 0, 255);
     let green = (0, 255, 0, 255);

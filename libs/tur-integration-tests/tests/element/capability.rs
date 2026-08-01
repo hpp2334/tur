@@ -5,11 +5,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use tur_engine::TurEngine;
+use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::{Capability, CapabilityDecls};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
-use tur_engine::TurEngine;
-use tur_engine::TurStdPlugin;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_native::NativeFontLoader;
 
@@ -63,9 +63,7 @@ fn capability_round_trip_via_plugin() {
     let app = build_app(|b| {
         b.capability(counter.clone())
             .plugin(TurStdPlugin)
-            .plugin(CapturePlugin {
-                seen: seen.clone(),
-            })
+            .plugin(CapturePlugin { seen: seen.clone() })
     });
     let got = seen.borrow().clone().expect("plugin should see capability");
     assert_eq!(got.value.as_ptr(), captured.as_ptr(), "same Rc backing");
@@ -101,7 +99,10 @@ fn capability_chain_order_irrelevant() {
             .plugin(NeedsCounterPlugin)
             .capability(CountersCapability::new())
     });
-    assert!(app.is_ok(), "capability registered after plugin should still satisfy requires");
+    assert!(
+        app.is_ok(),
+        "capability registered after plugin should still satisfy requires"
+    );
 }
 
 // Helper: build a TurEngine instance with a custom builder closure. Uses

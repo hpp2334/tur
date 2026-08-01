@@ -6,8 +6,8 @@ use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
 use crate::core::async_::{AsyncExecutor, TurJobExecutor};
-use crate::core::js_runtime::TurJsContext;
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::js_runtime::TurJsContext;
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::FontLoader;
@@ -69,11 +69,11 @@ impl TurAppInternal {
         executor: Rc<TurJobExecutor>,
         clock: std::rc::Rc<dyn Clock>,
     ) -> Self {
-        use crate::core::elements::NodeTree;
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+        use crate::core::edgy::reactive::Store;
+        use crate::core::elements::NodeTree;
         use crate::core::focus::FocusManager;
         use crate::core::image_resource::ImageResourceMap;
-        use crate::core::edgy::reactive::Store;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
@@ -125,10 +125,7 @@ impl TurAppInternal {
         }
     }
 
-    pub fn flush(
-        &self,
-        boa_context: &mut boa_engine::Context,
-    ) -> Result<FrameOutcome, TurError> {
+    pub fn flush(&self, boa_context: &mut boa_engine::Context) -> Result<FrameOutcome, TurError> {
         let mut needs_render = false;
         // Per-`flush()` epoch, bumped once per call. Stable across the
         // fixed-point iterations below so subsystems can self-gate "advance
@@ -210,74 +207,76 @@ impl TurAppInternal {
                 sub_dirty.take()
             };
 
-        // Reactive flush: drain the store, expand dirty atoms, and dispatch
-        // `do_update(dirties)` to the mounted root. This may mutate
-        // the ElementTree, which sets `dirty`/`need_paint` for the next
-        // layout pass.
-        let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);
+            // Reactive flush: drain the store, expand dirty atoms, and dispatch
+            // `do_update(dirties)` to the mounted root. This may mutate
+            // the ElementTree, which sets `dirty`/`need_paint` for the next
+            // layout pass.
+            let (reactive_changed, dirty_element_ids) = self.flush_reactive(boa_context);
 
-        // LazyList remount now happens *inside* `perform_layout` (it uses
-        // the real viewport from constraints), so there is no separate
-        // pre-layout remount pass here.
-        let dirty =
-            self.js_context.dirty.take() || self.js_context.need_paint.take() || reactive_changed || subsystem_dirtied;
-        if dirty {
-            needs_render = true;
-            self.app_context
-                .borrow_mut()
-                .layout(self.js_context.dirty.clone(), boa_context);
-        }
-        // Post-layout subsystem flush — runs every fixed-point iteration, in
-        // registration order, AFTER the layout step, so subscribers read the
-        // freshly-laid-out tree. This is where layout-derived recomputation
-        // lives: e.g. `CompositedTransformSubsystem` maps each target's world
-        // position onto its follower using final geometry + the follower's
-        // just-resolved anchor cache. Without this phase a follower would read
-        // zero/stale sizes on the first frame and only self-correct on the
-        // next input event (see `follower_correct_on_first_frame_non_topleft_anchor`).
-        {
-            let need_paint = self.js_context.need_paint.clone();
-            let mut ctx_guard = self.app_context.borrow_mut();
-            let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
-            let mut cx = crate::core::subsystem::SubsystemFlushContext {
-                boa: boa_context,
-                element_tree: ctx.element_tree.clone(),
-                focus_manager: ctx.focus_manager.clone(),
-                mutation_queue: ctx.mutation_queue.clone(),
-                platform_event_queue: &mut ctx.platform_event_queue,
-                app_event_queue: &mut ctx.app_event_queue,
-                renderer: ctx.renderer.as_mut(),
-                screen: &mut ctx.screen,
-                need_paint: &need_paint,
-                async_executor: &ctx.async_executor,
-                capabilities: &ctx.capabilities,
-                frame_id: signals.frame_id,
-                sub_dirty: signals.sub_dirty,
-                sub_request_frame: signals.sub_request_frame,
-            };
-            for sub in self.subsystems.borrow_mut().iter_mut() {
-                sub.flush_post_layout(&mut cx);
+            // LazyList remount now happens *inside* `perform_layout` (it uses
+            // the real viewport from constraints), so there is no separate
+            // pre-layout remount pass here.
+            let dirty = self.js_context.dirty.take()
+                || self.js_context.need_paint.take()
+                || reactive_changed
+                || subsystem_dirtied;
+            if dirty {
+                needs_render = true;
+                self.app_context
+                    .borrow_mut()
+                    .layout(self.js_context.dirty.clone(), boa_context);
             }
-            // `cx` (and its `ctx_guard` borrow) drop here before the
-            // lifecycle/render borrows below.
-            drop(cx);
-            drop(ctx_guard);
-        }
-        // Lifecycle hooks fire after layout: on_mounted for inserted
-        // elements, on_updated for dirtied elements, before_destroy for
-        // removed elements. Pushed mutations are drained right after.
-        self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
-        {
-            let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
-            cx.flush_focus_notifications(boa_context);
-        }
-        let handled_mutations = self.flush_pending_mutations(boa_context);
-        // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
-        // PromiseJobs fire `.then` callbacks which may call bridge fns that
-        // `spawn_detached` more Rust futures — those land in
-        // `async_executor.ready` and are caught by the `async_progress`
-        // termination check on the next iteration, keeping the fixed-point
-        // loop alive.
+            // Post-layout subsystem flush — runs every fixed-point iteration, in
+            // registration order, AFTER the layout step, so subscribers read the
+            // freshly-laid-out tree. This is where layout-derived recomputation
+            // lives: e.g. `CompositedTransformSubsystem` maps each target's world
+            // position onto its follower using final geometry + the follower's
+            // just-resolved anchor cache. Without this phase a follower would read
+            // zero/stale sizes on the first frame and only self-correct on the
+            // next input event (see `follower_correct_on_first_frame_non_topleft_anchor`).
+            {
+                let need_paint = self.js_context.need_paint.clone();
+                let mut ctx_guard = self.app_context.borrow_mut();
+                let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
+                let mut cx = crate::core::subsystem::SubsystemFlushContext {
+                    boa: boa_context,
+                    element_tree: ctx.element_tree.clone(),
+                    focus_manager: ctx.focus_manager.clone(),
+                    mutation_queue: ctx.mutation_queue.clone(),
+                    platform_event_queue: &mut ctx.platform_event_queue,
+                    app_event_queue: &mut ctx.app_event_queue,
+                    renderer: ctx.renderer.as_mut(),
+                    screen: &mut ctx.screen,
+                    need_paint: &need_paint,
+                    async_executor: &ctx.async_executor,
+                    capabilities: &ctx.capabilities,
+                    frame_id: signals.frame_id,
+                    sub_dirty: signals.sub_dirty,
+                    sub_request_frame: signals.sub_request_frame,
+                };
+                for sub in self.subsystems.borrow_mut().iter_mut() {
+                    sub.flush_post_layout(&mut cx);
+                }
+                // `cx` (and its `ctx_guard` borrow) drop here before the
+                // lifecycle/render borrows below.
+                drop(cx);
+                drop(ctx_guard);
+            }
+            // Lifecycle hooks fire after layout: on_mounted for inserted
+            // elements, on_updated for dirtied elements, before_destroy for
+            // removed elements. Pushed mutations are drained right after.
+            self.run_lifecycle_hooks(boa_context, &dirty_element_ids);
+            {
+                let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+                cx.flush_focus_notifications(boa_context);
+            }
+            let handled_mutations = self.flush_pending_mutations(boa_context);
+            // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
+            // PromiseJobs fire `.then` callbacks which may call bridge fns that
+            // `spawn_detached` more Rust futures — those land in
+            // `async_executor.ready` and are caught by the `async_progress`
+            // termination check on the next iteration, keeping the fixed-point
+            // loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
             // Quiescence: no events, no mutations, no dirty state, no async
@@ -318,8 +317,7 @@ impl TurAppInternal {
         //   until the next platform input arrives.
         let async_pending = self.async_executor.has_pending();
         let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if sub_request_frame.get()
-            || (async_pending && async_timer_delay.is_none())
+        let schedule = if sub_request_frame.get() || (async_pending && async_timer_delay.is_none())
         {
             NextFrame::Vsync
         } else if let Some(delay) = async_timer_delay {
@@ -338,10 +336,7 @@ impl TurAppInternal {
     /// subscriber graph. Returns `(reactive_changed, dirty_element_ids)`:
     /// the element ids whose subscribed atoms changed this flush — used by
     /// the flush loop to fire `on_updated` lifecycle hooks after layout.
-    fn flush_reactive(
-        &self,
-        boa_context: &mut boa_engine::Context,
-    ) -> (bool, Vec<ElementNodeId>) {
+    fn flush_reactive(&self, boa_context: &mut boa_engine::Context) -> (bool, Vec<ElementNodeId>) {
         let store = self.js_context.store.clone();
         let flush_engine = store.flush_engine();
         if !flush_engine.has_pending() {

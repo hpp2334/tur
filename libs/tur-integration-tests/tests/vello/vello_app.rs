@@ -5,13 +5,13 @@ use std::rc::Rc;
 use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use tur_engine::TurStdPlugin;
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::platform::PlatformEvent;
-use tur_native::NativeFontLoader;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurEngine};
-use tur_engine::TurStdPlugin;
+use tur_native::NativeFontLoader;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TurVelloError {
@@ -158,6 +158,10 @@ impl TurVelloApp {
     }
 
     pub fn render_to_pixels(&self) -> Vec<u8> {
-        self.inner.borrow().app.render_to_pixels().expect("renderer does not support render_to_pixels")
+        self.inner
+            .borrow()
+            .app
+            .render_to_pixels()
+            .expect("renderer does not support render_to_pixels")
     }
 }

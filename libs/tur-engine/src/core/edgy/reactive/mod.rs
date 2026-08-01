@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use boa_engine::object::JsObject;
 use boa_engine::property::PropertyDescriptor;
-use boa_engine::{js_string, Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
+use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue, js_string};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::js_runtime::js_value::{FromJs, IntoJs};
@@ -13,7 +13,7 @@ use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 mod store;
 
 pub use store::Store;
-pub use store::{ReactiveCore, ReactiveReadStore, ReactiveReadJsContext, SubscriberIndexStore};
+pub use store::{ReactiveCore, ReactiveReadJsContext, ReactiveReadStore, SubscriberIndexStore};
 
 /// Unique identifier for a reactive atom. Private to the reactive module —
 /// all biz code addresses atoms via the typed handles (`Source<T>`,
@@ -242,10 +242,7 @@ struct JsDerived(AtomId);
 #[boa_gc(unsafe_empty_trace)]
 struct JsMutation(AtomId);
 
-fn wrap_opaque<T: boa_engine::object::NativeObject>(
-    data: T,
-    ctx: &mut Context,
-) -> JsValue {
+fn wrap_opaque<T: boa_engine::object::NativeObject>(data: T, ctx: &mut Context) -> JsValue {
     let proto = ctx.intrinsics().constructors().object().prototype();
     JsObject::from_proto_and_data(proto, data).into()
 }
@@ -270,9 +267,9 @@ impl IntoJs for Mutation {
 
 impl FromJs for Source<JsValue> {
     fn from_js(value: &JsValue) -> Result<Self, JsError> {
-        let obj = value.as_object().ok_or_else(|| {
-            crate::core::js_runtime::js_value::type_error("a source atom handle")
-        })?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| crate::core::js_runtime::js_value::type_error("a source atom handle"))?;
         let id = obj
             .downcast_ref::<JsSource>()
             .map(|s| s.0)
@@ -289,7 +286,9 @@ impl FromJs for Derived<JsValue> {
         let id = obj
             .downcast_ref::<JsDerived>()
             .map(|d| d.0)
-            .ok_or_else(|| crate::core::js_runtime::js_value::type_error("a derived atom handle"))?;
+            .ok_or_else(|| {
+                crate::core::js_runtime::js_value::type_error("a derived atom handle")
+            })?;
         Ok(Derived::from_id(id))
     }
 }
@@ -302,7 +301,9 @@ impl FromJs for Mutation {
         let id = obj
             .downcast_ref::<JsMutation>()
             .map(|m| m.0)
-            .ok_or_else(|| crate::core::js_runtime::js_value::type_error("a mutation atom handle"))?;
+            .ok_or_else(|| {
+                crate::core::js_runtime::js_value::type_error("a mutation atom handle")
+            })?;
         Ok(Mutation(id))
     }
 }

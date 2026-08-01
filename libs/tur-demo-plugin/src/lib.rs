@@ -21,8 +21,8 @@ use tur_engine::error::TurError;
 // Re-export the swc compiler primitives so downstream embedders can use them
 // directly (matches the surface tur-wasm used to expose).
 pub use compiler::{
-    generate_ast, highlight_tsx, tokenize_tsx, transpile_tsx, AstNode, AstNodeKind,
-    ImportSpecifierInfo, TokenSpan,
+    AstNode, AstNodeKind, ImportSpecifierInfo, TokenSpan, generate_ast, highlight_tsx,
+    tokenize_tsx, transpile_tsx,
 };
 
 /// The demo-helper plugin. Registers the `tur-ext/demo-helper` module with

@@ -54,13 +54,13 @@ use std::rc::Rc;
 
 use boa_engine::Context;
 
+use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
-use crate::core::elements::NodeTree;
-use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::platform::{PlatformEvent, PlatformEventQueue};
-use crate::core::focus::FocusManager;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::elements::NodeTree;
+use crate::core::focus::FocusManager;
+use crate::core::platform::{PlatformEvent, PlatformEventQueue};
 use crate::core::render::Renderer;
 use crate::core::screen::Screen;
 

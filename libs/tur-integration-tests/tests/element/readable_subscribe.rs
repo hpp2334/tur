@@ -236,8 +236,10 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
     .unwrap();
 
     app.render();
-    app.eval_module_source(r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#)
-        .unwrap();
+    app.eval_module_source(
+        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
+    )
+    .unwrap();
     let v1: String = app.eval_js("globalThis.__result");
 
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
@@ -246,8 +248,10 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
     app.advance(std::time::Duration::from_millis(300)).unwrap();
     app.render();
 
-    app.eval_module_source(r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#)
-        .unwrap();
+    app.eval_module_source(
+        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
+    )
+    .unwrap();
     let v2: String = app.eval_js("globalThis.__result");
     assert_eq!(
         v1, "compact",
@@ -267,7 +271,8 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 #[test]
 fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"
+    app.eval_module_source(
+        r#"
         import { source, derive, Container, ReadableSubscribe, mutate, set, render } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__target = source(100);
@@ -294,7 +299,8 @@ fn js_animated_container_pattern_animates_width_over_time() {
             child: container
         });
         render(tree);
-    "#)
+    "#,
+    )
     .unwrap();
 
     app.render();
@@ -303,12 +309,20 @@ fn js_animated_container_pattern_animates_width_over_time() {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
         // root -> ReadableSubscribe(pass-through) -> Container
-        let rs = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-        tree.get_element(ElementNodeId::new(rs.children[0].as_u64())).unwrap().id
+        let rs = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
+        tree.get_element(ElementNodeId::new(rs.children[0].as_u64()))
+            .unwrap()
+            .id
     };
     let width_at = |app: &TurTestApp| {
         let tree = app.element_tree();
-        tree.get_element(container_id).unwrap().computed_layout.size.width
+        tree.get_element(container_id)
+            .unwrap()
+            .computed_layout
+            .size
+            .width
     };
 
     // Before retarget: width = lerp(1.0) = end = 100.

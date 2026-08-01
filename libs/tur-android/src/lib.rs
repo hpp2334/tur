@@ -57,8 +57,7 @@ fn system_prop(name: &str) -> Option<String> {
     let mut buf = [0 as c_char; 92];
     let len = unsafe { __system_property_get(c_name.as_ptr(), buf.as_mut_ptr()) };
     if len > 0 {
-        let bytes =
-            unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, len as usize) };
+        let bytes = unsafe { std::slice::from_raw_parts(buf.as_ptr() as *const u8, len as usize) };
         Some(String::from_utf8_lossy(bytes).into_owned())
     } else {
         None
@@ -224,13 +223,13 @@ fn init_logger_once() {
 pub mod ops {
     use std::ffi::c_void;
 
+    use jni::JNIEnv;
     use jni::objects::{JObject, JString};
     use jni::sys::{jdouble, jint, jlong};
-    use jni::JNIEnv;
+    use tur_engine::TurEngineBuilder;
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-    use tur_engine::core::platform::{ImeEvent, PointerDeviceKind, PointerInput, PlatformEvent};
-    use tur_engine::TurEngineBuilder;
+    use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 
     use crate::app::AndroidApp;
 
@@ -388,9 +387,23 @@ pub mod ops {
             let position = Offset::new(x, y);
             let button = MouseButton::Left;
             let ev = match action {
-                0 => PointerInput::PointerDown { position, button, time_ms: time_ms as u64, device },
-                1 => PointerInput::PointerUp { position, button, device, time_ms: time_ms as u64 },
-                2 => PointerInput::PointerMove { position, device, time_ms: time_ms as u64 },
+                0 => PointerInput::PointerDown {
+                    position,
+                    button,
+                    time_ms: time_ms as u64,
+                    device,
+                },
+                1 => PointerInput::PointerUp {
+                    position,
+                    button,
+                    device,
+                    time_ms: time_ms as u64,
+                },
+                2 => PointerInput::PointerMove {
+                    position,
+                    device,
+                    time_ms: time_ms as u64,
+                },
                 3 => PointerInput::PointerCancel { device },
                 _ => return Ok(()),
             };
@@ -416,7 +429,11 @@ pub mod ops {
             let app = handle_to_app(handle).ok_or("invalid engine handle")?;
             let key: String = env.get_string(&key)?.into();
             let code: String = env.get_string(&code)?.into();
-            let event_type = if action == 1 { KeyEventType::Up } else { KeyEventType::Down };
+            let event_type = if action == 1 {
+                KeyEventType::Up
+            } else {
+                KeyEventType::Down
+            };
             app.app.push_platform_event(PlatformEvent::Key(KeyEvent {
                 key,
                 code,
@@ -439,11 +456,7 @@ pub mod ops {
         let Some(app) = handle_to_app(handle) else {
             return 0;
         };
-        if app.app.focused_is_editable() {
-            1
-        } else {
-            0
-        }
+        if app.app.focused_is_editable() { 1 } else { 0 }
     }
 
     /// Push an IME composition event onto the platform-event queue. `kind`:
@@ -458,10 +471,7 @@ pub mod ops {
             let text: String = env.get_string(&text)?.into();
             let ime = match kind {
                 0 => PlatformEvent::Ime(ImeEvent::CompositionStart),
-                1 => PlatformEvent::Ime(ImeEvent::CompositionUpdate {
-                    text,
-                    cursor: None,
-                }),
+                1 => PlatformEvent::Ime(ImeEvent::CompositionUpdate { text, cursor: None }),
                 _ => PlatformEvent::Ime(ImeEvent::CompositionEnd { text }),
             };
             app.app.push_platform_event(ime);

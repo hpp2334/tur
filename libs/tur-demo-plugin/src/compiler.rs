@@ -4,10 +4,8 @@
 //! module registered by `TurDemoPlugin`.
 
 use swc_common::{
-    comments::SingleThreadedComments,
-    input::StringInput,
-    sync::Lrc,
-    BytePos, FileName, Globals, Mark, SourceMap, Span, Spanned, GLOBALS,
+    BytePos, FileName, GLOBALS, Globals, Mark, SourceMap, Span, Spanned,
+    comments::SingleThreadedComments, input::StringInput, sync::Lrc,
 };
 use swc_ecma_ast::{Decl, EsVersion, ModuleDecl, ModuleItem};
 use swc_ecma_parser::unstable::Token;
@@ -44,10 +42,7 @@ fn tsx_syntax() -> Syntax {
 /// (tur cases use function-call composition, not JSX).
 pub fn transpile_tsx(src: &str) -> Result<String, String> {
     let cm: Lrc<SourceMap> = Default::default();
-    let fm = cm.new_source_file(
-        FileName::Custom("case.tsx".into()).into(),
-        src.to_string(),
-    );
+    let fm = cm.new_source_file(FileName::Custom("case.tsx".into()).into(), src.to_string());
     let comments = SingleThreadedComments::default();
 
     let lexer = Lexer::new(
@@ -80,11 +75,13 @@ pub fn transpile_tsx(src: &str) -> Result<String, String> {
 /// up to the failure point (important for live editing).
 pub fn tokenize_tsx(src: &str) -> Vec<TokenSpan> {
     let cm: Lrc<SourceMap> = Default::default();
-    let fm = cm.new_source_file(
-        FileName::Custom("case.tsx".into()).into(),
-        src.to_string(),
+    let fm = cm.new_source_file(FileName::Custom("case.tsx".into()).into(), src.to_string());
+    let lexer = Lexer::new(
+        tsx_syntax(),
+        EsVersion::Es2020,
+        StringInput::from(&*fm),
+        None,
     );
-    let lexer = Lexer::new(tsx_syntax(), EsVersion::Es2020, StringInput::from(&*fm), None);
 
     let mut out = Vec::new();
     for ts in lexer {
@@ -105,16 +102,36 @@ pub fn tokenize_tsx(src: &str) -> Vec<TokenSpan> {
 fn classify_token(token: &Token) -> u8 {
     match token {
         Token::True | Token::False | Token::Null => 6,
-        Token::Str | Token::Template | Token::TemplateHead | Token::TemplateMiddle
-        | Token::TemplateTail | Token::BackQuote | Token::Regex => 2,
+        Token::Str
+        | Token::Template
+        | Token::TemplateHead
+        | Token::TemplateMiddle
+        | Token::TemplateTail
+        | Token::BackQuote
+        | Token::Regex => 2,
         Token::Num | Token::BigInt => 3,
         _ if token.is_keyword() || token.is_known_ident() => 1,
         _ if token.is_bin_op() || token.is_assign_op() => 5,
-        Token::Semi | Token::Comma | Token::Dot | Token::Colon | Token::QuestionMark
-        | Token::LParen | Token::RParen | Token::LBrace | Token::RBrace
-        | Token::LBracket | Token::RBracket | Token::At | Token::Hash
-        | Token::Tilde | Token::Bang | Token::Arrow | Token::DotDotDot
-        | Token::PlusPlus | Token::MinusMinus | Token::DollarLBrace => 5,
+        Token::Semi
+        | Token::Comma
+        | Token::Dot
+        | Token::Colon
+        | Token::QuestionMark
+        | Token::LParen
+        | Token::RParen
+        | Token::LBrace
+        | Token::RBrace
+        | Token::LBracket
+        | Token::RBracket
+        | Token::At
+        | Token::Hash
+        | Token::Tilde
+        | Token::Bang
+        | Token::Arrow
+        | Token::DotDotDot
+        | Token::PlusPlus
+        | Token::MinusMinus
+        | Token::DollarLBrace => 5,
         _ => 0, // Ident and anything else → default
     }
 }
@@ -208,9 +225,10 @@ impl Visit for HighlightOverlay {
         // function/view name (kind 7). Member callees (`obj.m()`) are
         // handled by `visit_member_expr` (the `.m` is a property, kind 11).
         if let swc_ecma_ast::Callee::Expr(e) = &n.callee
-            && let swc_ecma_ast::Expr::Ident(id) = e.as_ref() {
-                self.push(id.span, 7);
-            }
+            && let swc_ecma_ast::Expr::Ident(id) = e.as_ref()
+        {
+            self.push(id.span, 7);
+        }
         n.visit_children_with(self);
     }
 
@@ -332,10 +350,7 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
 
     // Parse for the AST (semantic overlay + template spans + comments).
     let cm: Lrc<SourceMap> = Default::default();
-    let fm = cm.new_source_file(
-        FileName::Custom("case.tsx".into()).into(),
-        src.to_string(),
-    );
+    let fm = cm.new_source_file(FileName::Custom("case.tsx".into()).into(), src.to_string());
     let comments = SingleThreadedComments::default();
     let lexer = Lexer::new(
         tsx_syntax(),
@@ -349,7 +364,10 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
     // Collect + merge template-literal byte ranges.
     let mut templates: Vec<(usize, usize)> = Vec::new();
     if let Ok(program) = &parse_result {
-        let mut c = TemplateSpanCollector { src_len, spans: Vec::new() };
+        let mut c = TemplateSpanCollector {
+            src_len,
+            spans: Vec::new(),
+        };
         program.visit_with(&mut c);
         templates = c.spans;
     }
@@ -369,7 +387,11 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
         if t_lo > cursor {
             lex_segment(&src[cursor..t_lo], cursor, src_len, &mut out);
         }
-        out.push(TokenSpan { start: t_lo, end: t_hi, kind: 2 });
+        out.push(TokenSpan {
+            start: t_lo,
+            end: t_hi,
+            kind: 2,
+        });
         cursor = t_hi;
     }
     if cursor < src_len {
@@ -382,7 +404,10 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
 
     // AST overlay (semantic) + comments, only when parse succeeded.
     if let Ok(program) = parse_result {
-        let mut overlay = HighlightOverlay { src_len, ranges: Vec::new() };
+        let mut overlay = HighlightOverlay {
+            src_len,
+            ranges: Vec::new(),
+        };
         program.visit_with(&mut overlay);
         if !overlay.ranges.is_empty() {
             for tok in &mut out {
@@ -404,7 +429,11 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
             for cmts in map.borrow().values() {
                 for c in cmts {
                     if let Some((s, e)) = span_to_range(c.span, src_len) {
-                        out.push(TokenSpan { start: s, end: e, kind: 4 });
+                        out.push(TokenSpan {
+                            start: s,
+                            end: e,
+                            kind: 4,
+                        });
                     }
                 }
             }
@@ -425,7 +454,9 @@ pub fn highlight_tsx(src: &str) -> Vec<TokenSpan> {
 
 /// True if `tok`'s range is inside one of the (merged) template regions.
 fn template_contains(templates: &[(usize, usize)], tok: &TokenSpan) -> bool {
-    templates.iter().any(|(s, e)| *s <= tok.start && tok.end <= *e)
+    templates
+        .iter()
+        .any(|(s, e)| *s <= tok.start && tok.end <= *e)
 }
 
 /// Import specifier: `{ X }` → local=X, imported=X; `{ X as Y }` → local=Y, imported=X.
@@ -477,10 +508,7 @@ pub struct AstNode {
 /// lightweight parse that walks the raw AST.
 pub fn generate_ast(src: &str) -> Result<Vec<AstNode>, String> {
     let cm: Lrc<SourceMap> = Default::default();
-    let fm = cm.new_source_file(
-        FileName::Custom("case.tsx".into()).into(),
-        src.to_string(),
-    );
+    let fm = cm.new_source_file(FileName::Custom("case.tsx".into()).into(), src.to_string());
     let lexer = Lexer::new(
         tsx_syntax(),
         EsVersion::Es2020,
@@ -511,11 +539,16 @@ pub fn generate_ast(src: &str) -> Result<Vec<AstNode>, String> {
                     .map(|s| match s {
                         swc_ecma_ast::ImportSpecifier::Named(n) => ImportSpecifierInfo {
                             local: n.local.sym.as_str().to_string(),
-                            imported: n.imported
+                            imported: n
+                                .imported
                                 .as_ref()
                                 .map(|i| match i {
-                                    swc_ecma_ast::ModuleExportName::Ident(id) => id.sym.as_str().to_string(),
-                                    swc_ecma_ast::ModuleExportName::Str(s) => s.value.to_atom_lossy().as_str().to_string(),
+                                    swc_ecma_ast::ModuleExportName::Ident(id) => {
+                                        id.sym.as_str().to_string()
+                                    }
+                                    swc_ecma_ast::ModuleExportName::Str(s) => {
+                                        s.value.to_atom_lossy().as_str().to_string()
+                                    }
                                 })
                                 .unwrap_or_else(|| n.local.sym.as_str().to_string()),
                         },
@@ -565,12 +598,20 @@ pub fn generate_ast(src: &str) -> Result<Vec<AstNode>, String> {
                             .exported
                             .as_ref()
                             .map(|e| match e {
-                                swc_ecma_ast::ModuleExportName::Ident(id) => id.sym.as_str().to_string(),
-                                swc_ecma_ast::ModuleExportName::Str(s) => s.value.to_atom_lossy().as_str().to_string(),
+                                swc_ecma_ast::ModuleExportName::Ident(id) => {
+                                    id.sym.as_str().to_string()
+                                }
+                                swc_ecma_ast::ModuleExportName::Str(s) => {
+                                    s.value.to_atom_lossy().as_str().to_string()
+                                }
                             })
                             .unwrap_or_else(|| match &n.orig {
-                                swc_ecma_ast::ModuleExportName::Ident(id) => id.sym.as_str().to_string(),
-                                swc_ecma_ast::ModuleExportName::Str(s) => s.value.to_atom_lossy().as_str().to_string(),
+                                swc_ecma_ast::ModuleExportName::Ident(id) => {
+                                    id.sym.as_str().to_string()
+                                }
+                                swc_ecma_ast::ModuleExportName::Str(s) => {
+                                    s.value.to_atom_lossy().as_str().to_string()
+                                }
                             }),
                         swc_ecma_ast::ExportSpecifier::Default(_) => "default".to_string(),
                         swc_ecma_ast::ExportSpecifier::Namespace(_) => "*".to_string(),
@@ -579,9 +620,7 @@ pub fn generate_ast(src: &str) -> Result<Vec<AstNode>, String> {
                 (AstNodeKind::ExportNamed { names }, None)
             }
 
-            ModuleItem::ModuleDecl(ModuleDecl::ExportAll(_)) => {
-                (AstNodeKind::ExportAll, None)
-            }
+            ModuleItem::ModuleDecl(ModuleDecl::ExportAll(_)) => (AstNodeKind::ExportAll, None),
 
             _ => (AstNodeKind::Statement, None),
         };
@@ -631,7 +670,9 @@ fn extract_type_decl_names(decl: &Decl) -> Vec<String> {
         Decl::TsEnum(e) => vec![e.id.sym.as_str().to_string()],
         Decl::TsModule(m) => match &m.id {
             swc_ecma_ast::TsModuleName::Ident(id) => vec![id.sym.as_str().to_string()],
-            swc_ecma_ast::TsModuleName::Str(s) => vec![s.value.to_atom_lossy().as_str().to_string()],
+            swc_ecma_ast::TsModuleName::Str(s) => {
+                vec![s.value.to_atom_lossy().as_str().to_string()]
+            }
         },
         _ => vec![],
     }
@@ -705,7 +746,10 @@ mod tests {
             body.starts_with("function openAddModal"),
             "body should not have 'export' prefix, was: {body}",
         );
-        assert!(!body.contains("export"), "body must not contain 'export': {body}");
+        assert!(
+            !body.contains("export"),
+            "body must not contain 'export': {body}"
+        );
     }
 
     #[test]
@@ -846,11 +890,11 @@ mod tests {
         // in the annotation `: Task` (kind 10).
         let src = "interface Task {} const t: Task = null as any;";
         let spans = highlight_tsx(src);
-        let task_spans: Vec<_> = spans.iter().filter(|s| &src[s.start..s.end] == "Task").collect();
-        assert!(
-            !task_spans.is_empty(),
-            "expected Task spans, got {spans:?}",
-        );
+        let task_spans: Vec<_> = spans
+            .iter()
+            .filter(|s| &src[s.start..s.end] == "Task")
+            .collect();
+        assert!(!task_spans.is_empty(), "expected Task spans, got {spans:?}",);
         assert!(
             task_spans.iter().all(|s| s.kind == 10),
             "all Task spans should be type (10), got {task_spans:?}",
@@ -864,7 +908,10 @@ mod tests {
         let spans = highlight_tsx(src);
         assert!(!spans.is_empty(), "should still return lexical tokens");
         // The `const` keyword is lexical kind 1 even without an AST.
-        assert!(spans.iter().any(|s| s.kind == 1), "keyword kept, got {spans:?}");
+        assert!(
+            spans.iter().any(|s| s.kind == 1),
+            "keyword kept, got {spans:?}"
+        );
     }
 
     #[test]
@@ -923,11 +970,17 @@ mod tests {
         let src = "const make = () => inner(1); make(2);";
         let spans = highlight_tsx(src);
         // First `make` (decl) and second `make` (call callee) both kind 7.
-        let makes: Vec<_> = spans.iter().filter(|s| &src[s.start..s.end] == "make").collect();
+        let makes: Vec<_> = spans
+            .iter()
+            .filter(|s| &src[s.start..s.end] == "make")
+            .collect();
         assert_eq!(makes.len(), 2);
         assert!(makes.iter().all(|s| s.kind == 7), "decl + callee both 7");
         // `inner` is a call callee → 7.
-        let inner = spans.iter().find(|s| &src[s.start..s.end] == "inner").unwrap();
+        let inner = spans
+            .iter()
+            .find(|s| &src[s.start..s.end] == "inner")
+            .unwrap();
         assert_eq!(inner.kind, 7);
     }
 
@@ -936,7 +989,10 @@ mod tests {
         let src = "const o = { child: 1 }; o.child;";
         let spans = highlight_tsx(src);
         // Both `child` tokens (object-literal key + member `.child`) → 11.
-        let childs: Vec<_> = spans.iter().filter(|s| &src[s.start..s.end] == "child").collect();
+        let childs: Vec<_> = spans
+            .iter()
+            .filter(|s| &src[s.start..s.end] == "child")
+            .collect();
         assert_eq!(childs.len(), 2, "expected two `child` tokens: {spans:?}");
         assert!(
             childs.iter().all(|s| s.kind == 11),
@@ -944,7 +1000,10 @@ mod tests {
         );
         // `o` appears as a decl (kind 7) and as a member-obj reference (now
         // also kind 7, matching imported/class names like `Color.hex`).
-        let o_refs: Vec<_> = spans.iter().filter(|s| &src[s.start..s.end] == "o").collect();
+        let o_refs: Vec<_> = spans
+            .iter()
+            .filter(|s| &src[s.start..s.end] == "o")
+            .collect();
         assert_eq!(o_refs.len(), 2);
         assert_eq!(o_refs[0].kind, 7, "declared `o` → 7");
         assert_eq!(o_refs[1].kind, 7, "member-obj `o` reference → 7");
@@ -986,7 +1045,9 @@ mod tests {
         );
         // And the template literal itself is a string span.
         assert!(
-            spans.iter().any(|s| s.kind == 2 && src[s.start..s.end].contains('`')),
+            spans
+                .iter()
+                .any(|s| s.kind == 2 && src[s.start..s.end].contains('`')),
             "template literal should be a string span: {spans:?}",
         );
     }

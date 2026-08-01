@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::layout::{Constraints, Size};
 use crate::core::element::ElementNodeId;
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::layout::{Constraints, Size};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 use super::GridMetrics;
 
@@ -31,7 +31,12 @@ pub struct GridView {
 }
 
 impl View for GridView {
-    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: crate::core::element::NodeId) -> crate::core::element::NodeId {
+    fn build(
+        &self,
+        cx: &mut dyn ViewCx,
+        boa: &mut Context,
+        parent: crate::core::element::NodeId,
+    ) -> crate::core::element::NodeId {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
@@ -100,7 +105,10 @@ impl ElementSubscribe for GridElement {
 impl ElementTrace for GridElement {
     fn trace_label(&self) -> String {
         if let Some(m) = &self.metrics {
-            format!("cols={} cell={}x{}", m.cross_axis_count, m.cell_cross, m.cell_main)
+            format!(
+                "cols={} cell={}x{}",
+                m.cross_axis_count, m.cell_cross, m.cell_main
+            )
         } else {
             "unlaid".to_string()
         }

@@ -186,7 +186,8 @@ impl VelloRenderer {
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
         let output = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+            wgpu::CurrentSurfaceTexture::Success(t)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Timeout => {
                 tracing::warn!("present: get_current_texture timed out");
                 return Ok(());
@@ -320,14 +321,17 @@ impl VelloRenderer {
 
         let slice = readback_buffer.slice(..);
         slice.map_async(wgpu::MapMode::Read, |_| {});
-        self.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
 
         let data = slice.get_mapped_range();
         let swap_red_blue = matches!(
             format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
         );
-        let mut pixels = Vec::with_capacity((self.physical_width * self.physical_height * 4) as usize);
+        let mut pixels =
+            Vec::with_capacity((self.physical_width * self.physical_height * 4) as usize);
         for row in 0..self.physical_height {
             let offset = row as usize * bytes_per_row_aligned as usize;
             let row_end = offset + (self.physical_width * 4) as usize;

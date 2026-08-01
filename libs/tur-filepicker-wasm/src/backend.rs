@@ -18,8 +18,8 @@ use std::future::Future;
 use std::pin::Pin;
 
 use js_sys::Array as JsArray;
-use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen_futures::JsFuture;
 
 use tur_filepicker_capability::{FilePickerBackend, PickedFile};

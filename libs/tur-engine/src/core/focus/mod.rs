@@ -5,8 +5,8 @@ pub use focusable::Focusable;
 
 use boa_engine::{Context, JsValue};
 
-use crate::core::element::ElementNodeId;
 use crate::core::edgy::mutation::IntoJsArgs;
+use crate::core::element::ElementNodeId;
 
 // ---------------------------------------------------------------------------
 // Focus event payloads — JS callback arguments for focus / blur.
@@ -67,7 +67,10 @@ impl Default for FocusManager {
 
 impl FocusManager {
     pub fn new() -> Self {
-        Self { focused_id: None, pending: Vec::new() }
+        Self {
+            focused_id: None,
+            pending: Vec::new(),
+        }
     }
 
     pub fn focused(&self) -> Option<ElementNodeId> {
@@ -81,9 +84,10 @@ impl FocusManager {
     pub fn set_focus(&mut self, new_id: ElementNodeId) {
         let old = self.focused_id.replace(new_id);
         if let Some(old) = old
-            && old != new_id {
-                self.pending.push(FocusChange::Blur(old));
-            }
+            && old != new_id
+        {
+            self.pending.push(FocusChange::Blur(old));
+        }
         self.pending.push(FocusChange::Focus(new_id));
     }
 

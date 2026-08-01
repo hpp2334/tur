@@ -56,11 +56,7 @@ pub async fn perform_request(
         };
         let resp = rb.send().await.map_err(|e| format!("{e}"))?;
         let status = resp.status().as_u16();
-        let status_text = resp
-            .status()
-            .canonical_reason()
-            .unwrap_or("")
-            .to_string();
+        let status_text = resp.status().canonical_reason().unwrap_or("").to_string();
         let hdrs: Vec<(String, String)> = resp
             .headers()
             .iter()

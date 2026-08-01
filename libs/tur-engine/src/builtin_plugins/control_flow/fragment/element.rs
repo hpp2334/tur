@@ -1,12 +1,12 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
 use crate::core::element::NodeId;
 use crate::core::elements::ElementTrace;
-use crate::core::view::{ViewCx, Lifecycle, View};
+use crate::core::js_runtime::JsProps;
+use crate::core::view::{Lifecycle, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // FragmentView — a transparent multi-child container. Children are built

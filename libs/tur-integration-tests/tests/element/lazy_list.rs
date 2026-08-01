@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::lazy_container::LazyListElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 #[test]
 fn lazy_list_viewport_size() {
@@ -15,7 +15,9 @@ fn lazy_list_viewport_size() {
         );
         assert_eq!(root.children.len(), 1);
 
-        let ll = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let ll = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             ll.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_lazy_list")
@@ -39,7 +41,9 @@ fn lazy_list_children_positioned_by_index() {
     let (child0_id, child1_id, child2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let ll = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert!(ll.children.len() >= 3, "should have at least 3 children");
         (ll.children[0], ll.children[1], ll.children[2])
     };
@@ -47,15 +51,21 @@ fn lazy_list_children_positioned_by_index() {
     app.render();
     let rt = app.element_tree();
 
-    let c0 = rt.get_element(ElementNodeId::new(child0_id.as_u64())).unwrap();
+    let c0 = rt
+        .get_element(ElementNodeId::new(child0_id.as_u64()))
+        .unwrap();
     assert_eq!(c0.computed_layout.size.height, 50.0);
     assert_eq!(c0.computed_layout.offset.y, 0.0);
 
-    let c1 = rt.get_element(ElementNodeId::new(child1_id.as_u64())).unwrap();
+    let c1 = rt
+        .get_element(ElementNodeId::new(child1_id.as_u64()))
+        .unwrap();
     assert_eq!(c1.computed_layout.size.height, 50.0);
     assert_eq!(c1.computed_layout.offset.y, 50.0);
 
-    let c2 = rt.get_element(ElementNodeId::new(child2_id.as_u64())).unwrap();
+    let c2 = rt
+        .get_element(ElementNodeId::new(child2_id.as_u64()))
+        .unwrap();
     assert_eq!(c2.computed_layout.size.height, 50.0);
     assert_eq!(c2.computed_layout.offset.y, 100.0);
 }
@@ -68,14 +78,18 @@ fn lazy_list_children_tight_constraints() {
     let child0_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let ll = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         ll.children[0]
     };
 
     app.render();
     let rt = app.element_tree();
 
-    let c0 = rt.get_element(ElementNodeId::new(child0_id.as_u64())).unwrap();
+    let c0 = rt
+        .get_element(ElementNodeId::new(child0_id.as_u64()))
+        .unwrap();
     assert_eq!(c0.computed_layout.size.width, 400.0);
     assert_eq!(c0.computed_layout.size.height, 50.0);
 }
@@ -92,7 +106,6 @@ fn lazy_list_element_properties() {
     };
 
     app.render();
-
 
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -126,8 +139,11 @@ fn lazy_list_scroll_updates_position() {
     // First mounted index should be 4 (scroll/extent = 4).
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
-        assert_eq!(ll.first_mounted_index(), Some(4),
-            "first mounted item should be index 4 after scrolling 200px (extent=50)");
+        assert_eq!(
+            ll.first_mounted_index(),
+            Some(4),
+            "first mounted item should be index 4 after scrolling 200px (extent=50)"
+        );
     });
 
     // Item 4 should be at viewport y=0 (content_pos = 4*50 = 200; viewport
@@ -136,7 +152,9 @@ fn lazy_list_scroll_updates_position() {
     let tree = app.element_tree();
     let ll = tree.get_element(ll_id).unwrap();
     let first_mounted_child = ll.children[0];
-    let c0 = tree.get_element(ElementNodeId::new(first_mounted_child.as_u64())).unwrap();
+    let c0 = tree
+        .get_element(ElementNodeId::new(first_mounted_child.as_u64()))
+        .unwrap();
     assert_eq!(
         c0.computed_layout.offset.y, 0.0,
         "first mounted child (index 4) should be at viewport y=0 after 200px scroll, got {}",
@@ -144,7 +162,9 @@ fn lazy_list_scroll_updates_position() {
     );
 
     // Item 5 should be at viewport y=50.
-    let c1 = tree.get_element(ElementNodeId::new(ll.children[1].as_u64())).unwrap();
+    let c1 = tree
+        .get_element(ElementNodeId::new(ll.children[1].as_u64()))
+        .unwrap();
     assert_eq!(
         c1.computed_layout.offset.y, 50.0,
         "second mounted child (index 5) should be at viewport y=50, got {}",
@@ -160,7 +180,9 @@ fn lazy_list_row_horizontal_layout() {
     let (child0_id, child1_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let ll = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert!(ll.children.len() >= 2);
         (ll.children[0], ll.children[1])
     };
@@ -168,12 +190,16 @@ fn lazy_list_row_horizontal_layout() {
     app.render();
     let rt = app.element_tree();
 
-    let c0 = rt.get_element(ElementNodeId::new(child0_id.as_u64())).unwrap();
+    let c0 = rt
+        .get_element(ElementNodeId::new(child0_id.as_u64()))
+        .unwrap();
     assert_eq!(c0.computed_layout.size.width, 80.0);
     assert_eq!(c0.computed_layout.size.height, 300.0);
     assert_eq!(c0.computed_layout.offset.x, 0.0);
 
-    let c1 = rt.get_element(ElementNodeId::new(child1_id.as_u64())).unwrap();
+    let c1 = rt
+        .get_element(ElementNodeId::new(child1_id.as_u64()))
+        .unwrap();
     assert_eq!(c1.computed_layout.size.width, 80.0);
     assert_eq!(c1.computed_layout.offset.x, 80.0);
 }
@@ -217,7 +243,8 @@ fn lazy_list_virtualizes_large_item_count() {
     // Build a LazyList inline with 10,000 fixed-extent items and verify
     // that only a small subset is actually mounted after layout + scroll.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"
+    app.eval_module_source(
+        r#"
         import { render, LazyList, Container, createColor, Text } from "tur:std";
         render(LazyList({
             axis: 0,
@@ -230,7 +257,9 @@ fn lazy_list_virtualizes_large_item_count() {
                 children: [Text({ text: "Item " + i })],
             }),
         }));
-    "#).unwrap();
+    "#,
+    )
+    .unwrap();
     app.render();
 
     let ll_id = {
@@ -244,12 +273,19 @@ fn lazy_list_virtualizes_large_item_count() {
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
         let built = ll.built_count();
-        assert!(built < 50,
-            "virtualized list should mount < 50 items, got {built}");
-        assert!(built >= 12,
-            "virtualized list should mount at least viewport/extent items, got {built}");
-        assert_eq!(ll.item_count(), 10000,
-            "declared item count should still be 10000");
+        assert!(
+            built < 50,
+            "virtualized list should mount < 50 items, got {built}"
+        );
+        assert!(
+            built >= 12,
+            "virtualized list should mount at least viewport/extent items, got {built}"
+        );
+        assert_eq!(
+            ll.item_count(),
+            10000,
+            "declared item count should still be 10000"
+        );
     });
 
     // Scroll by 5000px = 100 items. The mounted set should shift to the
@@ -260,12 +296,16 @@ fn lazy_list_virtualizes_large_item_count() {
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
         let built = ll.built_count();
-        assert!(built < 50,
-            "after scroll, virtualized list should still mount < 50 items, got {built}");
+        assert!(
+            built < 50,
+            "after scroll, virtualized list should still mount < 50 items, got {built}"
+        );
         // The first mounted index should be near 100.
         let first_idx = ll.first_mounted_index().unwrap_or(0);
-        assert!((95..=105).contains(&first_idx),
-            "first mounted index should be near 100, got {first_idx}");
+        assert!(
+            (95..=105).contains(&first_idx),
+            "first mounted index should be near 100, got {first_idx}"
+        );
     });
 }
 
@@ -303,8 +343,10 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
 /// `with_element` helper that returns the closure's R directly (panics if
 /// the lookup fails, which is fine for tests that just constructed the id).
 fn with_ll<R>(app: &TurTestApp, id: ElementNodeId, f: impl FnOnce(&LazyListElement) -> R) -> R {
-    app.with_element(id, |e| f(e.cast::<LazyListElement>().expect("not a LazyListElement")))
-        .expect("element not found")
+    app.with_element(id, |e| {
+        f(e.cast::<LazyListElement>().expect("not a LazyListElement"))
+    })
+    .expect("element not found")
 }
 
 /// Sanity check: the initial visible range corresponds to the viewport.
@@ -318,12 +360,19 @@ fn virtualized_initial_mount_set_matches_viewport() {
     let first = with_ll(&app, id, |ll| ll.first_mounted_index());
     let count = with_ll(&app, id, |ll| ll.item_count());
 
-    assert!((11..=20).contains(&built),
-        "initial mount set should be ~viewport/extent + 2*overscan (11..15), got {built}");
-    assert_eq!(first, Some(0),
-        "without scrolling, the first mounted item should be index 0");
-    assert_eq!(count, 10000,
-        "declared item count should remain 10000 regardless of mount set");
+    assert!(
+        (11..=20).contains(&built),
+        "initial mount set should be ~viewport/extent + 2*overscan (11..15), got {built}"
+    );
+    assert_eq!(
+        first,
+        Some(0),
+        "without scrolling, the first mounted item should be index 0"
+    );
+    assert_eq!(
+        count, 10000,
+        "declared item count should remain 10000 regardless of mount set"
+    );
 }
 
 /// After scrolling, items that fall outside the visible range should be
@@ -341,12 +390,16 @@ fn virtualized_unmounts_offscreen_items_after_scroll() {
     let after_built = with_ll(&app, id, |ll| ll.built_count());
     let first_idx = with_ll(&app, id, |ll| ll.first_mounted_index().unwrap());
 
-    assert!((14..=20).contains(&first_idx),
-        "after scrolling 1000px (extent 56), first mounted index should be ~17, got {first_idx}");
+    assert!(
+        (14..=20).contains(&first_idx),
+        "after scrolling 1000px (extent 56), first mounted index should be ~17, got {first_idx}"
+    );
     // Allow up to 4 difference for one-off overscan / rounding edges at the
     // top or bottom of the viewport.
-    assert!((after_built as i64 - initial_built as i64).abs() <= 4,
-        "mounted count should stay roughly constant after scroll (initial={initial_built}, after={after_built})");
+    assert!(
+        (after_built as i64 - initial_built as i64).abs() <= 4,
+        "mounted count should stay roughly constant after scroll (initial={initial_built}, after={after_built})"
+    );
 }
 
 /// Scroll far into the list and verify an item lands at viewport y≈0.
@@ -376,11 +429,19 @@ fn virtualized_far_scroll_lands_on_correct_item() {
         let ll_node = tree.get_element(id).unwrap();
         ll_node.children.iter().any(|child| {
             let child_id = *child;
-            let y = tree.get_element(ElementNodeId::new(child_id.as_u64())).unwrap().computed_layout.offset.y;
+            let y = tree
+                .get_element(ElementNodeId::new(child_id.as_u64()))
+                .unwrap()
+                .computed_layout
+                .offset
+                .y;
             (-56.0..=0.0).contains(&y)
         })
     };
-    assert!(found, "expected at least one child within one extent of viewport top after scroll");
+    assert!(
+        found,
+        "expected at least one child within one extent of viewport top after scroll"
+    );
 }
 
 /// Scrolling UP should keep the parent's children vector ordered by logical
@@ -461,8 +522,7 @@ fn virtualized_position_math_matches_content_index_formula() {
         tree.get_element(id).unwrap().children.to_vec()
     };
     for child_id in child_ids {
-        let logical = with_ll(&app, id, |ll| ll.visible_index_of(child_id))
-            .expect("logical index");
+        let logical = with_ll(&app, id, |ll| ll.visible_index_of(child_id)).expect("logical index");
         let expected_y = (logical as f64) * extent - scroll_amount;
         let actual_y = app
             .element_tree()
@@ -494,13 +554,17 @@ fn virtualized_reported_range_tracks_scroll() {
     // The first mounted index should be the visible-range start minus the
     // overscan (2). 1000 / 56 ≈ 17.86 → start = 17, minus overscan 2 = 15.
     // Allow ±1 for sub-pixel rounding.
-    assert!((14..=18).contains(&first_mounted),
-        "first mounted index after 1000px scroll should be ~15, got {first_mounted}");
+    assert!(
+        (14..=18).contains(&first_mounted),
+        "first mounted index after 1000px scroll should be ~15, got {first_mounted}"
+    );
 
     // And the mounted count should be the visible window + 2 * overscan.
     // Visible window = ceil(600/56) = 11. Total = 11 + 4 = 15, ±1.
-    assert!((13..=17).contains(&built),
-        "mounted count after scroll should be ~15, got {built}");
+    assert!(
+        (13..=17).contains(&built),
+        "mounted count after scroll should be ~15, got {built}"
+    );
 }
 
 /// When the user scrolls past the end, the position should clamp at
@@ -516,8 +580,10 @@ fn virtualized_scroll_past_end_clamps_and_no_negative_positions() {
 
     let max_extent = 10000.0_f64 * 56.0 - 600.0;
     let scroll = with_ll(&app, id, |ll| ll.scroll_offset());
-    assert!(scroll <= max_extent + 1.0,
-        "scroll should clamp at max extent ({max_extent}), got {scroll}");
+    assert!(
+        scroll <= max_extent + 1.0,
+        "scroll should clamp at max extent ({max_extent}), got {scroll}"
+    );
 
     // No mounted child should be absurdly off-screen. Allow up to 3 overscan
     // tolerances above/below the viewport to account for the boundary
@@ -527,11 +593,20 @@ fn virtualized_scroll_past_end_clamps_and_no_negative_positions() {
     let ll_node = tree.get_element(id).unwrap();
     for child in &ll_node.children {
         let child_id = *child;
-        let y = tree.get_element(ElementNodeId::new(child_id.as_u64())).unwrap().computed_layout.offset.y;
-        assert!(y > -overscan_tolerance,
-            "child at id={child_id:?} has y={y}, should not be more than 3 extents above viewport");
-        assert!(y < 600.0 + overscan_tolerance,
-            "child at id={child_id:?} has y={y}, should be within viewport + overscan");
+        let y = tree
+            .get_element(ElementNodeId::new(child_id.as_u64()))
+            .unwrap()
+            .computed_layout
+            .offset
+            .y;
+        assert!(
+            y > -overscan_tolerance,
+            "child at id={child_id:?} has y={y}, should not be more than 3 extents above viewport"
+        );
+        assert!(
+            y < 600.0 + overscan_tolerance,
+            "child at id={child_id:?} has y={y}, should be within viewport + overscan"
+        );
     }
 }
 
@@ -547,8 +622,11 @@ fn virtualized_scroll_back_to_zero_resets_cleanly() {
     app.render();
 
     let first_idx = with_ll(&app, id, |ll| ll.first_mounted_index());
-    assert_eq!(first_idx, Some(0),
-        "after scrolling back to 0, first mounted index should be 0, got {first_idx:?}");
+    assert_eq!(
+        first_idx,
+        Some(0),
+        "after scrolling back to 0, first mounted index should be 0, got {first_idx:?}"
+    );
 
     let (child_ids, ys): (Vec<_>, Vec<f64>) = {
         let tree = app.element_tree();
@@ -558,14 +636,22 @@ fn virtualized_scroll_back_to_zero_resets_cleanly() {
             ll_node
                 .children
                 .iter()
-                .map(|c| tree.get_element(ElementNodeId::new((*c).as_u64())).unwrap().computed_layout.offset.y)
+                .map(|c| {
+                    tree.get_element(ElementNodeId::new((*c).as_u64()))
+                        .unwrap()
+                        .computed_layout
+                        .offset
+                        .y
+                })
                 .collect(),
         )
     };
     for (i, (_cid, y)) in child_ids.iter().zip(ys.iter()).enumerate() {
         let expected = i as f64 * 56.0;
-        assert!((y - expected).abs() < 0.5,
-            "after scroll-back-to-0, child at slot {i} should be at y={expected}, got y={y}");
+        assert!(
+            (y - expected).abs() < 0.5,
+            "after scroll-back-to-0, child at slot {i} should be at y={expected}, got y={y}"
+        );
     }
 }
 
@@ -595,9 +681,12 @@ fn virtualized_no_duplicate_children_after_scroll_up() {
     };
     let mut seen = std::collections::HashSet::new();
     for child_id in &child_ids {
-        assert!(seen.insert(*child_id),
+        assert!(
+            seen.insert(*child_id),
             "duplicate child id {:?} in parent's children vector (total len = {})",
-            child_id, child_ids.len());
+            child_id,
+            child_ids.len()
+        );
     }
 }
 
@@ -620,9 +709,11 @@ fn virtualized_parent_children_count_matches_built_count() {
             tree.get_element(id).unwrap().children.len()
         };
         let built = with_ll(&app, id, |ll| ll.built_count());
-        assert_eq!(parent_count, built,
+        assert_eq!(
+            parent_count, built,
             "parent.children.len() ({parent_count}) should equal built_count ({built}) \
-             — divergence indicates a mount/unmount bookkeeping bug");
+             — divergence indicates a mount/unmount bookkeeping bug"
+        );
     }
 }
 
@@ -651,10 +742,14 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
         };
         let tree = app.element_tree();
         for &child_id in &child_ids {
-            let node = tree.get_element(ElementNodeId::new(child_id.as_u64())).unwrap_or_else(|| panic!(
-                "iteration {i}: child id {child_id:?} in parent.children but not in tree \
+            let node = tree
+                .get_element(ElementNodeId::new(child_id.as_u64()))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "iteration {i}: child id {child_id:?} in parent.children but not in tree \
                  (stale entry from double-add)"
-            ));
+                    )
+                });
             // Touch the computed layout to force the dereference all the
             // way through the node struct.
             let _ = node.computed_layout.offset.y;
@@ -679,7 +774,11 @@ fn scroll_does_not_remeasure_mounted_children() {
     let (mut app, id) = setup_virtualized();
 
     // Snapshot each currently-mounted child's (id, size, offset.y).
-    let before: Vec<(tur_engine::core::element::NodeId, tur_engine::core::layout::Size, f64)> = {
+    let before: Vec<(
+        tur_engine::core::element::NodeId,
+        tur_engine::core::layout::Size,
+        f64,
+    )> = {
         let tree = app.element_tree();
         let ll_node = tree.get_element(id).unwrap();
         ll_node
@@ -711,16 +810,25 @@ fn scroll_does_not_remeasure_mounted_children() {
         if !live_ids.contains(cid) {
             continue; // unmounted by scroll — out of scope for this check
         }
-        let n = tree.get_element(ElementNodeId::new((*cid).as_u64())).unwrap();
-        assert_eq!(n.computed_layout.size, *size_before,
+        let n = tree
+            .get_element(ElementNodeId::new((*cid).as_u64()))
+            .unwrap();
+        assert_eq!(
+            n.computed_layout.size, *size_before,
             "child {:?} was re-measured on scroll — size was {size_before:?}, now {:?} \
              (the per-node layout cache should have short-circuited it)",
-            cid, n.computed_layout.size);
+            cid, n.computed_layout.size
+        );
         let dy = n.computed_layout.offset.y - y_before;
-        assert!((dy - (-30.0)).abs() < 0.5,
-            "child {:?} offset.y shifted by {dy}, expected -30 (scroll delta)", cid);
+        assert!(
+            (dy - (-30.0)).abs() < 0.5,
+            "child {:?} offset.y shifted by {dy}, expected -30 (scroll delta)",
+            cid
+        );
         checked += 1;
     }
-    assert!(checked >= 5,
-        "expected at least 5 children to survive the 30px scroll for a meaningful check, got {checked}");
+    assert!(
+        checked >= 5,
+        "expected at least 5 children to survive the 30px scroll for a meaningful check, got {checked}"
+    );
 }

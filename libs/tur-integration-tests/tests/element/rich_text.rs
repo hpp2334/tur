@@ -4,7 +4,9 @@ use tur_integration_tests::TurTestApp;
 fn get_container(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let container = tree
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
     assert_eq!(
         container.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_paragraph")
@@ -58,7 +60,9 @@ fn rich_text_bold_wider_than_normal() {
 
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let container = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+    let container = tree
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
     assert_eq!(
         container.element.as_ref().unwrap().kind(),
         ElementKind::new("tur_paragraph")

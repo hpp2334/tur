@@ -21,7 +21,9 @@ fn center_of(app: &TurTestApp, query: &[&str]) -> (f64, f64) {
 }
 
 fn down_count(app: &TurTestApp) -> u32 {
-    app.eval_js("globalThis.__getDownCount()").parse::<u32>().unwrap_or(0)
+    app.eval_js("globalThis.__getDownCount()")
+        .parse::<u32>()
+        .unwrap_or(0)
 }
 
 /// Mouse drag in `steps` moves. Uses the mouse pointer helpers (which bypass
@@ -30,7 +32,10 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
     app.pointer_down(start.0, start.1);
     for i in 1..=steps {
         let t = i as f64 / steps as f64;
-        app.pointer_move(start.0 + (end.0 - start.0) * t, start.1 + (end.1 - start.1) * t);
+        app.pointer_move(
+            start.0 + (end.0 - start.0) * t,
+            start.1 + (end.1 - start.1) * t,
+        );
     }
     app.pointer_up(end.0, end.1);
 }

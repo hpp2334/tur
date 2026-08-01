@@ -3,16 +3,16 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-use parley::LayoutContext as ParleyLayoutContext;
 use crate::core::layout::{Constraints, Offset, Size};
+use parley::LayoutContext as ParleyLayoutContext;
 use vello_common::kurbo::{Affine, Point};
 
+use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Store, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::layout::{LayoutContext, SubscribeCx};
-use crate::core::edgy::reactive::{ReactiveReadStore, ReactiveReadJsContext, Store, SubscriberId};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
 
@@ -39,7 +39,6 @@ pub struct NodeTreeData {
     /// the hook run with a live element + mutation queue in scope.
     pending_destroy: Vec<AnyElement>,
 }
-
 
 impl NodeTreeData {
     pub fn new(store: Store) -> Self {
@@ -143,7 +142,8 @@ impl NodeTreeData {
 
     /// True if `id` is a fragment (not a real element node).
     pub fn is_fragment(&self, id: NodeId) -> bool {
-        self.fragments.contains_key(&FragmentNodeId::new(id.as_u64()))
+        self.fragments
+            .contains_key(&FragmentNodeId::new(id.as_u64()))
     }
 
     /// The node's absolute (world) affine: the product of each ancestor's
@@ -189,9 +189,15 @@ impl NodeTreeData {
 
     /// Remove a `child_id` entry from a parent's children vec (node or fragment).
     pub fn remove_child_entry(&mut self, parent_id: NodeId, child_id: NodeId) {
-        if let Some(node) = self.elements.get_mut(&ElementNodeId::new(parent_id.as_u64())) {
+        if let Some(node) = self
+            .elements
+            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
+        {
             node.children.retain(|c| *c != child_id);
-        } else if let Some(frag) = self.fragments.get_mut(&FragmentNodeId::new(parent_id.as_u64())) {
+        } else if let Some(frag) = self
+            .fragments
+            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
+        {
             frag.children.retain(|c| *c != child_id);
         }
     }
@@ -200,34 +206,59 @@ impl NodeTreeData {
         // Guard: don't link to a parent that doesn't exist in either map
         // (e.g. the `temp_parent` placeholder in `tur_render` which is
         // allocated but never inserted). Matches the pre-fragment behavior.
-        if !self.elements.contains_key(&ElementNodeId::new(parent_id.as_u64()))
-            && !self.fragments.contains_key(&FragmentNodeId::new(parent_id.as_u64()))
+        if !self
+            .elements
+            .contains_key(&ElementNodeId::new(parent_id.as_u64()))
+            && !self
+                .fragments
+                .contains_key(&FragmentNodeId::new(parent_id.as_u64()))
         {
             return false;
         }
         // Set the child's parent pointer (node or fragment).
-        if let Some(c) = self.elements.get_mut(&ElementNodeId::new(child_id.as_u64())) {
+        if let Some(c) = self
+            .elements
+            .get_mut(&ElementNodeId::new(child_id.as_u64()))
+        {
             c.parent = Some(parent_id);
-        } else if let Some(f) = self.fragments.get_mut(&FragmentNodeId::new(child_id.as_u64())) {
+        } else if let Some(f) = self
+            .fragments
+            .get_mut(&FragmentNodeId::new(child_id.as_u64()))
+        {
             f.parent = parent_id;
         }
         // Push to the parent's children vec (node or fragment).
-        if let Some(node) = self.elements.get_mut(&ElementNodeId::new(parent_id.as_u64())) {
+        if let Some(node) = self
+            .elements
+            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
+        {
             node.children.push(child_id);
-        } else if let Some(frag) = self.fragments.get_mut(&FragmentNodeId::new(parent_id.as_u64())) {
+        } else if let Some(frag) = self
+            .fragments
+            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
+        {
             frag.children.push(child_id);
         }
         true
     }
 
     pub fn remove_child(&mut self, parent_id: NodeId, child_id: NodeId) -> bool {
-        if let Some(node) = self.elements.get_mut(&ElementNodeId::new(parent_id.as_u64())) {
+        if let Some(node) = self
+            .elements
+            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
+        {
             node.children.retain(|c| *c != child_id);
-        } else if let Some(frag) = self.fragments.get_mut(&FragmentNodeId::new(parent_id.as_u64())) {
+        } else if let Some(frag) = self
+            .fragments
+            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
+        {
             frag.children.retain(|c| *c != child_id);
         }
         // Clear the child's parent pointer (node or fragment).
-        if let Some(c) = self.elements.get_mut(&ElementNodeId::new(child_id.as_u64())) {
+        if let Some(c) = self
+            .elements
+            .get_mut(&ElementNodeId::new(child_id.as_u64()))
+        {
             c.parent = None;
         }
         true
@@ -240,16 +271,26 @@ impl NodeTreeData {
         ref_id: ElementNodeId,
     ) -> bool {
         if !self.elements.contains_key(&parent_id)
-            || (!self.elements.contains_key(&ElementNodeId::new(child_id.as_u64()))
-                && !self.fragments.contains_key(&FragmentNodeId::new(child_id.as_u64())))
+            || (!self
+                .elements
+                .contains_key(&ElementNodeId::new(child_id.as_u64()))
+                && !self
+                    .fragments
+                    .contains_key(&FragmentNodeId::new(child_id.as_u64())))
             || !self.elements.contains_key(&ref_id)
         {
             return false;
         }
         // Set the child's parent pointer.
-        if let Some(c) = self.elements.get_mut(&ElementNodeId::new(child_id.as_u64())) {
+        if let Some(c) = self
+            .elements
+            .get_mut(&ElementNodeId::new(child_id.as_u64()))
+        {
             c.parent = Some(parent_id.into());
-        } else if let Some(f) = self.fragments.get_mut(&FragmentNodeId::new(child_id.as_u64())) {
+        } else if let Some(f) = self
+            .fragments
+            .get_mut(&FragmentNodeId::new(child_id.as_u64()))
+        {
             f.parent = parent_id.into();
         }
         let insert_fn = |children: &mut Vec<NodeId>| {
@@ -321,9 +362,10 @@ impl NodeTreeData {
         }
         // Capture the element so the flush loop can fire `before_destroy`.
         if let Some(node) = self.remove_element(id)
-            && let Some(elem) = node.element {
-                self.pending_destroy.push(elem);
-            }
+            && let Some(elem) = node.element
+        {
+            self.pending_destroy.push(elem);
+        }
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
@@ -359,9 +401,10 @@ impl NodeTreeData {
     /// child, e.g. keeping LazyList items ordered by logical index).
     pub fn move_child_before(&mut self, parent: ElementNodeId, child: NodeId, ref_child: NodeId) {
         if let Some(node) = self.elements.get_mut(&parent)
-            && let Some(pos) = node.children.iter().position(|c| *c == child) {
-                node.children.remove(pos);
-            }
+            && let Some(pos) = node.children.iter().position(|c| *c == child)
+        {
+            node.children.remove(pos);
+        }
         if let Some(node) = self.elements.get_mut(&parent) {
             if let Some(pos) = node.children.iter().position(|c| *c == ref_child) {
                 node.children.insert(pos, child);
@@ -424,7 +467,9 @@ impl NodeTreeData {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<
+            std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
+        >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {
@@ -434,7 +479,17 @@ impl NodeTreeData {
         };
 
         let mut js = ReactiveReadJsContext::new(self.read_face.clone(), boa);
-        self.layout(root_id, constraints, font_manager, text_layout_cx, image_resource_map, node_tree, mutation_queue, dirty, &mut js)
+        self.layout(
+            root_id,
+            constraints,
+            font_manager,
+            text_layout_cx,
+            image_resource_map,
+            node_tree,
+            mutation_queue,
+            dirty,
+            &mut js,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -446,7 +501,9 @@ impl NodeTreeData {
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &'a ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<
+            std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
+        >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         js: &'a mut ReactiveReadJsContext<'js>,
     ) -> Size {
@@ -456,7 +513,9 @@ impl NodeTreeData {
             .map(|n| (n.dirty_layout, n.last_constraints != Some(*constraints)))
             .unwrap_or((false, true));
         if !is_dirty && !constraints_changed {
-            return self.elements.get(&id)
+            return self
+                .elements
+                .get(&id)
                 .map(|n| n.computed_layout.size)
                 .unwrap_or(Size::ZERO);
         }
@@ -597,12 +656,7 @@ impl NodeTreeData {
         result
     }
 
-    fn query_element_recursive(
-        &self,
-        id: NodeId,
-        key: &[&str],
-        result: &mut Option<NodeId>,
-    ) {
+    fn query_element_recursive(&self, id: NodeId, key: &[&str], result: &mut Option<NodeId>) {
         if result.is_some() {
             return;
         }
@@ -787,7 +841,10 @@ impl NodeTreeData {
                 layout_extra: element.trace_layout_extra(),
                 relative: (relative.x, relative.y),
                 absolute: (abs.x, abs.y),
-                size: (node.computed_layout.size.width, node.computed_layout.size.height),
+                size: (
+                    node.computed_layout.size.width,
+                    node.computed_layout.size.height,
+                ),
                 query_key: node.query_key.clone(),
                 children: node.children.to_vec(),
             });
@@ -801,7 +858,10 @@ impl NodeTreeData {
             let mut ancestor = Some(frag.parent);
             while let Some(pid) = ancestor {
                 if let Some(p) = self.elements.get(&ElementNodeId::new(pid.as_u64())) {
-                    absolute = Offset::new(absolute.x + p.computed_layout.offset.x, absolute.y + p.computed_layout.offset.y);
+                    absolute = Offset::new(
+                        absolute.x + p.computed_layout.offset.x,
+                        absolute.y + p.computed_layout.offset.y,
+                    );
                     ancestor = p.parent;
                 } else if let Some(pf) = self.fragments.get(&FragmentNodeId::new(pid.as_u64())) {
                     ancestor = Some(pf.parent);
@@ -923,7 +983,9 @@ impl NodeTree {
         self.data.borrow().is_fragment(id)
     }
     pub fn remove_child_entry(&self, parent_id: NodeId, child_id: NodeId) {
-        self.data.borrow_mut().remove_child_entry(parent_id, child_id);
+        self.data
+            .borrow_mut()
+            .remove_child_entry(parent_id, child_id);
     }
     pub fn append_child(&self, parent_id: NodeId, child_id: NodeId) -> bool {
         self.data.borrow_mut().append_child(parent_id, child_id)
@@ -963,7 +1025,9 @@ impl NodeTree {
         self.data.borrow_mut().destroy_fragment(id);
     }
     pub fn move_child_before(&self, parent: ElementNodeId, child: NodeId, ref_child: NodeId) {
-        self.data.borrow_mut().move_child_before(parent, child, ref_child);
+        self.data
+            .borrow_mut()
+            .move_child_before(parent, child, ref_child);
     }
     pub fn mark_root_dirty(&self) {
         self.data.borrow_mut().mark_root_dirty();
@@ -1015,7 +1079,9 @@ impl NodeTree {
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
         image_resource_map: &ImageResourceMap,
         node_tree: NodeTree,
-        mutation_queue: std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>,
+        mutation_queue: std::rc::Rc<
+            std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
+        >,
         dirty: std::rc::Rc<std::cell::Cell<bool>>,
         boa: &mut boa_engine::Context,
     ) -> Size {

@@ -1,5 +1,5 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::text::elements::EditableTextElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
@@ -142,16 +142,27 @@ fn select_all_cut_then_undo_restores_text() {
     app.send_key_with_modifiers_full("a", false, false, true);
     app.render();
     let (anchor, end) = get_selection(&app, id);
-    let (lo, hi) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+    let (lo, hi) = if anchor <= end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     assert_eq!(lo, 0);
-    assert_eq!(hi, "hello world".len(), "Cmd+A should select the whole buffer");
+    assert_eq!(
+        hi,
+        "hello world".len(),
+        "Cmd+A should select the whole buffer"
+    );
 
     // Cmd+X — cut.
     app.send_key_with_modifiers_full("x", false, false, true);
     app.render();
     let written = app.take_clipboard_write();
-    assert_eq!(written.as_deref(), Some("hello world"),
-        "Cmd+X should write the cut text to the clipboard slot");
+    assert_eq!(
+        written.as_deref(),
+        Some("hello world"),
+        "Cmd+X should write the cut text to the clipboard slot"
+    );
     assert_eq!(get_text(&app, id), "", "Cmd+X should clear the buffer");
 
     // Cmd+Z — undo the cut. The buffer MUST be restored.
@@ -180,7 +191,11 @@ fn undo_after_typing_deletes_last_char() {
 
     app.send_key_with_modifiers_full("z", false, false, true);
     app.render();
-    assert_eq!(get_text(&app, id), "ab", "Cmd+Z should undo the last typed char");
+    assert_eq!(
+        get_text(&app, id),
+        "ab",
+        "Cmd+Z should undo the last typed char"
+    );
 }
 
 /// Same regression but with a partial selection (not select-all) to confirm
@@ -207,7 +222,11 @@ fn partial_cut_then_undo_restores_text() {
     }
     app.render();
     let (anchor, end) = get_selection(&app, id);
-    let (lo, hi) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+    let (lo, hi) = if anchor <= end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     assert_eq!((lo, hi), (6, 11), "should have selected 'world'");
 
     app.send_key_with_modifiers_full("x", false, false, true);
@@ -278,13 +297,21 @@ fn context_menu_cut_then_undo_restores_text() {
     app.eval_js("globalThis.__ctrl.setSelection(0, globalThis.__ctrl.text.length)");
     app.render();
     let (anchor, end) = get_selection(&app, id);
-    let (lo, hi) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+    let (lo, hi) = if anchor <= end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     assert_eq!((lo, hi), (0, "hello world".len()));
 
     // Cut via the controller JS bridge (mirrors the menu's Cut action).
     app.eval_js("globalThis.__ctrl.deleteSelection()");
     app.render();
-    assert_eq!(get_text(&app, id), "", "deleteSelection should clear the buffer");
+    assert_eq!(
+        get_text(&app, id),
+        "",
+        "deleteSelection should clear the buffer"
+    );
 
     // Undo — should restore, but currently does NOT because the JS-bridge
     // mutation path bypasses the undo stack entirely.
@@ -406,7 +433,11 @@ fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
         app.send_key_with_modifiers_full("z", false, false, true);
         app.render();
     }
-    assert_eq!(get_text(&app, id), "", "5 undos should clear all 5 typed chars");
+    assert_eq!(
+        get_text(&app, id),
+        "",
+        "5 undos should clear all 5 typed chars"
+    );
 
     app.send_key_with_modifiers_full("z", false, false, true);
     app.render();
@@ -416,4 +447,3 @@ fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
         "re-tokenize with same text must not have created a 6th undo entry",
     );
 }
-

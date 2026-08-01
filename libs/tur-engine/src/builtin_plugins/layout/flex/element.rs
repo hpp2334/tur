@@ -1,14 +1,16 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
+use crate::core::layout::{
+    Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Size,
+};
 use boa_engine::Context;
-use crate::core::layout::{Axis, Constraints, CrossAxisAlignment, MainAxisAlignment, MainAxisSize, Size};
+use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
 use crate::core::elements::{AnyElement, ElementTrace, TraceValue};
 use crate::core::js_runtime::JsProps;
-use crate::core::view::{ViewCx, Lifecycle, Val, View};
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::view::{Lifecycle, Val, View, ViewCx};
 
 pub struct ChildData {
     pub(crate) id: ElementNodeId,
@@ -78,9 +80,15 @@ impl Lifecycle for FlexElement {}
 impl ElementSubscribe for FlexElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.main_alignment.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.cross_alignment.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.main_axis_size.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.main_alignment.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.cross_alignment.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.main_axis_size.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 

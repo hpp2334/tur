@@ -40,7 +40,7 @@ use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::{FunctionObjectBuilder, JsObject};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{extract_ctx, FnEntry};
+use crate::core::js_runtime::helpers::{FnEntry, extract_ctx};
 
 /// Bridge function table entries for `tur:std`: `sleep` + `launch`.
 pub fn fns() -> Vec<FnEntry> {
@@ -53,11 +53,7 @@ pub fn fns() -> Vec<FnEntry> {
 fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
     let executor = js_ctx.async_executor().clone();
-    let ms = args
-        .get_or_undefined(1)
-        .as_number()
-        .unwrap_or(0.0)
-        .max(0.0) as u64;
+    let ms = args.get_or_undefined(1).as_number().unwrap_or(0.0).max(0.0) as u64;
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let need_paint = js_ctx.need_paint.clone();
@@ -69,9 +65,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
         // even if the `.then` body makes no reactive `set`.
         exec.complete(Box::new(move |ctx| {
             need_paint.set(true);
-            resolvers
-                .resolve
-                .call(&JsValue::undefined(), &[], ctx)?;
+            resolvers.resolve.call(&JsValue::undefined(), &[], ctx)?;
             Ok(())
         }));
     });
@@ -96,7 +90,9 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
         .as_object()
         .filter(|o| o.is_callable())
         .ok_or_else(|| {
-            JsError::from(JsNativeError::typ().with_message("launch: expected a generator function"))
+            JsError::from(
+                JsNativeError::typ().with_message("launch: expected a generator function"),
+            )
         })?;
 
     // Invoke the generator function to obtain the iterator object. For native
@@ -104,7 +100,10 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
     // it's a plain object with a `.next` method. We drive both the same way.
     let gen_value = gen_fn.call(&JsValue::undefined(), &[], ctx)?;
     let gen_obj = gen_value.as_object().ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("launch: generator function did not return an iterator"))
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("launch: generator function did not return an iterator"),
+        )
     })?;
     require_iterator(&gen_obj, ctx)?;
 
@@ -139,8 +138,9 @@ fn require_iterator(obj: &JsObject, ctx: &mut Context) -> JsResult<()> {
         .as_object()
         .is_some_and(|o| o.is_callable());
     if !has_next {
-        return Err(JsError::from(JsNativeError::typ()
-            .with_message("launch: generator function did not return an iterator (no callable .next)")));
+        return Err(JsError::from(JsNativeError::typ().with_message(
+            "launch: generator function did not return an iterator (no callable .next)",
+        )));
     }
     Ok(())
 }
@@ -168,9 +168,10 @@ fn iter_throw(iter: &JsObject, reason: JsValue, ctx: &mut Context) -> JsResult<J
         .as_object()
         .filter(|o| o.is_callable())
         .ok_or_else(|| {
-            JsError::from(JsNativeError::typ().with_message(
-                "launch: iterator has no callable .throw to deliver rejection",
-            ))
+            JsError::from(
+                JsNativeError::typ()
+                    .with_message("launch: iterator has no callable .throw to deliver rejection"),
+            )
         })?;
     throw_fn.call(&iter.clone().into(), &[reason], ctx)
 }
@@ -202,16 +203,16 @@ fn drive_result(
             .get(js_string!("then"), ctx)?
             .as_object()
             .filter(|f| f.is_callable())
-        {
-            let on_fulfilled = build_step(iterator.clone(), cancelled.clone(), ctx)?;
-            let on_rejected = build_reject_step(iterator.clone(), cancelled.clone(), ctx)?;
-            then_fn.call(
-                &obj.clone().into(),
-                &[on_fulfilled.into(), on_rejected.into()],
-                ctx,
-            )?;
-            return Ok(JsValue::undefined());
-        }
+    {
+        let on_fulfilled = build_step(iterator.clone(), cancelled.clone(), ctx)?;
+        let on_rejected = build_reject_step(iterator.clone(), cancelled.clone(), ctx)?;
+        then_fn.call(
+            &obj.clone().into(),
+            &[on_fulfilled.into(), on_rejected.into()],
+            ctx,
+        )?;
+        return Ok(JsValue::undefined());
+    }
     tracing::error!("launch: generator yielded a non-thenable; yield a Promise (e.g. sleep(ms))");
     Ok(JsValue::undefined())
 }

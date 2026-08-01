@@ -10,10 +10,10 @@ pub mod build_cx;
 pub mod context;
 pub mod val;
 
-pub use build_cx::{read_atom_raw, read_val, read_val_opt, ViewCx};
-pub use context::SharedViewCx;
 pub use crate::core::js_runtime::js_value::{FromJs, IntoJs};
-pub use val::{val_from_js, Val};
+pub use build_cx::{ViewCx, read_atom_raw, read_val, read_val_opt};
+pub use context::SharedViewCx;
+pub use val::{Val, val_from_js};
 
 // ---------------------------------------------------------------------------
 // View — the user's declaration of a view.
@@ -28,12 +28,7 @@ pub use val::{val_from_js, Val};
 // ---------------------------------------------------------------------------
 
 pub trait View: 'static {
-    fn build(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        parent: NodeId,
-    ) -> NodeId;
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,12 +67,7 @@ fn invoke_thunk(thunk: &JsFunction, boa: &mut Context) -> Option<Rc<dyn View>> {
 pub struct JsView(pub JsFunction);
 
 impl View for JsView {
-    fn build(
-        &self,
-        cx: &mut dyn ViewCx,
-        boa: &mut Context,
-        parent: NodeId,
-    ) -> NodeId {
+    fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         match invoke_thunk(&self.0, boa) {
             Some(inner) => inner.build(cx, boa, parent),
             None => parent,

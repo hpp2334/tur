@@ -7,30 +7,28 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
-use boa_engine::context::time::{Clock, FixedClock};
 use boa_engine::NativeFunction;
+use boa_engine::context::time::{Clock, FixedClock};
+use tur_engine::TurStdPlugin;
+use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, NodeId};
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::layout::{MouseButton, Offset};
+use tur_engine::core::platform::Cursor;
+use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
-use tur_native::NativeFontLoader;
-use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
-use tur_engine::{CursorBackend, CursorCap, TurApp, TurEngine};
-use tur_engine::TurStdPlugin;
-use tur_net_capability::{
-    Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin,
-};
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
+use tur_engine::{CursorBackend, CursorCap, TurApp, TurEngine};
 use tur_filepicker_capability::{
-    FilePicker, FilePickerBackend, PickedFile, PickOptions, SaveOptions, TurFilePickerPlugin,
+    FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
-use tur_engine::core::layout::{MouseButton, Offset};
-use tur_engine::core::platform::{Cursor};
+use tur_native::NativeFontLoader;
+use tur_net_capability::{Http, HttpBackend, HttpBody, HttpOutcome, RequestOpts, TurNetPlugin};
 
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
 /// build time. Test-only convenience for the cases that previously used the
@@ -225,7 +223,10 @@ impl FilePickerBackend for RecordingFilePicker {
         bytes: Vec<u8>,
         _opts: SaveOptions,
     ) -> Pin<Box<dyn Future<Output = ()>>> {
-        self.inner.saves.borrow_mut().push(RecordedSave { name, bytes });
+        self.inner
+            .saves
+            .borrow_mut()
+            .push(RecordedSave { name, bytes });
         Box::pin(std::future::ready(()))
     }
 }
@@ -239,7 +240,10 @@ pub struct Rect {
 
 impl Rect {
     pub fn center(&self) -> (f64, f64) {
-        ((self.left + self.right) / 2.0, (self.top + self.bottom) / 2.0)
+        (
+            (self.left + self.right) / 2.0,
+            (self.top + self.bottom) / 2.0,
+        )
     }
 }
 
@@ -284,13 +288,7 @@ impl TurTestApp {
     /// responses via [`Self::set_http_response`]; capture requests via
     /// [`Self::last_http_request`].
     pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(
-            width,
-            height,
-            Some(RecordingHttp::new()),
-            None,
-            Vec::new(),
-        )
+        Self::build(width, height, Some(RecordingHttp::new()), None, Vec::new())
     }
 
     /// Construct with `TurFilePickerPlugin` registered against a fresh
@@ -713,12 +711,11 @@ impl TurTestApp {
     }
 
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
-        self.inner
-            .push_platform_event(PlatformEvent::Wheel {
-                delta_x,
-                delta_y,
-                position: Offset::new(x, y),
-            });
+        self.inner.push_platform_event(PlatformEvent::Wheel {
+            delta_x,
+            delta_y,
+            position: Offset::new(x, y),
+        });
         self.ensure_flushed();
     }
 
@@ -825,20 +822,24 @@ impl TurTestApp {
     }
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
-        self.inner.with_element(id, |e| {
-            e.cast::<PointerInteractElement>()
-                .map(|p| p.has_on_click())
-                .unwrap_or(false)
-        }).unwrap_or(false)
+        self.inner
+            .with_element(id, |e| {
+                e.cast::<PointerInteractElement>()
+                    .map(|p| p.has_on_click())
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 
     pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
         use tur_engine::builtin_plugins::gesture::MouseRegionElement;
-        self.inner.with_element(id, |e| {
-            e.cast::<MouseRegionElement>()
-                .map(|m| m.has_region_callbacks())
-                .unwrap_or(false)
-        }).unwrap_or(false)
+        self.inner
+            .with_element(id, |e| {
+                e.cast::<MouseRegionElement>()
+                    .map(|m| m.has_region_callbacks())
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {

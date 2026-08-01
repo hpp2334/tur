@@ -1,11 +1,11 @@
 use std::fmt;
 
-use boa_engine::Context;
 use crate::core::layout::{ComputedLayout, Constraints};
+use boa_engine::Context;
 
-use crate::core::js_runtime::{BoaOpaque, TurNodeHandle};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::AnyElement;
+use crate::core::js_runtime::{BoaOpaque, TurNodeHandle};
 
 pub struct ElementObject {
     pub id: ElementNodeId,

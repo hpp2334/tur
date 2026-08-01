@@ -1,17 +1,17 @@
 use std::rc::Rc;
 
-use boa_engine::object::builtins::JsFunction;
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsValue};
 
-use crate::core::layout::Axis;
-use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::IntoJsArgs;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{
     AnyElement, ElementOnWheel, ElementOnWheelContext, ElementTrace, TraceValue, WheelEvent,
 };
-use crate::core::view::{ViewCx, read_val, Val, View, extract_view};
+use crate::core::js_runtime::JsProps;
+use crate::core::layout::Axis;
+use crate::core::view::{Val, View, ViewCx, extract_view, read_val};
 
 use crate::builtin_plugins::scroll::ScrollPosition;
 
@@ -184,12 +184,17 @@ impl LazyGridElement {
         let total_lines = item_count.div_ceil(count);
         let scroll = self.position.pixels();
         let first_line = ((scroll / stride).floor().max(0.0) as u64).min(total_lines - 1);
-        let last_line = (((scroll + viewport_main) / stride).floor().max(0.0) as u64).min(total_lines - 1);
-        let first_line = first_line.saturating_sub(self.overscan).min(total_lines - 1);
+        let last_line =
+            (((scroll + viewport_main) / stride).floor().max(0.0) as u64).min(total_lines - 1);
+        let first_line = first_line
+            .saturating_sub(self.overscan)
+            .min(total_lines - 1);
         let last_line = (last_line + self.overscan).min(total_lines - 1);
 
         let start_index = first_line * count;
-        let end_index = ((last_line + 1) * count).saturating_sub(1).min(item_count - 1);
+        let end_index = ((last_line + 1) * count)
+            .saturating_sub(1)
+            .min(item_count - 1);
         (start_index, end_index)
     }
 
@@ -284,7 +289,8 @@ impl LazyGridElement {
         for id in to_destroy {
             cx.destroy_child(id);
         }
-        self.visible.retain(|(i, _)| *i >= new_start && *i <= new_end);
+        self.visible
+            .retain(|(i, _)| *i >= new_start && *i <= new_end);
 
         // If the column count changed (resize crossing a max-extent boundary),
         // the index→position mapping shifted: clear the cache so the position
@@ -303,7 +309,11 @@ impl LazyGridElement {
             }
             if let Some(spec) = build_item_spec(&builder, index, boa) {
                 let item_id = spec.build(cx, boa, node_id.into());
-                let next_higher = self.visible.iter().find(|(i, _)| *i > index).map(|(_, id)| *id);
+                let next_higher = self
+                    .visible
+                    .iter()
+                    .find(|(i, _)| *i > index)
+                    .map(|(_, id)| *id);
                 if let Some(ref_id) = next_higher {
                     cx.move_child_before(node_id, item_id, ref_id);
                 }
@@ -382,7 +392,10 @@ impl ElementTrace for LazyGridElement {
     fn trace_layout_extra(&self) -> Vec<(&'static str, TraceValue)> {
         vec![
             ("offset", TraceValue::Num(self.position.pixels())),
-            ("maxScrollExtent", TraceValue::Num(self.position.max_scroll_extent())),
+            (
+                "maxScrollExtent",
+                TraceValue::Num(self.position.max_scroll_extent()),
+            ),
             ("rangeStart", TraceValue::Num(self.reported_start as f64)),
             ("rangeEnd", TraceValue::Num(self.reported_end as f64)),
         ]

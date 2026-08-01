@@ -4,8 +4,8 @@ use boa_engine::Context;
 use boa_engine::object::JsObject;
 
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::js_runtime::JsProps;
 use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::js_runtime::JsProps;
 use crate::core::layout::{Alignment, ElementSubscribe, SubscribeCx};
 use crate::core::view::{Lifecycle, Val, View, ViewCx};
 

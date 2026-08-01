@@ -6,10 +6,10 @@
 //!
 //! Installed into `tur:std` by [`install_effects`].
 
+pub mod bridge;
 mod element;
 mod layout;
 mod render;
-pub mod bridge;
 
 pub use element::{OpacityElement, OpacityView, TransformElement, TransformView};
 

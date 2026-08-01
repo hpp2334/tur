@@ -7,5 +7,5 @@
 
 mod backend;
 
-pub use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
 pub use backend::WasmClipboard;
+pub use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};

@@ -1,14 +1,14 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::MutationHandle;
+use crate::core::edgy::reactive::AnyReadable;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::js_runtime::JsProps;
 use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::edgy::reactive::AnyReadable;
 use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx};
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs, PendingMutationInvocationQueue};
 use crate::core::app::AppEventQueue;
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle, PendingMutationInvocationQueue};
 use crate::core::platform::key_event::KeyEvent;
 use std::cell::Cell;
 
@@ -41,11 +41,7 @@ impl<'a> ElementOnKeyboardContext<'a> {
 }
 
 pub trait ElementOnKeyboard: 'static {
-    fn on_keyboard_event(
-        &mut self,
-        cx: &mut ElementOnKeyboardContext,
-        event: &KeyEvent,
-    ) {
+    fn on_keyboard_event(&mut self, cx: &mut ElementOnKeyboardContext, event: &KeyEvent) {
         let _ = cx;
         let _ = event;
     }

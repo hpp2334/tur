@@ -1,7 +1,7 @@
+pub mod bridge;
 mod element;
 mod layout;
 mod render;
-pub mod bridge;
 mod scroll_position;
 
 pub use element::{ScrollViewElement, ScrollViewView};

@@ -18,11 +18,11 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
+use crate::core::edgy::mutation::{MutationHandle, extract_mutation_from_opts};
+use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::js_runtime::BoaOpaque;
 use crate::core::js_runtime::TurJsContext;
 use crate::core::js_runtime::TurNodeHandle;
-use crate::core::edgy::mutation::{extract_mutation_from_opts, MutationHandle};
-use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
@@ -60,7 +60,6 @@ pub struct TextEditingController {
     on_composition_update: Option<MutationHandle<CompositionUpdateEvent>>,
     on_composition_end: Option<MutationHandle<CompositionEndEvent>>,
 }
-
 
 impl TextEditingController {
     pub fn new() -> Self {
@@ -122,7 +121,9 @@ impl TextEditingController {
             selection_anchor: self.selection_anchor,
             selection_end: self.selection_end,
         };
-        if let Some(mut undo) = recorder.downcast_mut::<crate::builtin_plugins::text::controller::UndoController>() {
+        if let Some(mut undo) =
+            recorder.downcast_mut::<crate::builtin_plugins::text::controller::UndoController>()
+        {
             undo.push(snapshot);
         }
     }
@@ -213,7 +214,9 @@ impl TextEditingController {
     }
 
     pub fn delete_selection(&mut self) {
-        if !self.has_selection() { return; }
+        if !self.has_selection() {
+            return;
+        }
         let (start, end) = self.selection_range();
         self.delete_range(start, end);
         self.cursor_position = start;
@@ -367,7 +370,9 @@ impl TextEditingController {
         let (end_idx, end_local) = self.span_index_at(end);
 
         if start_idx == end_idx {
-            self.spans[start_idx].text.replace_range(start_local..end_local, "");
+            self.spans[start_idx]
+                .text
+                .replace_range(start_local..end_local, "");
         } else {
             self.spans[start_idx].text.truncate(start_local);
             self.spans[end_idx].text.replace_range(0..end_local, "");
@@ -414,8 +419,7 @@ impl Default for TextEditingController {
 
 macro_rules! controller_getter {
     ($class:expr, $name:expr, $body:expr) => {
-        let getter = NativeFunction::from_fn_ptr($body)
-            .to_js_function($class.context().realm());
+        let getter = NativeFunction::from_fn_ptr($body).to_js_function($class.context().realm());
         $class.accessor(js_string!($name), Some(getter), None, Attribute::default());
     };
 }
@@ -438,8 +442,10 @@ impl Class for TextEditingController {
             ctrl.on_key_up = extract_mutation_from_opts(&opts, "onKeyUp", ctx);
             ctrl.on_focus = extract_mutation_from_opts(&opts, "onFocus", ctx);
             ctrl.on_blur = extract_mutation_from_opts(&opts, "onBlur", ctx);
-            ctrl.on_composition_start = extract_mutation_from_opts(&opts, "onCompositionStart", ctx);
-            ctrl.on_composition_update = extract_mutation_from_opts(&opts, "onCompositionUpdate", ctx);
+            ctrl.on_composition_start =
+                extract_mutation_from_opts(&opts, "onCompositionStart", ctx);
+            ctrl.on_composition_update =
+                extract_mutation_from_opts(&opts, "onCompositionUpdate", ctx);
             ctrl.on_composition_end = extract_mutation_from_opts(&opts, "onCompositionEnd", ctx);
 
             // Optional initial text — pre-fills the controller so an input
@@ -449,68 +455,71 @@ impl Class for TextEditingController {
                 .get(js_string!("initialText"), ctx)
                 .ok()
                 .and_then(|v| v.as_string().map(|s| s.to_std_string_escaped()))
-                && !initial.is_empty() {
-                    ctrl.set_spans(vec![crate::builtin_plugins::text::controller::span_data::SpanData {
+                && !initial.is_empty()
+            {
+                ctrl.set_spans(vec![
+                    crate::builtin_plugins::text::controller::span_data::SpanData {
                         text: initial,
                         bold: false,
                         italic: false,
                         underline: false,
                         font_size: None,
                         color: None,
-                    }]);
-                }
+                    },
+                ]);
+            }
         }
         Ok(ctrl)
     }
 
     fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
         controller_getter!(class, "text", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<TextEditingController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(js_string!(ctrl.text())))
         });
 
         controller_getter!(class, "cursorPosition", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<TextEditingController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.cursor_position as f64))
         });
 
         controller_getter!(class, "selectionAnchor", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<TextEditingController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.selection_anchor as f64))
         });
 
         controller_getter!(class, "selectionEnd", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<TextEditingController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             Ok(JsValue::from(ctrl.selection_end as f64))
         });
 
         controller_getter!(class, "selectedText", |this, _, _ctx| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
-            let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+            let ctrl = obj
+                .downcast_ref::<TextEditingController>()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             if !ctrl.has_selection() {
                 return Ok(JsValue::from(js_string!("")));
             }
@@ -524,16 +533,17 @@ impl Class for TextEditingController {
             js_string!("setSpans"),
             1,
             NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let spans = crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
-                    args.get_or_undefined(0),
-                    ctx,
-                );
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let spans =
+                    crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
+                        args.get_or_undefined(0),
+                        ctx,
+                    );
                 ctrl.set_spans(spans);
                 Ok(JsValue::undefined())
             }),
@@ -543,16 +553,17 @@ impl Class for TextEditingController {
             js_string!("setSpansPreserveCursor"),
             1,
             NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let spans = crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
-                    args.get_or_undefined(0),
-                    ctx,
-                );
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let spans =
+                    crate::builtin_plugins::text::controller::span_data::extract_spans_from_js(
+                        args.get_or_undefined(0),
+                        ctx,
+                    );
                 ctrl.set_spans_preserve_cursor(spans);
                 Ok(JsValue::undefined())
             }),
@@ -562,12 +573,12 @@ impl Class for TextEditingController {
             js_string!("clear"),
             0,
             NativeFunction::from_fn_ptr(|this, _, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 ctrl.clear();
                 Ok(JsValue::undefined())
             }),
@@ -577,12 +588,12 @@ impl Class for TextEditingController {
             js_string!("setSelection"),
             2,
             NativeFunction::from_fn_ptr(|this, args, ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let anchor = args.get_or_undefined(0).to_number(ctx)? as usize;
                 let end = args.get_or_undefined(1).to_number(ctx)? as usize;
                 ctrl.set_selection(anchor, end);
@@ -594,12 +605,12 @@ impl Class for TextEditingController {
             js_string!("insertText"),
             1,
             NativeFunction::from_fn_ptr(|this, args, _ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let text = args
                     .get_or_undefined(0)
                     .as_string()
@@ -628,12 +639,12 @@ impl Class for TextEditingController {
             js_string!("deleteSelection"),
             0,
             NativeFunction::from_fn_ptr(|this, _args, _ctx| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 ctrl.delete_selection();
                 Ok(JsValue::undefined())
             }),
@@ -643,16 +654,17 @@ impl Class for TextEditingController {
             js_string!("_attach"),
             1,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let mut ctrl = obj.downcast_mut::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let mut ctrl = obj
+                    .downcast_mut::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 if let Some(handle_obj) = args.get_or_undefined(0).as_object()
-                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
-                        ctrl.handle = Some(handle_obj.clone());
-                    }
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some()
+                {
+                    ctrl.handle = Some(handle_obj.clone());
+                }
                 Ok(JsValue::undefined())
             }),
         );
@@ -685,26 +697,25 @@ impl Class for TextEditingController {
             js_string!("requestFocus"),
             0,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
-                let ctrl = obj.downcast_ref::<TextEditingController>().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
+                let ctrl = obj
+                    .downcast_ref::<TextEditingController>()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let Some(ref handle_obj) = ctrl.handle else {
                     return Ok(JsValue::undefined());
                 };
-                let handle_ref = BoaOpaque::<TurNodeHandle>::wrap(handle_obj).ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid handle")
-                })?;
+                let handle_ref = BoaOpaque::<TurNodeHandle>::wrap(handle_obj)
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid handle"))?;
                 let node_id = handle_ref.id;
 
-                let js_ctx_obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("expected __ctx")
-                })?;
-                let js_ctx = BoaOpaque::<TurJsContext>::wrap(&js_ctx_obj).ok_or_else(|| {
-                    JsNativeError::typ().with_message("expected __ctx")
-                })?;
+                let js_ctx_obj = args
+                    .get_or_undefined(0)
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
+                let js_ctx = BoaOpaque::<TurJsContext>::wrap(&js_ctx_obj)
+                    .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
                 let mut focus = js_ctx.focus_manager.borrow_mut();
                 focus.set_focus(node_id);
                 Ok(JsValue::undefined())

@@ -9,14 +9,18 @@ fn sized_box_fixed_dimensions() {
     let sb_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sb = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let sb = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             sb.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")
         );
         assert_eq!(sb.children.len(), 1);
 
-        let text = tree.get_element(ElementNodeId::new(sb.children[0].as_u64())).unwrap();
+        let text = tree
+            .get_element(ElementNodeId::new(sb.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             text.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_paragraph")

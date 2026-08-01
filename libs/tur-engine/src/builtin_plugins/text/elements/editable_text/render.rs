@@ -1,9 +1,9 @@
-use crate::core::render::brush::{Brush, Color};
 use crate::core::layout::{ComputedLayout, Geometry, Offset, Size};
+use crate::core::render::brush::{Brush, Color};
 
+use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};
-use crate::builtin_plugins::text::elements::text_shared::paint_helpers;
 use crate::core::text::text_layout;
 
 use super::element::{CARET_BLINK_HALF_PERIOD_MS, DEFAULT_TEXT_COLOR, EditableTextElement};
@@ -64,9 +64,7 @@ impl ElementRender for EditableTextElement {
         // substituted display string; under password mode the layout is built
         // from the masked string (and composition is rendered as bullets), so
         // skip it.
-        if !obscured
-            && let Some(ref comp) = composing_text
-        {
+        if !obscured && let Some(ref comp) = composing_text {
             let comp_start_byte = composing_start;
             let comp_end_byte = composing_start + comp.len();
             if comp_start_byte != comp_end_byte {

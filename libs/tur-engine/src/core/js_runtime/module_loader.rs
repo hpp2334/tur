@@ -26,12 +26,12 @@ use boa_engine::JsResult;
 use boa_engine::JsValue;
 use boa_engine::Module;
 use boa_engine::NativeFunction;
-use boa_engine::native_function::NativeFunctionPointer;
 use boa_engine::js_string;
 use boa_engine::module::ModuleLoader;
 use boa_engine::module::ModuleRequest;
 use boa_engine::module::Referrer;
 use boa_engine::module::SyntheticModuleInitializer;
+use boa_engine::native_function::NativeFunctionPointer;
 use boa_engine::object::FunctionObjectBuilder;
 
 /// A module loader that resolves registered bare specifiers (e.g. `tur:std`)
@@ -125,8 +125,7 @@ pub fn build_native_module(
         exports.push((js_string!(*name), val.clone()));
     }
 
-    let export_names: Vec<boa_engine::JsString> =
-        exports.iter().map(|(n, _)| n.clone()).collect();
+    let export_names: Vec<boa_engine::JsString> = exports.iter().map(|(n, _)| n.clone()).collect();
 
     let init = SyntheticModuleInitializer::from_copy_closure_with_captures(
         |module, exports, _ctx| {
@@ -145,12 +144,11 @@ pub fn build_native_module(
 /// (no bridge-ctx binding). Used by plugins to expose host services as
 /// modules — e.g. `tur:net` (HTTP `request`), `tur-ext/demo-helper`
 /// (swc compiler + file IO).
-pub fn build_fn_module(
-    context: &mut Context,
-    exports: &[(&str, NativeFunction, usize)],
-) -> Module {
-    let export_names: Vec<boa_engine::JsString> =
-        exports.iter().map(|(name, _, _)| js_string!(*name)).collect();
+pub fn build_fn_module(context: &mut Context, exports: &[(&str, NativeFunction, usize)]) -> Module {
+    let export_names: Vec<boa_engine::JsString> = exports
+        .iter()
+        .map(|(name, _, _)| js_string!(*name))
+        .collect();
 
     let fns: Vec<JsObject> = exports
         .iter()

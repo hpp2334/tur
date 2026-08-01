@@ -1,5 +1,5 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_engine::builtin_plugins::scroll::ScrollViewElement;
+use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// A multiline editor inside a ScrollView, pre-filled with 30 lines so the
@@ -39,13 +39,20 @@ fn caret_into_view_scrolls_to_caret() {
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
     let sv_id = ElementNodeId::new(sv_id.as_u64());
-    assert_eq!(scroll_offset(&app, sv_id), 0.0, "no scroll before caret moves");
+    assert_eq!(
+        scroll_offset(&app, sv_id),
+        0.0,
+        "no scroll before caret moves"
+    );
 
     // Focus the editor near its top-left (the editable occupies the top of the
     // scroll content at offset 0).
     app.click(5.0, 8.0);
     app.render();
-    assert!(app.focused_element().is_some(), "editor should be focused after click");
+    assert!(
+        app.focused_element().is_some(),
+        "editor should be focused after click"
+    );
 
     // Walk the caret down to the last line. Every keydown also runs
     // ensure_caret_visible, which scrolls the viewport to follow the caret

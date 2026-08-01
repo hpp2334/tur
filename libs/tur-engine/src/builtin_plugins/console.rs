@@ -1,9 +1,9 @@
-use boa_engine::js_string;
-use boa_engine::native_function::NativeFunction;
-use boa_engine::property::PropertyDescriptor;
 use boa_engine::Context;
 use boa_engine::JsResult;
 use boa_engine::JsValue;
+use boa_engine::js_string;
+use boa_engine::native_function::NativeFunction;
+use boa_engine::property::PropertyDescriptor;
 
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::plugin::PluginContext;
@@ -15,15 +15,17 @@ fn format_args(args: &[JsValue], ctx: &mut Context) -> String {
             let mut out = v.display().to_string();
             if let Some(obj) = v.as_object() {
                 if let Ok(msg) = obj.get(js_string!("message"), ctx)
-                    && let Some(s) = msg.as_string() {
-                        out.push('\n');
-                        out.push_str(&s.to_std_string_escaped());
-                    }
+                    && let Some(s) = msg.as_string()
+                {
+                    out.push('\n');
+                    out.push_str(&s.to_std_string_escaped());
+                }
                 if let Ok(stack) = obj.get(js_string!("stack"), ctx)
-                    && let Some(s) = stack.as_string() {
-                        out.push('\n');
-                        out.push_str(&s.to_std_string_escaped());
-                    }
+                    && let Some(s) = stack.as_string()
+                {
+                    out.push('\n');
+                    out.push_str(&s.to_std_string_escaped());
+                }
             }
             out
         })
@@ -50,12 +52,9 @@ pub(in crate::builtin_plugins) fn register_console_globals(context: &mut Context
     let proto = context.intrinsics().constructors().object().prototype();
     let console = boa_engine::object::JsObject::from_proto_and_data(proto, ());
     let set = |name: &str, f: NativeFunction, obj: &boa_engine::object::JsObject| {
-        let func = boa_engine::object::FunctionObjectBuilder::new(
-            context.realm(),
-            f,
-        )
-        .name(js_string!(name))
-        .build();
+        let func = boa_engine::object::FunctionObjectBuilder::new(context.realm(), f)
+            .name(js_string!(name))
+            .build();
         let desc = PropertyDescriptor::builder()
             .value(func)
             .writable(true)
@@ -67,11 +66,23 @@ pub(in crate::builtin_plugins) fn register_console_globals(context: &mut Context
 
     set("log", NativeFunction::from_fn_ptr(console_log), &console);
     set("warn", NativeFunction::from_fn_ptr(console_warn), &console);
-    set("error", NativeFunction::from_fn_ptr(console_error), &console);
+    set(
+        "error",
+        NativeFunction::from_fn_ptr(console_error),
+        &console,
+    );
     set("info", NativeFunction::from_fn_ptr(console_info), &console);
-    set("debug", NativeFunction::from_fn_ptr(console_debug), &console);
+    set(
+        "debug",
+        NativeFunction::from_fn_ptr(console_debug),
+        &console,
+    );
     context
-        .register_global_property(js_string!("console"), console, boa_engine::property::Attribute::all())
+        .register_global_property(
+            js_string!("console"),
+            console,
+            boa_engine::property::Attribute::all(),
+        )
         .expect("failed to register console");
 }
 

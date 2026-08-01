@@ -1,6 +1,6 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_engine::builtin_plugins::scroll::ScrollViewElement;
 use tur_engine::builtin_plugins::text::elements::EditableTextElement;
+use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 /// Locate the `EditableTextElement` nested under the element tagged with the
@@ -47,13 +47,19 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
 fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let child = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
-    let inner = tree.get_element(ElementNodeId::new(child.children[0].as_u64())).unwrap();
+    let child = tree
+        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .unwrap();
+    let inner = tree
+        .get_element(ElementNodeId::new(child.children[0].as_u64()))
+        .unwrap();
     let kind = inner.element.as_ref().unwrap().kind();
     if kind == ElementKind::new("tur_editable_text") {
         inner.id
     } else {
-        tree.get_element(ElementNodeId::new(inner.children[0].as_u64())).unwrap().id
+        tree.get_element(ElementNodeId::new(inner.children[0].as_u64()))
+            .unwrap()
+            .id
     }
 }
 
@@ -139,9 +145,14 @@ fn cursor_preserved_after_rerender() {
     app.eval_js("globalThis.__setCursorMidTick(1)");
     app.render();
 
-    assert_eq!(get_text(&app, input_id), "abc", "text unchanged after rerender");
     assert_eq!(
-        get_cursor_pos(&app, input_id), 2,
+        get_text(&app, input_id),
+        "abc",
+        "text unchanged after rerender"
+    );
+    assert_eq!(
+        get_cursor_pos(&app, input_id),
+        2,
         "cursor should stay at 2 after rerender, not jump to end"
     );
 }
@@ -164,7 +175,11 @@ fn delete_selected_first_character() {
 
     app.send_key("Home");
     app.render();
-    assert_eq!(get_cursor_pos(&app, input_id), 0, "cursor at start after Home");
+    assert_eq!(
+        get_cursor_pos(&app, input_id),
+        0,
+        "cursor at start after Home"
+    );
 
     app.send_key_with_modifiers("ArrowRight", true, false);
     app.render();
@@ -176,7 +191,11 @@ fn delete_selected_first_character() {
     app.send_key("Backspace");
     app.render();
 
-    assert_eq!(get_text(&app, input_id), "bc", "first char should be deleted");
+    assert_eq!(
+        get_text(&app, input_id),
+        "bc",
+        "first char should be deleted"
+    );
     assert_eq!(get_cursor_pos(&app, input_id), 0, "cursor should be at 0");
 }
 
@@ -208,16 +227,25 @@ fn drag_select_release_outside_then_backspace() {
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!("after drag+release outside: anchor={}, end={}", anchor, end);
-    assert_ne!(anchor, end, "should still have selection after releasing outside");
+    assert_ne!(
+        anchor, end,
+        "should still have selection after releasing outside"
+    );
 
-    assert!(app.focused_element() == Some(input_id), "editable text should still be focused after pointer_up outside");
+    assert!(
+        app.focused_element() == Some(input_id),
+        "editable text should still be focused after pointer_up outside"
+    );
 
     app.send_key("Backspace");
     app.render();
 
     let text = get_text(&app, input_id);
     eprintln!("after backspace: text='{}'", text);
-    assert_ne!(text, "abcd", "text should change after backspace with selection");
+    assert_ne!(
+        text, "abcd",
+        "text should change after backspace with selection"
+    );
 }
 
 #[test]
@@ -299,7 +327,13 @@ fn mouse_drag_select_then_backspace() {
 
     let text_after = get_text(&app, input_id);
     eprintln!("text after backspace: '{}'", text_after);
-    assert_eq!(text_after.len(), expected_remaining, "selected {} chars but got '{}' after delete", selected_len, text_after);
+    assert_eq!(
+        text_after.len(),
+        expected_remaining,
+        "selected {} chars but got '{}' after delete",
+        selected_len,
+        text_after
+    );
 }
 
 #[test]
@@ -316,11 +350,17 @@ fn multiline_drag_select_across_lines() {
     app.render();
 
     // Type three lines: "aaaa\nbbbb\ncccc"
-    for _ in 0..4 { app.send_key("a"); }
+    for _ in 0..4 {
+        app.send_key("a");
+    }
     app.send_key("Enter");
-    for _ in 0..4 { app.send_key("b"); }
+    for _ in 0..4 {
+        app.send_key("b");
+    }
     app.send_key("Enter");
-    for _ in 0..4 { app.send_key("c"); }
+    for _ in 0..4 {
+        app.send_key("c");
+    }
     app.render();
     assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
 
@@ -349,7 +389,11 @@ fn multiline_drag_select_across_lines() {
 
     // The selection should cover at least one newline character, meaning it
     // spans more than a single line.
-    let (s, e) = if anchor < end { (anchor, end) } else { (end, anchor) };
+    let (s, e) = if anchor < end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     let selected = &get_text(&app, input_id)[s..e];
     assert!(
         selected.contains('\n'),
@@ -390,11 +434,17 @@ fn multiline_drag_select_batched_events() {
     focus_editable(&mut app, input_id);
     app.render();
 
-    for _ in 0..4 { app.send_key("a"); }
+    for _ in 0..4 {
+        app.send_key("a");
+    }
     app.send_key("Enter");
-    for _ in 0..4 { app.send_key("b"); }
+    for _ in 0..4 {
+        app.send_key("b");
+    }
     app.send_key("Enter");
-    for _ in 0..4 { app.send_key("c"); }
+    for _ in 0..4 {
+        app.send_key("c");
+    }
     app.render();
     assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
 
@@ -427,7 +477,11 @@ fn multiline_drag_select_batched_events() {
         anchor, end,
         "should have multi-line selection even when events are processed in one batch",
     );
-    let (s, e) = if anchor < end { (anchor, end) } else { (end, anchor) };
+    let (s, e) = if anchor < end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     let selected = &get_text(&app, input_id)[s..e];
     assert!(
         selected.contains('\n'),
@@ -935,8 +989,13 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     app.render();
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
-        assert!((sv.scroll_offset() - scroll_amount).abs() < 0.5, "scrolled to {}", sv.scroll_offset());
-    }).unwrap();
+        assert!(
+            (sv.scroll_offset() - scroll_amount).abs() < 0.5,
+            "scrolled to {}",
+            sv.scroll_offset()
+        );
+    })
+    .unwrap();
 
     // Line 2 starts at byte 14 ("L0AAAA\nL1BBBB\n" = 14 bytes). Click col 2
     // ("L2|CCCC") on the line now at the viewport top (screen y = y0).
@@ -1005,7 +1064,9 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     app.click(left + 2.0, top + 2.0);
     app.render();
     let (x0, y0, _) = caret_rect(&app);
-    let dev = app.dev_tool_get_element(id.into()).expect("editable dev node");
+    let dev = app
+        .dev_tool_get_element(id.into())
+        .expect("editable dev node");
     let extra = |name: &str| -> f64 {
         dev.layout_extra
             .iter()
@@ -1023,7 +1084,10 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     let lw = extra("layoutWidth") as f32;
     let lh = extra("layoutHeight") as f32;
     eprintln!("softwrap: num_lines={num_lines} layout_w={lw:.1} layout_h={lh:.1} x0={x0} y0={y0}");
-    assert!(num_lines > 1, "spaced line should wrap (num_lines={num_lines})");
+    assert!(
+        num_lines > 1,
+        "spaced line should wrap (num_lines={num_lines})"
+    );
     let line_h = lh / num_lines as f32;
     app.send_key("ArrowRight");
     app.render();
@@ -1055,7 +1119,10 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
         app.click(x0 + cw * 2.0, y0 + line_h as f64 * (ln as f64 + 0.5));
         app.render();
         let c = get_cursor_pos(&app, id);
-        eprintln!("softwrap: visual line {ln} (y={:.1}) → caret {c}", y0 + line_h as f64 * (ln as f64 + 0.5));
+        eprintln!(
+            "softwrap: visual line {ln} (y={:.1}) → caret {c}",
+            y0 + line_h as f64 * (ln as f64 + 0.5)
+        );
         assert!(
             c > prev,
             "y-sweep broken: visual line {ln} caret {c} not > prev {prev} — \
@@ -1067,7 +1134,10 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     // Backspace on a wrap-continuation visual line deletes the char left of it.
     // Re-click visual line 2 at col 2 and backspace.
     let target_line = 2usize.min(num_lines - 1);
-    app.click(x0 + cw * 2.0, y0 + line_h as f64 * (target_line as f64 + 0.5));
+    app.click(
+        x0 + cw * 2.0,
+        y0 + line_h as f64 * (target_line as f64 + 0.5),
+    );
     app.render();
     let caret = get_cursor_pos(&app, id);
     let original = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega";
@@ -1075,7 +1145,10 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     expected.push_str(&original[caret..]);
     app.send_key("Backspace");
     app.render();
-    eprintln!("softwrap: after backspace at caret {caret} text='{}'", get_text(&app, id));
+    eprintln!(
+        "softwrap: after backspace at caret {caret} text='{}'",
+        get_text(&app, id)
+    );
     assert_eq!(
         get_text(&app, id),
         expected,
@@ -1120,9 +1193,16 @@ fn double_click_selects_word() {
     app.render();
 
     let (anchor, end) = get_selection(&app, input_id);
-    let (lo, hi) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+    let (lo, hi) = if anchor <= end {
+        (anchor, end)
+    } else {
+        (end, anchor)
+    };
     let selected = &get_text(&app, input_id)[lo..hi];
-    assert_eq!(selected, "hello", "double-click should select the word under the cursor");
+    assert_eq!(
+        selected, "hello",
+        "double-click should select the word under the cursor"
+    );
 }
 
 #[test]
@@ -1161,5 +1241,8 @@ fn single_click_after_double_click_collapses_selection() {
     app.pointer_down(click_x, click_y);
     app.render();
     let (a, e) = get_selection(&app, input_id);
-    assert_eq!(a, e, "single click after the window must collapse the selection");
+    assert_eq!(
+        a, e,
+        "single click after the window must collapse the selection"
+    );
 }

@@ -20,11 +20,11 @@
 //! callbacks, which can `set()` reactive atoms that drive re-layout.
 
 use boa_engine::js_string;
-use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::JsPromise;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{extract_ctx, Ptr};
+use crate::core::js_runtime::helpers::{Ptr, extract_ctx};
 use crate::core::js_runtime::module_loader::bound_native;
 
 use super::capability::Clipboard;
@@ -61,16 +61,8 @@ pub(in crate::builtin_plugins) fn build_clipboard_object(
         "writeText",
     );
     let obj = JsObject::with_object_proto(context.intrinsics());
-    let _ = obj.create_data_property(
-        js_string!("readText"),
-        JsValue::from(read),
-        context,
-    );
-    let _ = obj.create_data_property(
-        js_string!("writeText"),
-        JsValue::from(write),
-        context,
-    );
+    let _ = obj.create_data_property(js_string!("readText"), JsValue::from(read), context);
+    let _ = obj.create_data_property(js_string!("writeText"), JsValue::from(write), context);
     obj.into()
 }
 

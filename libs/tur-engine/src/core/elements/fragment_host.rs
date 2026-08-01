@@ -39,7 +39,10 @@ pub struct FragmentHost {
 
 impl FragmentHost {
     pub fn type_name(&self) -> &'static str {
-        self.kind.as_ref().map(|k| k.type_name()).unwrap_or("tur_fragment")
+        self.kind
+            .as_ref()
+            .map(|k| k.type_name())
+            .unwrap_or("tur_fragment")
     }
 
     pub fn trace_label(&self) -> String {

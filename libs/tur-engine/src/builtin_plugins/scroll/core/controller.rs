@@ -9,10 +9,12 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
+use crate::core::edgy::mutation::{
+    MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts,
+};
+use crate::core::element::ElementNodeId;
 use crate::core::js_runtime::BoaOpaque;
 use crate::core::js_runtime::{TurJsContext, TurNodeHandle};
-use crate::core::edgy::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
 
 use super::ScrollEvent;
 use crate::builtin_plugins::scroll::scroll_view::ScrollViewElement;
@@ -29,8 +31,7 @@ pub struct ScrollController {
     /// `ScrollViewView::build` (the `_attach` JS path is the legacy
     /// fallback). `jumpTo`/drag use this to locate the scroll element.
     pub(crate) bound_node: Option<ElementNodeId>,
-    pub(crate) element_tree:
-        Option<crate::core::elements::NodeTree>,
+    pub(crate) element_tree: Option<crate::core::elements::NodeTree>,
     pub(crate) mutation_queue: Option<Rc<RefCell<PendingMutationInvocationQueue>>>,
     pub(crate) dirty_flag: Option<Rc<Cell<bool>>>,
     pub(crate) pending_initial_offset: Option<f64>,
@@ -70,14 +71,8 @@ impl Default for ScrollController {
 
 macro_rules! controller_getter {
     ($class:expr, $name:expr, $body:expr) => {
-        let getter = NativeFunction::from_fn_ptr($body)
-            .to_js_function($class.context().realm());
-        $class.accessor(
-            js_string!($name),
-            Some(getter),
-            None,
-            Attribute::default(),
-        );
+        let getter = NativeFunction::from_fn_ptr($body).to_js_function($class.context().realm());
+        $class.accessor(js_string!($name), Some(getter), None, Attribute::default());
     };
 }
 
@@ -94,18 +89,19 @@ impl Class for ScrollController {
         if let Some(opts) = args.get_or_undefined(0).as_object() {
             ctrl.on_scroll = extract_mutation_from_opts(&opts, "onScroll", ctx);
             if let Ok(val) = opts.get(js_string!("initialOffset"), ctx)
-                && let Some(n) = val.as_number() {
-                    ctrl.pending_initial_offset = Some(n);
-                }
+                && let Some(n) = val.as_number()
+            {
+                ctrl.pending_initial_offset = Some(n);
+            }
         }
         Ok(ctrl)
     }
 
     fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
         controller_getter!(class, "offset", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<ScrollController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -113,9 +109,9 @@ impl Class for ScrollController {
         });
 
         controller_getter!(class, "maxScrollExtent", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<ScrollController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -123,9 +119,9 @@ impl Class for ScrollController {
         });
 
         controller_getter!(class, "viewportDimension", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<ScrollController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -136,9 +132,9 @@ impl Class for ScrollController {
             js_string!("jumpTo"),
             1,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<ScrollController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -191,16 +187,17 @@ impl Class for ScrollController {
                 dirty_flag.set(true);
 
                 if let Some(queue_rc) = mutation_queue
-                    && let Some(m) = on_scroll {
-                        queue_rc.borrow_mut().push(
-                            m,
-                            ScrollEvent {
-                                offset: ctrl.offset,
-                                max_extent: ctrl.max_scroll_extent,
-                                viewport_dimension: ctrl.viewport_dimension,
-                            },
-                        );
-                    }
+                    && let Some(m) = on_scroll
+                {
+                    queue_rc.borrow_mut().push(
+                        m,
+                        ScrollEvent {
+                            offset: ctrl.offset,
+                            max_extent: ctrl.max_scroll_extent,
+                            viewport_dimension: ctrl.viewport_dimension,
+                        },
+                    );
+                }
 
                 Ok(JsValue::undefined())
             }),
@@ -210,26 +207,26 @@ impl Class for ScrollController {
             js_string!("_attach"),
             2,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<ScrollController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
                 if let Some(handle_obj) = args.get_or_undefined(0).as_object()
-                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
-                        ctrl.handle = Some(handle_obj.clone());
-                    }
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some()
+                {
+                    ctrl.handle = Some(handle_obj.clone());
+                }
 
                 if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
-                    && let Some(js_ctx) =
-                        BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
-                    {
-                        ctrl.element_tree = Some(js_ctx.element_tree.clone());
-                        ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
-                        ctrl.dirty_flag = Some(js_ctx.dirty.clone());
-                    }
+                    && let Some(js_ctx) = BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
+                {
+                    ctrl.element_tree = Some(js_ctx.element_tree.clone());
+                    ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
+                    ctrl.dirty_flag = Some(js_ctx.dirty.clone());
+                }
 
                 Ok(JsValue::undefined())
             }),

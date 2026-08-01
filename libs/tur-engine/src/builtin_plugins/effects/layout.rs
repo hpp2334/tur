@@ -12,9 +12,7 @@ impl ElementLayout for OpacityElement {
     ) -> Size {
         // Resolve the paint-time opacity here (layout holds the store); paint
         // reads `self.painting` and never touches the store.
-        self.painting.value = cx
-            .read_val_opt(self.view.value.as_ref())
-            .unwrap_or(1.0);
+        self.painting.value = cx.read_val_opt(self.view.value.as_ref()).unwrap_or(1.0);
         let size = if let Some(child_id) = children.first() {
             cx.layout_child(*child_id, constraints)
         } else {

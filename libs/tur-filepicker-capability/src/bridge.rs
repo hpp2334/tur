@@ -17,14 +17,14 @@
 //!    objects + `ArrayBuffer`s there, where the boa `Context` is available).
 
 use boa_engine::js_string;
-use boa_engine::object::builtins::{JsArray, JsArrayBuffer, JsPromise};
 use boa_engine::object::JsObject;
+use boa_engine::object::builtins::{JsArray, JsArrayBuffer, JsPromise};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use tur_engine::core::js_runtime::helpers::{extract_ctx, FnEntry, Ptr};
+use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
 use tur_engine::core::js_runtime::module_loader::bound_native;
 
-use crate::{FilePicker, PickedFile, PickOptions, SaveOptions};
+use crate::{FilePicker, PickOptions, PickedFile, SaveOptions};
 
 /// Bridge function table entries for `tur:filepicker`.
 ///
@@ -66,7 +66,9 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
     let picker = js_ctx
         .capability()
         .of::<FilePicker>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no filepicker capability")))?
+        .ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message("no filepicker capability"))
+        })?
         .backend()
         .clone();
     let executor = js_ctx.async_executor().clone();
@@ -98,7 +100,9 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
     let picker = js_ctx
         .capability()
         .of::<FilePicker>()
-        .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no filepicker capability")))?
+        .ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message("no filepicker capability"))
+        })?
         .backend()
         .clone();
     let executor = js_ctx.async_executor().clone();

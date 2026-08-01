@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use boa_engine::JsValue;
 
-use crate::core::js_runtime::js_value::FromJs;
 use crate::core::edgy::reactive::{AnyReadable, Readable};
+use crate::core::js_runtime::js_value::FromJs;
 
 // ---------------------------------------------------------------------------
 // Val<T> — reactive-or-static value of a known Rust type.

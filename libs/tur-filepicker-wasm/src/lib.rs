@@ -8,7 +8,7 @@
 
 mod backend;
 
-pub use tur_filepicker_capability::{
-    FilePicker, FilePickerBackend, PickedFile, PickOptions, SaveOptions, TurFilePickerPlugin,
-};
 pub use backend::WasmFilePicker;
+pub use tur_filepicker_capability::{
+    FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
+};

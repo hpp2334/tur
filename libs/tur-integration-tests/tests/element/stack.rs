@@ -9,15 +9,21 @@ fn stack_children_overlap() {
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let stack = tree.get_element(ElementNodeId::new(root.children[0].as_u64())).unwrap();
+        let stack = tree
+            .get_element(ElementNodeId::new(root.children[0].as_u64()))
+            .unwrap();
         assert_eq!(
             stack.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_stack")
         );
         assert_eq!(stack.children.len(), 2);
 
-        let sb1 = tree.get_element(ElementNodeId::new(stack.children[0].as_u64())).unwrap();
-        let sb2 = tree.get_element(ElementNodeId::new(stack.children[1].as_u64())).unwrap();
+        let sb1 = tree
+            .get_element(ElementNodeId::new(stack.children[0].as_u64()))
+            .unwrap();
+        let sb2 = tree
+            .get_element(ElementNodeId::new(stack.children[1].as_u64()))
+            .unwrap();
         assert_eq!(
             sb1.element.as_ref().unwrap().kind(),
             ElementKind::new("tur_container")

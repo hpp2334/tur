@@ -1,15 +1,15 @@
 use std::rc::Rc;
 
-use boa_engine::object::JsObject;
 use boa_engine::Context;
+use boa_engine::object::JsObject;
 
-use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementOnFocus, ElementTrace};
 use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
+use crate::core::js_runtime::JsProps;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
-use crate::core::view::{ViewCx, Lifecycle, View};
+use crate::core::view::{Lifecycle, View, ViewCx};
 
 // ---------------------------------------------------------------------------
 // FocusableView — wraps a child and provides keyboard / focus callbacks.
@@ -30,11 +30,9 @@ impl View for FocusableView {
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
         cx.insert_node(
             id,
-            AnyElement::new(FocusableElement {
-                view: self.clone(),
-            })
-            .with_focusable::<FocusableElement>()
-            .with_callbacks(),
+            AnyElement::new(FocusableElement { view: self.clone() })
+                .with_focusable::<FocusableElement>()
+                .with_callbacks(),
             boa,
         );
         if let Some(child) = &self.child {

@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use boa_engine::{js_string, JsArgs, JsValue, Module, NativeFunction, Source};
+use boa_engine::{JsArgs, JsValue, Module, NativeFunction, Source, js_string};
 use tur_integration_tests::{HostModulePlugin, TurTestApp};
 
 #[test]
@@ -18,8 +18,7 @@ fn reentrant_module_load_via_host_fn() {
             .get_or_undefined(0)
             .as_string()
             .ok_or_else(|| {
-                boa_engine::JsNativeError::typ()
-                    .with_message("loadModule: expected string")
+                boa_engine::JsNativeError::typ().with_message("loadModule: expected string")
             })?
             .to_std_string_escaped();
         let module = Module::parse(
@@ -36,12 +35,7 @@ fn reentrant_module_load_via_host_fn() {
         specifier: "tur:cases",
         exports: vec![("loadModule".to_string(), load_module_fn, 1)],
     };
-    let app = TurTestApp::new_with_extra_plugins(
-        100.0,
-        100.0,
-        vec![Box::new(plugin)],
-    )
-    .unwrap();
+    let app = TurTestApp::new_with_extra_plugins(100.0, 100.0, vec![Box::new(plugin)]).unwrap();
 
     // Outer module calls `loadModule(innerSrc)` during its own evaluation.
     // `innerSrc` imports `tur:std` (already registered) and stashes a value.

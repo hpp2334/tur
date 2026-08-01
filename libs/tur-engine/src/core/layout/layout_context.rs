@@ -2,8 +2,8 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::core::edgy::reactive::ReactiveReadJsContext;
-use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 use crate::core::layout::{Constraints, Offset, Size};
+use parley::{FontContext, LayoutContext as ParleyLayoutContext};
 
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;
@@ -154,10 +154,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
     }
 
     /// Convenience: resolve an `Option<Val<T>>` (absent → `None`).
-    pub fn read_val_opt<T: FromJs + Clone + 'static>(
-        &mut self,
-        val: Option<&Val<T>>,
-    ) -> Option<T> {
+    pub fn read_val_opt<T: FromJs + Clone + 'static>(&mut self, val: Option<&Val<T>>) -> Option<T> {
         val.and_then(|v| self.read_val(v))
     }
 }

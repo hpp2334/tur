@@ -23,9 +23,9 @@ mod imp {
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurEngine, TurEngineBuilder};
     use tur_net_native::{Http, NativeHttp};
 
-    use tur_native::NativeFontLoader;
     use crate::loop_driver::{AndroidLoopDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
+    use tur_native::NativeFontLoader;
 
     #[derive(Debug, thiserror::Error)]
     pub enum TurAndroidError {
@@ -70,9 +70,7 @@ mod imp {
         ) -> Result<Self, TurAndroidError> {
             // Register the process JavaVM for the clipboard backend (it attaches
             // per call to reach ClipboardManager).
-            tur_clipboard_android::set_java_vm(
-                crate::java_vm().expect("JavaVM set before create"),
-            );
+            tur_clipboard_android::set_java_vm(crate::java_vm().expect("JavaVM set before create"));
 
             let (app, loop_driver) = pollster::block_on(Self::init_async(
                 context,
@@ -185,10 +183,10 @@ pub use imp::{AndroidApp, TurAndroidError};
 
 #[cfg(not(target_os = "android"))]
 mod imp {
-    use jni::objects::GlobalRef;
-    use tur_engine::TurEngineBuilder;
     use crate::loop_driver::FrameLoopRef;
     use crate::surface::AndroidWindowHandle;
+    use jni::objects::GlobalRef;
+    use tur_engine::TurEngineBuilder;
 
     // Stub so the crate type-checks on desktop. Never constructed at runtime.
     #[derive(Debug, thiserror::Error)]

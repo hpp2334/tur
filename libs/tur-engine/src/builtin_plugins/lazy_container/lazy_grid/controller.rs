@@ -9,11 +9,13 @@ use boa_engine::property::Attribute;
 use boa_engine::{Context, JsArgs, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
-use crate::core::js_runtime::{BoaOpaque, TurJsContext, TurNodeHandle};
-use crate::core::edgy::mutation::{extract_mutation_from_opts, MutationHandle, PendingMutationInvocationQueue};
-use crate::core::element::ElementNodeId;
-use crate::builtin_plugins::scroll::ScrollEvent;
 use crate::builtin_plugins::lazy_container::lazy_grid::{LazyGridElement, VisibleRangeChangeEvent};
+use crate::builtin_plugins::scroll::ScrollEvent;
+use crate::core::edgy::mutation::{
+    MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts,
+};
+use crate::core::element::ElementNodeId;
+use crate::core::js_runtime::{BoaOpaque, TurJsContext, TurNodeHandle};
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -59,14 +61,8 @@ impl Default for LazyGridController {
 
 macro_rules! controller_getter {
     ($class:expr, $name:expr, $body:expr) => {
-        let getter = NativeFunction::from_fn_ptr($body)
-            .to_js_function($class.context().realm());
-        $class.accessor(
-            js_string!($name),
-            Some(getter),
-            None,
-            Attribute::default(),
-        );
+        let getter = NativeFunction::from_fn_ptr($body).to_js_function($class.context().realm());
+        $class.accessor(js_string!($name), Some(getter), None, Attribute::default());
     };
 }
 
@@ -90,9 +86,9 @@ impl Class for LazyGridController {
 
     fn init(class: &mut ClassBuilder<'_>) -> JsResult<()> {
         controller_getter!(class, "offset", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<LazyGridController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -100,9 +96,9 @@ impl Class for LazyGridController {
         });
 
         controller_getter!(class, "maxScrollExtent", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<LazyGridController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -110,9 +106,9 @@ impl Class for LazyGridController {
         });
 
         controller_getter!(class, "viewportDimension", |this, _, _| {
-            let obj = this.as_object().ok_or_else(|| {
-                JsNativeError::typ().with_message("invalid this")
-            })?;
+            let obj = this
+                .as_object()
+                .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
             let ctrl = obj
                 .downcast_ref::<LazyGridController>()
                 .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -123,9 +119,9 @@ impl Class for LazyGridController {
             js_string!("jumpTo"),
             1,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<LazyGridController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
@@ -212,26 +208,26 @@ impl Class for LazyGridController {
             js_string!("_attach"),
             2,
             NativeFunction::from_fn_ptr(|this, args, _| {
-                let obj = this.as_object().ok_or_else(|| {
-                    JsNativeError::typ().with_message("invalid this")
-                })?;
+                let obj = this
+                    .as_object()
+                    .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
                 let mut ctrl = obj
                     .downcast_mut::<LazyGridController>()
                     .ok_or_else(|| JsNativeError::typ().with_message("invalid this"))?;
 
                 if let Some(handle_obj) = args.get_or_undefined(0).as_object()
-                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some() {
-                        ctrl.handle = Some(handle_obj.clone());
-                    }
+                    && BoaOpaque::<TurNodeHandle>::wrap(&handle_obj).is_some()
+                {
+                    ctrl.handle = Some(handle_obj.clone());
+                }
 
                 if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
-                    && let Some(js_ctx) =
-                        BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
-                    {
-                        ctrl.element_tree = Some(js_ctx.element_tree.clone());
-                        ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
-                        ctrl.dirty_flag = Some(js_ctx.dirty.clone());
-                    }
+                    && let Some(js_ctx) = BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
+                {
+                    ctrl.element_tree = Some(js_ctx.element_tree.clone());
+                    ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
+                    ctrl.dirty_flag = Some(js_ctx.dirty.clone());
+                }
 
                 Ok(JsValue::undefined())
             }),

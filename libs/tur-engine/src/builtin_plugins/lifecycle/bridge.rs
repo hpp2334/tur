@@ -5,7 +5,7 @@ use std::rc::Rc;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{extract_ctx, wrap_view, FnEntry, Ptr};
+use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx, wrap_view};
 use crate::core::view::View;
 
 pub fn fns() -> Vec<FnEntry> {

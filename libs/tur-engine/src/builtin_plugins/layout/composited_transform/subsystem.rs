@@ -102,8 +102,7 @@ impl Subsystem for CompositedTransformSubsystem {
                 .parent
                 .map(|pid| tree.absolute_affine_of(ElementNodeId::new(pid.as_u64())))
                 .unwrap_or(Affine::IDENTITY);
-            let new_transform =
-                parent_world.inverse() * Affine::translate((desired.x, desired.y));
+            let new_transform = parent_world.inverse() * Affine::translate((desired.x, desired.y));
 
             let prev = state.follower_transform.get();
             let pm = prev.as_coeffs();

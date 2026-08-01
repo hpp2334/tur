@@ -6,7 +6,7 @@
 
 mod backend;
 
+pub use backend::{WasmHttp, perform_request};
 pub use tur_net_capability::{
     Http, HttpBackend, HttpBody, HttpOutcome, NoopHttp, RequestOpts, ResponseType, TurNetPlugin,
 };
-pub use backend::{perform_request, WasmHttp};

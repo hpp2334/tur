@@ -31,6 +31,10 @@ pub fn decode_svg(svg: &str) -> Option<ImageResource> {
         return None;
     }
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)?;
-    resvg::render(&tree, resvg::tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
     ImageResource::from_rgba(pixmap.data(), width, height)
 }

@@ -1,5 +1,5 @@
 use crate::core::layout::ComputedLayout;
-use crate::core::platform::{Cursor};
+use crate::core::platform::Cursor;
 
 use crate::core::element::ElementNodeId;
 use crate::core::render::{Canvas, ElementRender, PaintContext};

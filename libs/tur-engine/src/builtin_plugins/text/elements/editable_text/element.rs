@@ -1,35 +1,35 @@
 use std::time::Duration;
 
+use crate::core::render::brush::Color;
 use boa_engine::class::Class;
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
-use crate::core::render::brush::Color;
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::core::async_::Task;
-use crate::core::edgy::mutation::{MutationHandle, IntoJsArgs};
-use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
-use crate::core::layout::{ElementSubscribe, SubscribeCx};
-use crate::core::elements::{
-    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
-    ElementOnIme, ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace,
-    TraceValue,
-};
-use crate::core::platform::ImeEvent;
-use crate::core::platform::PointerDeviceKind;
-use crate::core::platform::key_event::{KeyEvent, KeyEventType};
-use crate::core::platform::key_event::KeydownEvent;
 use crate::builtin_plugins::text::controller::TextEditingController;
 use crate::builtin_plugins::text::controller::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
-use crate::core::js_runtime::JsProps;
-use crate::core::view::{SharedViewCx, ViewCx, read_atom_raw, Lifecycle, Val, View};
-use crate::core::edgy::reactive::AnyReadable;
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
+use crate::core::async_::Task;
+use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
+use crate::core::edgy::reactive::AnyReadable;
+use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::elements::{
+    AnyElement, ComposedGestureEvent, ElementOnFocus, ElementOnGesture, ElementOnGestureContext,
+    ElementOnIme, ElementOnImeContext, ElementOnKeyboard, ElementOnKeyboardContext, ElementTrace,
+    TraceValue,
+};
+use crate::core::focus::{BlurEvent, FocusEvent, Focusable};
+use crate::core::js_runtime::JsProps;
+use crate::core::layout::{ElementSubscribe, SubscribeCx};
+use crate::core::platform::ImeEvent;
+use crate::core::platform::PointerDeviceKind;
+use crate::core::platform::key_event::KeydownEvent;
+use crate::core::platform::key_event::{KeyEvent, KeyEventType};
 use crate::core::text::text_layout::TextLayoutData;
+use crate::core::view::{Lifecycle, SharedViewCx, Val, View, ViewCx, read_atom_raw};
 
 /// Default text color (opaque black) shared by the layout (text fall-back)
 /// and render (cursor fall-back) modules.
@@ -120,13 +120,15 @@ impl View for EditableTextView {
         let mut spec = self.clone();
 
         if spec.controller.is_none()
-            && let Some(readable) = spec.controller_atom {
-                let js_val = read_atom_raw(cx, readable, boa);
-                if let Some(obj) = js_val.as_object()
-                    && obj.downcast_ref::<TextEditingController>().is_some() {
-                        spec.controller = Some(obj.clone());
-                    }
+            && let Some(readable) = spec.controller_atom
+        {
+            let js_val = read_atom_raw(cx, readable, boa);
+            if let Some(obj) = js_val.as_object()
+                && obj.downcast_ref::<TextEditingController>().is_some()
+            {
+                spec.controller = Some(obj.clone());
             }
+        }
 
         if spec.controller.is_none() {
             let data = TextEditingController::data_constructor(&JsValue::undefined(), &[], boa)
@@ -142,9 +144,10 @@ impl View for EditableTextView {
         // model. See `TextEditingController::maybe_push_undo`.
         if let Some(undo_obj) = spec.undo_controller.clone()
             && let Some(ctrl_obj) = spec.controller.as_ref()
-                && let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>() {
-                    ctrl.set_undo_recorder(Some(undo_obj));
-                }
+            && let Some(mut ctrl) = ctrl_obj.downcast_mut::<TextEditingController>()
+        {
+            ctrl.set_undo_recorder(Some(undo_obj));
+        }
 
         cx.insert_node(
             id,
@@ -212,7 +215,12 @@ impl crate::core::elements::ElementCursorRect for EditableTextElement {
         let (cursor_x, _) = layout_data.cursor_xy_at(cursor_byte);
         let line_idx = layout_data.line_index_for_byte(cursor_byte);
         let line_info = &layout_data.line_infos[line_idx];
-        Some((cursor_x as f64, line_info.top as f64, 2.0, line_info.height as f64))
+        Some((
+            cursor_x as f64,
+            line_info.top as f64,
+            2.0,
+            line_info.height as f64,
+        ))
     }
 }
 
@@ -245,7 +253,11 @@ impl EditableTextElement {
             .expect("controller is always a valid TextEditingController")
     }
 
-    pub fn undo_controller_mut(&self) -> Option<boa_engine::object::RefMut<'_, crate::builtin_plugins::text::controller::UndoController>> {
+    pub fn undo_controller_mut(
+        &self,
+    ) -> Option<
+        boa_engine::object::RefMut<'_, crate::builtin_plugins::text::controller::UndoController>,
+    > {
         self.view
             .undo_controller
             .as_ref()?
@@ -306,7 +318,8 @@ impl EditableTextElement {
         }
         let mask_char = self.resolved_obscuring_char;
         let mask_len = mask_char.len_utf8();
-        let base = self.text();        let (comp, cs_byte) = {
+        let base = self.text();
+        let (comp, cs_byte) = {
             let c = self.controller();
             (
                 c.composing_text().cloned().unwrap_or_default(),
@@ -361,7 +374,11 @@ impl EditableTextElement {
         let handled = match key {
             "Backspace" => {
                 if has_sel {
-                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    let (s, e) = if anchor <= end {
+                        (anchor, end)
+                    } else {
+                        (end, anchor)
+                    };
                     c.delete_range(s, e);
                     new_cursor = s;
                     new_anchor = s;
@@ -381,7 +398,11 @@ impl EditableTextElement {
             }
             "Delete" => {
                 if has_sel {
-                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    let (s, e) = if anchor <= end {
+                        (anchor, end)
+                    } else {
+                        (end, anchor)
+                    };
                     c.delete_range(s, e);
                     new_cursor = s;
                     new_anchor = s;
@@ -402,7 +423,9 @@ impl EditableTextElement {
             "ArrowLeft" => {
                 if shift {
                     new_end = prev_grapheme_boundary(&full, end);
-                    if !has_sel { new_anchor = cursor; }
+                    if !has_sel {
+                        new_anchor = cursor;
+                    }
                     new_cursor = new_end;
                 } else if has_sel {
                     new_cursor = if anchor <= end { anchor } else { end };
@@ -418,7 +441,9 @@ impl EditableTextElement {
             "ArrowRight" => {
                 if shift {
                     new_end = next_grapheme_boundary(&full, end);
-                    if !has_sel { new_anchor = cursor; }
+                    if !has_sel {
+                        new_anchor = cursor;
+                    }
                     new_cursor = new_end;
                 } else if has_sel {
                     new_cursor = if anchor <= end { end } else { anchor };
@@ -435,7 +460,9 @@ impl EditableTextElement {
                 if let Some(info) = nav_info {
                     let target_byte = compute_vertical_target(info, -1);
                     if shift {
-                        if !has_sel { new_anchor = cursor; }
+                        if !has_sel {
+                            new_anchor = cursor;
+                        }
                         new_end = target_byte;
                         new_cursor = target_byte;
                     } else {
@@ -452,7 +479,9 @@ impl EditableTextElement {
                 if let Some(info) = nav_info {
                     let target_byte = compute_vertical_target(info, 1);
                     if shift {
-                        if !has_sel { new_anchor = cursor; }
+                        if !has_sel {
+                            new_anchor = cursor;
+                        }
                         new_end = target_byte;
                         new_cursor = target_byte;
                     } else {
@@ -476,7 +505,9 @@ impl EditableTextElement {
                     0
                 };
                 if shift {
-                    if !has_sel { new_anchor = cursor; }
+                    if !has_sel {
+                        new_anchor = cursor;
+                    }
                     new_end = target;
                     new_cursor = target;
                 } else {
@@ -497,7 +528,9 @@ impl EditableTextElement {
                     len
                 };
                 if shift {
-                    if !has_sel { new_anchor = cursor; }
+                    if !has_sel {
+                        new_anchor = cursor;
+                    }
                     new_end = target;
                     new_cursor = target;
                 } else {
@@ -519,7 +552,11 @@ impl EditableTextElement {
                 // Suppressed in password mode so the real value can't be
                 // exfiltrated via the clipboard (matches Flutter).
                 if !self.resolved_obscured && has_sel {
-                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    let (s, e) = if anchor <= end {
+                        (anchor, end)
+                    } else {
+                        (end, anchor)
+                    };
                     new_clipboard_write = Some(full[s..e].to_string());
                 }
                 true
@@ -528,7 +565,11 @@ impl EditableTextElement {
                 // Cut: write selection to clipboard then delete it. Suppressed
                 // in password mode (same reason as copy).
                 if !self.resolved_obscured && has_sel {
-                    let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                    let (s, e) = if anchor <= end {
+                        (anchor, end)
+                    } else {
+                        (end, anchor)
+                    };
                     new_clipboard_write = Some(full[s..e].to_string());
                     c.delete_range(s, e);
                     new_cursor = s;
@@ -593,9 +634,7 @@ impl EditableTextElement {
                     selection_anchor: anchor,
                     selection_end: end,
                 };
-                let restored = self
-                    .undo_controller_mut()
-                    .and_then(|mut u| u.redo(current));
+                let restored = self.undo_controller_mut().and_then(|mut u| u.redo(current));
                 if let Some(value) = restored {
                     c.set_suppress_undo(true);
                     c.set_spans_preserve_cursor(vec![SpanData {
@@ -616,7 +655,11 @@ impl EditableTextElement {
             "Enter" => {
                 if multiline {
                     if has_sel {
-                        let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                        let (s, e) = if anchor <= end {
+                            (anchor, end)
+                        } else {
+                            (end, anchor)
+                        };
                         c.delete_range(s, e);
                         new_cursor = s;
                     }
@@ -634,7 +677,11 @@ impl EditableTextElement {
                 if key.len() == 1 && !ctrl && !meta && !composing {
                     let ch = key.chars().next().unwrap();
                     if has_sel {
-                        let (s, e) = if anchor <= end { (anchor, end) } else { (end, anchor) };
+                        let (s, e) = if anchor <= end {
+                            (anchor, end)
+                        } else {
+                            (end, anchor)
+                        };
                         c.delete_range(s, e);
                         new_cursor = s;
                     }
@@ -786,7 +833,9 @@ impl Lifecycle for EditableTextElement {
             let exec_clone = exec.clone();
             self.blink_task = Some(exec.spawn_task(async move {
                 loop {
-                    exec_clone.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS)).await;
+                    exec_clone
+                        .sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
+                        .await;
                     need_paint.set(true);
                 }
             }));
@@ -799,15 +848,33 @@ impl Lifecycle for EditableTextElement {
 impl ElementSubscribe for EditableTextElement {
     fn subscribe(&self, cx: &mut SubscribeCx) {
         let c = &self.view;
-        if let Some(v) = c.multiline.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.obscure_text.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.obscuring_character.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.font_size.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.font_family.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.placeholder.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.placeholder_color.as_ref() { cx.subscribe_val(v); }
-        if let Some(v) = c.cursor_color.as_ref() { cx.subscribe_val(v); }
+        if let Some(v) = c.multiline.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.obscure_text.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.obscuring_character.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.font_size.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.font_family.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.placeholder.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.placeholder_color.as_ref() {
+            cx.subscribe_val(v);
+        }
+        if let Some(v) = c.cursor_color.as_ref() {
+            cx.subscribe_val(v);
+        }
     }
 }
 
@@ -860,11 +927,7 @@ impl ElementOnGesture for EditableTextElement {
         matches!(device, PointerDeviceKind::Mouse)
     }
 
-    fn on_gesture_event(
-        &mut self,
-        cx: &mut ElementOnGestureContext,
-        event: &ComposedGestureEvent,
-    ) {
+    fn on_gesture_event(&mut self, cx: &mut ElementOnGestureContext, event: &ComposedGestureEvent) {
         match event {
             ComposedGestureEvent::PointerDoubleDown { local, .. } => {
                 cx.request_own_focus();
@@ -950,7 +1013,10 @@ impl ElementOnGesture for EditableTextElement {
                 if let Some(m) = self.view.on_context_menu {
                     cx.push_event(
                         m,
-                        ContextMenuEvent { local: *local, global: *global },
+                        ContextMenuEvent {
+                            local: *local,
+                            global: *global,
+                        },
                     );
                 }
             }
@@ -959,11 +1025,7 @@ impl ElementOnGesture for EditableTextElement {
 }
 
 impl ElementOnKeyboard for EditableTextElement {
-    fn on_keyboard_event(
-        &mut self,
-        cx: &mut ElementOnKeyboardContext,
-        event: &KeyEvent,
-    ) {
+    fn on_keyboard_event(&mut self, cx: &mut ElementOnKeyboardContext, event: &KeyEvent) {
         if event.event_type != KeyEventType::Down {
             return;
         }
@@ -984,13 +1046,19 @@ impl ElementOnKeyboard for EditableTextElement {
 
         let (prev_text, prev_cursor, prev_anchor, prev_end) = {
             let c = self.controller();
-            (c.text(), c.cursor_position(), c.selection_anchor(), c.selection_end())
+            (
+                c.text(),
+                c.cursor_position(),
+                c.selection_anchor(),
+                c.selection_end(),
+            )
         };
         let cursor_byte = prev_cursor;
 
-        let nav_info = self.cached_layout.as_ref().map(|ld| {
-            LineNavInfo::extract(ld, cursor_byte)
-        });
+        let nav_info = self
+            .cached_layout
+            .as_ref()
+            .map(|ld| LineNavInfo::extract(ld, cursor_byte));
 
         let (changed, clipboard_write) = self.handle_key_event(
             &event.key,
@@ -1016,32 +1084,34 @@ impl ElementOnKeyboard for EditableTextElement {
                 // (keyboard, IME, JS bridge, programmatic) records uniformly.
                 let enter = event.key == "Enter" && !self.resolved_multiline;
                 if let Some(m) = c.on_input() {
-                    cx.push_event(m, InputEvent { value: new_text, enter });
+                    cx.push_event(
+                        m,
+                        InputEvent {
+                            value: new_text,
+                            enter,
+                        },
+                    );
                 }
             }
             let cursor = c.cursor_position();
             if cursor != prev_cursor
-                && let Some(m) = c.on_cursor_change() {
-                    cx.push_event(m, CursorChangeEvent { position: cursor });
-                }
+                && let Some(m) = c.on_cursor_change()
+            {
+                cx.push_event(m, CursorChangeEvent { position: cursor });
+            }
             let anchor = c.selection_anchor();
             let end = c.selection_end();
             if (anchor != prev_anchor || end != prev_end)
-                && let Some(m) = c.on_selection_change() {
-                    cx.push_event(m, SelectionChangeEvent { anchor, end });
+                && let Some(m) = c.on_selection_change()
+            {
+                cx.push_event(m, SelectionChangeEvent { anchor, end });
             }
         }
     }
 }
 
-
-
 impl ElementOnIme for EditableTextElement {
-    fn on_ime_event(
-        &mut self,
-        cx: &mut ElementOnImeContext,
-        event: &ImeEvent,
-    ) {
+    fn on_ime_event(&mut self, cx: &mut ElementOnImeContext, event: &ImeEvent) {
         match event {
             ImeEvent::CompositionStart => {
                 self.controller_mut().start_composition();
@@ -1076,7 +1146,13 @@ impl ElementOnIme for EditableTextElement {
                         cx.push_event(m, CompositionEndEvent { text: text_end });
                     }
                     if let Some(m) = m_input {
-                        cx.push_event(m, InputEvent { value: new_text, enter: false });
+                        cx.push_event(
+                            m,
+                            InputEvent {
+                                value: new_text,
+                                enter: false,
+                            },
+                        );
                     }
                     if let Some(m) = m_cursor {
                         cx.push_event(m, CursorChangeEvent { position: cursor });
@@ -1099,7 +1175,9 @@ impl EditableTextView {
         EditableTextView {
             controller: p.opaque::<TextEditingController>("controller"),
             controller_atom: p.readable("controller"),
-            undo_controller: p.opaque::<crate::builtin_plugins::text::controller::UndoController>("undoController"),
+            undo_controller: p.opaque::<crate::builtin_plugins::text::controller::UndoController>(
+                "undoController",
+            ),
             placeholder: p.val::<String>("placeholder"),
             color: p.val::<Color>("color"),
             placeholder_color: p.val::<Color>("placeholderColor"),

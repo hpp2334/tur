@@ -1,4 +1,4 @@
-use boa_engine::{js_string, Context, JsValue};
+use boa_engine::{Context, JsValue, js_string};
 
 use crate::core::edgy::mutation::IntoJsArgs;
 

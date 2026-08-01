@@ -124,9 +124,17 @@ fn password_masks_typed_text_but_keeps_value() {
     type_str(&mut app, "abc");
     app.render();
 
-    assert_eq!(get_value(&app, id), "abc", "controller keeps the real value");
+    assert_eq!(
+        get_value(&app, id),
+        "abc",
+        "controller keeps the real value"
+    );
     assert_eq!(get_displayed(&app, id), "•••", "display is masked");
-    assert_eq!(get_cursor(&app, id), 3, "cursor advances in value-byte space");
+    assert_eq!(
+        get_cursor(&app, id),
+        3,
+        "cursor advances in value-byte space"
+    );
 }
 
 #[test]
@@ -179,12 +187,17 @@ fn password_copy_is_suppressed() {
     app.send_key_with_modifiers_full("a", false, false, true);
     app.render();
 
-    assert!(app.take_clipboard_write().is_none(), "no pending write before Cmd+C");
+    assert!(
+        app.take_clipboard_write().is_none(),
+        "no pending write before Cmd+C"
+    );
 
     app.send_key_with_modifiers_full("c", false, false, true);
 
-    assert!(app.take_clipboard_write().is_none(),
-        "Cmd+C must not write the password to the clipboard");
+    assert!(
+        app.take_clipboard_write().is_none(),
+        "Cmd+C must not write the password to the clipboard"
+    );
     assert_eq!(get_value(&app, id), "hello", "value unchanged after Cmd+C");
 }
 
@@ -204,10 +217,15 @@ fn password_cut_is_suppressed() {
 
     app.send_key_with_modifiers_full("x", false, false, true);
 
-    assert!(app.take_clipboard_write().is_none(),
-        "Cmd+X must not write the password to the clipboard");
-    assert_eq!(get_value(&app, id), "hello",
-        "Cmd+X must not delete the buffer in password mode");
+    assert!(
+        app.take_clipboard_write().is_none(),
+        "Cmd+X must not write the password to the clipboard"
+    );
+    assert_eq!(
+        get_value(&app, id),
+        "hello",
+        "Cmd+X must not delete the buffer in password mode"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +275,11 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
     assert_eq!(get_cursor(&app, id), 0);
     app.send_key("ArrowRight");
     app.render();
-    assert_eq!(get_cursor(&app, id), 3, "ArrowRight advances one grapheme (3 bytes)");
+    assert_eq!(
+        get_cursor(&app, id),
+        3,
+        "ArrowRight advances one grapheme (3 bytes)"
+    );
 
     // A mixed multi-byte value still masks one char per glyph.
     app.send_key("Home");
@@ -302,8 +324,10 @@ fn password_click_resolves_in_value_byte_space() {
     app.pointer_down(bounds.left + x3 as f64 + 0.5, cy);
     app.render();
     let clicked = get_cursor(&app, id);
-    assert!(clicked <= 6,
-        "click cursor must stay in value-byte range [0,6], got {clicked}");
+    assert!(
+        clicked <= 6,
+        "click cursor must stay in value-byte range [0,6], got {clicked}"
+    );
 
     // Inserting at the clicked position must yield a valid char-boundary split
     // in value space — proves the remap gave a value byte, not a display byte.
@@ -311,8 +335,10 @@ fn password_click_resolves_in_value_byte_space() {
     app.render();
     let text = get_value(&app, id);
     assert!(text.starts_with("abc"), "prefix preserved: {text}");
-    assert!(text.len() == 7 && text.contains('Z'),
-        "inserted one char in value space: {text}");
+    assert!(
+        text.len() == 7 && text.contains('Z'),
+        "inserted one char in value space: {text}"
+    );
     assert_eq!(text, "abcZdef", "inserted at value byte 3");
 }
 

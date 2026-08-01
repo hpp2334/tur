@@ -1,16 +1,16 @@
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use boa_gc::{Finalize, Trace};
 use boa_engine::JsData;
+use boa_gc::{Finalize, Trace};
 
 use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
+use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::ImageResourceMap;
-use crate::core::edgy::reactive::Store;
 
 #[derive(Clone, Debug, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]

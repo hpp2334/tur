@@ -3,7 +3,7 @@ use crate::core::layout::{Constraints, Size};
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{ElementLayout, LayoutContext};
 
-use super::element::{ScrollbarElement, DEFAULT_THICKNESS};
+use super::element::{DEFAULT_THICKNESS, ScrollbarElement};
 
 impl ElementLayout for ScrollbarElement {
     fn perform_layout(

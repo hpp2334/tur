@@ -1,10 +1,10 @@
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsValue};
 
-use crate::core::js_runtime::JsProps;
 use crate::core::edgy::mutation::MutationHandle;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
+use crate::core::js_runtime::JsProps;
 use crate::core::layout::ElementSubscribe;
 use crate::core::view::{Lifecycle, SharedViewCx, View, ViewCx, extract_view};
 
@@ -41,7 +41,11 @@ impl View for LifecycleView {
                 let v = p.raw_opt("element").unwrap_or(JsValue::undefined());
                 extract_view(&v)
             };
-            (element_view, p.mutation::<()>("onMounted$"), p.mutation::<()>("beforeDestroy$"))
+            (
+                element_view,
+                p.mutation::<()>("onMounted$"),
+                p.mutation::<()>("beforeDestroy$"),
+            )
         };
 
         let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());

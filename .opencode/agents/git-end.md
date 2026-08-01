@@ -64,11 +64,14 @@ First, check if there are any uncommitted changes:
 git status
 ```
 
-If there are uncommitted changes, commit them:
+If there are uncommitted changes, stage them, format the staged files, then commit:
 ```bash
 git add .
+node ./scripts/format-staged.cjs
 git commit -m "<type>: <description>"
 ```
+
+`format-staged.cjs` runs `rustfmt` on staged `.rs` files and `biome check --write` on staged JS/TS files (within `js/`, `demo/website`, `demo/playground-view`), then re-stages anything it reformatted. It is non-fatal — it never blocks a commit; lint/clippy are still enforced by CI in Step 5.
 
 Then push to remote:
 ```bash

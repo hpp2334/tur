@@ -18,7 +18,10 @@ pub struct MutationHandle<E: IntoJsArgs> {
 
 impl<E: IntoJsArgs> MutationHandle<E> {
     pub fn new(mutation: Mutation) -> Self {
-        MutationHandle { mutation, _marker: PhantomData }
+        MutationHandle {
+            mutation,
+            _marker: PhantomData,
+        }
     }
 
     pub fn mutation(&self) -> Mutation {

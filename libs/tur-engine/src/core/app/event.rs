@@ -43,10 +43,7 @@ pub enum AppEvent {
     /// Programmatic scroll request — set the absolute scroll offset of the
     /// target scroll-view node. Emitted by scrollbar drag (where the gesture
     /// handler can't mutate the tree directly due to an active borrow).
-    ScrollTo {
-        node_id: ElementNodeId,
-        offset: f64,
-    },
+    ScrollTo { node_id: ElementNodeId, offset: f64 },
     /// Scroll overflow bubbling — a scroll view consumed as much delta as it
     /// could and is forwarding the remainder (`delta`) to its nearest
     /// scrollable ancestor. Resolved by `ScrollSubsystem`.
