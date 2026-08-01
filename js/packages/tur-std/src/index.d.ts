@@ -788,4 +788,16 @@ declare module "tur:std" {
     ): LinearGradient;
     export function colorLerp(a: Color, b: Color, t: number): Color;
     export function requestFocus(target: TextController | Element): void;
+
+    export interface EventBus {
+        on(callback: (payload: Uint8Array) => void): void;
+        send(payload: Uint8Array): void;
+    }
+    export const eventBus: EventBus;
+
+    /** Decode a Uint8Array (or ArrayBuffer) of UTF-8 bytes into a string. */
+    export function decodeUtf8(bytes: Uint8Array | ArrayBuffer): string;
+
+    /** Encode a string into a Uint8Array of UTF-8 bytes. */
+    export function encodeUtf8(text: string): Uint8Array;
 }

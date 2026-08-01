@@ -6,13 +6,28 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use boa_engine::Source;
 use boa_engine::context::time::FixedClock;
+use tur_engine::TurRuntime;
+use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
-use tur_engine::TurRuntime;
-use tur_engine::TurStdPlugin;
 use tur_native::NativeFontLoader;
+
+/// Eval a JS script on a `TurApp` and return the result as a string.
+/// Mirrors the old `TurApp::eval_js` via the `with_boa_context` escape hatch.
+fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String> {
+    app.with_boa_context(|ctx| {
+        ctx.eval(Source::from_bytes(source))
+            .map(|r| {
+                r.as_string()
+                    .map(|s| s.to_std_string_escaped())
+                    .unwrap_or_else(|| r.display().to_string())
+            })
+            .map_err(|e| e.to_string())
+    })
+}
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
 /// instances are headless).
@@ -47,14 +62,14 @@ fn instances_have_isolated_js_realms() {
         .expect("load B");
 
     // Each instance reads back its OWN global — they must differ.
-    let id_a = app_a.eval_js("globalThis.__instanceId").expect("eval A");
-    let id_b = app_b.eval_js("globalThis.__instanceId").expect("eval B");
+    let id_a = eval_js(&app_a, "globalThis.__instanceId").expect("eval A");
+    let id_b = eval_js(&app_b, "globalThis.__instanceId").expect("eval B");
     assert_eq!(id_a, "A", "instance A should have its own state");
     assert_eq!(id_b, "B", "instance B should have its own state");
 
     // Mutating A must not affect B.
-    app_a.eval_js(r#"globalThis.__instanceId = "A2""#).unwrap();
-    let id_b_after = app_b.eval_js("globalThis.__instanceId").unwrap();
+    eval_js(&app_a, r#"globalThis.__instanceId = "A2""#).unwrap();
+    let id_b_after = eval_js(&app_b, "globalThis.__instanceId").unwrap();
     assert_eq!(id_b_after, "B", "instance B unaffected by A's mutation");
 }
 
@@ -101,7 +116,7 @@ fn headless_instance_runs_js_without_rendering() {
     .expect("load");
     app.run_frame().expect("frame");
 
-    let val = app.eval_js("globalThis.__readBack").expect("eval");
+    let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "42", "headless instance ran JS");
 }
 
@@ -118,12 +133,8 @@ fn many_instances_share_one_runtime() {
         apps.push(app);
     }
     for (i, app) in apps.iter().enumerate() {
-        let idx = app.eval_js("globalThis.__idx").expect("eval");
-        assert_eq!(
-            idx,
-            i.to_string(),
-            "instance {i} should have its own __idx"
-        );
+        let idx = eval_js(app, "globalThis.__idx").expect("eval");
+        assert_eq!(idx, i.to_string(), "instance {i} should have its own __idx");
     }
 }
 
@@ -231,9 +242,17 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     runtime.create_headless_app((10.0, 10.0)).expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
     runtime.create_headless_app((10.0, 10.0)).expect("B");
-    assert_eq!(cap.get(), 2, "instance B's register saw the same shared cap");
+    assert_eq!(
+        cap.get(),
+        2,
+        "instance B's register saw the same shared cap"
+    );
     runtime.create_headless_app((10.0, 10.0)).expect("C");
-    assert_eq!(cap.get(), 3, "instance C's register saw the same shared cap");
+    assert_eq!(
+        cap.get(),
+        3,
+        "instance C's register saw the same shared cap"
+    );
 }
 
 // === Independent event routing + reactive isolation =======================
@@ -261,7 +280,7 @@ fn platform_events_route_to_the_correct_instance() {
             r#"import { viewportSize$, get } from "tur:std";
                globalThis.__vp = JSON.stringify(get(viewportSize$));"#,
         );
-        app.eval_js("globalThis.__vp").unwrap_or_default()
+        eval_js(app, "globalThis.__vp").unwrap_or_default()
     };
 
     let a_vp = read_vp(&app_a);
@@ -293,9 +312,11 @@ fn reactive_stores_are_isolated_per_instance() {
         .expect("setup A");
 
     // B has no such atom — `globalThis.__atom` is undefined in B's realm.
-    let b_val = app_b
-        .eval_js("typeof globalThis.__atom === 'undefined' ? 'none' : 'present'")
-        .expect("eval B");
+    let b_val = eval_js(
+        &app_b,
+        "typeof globalThis.__atom === 'undefined' ? 'none' : 'present'",
+    )
+    .expect("eval B");
     assert_eq!(
         b_val, "none",
         "instance B should not see instance A's reactive atoms"
@@ -303,9 +324,8 @@ fn reactive_stores_are_isolated_per_instance() {
 
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
-    let _ = app_a.eval_module(
-        r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#,
-    );
-    let a_val = app_a.eval_js("globalThis.__r").unwrap_or_default();
+    let _ = app_a
+        .eval_module(r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#);
+    let a_val = eval_js(&app_a, "globalThis.__r").unwrap_or_default();
     assert_eq!(a_val, "A2", "instance A retains its own reactive state");
 }

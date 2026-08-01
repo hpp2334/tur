@@ -21,6 +21,7 @@ pub use crate::builtin_plugins::clipboard::{
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
 pub use crate::builtin_plugins::TurStdPlugin;
+pub use crate::builtin_plugins::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.create_app()` / `runtime.create_headless_app()` spawn isolated
@@ -127,19 +128,6 @@ impl TurApp {
         Ok(())
     }
 
-    pub fn eval_js(&self, source: &str) -> Result<String, TurError> {
-        let result = {
-            let mut boa = self.boa_context.borrow_mut();
-            boa.eval(Source::from_bytes(source))
-                .map_err(TurError::JsEval)?
-        };
-        let s = result
-            .as_string()
-            .map(|s| s.to_std_string_escaped())
-            .unwrap_or_else(|| result.display().to_string());
-        Ok(s)
-    }
-
     /// Advance exactly one frame: run the engine's fixed-point flush (events,
     /// reactive updates, layout, microtasks, async polling) and render if
     /// anything changed. Returns the outcome including how the next frame
@@ -159,6 +147,21 @@ impl TurApp {
 
     pub fn with_boa_context<R>(&self, f: impl FnOnce(&mut Context) -> R) -> R {
         f(&mut self.boa_context.borrow_mut())
+    }
+
+    /// Retrieve per-instance typed data stored by a plugin during `register`
+    /// via [`PluginContext::store_instance_data`](core::plugin::PluginContext::store_instance_data).
+    /// Returns `None` if no plugin stored data of type `T`.
+    ///
+    /// Each plugin exposes its own `of()` wrapper around this (e.g.
+    /// `EventBus::of(&app)`).
+    pub fn instance_data<T: 'static>(&self) -> Option<Rc<T>> {
+        self.internal
+            .instance_data
+            .borrow()
+            .get(&std::any::TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref::<Rc<T>>())
+            .cloned()
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,

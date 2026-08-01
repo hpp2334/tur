@@ -9,4 +9,5 @@ license.workspace = true
 [dependencies]
 tur-net-capability = { workspace = true }
 boa_engine = { workspace = true }
-reqwest-wasm = { version = "0.11", default-features = false }
+reqwest-wasm = { version = "0.11", default-features = false, features = ["stream"] }
+futures = { workspace = true }

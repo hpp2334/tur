@@ -31,4 +31,17 @@ declare module "tur:net" {
 
     /** Perform an HTTP request. Rejects with `{ message }` on network error. */
     export function request(opts: RequestOptions): Promise<ResponseResult>;
+
+    export interface StreamResponse {
+        ok: true;
+        status: number;
+        statusText: string;
+        headers: Record<string, string>;
+        body: AsyncIterable<Uint8Array>;
+    }
+
+    /** Streaming HTTP request. The response body is an async iterable yielding Uint8Array chunks. */
+    export function requestStream(
+        opts: RequestOptions,
+    ): Promise<StreamResponse>;
 }

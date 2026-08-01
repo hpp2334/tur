@@ -32,12 +32,20 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 
+use futures::StreamExt;
+use futures::stream::LocalBoxStream;
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
 
 // ---------------------------------------------------------------------------
 // Http capability trait + supporting types
 // ---------------------------------------------------------------------------
+
+/// Shorthand for the boxed future returned by [`HttpBackend::request`].
+pub type HttpFuture = Pin<Box<dyn Future<Output = HttpOutcome>>>;
+
+/// Shorthand for the boxed future returned by [`HttpBackend::request_stream`].
+pub type HttpStreamFuture = Pin<Box<dyn Future<Output = Result<HttpStreamResponse, String>>>>;
 
 /// Request body kind. Mirrors what JS can pass via `request({ body })`:
 /// either a string or an `ArrayBuffer` (e.g. from `filePicker.pick()`).
@@ -81,13 +89,53 @@ pub enum HttpOutcome {
     Err(String),
 }
 
+/// A streaming HTTP response. The body is a `BoxStream` yielding byte chunks.
+/// Used by `HttpBackend::request_stream`.
+pub struct HttpStreamResponse {
+    pub status: u16,
+    pub status_text: String,
+    pub headers: Vec<(String, String)>,
+    pub body: LocalBoxStream<'static, Result<Vec<u8>, String>>,
+}
+
 /// Async HTTP backend. Backends provide an impl (`WasmHttp` via
 /// `reqwest_wasm` on wasm; `NativeHttp` via native `reqwest`; `RecordingHttp`
 /// for tests) and register it via
 /// `TurRuntimeBuilder::capability(Http::new(backend))`. The bridge fn
 /// `request` in `tur:net` consumes it.
 pub trait HttpBackend: 'static {
-    fn request(&self, opts: RequestOpts) -> Pin<Box<dyn Future<Output = HttpOutcome>>>;
+    fn request(&self, opts: RequestOpts) -> HttpFuture;
+
+    /// Streaming variant: returns the response headers immediately, then the
+    /// body as a stream of byte chunks. Default impl delegates to `request()`
+    /// and wraps the body as a single-chunk stream.
+    fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
+        let fut = self.request(opts);
+        Box::pin(async move {
+            let outcome = fut.await;
+            match outcome {
+                HttpOutcome::Ok {
+                    status,
+                    status_text,
+                    headers,
+                    body,
+                } => {
+                    let chunk = match body {
+                        HttpBody::Text(t) => t.into_bytes(),
+                        HttpBody::Bytes(b) => b,
+                    };
+                    let body_stream = futures::stream::once(async move { Ok(chunk) }).boxed_local();
+                    Ok(HttpStreamResponse {
+                        status,
+                        status_text,
+                        headers,
+                        body: body_stream,
+                    })
+                }
+                HttpOutcome::Err(e) => Err(e),
+            }
+        })
+    }
 }
 
 /// No-op `HttpBackend` default. Always rejects with "no http backend" — JS

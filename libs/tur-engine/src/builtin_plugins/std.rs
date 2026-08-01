@@ -30,10 +30,10 @@
 
 use crate::builtin_plugins::{
     console::install_console, control_flow::install_control_flow, effects::install_effects,
-    focus::install_focus, gesture::install_gesture, image::install_image, input::install_input,
-    layout::composited_transform::install_composited_transform, layout::enums,
-    layout::install_layout, lazy_container::install_lazy_container, lifecycle::install_lifecycle,
-    scroll::install_scroll, text::install_text,
+    encode::install_encode, focus::install_focus, gesture::install_gesture, image::install_image,
+    input::install_input, layout::composited_transform::install_composited_transform,
+    layout::enums, layout::install_layout, lazy_container::install_lazy_container,
+    lifecycle::install_lifecycle, scroll::install_scroll, text::install_text,
 };
 use crate::core::app::render;
 use crate::core::async_::task;
@@ -108,6 +108,7 @@ impl Plugin for TurStdPlugin {
         std_fns.extend(ct_fns);
         std_closures.extend(ct_closures);
         std_fns.extend(install_lifecycle(ctx)?);
+        std_fns.extend(install_encode()?);
         // Render mount + async task primitives stay in `core::app::render`
         // and `core::async_::task` (renderer/async infra, not element-plugin
         // affinity).
@@ -126,6 +127,8 @@ impl Plugin for TurStdPlugin {
         // `{width, height}` (CSS pixels). The engine syncs it each frame in
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
+        // Event bus: bidirectional byte-channel between host and JS.
+        std_consts.extend(crate::builtin_plugins::event_bus::install_event_bus(ctx)?);
 
         ctx.register_module("tur:std", std_fns, std_closures, std_consts);
 

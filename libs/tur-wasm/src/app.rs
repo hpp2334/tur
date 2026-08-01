@@ -1,4 +1,5 @@
 use crate::fonts::WasmFontLoader;
+use boa_engine::Source;
 use boa_engine::context::time::{Clock, JsInstant};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -1022,9 +1023,14 @@ impl WasmApp {
         let Some(s) = guard.as_mut() else {
             return String::new();
         };
-        s.app
-            .eval_js("JSON.stringify(turDevTool.elementTree())")
+        s.app.with_boa_context(|ctx| {
+            ctx.eval(Source::from_bytes(
+                "JSON.stringify(turDevTool.elementTree())",
+            ))
+            .ok()
+            .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
             .unwrap_or_default()
+        })
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
@@ -1034,9 +1040,14 @@ impl WasmApp {
         let Some(s) = guard.as_mut() else {
             return String::new();
         };
-        s.app
-            .eval_js(&format!("JSON.stringify(turDevTool.getElement({id}))"))
+        s.app.with_boa_context(|ctx| {
+            ctx.eval(Source::from_bytes(&format!(
+                "JSON.stringify(turDevTool.getElement({id}))"
+            )))
+            .ok()
+            .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
             .unwrap_or_default()
+        })
     }
 }
 
