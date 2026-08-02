@@ -17,7 +17,6 @@ mod imp {
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
-    use tur_net_native::{Http, NativeHttp};
 
     use crate::loop_driver::{AndroidLoopDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
@@ -49,8 +48,10 @@ mod imp {
         /// Build the shared runtime. `configure` receives the
         /// [`TurRuntimeBuilder`] (by value) AFTER the Android defaults are
         /// installed (native font loader, wall-clock `StdClock`, `NoopCursor`,
-        /// `AndroidClipboard`, `NativeHttp`), so the callback only needs to
-        /// chain `.plugin(…)` calls and return the builder.
+        /// `AndroidClipboard`), so the callback only needs to chain
+        /// `.plugin(…)` calls (and, if HTTP is wanted, register a
+        /// `NativeHttp` backend against an embedder-owned tokio runtime) and
+        /// return the builder.
         pub fn build(
             context: GlobalRef,
             configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
@@ -63,8 +64,7 @@ mod imp {
                 .font_loader(Rc::new(NativeFontLoader::new()))
                 .clock(Rc::new(StdClock::new()))
                 .capability(CursorCap::new(NoopCursor))
-                .capability(Clipboard::new(AndroidClipboard::new(context)))
-                .capability(Http::new(NativeHttp::default()));
+                .capability(Clipboard::new(AndroidClipboard::new(context)));
             builder = configure(builder);
             let runtime = builder.build()?;
 
