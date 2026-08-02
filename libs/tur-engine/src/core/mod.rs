@@ -5,6 +5,7 @@ pub mod dev;
 pub mod edgy;
 pub mod element;
 pub mod elements;
+pub mod event_bus;
 pub mod focus;
 pub mod fonts;
 pub mod hit_test;

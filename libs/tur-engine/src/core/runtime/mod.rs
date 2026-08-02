@@ -1,4 +1,3 @@
-use std::cell::RefCell;
 use std::rc::Rc;
 
 use boa_engine::Context;
@@ -23,6 +22,9 @@ use crate::core::plugin::{CompileContext, Plugin, PluginContext};
 use crate::core::render::Renderer;
 use crate::core::screen::Screen;
 use crate::error::TurError;
+
+pub mod backend;
+pub use backend::{AnySend, BoaClosure, ElementClosure, InlineBackend, TurAppBackend};
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
@@ -247,7 +249,7 @@ impl TurRuntime {
                 js_ctx: internal.js_context.clone(),
                 app: internal.app_context.clone(),
                 subsystems: internal.subsystems.clone(),
-                instance_data: internal.instance_data.clone(),
+                event_bus: internal.event_bus.clone(),
                 viewport_size: viewport_size_js.clone(),
             };
             plugin.register(&mut plugin_ctx)?;
@@ -274,14 +276,8 @@ impl TurRuntime {
 
         tracing::info!("TurApp instance created ({} plugins)", self.plugins.len());
 
-        Ok(Rc::new(TurApp {
-            boa_context: RefCell::new(boa_context),
-            internal,
-            executor,
-            driver: RefCell::new(None),
-            wake_fn: RefCell::new(None),
-            after_frame: RefCell::new(None),
-        }))
+        let backend = InlineBackend::new(boa_context, internal, executor);
+        Ok(Rc::new(TurApp::new(Box::new(backend))))
     }
 }
 

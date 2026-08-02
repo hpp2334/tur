@@ -96,7 +96,7 @@ fn js_sends_bytes_host_receives() {
     )
     .expect("module");
 
-    app.wait_for(|_| received.lock().unwrap().len() >= 1);
+    app.wait_for(|_| !received.lock().unwrap().is_empty());
 
     let msgs = received.lock().unwrap();
     assert_eq!(msgs.len(), 1);
@@ -125,7 +125,7 @@ fn js_sends_raw_uint8array() {
     )
     .expect("module");
 
-    app.wait_for(|_| received.lock().unwrap().len() >= 1);
+    app.wait_for(|_| !received.lock().unwrap().is_empty());
 
     let msgs = received.lock().unwrap();
     assert_eq!(msgs.len(), 1);

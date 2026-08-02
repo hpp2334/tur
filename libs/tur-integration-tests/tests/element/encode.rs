@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 
 #[test]
 fn encode_decode_roundtrip_ascii() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -29,7 +29,7 @@ fn encode_decode_roundtrip_ascii() {
 
 #[test]
 fn encode_decode_roundtrip_unicode() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -51,7 +51,7 @@ fn encode_decode_roundtrip_unicode() {
 
 #[test]
 fn decode_arraybuffer() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -74,7 +74,7 @@ fn decode_arraybuffer() {
 
 #[test]
 fn encode_empty_string() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -93,7 +93,7 @@ fn encode_empty_string() {
 
 #[test]
 fn decode_invalid_utf8_throws() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"

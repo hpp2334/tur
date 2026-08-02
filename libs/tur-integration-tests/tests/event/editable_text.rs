@@ -987,7 +987,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     let (cx, cy) = app.get_element_absolute_bounds(sv_id).unwrap().center();
     app.wheel(0.0, scroll_amount, cx, cy);
     app.render();
-    app.with_element(sv_id, |e| {
+    app.with_element(sv_id, move |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
         assert!(
             (sv.scroll_offset() - scroll_amount).abs() < 0.5,

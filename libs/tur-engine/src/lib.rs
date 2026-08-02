@@ -21,37 +21,38 @@ pub use crate::builtin_plugins::clipboard::{
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
 pub use crate::builtin_plugins::TurStdPlugin;
-pub use crate::builtin_plugins::event_bus::EventBus;
+pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.create_app()` / `runtime.create_headless_app()` spawn isolated
 // `TurApp` instances.
-pub use crate::core::runtime::{TurRuntime, TurRuntimeBuilder};
+pub use crate::core::runtime::{InlineBackend, TurRuntime, TurRuntimeBuilder};
 
 use std::cell::RefCell;
-use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use boa_engine::Context;
-use boa_engine::Source;
 
 use error::TurError;
 
-use core::app::{FrameOutcome, ModuleError, Reply, TurAppInternal, WorkerMsg};
-use core::async_::TurJobExecutor;
+use core::app::{FrameOutcome, ModuleError, Reply, WorkerMsg};
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
+use core::runtime::backend::{BoaClosure, ElementClosure, TurAppBackend};
 
 #[cfg(feature = "trace")]
 use core::elements::NodeTreeData;
 
 pub struct TurApp {
-    boa_context: RefCell<Context>,
-    internal: TurAppInternal,
-    executor: Rc<TurJobExecutor>,
+    /// Engine state + dispatch — owned by the backend. `InlineBackend`
+    /// runs everything on this thread (today's behavior, used by tests);
+    /// `ThreadedBackend` (Phase 7 follow-up) runs the engine on a worker.
+    backend: Box<dyn TurAppBackend>,
     /// Autonomous-loop driver. `None` until [`Self::start`] is called
     /// (production); tests leave it unset and pump via [`Self::run_frame`].
+    /// Always main-side: even in threaded mode, the driver's wake
+    /// trampoline must fire `TurApp::wake` on the main thread.
     driver: RefCell<Option<Rc<dyn LoopDriver>>>,
     /// Long-lived wake trampoline created in [`Self::start`]: upgrades a
     /// `Weak<Self>` and calls [`Self::wake`]. Held here (and cloned into the
@@ -81,10 +82,23 @@ pub struct FocusedState {
 }
 
 impl TurApp {
+    /// Construct a `TurApp` backed by the given [`TurAppBackend`]. The
+    /// runtime calls this with [`InlineBackend`] for `create_app` /
+    /// `create_headless_app`; Phase 7's `create_app_threaded` will pass
+    /// a `ThreadedBackend`.
+    pub(crate) fn new(backend: Box<dyn TurAppBackend>) -> Self {
+        Self {
+            backend,
+            driver: RefCell::new(None),
+            wake_fn: RefCell::new(None),
+            after_frame: RefCell::new(None),
+        }
+    }
+
     pub fn load_js(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
         let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.handle_worker_msg(WorkerMsg::LoadJs {
+        self.backend.handle_worker_msg(WorkerMsg::LoadJs {
             source: Arc::from(source),
             reply: tx,
         });
@@ -96,7 +110,7 @@ impl TurApp {
     pub fn load_module(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
         let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.handle_worker_msg(WorkerMsg::LoadModule {
+        self.backend.handle_worker_msg(WorkerMsg::LoadModule {
             source: Arc::from(source),
             reply: tx,
         });
@@ -107,7 +121,7 @@ impl TurApp {
 
     pub fn eval_module(&self, source: &str) -> Result<(), TurError> {
         let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.handle_worker_msg(WorkerMsg::EvalModule {
+        self.backend.handle_worker_msg(WorkerMsg::EvalModule {
             source: Arc::from(source),
             reply: tx,
         });
@@ -132,13 +146,7 @@ impl TurApp {
     /// clock is the engine's own `Clock` (a real wall-clock in production,
     /// a `FixedClock` the harness advances in tests).
     pub fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
-        // Phase 4 single-threaded: the Wake handler ran flush inline and
-        // emitted MainMsg::FrameOutcome to the (yet-unwired) main channel.
-        // We return the outcome directly; Phase 7's pump will drain a real
-        // mpsc until it sees FrameOutcome.
-        self.handle_worker_msg(WorkerMsg::Wake);
-        let mut boa = self.boa_context.borrow_mut();
-        self.internal.flush(&mut boa)
+        self.backend.pump()
     }
 
     /// Legacy alias for [`Self::pump`]. Kept for embedder/test back-compat
@@ -147,38 +155,28 @@ impl TurApp {
         self.pump()
     }
 
-    pub fn with_boa_context<R>(&self, f: impl FnOnce(&mut Context) -> R) -> R {
-        f(&mut self.boa_context.borrow_mut())
+    /// Escape hatch — run a closure with the boa `Context`. **Inline-only**:
+    /// panics on the threaded backend (it doesn't ship arbitrary closures
+    /// across threads — production threaded code uses specific RPC variants
+    /// like `load_module` / `eval_module`).
+    pub fn with_boa_context<R: 'static>(&self, f: impl FnOnce(&mut Context) -> R + 'static) -> R {
+        let boxed: BoaClosure = Box::new(move |ctx| Box::new(f(ctx)));
+        let result = self.backend.with_boa_context_dyn(boxed);
+        *result
+            .downcast::<R>()
+            .expect("with_boa_context: backend returned wrong type")
     }
 
-    /// Retrieve per-instance typed data stored by a plugin during `register`
-    /// via [`PluginContext::store_instance_data](core::plugin::PluginContext::store_instance_data).
-    /// Returns `None` if no plugin stored data of type `T`.
+    /// Always-installed event bus handle. The bus is unconditionally
+    /// created by `TurAppInternal::new` and wired up by
+    /// `TurStdPlugin::register` via `install_event_bus`, so this never
+    /// fails — the historical `EventBus::of(&app) -> Option<EventBus>`
+    /// was always `Some`. New code should prefer this direct accessor.
     ///
-    /// Each plugin exposes its own `of()` wrapper around this (e.g.
-    /// `EventBus::of(&app)`).
-    pub fn instance_data<T: 'static>(&self) -> Option<Rc<T>> {
-        self.internal
-            .instance_data
-            .borrow()
-            .get(&std::any::TypeId::of::<T>())
-            .and_then(|v| v.downcast_ref::<Rc<T>>())
-            .cloned()
-    }
-
-    /// Always-installed event bus handle (Phase 5+). The bus is
-    /// unconditionally registered by `TurStdPlugin`, so this never fails —
-    /// the historical `EventBus::of(&app) -> Option<EventBus>` was always
-    /// `Some`. New code should prefer this direct accessor.
-    ///
-    /// Phase 5 keeps `EventBus::of` as a back-compat alias (returns
+    /// `EventBus::of` is kept as a back-compat alias (returns
     /// `Some(self.event_bus())`).
-    pub fn event_bus(&self) -> builtin_plugins::event_bus::EventBus {
-        // The event bus is always installed; unwrap is sound.
-        let inner = self
-            .instance_data::<builtin_plugins::event_bus::EventBusInner>()
-            .expect("EventBus always installed by TurStdPlugin");
-        builtin_plugins::event_bus::EventBus::from_inner(inner)
+    pub fn event_bus(&self) -> Rc<core::event_bus::EventBus> {
+        self.backend.event_bus()
     }
 
     /// Combined focused-element state — single call replaces the
@@ -187,10 +185,7 @@ impl TurApp {
     /// main-side cache via `MainMsg::FocusedStateChanged`; today this
     /// reads live from the engine state (single-threaded).
     pub fn focused_state(&self) -> FocusedState {
-        FocusedState {
-            is_editable: self.focused_is_editable(),
-            cursor_rect: self.focused_cursor_rect(),
-        }
+        self.backend.focused_state()
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
@@ -199,7 +194,9 @@ impl TurApp {
     /// Also re-arms an idle autonomous loop (see [`Self::start`]) so the event
     /// is processed on the next frame.
     pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
-        self.handle_worker_msg(WorkerMsg::PlatformEvent(event));
+        self.backend
+            .handle_worker_msg(WorkerMsg::PlatformEvent(event));
+        self.request_wakeup();
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
@@ -208,15 +205,11 @@ impl TurApp {
     /// exposed for host-initiated app events and testing. Re-arms an idle
     /// autonomous loop like [`Self::push_platform_event`].
     pub fn push_app_event(&self, event: core::app::AppEvent) {
-        // AppEvent can't cross a thread boundary yet (its Custom payload's
-        // Send bound lands in Phase 6). Single-threaded inline dispatch:
-        // push straight onto the queue. Phase 7 will introduce a
-        // `WorkerMsg::AppEvent` variant once AppEvent is Send.
-        self.internal
-            .app_context
-            .borrow_mut()
-            .app_event_queue
-            .push(event);
+        // Inline backend writes directly to the queue. Threaded backend
+        // needs `AppEvent` to be `Send` (its `Custom` payload's bound
+        // lands with Phase 7's threaded work) — until then, threaded
+        // panics here.
+        self.backend.push_app_event(event);
         self.request_wakeup();
     }
 
@@ -226,129 +219,8 @@ impl TurApp {
     /// even when nothing else is pending (see [`Self::start`]). Used by
     /// embedders after loading JS and by tests asserting an explicit paint.
     pub fn request_paint(&self) {
-        self.handle_worker_msg(WorkerMsg::RequestPaint);
-    }
-
-    /// Internal dispatch — every [`WorkerMsg`] variant is processed here.
-    ///
-    /// **Phase 4** (single-threaded): the public API is a thin wrapper that
-    /// builds a `WorkerMsg`, calls this method on the same thread, and
-    /// unwraps the [`Reply`] synchronously.
-    /// **Phase 7** (multi-threaded): a worker task replaces this method's
-    /// body — `while let Some(msg) = rx.blocking_recv() { match msg { … } }`
-    /// — and the public API sends over a real `mpsc`. The wire types stay
-    /// the same.
-    pub(crate) fn handle_worker_msg(&self, msg: WorkerMsg) {
-        match msg {
-            WorkerMsg::PlatformEvent(event) => {
-                self.internal
-                    .app_context
-                    .borrow_mut()
-                    .platform_event_queue
-                    .push(event);
-                self.request_wakeup();
-            }
-            WorkerMsg::RequestPaint => {
-                self.internal.js_context.need_paint.set(true);
-                self.request_wakeup();
-            }
-            WorkerMsg::Wake => {
-                // Single-threaded Phase 4: caller (pump) drives flush
-                // directly so it can return FrameOutcome. No-op here;
-                // Phase 7's worker task will run flush inline at this
-                // case and emit MainMsg::FrameOutcome over the channel.
-            }
-            WorkerMsg::LoadModule { source, reply } => {
-                let res = self.load_module_inner(&source);
-                reply.send(res);
-            }
-            WorkerMsg::LoadJs { source, reply } => {
-                let res = self.load_js_inner(&source);
-                reply.send(res);
-            }
-            WorkerMsg::EvalModule { source, reply } => {
-                let res = self.eval_module_inner(&source);
-                reply.send(res);
-            }
-            WorkerMsg::DevElementTree { reply } => {
-                let snap = self.dev_tool_element_tree();
-                reply.send(snap);
-            }
-            WorkerMsg::DevGetElement { id, reply } => {
-                let snap = self.dev_tool_get_element(id);
-                reply.send(snap);
-            }
-            WorkerMsg::EventBusToJs(_bytes) => {
-                // Phase 5 wires the event bus end-to-end. Placeholder:
-                // log + drop until the JS-side sink is plumbed.
-                tracing::trace!(
-                    "EventBusToJs: {} bytes (Phase 5 wires delivery)",
-                    _bytes.len()
-                );
-            }
-            WorkerMsg::Destroy { reply } => {
-                // Single-threaded Phase 4: lifetime is owned by the
-                // embedder's `Rc<TurApp>`. Phase 7's worker task drains
-                // and exits here.
-                reply.send(());
-            }
-        }
-    }
-
-    fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
-        let mut boa = self.boa_context.borrow_mut();
-        boa.eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
-            .map_err(|e| {
-                tracing::error!("JS eval error: {e}");
-                ModuleError::Eval(e.to_string())
-            })?;
-        if let Err(e) = self.executor.drain(&mut boa) {
-            tracing::error!("load_js drain error: {e}");
-        }
-        tracing::info!("load_js: bundle evaluated successfully");
-        Ok(())
-    }
-
-    fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("entry.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("module parse error: {e}");
-            ModuleError::Parse(e.to_string())
-        })?;
-        let _promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("module run_jobs error: {e}");
-        }
-        drop(boa);
-        if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
-            tracing::error!("load_module drain error: {e}");
-        }
-        Ok(())
-    }
-
-    fn eval_module_inner(&self, source: &str) -> Result<(), ModuleError> {
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("eval.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("eval_module parse error: {e}");
-            ModuleError::Parse(e.to_string())
-        })?;
-        let _promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("eval_module run_jobs error: {e}");
-        }
-        drop(boa);
-        let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
-        Ok(())
+        self.backend.handle_worker_msg(WorkerMsg::RequestPaint);
+        self.request_wakeup();
     }
 
     /// Begin autonomous operation: the engine schedules its own frames via
@@ -414,82 +286,58 @@ impl TurApp {
     }
 
     pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
-        let tree = self.internal.js_context.element_tree.borrow();
-        let root_id = tree.root_element_id()?;
-        tree.dev_tool_node(root_id.into())
+        self.backend.dev_tool_element_tree()
     }
 
     pub fn dev_tool_get_element(
         &self,
         id: core::element::NodeId,
     ) -> Option<core::elements::DevNodeData> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .dev_tool_node(id)
+        self.backend.dev_tool_get_element(id)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .query_element(key)
+        self.backend.query_element(key)
     }
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
-        self.internal.js_context.focus_manager.borrow().focused()
+        self.backend.focused_element()
     }
 
-    pub fn with_element<R>(
+    /// Escape hatch — run a closure with an element by id. Returns `None`
+    /// if the element doesn't exist. **Inline-only** (panics on threaded
+    /// backend — see [`Self::with_boa_context`]).
+    pub fn with_element<R: 'static>(
         &self,
         id: ElementNodeId,
-        cb: impl FnOnce(&AnyElement) -> R,
+        cb: impl FnOnce(&AnyElement) -> R + 'static,
     ) -> Option<R> {
-        let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get_element(id)?;
-        let element = node.element.as_ref()?;
-        Some(cb(element))
+        let boxed: ElementClosure = Box::new(move |e| Box::new(cb(e)));
+        let result = self.backend.with_element_dyn(id, boxed)?;
+        Some(
+            *result
+                .downcast::<R>()
+                .expect("with_element: backend returned wrong type"),
+        )
     }
 
     pub fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        let focused_id = self.focused_element()?;
-        let tree = self.internal.js_context.element_tree.borrow();
-
-        let mut abs_x = 0.0f64;
-        let mut abs_y = 0.0f64;
-        let mut current: Option<NodeId> = Some(focused_id.into());
-        while let Some(id) = current {
-            let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
-            abs_x += node.computed_layout.offset.x;
-            abs_y += node.computed_layout.offset.y;
-            current = node.parent;
-        }
-
-        let node = tree.get_element(focused_id)?;
-        let element = node.element.as_ref()?;
-        let (cx, cy, cw, ch) = element.cursor_rect_relative()?;
-
-        Some((abs_x + cx, abs_y + cy, cw, ch))
+        self.backend.focused_cursor_rect()
     }
 
     /// True if the currently-focused element is an editable text element.
     /// Used by embedders (e.g. tur-wasm) to manage IME state.
     pub fn focused_is_editable(&self) -> bool {
-        use core::focus::helper;
-        let tree = self.internal.js_context.element_tree.borrow();
-        let focus = self.internal.js_context.focus_manager.borrow();
-        helper::focused_is_editable(&tree, &focus)
+        self.backend.focused_is_editable()
     }
 
     #[cfg(feature = "trace")]
     pub fn element_tree(&self) -> std::cell::Ref<'_, NodeTreeData> {
-        self.internal.js_context.element_tree.borrow()
+        self.backend.element_tree_handle()
     }
 
     pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.internal.app_context.borrow_mut().render_to_pixels()
+        self.backend.render_to_pixels()
     }
 
     /// Override the shell's cursor backend. Used by embedders whose cursor
@@ -501,11 +349,7 @@ impl TurApp {
         &self,
         backend: Rc<std::cell::RefCell<dyn core::platform::CursorBackend>>,
     ) {
-        self.internal
-            .app_context
-            .borrow_mut()
-            .shell
-            .set_cursor_platform(backend);
+        self.backend.set_cursor_backend(backend);
     }
 }
 

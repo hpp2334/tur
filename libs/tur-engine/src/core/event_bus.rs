@@ -1,20 +1,28 @@
-//! Event bus plugin — bidirectional byte-channel between the Rust host and
-//! the JS realm.
+//! Event bus — bidirectional byte-channel between the Rust host and the JS
+//! realm.
 //!
-//! Registered as part of `tur:std` (merged by `TurStdPlugin`). The JS-side
-//! `eventBus` object exposes:
+//! The bus is engine infrastructure (always installed by `TurStdPlugin`),
+//! so the type lives in `core` rather than `builtin_plugins`. The
+//! registration code (`install_event_bus`) and the JS bridge closures live
+//! here too; `TurStdPlugin::register` just calls `install_event_bus`.
+//!
+//! The JS-side `eventBus` object exposes:
 //! - `on(callback)` — register a callback invoked with a `Uint8Array` for each
 //!   host→JS message.
 //! - `send(Uint8Array)` — push a byte payload to the host-side handlers.
 //!
-//! The host-side [`EventBus`] wrapper (retrieved via `EventBus::of(&app)`)
-//! exposes:
-//! - `emit_to_js(Vec<u8>)` — push bytes to be delivered to JS `on` callbacks.
-//! - `on_bus_event(handler)` — register a Rust handler invoked with `Vec<u8>`
-//!   for each JS→host message.
+//! The host-side [`EventBus`] wrapper (retrieved via
+//! [`TurApp::event_bus`](crate::TurApp::event_bus)) exposes:
+//! - [`EventBus::emit_to_js`] — push bytes to be delivered to JS `on`
+//!   callbacks on the next flush.
+//! - [`EventBus::on_bus_event`] — register a Rust handler invoked with
+//!   `Vec<u8>` for each JS→host message.
 //!
-//! All queues use separate `RefCell`s so a host handler calling `emit_to_js`
-//! (or a JS callback calling `send`) does not cause double-borrow panics.
+//! Shared state lives directly on [`EventBus`] (no separate "inner" type);
+//! all sides (host handle, JS bridge closures, the
+//! [`HostBusSubsystem`]) hold `Rc<EventBus>`. Queues use separate `RefCell`s
+//! so a host handler calling `emit_to_js` (or a JS callback calling `send`)
+//! does not cause double-borrow panics.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -33,41 +41,26 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::error::TurError;
 
 // ---------------------------------------------------------------------------
-// Shared state
+// Shared state (was `EventBusInner`)
 // ---------------------------------------------------------------------------
 
 type HostHandler = Box<dyn FnMut(Vec<u8>)>;
 
-pub struct EventBusInner {
+pub struct EventBus {
     host_to_js: RefCell<VecDeque<Vec<u8>>>,
     js_to_host: RefCell<VecDeque<Vec<u8>>>,
     js_handlers: RefCell<Vec<JsFunction>>,
     host_handlers: RefCell<Vec<HostHandler>>,
 }
 
-impl EventBusInner {
-    fn new() -> Self {
+impl EventBus {
+    pub fn new() -> Self {
         Self {
             host_to_js: RefCell::new(VecDeque::new()),
             js_to_host: RefCell::new(VecDeque::new()),
             js_handlers: RefCell::new(Vec::new()),
             host_handlers: RefCell::new(Vec::new()),
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Host-side wrapper
-// ---------------------------------------------------------------------------
-
-pub struct EventBus(Rc<EventBusInner>);
-
-impl EventBus {
-    /// Construct from the inner shared state. Used by
-    /// [`TurApp::event_bus`](crate::TurApp::event_bus) — public only so the
-    /// crate root can build a handle from the engine's instance data.
-    pub fn from_inner(inner: Rc<EventBusInner>) -> Self {
-        EventBus(inner)
     }
 
     /// Retrieve the engine's always-installed event bus. Phase 5 promotes
@@ -79,30 +72,30 @@ impl EventBus {
     /// unconditionally) so existing embedder/test code keeps working; new
     /// code should use [`TurApp::event_bus`](crate::TurApp::event_bus)
     /// directly.
-    pub fn of(app: &crate::TurApp) -> Option<EventBus> {
+    pub fn of(app: &crate::TurApp) -> Option<Rc<EventBus>> {
         Some(app.event_bus())
     }
 
     pub fn emit_to_js(&self, payload: Vec<u8>) {
-        self.0.host_to_js.borrow_mut().push_back(payload);
+        self.host_to_js.borrow_mut().push_back(payload);
     }
 
     pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + 'static) {
-        self.0.host_handlers.borrow_mut().push(Box::new(handler));
+        self.host_handlers.borrow_mut().push(Box::new(handler));
     }
 }
 
-impl Clone for EventBus {
-    fn clone(&self) -> Self {
-        EventBus(self.0.clone())
+impl Default for EventBus {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 // ---------------------------------------------------------------------------
-// Subsystem
+// Subsystem — drains the queues each flush
 // ---------------------------------------------------------------------------
 
-pub struct HostBusSubsystem(Rc<EventBusInner>);
+pub struct HostBusSubsystem(Rc<EventBus>);
 
 impl Subsystem for HostBusSubsystem {
     fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext) {
@@ -148,7 +141,7 @@ impl Subsystem for HostBusSubsystem {
 #[derive(Clone, Trace, Finalize)]
 #[boa_gc(unsafe_empty_trace)]
 struct EventBusCaptures {
-    inner: Rc<EventBusInner>,
+    inner: Rc<EventBus>,
 }
 
 // ---------------------------------------------------------------------------
@@ -207,13 +200,19 @@ fn extract_bytes_from_value(v: &JsValue, ctx: &mut Context) -> JsResult<Vec<u8>>
 }
 
 // ---------------------------------------------------------------------------
-// Install
+// Install — called by TurStdPlugin::register
 // ---------------------------------------------------------------------------
 
+/// Wire up the event bus: register the [`HostBusSubsystem`] (drains queues
+/// each flush) and the JS-side `eventBus` object (`on`/`send`). The shared
+/// state is created up-front in [`crate::core::app::TurAppInternal::new`]
+/// and exposed to plugins via
+/// [`PluginContext::event_bus`](crate::core::plugin::PluginContext::event_bus);
+/// this function just hooks up the JS bridge + subsystem to that shared
+/// state.
 pub fn install_event_bus(ctx: &mut PluginContext) -> Result<Vec<ConstEntry>, TurError> {
-    let inner = Rc::new(EventBusInner::new());
+    let inner = ctx.event_bus();
 
-    ctx.store_instance_data::<EventBusInner>(inner.clone());
     ctx.register_subsystem(Box::new(HostBusSubsystem(inner.clone())));
 
     let caps = EventBusCaptures {

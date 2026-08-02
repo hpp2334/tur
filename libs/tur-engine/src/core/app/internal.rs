@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -63,12 +62,16 @@ pub struct TurAppInternal {
     /// Incremented once at the top of each `flush()` call; stable across the
     /// fixed-point iterations within that call.
     pub(crate) frame_id: Cell<u64>,
-    /// Per-instance plugin data: a type-keyed map (`TypeId → Rc<dyn Any>`)
-    /// that plugins populate during `register` and embedders retrieve via
-    /// [`TurApp::instance_data`](crate::TurApp::instance_data). Each entry is
-    /// an `Rc<T>` so all sides (bridge fns, subsystems, host code) share one
-    /// handle without re-borrowing the `RefCell`.
-    pub(crate) instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn std::any::Any>>>>,
+    /// Always-installed event bus — bidirectional byte channel
+    /// between the Rust host and the JS realm. Created in
+    /// [`TurAppInternal::new`]; the host-side handle is retrieved via
+    /// [`crate::TurApp::event_bus`]. Plugins (specifically
+    /// `install_event_bus`) read this via
+    /// [`crate::core::plugin::PluginContext::event_bus`] to register the
+    /// JS-side bridge (`eventBus.on`/`send`) and the
+    /// [`crate::core::event_bus::HostBusSubsystem`] that drains the queues
+    /// each flush.
+    pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Main-side render tree mirror, updated from each frame's command
     /// batch (Phase 3+). Read by dev tools; Phase 7 will use it as the
     /// worker→main wire endpoint for non-render queries (topology,
@@ -148,7 +151,7 @@ impl TurAppInternal {
             async_executor,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
-            instance_data: Rc::new(RefCell::new(HashMap::new())),
+            event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
             main_tree: RefCell::new(MainTree::new()),
             last_topology: RefCell::new(HashMap::new()),
         }

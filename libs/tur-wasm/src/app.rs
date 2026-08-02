@@ -958,7 +958,8 @@ impl WasmApp {
                 // `&mut Context` between frames). The generic textarea /
                 // caret focus logic below runs after it.
                 if let Some(hook) = after_frame_hook.as_ref() {
-                    s.app.with_boa_context(|ctx| hook(ctx));
+                    let hook = hook.clone();
+                    s.app.with_boa_context(move |ctx| hook(ctx));
                 }
 
                 let is_editable = s.app.focused_is_editable();
@@ -1040,13 +1041,12 @@ impl WasmApp {
         let Some(s) = guard.as_mut() else {
             return String::new();
         };
-        s.app.with_boa_context(|ctx| {
-            ctx.eval(Source::from_bytes(&format!(
-                "JSON.stringify(turDevTool.getElement({id}))"
-            )))
-            .ok()
-            .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
-            .unwrap_or_default()
+        let id_str = format!("JSON.stringify(turDevTool.getElement({id}))");
+        s.app.with_boa_context(move |ctx| {
+            ctx.eval(Source::from_bytes(&id_str))
+                .ok()
+                .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
+                .unwrap_or_default()
         })
     }
 }

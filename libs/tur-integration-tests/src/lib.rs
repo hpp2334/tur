@@ -928,10 +928,10 @@ impl TurTestApp {
         self.inner.focused_is_editable()
     }
 
-    pub fn with_element<R>(
+    pub fn with_element<R: 'static>(
         &self,
         id: ElementNodeId,
-        cb: impl FnOnce(&AnyElement) -> R,
+        cb: impl FnOnce(&AnyElement) -> R + 'static,
     ) -> Option<R> {
         self.inner.with_element(id, cb)
     }
@@ -1023,8 +1023,9 @@ impl TurTestApp {
     }
 
     pub fn eval_js(&self, source: &str) -> String {
+        let source = source.to_string();
         self.inner
-            .with_boa_context(|ctx| match ctx.eval(Source::from_bytes(source)) {
+            .with_boa_context(move |ctx| match ctx.eval(Source::from_bytes(&source)) {
                 Ok(r) => r
                     .as_string()
                     .map(|s| s.to_std_string_escaped())

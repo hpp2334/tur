@@ -19,8 +19,9 @@ use tur_native::NativeFontLoader;
 /// Eval a JS script on a `TurApp` and return the result as a string.
 /// Mirrors the old `TurApp::eval_js` via the `with_boa_context` escape hatch.
 fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String> {
-    app.with_boa_context(|ctx| {
-        ctx.eval(Source::from_bytes(source))
+    let source = source.to_string();
+    app.with_boa_context(move |ctx| {
+        ctx.eval(Source::from_bytes(&source))
             .map(|r| {
                 r.as_string()
                     .map(|s| s.to_std_string_escaped())

@@ -128,7 +128,10 @@ impl Plugin for TurStdPlugin {
         // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
         std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
         // Event bus: bidirectional byte-channel between host and JS.
-        std_consts.extend(crate::builtin_plugins::event_bus::install_event_bus(ctx)?);
+        // Engine infrastructure (lives in `core::event_bus`); the shared
+        // state is created up-front by `TurAppInternal::new`, so
+        // `install_event_bus` just hooks up the JS bridge + subsystem.
+        std_consts.extend(crate::core::event_bus::install_event_bus(ctx)?);
 
         ctx.register_module("tur:std", std_fns, std_closures, std_consts);
 

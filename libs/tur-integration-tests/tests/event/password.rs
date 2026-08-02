@@ -93,7 +93,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 }
 
 fn cursor_x(app: &TurTestApp, id: ElementNodeId, byte: usize) -> f32 {
-    app.with_element(id, |e| {
+    app.with_element(id, move |e| {
         e.cast::<EditableTextElement>()
             .and_then(|el| el.cursor_x_at(byte))
             .unwrap_or(0.0)

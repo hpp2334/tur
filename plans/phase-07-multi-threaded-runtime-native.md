@@ -11,7 +11,15 @@
 - `CapturePlugin` / `CounterPlugin` (test plugins) migrated from `Rc<RefCell<>>` / `Rc<Cell<>>` to `Arc<Mutex<>>` / `Arc<AtomicU32>`. Test assertions updated (pointer-equality replaced with `Arc::ptr_eq` / value comparison to avoid deadlock when comparing the same Mutex twice).
 - 2 test files updated: `host_module_check.rs`, `reentrant_module_check.rs` use the new `HostExport { name, builder, length }` shape.
 - 2 test files updated: `capability.rs`, `multi_instance.rs` use `Arc`/`Mutex`/`AtomicU32` instead of `Rc`/`RefCell`/`Cell` for plugin-shared state.
-- All 170 element + 93 event + 8 vello tests pass; clippy + wasm clean.
+- **`instance_data` removed entirely** (per user direction): `EventBus` is the only consumer, so the type-erased `HashMap<TypeId, Box<dyn Any>>` on `TurAppInternal` was overkill.
+  - `EventBusInner` merged into `EventBus` (state lives directly on `EventBus`, shared via `Rc<EventBus>` — no separate "inner" type).
+  - `EventBus` + bridge closures + `HostBusSubsystem` + `install_event_bus` moved to new `core::event_bus` module (engine infrastructure, not plugin-specific).
+  - `TurAppInternal.event_bus: Rc<EventBus>` constructed up-front in `new()` (no longer populated during plugin register).
+  - `PluginContext.event_bus: Rc<EventBus>` field + `event_bus()` accessor — replaces `store_instance_data<T>`.
+  - `TurApp::event_bus()` returns `Rc<EventBus>` directly (no `from_inner` wrapper).
+  - `TurApp::instance_data<T>()` pub method removed.
+  - `builtin_plugins/event_bus/` deleted (was redundant after move).
+  - 170 element + 93 event tests pass; wasm + clippy clean.
 
 ## 🚧 What remains
 

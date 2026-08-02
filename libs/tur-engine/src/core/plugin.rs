@@ -115,11 +115,15 @@ pub struct PluginContext<'a> {
     /// [`TurAppInternal::subsystems`](crate::core::app::TurAppInternal) —
     /// plugins push here, the engine iterates the same vec during flush.
     pub(crate) subsystems: Rc<RefCell<Vec<Box<dyn Subsystem>>>>,
-    /// Per-instance plugin data map. Plugins store typed state here during
-    /// `register`; embedders retrieve it via
-    /// [`TurApp::instance_data`](crate::TurApp::instance_data).
-    pub(crate) instance_data:
-        Rc<RefCell<std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any>>>>,
+    /// Always-installed event bus — shared with
+    /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
+    /// (specifically `install_event_bus`) read this to wire up the JS bridge
+    /// (`eventBus.on`/`send`) and the [`HostBusSubsystem`] against the same
+    /// handle that [`TurApp::event_bus`](crate::TurApp::event_bus) returns to
+    /// embedders.
+    ///
+    /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
+    pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wrapping
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
     /// `import { viewportSize$ } from "tur:std"` and read the live
@@ -236,15 +240,14 @@ impl<'a> PluginContext<'a> {
         self.subsystems.borrow_mut().push(sub);
     }
 
-    /// Store per-instance typed data retrievable via
-    /// [`TurApp::instance_data`](crate::TurApp::instance_data). Plugins call
-    /// this during `register` to expose a typed handle (e.g. `EventBus`) that
-    /// embedders access after the app is built. The value is an `Rc<T>` so all
-    /// sides share one handle.
-    pub fn store_instance_data<T: 'static>(&mut self, data: Rc<T>) {
-        self.instance_data
-            .borrow_mut()
-            .insert(std::any::TypeId::of::<T>(), Box::new(data));
+    /// The always-installed event bus handle (shared with
+    /// [`TurApp::event_bus`](crate::TurApp::event_bus)). Plugins that need to
+    /// wire up host↔JS byte traffic (specifically [`install_event_bus`])
+    /// read this and clone the `Rc` for their subsystem / bridge captures.
+    ///
+    /// [`install_event_bus`]: crate::core::event_bus::install_event_bus
+    pub fn event_bus(&self) -> Rc<crate::core::event_bus::EventBus> {
+        self.event_bus.clone()
     }
 
     /// Register a JS source module under a bare specifier (e.g.
