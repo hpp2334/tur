@@ -1,332 +1,99 @@
 # Phase 7 — Multi-threaded runtime on native (worker pool, off-main-thread)
 
-**Status:** not started
+**Status:** 🚧 partial — prerequisite landed (Plugin `Send + Sync` + test plugin migration); worker thread + TurApp restructure pending
 **Prerequisite:** Phase 4 (`WorkerMsg`/`MainMsg` wire format + `handle_worker_msg` dispatch).
 **Goal:** introduce `TurRuntimeBuilder::tokio_handle(handle)` + a `WorkerPool` (Model B: pool of `min(4, num_cpus)` workers, lazy-spawned via `handle.spawn_blocking`, round-robin instance assignment at `create_app`). The boa Context + tree + subsystems for each instance live on its assigned worker thread; the renderer + cursor backend stay on main. **Native (desktop + Android) now runs JS off the main thread.**
 
-## Background
+## ✅ What landed (prerequisite)
 
-boa `Context` is `!Send` (GC-thread-local). Each instance's JS state is bound to one OS thread for the instance's lifetime. Model B (worker pool with instance pinning) lets M threads serve N instances — each instance permanently assigned to one worker, the worker multiplexes its instances cooperatively.
+- `Plugin: Send + Sync` supertrait added. All six production plugins are zero-field unit structs — trivially satisfied.
+- `HostModulePlugin` (test util) refactored from holding pre-built `NativeFunction`s (which wrap boa `TraceableClosure`, `!Send`) to holding **builder closures** (`Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>`). Each instance's `register()` calls the builder to produce a fresh `NativeFunction` against its own boa `Context`.
+- `CapturePlugin` / `CounterPlugin` (test plugins) migrated from `Rc<RefCell<>>` / `Rc<Cell<>>` to `Arc<Mutex<>>` / `Arc<AtomicU32>`. Test assertions updated (pointer-equality replaced with `Arc::ptr_eq` / value comparison to avoid deadlock when comparing the same Mutex twice).
+- 2 test files updated: `host_module_check.rs`, `reentrant_module_check.rs` use the new `HostExport { name, builder, length }` shape.
+- 2 test files updated: `capability.rs`, `multi_instance.rs` use `Arc`/`Mutex`/`AtomicU32` instead of `Rc`/`RefCell`/`Cell` for plugin-shared state.
+- All 170 element + 93 event + 8 vello tests pass; clippy + wasm clean.
 
-The user-provided tokio runtime owns the worker pool. Engine never constructs a runtime; it submits long-running worker tasks via `handle.spawn_blocking`. Communication is `tokio::sync::mpsc` / `oneshot`.
+## 🚧 What remains
 
-### Per-worker "local thread shared" capability model
+### 7.1 — `TurApp` restructure (the big rock)
 
-Each worker thread constructs its **own** `Rc`-rooted backend graph from a `RuntimeConfig` of factories/closures. Backends stay `Rc<dyn Backend>` (no `Arc`, no `Send + Sync` bounds on the trait). Backends are shared **within** a worker (across instances pinned to that worker); **not shared across** worker threads. This replaces the original Phase 6 plan's "shared Arc-backed backends" approach — most backends are stateless dispatchers (WasmClipboard → `navigator.clipboard`, WasmHttp → fresh reqwest client per request, etc.) and have no cross-instance state worth sharing across OS threads.
+Today's `TurApp` owns `boa_context: RefCell<Context>` + `internal: TurAppInternal` + `executor: Rc<TurJobExecutor>` inline. These are all `!Send` (boa GC + `Rc` graph rooted in the `Context`).
 
-`TurRuntime` therefore stores **backend factories** (closures producing a fresh `Rc<dyn Backend>` per call), not backend instances. When a worker thread first spins up, it calls each factory to build its own backend set, then builds a `Capabilities` map from those.
+For multi-threading, two architectural options:
 
-## Architecture
+**A. TurAppBackend trait object (cleanest, verbose)**
+- Introduce `trait TurAppBackend` with `InlineBackend` (today's state) and `ThreadedBackend` (worker thread + channels).
+- All `TurApp` methods delegate to the backend.
+- Existing tests use InlineBackend (default); production uses ThreadedBackend via `create_app_threaded`.
+- The public `TurApp` type stays unchanged — embedders see no API break.
+- ~600 LOC new (trait + InlineBackend move + ThreadedBackend + worker thread loop), ~300 LOC modified.
 
-```
-┌────────────── EMBEDDER ──────────────┐
-│  tokio::runtime::Runtime (multi-thr) │
-│  ├── async worker pool (HTTP, etc.)  │
-│  └── blocking pool (worker tasks)    │
-└──────────────┬───────────────────────┘
-               │ Handle
-               ▼
-┌─────────── TurRuntime ───────────────┐
-│  plugins: Vec<Box<dyn Plugin>>       │ ← shared by reference; per-worker
-│  capability_factories: Factories     │   calls each to build local set
-│  font_context: FontContext           │ ← Arc-backed internally, shareable
-│  clock: Arc<dyn Clock>               │ ← shareable
-│  font_loader: Arc<dyn FontLoader>    │ ← shareable
-│  tokio_handle: Handle                │
-│  worker_pool: Arc<WorkerPool>        │
-└──────────────────────────────────────┘
+**B. Single threaded TurApp (what the original plan called for)**
+- Move all engine state to a worker thread unconditionally.
+- Every `TurApp` method goes through channels.
+- Escape hatches (`with_element`, `with_boa_context`, `with_app`) become synchronous RPC (send `WorkerMsg`, blocking_recv on reply).
+- ~40 test files migrate to the new pattern.
+- ~1000 LOC total, high regression risk.
 
-WorkerPool:
-  - workers: Vec<mpsc::Sender<WorkerCommand>>
-  - next_assignment: AtomicUsize  (round-robin)
-  - pool_size = min(4, num_cpus)
-  - Lazy spawn: workers vec starts empty; first instance to slot i
-    triggers handle.spawn_blocking(worker_loop)
+### 7.2 — Escape hatch RPC variants
 
-worker_loop (one OS thread per pool slot):
-  - rx: mpsc::Receiver<WorkerCommand>
-  - instances: HashMap<InstanceId, InstanceState>
-  - local_caps: Capabilities  ← built fresh on THIS thread from factories
-  - loop:
-      recv WorkerCommand:
-        CreateInstance { config, reply }:
-          build InstanceState (boa Context + tree + subsystems + ...)
-            — uses local_caps (Rc clones, same thread)
-          insert into instances map
-          reply.send(main_rx_for_this_instance)
-        InstanceMessage { id, msg }:
-          process on instances[id]
-          (drain WorkerMsg queue → flush → build MainMsgs → send via instance's main_tx)
-        DestroyInstance { id }:
-          run before_destroy hooks; drop state
-```
+Either approach needs `WorkerMsg::WithElement { id, closure, reply }` and `WorkerMsg::WithBoaContext { closure, reply }` for the synchronous test-introspection pattern. Closures must be `Send + Sync` (they cross thread boundaries). Return types must be `Send`. ~40 test files use this pattern; each call site picks up the RPC overhead.
 
-## Files to add
+### 7.3 — Per-worker capability factory pattern
 
-### `libs/tur-engine/src/core/runtime/worker_pool.rs`
+Per the "local thread shared" decision (Phase 6 cancelled): each worker thread constructs its own backends via `Send + Sync` factory closures stored in `RuntimeConfig`. The runtime hands factories to the worker; the worker builds its `Rc`-rooted capability map on first spawn.
+
+### 7.4 — Worker thread loop
 
 ```rust
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use tokio::sync::{mpsc, oneshot};
-use tokio::runtime::Handle;
-
-use crate::core::app::comm::{WorkerMsg, MainMsg};
-use crate::core::capability::Capabilities;
-use crate::core::element::ElementNodeId;
-use crate::core::plugin::Plugin;
-
-pub struct WorkerPool {
-    workers: Vec<mpsc::Sender<WorkerCommand>>,
-    next_assignment: AtomicUsize,
-    handle: Handle,
-    pool_size: usize,
-    /// Shared, Send+Sync config (factories + Arc-backed resources).
-    runtime_config: Arc<RuntimeConfig>,
-}
-
-/// Send + Sync runtime-level config. Each worker calls
-/// `runtime_config.build_local_state()` on its own thread to construct a
-/// fresh `Rc`-rooted backend graph + plugin set.
-pub struct RuntimeConfig {
-    pub plugin_factories: Vec<Box<dyn Fn() -> Box<dyn Plugin> + Send + Sync>>,
-    pub capability_factories: Vec<CapabilityFactory>,
-    pub font_context: FontContext,
-    pub clock: Arc<dyn Clock>,
-    pub font_loader: Arc<dyn FontLoader>,
-}
-
-/// A typed closure that produces a fresh capability value on the worker
-/// thread. Each backend (Clipboard/Http/FilePicker) is registered here as
-/// a factory; the worker builds its own `Rc<dyn Backend>` instances.
-pub struct CapabilityFactory {
-    pub type_id: std::any::TypeId,
-    pub type_name: &'static str,
-    pub build: Box<dyn Fn() -> Box<dyn std::any::Any> + Send + Sync>,
-}
-
-enum WorkerCommand {
-    CreateInstance {
-        config: InstanceConfig,
-        reply: oneshot::Sender<Result<InstanceHandle, SpawnError>>,
-    },
-    DestroyAll {
-        reply: oneshot::Sender<()>,
-    },
-}
-
-pub struct InstanceConfig {
-    pub viewport: (f64, f64),
-    pub dpr: f64,
-}
-
-pub struct InstanceHandle {
-    pub worker_tx: mpsc::Sender<WorkerMsg>,
-    pub main_rx: mpsc::Receiver<MainMsg>,
-    pub instance_id: InstanceId,
-}
-
-impl WorkerPool {
-    pub fn new(handle: Handle, config: RuntimeConfig) -> Self {
-        let pool_size = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .min(4);
-        WorkerPool {
-            workers: Vec::with_capacity(pool_size),
-            next_assignment: AtomicUsize::new(0),
-            handle,
-            pool_size,
-            runtime_config: Arc::new(config),
-        }
-    }
-
-    pub async fn create_instance(&mut self, config: InstanceConfig) -> Result<InstanceHandle, SpawnError> {
-        let slot = self.next_assignment.fetch_add(1, Ordering::Relaxed) % self.pool_size;
-        if self.workers.len() <= slot {
-            self.spawn_worker(slot);
-        }
-        let (tx, rx) = oneshot::channel();
-        self.workers[slot].send(WorkerCommand::CreateInstance { config, reply: tx }).await?;
-        rx.await?
-    }
-}
-
 fn worker_loop(
-    mut rx: mpsc::Receiver<WorkerCommand>,
+    worker_rx: mpsc::Receiver<WorkerMsg>,
+    main_tx: mpsc::Sender<MainMsg>,
     config: Arc<RuntimeConfig>,
 ) {
-    // Build this worker's local state — Rc-rooted, never crosses threads.
+    // Build per-worker state (capabilities from factories, plugins, etc.).
     let local_caps = build_local_capabilities(&config.capability_factories);
-    let local_plugins: Vec<Box<dyn Plugin>> =
-        config.plugin_factories.iter().map(|f| f()).collect();
+
+    // Per-instance state built on demand when CreateInstance arrives.
+    // For Model A (one worker per instance), this is one InstanceState.
     let mut instances: HashMap<InstanceId, InstanceState> = HashMap::new();
 
-    while let Some(cmd) = rx.blocking_recv() {
-        match cmd {
-            WorkerCommand::CreateInstance { config: ic, reply } => {
-                let state = InstanceState::build(&config, &local_caps, &local_plugins, ic);
-                let handle = InstanceHandle { /* ... */ };
-                instances.insert(state.id, state);
-                let _ = reply.send(Ok(handle));
+    for msg in worker_rx.iter() {
+        match msg {
+            WorkerMsg::Wake => {
+                // Run flush on the assigned instance. Worker owns the
+                // renderer, so flush() renders directly. FrameOutcome
+                // is shipped to main.
+                let outcome = instance.flush();
+                let _ = main_tx.send(MainMsg::FrameOutcome(outcome));
             }
-            WorkerCommand::DestroyAll { reply } => {
-                for (_, mut s) in instances.drain() {
-                    s.shutdown();
-                }
-                let _ = reply.send(());
-                return;
-            }
+            // ... other variants delegate to per-instance dispatch.
+            WorkerMsg::Destroy { .. } => break,
+            _ => instance.handle_worker_msg(msg),
         }
     }
 }
-
-fn build_local_capabilities(factories: &[CapabilityFactory]) -> Capabilities {
-    let caps = Capabilities::new();
-    for f in factories {
-        let value = (f.build)();
-        // Insert via the typed API. The closure returns Box<dyn Any>;
-        // Capabilities::insert expects a typed C: Capability, so we need
-        // a typed-erased insertion path here. (Implementation detail —
-        // likely a `Capabilities::insert_erased(TypeId, Box<dyn Any>)`
-        // added for this purpose.)
-        caps.insert_erased(f.type_id, value);
-    }
-    caps
-}
 ```
 
-### `libs/tur-engine/src/core/runtime/instance_state.rs`
+### 7.5 — `NativeHttp::new(handle)` unchanged
 
-The worker-side `!Send` state for one instance. Same shape as today's `TurAppInternal` + boa `Context` + comm channels. Built on the worker thread (boa `Context` constructed here — never crosses thread boundary).
+The "local thread shared" model (Phase 6 cancelled) means each worker constructs its own `NativeHttp` from a cloned `Handle`. The runtime stores the `Handle` (or a factory); each worker calls `NativeHttp::new(handle.clone())` at startup.
 
-```rust
-pub struct InstanceState {
-    pub id: InstanceId,
-    pub boa_context: Context,  // !Send
-    pub internal: TurAppInternal,
-    pub executor: Rc<TurJobExecutor>,
-    pub main_tx: mpsc::Sender<MainMsg>,
-    pub worker_rx: mpsc::Receiver<WorkerMsg>,
-}
+## Why this is genuinely big
 
-impl InstanceState {
-    pub fn build(
-        config: &RuntimeConfig,
-        local_caps: &Capabilities,
-        local_plugins: &[Box<dyn Plugin>],
-        instance: InstanceConfig,
-    ) -> Self { ... }
+Refactoring `TurApp` is a deep surgery:
+- `boa_engine::Context` is `!Send` (GC-thread-local).
+- `Rc<TurAppInternal>` is `!Send`.
+- The whole engine graph (`ElementTree`, `FocusManager`, `MutationQueue`, `ImageResourceMap`, `Store`, `AsyncExecutor`, `Capabilities`) is `Rc`-rooted.
+- Moving any of it across threads requires either Arc/Mutex throughout OR a worker thread that owns it all.
 
-    /// Process one message from main. Drains event queues, runs flush,
-    /// builds MainMsgs, sends them via `main_tx`.
-    pub fn process(&mut self, msg: WorkerMsg) { ... }
+The "local thread shared" decision keeps backends on `Rc` (per-worker), but `TurAppInternal` itself is `Rc`-rooted and would need the same per-worker treatment OR a worker that owns it.
 
-    pub fn shutdown(&mut self) { ... }
-}
-```
-
-## Files to modify
-
-### `libs/tur-engine/src/core/runtime.rs` — `TurRuntimeBuilder`
-
-Add `tokio_handle` + factory registration. Today's `.capability(Clipboard::new(backend))` becomes `.capability_factory(Clipboard::factory(backend))` (or the existing API is kept and the builder wraps the backend in a closure that clones it — but `Rc` is `!Clone`-across-threads, so the cleanest is a factory-style API).
-
-```rust
-pub struct TurRuntimeBuilder {
-    font_loader: Option<Rc<dyn FontLoader>>,
-    clock: Option<Rc<dyn Clock>>,
-    capability_factories: Vec<CapabilityFactory>,
-    plugins: Vec<Box<dyn Plugin>>,
-    tokio_handle: Option<Handle>,
-}
-
-impl TurRuntimeBuilder {
-    pub fn tokio_handle(mut self, handle: Handle) -> Self {
-        self.tokio_handle = Some(handle);
-        self
-    }
-    pub fn build(self) -> Result<Rc<TurRuntime>, TurError> {
-        let handle = self.tokio_handle.ok_or_else(|| TurError::other(
-            "tokio Handle is required (TurRuntimeBuilder::tokio_handle)"
-        ))?;
-        // ... build WorkerPool, RuntimeConfig (factories + Arc-backed resources)
-    }
-}
-```
-
-### `TurRuntime::create_app`
-
-```rust
-pub fn create_app(
-    self: &Rc<Self>,
-    renderer: Box<dyn Renderer>,
-    viewport: (f64, f64),
-    dpr: f64,
-) -> Result<Rc<TurApp>, TurError> {
-    // Submit CreateInstance to the worker pool (round-robin slot).
-    let handle = self.worker_pool.blocking_create_instance(InstanceConfig {
-        viewport, dpr,
-    })?;
-    Ok(Rc::new(TurApp::new(handle, renderer)))
-}
-```
-
-`TurApp::new` constructs the main-side handle with the worker channels.
-
-### `TurApp` becomes the main-side handle
-
-```rust
-pub struct TurApp {
-    worker_tx: mpsc::Sender<WorkerMsg>,
-    main_rx: RefCell<mpsc::Receiver<MainMsg>>,
-    renderer: RefCell<Box<dyn Renderer>>,
-    cursor_backend: RefCell<Option<Rc<RefCell<dyn CursorBackend>>>>,
-    focused_state: RefCell<FocusedState>,
-    last_cursor: RefCell<Option<Cursor>>,
-    main_tree: RefCell<MainTree>,
-    event_bus: EventBus,  // always-installed, hand-built on main
-    viewport: RefCell<(u32, u32, f64)>,
-}
-```
-
-Per-frame pump (called by embedder's rAF):
-```rust
-impl TurApp {
-    pub fn pump(&self) -> Result<FrameOutcome, TurError> {
-        // 1. Forward any queued WorkerMsg (the embedder calls push_platform_event etc.)
-        // 2. Send Wake.
-        // 3. Drain main_rx until FrameOutcome.
-        // 4. Return FrameOutcome for the embedder to schedule next rAF.
-    }
-}
-```
-
-### Embedder rAF loop (e.g. `tur-wasm`, `tur-android`)
-
-Today's `run_frame()` becomes `pump()`:
-```rust
-let outcome = app.pump()?;
-driver.request_next(outcome.schedule);
-```
-
-## Verification
-
-1. **Multi-instance integration test** — `tests/element/multi_instance.rs` extended: spawn 5+ instances, drive each independently, verify isolation. With pool_size = min(4, num_cpus), instances share workers.
-2. **Off-main-thread verification** — log the thread ID inside `flush()` and inside `Renderer::render_commands`. They should differ.
-3. All existing element + event + vello tests pass (they go through the same message path, just inlined on the test thread — pump uses `try_recv`/`blocking_recv`).
-4. **No blocking on main** — main never waits synchronously for a worker round-trip during normal flush. Only the *first* `pump()` after `create_app` may take longer (initial instance construction on the worker).
-5. `cargo test --workspace` clean.
-6. `cargo clippy --workspace -- -D warnings` clean.
-7. Manual smoke test: playground + Android demo render correctly.
-
-## Risks
+## Risks (unchanged from original plan)
 
 - **boa Context construction time** — building a fresh Context per instance on the worker is currently done synchronously in `create_app`. With the split, it happens on the worker asynchronously; the first `pump()` may stall. Mitigation: construct eagerly in `create_app` (block on the spawn_blocking join) OR show a loading state.
 - **Channel overhead** — every event and every frame's commands cross a channel. With `min(4, num_cpus)` workers, contention is minimal. mpsc is fast.
-- **Cursor latency** — pointer events arrive at main, forward to worker, worker resolves cursor claim during record, ships back. +1 frame inherent latency. Acceptable per earlier design.
+- **Cursor latency** — pointer events arrive at main, forward to worker, worker resolves cursor claim during record, ships back. +1 frame inherent latency.
 - **Event bus handler timing** — handlers now run on main (during pump), not inline during flush. Slight timing shift; document.
 - **Per-worker factory pattern is new code.** Backends must be constructible from a `Send + Sync` factory closure. For `Rc`-only backends (none today, but a future macOS-specific arboard variant could need this), the factory must produce fresh instances without sharing parent-thread state.
 
@@ -336,8 +103,9 @@ driver.request_next(outcome.schedule);
 - Android-specific JNI changes — Phase 8.
 - Public API stable; only the runtime builder requires the new `tokio_handle` arg.
 
-## Estimated scope
+## Estimated scope (remaining)
 
-- ~700 lines new (WorkerPool, InstanceState, per-worker factory plumbing, comm wiring)
-- ~300 lines modified (TurRuntimeBuilder, create_app, TurApp)
+- ~700 lines new (TurAppBackend trait + InlineBackend + ThreadedBackend + worker thread loop + per-worker factory plumbing)
+- ~300 lines modified (TurApp methods, TurRuntimeBuilder, create_app)
+- ~200 lines test migration (escape hatch RPC pattern)
 - Significant PR; budget 4-6 days including multi-instance testing + factory pattern design
