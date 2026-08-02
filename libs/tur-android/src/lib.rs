@@ -234,10 +234,10 @@ pub mod ops {
     use jni::JNIEnv;
     use jni::objects::{JObject, JString};
     use jni::sys::{jdouble, jint, jlong};
-    use tur_engine::TurRuntimeBuilder;
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
     use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+    use tur_engine::{TurApp, TurRuntimeBuilder};
 
     use crate::app::{AndroidInstance, AndroidRuntime};
 
@@ -513,6 +513,27 @@ pub mod ops {
         } else {
             0
         }
+    }
+
+    /// Escape hatch for embedders: run `f` with `&TurApp` for the given
+    /// instance handle. Used from an embedder's *own* JNI trampolines (its
+    /// cdylib) to reach plugin-installed per-instance data — e.g.
+    /// `with_app(h, |app| EventBus::of(app))` — or to nudge a wake:
+    /// `with_app(h, |app| app.request_paint())`.
+    ///
+    /// Not part of [`standard_jni_exports!`](crate::standard_jni_exports!)
+    /// (Kotlin can't pass a Rust closure); the embedder wires its own
+    /// `Java_<pkg>_<Class>_*` trampoline that calls this. Returns `None` if
+    /// `handle` is `0` or stale (already `destroy`'d), in which case `f` is
+    /// not run.
+    ///
+    /// Must be called on the instance's own thread — `Rc<TurApp>` and the
+    /// underlying boa `Context` are `!Send` / `!Sync` (same constraint as
+    /// every other op here). Mirrors `TurApp::with_element` /
+    /// `TurApp::with_boa_context` in the engine.
+    pub fn with_app<R>(handle: jlong, f: impl FnOnce(&TurApp) -> R) -> Option<R> {
+        let instance = handle_to_instance(handle)?;
+        Some(f(&instance.app))
     }
 
     /// Push an IME composition event onto the platform-event queue. `kind`:
