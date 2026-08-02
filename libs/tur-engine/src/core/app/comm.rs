@@ -40,7 +40,7 @@ use std::fmt;
 use std::sync::{Arc, Condvar, Mutex};
 
 use crate::core::app::FrameOutcome;
-use crate::core::element::NodeId;
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::DevNodeData;
 use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
@@ -90,9 +90,37 @@ pub enum WorkerMsg {
         id: NodeId,
         reply: ReplySender<Option<DevNodeData>>,
     },
+    /// Query the focused-element state. Used by threaded backend's
+    /// `focused_state` RPC (inline backend reads engine state directly).
+    QueryFocusedState {
+        reply: ReplySender<crate::FocusedState>,
+    },
+    /// Query the focused-element id. Same pattern as `QueryFocusedState`.
+    QueryFocusedElement {
+        reply: ReplySender<Option<ElementNodeId>>,
+    },
+    /// Query the focused element's caret rect (logical-space `(x, y, w, h)`).
+    QueryFocusedCursorRect {
+        reply: ReplySender<Option<(f64, f64, f64, f64)>>,
+    },
+    /// Query whether the focused element is an editable text element.
+    QueryFocusedIsEditable { reply: ReplySender<bool> },
+    /// Path-based element lookup. `key` is the path segments.
+    QueryElement {
+        key: Vec<String>,
+        reply: ReplySender<Option<NodeId>>,
+    },
     /// Event bus — host → JS bytes. Worker forwards to the JS-side
     /// `__turEventBus.toJs` sink during the next flush.
     EventBusToJs(Vec<u8>),
+    /// Push an engine-internal event (programmatic scroll, clipboard
+    /// write, etc.). `AppEvent`'s `Custom` payload's `Send + Sync` bound
+    /// (added in Phase 6 prep) makes this safe to ship across threads.
+    AppEvent(crate::core::app::AppEvent),
+    /// Screenshot RPC — read rendered pixels from the worker's renderer.
+    /// Used by screenshot tests; returns `None` if the renderer doesn't
+    /// support pixel readback.
+    RenderToPixels { reply: ReplySender<Option<Vec<u8>>> },
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
@@ -233,7 +261,20 @@ impl fmt::Debug for WorkerMsg {
             Self::DevGetElement { id, .. } => {
                 f.debug_struct("DevGetElement").field("id", id).finish()
             }
+            Self::QueryFocusedState { .. } => f.debug_struct("QueryFocusedState").finish(),
+            Self::QueryFocusedElement { .. } => f.debug_struct("QueryFocusedElement").finish(),
+            Self::QueryFocusedCursorRect { .. } => {
+                f.debug_struct("QueryFocusedCursorRect").finish()
+            }
+            Self::QueryFocusedIsEditable { .. } => {
+                f.debug_struct("QueryFocusedIsEditable").finish()
+            }
+            Self::QueryElement { key, .. } => {
+                f.debug_struct("QueryElement").field("key", &key).finish()
+            }
             Self::EventBusToJs(bytes) => f.debug_tuple("EventBusToJs").field(&bytes.len()).finish(),
+            Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
+            Self::RenderToPixels { .. } => f.debug_struct("RenderToPixels").finish(),
             Self::Destroy { .. } => write!(f, "Destroy"),
         }
     }

@@ -233,11 +233,33 @@ impl TurAppBackend for InlineBackend {
                 let snap = self.dev_tool_get_element(id);
                 reply.send(snap);
             }
+            WorkerMsg::QueryFocusedState { reply } => {
+                reply.send(self.focused_state());
+            }
+            WorkerMsg::QueryFocusedElement { reply } => {
+                reply.send(self.focused_element());
+            }
+            WorkerMsg::QueryFocusedCursorRect { reply } => {
+                reply.send(self.focused_cursor_rect());
+            }
+            WorkerMsg::QueryFocusedIsEditable { reply } => {
+                reply.send(self.focused_is_editable());
+            }
+            WorkerMsg::QueryElement { key, reply } => {
+                let key_refs: Vec<&str> = key.iter().map(|s| s.as_str()).collect();
+                reply.send(self.query_element(&key_refs));
+            }
             WorkerMsg::EventBusToJs(_bytes) => {
                 tracing::trace!(
                     "EventBusToJs: {} bytes (Phase 5 wires delivery)",
                     _bytes.len()
                 );
+            }
+            WorkerMsg::AppEvent(event) => {
+                self.push_app_event(event);
+            }
+            WorkerMsg::RenderToPixels { reply } => {
+                reply.send(self.render_to_pixels());
             }
             WorkerMsg::Destroy { reply } => {
                 reply.send(());
@@ -474,11 +496,11 @@ impl TurAppBackend for ThreadedBackend {
         }
     }
 
-    fn push_app_event(&self, _event: AppEvent) {
-        // AppEvent's Custom payload isn't Send yet (Phase 8 adds the bound
-        // + a `WorkerMsg::AppEvent` variant). Until then, threaded mode
-        // panics — production embedders only use `push_platform_event`.
-        unimplemented!("push_app_event not supported in threaded mode (Phase 8)")
+    fn push_app_event(&self, event: AppEvent) {
+        // AppEvent's Custom payload's Send + Sync bound (Phase 6 prep)
+        // lets us ship it across the thread boundary. Fire-and-forget —
+        // no Reply needed.
+        let _ = self.worker_tx.send(WorkerMsg::AppEvent(event));
     }
 
     fn event_bus(&self) -> Rc<EventBus> {
@@ -488,25 +510,45 @@ impl TurAppBackend for ThreadedBackend {
     }
 
     fn focused_state(&self) -> FocusedState {
-        // Phase 8: RPC variant `WorkerMsg::FocusedState { reply }` or
-        // cache on main from `MainMsg::FocusedStateChanged`.
-        unimplemented!("focused_state not supported in threaded mode (Phase 8)")
+        let (tx, rx) = crate::core::app::Reply::<FocusedState>::pair();
+        let _ = self
+            .worker_tx
+            .send(WorkerMsg::QueryFocusedState { reply: tx });
+        rx.recv()
     }
 
     fn focused_element(&self) -> Option<ElementNodeId> {
-        unimplemented!("focused_element not supported in threaded mode (Phase 8)")
+        let (tx, rx) = crate::core::app::Reply::<Option<ElementNodeId>>::pair();
+        let _ = self
+            .worker_tx
+            .send(WorkerMsg::QueryFocusedElement { reply: tx });
+        rx.recv()
     }
 
     fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        unimplemented!("focused_cursor_rect not supported in threaded mode (Phase 8)")
+        let (tx, rx) = crate::core::app::Reply::<Option<(f64, f64, f64, f64)>>::pair();
+        let _ = self
+            .worker_tx
+            .send(WorkerMsg::QueryFocusedCursorRect { reply: tx });
+        rx.recv()
     }
 
     fn focused_is_editable(&self) -> bool {
-        unimplemented!("focused_is_editable not supported in threaded mode (Phase 8)")
+        let (tx, rx) = crate::core::app::Reply::<bool>::pair();
+        let _ = self
+            .worker_tx
+            .send(WorkerMsg::QueryFocusedIsEditable { reply: tx });
+        rx.recv()
     }
 
-    fn query_element(&self, _key: &[&str]) -> Option<NodeId> {
-        unimplemented!("query_element not supported in threaded mode (Phase 8)")
+    fn query_element(&self, key: &[&str]) -> Option<NodeId> {
+        let (tx, rx) = crate::core::app::Reply::<Option<NodeId>>::pair();
+        let key_owned: Vec<String> = key.iter().map(|s| s.to_string()).collect();
+        let _ = self.worker_tx.send(WorkerMsg::QueryElement {
+            key: key_owned,
+            reply: tx,
+        });
+        rx.recv()
     }
 
     fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
@@ -525,10 +567,9 @@ impl TurAppBackend for ThreadedBackend {
     }
 
     fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        // Phase 8: add `WorkerMsg::RenderToPixels { reply }` or expose
-        // via main-side renderer (the threaded model splits rendering
-        // from engine state).
-        unimplemented!("render_to_pixels not supported in threaded mode (Phase 8)")
+        let (tx, rx) = crate::core::app::Reply::<Option<Vec<u8>>>::pair();
+        let _ = self.worker_tx.send(WorkerMsg::RenderToPixels { reply: tx });
+        rx.recv()
     }
 
     fn set_cursor_backend(&self, _backend: Rc<RefCell<dyn CursorBackend>>) {
