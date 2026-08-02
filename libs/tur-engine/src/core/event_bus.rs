@@ -27,6 +27,7 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use boa_engine::object::FunctionObjectBuilder;
 use boa_engine::object::builtins::{JsFunction, JsUint8Array};
@@ -41,26 +42,63 @@ use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 use crate::error::TurError;
 
 // ---------------------------------------------------------------------------
+// Cross-thread queue types
+// ---------------------------------------------------------------------------
+
+/// Cross-thread host→JS byte queue. Host pushes (from any thread); the
+/// worker's `HostBusSubsystem` drains during flush.
+pub type HostToJsQueue = Arc<Mutex<VecDeque<Vec<u8>>>>;
+
+/// Cross-thread JS→host byte queue. JS pushes (via `eventBus.send`); the
+/// worker's `HostBusSubsystem` drains during flush and invokes host
+/// handlers.
+pub type JsToHostQueue = Arc<Mutex<VecDeque<Vec<u8>>>>;
+
+// ---------------------------------------------------------------------------
 // Shared state (was `EventBusInner`)
 // ---------------------------------------------------------------------------
 
 type HostHandler = Box<dyn FnMut(Vec<u8>)>;
 
 pub struct EventBus {
-    host_to_js: RefCell<VecDeque<Vec<u8>>>,
-    js_to_host: RefCell<VecDeque<Vec<u8>>>,
+    host_to_js: HostToJsQueue,
+    js_to_host: JsToHostQueue,
+    /// JS-side handlers registered via `eventBus.on`. `RefCell` because
+    /// boa's `JsFunction` is `!Send`/`!Sync` — these stay on the worker
+    /// thread (the subsystem that invokes them runs there).
     js_handlers: RefCell<Vec<JsFunction>>,
+    /// Host-side handlers registered via `on_bus_event`. Run during the
+    /// worker's `HostBusSubsystem` flush.
     host_handlers: RefCell<Vec<HostHandler>>,
 }
 
 impl EventBus {
     pub fn new() -> Self {
         Self {
-            host_to_js: RefCell::new(VecDeque::new()),
-            js_to_host: RefCell::new(VecDeque::new()),
+            host_to_js: Arc::new(Mutex::new(VecDeque::new())),
+            js_to_host: Arc::new(Mutex::new(VecDeque::new())),
             js_handlers: RefCell::new(Vec::new()),
             host_handlers: RefCell::new(Vec::new()),
         }
+    }
+
+    /// Construct with pre-existing cross-thread queues. Used by
+    /// `ThreadedBackend` to share queues between the worker's
+    /// `EventBus` and main's `EventBusHandle`.
+    pub fn from_queues(host_to_js: HostToJsQueue, js_to_host: JsToHostQueue) -> Self {
+        Self {
+            host_to_js,
+            js_to_host,
+            js_handlers: RefCell::new(Vec::new()),
+            host_handlers: RefCell::new(Vec::new()),
+        }
+    }
+
+    /// Clone the cross-thread queues. The returned handle can be sent
+    /// across threads (Arc<Mutex> is Send + Sync); the full EventBus
+    /// stays on the worker thread.
+    pub fn queues(&self) -> (HostToJsQueue, JsToHostQueue) {
+        (self.host_to_js.clone(), self.js_to_host.clone())
     }
 
     /// Retrieve the engine's always-installed event bus. Phase 5 promotes
@@ -77,7 +115,7 @@ impl EventBus {
     }
 
     pub fn emit_to_js(&self, payload: Vec<u8>) {
-        self.host_to_js.borrow_mut().push_back(payload);
+        self.host_to_js.lock().unwrap().push_back(payload);
     }
 
     pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + 'static) {
@@ -92,6 +130,70 @@ impl Default for EventBus {
 }
 
 // ---------------------------------------------------------------------------
+// Main-side handle (for threaded mode) — owns just the queues
+// ---------------------------------------------------------------------------
+
+/// Main-side handle to the event bus. Holds either:
+/// - **Queues mode** (inline): direct `Arc<Mutex<>>` queue clones,
+///   shared with the worker's `EventBus`. Full functionality.
+/// - **Channel mode** (threaded): a worker `Sender<WorkerMsg>`.
+///   `emit_to_js` ships via `WorkerMsg::EventBusToJs`. `drain_js_to_host`
+///   returns empty (handlers run on worker).
+///
+/// Both modes make `emit_to_js` work cross-thread, which is the embedder
+/// hot path. Use `TurApp::event_bus_handle()` for cross-thread access;
+/// use `TurApp::event_bus()` for inline-only full API
+/// (`on_bus_event` etc.).
+#[derive(Clone)]
+pub struct EventBusHandle {
+    inner: EventBusHandleInner,
+}
+
+#[derive(Clone)]
+enum EventBusHandleInner {
+    /// Inline mode — shared queues with the worker's `EventBus`.
+    Queues(HostToJsQueue, JsToHostQueue),
+    /// Threaded mode — ship via the worker's mpsc.
+    Channel(std::sync::mpsc::Sender<crate::core::app::WorkerMsg>),
+}
+
+impl EventBusHandle {
+    pub fn from_queues(host_to_js: HostToJsQueue, js_to_host: JsToHostQueue) -> Self {
+        Self {
+            inner: EventBusHandleInner::Queues(host_to_js, js_to_host),
+        }
+    }
+
+    pub fn from_channel(worker_tx: std::sync::mpsc::Sender<crate::core::app::WorkerMsg>) -> Self {
+        Self {
+            inner: EventBusHandleInner::Channel(worker_tx),
+        }
+    }
+
+    /// Push bytes to be delivered to JS `on` callbacks on the next flush.
+    pub fn emit_to_js(&self, payload: Vec<u8>) {
+        match &self.inner {
+            EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
+            EventBusHandleInner::Channel(tx) => {
+                let _ = tx.send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+            }
+        }
+    }
+
+    /// Drain pending JS→host messages. Returns empty in channel mode
+    /// (handlers run on the worker).
+    pub fn drain_js_to_host(&self) -> Vec<Vec<u8>> {
+        match &self.inner {
+            EventBusHandleInner::Queues(_, j) => {
+                let mut q = j.lock().unwrap();
+                q.drain(..).collect()
+            }
+            EventBusHandleInner::Channel(_) => Vec::new(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Subsystem — drains the queues each flush
 // ---------------------------------------------------------------------------
 
@@ -101,7 +203,7 @@ impl Subsystem for HostBusSubsystem {
     fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext) {
         let inner = self.0.clone();
 
-        let host_msgs: Vec<Vec<u8>> = inner.host_to_js.borrow_mut().drain(..).collect();
+        let host_msgs: Vec<Vec<u8>> = inner.host_to_js.lock().unwrap().drain(..).collect();
         if !host_msgs.is_empty() {
             let handlers = inner.js_handlers.borrow().clone();
             for msg in host_msgs {
@@ -122,7 +224,7 @@ impl Subsystem for HostBusSubsystem {
             cx.mark_dirty();
         }
 
-        let js_msgs: Vec<Vec<u8>> = inner.js_to_host.borrow_mut().drain(..).collect();
+        let js_msgs: Vec<Vec<u8>> = inner.js_to_host.lock().unwrap().drain(..).collect();
         if !js_msgs.is_empty() {
             let mut handlers = inner.host_handlers.borrow_mut();
             for msg in js_msgs {
@@ -172,7 +274,7 @@ fn tur_event_bus_send(
 ) -> JsResult<JsValue> {
     let v = args.get_or_undefined(0);
     let bytes = extract_bytes_from_value(v, ctx)?;
-    caps.inner.js_to_host.borrow_mut().push_back(bytes);
+    caps.inner.js_to_host.lock().unwrap().push_back(bytes);
     Ok(JsValue::undefined())
 }
 

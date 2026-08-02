@@ -70,6 +70,28 @@ fn threaded_app_cross_thread_rpc() {
 
     // RPC #7: render_to_pixels (returns None for NoopRenderer).
     let _pixels = app.render_to_pixels();
+
+    // RPC #8: event_bus_handle — emit_to_js ships via WorkerMsg::EventBusToJs.
+    let bus = app.event_bus_handle();
+    bus.emit_to_js(b"hello from threaded main".to_vec());
+    // Worker's subsystem will deliver on next flush.
+    app.pump().expect("pump after event_bus emit_to_js");
+
+    // RPC #9: set_cursor_backend — stored on main. Worker emits
+    // MainMsg::CursorChanged on cursor change; main applies here.
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    #[derive(Default)]
+    struct RecordingCursor(std::cell::RefCell<Option<tur_engine::core::platform::Cursor>>);
+    impl tur_engine::core::platform::CursorBackend for RecordingCursor {
+        fn set_cursor(&mut self, cursor: tur_engine::core::platform::Cursor) {
+            *self.0.borrow_mut() = Some(cursor);
+        }
+    }
+    let recording = Rc::new(RefCell::new(RecordingCursor::default()));
+    app.set_cursor_backend(recording.clone() as Rc<RefCell<dyn tur_engine::core::platform::CursorBackend>>);
+    // No pump here — without a pointer event, the worker's cursor sink
+    // stays empty. The point is that `set_cursor_backend` doesn't panic.
 }
 
 #[test]

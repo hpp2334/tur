@@ -107,6 +107,62 @@ mod imp {
             dpr: f64,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
+            Self::build_with_surface_inner(
+                runtime,
+                wgpu_instance,
+                window_handle,
+                logical_width,
+                logical_height,
+                dpr,
+                frame_loop,
+                false, // inline (default)
+            )
+            .await
+        }
+
+        /// Same as [`build_with_surface`](Self::build_with_surface) but
+        /// spawns the engine on a **worker thread** via
+        /// [`TurRuntime::create_app_threaded`]. The renderer is captured
+        /// into the worker factory closure (wgpu types are `Send + Sync`
+        /// on native). The embedder sees the same `TurApp` API; all
+        /// methods dispatch via mpsc to the worker.
+        ///
+        /// **Limitations:** capabilities are NOT shared with the worker
+        /// (worker gets a fresh `Capabilities::new()`). Embedders needing
+        /// per-instance capabilities should construct them inside the
+        /// `renderer_factory` closure pattern (Phase 8.1 limitation).
+        pub async fn build_with_surface_threaded(
+            runtime: &Rc<TurRuntime>,
+            wgpu_instance: &wgpu::Instance,
+            window_handle: AndroidWindowHandle,
+            logical_width: u32,
+            logical_height: u32,
+            dpr: f64,
+            frame_loop: FrameLoopRef,
+        ) -> Result<Self, TurAndroidError> {
+            Self::build_with_surface_inner(
+                runtime,
+                wgpu_instance,
+                window_handle,
+                logical_width,
+                logical_height,
+                dpr,
+                frame_loop,
+                true, // threaded
+            )
+            .await
+        }
+
+        async fn build_with_surface_inner(
+            runtime: &Rc<TurRuntime>,
+            wgpu_instance: &wgpu::Instance,
+            window_handle: AndroidWindowHandle,
+            logical_width: u32,
+            logical_height: u32,
+            dpr: f64,
+            frame_loop: FrameLoopRef,
+            threaded: bool,
+        ) -> Result<Self, TurAndroidError> {
             let raw_display = window_handle
                 .display_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("display: {e}")))?;
@@ -147,11 +203,19 @@ mod imp {
                 dpr,
             );
 
-            let app = runtime.create_app(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )?;
+            let app = if threaded {
+                runtime.create_app_threaded(
+                    move || Box::new(renderer),
+                    (logical_width as f64, logical_height as f64),
+                    dpr,
+                )?
+            } else {
+                runtime.create_app(
+                    Box::new(renderer),
+                    (logical_width as f64, logical_height as f64),
+                    dpr,
+                )?
+            };
 
             let loop_driver = Rc::new(AndroidLoopDriver::new(frame_loop));
             app.start(loop_driver.clone());

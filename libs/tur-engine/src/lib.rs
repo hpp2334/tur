@@ -173,6 +173,17 @@ impl TurApp {
         self.backend.event_bus()
     }
 
+    /// Cross-thread-safe event bus handle. Works for both inline and
+    /// threaded backends. Inline returns a queues-shared handle (full
+    /// functionality); threaded returns a channel-routed handle
+    /// (`emit_to_js` works; `drain_js_to_host` returns empty).
+    ///
+    /// Production threaded code should prefer this over
+    /// [`event_bus`](Self::event_bus) (which panics in threaded mode).
+    pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
+        self.backend.event_bus_handle()
+    }
+
     /// Combined focused-element state — single call replaces the
     /// `focused_is_editable()` + `focused_cursor_rect()` pair when the
     /// caller needs both. Phase 7's worker→main push will populate the

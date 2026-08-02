@@ -77,6 +77,12 @@ pub trait TurAppBackend: 'static {
     /// Always-installed event bus.
     fn event_bus(&self) -> Rc<EventBus>;
 
+    /// Cross-thread-safe event bus handle. Holds just the queue clones
+    /// (Arc<Mutex>) — safe to send across threads. Inline returns a
+    /// handle constructed from `internal.event_bus.queues()`; threaded
+    /// returns a pre-stored handle (constructed at worker-spawn time).
+    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle;
+
     /// Combined focused-element state.
     fn focused_state(&self) -> FocusedState;
     fn focused_element(&self) -> Option<ElementNodeId>;
@@ -135,6 +141,18 @@ impl InlineBackend {
             internal,
             executor,
         }
+    }
+
+    /// Read the latest cursor applied during the last flush (or `None` if
+    /// no pointer was over the surface / no cursor change happened).
+    /// Used by `ThreadedBackend` to ship cursor changes via
+    /// `MainMsg::CursorChanged`.
+    pub(crate) fn last_applied_cursor(&self) -> Option<crate::core::platform::Cursor> {
+        self.internal
+            .app_context
+            .borrow()
+            .shell
+            .last_applied_cursor()
     }
 
     fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -285,6 +303,11 @@ impl TurAppBackend for InlineBackend {
         self.internal.event_bus.clone()
     }
 
+    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
+        let (h, j) = self.internal.event_bus.queues();
+        crate::core::event_bus::EventBusHandle::from_queues(h, j)
+    }
+
     fn focused_state(&self) -> FocusedState {
         FocusedState {
             is_editable: self.focused_is_editable(),
@@ -413,6 +436,17 @@ use crate::core::app::MainMsg;
 pub struct ThreadedBackend {
     worker_tx: mpsc::Sender<WorkerMsg>,
     main_rx: Mutex<mpsc::Receiver<MainMsg>>,
+    /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged`
+    /// on cursor state change; main applies it here during `pump`. Set
+    /// via `set_cursor_backend` (called by embedder after
+    /// `create_app_threaded`). Stored as `RefCell` since
+    /// `ThreadedBackend` lives on the main thread only.
+    cursor_backend: RefCell<Option<Rc<RefCell<dyn CursorBackend>>>>,
+    /// Cross-thread event bus handle. Routes `emit_to_js` via
+    /// `WorkerMsg::EventBusToJs` (channel mode — no shared queues with
+    /// the worker, since the worker's `EventBus` is constructed inside
+    /// `build_inline_backend` and isn't reachable from main).
+    event_bus_handle: crate::core::event_bus::EventBusHandle,
 }
 
 impl ThreadedBackend {
@@ -435,8 +469,10 @@ impl ThreadedBackend {
             .expect("failed to spawn tur worker thread");
 
         Self {
-            worker_tx,
+            worker_tx: worker_tx.clone(),
             main_rx: Mutex::new(main_rx),
+            cursor_backend: RefCell::new(None),
+            event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
         }
     }
 }
@@ -446,6 +482,7 @@ fn worker_loop(
     worker_rx: mpsc::Receiver<WorkerMsg>,
     main_tx: mpsc::Sender<MainMsg>,
 ) {
+    let mut last_cursor: Option<crate::core::platform::Cursor> = None;
     while let Ok(msg) = worker_rx.recv() {
         match msg {
             WorkerMsg::Wake => {
@@ -458,6 +495,12 @@ fn worker_loop(
                     }
                 };
                 let _ = main_tx.send(MainMsg::FrameOutcome(payload));
+                // Ship cursor changes (deduped against the last emitted).
+                let current = backend.last_applied_cursor();
+                if current != last_cursor {
+                    last_cursor = current;
+                    let _ = main_tx.send(MainMsg::CursorChanged(current.unwrap_or_default()));
+                }
             }
             WorkerMsg::Destroy { reply } => {
                 reply.send(());
@@ -487,9 +530,16 @@ impl TurAppBackend for ThreadedBackend {
         loop {
             match main_rx.recv() {
                 Ok(MainMsg::FrameOutcome(result)) => return result.map_err(TurError::Other),
-                // CursorChanged / FocusedStateChanged / EventBusToHost /
-                // RenderCommands / DevReply / Destroyed — pump ignores
-                // for now; Phase 8 routes them to embedder-side handlers.
+                Ok(MainMsg::CursorChanged(cursor)) => {
+                    // Apply to the main-side cursor backend (set via
+                    // `set_cursor_backend`). No backend → no-op.
+                    if let Some(backend) = self.cursor_backend.borrow().as_ref() {
+                        backend.borrow_mut().set_cursor(cursor);
+                    }
+                }
+                // FocusedStateChanged / EventBusToHost / RenderCommands /
+                // DevReply / Destroyed — pump ignores for now; Phase 8
+                // routes them to embedder-side handlers.
                 Ok(_) => continue,
                 Err(_) => return Err(TurError::Other("worker gone".into())),
             }
@@ -504,9 +554,15 @@ impl TurAppBackend for ThreadedBackend {
     }
 
     fn event_bus(&self) -> Rc<EventBus> {
-        // EventBus is Rc<RefCell<...>>-backed; cross-thread needs Arc<Mutex>
-        // or a main-side proxy. Phase 8 introduces the proxy.
-        unimplemented!("event_bus not supported in threaded mode (Phase 8)")
+        // The full EventBus lives on the worker. For threaded mode,
+        // embedders use `event_bus_handle()` (the cross-thread-safe
+        // handle that routes via mpsc). The inline-only `event_bus()`
+        // panics here — production threaded code uses the handle.
+        unimplemented!("event_bus (full API) not supported in threaded mode; use event_bus_handle()")
+    }
+
+    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
+        self.event_bus_handle.clone()
     }
 
     fn focused_state(&self) -> FocusedState {
@@ -572,11 +628,10 @@ impl TurAppBackend for ThreadedBackend {
         rx.recv()
     }
 
-    fn set_cursor_backend(&self, _backend: Rc<RefCell<dyn CursorBackend>>) {
-        // Phase 8: ship to worker via `WorkerMsg::SetCursorBackend` (needs
-        // the backend to be Send, which today's wasm/native impls are via
-        // their own internal threading).
-        unimplemented!("set_cursor_backend not supported in threaded mode (Phase 8)")
+    fn set_cursor_backend(&self, backend: Rc<RefCell<dyn CursorBackend>>) {
+        // Store on main. Worker emits `MainMsg::CursorChanged` during
+        // pump; main applies here.
+        *self.cursor_backend.borrow_mut() = Some(backend);
     }
 
     fn with_boa_context_dyn(&self, _f: BoaClosure) -> AnySend {

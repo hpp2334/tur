@@ -125,6 +125,14 @@ impl Shell {
         }
     }
 
+    /// The most recent cursor applied via `apply_changes` (or `None` if
+    /// no pointer position was ever recorded). Used by `ThreadedBackend`'s
+    /// worker loop to ship cursor changes to main via
+    /// `MainMsg::CursorChanged`.
+    pub fn last_applied_cursor(&self) -> Option<Cursor> {
+        self.applied_cursor
+    }
+
     /// Borrow the biz/paint face for one paint pass.
     pub fn paint_face(&self) -> PaintShell<'_> {
         PaintShell { inner: self }
