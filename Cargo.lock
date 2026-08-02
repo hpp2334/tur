@@ -4635,6 +4635,7 @@ dependencies = [
  "tur-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wasm-bindgen-rayon",
 ]
 
 [[package]]

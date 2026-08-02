@@ -37,6 +37,19 @@ async function loadWasm(): Promise<Record<string, unknown>> {
         await (mod.default as (b: WebAssembly.Module) => Promise<unknown>)(
             compiled,
         );
+        // NOTE: thread-pool init is currently disabled because the
+        // engine traps with "memory access out of bounds" during JS
+        // module evaluation under atomics-enabled codegen, even when
+        // the wasm memory is correctly shared. See
+        // `.cargo/config.toml` for the full status / debugging trail.
+        // Uncomment the block below to attempt the threaded path:
+        //
+        // const initThreadPool = mod.initThreadPool as (
+        //     n: number,
+        // ) => Promise<unknown>;
+        // if (typeof initThreadPool === "function") {
+        //     await initThreadPool(navigator.hardwareConcurrency || 4);
+        // }
         return mod;
     })();
     return wasmReady;

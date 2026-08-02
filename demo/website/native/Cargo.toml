@@ -17,6 +17,7 @@ boa_engine = { workspace = true }
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
+wasm-bindgen-rayon = "1.2"
 console_error_panic_hook = { workspace = true }
 tracing = { workspace = true }
 tracing-wasm = { workspace = true }

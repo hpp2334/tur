@@ -2,17 +2,46 @@
 RUST_MIN_STACK = "8388608"
 
 [target.wasm32-unknown-unknown]
-# wasm-bindgen-rayon setup. The combination below (atomics target
-# feature + shared/imported memory link args) is the upstream-README
-# configuration. Note: modern LLVM (Rust 1.85+) sometimes still trips
-# wasm-bindgen's `__heap_base` / `mem.import.is_some()` assertions;
-# the runtime side (`WasmRuntime::create`) catches any
-# `init_thread_pool` failure so the playground falls back to
-# single-threaded execution instead of crashing the bootstrap.
+# Wasm threading is configured per the canonical wasm-bindgen-rayon
+# upstream README (https://github.com/RReverser/wasm-bindgen-rayon).
+# All four pieces are required for the wasm memory to be shareable
+# across web workers:
+#   1. `+atomics,+bulk-memory` target feature
+#   2. `--shared-memory` + `--max-memory` + `--import-memory` link args
+#   3. `--export=__tls_*` (modern LLVM uses TLS, not `__heap_base`)
+#   4. `[unstable] build-std = ["panic_abort", "std"]` (below) — without
+#      this, std is compiled without atomics and the resulting TLS
+#      layout mismatch traps with "memory access out of bounds".
+#
+# Status: the build succeeds and the wasm memory IS shared at runtime
+# (`SharedArrayBuffer`-backed, `shared:true`), but the engine traps
+# during JS module evaluation (`loadAndRunModule`) with
+# "memory access out of bounds" under threaded codegen. This appears
+# to be a boa_engine / engine-level incompatibility with the
+# atomics-enabled LLVM codegen, not a configuration issue — the
+# configuration below matches the upstream README exactly. The runtime
+# call to `initThreadPool` from JS is therefore disabled in
+# `demo/website/src/index.tsx`; see the commit history for the
+# debugging trail. Use plain `wasm-pack build --target web --no-opt`
+# (no `--profile wasm-dev`) to get a working single-threaded wasm.
 rustflags = [
     "-C",
-    "target-feature=+atomics,+mutable-globals,+bulk-memory",
+    "target-feature=+atomics,+bulk-memory",
+    "-C",
+    "link-arg=--shared-memory",
+    "-C",
+    "link-arg=--max-memory=1073741824",
+    "-C",
+    "link-arg=--import-memory",
+    "-C",
+    "link-arg=--export=__wasm_init_tls",
+    "-C",
+    "link-arg=--export=__tls_size",
+    "-C",
+    "link-arg=--export=__tls_align",
+    "-C",
+    "link-arg=--export=__tls_base",
 ]
 
 [unstable]
-build-std = ["std", "panic_abort"]
+build-std = ["panic_abort", "std"]

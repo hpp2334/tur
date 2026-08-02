@@ -18,12 +18,12 @@ class WasmBuildPlugin implements RspackPluginInstance {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
                 .info("Building WASM (threaded, +atomics) with wasm-pack...");
-            // wasm-bindgen-rayon infrastructure (Cargo dep + atomics
-            // rustflags + nightly toolchain) is in place, but the runtime
-            // call is deferred to the host (see WasmRuntime::create
-            // docstring for why). Plain `--dev` profile (panic=unwind)
-            // keeps the engine working; the `wasm-dev` profile
-            // (panic=abort) is only needed when actually using threads.
+            // Plain `--dev` (panic=unwind) — single-threaded build. The
+            // threaded config in `.cargo/config.toml` is correct per the
+            // upstream wasm-bindgen-rayon README, but the engine traps
+            // during JS module evaluation under atomics-enabled codegen
+            // (see .cargo/config.toml docstring). Use `--profile wasm-dev`
+            // here to attempt the threaded build.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",

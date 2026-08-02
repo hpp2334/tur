@@ -17,6 +17,14 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+/// Re-export so the generated `tur_website.js` exposes `initThreadPool(n)` to
+/// the host. The host must `await initThreadPool(...)` *before* instantiating
+/// `TurWebsiteApp` — this is the upstream-recommended pattern
+/// (wasm-bindgen-rayon README): Rust has no way to await the promise without
+/// blocking the event loop.
+#[cfg(target_arch = "wasm32")]
+pub use wasm_bindgen_rayon::init_thread_pool;
+
 /// One-time wasm init (panic hook + tracing). Called automatically on module
 /// instantiation via the `#[wasm_bindgen(start)]` attribute.
 #[cfg(target_arch = "wasm32")]
