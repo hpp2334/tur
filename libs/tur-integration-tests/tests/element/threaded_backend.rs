@@ -1,6 +1,6 @@
-//! Phase 7 smoke test — proves `ThreadedBackend` dispatches across the
-//! thread boundary. Uses `build_inline_backend` inside a Send factory
-//! closure that constructs all engine pieces on the worker thread.
+//! Phase 7/8 smoke tests — prove `ThreadedBackend` dispatches across the
+//! thread boundary, both via low-level `ThreadedBackend::new(factory)` and
+//! via the high-level `TurRuntime::create_app_threaded(...)` runtime API.
 use std::sync::Arc;
 
 use boa_engine::context::time::StdClock;
@@ -39,52 +39,71 @@ fn build_backend() -> tur_engine::core::runtime::InlineBackend {
 fn threaded_app_cross_thread_rpc() {
     let app = std::rc::Rc::new(TurApp::new(Box::new(ThreadedBackend::new(build_backend))));
 
-    // RPC #1: load a module. Reply round-trips across the thread
-    // boundary via the Condvar. Verifies:
-    //   - worker thread spawned correctly
-    //   - mpsc channel send/recv works
-    //   - Reply slot Condvar wakes main
-    //   - InlineBackend.handle_worker_msg(LoadModule) processed on worker
-    //   - reply.send(Result<(), ModuleError>) delivered to main
+    // RPC #1: load_module — Reply round-trips across the thread boundary
+    // via the Condvar.
     app.load_module(
         "import { Column, Text } from 'tur:std';\
          globalThis.__root = () => Column({ children: [ Text('hi') ] });",
     )
     .expect("load_module round-tripped across threads");
 
-    // RPC #2: pump. Sends WorkerMsg::Wake, worker runs flush, ships
-    // MainMsg::FrameOutcome, main drains main_rx.
+    // RPC #2: pump — sends Wake, worker runs flush, ships FrameOutcome.
     let outcome = app.pump().expect("pump round-tripped across threads");
     eprintln!("threaded pump outcome: rendered={}", outcome.rendered);
 
     // RPC #3: dev-tool query (separate Reply-slot round-trip).
-    // Returns Option<DevNodeData>. None is OK — the JS above sets
-    // globalThis.__root but doesn't actually mount a tree, so the
-    // engine has nothing to render. The point is that the RPC itself
-    // works (returns without hanging / erroring).
     let _tree = app.dev_tool_element_tree();
-    eprintln!("threaded dev_tool_element_tree RPC completed");
 
     // RPC #4: eval_module (another Reply-slot path).
     app.eval_module("export const x = 1;")
         .expect("eval_module round-tripped across threads");
 
-    // RPC #5: focused-state queries (the embedder hot path — wasm reads
-    // these every frame for IME / caret placement).
+    // RPC #5: focused-state queries (wasm hot path — IME / caret).
     let _state = app.focused_state();
     let _editable = app.focused_is_editable();
     let _rect = app.focused_cursor_rect();
     let _id = app.focused_element();
-    eprintln!("threaded focused-state queries completed");
 
-    // RPC #6: push_app_event (fire-and-forget across threads). We just
-    // verify it doesn't panic / hang.
-    // Using a no-op event since we don't have a way to verify delivery
-    // without more plumbing — the round-trip itself is the test.
+    // RPC #6: push_app_event (fire-and-forget).
     app.request_paint();
     app.pump().expect("pump after request_paint");
 
     // RPC #7: render_to_pixels (returns None for NoopRenderer).
-    let pixels = app.render_to_pixels();
-    eprintln!("threaded render_to_pixels: {:?}", pixels.is_some());
+    let _pixels = app.render_to_pixels();
+}
+
+#[test]
+fn runtime_create_app_threaded_end_to_end() {
+    use tur_engine::TurRuntime;
+
+    // Build runtime with TurStdPlugin — the threaded factory
+    // re-registers it on the worker.
+    let runtime = TurRuntime::builder()
+        .font_loader(std::sync::Arc::new(StubFontLoader))
+        .clock(std::sync::Arc::new(StdClock::new()))
+        .plugin(TurStdPlugin)
+        .build()
+        .expect("runtime build");
+
+    // create_app_threaded spawns the worker, captures Arc clones of
+    // clock/font_loader/plugins, constructs InlineBackend on the worker,
+    // wraps in ThreadedBackend.
+    let app = runtime
+        .create_app_threaded(
+            || Box::new(tur_engine::renderer::NoopRenderer::new()),
+            (200.0, 100.0),
+            1.0,
+        )
+        .expect("create_app_threaded");
+
+    // Verify the canonical embedder flow: load_module → pump →
+    // focused_state (the wasm website hot path).
+    app.load_module("export const x = 1;")
+        .expect("load_module via runtime-spawned worker");
+    let outcome = app.pump().expect("pump via runtime-spawned worker");
+    let _state = app.focused_state();
+    eprintln!(
+        "runtime.create_app_threaded end-to-end: rendered={}",
+        outcome.rendered
+    );
 }

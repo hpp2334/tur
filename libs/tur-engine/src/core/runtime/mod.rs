@@ -98,7 +98,12 @@ pub struct TurRuntime {
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
-    plugins: Vec<Box<dyn Plugin>>,
+    /// `Arc` so a threaded factory closure can cheaply clone the plugin
+    /// list and re-register every plugin on the worker thread (Phase 8
+    /// `create_app_threaded`). Each `Box<dyn Plugin>` is `Send + Sync`
+    /// (Phase 7 prep), and `register` takes `&self`, so the same plugin
+    /// objects work for both inline and threaded instances.
+    plugins: Arc<Vec<Box<dyn Plugin>>>,
 }
 
 impl TurRuntime {
@@ -152,6 +157,70 @@ impl TurRuntime {
         viewport: (f64, f64),
     ) -> Result<Rc<TurApp>, TurError> {
         self.create_instance(None, viewport)
+    }
+
+    /// Create an isolated [`TurApp`] instance backed by a **worker thread**.
+    /// The engine state (boa `Context`, element tree, reactive store,
+    /// subsystems) lives on the worker; the renderer is supplied via
+    /// `renderer_factory` (which runs ON THE WORKER THREAD).
+    ///
+    /// All `TurApp` methods dispatch via mpsc channels: synchronous from
+    /// the caller's perspective, blocking on the worker's reply.
+    ///
+    /// **Limitation (Phase 8.1):** capabilities are NOT shared with the
+    /// worker today — the runtime's `Capabilities` is `Rc<RefCell<…>>`
+    /// (`!Send`). The threaded factory constructs a fresh, empty
+    /// `Capabilities` on the worker; embedders that need capabilities
+    /// (Clipboard/Http/FilePicker/Cursor) should construct them inside
+    /// the `renderer_factory` closure via the lower-level
+    /// [`build_inline_backend`] helper. Phase 8.2 will migrate
+    /// `Capabilities` to `Arc<Mutex<…>>` and share.
+    ///
+    /// **What works cross-thread:** `load_module`/`load_js`/`eval_module`,
+    /// `pump`, `push_platform_event`/`push_app_event`/`request_paint`,
+    /// `focused_*`, `query_element`, `dev_tool_*`, `render_to_pixels`.
+    ///
+    /// **What panics:** `event_bus` (deferred), `set_cursor_backend`
+    /// (deferred), `with_boa_context`/`with_element` escape hatches
+    /// (inline-only by design). See [`ThreadedBackend`] docs.
+    ///
+    /// Native-only. Wasm threading lands in Phase 9 (wasm-bindgen-rayon +
+    /// COOP/COEP).
+    pub fn create_app_threaded(
+        self: &Rc<Self>,
+        renderer_factory: impl FnOnce() -> Box<dyn Renderer> + Send + 'static,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Result<Rc<TurApp>, TurError> {
+        let clock = self.clock.clone();
+        let font_context = self.font_context.clone();
+        let font_loader = self.font_loader.clone();
+        let plugins = self.plugins.clone();
+        let backend_factory = move || {
+            let renderer = renderer_factory();
+            // Fresh, empty capabilities — Phase 8.1 limitation. Embedders
+            // needing capabilities should call `build_inline_backend`
+            // directly with their own pre-populated `Capabilities`.
+            let capabilities = Capabilities::new();
+            build_inline_backend(
+                clock,
+                font_context,
+                font_loader,
+                capabilities,
+                &plugins,
+                renderer,
+                viewport,
+            )
+            .expect("threaded backend factory failed")
+        };
+        let backend = ThreadedBackend::new(backend_factory);
+        let app = Rc::new(TurApp::new(Box::new(backend)));
+        app.push_platform_event(crate::core::platform::PlatformEvent::Resize {
+            logical_width: viewport.0 as u32,
+            logical_height: viewport.1 as u32,
+            dpr,
+        });
+        Ok(app)
     }
 
     fn create_instance(
@@ -417,7 +486,7 @@ impl TurRuntimeBuilder {
             font_context,
             font_loader,
             capabilities,
-            plugins: self.plugins,
+            plugins: Arc::new(self.plugins),
         }))
     }
 }
