@@ -74,3 +74,16 @@ console_error_panic_hook = "0.1"
 getrandom = "0.4"
 wasm-bindgen-futures = "0.4"
 winit = "0.30"
+
+# Wasm thread builds (wasm-bindgen-rayon) require `panic = "abort"`
+# so wasm-bindgen can locate `__heap_base` for thread-id injection.
+# Native builds keep `panic = "unwind"` (tur-android JNI trampoline
+# and vello integration tests rely on `catch_unwind`). The dedicated
+# profile is selected via `wasm-pack build --profile wasm-dev`.
+[profile.wasm-dev]
+inherits = "dev"
+panic = "abort"
+
+[profile.wasm-release]
+inherits = "release"
+panic = "abort"

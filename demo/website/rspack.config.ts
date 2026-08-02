@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
@@ -18,9 +18,12 @@ class WasmBuildPlugin implements RspackPluginInstance {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
                 .info("Building WASM (threaded, +atomics) with wasm-pack...");
-            // wasm-bindgen-rayon requires `-Z build-std` (nightly) +
-            // atomics target features. `.cargo/config.toml` already
-            // sets both; we just invoke wasm-pack normally.
+            // wasm-bindgen-rayon infrastructure (Cargo dep + atomics
+            // rustflags + nightly toolchain) is in place, but the runtime
+            // call is deferred to the host (see WasmRuntime::create
+            // docstring for why). Plain `--dev` profile (panic=unwind)
+            // keeps the engine working; the `wasm-dev` profile
+            // (panic=abort) is only needed when actually using threads.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",
@@ -36,6 +39,7 @@ class WasmBuildPlugin implements RspackPluginInstance {
             "WasmBuildPlugin",
             async (compilation) => {
                 const logger = compilation.getLogger("WasmBuildPlugin");
+                // Emit top-level files (tur_website.{js,wasm,d.ts}).
                 for (const file of readdirSync(wasmPkgDir)) {
                     if (!/\.(js|wasm|d\.ts)$/.test(file)) continue;
                     const content = readFileSync(join(wasmPkgDir, file));
@@ -44,6 +48,31 @@ class WasmBuildPlugin implements RspackPluginInstance {
                         new compiler.webpack.sources.RawSource(content),
                     );
                     logger.info(`Copied WASM asset: ${file}`);
+                }
+                // Emit per-snippet files (e.g. wasm-bindgen-rayon worker
+                // helper, wasm-streams inline modules) preserving the
+                // `snippets/<crate-hash>/<file>` path the JS glue expects.
+                // Recurses into subdirs (rayon's workerHelpers lives under
+                // `snippets/<crate-hash>/src/workerHelpers.js`).
+                const snippetsDir = join(wasmPkgDir, "snippets");
+                if (existsSync(snippetsDir)) {
+                    const walk = (dir: string, relPrefix: string) => {
+                        for (const entry of readdirSync(dir)) {
+                            const abs = join(dir, entry);
+                            const rel = `${relPrefix}/${entry}`;
+                            if (statSync(abs).isDirectory()) {
+                                walk(abs, rel);
+                            } else {
+                                const content = readFileSync(abs);
+                                compilation.emitAsset(
+                                    rel,
+                                    new compiler.webpack.sources.RawSource(content),
+                                );
+                                logger.info(`Copied WASM snippet: ${rel}`);
+                            }
+                        }
+                    };
+                    walk(snippetsDir, "snippets");
                 }
             },
         );

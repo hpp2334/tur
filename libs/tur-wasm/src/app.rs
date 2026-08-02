@@ -111,21 +111,30 @@ impl WasmRuntime {
     /// plugins / capability overrides). No canvas/DOM — instances are spawned
     /// separately.
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
-        // Initialize the wasm-bindgen-rayon thread pool. Must be called
-        // before any `spawn_blocking`-style work; requires
-        // SharedArrayBuffer (COOP/COEP headers — already configured in
-        // the dev server). The returned `Promise` resolves once the
-        // workers are ready; we don't await it here (the pool lazily
-        // spins up workers as needed).
+        // Note on wasm threading:
         //
-        // Note: the wasm embedder currently uses inline mode
-        // (`runtime.create_app`) because `WebGlVelloRenderer` holds web-sys
-        // types (`!Send` across web-worker realms). True threaded wasm
-        // rendering requires splitting the renderer (main) from the JS
-        // engine (worker) — a future architectural change. This call
-        // initializes the pool so rayon-backed crates (e.g. usvg image
-        // decoding) can offload to workers in the meantime.
-        let _ = wasm_bindgen_rayon::init_thread_pool(4);
+        // The wasm-bindgen-rayon dep is hard-wired (no feature flag,
+        // per design), and the build profile (`wasm-dev`/`wasm-release`
+        // in workspace Cargo.toml) + `.cargo/config.toml` rustflags
+        // (atomics + bulk-memory + mutable-globals) are set up for it.
+        // We do NOT call `init_thread_pool` from here, though, because:
+        //
+        //   1. The current Rust (1.85+) + wasm-bindgen (0.2.118) +
+        //      wasm-bindgen-rayon (1.3) combo doesn't reliably share
+        //      memory across workers — modern LLVM doesn't auto-share
+        //      memory on `+atomics`, and adding `--shared-memory` link
+        //      arg trips wasm-bindgen's `__heap_base` assertion. When
+        //      the call fails it traps the wasm instance ("memory
+        //      access out of bounds"), which can't be caught.
+        //
+        //   2. `WebGlVelloRenderer` holds web-sys types (`!Send` across
+        //      web-worker realms), so the engine + renderer can't move
+        //      to a worker without an architectural split.
+        //
+        // The host (e.g. the website) can opt-in by calling the
+        // generated `initThreadPool(n)` export from JS once the
+        // toolchain supports it. Until then, the playground runs
+        // single-threaded.
 
         let builder = tur_engine::TurRuntime::builder()
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))

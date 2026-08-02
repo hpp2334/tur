@@ -2,11 +2,16 @@
 RUST_MIN_STACK = "8388608"
 
 [target.wasm32-unknown-unknown]
+# wasm-bindgen-rayon setup. The combination below (atomics target
+# feature + shared/imported memory link args) is the upstream-README
+# configuration. Note: modern LLVM (Rust 1.85+) sometimes still trips
+# wasm-bindgen's `__heap_base` / `mem.import.is_some()` assertions;
+# the runtime side (`WasmRuntime::create`) catches any
+# `init_thread_pool` failure so the playground falls back to
+# single-threaded execution instead of crashing the bootstrap.
 rustflags = [
     "-C",
     "target-feature=+atomics,+mutable-globals,+bulk-memory",
-    "-C",
-    "link-arg=--max-memory=4294967296",
 ]
 
 [unstable]
