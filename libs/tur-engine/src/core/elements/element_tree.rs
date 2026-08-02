@@ -611,12 +611,15 @@ impl NodeTreeData {
 
         // The node's relative transform (default: translate(layout.offset);
         // `Transform` folds in rotate/scale; the follower uses its link-tracked
-        // offset). Push it so the element paints in its own local space; the
-        // canvas transform stack accumulates the absolute position. `absolute`
-        // is threaded through `PaintContext` for pointer-space conversions.
+        // offset). The paint walk delegates transform-stack management to
+        // `notify_node_entry` / `notify_node_exit` so recording canvases can
+        // capture per-node boundaries without also recording the auto-push
+        // (the absolute is carried by the `NodeStart` marker; main playback
+        // pushes it from the `Paint.transform` field). `absolute` is also
+        // threaded through `PaintContext` for pointer-space conversions.
         let rel = element.relative_transform(&node.computed_layout);
         let absolute = parent_absolute * rel;
-        canvas.push_transform(rel);
+        canvas.notify_node_entry(id, absolute, node.computed_layout.size);
 
         let paint_ctx = PaintContext::new(
             self,
@@ -630,7 +633,7 @@ impl NodeTreeData {
         let children = self.flatten_children(&node.children);
         element.paint(canvas, &node.computed_layout, &children, &paint_ctx);
 
-        canvas.pop_transform();
+        canvas.notify_node_exit();
     }
 
     pub fn hit_test(&self, position: Offset) -> bool {

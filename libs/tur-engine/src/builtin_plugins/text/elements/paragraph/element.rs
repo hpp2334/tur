@@ -1,5 +1,6 @@
 use boa_engine::object::JsObject;
 use boa_engine::{Context, JsError, JsValue};
+use std::sync::Arc;
 
 use crate::builtin_plugins::text::controller::SelectionChangeEvent;
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
@@ -109,7 +110,7 @@ impl View for TextView {
 
 pub struct TextElement {
     pub(crate) view: TextView,
-    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) cached_layout: Option<Arc<TextLayoutData>>,
     pub(crate) cached_spans: Vec<SpanData>,
     pub(crate) selection_anchor: usize,
     pub(crate) selection_end: usize,

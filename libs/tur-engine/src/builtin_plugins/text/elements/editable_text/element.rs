@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::render::brush::Color;
@@ -192,7 +193,7 @@ pub struct EditableTextPainting {
 
 pub struct EditableTextElement {
     pub(crate) view: EditableTextView,
-    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) cached_layout: Option<Arc<TextLayoutData>>,
     pub(crate) resolved_multiline: bool,
     /// Last-resolved `obscureText` flag (refreshed during layout). Read by
     /// the keyboard handler (to suppress copy/cut) and the render path (to

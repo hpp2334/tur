@@ -64,7 +64,10 @@ fn host_emits_multiple_messages_js_collects_all() {
     bus.emit_to_js(b"third".to_vec());
 
     app.wait_for(|a| a.eval_js("globalThis.__messages.length") == "3");
-    assert_eq!(app.eval_js(r#"globalThis.__messages.join(",")"#), "first,second,third");
+    assert_eq!(
+        app.eval_js(r#"globalThis.__messages.join(",")"#),
+        "first,second,third"
+    );
 }
 
 // ===========================================================================
@@ -164,7 +167,10 @@ fn json_round_trip_with_id_correlation() {
 
     app.wait_for(|a| !a.eval_js("globalThis.__result").is_empty());
     let result = app.eval_js("globalThis.__result");
-    assert!(result.contains("echo:"), "should contain echo prefix: {result}");
+    assert!(
+        result.contains("echo:"),
+        "should contain echo prefix: {result}"
+    );
     assert!(result.contains("\"id\":42"), "should contain id: {result}");
 }
 

@@ -5,7 +5,7 @@
 /// aligned with the `TextEditingController`'s byte-based cursor/selection
 /// offsets — newlines (`\n`) consume a byte in the string but produce no
 /// glyph, so we must never count glyphs as if they were string indices.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct LineGlyphStop {
     pub byte: usize,
     pub x: f32,
@@ -13,6 +13,7 @@ pub struct LineGlyphStop {
     pub advance: f32,
 }
 
+#[derive(Debug)]
 pub struct LineInfo {
     pub top: f32,
     pub height: f32,
@@ -32,6 +33,7 @@ pub struct LineInfo {
     pub stops: Vec<LineGlyphStop>,
 }
 
+#[derive(Debug)]
 pub struct TextLayoutData {
     pub runs: Vec<TextRunData>,
     pub line_infos: Vec<LineInfo>,
@@ -39,6 +41,7 @@ pub struct TextLayoutData {
     pub _height: f32,
 }
 
+#[derive(Debug)]
 pub struct TextRunData {
     pub font: parley::FontData,
     pub font_size: f32,
@@ -49,6 +52,7 @@ pub struct TextRunData {
     pub line_index: usize,
 }
 
+#[derive(Debug)]
 pub struct TextGlyph {
     pub id: u32,
     pub x: f32,

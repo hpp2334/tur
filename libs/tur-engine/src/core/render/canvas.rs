@@ -1,5 +1,7 @@
 use std::fmt;
+use std::sync::Arc;
 
+use crate::core::element::ElementNodeId;
 use crate::core::layout::{Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
 use vello_common::kurbo::Affine;
@@ -16,8 +18,15 @@ pub trait Canvas: fmt::Debug {
         color: &Color,
         stroke_width: f64,
     );
+    /// `layout` is `&Arc<TextLayoutData>` (not `&TextLayoutData`) so a
+    /// [`super::RecordingCanvas`](super::RecordingCanvas) can capture the
+    /// layout into a [`super::CanvasOp::FillTextLayout`] by refcount bump
+    /// instead of a deep clone — text layouts are by far the largest
+    /// per-op payload (a `Vec` of glyph runs + line info per paint call),
+    /// so the `Arc` makes record + ship to main cheap. Element paint
+    /// bodies already hold their cached layout as `Arc<TextLayoutData>`.
     #[allow(private_interfaces)]
-    fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData);
+    fn fill_text_layout(&mut self, offset: Offset, layout: &Arc<TextLayoutData>);
     fn draw_image(&mut self, resource_id: ImageResourceId, natural_size: Size, transform: Affine);
     fn draw_shadow(
         &mut self,
@@ -47,6 +56,24 @@ pub trait Canvas: fmt::Debug {
     /// `pop_transform` is called.
     fn push_transform(&mut self, transform: Affine);
     fn pop_transform(&mut self);
+
+    /// Called by the paint walk at the start of each node, before
+    /// `push_transform`. Default: no-op. `RecordingCanvas` overrides this
+    /// to insert a `NodeStart` marker so the record pass can split the
+    /// recorded op stream into per-node `RenderCommand::Paint` segments
+    /// (a node may emit multiple `Paint` commands when its paint body
+    /// interleaves children — the record pass closes the current segment
+    /// at each child boundary and emits a `Paint` for what came before).
+    ///
+    /// `transform` is the node's **absolute** affine (parent_absolute *
+    /// relative_transform), which is what main playback needs (it doesn't
+    /// walk a parent chain). `size` is the node's laid-out size.
+    fn notify_node_entry(&mut self, _id: ElementNodeId, _transform: Affine, _size: Size) {}
+
+    /// Called by the paint walk at the end of each node, after
+    /// `pop_transform`. Default: no-op. `RecordingCanvas` overrides this
+    /// to insert a `NodeEnd` marker.
+    fn notify_node_exit(&mut self) {}
 }
 
 /// A `Canvas` that discards every draw. Used by `NoopRenderer` to drive the
@@ -66,7 +93,7 @@ impl Canvas for NullCanvas {
     ) {
     }
     #[allow(private_interfaces)]
-    fn fill_text_layout(&mut self, _offset: Offset, _layout: &TextLayoutData) {}
+    fn fill_text_layout(&mut self, _offset: Offset, _layout: &Arc<TextLayoutData>) {}
     fn draw_image(
         &mut self,
         _resource_id: ImageResourceId,
