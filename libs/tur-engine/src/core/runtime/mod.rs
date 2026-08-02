@@ -73,14 +73,14 @@ type CapabilityInsert = Box<dyn FnOnce(&Capabilities)>;
 /// capabilities + events only).
 ///
 /// ```no_run
-/// # use std::rc::Rc;
+///
 /// # use tur_engine::*;
 /// # use tur_engine::core::fonts::FontLoader;
 /// # use tur_engine::core::render::Renderer;
 /// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>, renderer_a: Box<dyn Renderer>, renderer_b: Box<dyn Renderer>) -> Result<(), tur_engine::error::TurError> {
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
-///     .clock(Rc::new(boa_engine::context::time::StdClock::new()))
+///     .clock(std::sync::Arc::new(boa_engine::context::time::StdClock::new()))
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
 ///
