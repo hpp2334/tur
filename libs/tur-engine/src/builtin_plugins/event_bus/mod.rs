@@ -63,8 +63,24 @@ impl EventBusInner {
 pub struct EventBus(Rc<EventBusInner>);
 
 impl EventBus {
+    /// Construct from the inner shared state. Used by
+    /// [`TurApp::event_bus`](crate::TurApp::event_bus) — public only so the
+    /// crate root can build a handle from the engine's instance data.
+    pub fn from_inner(inner: Rc<EventBusInner>) -> Self {
+        EventBus(inner)
+    }
+
+    /// Retrieve the engine's always-installed event bus. Phase 5 promotes
+    /// this from an `Option<EventBus>` (`EventBus::of`) to a direct handle
+    /// — the bus is unconditionally installed by `TurStdPlugin`, so the
+    /// `Option` was always unwrappable in practice.
+    ///
+    /// Phase 5 keeps `of()` as a back-compat alias (it returns `Some(bus)`
+    /// unconditionally) so existing embedder/test code keeps working; new
+    /// code should use [`TurApp::event_bus`](crate::TurApp::event_bus)
+    /// directly.
     pub fn of(app: &crate::TurApp) -> Option<EventBus> {
-        app.instance_data::<EventBusInner>().map(EventBus)
+        Some(app.event_bus())
     }
 
     pub fn emit_to_js(&self, payload: Vec<u8>) {

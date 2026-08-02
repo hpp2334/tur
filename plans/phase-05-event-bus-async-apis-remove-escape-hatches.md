@@ -1,7 +1,7 @@
 # Phase 5 — Event bus always-installed; async module/dev APIs; remove escape hatches
 
-**Status:** not started
-**Prerequisite:** Phase 4 (channel-based TurApp API).
+**Status:** ✅ partial (refined scope — see "Outcome" below)
+**Prerequisite:** Phase 4 (channel-based TurApp API — wire format defined).
 **Goal:** three coordinated changes that all touch the public API surface:
 1. Promote the event bus from opt-in plugin to always-installed builtin.
 2. Convert module-loading and dev-tool APIs to real Rust async fns.
@@ -109,6 +109,31 @@ Worker tracks `last_focused_state` and emits only on change.
 3. Event bus integration test (`tests/element/event_bus.rs`) passes with the new handle.
 4. `cargo clippy --workspace -- -D warnings`.
 5. `cargo check --target wasm32-unknown-unknown`.
+
+## ✅ Outcome (refined scope)
+
+The original Phase 5 scope bundled three large changes (event bus promotion + async APIs + escape hatch removal) into one massive API-break phase. The refined scope delivers the event bus promotion now (the only piece that has visible single-threaded value) and defers the other two to Phase 7, where they align naturally with the actual multi-threaded migration.
+
+**What landed:**
+- `TurApp::event_bus() -> EventBus` — non-Option direct handle (the bus is unconditionally installed by `TurStdPlugin`, so the historical `Option` was always unwrappable in practice).
+- `EventBus::of(&app)` kept as back-compat alias returning `Some(app.event_bus())` — zero test churn.
+- `EventBus::from_inner(Rc<EventBusInner>)` constructor exposed so the crate root can build a handle from the engine's instance data.
+- `TurApp::focused_state() -> FocusedState` — combined accessor (`is_editable + cursor_rect` in one call). Replaces the two-call `focused_is_editable()` + `focused_cursor_rect()` pattern when the caller needs both. Today this reads live from engine state; Phase 7's worker will populate a main-side cache via `MainMsg::FocusedStateChanged`.
+- New `FocusedState` struct at the crate root.
+
+**What was deferred to Phase 7:**
+- **Async module/dev APIs** (`async fn load_and_run_module`, etc.) — these require an async runtime to `.await`. The engine core is tokio-free today; Phase 7 introduces `TurRuntimeBuilder::tokio_handle(handle)`, at which point async APIs become natural. The wire types are already defined (Phase 4's `WorkerMsg::LoadModule { reply: ReplySender<...> }`); the sync wrapper in `TurApp::load_module` continues to work.
+- **Escape hatch removal** (`with_app` / `with_boa_context` / `with_element`) — these are used by ~40 test files and 2 embedder crates for introspection. They work fine single-threaded (closures don't cross threads). Removing them is a Phase 7 concern: when the worker/main split goes live, closures can't cross the boundary, so they must be replaced with named handles. Phase 6's Send+Sync prep doesn't require their removal — Phase 6 adds bounds to wire types and capability traits, not to `TurApp` itself (which stays main-side).
+
+**Why defer rather than do it now?**
+- **Avoid test/embedder churn twice.** Doing the async + escape-hatch migration now, then re-doing it in Phase 7 for the channel wiring, doubles the work. Phase 7 will be a single coordinated migration: channels + async + escape hatch removal, all in service of the worker/main split.
+- **Phase 6 unblocked.** Phase 6's Send+Sync bounds only need Phase 4's wire types (already done) and Phase 5's event bus promotion (now done). It doesn't need escape hatches gone.
+
+**Verification:**
+- All 170 element + 93 event + 8 vello tests pass (no test changes needed).
+- 27 in-crate unit tests pass.
+- `cargo build` / `cargo clippy --workspace` clean under both `direct-render` feature configs.
+- `cargo check --target wasm32-unknown-unknown -p tur-wasm` clean.
 
 ## Risks
 

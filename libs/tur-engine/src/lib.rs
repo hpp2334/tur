@@ -68,6 +68,18 @@ pub struct TurApp {
 /// before rescheduling). See [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
+/// Snapshot of focused-element state — single struct for the two-value
+/// `focused_is_editable` + `focused_cursor_rect` pair. Used by
+/// [`TurApp::focused_state`]. Phase 7's worker emits the equivalent
+/// `MainMsg::FocusedStateChanged` on change.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FocusedState {
+    pub is_editable: bool,
+    /// Logical-space `(x, y, w, h)` of the focused element's caret, or
+    /// `None` if no editable is focused.
+    pub cursor_rect: Option<(f64, f64, f64, f64)>,
+}
+
 impl TurApp {
     pub fn load_js(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
@@ -140,7 +152,7 @@ impl TurApp {
     }
 
     /// Retrieve per-instance typed data stored by a plugin during `register`
-    /// via [`PluginContext::store_instance_data`](core::plugin::PluginContext::store_instance_data).
+    /// via [`PluginContext::store_instance_data](core::plugin::PluginContext::store_instance_data).
     /// Returns `None` if no plugin stored data of type `T`.
     ///
     /// Each plugin exposes its own `of()` wrapper around this (e.g.
@@ -152,6 +164,33 @@ impl TurApp {
             .get(&std::any::TypeId::of::<T>())
             .and_then(|v| v.downcast_ref::<Rc<T>>())
             .cloned()
+    }
+
+    /// Always-installed event bus handle (Phase 5+). The bus is
+    /// unconditionally registered by `TurStdPlugin`, so this never fails —
+    /// the historical `EventBus::of(&app) -> Option<EventBus>` was always
+    /// `Some`. New code should prefer this direct accessor.
+    ///
+    /// Phase 5 keeps `EventBus::of` as a back-compat alias (returns
+    /// `Some(self.event_bus())`).
+    pub fn event_bus(&self) -> builtin_plugins::event_bus::EventBus {
+        // The event bus is always installed; unwrap is sound.
+        let inner = self
+            .instance_data::<builtin_plugins::event_bus::EventBusInner>()
+            .expect("EventBus always installed by TurStdPlugin");
+        builtin_plugins::event_bus::EventBus::from_inner(inner)
+    }
+
+    /// Combined focused-element state — single call replaces the
+    /// `focused_is_editable()` + `focused_cursor_rect()` pair when the
+    /// caller needs both. Phase 7's worker→main push will populate the
+    /// main-side cache via `MainMsg::FocusedStateChanged`; today this
+    /// reads live from the engine state (single-threaded).
+    pub fn focused_state(&self) -> FocusedState {
+        FocusedState {
+            is_editable: self.focused_is_editable(),
+            cursor_rect: self.focused_cursor_rect(),
+        }
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
