@@ -49,7 +49,13 @@ use crate::error::TurError;
 /// runs, so a missing capability fails fast at runtime build with a clear error
 /// (naming the missing type and the fix) instead of midway through
 /// side-effecting registration.
-pub trait Plugin {
+/// **Phase 7**: requires `Send + Sync` so plugin config can be shared across
+/// worker threads (the runtime hands the plugin vec to whichever worker
+/// spawns the instance). Production plugins are zero-field unit structs
+/// (trivially `Send + Sync`); test plugins that captured `Rc<RefCell<>>`
+/// state or pre-built `NativeFunction`s must migrate to `Arc<Mutex<>>` /
+/// builder closures.
+pub trait Plugin: Send + Sync {
     /// Declare capabilities this plugin hard-requires. Called by the runtime
     /// builder BEFORE any plugin's `compile`/`register` runs. If a declared
     /// capability is missing, runtime `build()` returns `TurError::Other(...)`

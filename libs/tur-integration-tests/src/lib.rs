@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
+use boa_engine::Context;
 use boa_engine::NativeFunction;
 use boa_engine::Source;
 use boa_engine::context::time::{Clock, FixedClock};
@@ -38,16 +39,34 @@ use tur_net_capability::{
 /// build time. Test-only convenience for the cases that previously used the
 /// runtime `TurApp::register_host_module` API (now removed) — lets a test
 /// inject `tur:<whatever>` exports through the plugin path.
+///
+/// **Phase 7**: holds builder closures (not pre-built `NativeFunction`s)
+/// because `NativeFunction` wraps a boa `TraceableClosure` (`!Send`). Each
+/// instance's `register()` calls the builder to produce a fresh
+/// `NativeFunction` against its own boa `Context`.
 pub struct HostModulePlugin {
     /// Module specifier to register (e.g. `"tur:test"`).
     pub specifier: &'static str,
-    /// `(name, fn, length)` exports.
-    pub exports: Vec<(String, NativeFunction, usize)>,
+    /// `(name, builder, length)` exports.
+    pub exports: Vec<HostExport>,
+}
+
+/// One export of a [`HostModulePlugin`]. The `builder` closure produces a
+/// fresh `NativeFunction` for each instance (called inside `register`).
+pub struct HostExport {
+    pub name: String,
+    pub builder: Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>,
+    pub length: usize,
 }
 
 impl Plugin for HostModulePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        ctx.register_host_module(self.specifier, self.exports.clone());
+        let exports: Vec<(String, NativeFunction, usize)> = self
+            .exports
+            .iter()
+            .map(|e| (e.name.clone(), (e.builder)(ctx.boa_mut()), e.length))
+            .collect();
+        ctx.register_host_module(self.specifier, exports);
         Ok(())
     }
 }

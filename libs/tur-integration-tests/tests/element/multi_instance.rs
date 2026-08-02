@@ -3,8 +3,9 @@
 //! global state), shared-runtime semantics (same fonts/clock/capabilities),
 //! the plugin compile/register split, and independent event routing.
 
-use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use boa_engine::Source;
 use boa_engine::context::time::FixedClock;
@@ -143,20 +144,20 @@ fn many_instances_share_one_runtime() {
 /// A test-only capability carrying a shared counter.
 #[derive(Clone)]
 struct SharedCounterCap {
-    value: Rc<Cell<u32>>,
+    value: Arc<AtomicU32>,
 }
 impl Capability for SharedCounterCap {}
 impl SharedCounterCap {
     fn new() -> Self {
         Self {
-            value: Rc::new(Cell::new(0)),
+            value: Arc::new(AtomicU32::new(0)),
         }
     }
     fn get(&self) -> u32 {
-        self.value.get()
+        self.value.load(Ordering::SeqCst)
     }
     fn bump(&self) {
-        self.value.set(self.value.get() + 1);
+        self.value.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -164,17 +165,17 @@ impl SharedCounterCap {
 /// capability registry and bumps it. Counts `compile` vs `register` invocations
 /// to pin the compile/register split.
 struct CounterPlugin {
-    compile_count: Rc<Cell<u32>>,
-    register_count: Rc<Cell<u32>>,
+    compile_count: Arc<AtomicU32>,
+    register_count: Arc<AtomicU32>,
 }
 
 impl Plugin for CounterPlugin {
     fn compile(&self, _cx: &mut CompileContext) -> Result<(), tur_engine::error::TurError> {
-        self.compile_count.set(self.compile_count.get() + 1);
+        self.compile_count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), tur_engine::error::TurError> {
-        self.register_count.set(self.register_count.get() + 1);
+        self.register_count.fetch_add(1, Ordering::SeqCst);
         // Look up the shared capability (registered on the runtime builder) and
         // bump it — proves every instance's register sees the SAME backend.
         if let Some(cap) = ctx.capability().of::<SharedCounterCap>() {
@@ -186,8 +187,8 @@ impl Plugin for CounterPlugin {
 
 #[test]
 fn plugin_compile_runs_once_register_runs_per_instance() {
-    let compile_count = Rc::new(Cell::new(0));
-    let register_count = Rc::new(Cell::new(0));
+    let compile_count = Arc::new(AtomicU32::new(0));
+    let register_count = Arc::new(AtomicU32::new(0));
     let runtime = TurRuntime::builder()
         .font_loader(Rc::new(NativeFontLoader::new()))
         .clock(Rc::new(FixedClock::from_millis(0)))
@@ -200,10 +201,14 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
         .expect("runtime");
 
     // compile ran exactly once at build time.
-    assert_eq!(compile_count.get(), 1, "compile runs once on the runtime");
+    assert_eq!(
+        compile_count.load(Ordering::SeqCst),
+        1,
+        "compile runs once on the runtime"
+    );
     // register has NOT run yet (no instances created).
     assert_eq!(
-        register_count.get(),
+        register_count.load(Ordering::SeqCst),
         0,
         "register runs per instance, not at build"
     );
@@ -212,9 +217,13 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     for _ in 0..3 {
         runtime.create_headless_app((10.0, 10.0)).expect("app");
     }
-    assert_eq!(compile_count.get(), 1, "compile never re-runs per instance");
     assert_eq!(
-        register_count.get(),
+        compile_count.load(Ordering::SeqCst),
+        1,
+        "compile never re-runs per instance"
+    );
+    assert_eq!(
+        register_count.load(Ordering::SeqCst),
         3,
         "register ran once per spawned instance"
     );
@@ -222,8 +231,8 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
 
 #[test]
 fn shared_capability_backend_is_visible_from_all_instances() {
-    let compile_count = Rc::new(Cell::new(0));
-    let register_count = Rc::new(Cell::new(0));
+    let compile_count = Arc::new(AtomicU32::new(0));
+    let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
     let runtime = TurRuntime::builder()
         .font_loader(Rc::new(NativeFontLoader::new()))
