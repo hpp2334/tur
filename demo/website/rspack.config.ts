@@ -17,7 +17,10 @@ class WasmBuildPlugin implements RspackPluginInstance {
         const buildWasm = () => {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
-                .info("Building WASM with wasm-pack...");
+                .info("Building WASM (threaded, +atomics) with wasm-pack...");
+            // wasm-bindgen-rayon requires `-Z build-std` (nightly) +
+            // atomics target features. `.cargo/config.toml` already
+            // sets both; we just invoke wasm-pack normally.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",

@@ -111,6 +111,22 @@ impl WasmRuntime {
     /// plugins / capability overrides). No canvas/DOM — instances are spawned
     /// separately.
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
+        // Initialize the wasm-bindgen-rayon thread pool. Must be called
+        // before any `spawn_blocking`-style work; requires
+        // SharedArrayBuffer (COOP/COEP headers — already configured in
+        // the dev server). The returned `Promise` resolves once the
+        // workers are ready; we don't await it here (the pool lazily
+        // spins up workers as needed).
+        //
+        // Note: the wasm embedder currently uses inline mode
+        // (`runtime.create_app`) because `WebGlVelloRenderer` holds web-sys
+        // types (`!Send` across web-worker realms). True threaded wasm
+        // rendering requires splitting the renderer (main) from the JS
+        // engine (worker) — a future architectural change. This call
+        // initializes the pool so rayon-backed crates (e.g. usvg image
+        // decoding) can offload to workers in the meantime.
+        let _ = wasm_bindgen_rayon::init_thread_pool(4);
+
         let builder = tur_engine::TurRuntime::builder()
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))

@@ -51,3 +51,4 @@ js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
+wasm-bindgen-rayon = "1.2"

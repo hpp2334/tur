@@ -362,7 +362,8 @@ impl VelloRenderer {
             let offset = row as usize * bytes_per_row_aligned as usize;
             let row_end = offset + (self.physical_width * 4) as usize;
             if swap_red_blue {
-                for chunk in data[offset..row_end].chunks_exact(4) {
+                let (chunks, _) = data[offset..row_end].as_chunks::<4>();
+                for chunk in chunks {
                     pixels.extend_from_slice(&[chunk[2], chunk[1], chunk[0], chunk[3]]);
                 }
             } else {
