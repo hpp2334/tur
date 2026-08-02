@@ -110,8 +110,8 @@ impl TurVelloApp {
         );
 
         let runtime = TurRuntime::builder()
-            .font_loader(Rc::new(NativeFontLoader::new()))
-            .clock(Rc::new(StdClock::new()))
+            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+            .clock(std::sync::Arc::new(StdClock::new()))
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;

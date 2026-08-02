@@ -61,8 +61,8 @@ mod imp {
             tur_clipboard_android::set_java_vm(crate::java_vm().expect("JavaVM set before create"));
 
             let mut builder = TurRuntime::builder()
-                .font_loader(Rc::new(NativeFontLoader::new()))
-                .clock(Rc::new(StdClock::new()))
+                .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+                .clock(std::sync::Arc::new(StdClock::new()))
                 .capability(CursorCap::new(NoopCursor))
                 .capability(Clipboard::new(AndroidClipboard::new(context)));
             builder = configure(builder);

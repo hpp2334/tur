@@ -8,12 +8,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use boa_engine::Source;
-use boa_engine::context::time::FixedClock;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
+use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 /// Eval a JS script on a `TurApp` and return the result as a string.
@@ -35,8 +35,8 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String>
 /// instances are headless).
 fn build_runtime() -> Rc<TurRuntime> {
     TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .build()
@@ -191,8 +191,8 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
     let runtime = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {
             compile_count: compile_count.clone(),
@@ -236,8 +236,8 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
     let runtime = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .capability(cap.clone())
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {

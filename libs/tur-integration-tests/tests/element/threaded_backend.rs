@@ -1,8 +1,7 @@
 //! Phase 7 smoke test — proves `ThreadedBackend` dispatches across the
 //! thread boundary. Uses `build_inline_backend` inside a Send factory
 //! closure that constructs all engine pieces on the worker thread.
-
-use std::rc::Rc;
+use std::sync::Arc;
 
 use boa_engine::context::time::StdClock;
 
@@ -21,13 +20,13 @@ fn build_backend() -> tur_engine::core::runtime::InlineBackend {
     let plugins: Vec<Box<dyn tur_engine::core::plugin::Plugin>> = vec![Box::new(TurStdPlugin)];
 
     build_inline_backend(
-        Rc::new(StdClock::new()),
+        Arc::new(StdClock::new()),
         {
             let mut fc = tur_engine::core::fonts::FontContext::new();
             StubFontLoader.load_preset_fonts(&mut fc);
             fc
         },
-        Rc::new(StubFontLoader),
+        Arc::new(StubFontLoader),
         tur_engine::core::capability::Capabilities::new(),
         &plugins,
         Box::new(tur_engine::renderer::NoopRenderer::new()),
@@ -38,7 +37,7 @@ fn build_backend() -> tur_engine::core::runtime::InlineBackend {
 
 #[test]
 fn threaded_app_cross_thread_rpc() {
-    let app = Rc::new(TurApp::new(Box::new(ThreadedBackend::new(build_backend))));
+    let app = std::rc::Rc::new(TurApp::new(Box::new(ThreadedBackend::new(build_backend))));
 
     // RPC #1: load a module. Reply round-trips across the thread
     // boundary via the Condvar. Verifies:

@@ -65,7 +65,7 @@ impl TurAppContext {
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
         renderer: Box<dyn Renderer>,
         font_context: crate::core::fonts::FontContext,
-        font_loader: Rc<dyn crate::core::fonts::FontLoader>,
+        font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
         async_executor: Rc<AsyncExecutor>,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,

@@ -112,8 +112,8 @@ impl WasmRuntime {
     /// separately.
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
         let builder = tur_engine::TurRuntime::builder()
-            .font_loader(Rc::new(WasmFontLoader::new()))
-            .clock(Rc::new(WasmClock))
+            .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
+            .clock(std::sync::Arc::new(WasmClock))
             .capability(Clipboard::new(WasmClipboard))
             .capability(Http::new(WasmHttp))
             .capability(FilePicker::new(WasmFilePicker))

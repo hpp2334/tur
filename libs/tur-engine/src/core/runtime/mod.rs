@@ -1,4 +1,5 @@
 use std::rc::Rc;
+use std::sync::Arc;
 
 use boa_engine::Context;
 use boa_engine::context::time::Clock;
@@ -30,11 +31,13 @@ pub use backend::{
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
-/// `Rc<dyn Clock>`. `ClockProxy` is a Sized adapter that delegates to the
-/// shared `Rc<dyn Clock>` — giving every instance's boa `Context` and the
-/// runtime `Shell` one shared time source.
+/// `Arc<dyn Clock + Send + Sync>`. `ClockProxy` is a Sized adapter that
+/// delegates to the shared `Arc<dyn Clock + Send + Sync>` — giving every
+/// instance's boa `Context` and the runtime `Shell` one shared time
+/// source. `Send + Sync` so the runtime can be shared across worker
+/// threads (Phase 8 threaded mode).
 #[derive(Clone)]
-struct ClockProxy(Rc<dyn Clock>);
+pub(crate) struct ClockProxy(pub(crate) Arc<dyn Clock + Send + Sync>);
 impl Clock for ClockProxy {
     fn now(&self) -> boa_engine::context::time::JsInstant {
         self.0.now()
@@ -74,7 +77,7 @@ type CapabilityInsert = Box<dyn FnOnce(&Capabilities)>;
 /// # use tur_engine::*;
 /// # use tur_engine::core::fonts::FontLoader;
 /// # use tur_engine::core::render::Renderer;
-/// # fn _doc(loader: Rc<dyn FontLoader>, renderer_a: Box<dyn Renderer>, renderer_b: Box<dyn Renderer>) -> Result<(), tur_engine::error::TurError> {
+/// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>, renderer_a: Box<dyn Renderer>, renderer_b: Box<dyn Renderer>) -> Result<(), tur_engine::error::TurError> {
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
 ///     .clock(Rc::new(boa_engine::context::time::StdClock::new()))
@@ -91,9 +94,9 @@ type CapabilityInsert = Box<dyn FnOnce(&Capabilities)>;
 /// # }
 /// ```
 pub struct TurRuntime {
-    clock: Rc<dyn Clock>,
+    clock: Arc<dyn Clock + Send + Sync>,
     font_context: FontContext,
-    font_loader: Rc<dyn FontLoader>,
+    font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
     plugins: Vec<Box<dyn Plugin>>,
 }
@@ -179,9 +182,9 @@ impl TurRuntime {
 /// them inside the closure so the `!Send` `Rc`s never cross threads).
 #[allow(clippy::too_many_arguments)]
 pub fn build_inline_backend(
-    clock: Rc<dyn Clock>,
+    clock: Arc<dyn Clock + Send + Sync>,
     font_context: FontContext,
-    font_loader: Rc<dyn FontLoader>,
+    font_loader: Arc<dyn FontLoader>,
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
     renderer: Box<dyn Renderer>,
@@ -290,8 +293,8 @@ pub fn build_inline_backend(
 }
 
 pub struct TurRuntimeBuilder {
-    font_loader: Option<Rc<dyn FontLoader>>,
-    clock: Option<Rc<dyn Clock>>,
+    font_loader: Option<Arc<dyn FontLoader>>,
+    clock: Option<Arc<dyn Clock + Send + Sync>>,
     plugins: Vec<Box<dyn Plugin>>,
     capabilities: Vec<CapabilityInsert>,
 }
@@ -314,8 +317,9 @@ impl TurRuntimeBuilder {
 
     /// Provide the font loader. The runtime builds one `FontContext` from it
     /// (discovering system fonts + loading presets once) and each instance
-    /// clones that context. Required.
-    pub fn font_loader(mut self, font_loader: Rc<dyn FontLoader>) -> Self {
+    /// clones that context. Required. Stored as `Arc` so it can be shared
+    /// across worker threads in Phase 8 threaded mode.
+    pub fn font_loader(mut self, font_loader: Arc<dyn FontLoader>) -> Self {
         self.font_loader = Some(font_loader);
         self
     }
@@ -329,7 +333,7 @@ impl TurRuntimeBuilder {
     ///
     /// [`StdClock`]: boa_engine::context::time::StdClock
     /// [`FixedClock`]: boa_engine::context::time::FixedClock
-    pub fn clock(mut self, clock: Rc<dyn Clock>) -> Self {
+    pub fn clock(mut self, clock: Arc<dyn Clock + Send + Sync>) -> Self {
         self.clock = Some(clock);
         self
     }

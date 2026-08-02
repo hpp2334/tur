@@ -10,12 +10,40 @@ use std::time::Duration;
 use boa_engine::Context;
 use boa_engine::NativeFunction;
 use boa_engine::Source;
-use boa_engine::context::time::{Clock, FixedClock};
+use boa_engine::context::time::Clock;
 use futures::StreamExt;
 use tur_engine::TurStdPlugin;
 use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, NodeId};
+
+/// `Send + Sync` wrapper around boa's `FixedClock` (which uses `RefCell`
+/// internally and is therefore `!Sync`). The runtime requires
+/// `Arc<dyn Clock + Send + Sync>` so its config can be shared across
+/// worker threads (Phase 8 threaded mode). Tests are single-threaded but
+/// must satisfy the same bound — `Mutex` adds negligible overhead for the
+/// test's per-frame clock access.
+pub struct MutexFixedClock(pub std::sync::Mutex<boa_engine::context::time::FixedClock>);
+
+impl boa_engine::context::time::Clock for MutexFixedClock {
+    fn now(&self) -> boa_engine::context::time::JsInstant {
+        self.0.lock().unwrap().now()
+    }
+    fn system_time_millis(&self) -> i64 {
+        self.0.lock().unwrap().system_time_millis()
+    }
+}
+
+impl MutexFixedClock {
+    pub fn new(start_millis: u64) -> Self {
+        Self(std::sync::Mutex::new(
+            boa_engine::context::time::FixedClock::from_millis(start_millis),
+        ))
+    }
+    pub fn forward(&self, millis: u64) {
+        self.0.lock().unwrap().forward(millis);
+    }
+}
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeData;
 use tur_engine::core::layout::{MouseButton, Offset};
@@ -304,7 +332,7 @@ pub struct TurTestApp {
     /// [`Self::wait_frames`] / [`Self::wait_for`] (and the legacy
     /// [`Self::advance`]). Shared with the engine `Shell` and the boa
     /// `Context`, so `Date.now()` and timer scheduling see the same time.
-    clock: Rc<FixedClock>,
+    clock: std::sync::Arc<MutexFixedClock>,
     /// Shared with the `RecordingCursorPlatform` installed in the engine. The engine
     /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
     /// drains it through `take_current_cursor`.
@@ -378,9 +406,9 @@ impl TurTestApp {
     ) -> Result<Self, TurError> {
         let cursor_slot = Rc::new(Cell::new(None));
         let clipboard = RecordingClipboard::new();
-        let clock = Rc::new(FixedClock::from_millis(0));
+        let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         let mut builder = TurRuntime::builder()
-            .font_loader(Rc::new(NativeFontLoader::new()))
+            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .capability(CursorCap::new(RecordingCursor {
                 last: cursor_slot.clone(),

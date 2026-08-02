@@ -10,6 +10,7 @@ use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::{Capability, CapabilityDecls};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
+use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 // ---------- Test capability newtype ---------------------------------------
@@ -120,10 +121,9 @@ fn capability_chain_order_irrelevant() {
 fn build_app(
     configure: impl FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder,
 ) -> Result<Rc<tur_engine::TurApp>, TurError> {
-    use boa_engine::context::time::FixedClock;
     let builder = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)));
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)));
     let runtime = configure(builder).build()?;
     let app = runtime.create_headless_app((400.0, 600.0))?;
     Ok(app)

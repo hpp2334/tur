@@ -1,8 +1,11 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub use parley::FontContext;
 
-pub trait FontLoader {
+/// Font loading + registration. Implementations must be `Send + Sync` so
+/// the runtime can hold them behind `Arc<dyn FontLoader + Send + Sync>`
+/// and share across worker threads (Phase 8 threaded mode).
+pub trait FontLoader: Send + Sync {
     fn load_preset_fonts(&self, fcx: &mut FontContext);
 
     fn register_font(&self, _fcx: &mut FontContext, _name: &str, _data: &[u8]) {}
@@ -21,21 +24,21 @@ pub trait FontLoader {
 /// scanned system-font data.
 pub struct FontManager {
     inner: FontContext,
-    loader: Rc<dyn FontLoader>,
+    loader: Arc<dyn FontLoader>,
 }
 
 impl FontManager {
     /// Wrap a (typically cloned) shared `FontContext` plus the shared loader.
     /// The caller is expected to have already loaded preset/system fonts into
     /// `fcx` once (on the runtime) — this does not re-load them.
-    pub fn from_context(fcx: FontContext, loader: Rc<dyn FontLoader>) -> Self {
+    pub fn from_context(fcx: FontContext, loader: Arc<dyn FontLoader>) -> Self {
         Self { inner: fcx, loader }
     }
 
     /// Build a fresh `FontContext` (discovering system fonts) and load the
     /// loader's preset fonts into it. Used by standalone callers that don't
     /// share a runtime's pre-built context.
-    pub fn new(loader: Rc<dyn FontLoader>) -> Self {
+    pub fn new(loader: Arc<dyn FontLoader>) -> Self {
         let mut fcx = FontContext::new();
         loader.load_preset_fonts(&mut fcx);
         Self::from_context(fcx, loader)

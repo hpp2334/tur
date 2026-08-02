@@ -91,9 +91,9 @@ impl TurAppInternal {
     pub fn new(
         renderer: Box<dyn Renderer>,
         font_context: FontContext,
-        font_loader: Rc<dyn FontLoader>,
+        font_loader: std::sync::Arc<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
-        clock: std::rc::Rc<dyn Clock>,
+        clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
@@ -108,7 +108,12 @@ impl TurAppInternal {
         let need_paint = Rc::new(Cell::new(false));
         let image_resource_map = Rc::new(RefCell::new(ImageResourceMap::default()));
 
-        let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
+        // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
+        // `Rc<dyn Clock>` that `AsyncExecutor` and `Shell` expect (they're
+        // per-instance + worker-side only, never shared across threads).
+        // ClockProxy is a Sized adapter that delegates to the Arc.
+        let clock_rc: Rc<dyn Clock> = Rc::new(crate::core::runtime::ClockProxy(clock));
+        let async_executor = Rc::new(AsyncExecutor::new(clock_rc.clone()));
 
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
@@ -140,7 +145,7 @@ impl TurAppInternal {
             font_loader,
             async_executor.clone(),
             capabilities,
-            clock,
+            clock_rc,
             store,
         );
 
