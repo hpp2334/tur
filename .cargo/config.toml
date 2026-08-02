@@ -2,31 +2,33 @@
 RUST_MIN_STACK = "8388608"
 
 [target.wasm32-unknown-unknown]
-# Wasm threading is configured per the canonical wasm-bindgen-rayon
-# upstream README (https://github.com/RReverser/wasm-bindgen-rayon).
-# All four pieces are required for the wasm memory to be shareable
-# across web workers:
-#   1. `+atomics,+bulk-memory` target feature
+# Wasm threading with `wasm_thread` (an `std::thread` drop-in for
+# wasm32). Per upstream README
+# (https://github.com/chemicstry/wasm_thread), all four pieces are
+# required for the wasm memory to be shareable across web workers:
+#   1. `+atomics,+bulk-memory,+mutable-globals` target feature
 #   2. `--shared-memory` + `--max-memory` + `--import-memory` link args
 #   3. `--export=__tls_*` (modern LLVM uses TLS, not `__heap_base`)
 #   4. `[unstable] build-std = ["panic_abort", "std"]` (below) — without
 #      this, std is compiled without atomics and the resulting TLS
 #      layout mismatch traps with "memory access out of bounds".
 #
-# Status: the build succeeds and the wasm memory IS shared at runtime
-# (`SharedArrayBuffer`-backed, `shared:true`), but the engine traps
-# during JS module evaluation (`loadAndRunModule`) with
-# "memory access out of bounds" under threaded codegen. This appears
-# to be a boa_engine / engine-level incompatibility with the
-# atomics-enabled LLVM codegen, not a configuration issue — the
-# configuration below matches the upstream README exactly. The runtime
-# call to `initThreadPool` from JS is therefore disabled in
-# `demo/website/src/index.tsx`; see the commit history for the
-# debugging trail. Use plain `wasm-pack build --target web --no-opt`
-# (no `--profile wasm-dev`) to get a working single-threaded wasm.
+# Unlike wasm-bindgen-rayon, `wasm_thread` requires NO JS-side
+# pre-init (no `initThreadPool(n)` call) — workers spawn on demand
+# from Rust via `wasm_thread::spawn`. Build with
+# `wasm-pack build --target web --profile wasm-dev` to enable.
+#
+# Status: under this codegen the engine previously trapped with
+# "memory access out of bounds" during JS module evaluation
+# (`loadAndRunModule`) when using wasm-bindgen-rayon. The trap
+# appeared to be a boa_engine / engine-level incompatibility with
+# atomics-enabled LLVM codegen, NOT a configuration issue — the
+# configuration below matches the upstream README exactly. Default
+# `wasm-pack build --target web --no-opt` produces a working
+# single-threaded wasm; threaded mode is opt-in via `--profile wasm-dev`.
 rustflags = [
     "-C",
-    "target-feature=+atomics,+bulk-memory",
+    "target-feature=+atomics,+bulk-memory,+mutable-globals",
     "-C",
     "link-arg=--shared-memory",
     "-C",

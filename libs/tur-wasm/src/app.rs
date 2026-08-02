@@ -113,20 +113,18 @@ impl WasmRuntime {
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
         // Note on wasm threading:
         //
-        // The thread pool is initialised from JS (not Rust) by calling
-        // the generated `initThreadPool(n)` export — see
-        // `demo/website/native/src/lib.rs` for the re-export and
-        // `demo/website/main.js` for the call site. This is the
-        // upstream-recommended pattern (wasm-bindgen-rayon README):
-        // the JS side must `await initThreadPool(...)` *before* any
-        // rayon-backed code runs, and Rust has no way to await that
-        // promise without blocking the event loop.
+        // `tur-engine`'s `ThreadedBackend` uses `wasm_thread` (an
+        // `std::thread` drop-in for `wasm32`) on wasm targets — Web
+        // Workers backed by `SharedArrayBuffer`. Unlike the previous
+        // wasm-bindgen-rayon setup, no JS-side `initThreadPool(n)` call
+        // is required: workers spawn on demand from Rust via
+        // `wasm_thread::spawn` (or `ThreadedBackend::new`).
         //
         // Build-side config (in .cargo/config.toml + rust-toolchain.toml
         // + [profile.wasm-*] in workspace Cargo.toml):
         //   • nightly-2025-11-15 toolchain
         //   • -Z build-std=panic_abort,std
-        //   • +atomics,+bulk-memory target feature
+        //   • +atomics,+bulk-memory,+mutable-globals target feature
         //   • --shared-memory + --import-memory + --max-memory=1GiB
         //   • --export=__tls_* / __wasm_init_tls (thread-id injection)
         //
@@ -135,9 +133,9 @@ impl WasmRuntime {
         // web-sys types (`!Send` across web-worker realms). True
         // threaded wasm *rendering* requires splitting the renderer
         // (main) from the JS engine (worker) — future architectural
-        // work. The thread pool itself is live, though, so any
-        // rayon-backed crate (e.g. usvg image decoding) offloads to
-        // workers immediately.
+        // work. The thread infrastructure is live, though, so any
+        // engine-side parallelism offloads to workers immediately via
+        // `TurRuntime::create_app_threaded`.
 
         let builder = tur_engine::TurRuntime::builder()
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))

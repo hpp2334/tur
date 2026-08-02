@@ -407,6 +407,17 @@ use std::sync::mpsc;
 
 use crate::core::app::MainMsg;
 
+// `std::thread` drop-in. On native we use `std::thread`; on wasm32 we use
+// `wasm_thread` (Web Workers backed by `SharedArrayBuffer`). Both expose
+// `Builder::new().name(String).spawn(F) -> io::Result<JoinHandle<T>>`
+// with `F: Send + 'static`, so the rest of `ThreadedBackend` is identical
+// across targets. Wasm builds require the atomics + shared-memory +
+// build-std config in `.cargo/config.toml` + `--profile wasm-dev`.
+#[cfg(target_arch = "wasm32")]
+use wasm_thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
+#[cfg(not(target_arch = "wasm32"))]
+use std::thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
+
 /// Worker thread owner of [`InlineBackend`]. The main thread holds
 /// [`ThreadedBackend`] (just the channel endpoints) and dispatches via RPC.
 ///
@@ -436,6 +447,11 @@ use crate::core::app::MainMsg;
 pub struct ThreadedBackend {
     worker_tx: mpsc::Sender<WorkerMsg>,
     main_rx: Mutex<mpsc::Receiver<MainMsg>>,
+    /// Holds the worker `JoinHandle` alive for the backend's lifetime so
+    /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
+    /// On wasm the handle is `wasm_thread::JoinHandle`, on native it's
+    /// `std::thread::JoinHandle` — both are dropped silently here.
+    _worker_handle: ThreadJoinHandle<()>,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged`
     /// on cursor state change; main applies it here during `pump`. Set
     /// via `set_cursor_backend` (called by embedder after
@@ -456,11 +472,14 @@ impl ThreadedBackend {
     ///
     /// The factory must be `Send + 'static` — capture only `Send` config
     /// (plugin vecs, capability factories, etc.), not `Rc`/`RefCell` state.
+    ///
+    /// Cross-target: uses `std::thread` on native, `wasm_thread` (Web
+    /// Worker + `SharedArrayBuffer`) on wasm32.
     pub fn new(backend_factory: impl FnOnce() -> InlineBackend + Send + 'static) -> Self {
         let (worker_tx, worker_rx) = mpsc::channel::<WorkerMsg>();
         let (main_tx, main_rx) = mpsc::channel::<MainMsg>();
 
-        std::thread::Builder::new()
+        let worker_handle = ThreadBuilder::new()
             .name("tur-worker".into())
             .spawn(move || {
                 let backend = backend_factory();
@@ -471,6 +490,7 @@ impl ThreadedBackend {
         Self {
             worker_tx: worker_tx.clone(),
             main_rx: Mutex::new(main_rx),
+            _worker_handle: worker_handle,
             cursor_backend: RefCell::new(None),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
         }

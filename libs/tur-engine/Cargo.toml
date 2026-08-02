@@ -42,3 +42,10 @@ parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 unicode-segmentation = { workspace = true }
+
+# `std::thread` drop-in for `wasm32-unknown-unknown`. Used by
+# `ThreadedBackend` to run the engine on a Web Worker (backed by
+# `SharedArrayBuffer`). Target-gated: on native `ThreadedBackend` uses
+# `std::thread` directly.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm_thread = { workspace = true }

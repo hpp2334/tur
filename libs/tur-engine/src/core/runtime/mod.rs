@@ -184,8 +184,9 @@ impl TurRuntime {
     /// (deferred), `with_boa_context`/`with_element` escape hatches
     /// (inline-only by design). See [`ThreadedBackend`] docs.
     ///
-    /// Native-only. Wasm threading lands in Phase 9 (wasm-bindgen-rayon +
-    /// COOP/COEP).
+    /// Cross-target: uses `std::thread` on native, `wasm_thread` (Web
+    /// Workers + `SharedArrayBuffer`) on wasm32 — see
+    /// [`ThreadedBackend::new`]. Wasm builds require `--profile wasm-dev`.
     pub fn create_app_threaded(
         self: &Rc<Self>,
         renderer_factory: impl FnOnce() -> Box<dyn Renderer> + Send + 'static,

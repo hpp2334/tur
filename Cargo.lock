@@ -4506,6 +4506,7 @@ dependencies = [
  "usvg",
  "vello_common",
  "vello_hybrid",
+ "wasm_thread",
  "web-sys",
  "wgpu",
 ]
@@ -4635,7 +4636,6 @@ dependencies = [
  "tur-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-bindgen-rayon",
 ]
 
 [[package]]
@@ -4992,6 +4992,18 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cff360cade7fec41ff0e9d2cda57fe58258c5f16def0e21302394659e6bbb0ea"
 dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm_thread"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7516db7f32decdadb1c3b8deb1b7d78b9df7606c5cc2f6241737c2ab3a0258e"
+dependencies = [
+ "futures",
  "js-sys",
  "wasm-bindgen",
  "web-sys",

@@ -1,7 +1,8 @@
 [toolchain]
-# Pinned to the version tested with wasm-bindgen-rayon 1.3 (per upstream
-# README). Newer nightlies may work but aren't validated for the
-# shared-memory + TLS-export config in .cargo/config.toml.
+# Pinned to a known-good nightly for `wasm_thread` (which requires
+# `-Z build-std` with atomics-enabled std). Newer nightlies may work
+# but aren't validated for the shared-memory + TLS-export config in
+# `.cargo/config.toml`.
 channel = "nightly-2025-11-15"
 components = ["rust-src", "rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]

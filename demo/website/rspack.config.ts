@@ -17,13 +17,12 @@ class WasmBuildPlugin implements RspackPluginInstance {
         const buildWasm = () => {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
-                .info("Building WASM (threaded, +atomics) with wasm-pack...");
-            // Plain `--dev` (panic=unwind) — single-threaded build. The
-            // threaded config in `.cargo/config.toml` is correct per the
-            // upstream wasm-bindgen-rayon README, but the engine traps
-            // during JS module evaluation under atomics-enabled codegen
-            // (see .cargo/config.toml docstring). Use `--profile wasm-dev`
-            // here to attempt the threaded build.
+                .info("Building WASM with wasm-pack...");
+            // Plain `--no-opt` (panic=unwind) — single-threaded build that
+            // works without COOP/COEP. The threaded config in
+            // `.cargo/config.toml` + `--profile wasm-dev` enables
+            // `wasm_thread` (Web Workers via SharedArrayBuffer) — use that
+            // to opt into multi-threading.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",
@@ -49,11 +48,11 @@ class WasmBuildPlugin implements RspackPluginInstance {
                     );
                     logger.info(`Copied WASM asset: ${file}`);
                 }
-                // Emit per-snippet files (e.g. wasm-bindgen-rayon worker
+                // Emit per-snippet files (e.g. wasm_thread's web worker
                 // helper, wasm-streams inline modules) preserving the
                 // `snippets/<crate-hash>/<file>` path the JS glue expects.
-                // Recurses into subdirs (rayon's workerHelpers lives under
-                // `snippets/<crate-hash>/src/workerHelpers.js`).
+                // Recurses into subdirs (wasm_thread's worker script lives
+                // under `snippets/<crate-hash>/src/...`).
                 const snippetsDir = join(wasmPkgDir, "snippets");
                 if (existsSync(snippetsDir)) {
                     const walk = (dir: string, relPrefix: string) => {
