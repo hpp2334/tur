@@ -37,7 +37,7 @@
 //! once the bound is in place.
 
 use std::fmt;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use crate::core::app::FrameOutcome;
 use crate::core::element::NodeId;
@@ -106,8 +106,11 @@ pub enum MainMsg {
     /// `MainTree` and plays it back into its renderer.
     RenderCommands(Vec<RenderCommand>),
     /// Schedule decision after a flush. Main arms the next rAF /
-    /// `setTimeout` based on `schedule`.
-    FrameOutcome(FrameOutcome),
+    /// `setTimeout` based on `schedule`. The `Err(String)` variant
+    /// carries a flush error message (worker can't ship `TurError`
+    /// directly because its `JsEval` variant holds a boa `JsError` which
+    /// is `!Send` — main re-wraps as `TurError::Other`).
+    FrameOutcome(Result<FrameOutcome, String>),
     /// Resolved cursor changed this frame (deduped: only emitted on
     /// change). Main forwards to its `CursorBackend`.
     CursorChanged(Cursor),
@@ -150,39 +153,58 @@ pub enum ModuleError {
 /// One-shot reply slot — sender side. See [module docs](self) for the
 /// Phase 4 → Phase 7 migration path.
 pub struct ReplySender<T> {
-    slot: Arc<Mutex<Option<T>>>,
+    slot: Arc<(Mutex<Option<T>>, Condvar)>,
 }
 
-/// One-shot reply slot — receiver side. `try_recv` is the only accessor in
-/// Phase 4 (the sender fires inline during `handle_worker_msg`). Phase 7
-/// will add `async fn recv` over a real channel.
+/// One-shot reply slot — receiver side. `try_recv` is the inline-mode
+/// accessor (the sender fires synchronously during `handle_worker_msg`);
+/// `recv` blocks until the sender fires (Phase 7's threaded backend).
 pub struct Reply<T> {
-    slot: Arc<Mutex<Option<T>>>,
+    slot: Arc<(Mutex<Option<T>>, Condvar)>,
 }
 
 impl<T> Reply<T> {
     /// Create a paired (sender, receiver) slot pair.
     pub fn pair() -> (ReplySender<T>, Reply<T>) {
-        let slot = Arc::new(Mutex::new(None));
+        let slot = Arc::new((Mutex::new(None), Condvar::new()));
         (ReplySender { slot: slot.clone() }, Reply { slot })
     }
 
     /// Non-blocking receive. Returns `None` if the sender hasn't fired yet,
     /// `Some(value)` if it has (the slot is drained).
     ///
-    /// In Phase 4's single-threaded inline mode, the sender always fires
-    /// before the receiver polls (synchronous dispatch), so this never
-    /// returns `None` unless the worker dropped the sender without replying.
+    /// Inline mode: the sender always fires before the receiver polls
+    /// (synchronous dispatch), so this never returns `None` unless the
+    /// worker dropped the sender without replying.
     pub fn try_recv(&self) -> Option<T> {
-        self.slot.lock().ok().and_then(|mut g| g.take())
+        self.slot.0.lock().ok().and_then(|mut g| g.take())
+    }
+
+    /// Blocking receive. Waits until the sender fires, then returns the
+    /// value. Used by `ThreadedBackend` to make the synchronous public API
+    /// (`load_module`, `dev_tool_*`, etc.) wait for the worker's reply.
+    ///
+    /// Inline mode never calls this — `try_recv` works because dispatch
+    /// is synchronous. If you call `recv` in inline mode, it blocks
+    /// forever (the sender is on the same thread, waiting for you to
+    /// finish).
+    pub fn recv(self) -> T {
+        let (lock, cvar) = &*self.slot;
+        let mut g = lock.lock().expect("reply slot poisoned");
+        while g.is_none() {
+            g = cvar.wait(g).expect("reply slot poisoned");
+        }
+        g.take().expect("slot filled above")
     }
 }
 
 impl<T> ReplySender<T> {
     /// Fire the reply. Consumes the sender (one-shot semantics).
+    /// Wakes any thread blocked in [`Reply::recv`].
     pub fn send(self, value: T) {
-        if let Ok(mut g) = self.slot.lock() {
+        if let Ok(mut g) = self.slot.0.lock() {
             *g = Some(value);
+            self.slot.1.notify_one();
         }
     }
 }

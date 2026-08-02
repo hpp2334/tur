@@ -24,7 +24,9 @@ use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
-pub use backend::{AnySend, BoaClosure, ElementClosure, InlineBackend, TurAppBackend};
+pub use backend::{
+    AnySend, BoaClosure, ElementClosure, InlineBackend, ThreadedBackend, TurAppBackend,
+};
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
@@ -155,130 +157,136 @@ impl TurRuntime {
         viewport: (f64, f64),
     ) -> Result<Rc<TurApp>, TurError> {
         let renderer = renderer.unwrap_or_else(|| Box::new(crate::renderer::NoopRenderer::new()));
-
-        let executor = Rc::new(TurJobExecutor::new());
-        let module_loader = TurModuleLoader::new();
-        let mut boa_context = Context::builder()
-            .clock(Rc::new(ClockProxy(self.clock.clone())))
-            .job_executor(executor.clone())
-            .module_loader(module_loader.clone())
-            .build()
-            .expect("failed to build boa context");
-
-        // Each instance clones the runtime's pre-built FontContext (cheap —
-        // Arc-backed) and shares the runtime's font loader (for runtime
-        // register_font calls).
-        let internal = TurAppInternal::new(
-            renderer,
+        let backend = build_inline_backend(
+            self.clock.clone(),
             self.font_context.clone(),
             self.font_loader.clone(),
-            executor.clone(),
-            self.clock.clone(),
             self.capabilities.clone(),
-        );
-
-        let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
-        let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
-
-        // Engine-owned `viewportSize$` reactive source. Seeded with the
-        // instance's initial viewport; updated on each `PlatformEvent::Resize`
-        // by `core::screen::ResizeSubsystem`. We also set `screen.logical_size`
-        // directly so headless instances (which never receive a Resize event)
-        // lay out against the right dimensions.
-        let viewport_size_js: boa_engine::JsValue = {
-            internal.app_context.borrow_mut().screen.logical_size = viewport;
-            let init = Screen::size_js(viewport.0, viewport.1, &mut boa_context);
-            let src: reactive::Source<boa_engine::JsValue> =
-                internal.js_context.store.bridge().source(init);
-            internal.app_context.borrow_mut().screen.set_source(src);
-            src.into_js(&mut boa_context)
-        };
-
-        let mut core_fns: Vec<FnEntry> = Vec::new();
-        core_fns.extend(crate::core::edgy::bridge::fns());
-        core_fns.extend(render::fns());
-        let core_module = build_native_module(
-            &mut boa_context,
-            opaque.object().clone().into(),
-            &core_fns,
-            &[],
-            &[],
-        );
-        module_loader.register("tur:core", core_module);
-
-        // Per-instance turDevTool global (each instance has its own boa
-        // Context, so its own dev-tool object).
-        let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
-        let et_fn = bound_native(
-            &mut boa_context,
-            ctx_val.clone(),
-            dev_tool::tur_dev_tool_element_tree,
-            0,
-            "elementTree",
-        );
-        let ge_fn = bound_native(
-            &mut boa_context,
-            ctx_val.clone(),
-            dev_tool::tur_dev_tool_get_element,
-            1,
-            "getElement",
-        );
-        let _ = dt_obj.create_data_property(
-            js_string!("elementTree"),
-            boa_engine::JsValue::from(et_fn),
-            &mut boa_context,
-        );
-        let _ = dt_obj.create_data_property(
-            js_string!("getElement"),
-            boa_engine::JsValue::from(ge_fn),
-            &mut boa_context,
-        );
-        let _ = boa_context.register_global_property(
-            js_string!("turDevTool"),
-            dt_obj,
-            Attribute::all(),
-        );
-
-        // Re-register every plugin into this instance's fresh boa Context.
-        // `register` takes `&self`, so the same plugin objects are reused.
-        for plugin in &self.plugins {
-            let mut plugin_ctx = PluginContext {
-                boa: &mut boa_context,
-                loader: module_loader.clone(),
-                js_ctx_value: ctx_val.clone(),
-                js_ctx: internal.js_context.clone(),
-                app: internal.app_context.clone(),
-                subsystems: internal.subsystems.clone(),
-                event_bus: internal.event_bus.clone(),
-                viewport_size: viewport_size_js.clone(),
-            };
-            plugin.register(&mut plugin_ctx)?;
-        }
-
-        // Install the cursor backend on the Shell from the shared capability
-        // registry. Falls back to `NoopCursor` when no cursor capability is
-        // present.
-        {
-            let cursor_backend = internal
-                .js_context
-                .capability()
-                .of::<crate::core::platform::CursorCap>()
-                .map(|c| c.backend().clone())
-                .unwrap_or_else(|| {
-                    Rc::new(std::cell::RefCell::new(crate::core::platform::NoopCursor))
-                });
-            internal
-                .app_context
-                .borrow_mut()
-                .shell
-                .set_cursor_platform(cursor_backend);
-        }
-
-        tracing::info!("TurApp instance created ({} plugins)", self.plugins.len());
-
-        let backend = InlineBackend::new(boa_context, internal, executor);
+            &self.plugins,
+            renderer,
+            viewport,
+        )?;
         Ok(Rc::new(TurApp::new(Box::new(backend))))
     }
+}
+
+/// Construct an [`InlineBackend`] from individual engine pieces. Both
+/// [`TurRuntime::create_instance`] (inline) and the threaded factory
+/// closure (Phase 7's [`crate::core::runtime::ThreadedBackend`]) call
+/// this. The function itself is callable from any thread — the caller
+/// is responsible for ensuring `clock`, `font_loader`, etc. are
+/// constructed on the right thread (e.g. the threaded factory constructs
+/// them inside the closure so the `!Send` `Rc`s never cross threads).
+#[allow(clippy::too_many_arguments)]
+pub fn build_inline_backend(
+    clock: Rc<dyn Clock>,
+    font_context: FontContext,
+    font_loader: Rc<dyn FontLoader>,
+    capabilities: crate::core::capability::Capabilities,
+    plugins: &[Box<dyn Plugin>],
+    renderer: Box<dyn Renderer>,
+    viewport: (f64, f64),
+) -> Result<InlineBackend, TurError> {
+    let executor = Rc::new(TurJobExecutor::new());
+    let module_loader = TurModuleLoader::new();
+    let mut boa_context = Context::builder()
+        .clock(Rc::new(ClockProxy(clock.clone())))
+        .job_executor(executor.clone())
+        .module_loader(module_loader.clone())
+        .build()
+        .expect("failed to build boa context");
+
+    let internal = TurAppInternal::new(
+        renderer,
+        font_context,
+        font_loader,
+        executor.clone(),
+        clock,
+        capabilities,
+    );
+
+    let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
+    let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
+
+    let viewport_size_js: boa_engine::JsValue = {
+        internal.app_context.borrow_mut().screen.logical_size = viewport;
+        let init = Screen::size_js(viewport.0, viewport.1, &mut boa_context);
+        let src: reactive::Source<boa_engine::JsValue> =
+            internal.js_context.store.bridge().source(init);
+        internal.app_context.borrow_mut().screen.set_source(src);
+        src.into_js(&mut boa_context)
+    };
+
+    let mut core_fns: Vec<FnEntry> = Vec::new();
+    core_fns.extend(crate::core::edgy::bridge::fns());
+    core_fns.extend(render::fns());
+    let core_module = build_native_module(
+        &mut boa_context,
+        opaque.object().clone().into(),
+        &core_fns,
+        &[],
+        &[],
+    );
+    module_loader.register("tur:core", core_module);
+
+    let dt_obj = JsObject::with_object_proto(boa_context.intrinsics());
+    let et_fn = bound_native(
+        &mut boa_context,
+        ctx_val.clone(),
+        dev_tool::tur_dev_tool_element_tree,
+        0,
+        "elementTree",
+    );
+    let ge_fn = bound_native(
+        &mut boa_context,
+        ctx_val.clone(),
+        dev_tool::tur_dev_tool_get_element,
+        1,
+        "getElement",
+    );
+    let _ = dt_obj.create_data_property(
+        js_string!("elementTree"),
+        boa_engine::JsValue::from(et_fn),
+        &mut boa_context,
+    );
+    let _ = dt_obj.create_data_property(
+        js_string!("getElement"),
+        boa_engine::JsValue::from(ge_fn),
+        &mut boa_context,
+    );
+    let _ =
+        boa_context.register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
+
+    for plugin in plugins {
+        let mut plugin_ctx = PluginContext {
+            boa: &mut boa_context,
+            loader: module_loader.clone(),
+            js_ctx_value: ctx_val.clone(),
+            js_ctx: internal.js_context.clone(),
+            app: internal.app_context.clone(),
+            subsystems: internal.subsystems.clone(),
+            event_bus: internal.event_bus.clone(),
+            viewport_size: viewport_size_js.clone(),
+        };
+        plugin.register(&mut plugin_ctx)?;
+    }
+
+    {
+        let cursor_backend = internal
+            .js_context
+            .capability()
+            .of::<crate::core::platform::CursorCap>()
+            .map(|c| c.backend().clone())
+            .unwrap_or_else(|| Rc::new(std::cell::RefCell::new(crate::core::platform::NoopCursor)));
+        internal
+            .app_context
+            .borrow_mut()
+            .shell
+            .set_cursor_platform(cursor_backend);
+    }
+
+    tracing::info!("InlineBackend built ({} plugins)", plugins.len());
+    Ok(InlineBackend::new(boa_context, internal, executor))
 }
 
 pub struct TurRuntimeBuilder {

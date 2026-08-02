@@ -4,9 +4,9 @@
 //! - [`InlineBackend`] runs everything on the calling thread (today's
 //!   behavior). Used by `TurRuntime::create_app` / `create_headless_app`
 //!   and by every test.
-//! - `ThreadedBackend` (Phase 7 follow-up) runs the engine on a worker
-//!   thread, dispatching via `mpsc` channels. Used by
-//!   `TurRuntime::create_app_threaded` (production).
+//! - [`ThreadedBackend`] runs the engine on a worker thread, dispatching
+//!   via `mpsc` channels. Production use; some methods panic until
+//!   Phase 8 wires cross-thread variants (see the trait impl docs).
 //!
 //! `TurApp` holds `Box<dyn TurAppBackend>` + the main-side scheduling state
 //! (driver / wake_fn / after_frame hook). Public methods delegate to the
@@ -17,11 +17,11 @@
 //!
 //! These are generic over the return type `R`, which can't be expressed in
 //! a trait object directly. The trait exposes type-erased `_dyn` variants
-//! taking `Box<dyn FnOnce(...) -> Box<dyn Any + Send>>`; `TurApp` wraps
-//! them in ergonomic generic helpers that box/unbox automatically. The
-//! closures must be `Send + 'static` so threaded mode can ship them across
-//! the thread boundary (inline mode doesn't actually need `Send`, but the
-//! uniform API simplifies the trait).
+//! taking [`BoaClosure`] / [`ElementClosure`]; `TurApp` wraps them in
+//! ergonomic generic helpers that box/unbox automatically. **Inline-only**:
+//! closures can't easily be made `Send` without restricting the inline API,
+//! so threaded mode panics — production threaded code uses RPC variants
+//! (`load_module`, `dev_tool_*`, etc.) instead.
 
 use std::any::Any;
 use std::cell::RefCell;
@@ -350,5 +350,204 @@ impl TurAppBackend for InlineBackend {
     #[cfg(feature = "trace")]
     fn element_tree_handle(&self) -> std::cell::Ref<'_, crate::core::elements::NodeTreeData> {
         self.internal.js_context.element_tree.borrow()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ThreadedBackend — engine state on a worker thread, RPC via mpsc
+// ---------------------------------------------------------------------------
+
+use std::sync::Mutex;
+use std::sync::mpsc;
+
+use crate::core::app::MainMsg;
+
+/// Worker thread owner of [`InlineBackend`]. The main thread holds
+/// [`ThreadedBackend`] (just the channel endpoints) and dispatches via RPC.
+///
+/// ## What works cross-thread
+///
+/// - [`handle_worker_msg`](TurAppBackend::handle_worker_msg) for input
+///   (`PlatformEvent`, `RequestPaint`, `EventBusToJs`) — fire-and-forget.
+/// - [`pump`](TurAppBackend::pump) — sends `Wake`, blocks on
+///   `MainMsg::FrameOutcome`.
+/// - RPC methods with `Reply` slots (`LoadModule`, `LoadJs`, `EvalModule`,
+///   `DevElementTree`, `DevGetElement`) — `TurApp` blocks on `Reply::recv`.
+///
+/// ## What panics (deferred to Phase 8)
+///
+/// - [`event_bus`](TurAppBackend::event_bus) — `EventBus` is `Rc`-backed.
+///   Phase 8 will introduce a main-side proxy or migrate the bus to
+///   `Arc<Mutex<>>`.
+/// - [`push_app_event`](TurAppBackend::push_app_event) — `AppEvent`'s
+///   `Custom` payload may be `!Send`. Phase 8 wires the bound + a
+///   `WorkerMsg::AppEvent` variant.
+/// - Escape hatches (`with_boa_context_dyn`, `with_element_dyn`) — closures
+///   can't be made `Send` without restricting the inline API. Tests use
+///   inline mode; production doesn't need these.
+/// - Direct-read accessors (`focused_state`, `query_element`, etc.) — these
+///   need either RPC variants or main-side caching from `MainMsg`. Phase 8
+///   adds the variants; for now, use `dev_tool_*` which IS RPC-able.
+pub struct ThreadedBackend {
+    worker_tx: mpsc::Sender<WorkerMsg>,
+    main_rx: Mutex<mpsc::Receiver<MainMsg>>,
+}
+
+impl ThreadedBackend {
+    /// Spawn a worker thread that owns an [`InlineBackend`] produced by
+    /// `backend_factory`. The factory runs on the worker thread (so it can
+    /// construct `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
+    ///
+    /// The factory must be `Send + 'static` — capture only `Send` config
+    /// (plugin vecs, capability factories, etc.), not `Rc`/`RefCell` state.
+    pub fn new(backend_factory: impl FnOnce() -> InlineBackend + Send + 'static) -> Self {
+        let (worker_tx, worker_rx) = mpsc::channel::<WorkerMsg>();
+        let (main_tx, main_rx) = mpsc::channel::<MainMsg>();
+
+        std::thread::Builder::new()
+            .name("tur-worker".into())
+            .spawn(move || {
+                let backend = backend_factory();
+                worker_loop(backend, worker_rx, main_tx);
+            })
+            .expect("failed to spawn tur worker thread");
+
+        Self {
+            worker_tx,
+            main_rx: Mutex::new(main_rx),
+        }
+    }
+}
+
+fn worker_loop(
+    backend: InlineBackend,
+    worker_rx: mpsc::Receiver<WorkerMsg>,
+    main_tx: mpsc::Sender<MainMsg>,
+) {
+    while let Ok(msg) = worker_rx.recv() {
+        match msg {
+            WorkerMsg::Wake => {
+                let outcome = backend.pump();
+                let payload = match outcome {
+                    Ok(fo) => Ok(fo),
+                    Err(e) => {
+                        tracing::error!("worker pump error: {e}");
+                        Err(e.to_string())
+                    }
+                };
+                let _ = main_tx.send(MainMsg::FrameOutcome(payload));
+            }
+            WorkerMsg::Destroy { reply } => {
+                reply.send(());
+                break;
+            }
+            // All other variants (PlatformEvent, RequestPaint, LoadModule,
+            // Dev*, EventBusToJs) delegate to the inline dispatch — RPC
+            // variants fire their own ReplySender, so main blocks on
+            // `Reply::recv` independently of `main_tx`.
+            other => backend.handle_worker_msg(other),
+        }
+    }
+}
+
+impl TurAppBackend for ThreadedBackend {
+    fn handle_worker_msg(&self, msg: WorkerMsg) {
+        // Fire-and-forget for non-RPC variants; RPC variants carry their
+        // own `ReplySender` and the caller blocks on `Reply::recv`.
+        let _ = self.worker_tx.send(msg);
+    }
+
+    fn pump(&self) -> Result<FrameOutcome, TurError> {
+        self.worker_tx
+            .send(WorkerMsg::Wake)
+            .map_err(|_| TurError::Other("worker gone".into()))?;
+        let main_rx = self.main_rx.lock().expect("main_rx poisoned");
+        loop {
+            match main_rx.recv() {
+                Ok(MainMsg::FrameOutcome(result)) => return result.map_err(TurError::Other),
+                // CursorChanged / FocusedStateChanged / EventBusToHost /
+                // RenderCommands / DevReply / Destroyed — pump ignores
+                // for now; Phase 8 routes them to embedder-side handlers.
+                Ok(_) => continue,
+                Err(_) => return Err(TurError::Other("worker gone".into())),
+            }
+        }
+    }
+
+    fn push_app_event(&self, _event: AppEvent) {
+        // AppEvent's Custom payload isn't Send yet (Phase 8 adds the bound
+        // + a `WorkerMsg::AppEvent` variant). Until then, threaded mode
+        // panics — production embedders only use `push_platform_event`.
+        unimplemented!("push_app_event not supported in threaded mode (Phase 8)")
+    }
+
+    fn event_bus(&self) -> Rc<EventBus> {
+        // EventBus is Rc<RefCell<...>>-backed; cross-thread needs Arc<Mutex>
+        // or a main-side proxy. Phase 8 introduces the proxy.
+        unimplemented!("event_bus not supported in threaded mode (Phase 8)")
+    }
+
+    fn focused_state(&self) -> FocusedState {
+        // Phase 8: RPC variant `WorkerMsg::FocusedState { reply }` or
+        // cache on main from `MainMsg::FocusedStateChanged`.
+        unimplemented!("focused_state not supported in threaded mode (Phase 8)")
+    }
+
+    fn focused_element(&self) -> Option<ElementNodeId> {
+        unimplemented!("focused_element not supported in threaded mode (Phase 8)")
+    }
+
+    fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        unimplemented!("focused_cursor_rect not supported in threaded mode (Phase 8)")
+    }
+
+    fn focused_is_editable(&self) -> bool {
+        unimplemented!("focused_is_editable not supported in threaded mode (Phase 8)")
+    }
+
+    fn query_element(&self, _key: &[&str]) -> Option<NodeId> {
+        unimplemented!("query_element not supported in threaded mode (Phase 8)")
+    }
+
+    fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
+        // RPC via DevElementTree.
+        let (tx, rx) = crate::core::app::Reply::<Option<DevNodeData>>::pair();
+        let _ = self.worker_tx.send(WorkerMsg::DevElementTree { reply: tx });
+        rx.recv()
+    }
+
+    fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
+        let (tx, rx) = crate::core::app::Reply::<Option<DevNodeData>>::pair();
+        let _ = self
+            .worker_tx
+            .send(WorkerMsg::DevGetElement { id, reply: tx });
+        rx.recv()
+    }
+
+    fn render_to_pixels(&self) -> Option<Vec<u8>> {
+        // Phase 8: add `WorkerMsg::RenderToPixels { reply }` or expose
+        // via main-side renderer (the threaded model splits rendering
+        // from engine state).
+        unimplemented!("render_to_pixels not supported in threaded mode (Phase 8)")
+    }
+
+    fn set_cursor_backend(&self, _backend: Rc<RefCell<dyn CursorBackend>>) {
+        // Phase 8: ship to worker via `WorkerMsg::SetCursorBackend` (needs
+        // the backend to be Send, which today's wasm/native impls are via
+        // their own internal threading).
+        unimplemented!("set_cursor_backend not supported in threaded mode (Phase 8)")
+    }
+
+    fn with_boa_context_dyn(&self, _f: BoaClosure) -> AnySend {
+        unimplemented!("with_boa_context not supported in threaded mode (use RPC variants)")
+    }
+
+    fn with_element_dyn(&self, _id: ElementNodeId, _f: ElementClosure) -> Option<AnySend> {
+        unimplemented!("with_element not supported in threaded mode (use dev_tool_* RPC)")
+    }
+
+    #[cfg(feature = "trace")]
+    fn element_tree_handle(&self) -> std::cell::Ref<'_, crate::core::elements::NodeTreeData> {
+        unimplemented!("element_tree not supported in threaded mode")
     }
 }

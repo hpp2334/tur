@@ -86,7 +86,7 @@ impl TurApp {
     /// runtime calls this with [`InlineBackend`] for `create_app` /
     /// `create_headless_app`; Phase 7's `create_app_threaded` will pass
     /// a `ThreadedBackend`.
-    pub(crate) fn new(backend: Box<dyn TurAppBackend>) -> Self {
+    pub fn new(backend: Box<dyn TurAppBackend>) -> Self {
         Self {
             backend,
             driver: RefCell::new(None),
@@ -102,9 +102,7 @@ impl TurApp {
             source: Arc::from(source),
             reply: tx,
         });
-        rx.try_recv()
-            .ok_or_else(|| TurError::Other("worker gone".into()))
-            .and_then(|res| res.map_err(TurError::from))
+        rx.recv().map_err(TurError::from)
     }
 
     pub fn load_module(&self, source: &str) -> Result<(), TurError> {
@@ -114,9 +112,7 @@ impl TurApp {
             source: Arc::from(source),
             reply: tx,
         });
-        rx.try_recv()
-            .ok_or_else(|| TurError::Other("worker gone".into()))
-            .and_then(|res| res.map_err(TurError::from))
+        rx.recv().map_err(TurError::from)
     }
 
     pub fn eval_module(&self, source: &str) -> Result<(), TurError> {
@@ -125,9 +121,7 @@ impl TurApp {
             source: Arc::from(source),
             reply: tx,
         });
-        rx.try_recv()
-            .ok_or_else(|| TurError::Other("worker gone".into()))
-            .and_then(|res| res.map_err(TurError::from))
+        rx.recv().map_err(TurError::from)
     }
 
     /// Advance exactly one frame: run the engine's fixed-point flush (events,
