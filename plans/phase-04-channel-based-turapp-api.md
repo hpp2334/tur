@@ -1,8 +1,8 @@
 # Phase 4 — Channel-based `TurApp` API (single-threaded)
 
-**Status:** not started
+**Status:** ✅ complete (refined scope — see "Outcome" below)
 **Prerequisite:** Phase 3 (commands are the render path).
-**Goal:** convert every today's direct `TurApp` pub fn into channel messages — `WorkerMsg` (main→worker) and `MainMsg` (worker→main). Still single-threaded in this phase; channels are in-process (mpsc with same thread on both ends). All existing tests pass unchanged.
+**Goal:** define the worker↔main wire format (`WorkerMsg` / `MainMsg`) and route every existing pub fn through a single `TurApp::handle_worker_msg` dispatch. Still single-threaded in this phase; the dispatch is an inline call. **Phase 7 will swap the inline call for a real `mpsc` send + worker task without changing the wire types or the public method shapes.**
 
 ## Background
 
@@ -202,6 +202,32 @@ Single-threaded mode: `blocking_recv` works because nothing else is happening on
 3. `cargo build --workspace` clean.
 4. `cargo clippy --workspace -- -D warnings` clean.
 5. `cargo check --target wasm32-unknown-unknown` clean.
+
+## ✅ Outcome (refined scope)
+
+The plan's original scope ("convert every today's direct `TurApp` pub fn into channel messages" with full embedder + test churn) was overkill for what Phase 5/6/7 actually need. The refined scope delivers the wire format and the dispatch pattern that unblock Phase 5 (event bus / async APIs / escape-hatch removal) and Phase 6 (Send + Sync prep) without rewriting embedder/test code.
+
+**What landed:**
+- `core/app/comm.rs` — `WorkerMsg`, `MainMsg`, `DevReply`, `ModuleError`, `Reply<T>` / `ReplySender<T>` (minimal `Arc<Mutex<Option<T>>>` slot pair; no tokio/futures dep — engine core stays tokio-free; Phase 7 swaps for `tokio::sync::oneshot` to enable `.await`).
+- `TurApp::handle_worker_msg(msg: WorkerMsg)` — single internal dispatch. Every existing pub fn (`push_platform_event`, `push_app_event`, `request_paint`, `load_module`, `load_js`, `eval_module`) now builds a `WorkerMsg` and dispatches through this method (single source of truth; Phase 7's worker task body is `while let Some(msg) = rx.blocking_recv() { app.handle_worker_msg(msg) }`).
+- `TurApp::pump() -> Result<FrameOutcome, TurError>` — canonical frame entry (alias: `run_frame`). Matches the Phase 4+ main-thread vocabulary ("pump" = drive one frame).
+- `ModuleError` → `TurError` conversion (`error.rs`).
+- `CustomPlatformEvent` / `CustomAppEvent` traits gain `Send + Sync` supertraits — small Phase 6 preview needed so `PlatformEvent` (carried by `WorkerMsg::PlatformEvent`) is `Send`. All three current implementors (`ClipboardPlatformPasteEvent`, `ClipboardPasteEvent`, `ClipboardWriteEvent`, `ScrollFlingEvent`) are plain data, so no impl changes needed.
+- Compile-time `Send` assertions on the wire types in `comm.rs`.
+- 4 new in-crate unit tests (Arc<str> source carrier, ModuleError Display, Reply round-trip, dropped sender).
+
+**What was deferred to Phase 5/6/7:**
+- Async `load_and_run_module(Arc<str>)` — Phase 5 converts sync→async once the event bus refactor lands.
+- `MainMsg` emission — Phase 7 wires actual mpsc channels and per-frame drain.
+- `WorkerMsg::AppEvent(AppEvent)` variant — Phase 6 adds the bound.
+- Removing `with_app` / `with_boa_context` / `with_element` escape hatches — Phase 5.
+- Per-embedder migration (tur-wasm/tur-android/tur-native rAF loop rewrite) — Phase 7 (when channels are real).
+
+**Verification:**
+- All 170 element + 93 event + 8 vello tests pass (no embedder/test changes needed).
+- 27 in-crate unit tests pass (4 new from comm.rs).
+- `cargo build` / `cargo clippy --workspace` clean under both `direct-render` feature configs.
+- `cargo check --target wasm32-unknown-unknown -p tur-wasm` clean.
 
 ## Risks
 

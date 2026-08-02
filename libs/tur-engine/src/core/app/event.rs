@@ -30,7 +30,12 @@ use crate::core::layout::Offset;
 /// Implementors also expose [`Any`](std::any::Any) for downcasting so
 /// consumers can recover the concrete payload type via
 /// [`AppEvent::as_custom`].
-pub trait CustomAppEvent: std::any::Any + std::fmt::Debug {
+///
+/// `Send + Sync` is required so an `AppEvent` can cross the worker↔main
+/// channel boundary (Phase 4+). All current implementors are plain data
+/// (`{ text: String }`, `{ vx, vy, position }`); the bound is a
+/// forward-looking guard.
+pub trait CustomAppEvent: std::any::Any + std::fmt::Debug + Send + Sync {
     /// Stable, human-readable identifier used for diagnostics / tracing.
     fn name(&self) -> &'static str;
     /// Borrow as `&dyn Any` so the dispatcher can downcast without leaking

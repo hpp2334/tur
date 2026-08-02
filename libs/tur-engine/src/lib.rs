@@ -31,15 +31,14 @@ pub use crate::core::runtime::{TurRuntime, TurRuntimeBuilder};
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use boa_engine::Context;
 use boa_engine::Source;
 
 use error::TurError;
 
-use core::app::FrameOutcome;
-use core::app::TurAppInternal;
-
+use core::app::{FrameOutcome, ModuleError, Reply, TurAppInternal, WorkerMsg};
 use core::async_::TurJobExecutor;
 use core::element::{ElementNodeId, NodeId};
 use core::elements::AnyElement;
@@ -72,60 +71,37 @@ pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 impl TurApp {
     pub fn load_js(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
-        let mut boa = self.boa_context.borrow_mut();
-        boa.eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
-            .map_err(|e| {
-                tracing::error!("JS eval error: {e}");
-                TurError::JsEval(e)
-            })?;
-        if let Err(e) = self.executor.drain(&mut boa) {
-            tracing::error!("load_js drain error: {e}");
-        }
-        tracing::info!("load_js: bundle evaluated successfully");
-        Ok(())
+        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
+        self.handle_worker_msg(WorkerMsg::LoadJs {
+            source: Arc::from(source),
+            reply: tx,
+        });
+        rx.try_recv()
+            .ok_or_else(|| TurError::Other("worker gone".into()))
+            .and_then(|res| res.map_err(TurError::from))
     }
 
     pub fn load_module(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("entry.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("module parse error: {e}");
-            TurError::JsEval(e)
-        })?;
-        let _promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("module run_jobs error: {e}");
-        }
-        drop(boa);
-        if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
-            tracing::error!("load_module drain error: {e}");
-        }
-        Ok(())
+        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
+        self.handle_worker_msg(WorkerMsg::LoadModule {
+            source: Arc::from(source),
+            reply: tx,
+        });
+        rx.try_recv()
+            .ok_or_else(|| TurError::Other("worker gone".into()))
+            .and_then(|res| res.map_err(TurError::from))
     }
 
     pub fn eval_module(&self, source: &str) -> Result<(), TurError> {
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("eval.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("eval_module parse error: {e}");
-            TurError::JsEval(e)
-        })?;
-        let _promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("eval_module run_jobs error: {e}");
-        }
-        drop(boa);
-        let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
-        Ok(())
+        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
+        self.handle_worker_msg(WorkerMsg::EvalModule {
+            source: Arc::from(source),
+            reply: tx,
+        });
+        rx.try_recv()
+            .ok_or_else(|| TurError::Other("worker gone".into()))
+            .and_then(|res| res.map_err(TurError::from))
     }
 
     /// Advance exactly one frame: run the engine's fixed-point flush (events,
@@ -133,16 +109,30 @@ impl TurApp {
     /// anything changed. Returns the outcome including how the next frame
     /// should be scheduled.
     ///
-    /// This is the low-level frame primitive. Embedders normally drive the
-    /// engine via [`Self::start`] (autonomous loop); test harnesses and
-    /// advanced embedders call this directly.
+    /// This is the canonical frame entry. `pump` and `run_frame` are
+    /// aliases; `pump` matches the worker/main vocabulary used in Phase 4+
+    /// (the main thread "pumps" the worker task once per rAF).
+    ///
+    /// Embedders normally drive the engine via [`Self::start`] (autonomous
+    /// loop); test harnesses and advanced embedders call this directly.
     ///
     /// Unlike the old `spawn_loop_once`, this takes no time argument — the
     /// clock is the engine's own `Clock` (a real wall-clock in production,
     /// a `FixedClock` the harness advances in tests).
-    pub fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
+    pub fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
+        // Phase 4 single-threaded: the Wake handler ran flush inline and
+        // emitted MainMsg::FrameOutcome to the (yet-unwired) main channel.
+        // We return the outcome directly; Phase 7's pump will drain a real
+        // mpsc until it sees FrameOutcome.
+        self.handle_worker_msg(WorkerMsg::Wake);
         let mut boa = self.boa_context.borrow_mut();
         self.internal.flush(&mut boa)
+    }
+
+    /// Legacy alias for [`Self::pump`]. Kept for embedder/test back-compat
+    /// during the Phase 4 transition; new code should call `pump`.
+    pub fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
+        self.pump()
     }
 
     pub fn with_boa_context<R>(&self, f: impl FnOnce(&mut Context) -> R) -> R {
@@ -170,12 +160,7 @@ impl TurApp {
     /// Also re-arms an idle autonomous loop (see [`Self::start`]) so the event
     /// is processed on the next frame.
     pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
-        self.internal
-            .app_context
-            .borrow_mut()
-            .platform_event_queue
-            .push(event);
-        self.request_wakeup();
+        self.handle_worker_msg(WorkerMsg::PlatformEvent(event));
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
@@ -184,6 +169,10 @@ impl TurApp {
     /// exposed for host-initiated app events and testing. Re-arms an idle
     /// autonomous loop like [`Self::push_platform_event`].
     pub fn push_app_event(&self, event: core::app::AppEvent) {
+        // AppEvent can't cross a thread boundary yet (its Custom payload's
+        // Send bound lands in Phase 6). Single-threaded inline dispatch:
+        // push straight onto the queue. Phase 7 will introduce a
+        // `WorkerMsg::AppEvent` variant once AppEvent is Send.
         self.internal
             .app_context
             .borrow_mut()
@@ -198,8 +187,129 @@ impl TurApp {
     /// even when nothing else is pending (see [`Self::start`]). Used by
     /// embedders after loading JS and by tests asserting an explicit paint.
     pub fn request_paint(&self) {
-        self.internal.js_context.need_paint.set(true);
-        self.request_wakeup();
+        self.handle_worker_msg(WorkerMsg::RequestPaint);
+    }
+
+    /// Internal dispatch — every [`WorkerMsg`] variant is processed here.
+    ///
+    /// **Phase 4** (single-threaded): the public API is a thin wrapper that
+    /// builds a `WorkerMsg`, calls this method on the same thread, and
+    /// unwraps the [`Reply`] synchronously.
+    /// **Phase 7** (multi-threaded): a worker task replaces this method's
+    /// body — `while let Some(msg) = rx.blocking_recv() { match msg { … } }`
+    /// — and the public API sends over a real `mpsc`. The wire types stay
+    /// the same.
+    pub(crate) fn handle_worker_msg(&self, msg: WorkerMsg) {
+        match msg {
+            WorkerMsg::PlatformEvent(event) => {
+                self.internal
+                    .app_context
+                    .borrow_mut()
+                    .platform_event_queue
+                    .push(event);
+                self.request_wakeup();
+            }
+            WorkerMsg::RequestPaint => {
+                self.internal.js_context.need_paint.set(true);
+                self.request_wakeup();
+            }
+            WorkerMsg::Wake => {
+                // Single-threaded Phase 4: caller (pump) drives flush
+                // directly so it can return FrameOutcome. No-op here;
+                // Phase 7's worker task will run flush inline at this
+                // case and emit MainMsg::FrameOutcome over the channel.
+            }
+            WorkerMsg::LoadModule { source, reply } => {
+                let res = self.load_module_inner(&source);
+                reply.send(res);
+            }
+            WorkerMsg::LoadJs { source, reply } => {
+                let res = self.load_js_inner(&source);
+                reply.send(res);
+            }
+            WorkerMsg::EvalModule { source, reply } => {
+                let res = self.eval_module_inner(&source);
+                reply.send(res);
+            }
+            WorkerMsg::DevElementTree { reply } => {
+                let snap = self.dev_tool_element_tree();
+                reply.send(snap);
+            }
+            WorkerMsg::DevGetElement { id, reply } => {
+                let snap = self.dev_tool_get_element(id);
+                reply.send(snap);
+            }
+            WorkerMsg::EventBusToJs(_bytes) => {
+                // Phase 5 wires the event bus end-to-end. Placeholder:
+                // log + drop until the JS-side sink is plumbed.
+                tracing::trace!(
+                    "EventBusToJs: {} bytes (Phase 5 wires delivery)",
+                    _bytes.len()
+                );
+            }
+            WorkerMsg::Destroy { reply } => {
+                // Single-threaded Phase 4: lifetime is owned by the
+                // embedder's `Rc<TurApp>`. Phase 7's worker task drains
+                // and exits here.
+                reply.send(());
+            }
+        }
+    }
+
+    fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
+        let mut boa = self.boa_context.borrow_mut();
+        boa.eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
+            .map_err(|e| {
+                tracing::error!("JS eval error: {e}");
+                ModuleError::Eval(e.to_string())
+            })?;
+        if let Err(e) = self.executor.drain(&mut boa) {
+            tracing::error!("load_js drain error: {e}");
+        }
+        tracing::info!("load_js: bundle evaluated successfully");
+        Ok(())
+    }
+
+    fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+        let mut boa = self.boa_context.borrow_mut();
+        let module = boa_engine::Module::parse(
+            Source::from_bytes(source).with_path(Path::new("entry.mjs")),
+            None,
+            &mut boa,
+        )
+        .map_err(|e| {
+            tracing::error!("module parse error: {e}");
+            ModuleError::Parse(e.to_string())
+        })?;
+        let _promise = module.load_link_evaluate(&mut boa);
+        if let Err(e) = boa.run_jobs() {
+            tracing::error!("module run_jobs error: {e}");
+        }
+        drop(boa);
+        if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
+            tracing::error!("load_module drain error: {e}");
+        }
+        Ok(())
+    }
+
+    fn eval_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+        let mut boa = self.boa_context.borrow_mut();
+        let module = boa_engine::Module::parse(
+            Source::from_bytes(source).with_path(Path::new("eval.mjs")),
+            None,
+            &mut boa,
+        )
+        .map_err(|e| {
+            tracing::error!("eval_module parse error: {e}");
+            ModuleError::Parse(e.to_string())
+        })?;
+        let _promise = module.load_link_evaluate(&mut boa);
+        if let Err(e) = boa.run_jobs() {
+            tracing::error!("eval_module run_jobs error: {e}");
+        }
+        drop(boa);
+        let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
+        Ok(())
     }
 
     /// Begin autonomous operation: the engine schedules its own frames via
