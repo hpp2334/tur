@@ -17,6 +17,12 @@ wgpu-backend = ["dep:wgpu", "vello_hybrid/wgpu", "vello_hybrid/wgpu_default"]
 # builds that enable `webgl` should disable default features (`default-features
 # = false, features = ["webgl"]`).
 webgl = ["vello_hybrid/webgl", "dep:web-sys"]
+# Direct-render path: skip the record/playback command-batch path and have
+# `Renderer::render` walk the live element tree directly. Kept as a parity
+# fallback — production uses the command-batch path (render_commands), which
+# is identical pixels but architecturally ready for the worker/main split
+# (Phase 7+).
+direct-render = []
 
 [dependencies]
 tur-async = { workspace = true }

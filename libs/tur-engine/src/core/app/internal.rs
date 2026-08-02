@@ -10,6 +10,7 @@ use crate::core::app::TurAppContext;
 use crate::core::async_::{AsyncExecutor, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
+use crate::core::render::{MainTree, RenderCommand, build_topology_batch};
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::{FontContext, FontLoader};
@@ -68,6 +69,19 @@ pub struct TurAppInternal {
     /// an `Rc<T>` so all sides (bridge fns, subsystems, host code) share one
     /// handle without re-borrowing the `RefCell`.
     pub(crate) instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn std::any::Any>>>>,
+    /// Main-side render tree mirror, updated from each frame's command
+    /// batch (Phase 3+). Read by dev tools; Phase 7 will use it as the
+    /// worker→main wire endpoint for non-render queries (topology,
+    /// per-node state).
+    #[cfg_attr(feature = "direct-render", allow(dead_code))]
+    pub(crate) main_tree: RefCell<MainTree>,
+    /// Last-frame element topology snapshot — input to
+    /// [`build_topology_batch`] so the diff can emit `Remove` commands for
+    /// ids that disappeared from the worker's tree since the previous
+    /// frame. Phase 3 v1 emits `SetChildren` for every node every frame
+    /// (full sync); diff optimization is deferred.
+    #[cfg_attr(feature = "direct-render", allow(dead_code, unused))]
+    pub(crate) last_topology: RefCell<HashMap<ElementNodeId, Vec<ElementNodeId>>>,
 }
 
 impl TurAppInternal {
@@ -135,6 +149,8 @@ impl TurAppInternal {
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             instance_data: Rc::new(RefCell::new(HashMap::new())),
+            main_tree: RefCell::new(MainTree::new()),
+            last_topology: RefCell::new(HashMap::new()),
         }
     }
 
@@ -309,7 +325,24 @@ impl TurAppInternal {
         }
 
         if needs_render {
-            self.app_context.borrow_mut().render();
+            #[cfg(feature = "direct-render")]
+            {
+                self.app_context.borrow_mut().render();
+            }
+            #[cfg(not(feature = "direct-render"))]
+            {
+                // Phase 3 record/playback path: build the topology batch
+                // (SetChildren + Remove), then let `render_commands`
+                // record the paint pass + dispatch the full batch to the
+                // renderer. The combined batch is also applied to
+                // `main_tree` for dev-tool / future main-side queries.
+                let topology_batch = self.build_topology_batch();
+                let batch_clone = topology_batch.clone();
+                self.app_context
+                    .borrow_mut()
+                    .render_commands(topology_batch);
+                self.main_tree.borrow_mut().apply_batch(&batch_clone);
+            }
             if let Err(e) = self.app_context.borrow_mut().renderer.present() {
                 tracing::error!("present failed: {e}");
                 return Err(TurError::Render(e.to_string()));
@@ -556,6 +589,31 @@ impl TurAppInternal {
         true
     }
 
+    /// Build the topology portion of this frame's render batch
+    /// (`SetChildren` + `Remove` commands) by diffing the current
+    /// element-tree topology against `last_topology`.
+    ///
+    /// Phase 3 v1: `SetChildren` is emitted **for every node every frame**
+    /// (full sync). `Remove` is emitted for any id present in
+    /// `last_topology` but missing from the current tree. The diff
+    /// optimization is deferred — the wire cost is negligible in
+    /// single-threaded Phase 3 and revisited in Phase 7.
+    ///
+    /// Updates `last_topology` in place to reflect the current topology.
+    #[cfg_attr(feature = "direct-render", allow(dead_code))]
+    fn build_topology_batch(&self) -> Vec<RenderCommand> {
+        let element_ids: Vec<ElementNodeId> = self.js_context.element_tree.borrow().element_ids();
+        // Capture the tree handle so the per-id closure can borrow without
+        // re-borrowing inside `build_topology_batch` (which would conflict
+        // with the `last_topology` borrow).
+        let tree_handle = self.js_context.element_tree.clone();
+        let mut last_topology = self.last_topology.borrow_mut();
+        build_topology_batch(
+            &element_ids,
+            |id| tree_handle.borrow().children_of_element(id),
+            &mut last_topology,
+        )
+    }
     /// Drain the pending-mutation queue and invoke each mutation via the
     /// reactive store, prepending the `{get, set}` context object. No element
     /// tree access is needed: every entry is a self-contained `(Mutation, args)`.

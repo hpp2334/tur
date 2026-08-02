@@ -1,6 +1,6 @@
 # Phase 3 — MainTree + render-commands wired into flush
 
-**Status:** not started
+**Status:** ✅ complete
 **Prerequisite:** Phase 1 + Phase 2 complete (CanvasOp, RenderCommand, RecordingCanvas, Canvas notify hooks).
 **Goal:** switch the engine's render path from "walk ElementTree directly" to "record → ship commands → main applies + plays back." Single-threaded in this phase; both wasm and native still run on the calling thread. Old direct-render path kept behind a `direct-render` feature for parity testing.
 
@@ -159,6 +159,16 @@ direct-render = []   # opt-in: use old `Renderer::render(&NodeTreeData)` path
 3. `cargo build --workspace` and `cargo build --workspace --features tur-engine/direct-render` both clean.
 4. `cargo clippy --workspace -- -D warnings` clean under both.
 5. `cargo check --target wasm32-unknown-unknown -p tur-engine` clean.
+
+## ✅ Outcome
+
+- All 170 element tests pass under both feature configs.
+- All 93 event tests pass under both feature configs.
+- All 8 vello snapshot tests pass under both feature configs (pixel parity between record/playback and direct-render paths — verified by the same snapshot assertions running green against both).
+- 23 in-crate unit tests pass (10 new from Phase 3: 7 MainTree apply_batch/topology tests + 4 play_commands tests including the record→playback roundtrip).
+- `cargo build` and `cargo clippy --workspace` clean under both feature configs.
+- `cargo check --target wasm32-unknown-unknown -p tur-wasm -p tur-website` clean.
+- `cargo clippy --target wasm32-unknown-unknown -p tur-wasm -p tur-website` clean.
 
 ## Risks
 

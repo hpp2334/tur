@@ -5,7 +5,7 @@ use crate::core::layout::Offset;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
 use crate::core::image_resource::ImageResourceMap;
-use crate::core::render::{NullCanvas, Renderer};
+use crate::core::render::{NullCanvas, RenderCommand, Renderer, play_commands};
 use crate::core::shell::PaintShell;
 
 pub struct NoopRenderer;
@@ -53,6 +53,35 @@ impl Renderer for NoopRenderer {
             max_depth,
             counts
         );
+    }
+
+    fn render_commands(
+        &mut self,
+        commands: &[RenderCommand],
+        _physical_width: u32,
+        _physical_height: u32,
+        _dpr: f64,
+        _image_resource_map: &ImageResourceMap,
+        _shell: PaintShell<'_>,
+    ) {
+        // Drive playback against a null canvas so any side effects baked
+        // into Canvas ops (none today, but defensive) still run. Paint
+        // counts come from the recorded batch.
+        let mut null = NullCanvas;
+        play_commands(&mut null, commands);
+
+        let paint_count = commands
+            .iter()
+            .filter(|c| matches!(c, RenderCommand::Paint { .. }))
+            .count();
+        let total_ops: usize = commands
+            .iter()
+            .filter_map(|c| match c {
+                RenderCommand::Paint { ops, .. } => Some(ops.len()),
+                _ => None,
+            })
+            .sum();
+        tracing::debug!("noop-renderer: {paint_count} Paint commands, {total_ops} total ops",);
     }
 }
 

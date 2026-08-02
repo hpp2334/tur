@@ -17,7 +17,7 @@ use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
-use crate::core::render::Renderer;
+use crate::core::render::{RecordingCanvas, RenderCommand, Renderer};
 use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -198,6 +198,63 @@ impl TurAppContext {
             self.renderer
                 .render(&tree, focused_node_id, &image_resource_map, shell);
         }
+        self.shell.apply_changes();
+    }
+
+    /// New record/playback render path (Phase 3+).
+    ///
+    /// Walks the element tree with a [`RecordingCanvas`] to capture
+    /// per-node paint ops + boundaries, post-processes the recording into
+    /// `Vec<RenderCommand>` (topology + paint commands in playback order),
+    /// and dispatches the batch to [`Renderer::render_commands`].
+    ///
+    /// `extra_commands` (typically the topology batch from
+    /// [`crate::core::render::build_topology_batch`]) is prepended to the
+    /// paint commands so a single `render_commands` call consumes the full
+    /// frame's batch.
+    ///
+    /// Phase 3 keeps the existing cursor flow (`Shell::apply_changes`) —
+    /// the worker-side record pass populates the shell's `CursorSink` via
+    /// `MouseRegion`'s paint body just like the direct path. Phase 7
+    /// routes cursor through the command batch end-to-end.
+    pub fn render_commands(&mut self, extra_commands: Vec<RenderCommand>) {
+        let focused_node_id = self.focus_manager.borrow().focused();
+
+        // Record the paint pass.
+        let image_resource_map = self.image_resource_map.borrow();
+        let tree = self.element_tree.borrow();
+        let mut recording = RecordingCanvas::new();
+        {
+            let shell = self.shell.paint_face();
+            tree.paint(&mut recording, focused_node_id, &image_resource_map, shell);
+        }
+        let paint_commands = recording.into_render_commands();
+        drop(tree);
+
+        // Combine extra (topology) + paint into one batch.
+        let mut batch = extra_commands;
+        batch.extend(paint_commands);
+
+        // Render via the command-batch path. The renderers track their own
+        // surface geometry (set via `resize`), so the trait-level
+        // physical_width/height/dpr are placeholders here — Phase 7's
+        // main-side renderer will use them when the renderer doesn't own
+        // its own surface.
+        let (logical_w, logical_h) = self.screen.logical_size;
+        {
+            let shell = self.shell.paint_face();
+            self.renderer.render_commands(
+                &batch,
+                logical_w as u32,
+                logical_h as u32,
+                1.0,
+                &image_resource_map,
+                shell,
+            );
+        }
+        drop(image_resource_map);
+
+        // Flush cursor claims accumulated during the record pass.
         self.shell.apply_changes();
     }
 

@@ -46,7 +46,12 @@ use vello_common::kurbo::Affine;
 /// `Brush` and `TextLayoutData` own `Vec`s of plain-data structs; the
 /// `Arc<TextLayoutData>` on `FillTextLayout` lets the worker hand the same
 /// shaped layout to main by refcount bump instead of a deep clone.
-#[derive(Debug)]
+///
+/// `Clone` is derived for the engine-internal `MainTree` mirror, which
+/// snapshots the latest `Paint.ops` per node for dev-tool queries. The
+/// wire path (worker→main) consumes the original `Vec` by ownership, not
+/// by clone.
+#[derive(Debug, Clone)]
 pub enum CanvasOp {
     // ─── Draw ops (1:1 with the Canvas trait) ───
     FillGeometry {
@@ -99,7 +104,7 @@ pub enum CanvasOp {
 /// applying these commands: `Paint`/`SetChildren`/`Remove` update the
 /// tree's per-node state; `Cursor` is a transient side-channel that main
 /// forwards to its `CursorBackend`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RenderCommand {
     /// Paint `ops` for node `id` at absolute `transform` and `size`.
     ///
