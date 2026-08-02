@@ -120,7 +120,9 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │     ├── tur-net-capability (Http + HttpBackend trait + │
 │     │   tur:net)                               │
 │     ├── tur-net-wasm           (WasmHttp via reqwest-wasm)│
-│     ├── tur-net-native         (NativeHttp via reqwest)│
+│     ├── tur-net-native         (NativeHttp via reqwest on a│
+│     │   user-provided tokio runtime — the only crate that │
+│     │   touches tokio; engine core is tokio-free)        │
 │     ├── tur-filepicker-capability (FilePicker +         │
 │     │   FilePickerBackend trait + tur:filepicker bridge │
 │     │   — opt-in, requires a backend)                    │
@@ -434,7 +436,10 @@ libs/
                              #   re-exports
   tur-net-capability/        # HttpBackend trait + Http cap + tur:net
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
-   tur-net-native/            # NativeHttp (reqwest) backend
+   tur-net-native/            # NativeHttp (reqwest) backend — runs each request
+                              #   on a user-provided tokio runtime (Handle) and
+                              #   bridges results back via oneshot/mpsc; the only
+                              #   crate in the workspace that touches tokio
    tur-clipboard-android/     # AndroidClipboard (ClipboardManager via JNI) —
                              #   registers the process JavaVM for per-call attach
    tur-android/               # Embedder glue (rlib, NOT a cdylib): wgpu/Vulkan

@@ -1,6 +1,6 @@
 [package]
 name = "tur-async"
-description = "Single-threaded async executor for tur, backed by a Tokio current-thread runtime + LocalSet"
+description = "Dependency-free single-threaded async executor for tur"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,16 +8,3 @@ license.workspace = true
 
 [dependencies]
 tracing = { workspace = true }
-
-# Native: `rt` (current-thread runtime + `LocalSet` + `block_on` + `spawn_local`),
-# `net` + `time` so `enable_all()` can compile the I/O + time drivers reqwest/hyper
-# need. `rt-multi-thread` is intentionally NOT enabled — the executor is strictly
-# single-threaded (main thread).
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
-tokio = { version = "1", default-features = false, features = ["rt", "net", "time"] }
-
-# wasm: scheduler-only. `net` is unavailable on `wasm32-unknown-unknown`
-# (reqwest-wasm uses the browser for I/O); engine timers are engine-managed, so
-# no Tokio time driver is needed either.
-[target.'cfg(target_family = "wasm")'.dependencies]
-tokio = { version = "1", default-features = false, features = ["rt"] }

@@ -1,6 +1,6 @@
 [package]
 name = "tur-net-native"
-description = "Native HTTP backend for tur (NativeHttp via reqwest)"
+description = "Native HTTP backend for tur (NativeHttp via reqwest on a user-provided tokio runtime)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,12 @@ license.workspace = true
 tur-net-capability = { workspace = true }
 tracing = { workspace = true }
 
+# Native: reqwest (which pulls tokio transitively to drive its reactor) plus
+# tokio directly for `runtime::Handle` (the user-supplied runtime) + `sync`
+# (`oneshot` / `mpsc`) to bridge results back onto the engine's main-thread
+# executor. The engine itself is tokio-free; only this backend touches tokio,
+# and it never builds or enters a runtime of its own — the user owns it.
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "stream"] }
 futures = { workspace = true }
+tokio = { version = "1", default-features = false, features = ["rt", "sync"] }

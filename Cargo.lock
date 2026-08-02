@@ -4360,7 +4360,6 @@ dependencies = [
  "tur-clipboard-android",
  "tur-engine",
  "tur-native",
- "tur-net-native",
  "wgpu",
 ]
 
@@ -4379,7 +4378,6 @@ dependencies = [
 name = "tur-async"
 version = "0.1.0"
 dependencies = [
- "tokio",
  "tracing",
 ]
 
@@ -4536,6 +4534,7 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "reqwest",
+ "tokio",
  "tracing",
  "tur-net-capability",
 ]
