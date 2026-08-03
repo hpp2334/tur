@@ -223,7 +223,9 @@ The engine has a **one runtime, many instances** architecture:
   surface) or `runtime.create_headless_app(viewport)` (no rendering — JS +
   capabilities + events only, backed by `NoopRenderer`). Each instance gets its
   own boa `Context` (JS realm), element tree, reactive store, focus manager,
-  event queues, subsystems, screen, and LoopDriver. Plugins are re-registered
+  event queues, subsystems, screen, and scheduler (per-instance vsync drivers —
+  e.g. Android instances install their own JNI `FrameLoop`-bound scheduler via
+  `TurApp::set_main_scheduler`). Plugins are re-registered
   into each instance's fresh realm (the same plugin objects — `register` takes
   `&self`, so no factory needed).
 
@@ -321,10 +323,14 @@ libs/
         app/                 # TurAppInternal + FrameOutcome + AppEvent/
                              #   AppEventQueue + render() mount +
                              #   RootView/RootElement generic-root wrapper
-        async_/              # AsyncExecutor (tur_async wrapper) + task
-                             #   primitives (sleep/launch, the bridge fns
-                             #   for tur:std) + executor
-                             #   (TurJobExecutor — boa JobExecutor impl)
+        async_/              # CompletionQueue/CompletionHandle (pending
+                             #   completion invocations drained each flush)
+                             #   + executor (TurJobExecutor — boa
+                             #   JobExecutor impl)
+        scheduler.rs         # MainScheduler + WorkerScheduler traits,
+                             #   Sleep/VsyncEvents/WorkerHandle (drivers:
+                             #   WasmSchedulerDriver, AndroidSchedulerDriver,
+                             #   TestSchedulerDriver)
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge

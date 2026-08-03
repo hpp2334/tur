@@ -1,14 +1,24 @@
 //! Android scheduler driver (JNI-backed).
 //!
 //! Implements both [`MainScheduler`] and [`WorkerScheduler`] for Android.
-//! Replaces the old `loop_driver.rs` (the `LoopDriver`-based driver).
+//! Replaces the old `loop_driver.rs` (`LoopDriver`-based, now deleted).
 //!
 //! ## Vsync events
 //!
 //! `request_vsync` calls into Kotlin's `FrameLoop.scheduleVsync()` via JNI
 //! (Choreographer-backed). When the Choreographer fires, Kotlin calls
 //! `nativePump` which invokes [`AndroidSchedulerDriver::fire_vsync`],
-//! pushing an event into the subscribed `vsync_tx` channel.
+//! pushing an event into every subscribed vsync channel.
+//!
+//! ## Frame loop ownership
+//!
+//! Each `AndroidInstance` owns its own Kotlin `FrameLoop` (Choreographer
+//! callback), so the vsync driver is **per-instance**: `AndroidRuntime::build`
+//! installs a base driver with no frame loop (its `request_vsync` no-ops —
+//! the worker thread is all it needs), and each instance replaces the app's
+//! main scheduler via `TurApp::set_main_scheduler` with a driver bound to its
+//! own `FrameLoop`. Multiple subscribers per driver are supported (broadcast),
+//! which is what the base driver's `vsync_events()` channel provides.
 //!
 //! ## Sleep
 //!
@@ -43,8 +53,20 @@ use tur_engine::core::scheduler::{
     MainScheduler, Sleep, VsyncEvents, WorkerHandle, WorkerScheduler,
 };
 
-use crate::loop_driver::FrameLoopRef;
+/// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so
+/// the scheduler (which the engine calls from its own frame tick) can reach
+/// it.
+#[derive(Clone)]
+pub struct FrameLoopRef {
+    /// Global ref to the Kotlin `FrameLoop` instance.
+    pub kotlin_loop: jni::objects::GlobalRef,
+}
 
+impl FrameLoopRef {
+    pub fn new(kotlin_loop: jni::objects::GlobalRef) -> Self {
+        Self { kotlin_loop }
+    }
+}
 thread_local! {
     /// Per-thread `LocalPool` for `spawn_local` + `block_on`. Set by
     /// [`AndroidSchedulerDriver::new`] for the main thread and inside
@@ -98,30 +120,33 @@ pub struct AndroidSchedulerDriver {
     /// Used for **timers only** (no spawn_local / block_on).
     runtime: Arc<tokio::runtime::Handle>,
     /// JNI `FrameLoop` global ref. The driver's `request_vsync` calls
-    /// `scheduleVsync()` on this object.
-    frame_loop: FrameLoopRef,
+    /// `scheduleVsync()` on this object. `None` for the runtime base
+    /// driver (no frame loop at runtime-build time; instances replace it).
+    frame_loop: Option<FrameLoopRef>,
 }
 
 struct AndroidInner {
     /// The vsync event sender. Set when the engine subscribes via
     /// `vsync_events()`. The Kotlin side fires [`Self::fire_vsync`] via
     /// JNI when Choreographer ticks; that pushes a `()` into this channel.
-    vsync_tx: Mutex<Option<futures::channel::mpsc::UnboundedSender<()>>>,
+    vsync_txs: Mutex<Vec<futures::channel::mpsc::UnboundedSender<()>>>,
     /// Whether a vsync is currently armed. Idempotent guard — multiple
     /// `request_vsync` calls before the next fire coalesce into one.
     vsync_armed: std::sync::atomic::AtomicBool,
 }
 
 impl AndroidSchedulerDriver {
-    /// Construct. Captures the tokio runtime handle + JNI frame loop ref.
-    /// Sets up the main-thread `LocalPool` so `spawn_local` / `block_on`
-    /// work on the calling (main) thread.
-    pub fn new(runtime: tokio::runtime::Handle, frame_loop: FrameLoopRef) -> Rc<Self> {
+    /// Construct. Captures the tokio runtime handle + the JNI frame loop
+    /// ref (or `None` for the runtime's base driver — no vsync, used only
+    /// to spawn the worker + serve `sleep`). Sets up the main-thread
+    /// `LocalPool` so `spawn_local` / `block_on` work on the calling
+    /// (main) thread.
+    pub fn new(runtime: tokio::runtime::Handle, frame_loop: Option<FrameLoopRef>) -> Rc<Self> {
         CURRENT_POOL.with(|c| *c.borrow_mut() = Some(LocalPool::new()));
 
         Rc::new(Self {
             inner: Arc::new(AndroidInner {
-                vsync_tx: Mutex::new(None),
+                vsync_txs: Mutex::new(Vec::new()),
                 vsync_armed: std::sync::atomic::AtomicBool::new(false),
             }),
             runtime: Arc::new(runtime),
@@ -136,7 +161,7 @@ impl AndroidSchedulerDriver {
         self.inner
             .vsync_armed
             .store(false, std::sync::atomic::Ordering::Release);
-        if let Some(tx) = self.inner.vsync_tx.lock().unwrap().as_ref() {
+        for tx in self.inner.vsync_txs.lock().unwrap().iter() {
             let _ = tx.unbounded_send(());
         }
     }
@@ -174,11 +199,16 @@ impl MainScheduler for AndroidSchedulerDriver {
 
     fn vsync_events(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
-        *self.inner.vsync_tx.lock().unwrap() = Some(tx);
+        self.inner.vsync_txs.lock().unwrap().push(tx);
         VsyncEvents(rx)
     }
 
     fn request_vsync(&self) {
+        // Base driver (no frame loop) never schedules — instances install
+        // their own driver via `TurApp::set_main_scheduler`.
+        let Some(frame_loop) = self.frame_loop.as_ref() else {
+            return;
+        };
         // Idempotent: no-op if a vsync is already armed.
         if self
             .inner
@@ -195,12 +225,24 @@ impl MainScheduler for AndroidSchedulerDriver {
             tracing::warn!("scheduler: JNI attach failed for request_vsync");
             return;
         };
-        let loop_obj = unsafe { JObject::from_raw(self.frame_loop.kotlin_loop.as_raw()) };
-        if let Err(e) =
-            env.call_method(&loop_obj, "scheduleVsync", "()V", &[])
-        {
+        let loop_obj = unsafe { JObject::from_raw(frame_loop.kotlin_loop.as_raw()) };
+        if let Err(e) = env.call_method(&loop_obj, "scheduleVsync", "()V", &[]) {
             tracing::warn!("scheduler: scheduleVsync failed: {e}");
         }
+    }
+
+    fn sleep(&self, d: Duration) -> Sleep {
+        tokio_sleep(self.runtime.clone(), d)
+    }
+}
+
+impl WorkerScheduler for AndroidSchedulerDriver {
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+        spawn_local_on_current_thread(fut);
+    }
+
+    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+        block_on_on_current_thread(fut);
     }
 
     fn sleep(&self, d: Duration) -> Sleep {

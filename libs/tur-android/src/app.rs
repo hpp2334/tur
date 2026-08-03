@@ -8,6 +8,7 @@
 
 #[cfg(target_os = "android")]
 mod imp {
+    use std::pin::Pin;
     use std::rc::Rc;
 
     use boa_engine::context::time::StdClock;
@@ -18,7 +19,7 @@ mod imp {
     use tur_engine::renderer::vello::VelloRenderer;
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
 
-    use crate::loop_driver::{AndroidLoopDriver, FrameLoopRef};
+    use crate::scheduler::{AndroidSchedulerDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
 
@@ -35,23 +36,27 @@ mod imp {
     }
 
     /// The shared runtime — created once per app process. Owns the
-    /// [`TurRuntime`] (fonts, clock, capabilities, plugins) plus a single
-    /// shared `wgpu::Instance` that every rendering instance creates its
-    /// `Surface` from. Returned to the JNI layer as a boxed pointer (the
+    /// [`TurRuntime`] (fonts, clock, capabilities, plugins), a shared
+    /// `wgpu::Instance` that every rendering instance creates its `Surface`
+    /// from, and the tokio runtime whose handle backs the scheduler's
+    /// `sleep` timers. Returned to the JNI layer as a boxed pointer (the
     /// `jlong` runtime handle Kotlin holds).
     pub struct AndroidRuntime {
         pub runtime: Rc<TurRuntime>,
         pub wgpu_instance: wgpu::Instance,
+        /// Tokio runtime — `sleep` timers (via
+        /// [`AndroidSchedulerDriver`]) + optionally `NativeHttp`/reqwest.
+        pub tokio: tokio::runtime::Runtime,
     }
 
     impl AndroidRuntime {
         /// Build the shared runtime. `configure` receives the
         /// [`TurRuntimeBuilder`] (by value) AFTER the Android defaults are
         /// installed (native font loader, wall-clock `StdClock`, `NoopCursor`,
-        /// `AndroidClipboard`), so the callback only needs to chain
-        /// `.plugin(…)` calls (and, if HTTP is wanted, register a
-        /// `NativeHttp` backend against an embedder-owned tokio runtime) and
-        /// return the builder.
+        /// `AndroidClipboard`, the base scheduler driver), so the callback
+        /// only needs to chain `.plugin(…)` calls (and, if HTTP is wanted,
+        /// register a `NativeHttp` backend against the same tokio runtime
+        /// via [`Self::tokio_handle`]) and return the builder.
         pub fn build(
             context: GlobalRef,
             configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
@@ -60,7 +65,19 @@ mod imp {
             // per call to reach ClipboardManager).
             tur_clipboard_android::set_java_vm(crate::java_vm().expect("JavaVM set before create"));
 
+            // Timers for scheduler `sleep`. Also shared with `NativeHttp`.
+            let tokio = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(2)
+                .enable_time()
+                .build()
+                .map_err(|e| TurAndroidError::Engine(TurError::Other(format!("tokio: {e}"))))?;
+
+            // Base scheduler: no frame loop (that's per-instance — each
+            // instance installs its own via `TurApp::set_main_scheduler`).
+            let driver = AndroidSchedulerDriver::new(tokio.handle().clone(), None);
+
             let mut builder = TurRuntime::builder()
+                .scheduler(driver)
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
                 .clock(std::sync::Arc::new(StdClock::new()))
                 .capability(CursorCap::new(NoopCursor))
@@ -79,7 +96,14 @@ mod imp {
             Ok(Self {
                 runtime,
                 wgpu_instance,
+                tokio,
             })
+        }
+
+        /// Handle to the runtime's tokio runtime — embedders can register a
+        /// `NativeHttp` backend against it in `configure`.
+        pub fn tokio_handle(&self) -> tokio::runtime::Handle {
+            self.tokio.handle().clone()
         }
     }
 
@@ -90,10 +114,59 @@ mod imp {
     /// boxed pointer (the `jlong` instance handle Kotlin holds).
     pub struct AndroidInstance {
         pub app: Rc<TurApp>,
-        pub loop_driver: Rc<AndroidLoopDriver>,
+        pub scheduler: Rc<AndroidSchedulerDriver>,
+        /// The autonomous `start_loop` future. `TurApp` is `Rc`-based
+        /// (!Send — the boa realm lives on the main thread), so the loop
+        /// cannot run on a spawned thread: JNI `pump` polls it once per
+        /// Choreographer tick.
+        loop_task: std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
     }
 
     impl AndroidInstance {
+        /// Install the per-instance scheduler (bound to this instance's
+        /// Kotlin `FrameLoop`) and stash the autonomous `start_loop` future
+        /// for poll-per-`pump` driving. Arms the first vsync so the
+        /// bootstrap `FrameOutcome` (from `create_app`'s initial resize)
+        /// kicks the loop off.
+        fn install_frame_loop(
+            app: &Rc<TurApp>,
+            frame_loop: FrameLoopRef,
+            tokio: &tokio::runtime::Handle,
+        ) -> (
+            Rc<AndroidSchedulerDriver>,
+            std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
+        ) {
+            use tur_engine::core::scheduler::MainScheduler;
+
+            let driver = AndroidSchedulerDriver::new(tokio.clone(), Some(frame_loop));
+            app.set_main_scheduler(driver.clone());
+            // Bootstrap: arm the first Choreographer callback. Subsequent
+            // frames re-arm via the loop's `request_vsync` on `FrameOutcome`.
+            driver.request_vsync();
+            let loop_task = std::cell::RefCell::new(Some(
+                Box::pin(app.clone().start_loop()) as Pin<Box<dyn Future<Output = ()>>>
+            ));
+            (driver, loop_task)
+        }
+
+        /// Poll the autonomous loop exactly once. Called from JNI `pump`
+        /// after `fire_vsync`; each poll handles at most one vsync/main-msg
+        /// event, so the loop is pulled forward by the Choreographer
+        /// cadence.
+        pub fn pump_loop(&self) {
+            let mut task = self.loop_task.borrow_mut();
+            let ready = task
+                .as_mut()
+                .map(|t| {
+                    let waker = futures::task::noop_waker();
+                    let mut cx = std::task::Context::from_waker(&waker);
+                    t.as_mut().poll(&mut cx)
+                })
+                .map_or(false, |p| p.is_ready());
+            if ready {
+                *task = None;
+            }
+        }
         /// Build a rendering instance over a freshly-created wgpu surface
         /// backed by the given Android `Surface`'s `ANativeWindow*`, using the
         /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
@@ -103,8 +176,10 @@ mod imp {
         /// `VelloRenderer` lives on the caller thread (main) and is driven
         /// by a `render_sink` callback that receives command batches +
         /// image map snapshots from the worker each frame.
+        #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             runtime: &Rc<TurRuntime>,
+            tokio: &tokio::runtime::Handle,
             wgpu_instance: &wgpu::Instance,
             window_handle: AndroidWindowHandle,
             logical_width: u32,
@@ -167,26 +242,30 @@ mod imp {
                 let _ = r.present();
             });
 
-            let loop_driver = Rc::new(AndroidLoopDriver::new(frame_loop));
-            // Native: drive the async wake trampoline via `block_on`. The
-            // JNI render-tick parks the calling thread until the future
-            // resolves (functionally identical to a sync pump, but routed
-            // through the unified async API).
-            app.start(loop_driver.clone(), |fut| futures::executor::block_on(fut));
+            let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
 
-            Ok(Self { app, loop_driver })
+            Ok(Self {
+                app,
+                scheduler,
+                loop_task,
+            })
         }
 
         /// Build a headless instance (no surface, no rendering) from the
         /// runtime. Runs JS + capabilities + events only.
         pub fn build_headless(
             runtime: &Rc<TurRuntime>,
+            tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
             let app = runtime.create_app((0.0, 0.0), 1.0)?;
-            let loop_driver = Rc::new(AndroidLoopDriver::new(frame_loop));
-            app.start(loop_driver.clone(), |fut| futures::executor::block_on(fut));
-            Ok(Self { app, loop_driver })
+            let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
+
+            Ok(Self {
+                app,
+                scheduler,
+                loop_task,
+            })
         }
     }
 }
@@ -197,7 +276,7 @@ pub use imp::{AndroidInstance, AndroidRuntime, TurAndroidError};
 
 #[cfg(not(target_os = "android"))]
 mod imp {
-    use crate::loop_driver::FrameLoopRef;
+    use crate::scheduler::FrameLoopRef;
     use crate::surface::AndroidWindowHandle;
     use jni::objects::GlobalRef;
     use tur_engine::TurRuntimeBuilder;
@@ -223,8 +302,10 @@ mod imp {
     pub struct AndroidInstance;
 
     impl AndroidInstance {
+        #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
+            _tokio: &tokio::runtime::Handle,
             _wgpu_instance: &wgpu::Instance,
             _window_handle: AndroidWindowHandle,
             _logical_width: u32,
@@ -237,6 +318,7 @@ mod imp {
 
         pub fn build_headless(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
+            _tokio: &tokio::runtime::Handle,
             _frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)

@@ -50,10 +50,10 @@ pub struct WasmSchedulerDriver {
 }
 
 struct WasmInner {
-    /// The vsync event sender — set once when the engine subscribes via
-    /// `vsync_events()`. Driver's rAF closure pushes a `()` here on each
-    /// fire. `None` until subscribed.
-    vsync_tx: RefCell<Option<futures::channel::mpsc::UnboundedSender<()>>>,
+    /// All vsync event subscribers. Each `vsync_events()` call pushes a
+    /// new sender; `fire_vsync` pushes to ALL. Supports multi-instance
+    /// (multiple TurApps from one runtime).
+    vsync_txs: RefCell<Vec<futures::channel::mpsc::UnboundedSender<()>>>,
     /// Pending rAF handle, if any. `None` ⇒ no rAF outstanding. Cleared by
     /// the rAF closure when it fires.
     raf_id: RefCell<Option<i32>>,
@@ -68,7 +68,7 @@ impl WasmSchedulerDriver {
     /// rAF closure that fires vsync events into the subscribed channel.
     pub fn new() -> Rc<Self> {
         let inner = Rc::new(WasmInner {
-            vsync_tx: RefCell::new(None),
+            vsync_txs: RefCell::new(Vec::new()),
             raf_id: RefCell::new(None),
             raf_closure: RefCell::new(None),
         });
@@ -89,8 +89,8 @@ impl WasmInner {
     fn fire_vsync(&self) {
         // Clear the pending handle (rAF is one-shot).
         *self.raf_id.borrow_mut() = None;
-        // Push an event into the subscriber's channel.
-        if let Some(tx) = self.vsync_tx.borrow().as_ref() {
+        // Push an event to ALL subscribers.
+        for tx in self.vsync_txs.borrow().iter() {
             let _ = tx.unbounded_send(());
         }
     }
@@ -123,7 +123,7 @@ impl MainScheduler for WasmSchedulerDriver {
 
     fn vsync_events(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
-        *self.inner.vsync_tx.borrow_mut() = Some(tx);
+        self.inner.vsync_txs.borrow_mut().push(tx);
         VsyncEvents(rx)
     }
 
@@ -132,7 +132,9 @@ impl MainScheduler for WasmSchedulerDriver {
         if self.inner.raf_id.borrow().is_some() {
             return;
         }
-        let Some(window) = web_sys::window() else { return };
+        let Some(window) = web_sys::window() else {
+            return;
+        };
         let raf_closure_ref = self.inner.raf_closure.borrow();
         let Some(closure) = raf_closure_ref.as_ref() else {
             return;

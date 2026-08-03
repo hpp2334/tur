@@ -30,8 +30,6 @@ pub use crate::core::event_bus::EventBus;
 pub use crate::core::runtime::{MainBackend, RenderSink, TurRuntime, TurRuntimeBuilder};
 
 use std::cell::{Cell, RefCell};
-use std::future::Future;
-use std::pin::Pin;
 use std::rc::Rc;
 
 use error::TurError;
@@ -48,20 +46,6 @@ pub struct FocusedState {
     /// `None` if no editable is focused.
     pub cursor_rect: Option<(f64, f64, f64, f64)>,
 }
-
-/// Type-erased future driven by the embedder's async runtime. The wake
-/// trampoline (set via [`LoopDriver::set_wake`] inside [`TurApp::start`])
-/// hands one of these to the embedder-supplied `spawn` closure — which
-/// either `wasm_bindgen_futures::spawn_local`s it (wasm main thread,
-/// cooperatively scheduled on the JS event loop) or
-/// `futures::executor::block_on`s it (native, calling thread parks until
-/// the future completes).
-pub type WakeFuture = Pin<Box<dyn Future<Output = ()>>>;
-
-/// Type-erased spawn closure passed by the embedder to
-/// [`TurApp::start`]. Receives a future; the embedder decides how to drive
-/// it (`spawn_local` / `block_on` / custom executor).
-pub type SpawnWake = Rc<dyn Fn(WakeFuture)>;
 
 /// A running tur engine instance.
 ///
@@ -83,27 +67,14 @@ pub type SpawnWake = Rc<dyn Fn(WakeFuture)>;
 pub struct TurApp {
     backend: MainBackend,
     /// Platform main-thread scheduler (vsync events, request_vsync,
-    /// spawn_local). Cloned from the runtime at construction.
-    main_sched: Rc<dyn core::scheduler::MainScheduler>,
-    /// Autonomous-loop driver. `None` until [`Self::start`] is called
-    /// (production); tests leave it unset and pump via [`Self::pump`].
-    driver: RefCell<Option<Rc<dyn LoopDriver>>>,
-    /// Embedder-supplied spawn closure — drives the async wake trampoline
-    /// on the platform's runtime. Set once in [`Self::start`]; held so
-    /// [`Self::spawn_wake`] (the concurrency-guarded entry point used by
-    /// the wake trampoline) can re-invoke it for the next frame.
-    spawn: RefCell<Option<SpawnWake>>,
+    /// spawn_local). Cloned from the runtime at construction; embedders
+    /// with per-instance scheduling (Android) replace it via
+    /// [`Self::set_main_scheduler`].
+    main_sched: RefCell<Rc<dyn core::scheduler::MainScheduler>>,
     /// Embedder-installed callback fired after each autonomous frame —
     /// typically used for DOM side-effects (file-pick resolution, textarea
     /// focus / caret positioning). `None` in tests.
     after_frame: RefCell<Option<AfterFrameHook>>,
-    /// Concurrency guard: true while a wake is in-flight. Prevents
-    /// re-entry (e.g. rAF firing while the previous frame's future is
-    /// still pending) from spawning overlapping pumps.
-    pump_in_progress: Cell<bool>,
-    /// Set when rAF fires while `pump_in_progress` is true. On wake exit,
-    /// if true, another wake is spawned.
-    wake_pending: Cell<bool>,
     /// Set by [`Self::start_loop`] — guards against double-spawn of the
     /// autonomous loop.
     loop_started: Cell<bool>,
@@ -118,9 +89,10 @@ enum HandleResult {
     Stop,
 }
 impl HandleResult {
-    fn should_stop(self) -> bool { matches!(self, Self::Stop) }
+    fn should_stop(self) -> bool {
+        matches!(self, Self::Stop)
+    }
 }
-
 
 /// Per-frame hook fired at the end of [`TurApp::wake`] (after `pump`,
 /// before rescheduling). See [`TurApp::set_after_frame_hook`].
@@ -133,15 +105,19 @@ impl TurApp {
     pub fn new(backend: MainBackend, main_sched: Rc<dyn core::scheduler::MainScheduler>) -> Self {
         Self {
             backend,
-            main_sched,
-            driver: RefCell::new(None),
-            spawn: RefCell::new(None),
+            main_sched: RefCell::new(main_sched),
             after_frame: RefCell::new(None),
-            pump_in_progress: Cell::new(false),
-            wake_pending: Cell::new(false),
             loop_started: Cell::new(false),
             destroyed: Cell::new(false),
         }
+    }
+
+    /// Replace the main-thread scheduler. Used by embedders that need a
+    /// per-instance scheduler (e.g. Android, where each instance has its
+    /// own JNI `FrameLoop`). Call after `runtime.create_app(...)` and
+    /// before `start_loop()`.
+    pub fn set_main_scheduler(&self, sched: Rc<dyn core::scheduler::MainScheduler>) {
+        *self.main_sched.borrow_mut() = sched;
     }
 
     /// Direct accessor on the underlying [`MainBackend`]. Embedders use it
@@ -237,33 +213,6 @@ impl TurApp {
         self.request_wakeup();
     }
 
-    /// Begin autonomous operation: install the driver + the embedder's
-    /// `spawn` closure, register the wake trampoline, and kick off frame 1.
-    ///
-    /// **Deprecated** in favor of [`Self::start_loop`] (the new
-    /// event-driven loop that doesn't take a `LoopDriver`). Kept for
-    /// migration purposes.
-    pub fn start<S>(self: &Rc<Self>, driver: Rc<dyn LoopDriver>, spawn: S)
-    where
-        S: Fn(WakeFuture) + 'static,
-    {
-        let spawn: SpawnWake = Rc::new(spawn);
-        *self.spawn.borrow_mut() = Some(spawn.clone());
-        // Install the wake trampoline on the driver. When the driver fires
-        // (rAF / JNI / etc.), it calls this trampoline, which hands a
-        // fresh async wake to the embedder-supplied spawn closure.
-        let weak = Rc::downgrade(self);
-        driver.set_wake(Rc::new(move || {
-            if let Some(app) = weak.upgrade() {
-                app.spawn_wake();
-            }
-        }));
-        *self.driver.borrow_mut() = Some(driver);
-
-        // Kick off frame 1. spawn_wake sets pump_in_progress itself.
-        self.spawn_wake();
-    }
-
     /// New autonomous frame loop. The embedder spawns this on its platform's
     /// runtime; the engine owns all the logic.
     ///
@@ -286,7 +235,7 @@ impl TurApp {
             "start_loop called twice on the same TurApp"
         );
 
-        let mut vsync_rx = self.main_sched.vsync_events();
+        let mut vsync_rx = self.main_sched.borrow().vsync_events();
         // `main_rx` is in a RefCell; borrow for the lifetime of this loop.
         // Safe: start_loop is called exactly once per app (asserted above).
         #[allow(clippy::await_holding_refcell_ref)]
@@ -303,12 +252,16 @@ impl TurApp {
 
             match event {
                 Either::Left((Some(()), _)) => {
-                    if self.destroyed.get() { break; }
+                    if self.destroyed.get() {
+                        break;
+                    }
                     self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
-                    if self.handle_main_msg(msg).should_stop() { break; }
+                    if self.handle_main_msg(msg).should_stop() {
+                        break;
+                    }
                 }
                 Either::Right((None, _)) => break,
             }
@@ -319,7 +272,11 @@ impl TurApp {
     /// should stop (e.g. on Destroyed).
     fn handle_main_msg(&self, msg: core::app::MainMsg) -> HandleResult {
         match msg {
-            core::app::MainMsg::RenderCommands { commands, image_map, viewport } => {
+            core::app::MainMsg::RenderCommands {
+                commands,
+                image_map,
+                viewport,
+            } => {
                 self.backend.apply_render(commands, &image_map, viewport);
             }
             core::app::MainMsg::FrameOutcome(Ok(outcome)) => {
@@ -327,7 +284,7 @@ impl TurApp {
                     hook(outcome);
                 }
                 if outcome.schedule == core::app::NextFrame::Vsync {
-                    self.main_sched.request_vsync();
+                    self.main_sched.borrow().request_vsync();
                 }
                 // Idle: no-op. The loop will block on the next event.
             }
@@ -363,72 +320,10 @@ impl TurApp {
             .send_worker_msg(core::app::WorkerMsg::Destroy { reply: tx });
     }
 
-    /// Re-arm an idle autonomous loop: ask the driver for one wake-up on
-    /// the next frame. No-op when no driver is installed (tests) or when a
-    /// frame is already pending.
+    /// Re-arm an idle autonomous loop: ask the scheduler for one wake-up
+    /// on the next frame. Idempotent at the driver (armed flag).
     fn request_wakeup(&self) {
-        if let Some(driver) = self.driver.borrow().as_ref() {
-            driver.request_next(core::app::NextFrame::Vsync);
-        }
-    }
-
-    /// Concurrency-guarded wake entry point. Spawns a fresh wake unless
-    /// one is already in-flight (in which case `wake_pending` is set and
-    /// the in-flight wake will pick it up on exit). The wake trampoline
-    /// set in [`Self::start`] calls this.
-    fn spawn_wake(self: &Rc<Self>) {
-        if self.destroyed.get() {
-            return;
-        }
-        if self.pump_in_progress.replace(true) {
-            // Already in flight — defer.
-            self.wake_pending.set(true);
-            return;
-        }
-        let Some(spawn) = self.spawn.borrow().clone() else {
-            // No spawn closure — must be a test path. Clear the guard.
-            self.pump_in_progress.set(false);
-            return;
-        };
-        let weak = Rc::downgrade(self);
-        spawn(Box::pin(async move {
-            if let Some(app) = weak.upgrade() {
-                app.wake().await;
-            }
-        }));
-    }
-
-    /// One autonomous-frame tick: pump, the `after_frame` hook, then
-    /// reschedule via the driver. Clears `pump_in_progress` and re-spawns
-    /// if a wake was deferred during this tick.
-    async fn wake(self: &Rc<Self>) {
-        if self.destroyed.get() {
-            self.pump_in_progress.set(false);
-            return;
-        }
-        let outcome = match self.pump().await {
-            Ok(o) => o,
-            Err(e) => {
-                tracing::error!("frame loop pump error: {e}");
-                self.pump_in_progress.set(false);
-                return;
-            }
-        };
-        if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
-            hook(outcome);
-        }
-        if !self.destroyed.get()
-            && let Some(driver) = self.driver.borrow().as_ref().cloned()
-        {
-            driver.request_next(outcome.schedule);
-        }
-        // Re-arm the deferred wake before clearing the in-flight guard
-        // (the spawned wake will re-check `pump_in_progress`).
-        let pending = self.wake_pending.replace(false);
-        self.pump_in_progress.set(false);
-        if pending {
-            self.spawn_wake();
-        }
+        self.main_sched.borrow().request_vsync();
     }
 
     pub async fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
@@ -520,30 +415,4 @@ impl TurApp {
     ) {
         self.backend.set_cursor_backend(backend);
     }
-}
-
-/// Autonomous-loop driver — the platform scheduling primitive the engine
-/// uses to wake itself for the next frame. Implementations live in the
-/// embedder: a wasm driver backed by `requestAnimationFrame` / `setTimeout`
-/// for the wake trampoline (tur-wasm), or any other platform's wake mechanism.
-/// Tests do not install one (they pump [`TurApp::pump`] manually via
-/// `block_on`).
-pub trait LoopDriver {
-    /// Install the engine's wake trampoline. The driver must call it exactly
-    /// once whenever a wake-up requested via [`Self::request_next`] becomes
-    /// due. Set once at [`TurApp::start`].
-    ///
-    /// The trampoline is sync (`Rc<dyn Fn()>`) but internally schedules an
-    /// async wake via the spawn closure passed to `TurApp::start`. The
-    /// driver sees only the sync surface.
-    fn set_wake(&self, wake: Rc<dyn Fn()>);
-
-    /// Request the next wake-up, replacing any pending request.
-    /// - [`NextFrame::Vsync`](core::app::NextFrame) → wake on the next display
-    ///   frame (~16 ms).
-    /// - [`NextFrame::After(d)`](core::app::NextFrame) → wake after `d`.
-    /// - [`NextFrame::Idle`](core::app::NextFrame) → cancel any pending
-    ///   wake-up; the loop stops until [`TurApp::push_platform_event`] (via
-    ///   `request_next(Vsync)`) re-arms it.
-    fn request_next(&self, next: core::app::NextFrame);
 }

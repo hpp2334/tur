@@ -54,11 +54,7 @@ impl VirtualClock {
 
     fn advance(&mut self, ms: u64) {
         self.now_ms += ms;
-        let due: Vec<u64> = self
-            .timers
-            .range(..=self.now_ms)
-            .map(|(k, _)| *k)
-            .collect();
+        let due: Vec<u64> = self.timers.range(..=self.now_ms).map(|(k, _)| *k).collect();
         for deadline in due {
             if let Some(wakers) = self.timers.remove(&deadline) {
                 for w in wakers {
@@ -155,7 +151,7 @@ impl Future for VirtualSleepFuture {
 
 /// Test scheduler driver.
 pub struct TestSchedulerDriver {
-    vsync_tx: Mutex<Option<futures::channel::mpsc::UnboundedSender<()>>>,
+    vsync_txs: Mutex<Vec<futures::channel::mpsc::UnboundedSender<()>>>,
     clock: Arc<Mutex<VirtualClock>>,
 }
 
@@ -164,13 +160,13 @@ impl TestSchedulerDriver {
         let clock = Arc::new(Mutex::new(VirtualClock::default()));
         init_thread_exec(clock.clone());
         Rc::new(Self {
-            vsync_tx: Mutex::new(None),
+            vsync_txs: Mutex::new(Vec::new()),
             clock,
         })
     }
 
     pub fn fire_vsync(&self) {
-        if let Some(tx) = self.vsync_tx.lock().unwrap().as_ref() {
+        for tx in self.vsync_txs.lock().unwrap().iter() {
             let _ = tx.unbounded_send(());
         }
     }
@@ -210,7 +206,7 @@ impl MainScheduler for TestSchedulerDriver {
 
     fn vsync_events(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
-        *self.vsync_tx.lock().unwrap() = Some(tx);
+        self.vsync_txs.lock().unwrap().push(tx);
         VsyncEvents(rx)
     }
 

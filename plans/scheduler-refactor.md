@@ -816,3 +816,14 @@ let tree = driver.block_on(app.dev_tool_element_tree())?;
 - **No engine-side timer queue**: `Sleep` is platform-driven; wakes worker via `CompletionHandle::on_push` → self-Wake.
 - **Engine is tokio-free**: tokio dep lives in the native driver (tur-android) only.
 - **Engine is wasm_thread-free**: dep moves to tur-wasm.
+
+---
+
+## 13. Status: COMPLETE (2026-08-04)
+
+All items landed on `refactor/scheduler`:
+
+- Scheduler traits + drivers (wasm / android / test) implemented; all bridges migrated to `worker_sched.spawn_local` + `CompletionQueue`; `NextFrame::After` removed.
+- Legacy `LoopDriver` / `AsyncExecutor` / `tur-async` / `core::thread` / `WasmLoopDriver` / `AndroidLoopDriver` deleted (tur-android now: base driver at runtime build + per-instance driver via `TurApp::set_main_scheduler`; `start_loop` polled once per JNI `pump` — `TurApp` is `Rc`/!Send so no loop thread).
+- Vsyc is a broadcast (multiple subscribers per driver) for multi-instance.
+- Verification: 164/164 integration tests, workspace + wasm clippy clean, `tur-android` compiles for `aarch64-linux-android`. (On-device run not yet done; `tur-clipboard-android` has a pre-existing `useless_conversion` clippy error.)
