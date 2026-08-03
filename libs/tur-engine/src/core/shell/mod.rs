@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::layout::Offset;
@@ -59,7 +60,8 @@ impl Default for CursorSink {
 /// [`paint_face`]: Shell::paint_face
 pub struct Shell {
     clock: Rc<dyn Clock>,
-    cursor_platform: Option<Rc<RefCell<dyn CursorBackend>>>,
+    cursor_platform:
+        Option<Arc<std::sync::Mutex<dyn crate::core::platform::CursorBackend + Send + Sync>>>,
     pointer_position: Option<Offset>,
     cursor: CursorSink,
     applied_cursor: Option<Cursor>,
@@ -79,7 +81,10 @@ impl Shell {
     /// Install the cursor backend. Called at build time by the engine
     /// builder after looking up the `Cursor` capability. The backend fires
     /// at runtime during `apply_changes` whenever the resolved cursor changes.
-    pub fn set_cursor_platform(&mut self, backend: Rc<RefCell<dyn CursorBackend>>) {
+    pub fn set_cursor_platform(
+        &mut self,
+        backend: Arc<std::sync::Mutex<dyn crate::core::platform::CursorBackend + Send + Sync>>,
+    ) {
         self.cursor_platform = Some(backend);
     }
 
@@ -120,7 +125,9 @@ impl Shell {
         if present && self.applied_cursor != Some(resolved) {
             self.applied_cursor = Some(resolved);
             if let Some(backend) = self.cursor_platform.as_ref() {
-                backend.borrow_mut().set_cursor(resolved);
+                if let Ok(mut b) = backend.lock() {
+                    b.set_cursor(resolved);
+                }
             }
         }
     }

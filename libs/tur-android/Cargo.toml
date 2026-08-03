@@ -27,6 +27,11 @@ pollster = "0.4"
 wgpu = { workspace = true }
 raw-window-handle = "0.6"
 thiserror = { workspace = true }
+# Drives the async pump/wake on the JNI thread — `TurApp::pump` /
+# `TurApp::wake` are `async fn`, the engine exposes no sync wrapper, so the
+# embedder supplies the runtime. The JNI render-tick blocks on each frame's
+# future via `futures::executor::block_on`.
+futures = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"

@@ -164,7 +164,7 @@ pub struct FlushSignals<'a> {
 ///
 /// Subsystems that just override [`Subsystem::flush_pre_layout`] (e.g.
 /// animation) only need [`Self::boa`]; subsystems that handle events use the
-/// element tree / focus manager / mutation queue / event queues / renderer /
+/// element tree / focus manager / mutation queue / event queues /
 /// `screen` / async executor / capability fields.
 ///
 /// ## Signalling the engine
@@ -194,7 +194,6 @@ pub struct SubsystemFlushContext<'a> {
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub platform_event_queue: &'a mut PlatformEventQueue,
     pub app_event_queue: &'a mut AppEventQueue,
-    pub renderer: &'a mut dyn Renderer,
     /// Engine screen state — the canvas logical size + the `viewportSize$`
     /// atom. Driven by [`crate::core::screen::ResizeSubsystem`] on
     /// `PlatformEvent::Resize` (it sets the size, pushes the atom via

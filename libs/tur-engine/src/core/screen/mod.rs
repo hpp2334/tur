@@ -24,12 +24,16 @@ use boa_engine::{Context, JsValue, js_string, object::JsObject};
 
 use crate::core::edgy::reactive::{Source, Store};
 
-/// Engine screen state — the canvas's logical size + the `viewportSize$`
-/// reactive source atom that publishes it to JS.
+/// Engine screen state — the canvas's logical size + DPR + the
+/// `viewportSize$` reactive source atom that publishes it to JS.
 pub struct Screen {
     /// Current canvas logical size, in CSS pixels. Updated by
     /// [`ResizeSubsystem`] when a `PlatformEvent::Resize` arrives.
     pub logical_size: (f64, f64),
+    /// Current device pixel ratio. Updated by [`ResizeSubsystem`]; shipped
+    /// to main with each `MainMsg::RenderCommands` so the main-side
+    /// renderer can call `resize()` + apply the dpr root transform.
+    pub dpr: f64,
     /// The shared reactive store, captured at construction so the resize
     /// handler can push the `viewportSize$` atom directly via
     /// [`Self::sync_source`] without the caller threading a `&Store` through
@@ -53,6 +57,7 @@ impl Screen {
     pub fn new(store: Store) -> Self {
         Self {
             logical_size: (400.0, 600.0),
+            dpr: 1.0,
             store,
             source: None,
             last: Cell::new((-1.0, -1.0)),

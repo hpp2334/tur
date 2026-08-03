@@ -17,7 +17,7 @@ use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
-use crate::core::render::{RecordingCanvas, RenderCommand, Renderer};
+use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -27,7 +27,6 @@ pub struct TurAppContext {
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) image_resource_map: Rc<RefCell<ImageResourceMap>>,
-    pub(crate) renderer: Box<dyn Renderer>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) screen: Screen,
@@ -63,7 +62,6 @@ impl TurAppContext {
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
-        renderer: Box<dyn Renderer>,
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
         async_executor: Rc<AsyncExecutor>,
@@ -77,7 +75,6 @@ impl TurAppContext {
             mutation_queue,
             focus_manager,
             image_resource_map,
-            renderer,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             screen: Screen::new(store),
@@ -118,7 +115,6 @@ impl TurAppContext {
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            renderer: self.renderer.as_mut(),
             screen: &mut self.screen,
             need_paint,
             async_executor: &self.async_executor,
@@ -149,7 +145,6 @@ impl TurAppContext {
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            renderer: self.renderer.as_mut(),
             screen: &mut self.screen,
             need_paint,
             async_executor: &self.async_executor,
@@ -186,79 +181,43 @@ impl TurAppContext {
         );
     }
 
-    pub fn render(&mut self) {
-        let focused_node_id = self.focus_manager.borrow().focused();
-        let image_resource_map = self.image_resource_map.borrow();
-        let tree = self.element_tree.borrow();
-        // Borrow the biz face for the paint pass, then flush the accumulated
-        // cursor claims through the host API. The face is scoped so the
-        // immutable shell borrow ends before `apply_changes` takes &mut.
-        {
-            let shell = self.shell.paint_face();
-            self.renderer
-                .render(&tree, focused_node_id, &image_resource_map, shell);
-        }
-        self.shell.apply_changes();
-    }
-
-    /// New record/playback render path (Phase 3+).
-    ///
-    /// Walks the element tree with a [`RecordingCanvas`] to capture
-    /// per-node paint ops + boundaries, post-processes the recording into
+    /// Walk the element tree with a [`RecordingCanvas`] to capture per-node
+    /// paint ops + boundaries, post-process the recording into
     /// `Vec<RenderCommand>` (topology + paint commands in playback order),
-    /// and dispatches the batch to [`Renderer::render_commands`].
+    /// and return the batch.
     ///
     /// `extra_commands` (typically the topology batch from
     /// [`crate::core::render::build_topology_batch`]) is prepended to the
-    /// paint commands so a single `render_commands` call consumes the full
-    /// frame's batch.
+    /// paint commands so a single batch consumes the full frame's payload.
     ///
-    /// Phase 3 keeps the existing cursor flow (`Shell::apply_changes`) —
-    /// the worker-side record pass populates the shell's `CursorSink` via
-    /// `MouseRegion`'s paint body just like the direct path. Phase 7
-    /// routes cursor through the command batch end-to-end.
-    pub fn render_commands(&mut self, extra_commands: Vec<RenderCommand>) {
+    /// The caller is responsible for shipping the batch to whichever
+    /// thread/realm owns the actual renderer. The worker stores it in
+    /// `TurAppInternal::pending_render_batch` for `MainBackend::worker_loop`
+    /// to drain and ship via `MainMsg::RenderCommands`.
+    pub fn build_render_batch(&mut self, extra_commands: Vec<RenderCommand>) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();
 
         // Record the paint pass.
-        let image_resource_map = self.image_resource_map.borrow();
         let tree = self.element_tree.borrow();
         let mut recording = RecordingCanvas::new();
         {
             let shell = self.shell.paint_face();
-            tree.paint(&mut recording, focused_node_id, &image_resource_map, shell);
+            tree.paint(
+                &mut recording,
+                focused_node_id,
+                &self.image_resource_map.borrow(),
+                shell,
+            );
         }
-        let paint_commands = recording.into_render_commands();
         drop(tree);
 
         // Combine extra (topology) + paint into one batch.
         let mut batch = extra_commands;
-        batch.extend(paint_commands);
-
-        // Render via the command-batch path. The renderers track their own
-        // surface geometry (set via `resize`), so the trait-level
-        // physical_width/height/dpr are placeholders here — Phase 7's
-        // main-side renderer will use them when the renderer doesn't own
-        // its own surface.
-        let (logical_w, logical_h) = self.screen.logical_size;
-        {
-            let shell = self.shell.paint_face();
-            self.renderer.render_commands(
-                &batch,
-                logical_w as u32,
-                logical_h as u32,
-                1.0,
-                &image_resource_map,
-                shell,
-            );
-        }
-        drop(image_resource_map);
+        batch.extend(recording.into_render_commands());
 
         // Flush cursor claims accumulated during the record pass.
         self.shell.apply_changes();
-    }
 
-    pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
-        self.renderer.render_to_pixels()
+        batch
     }
 }

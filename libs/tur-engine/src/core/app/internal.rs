@@ -13,7 +13,6 @@ use crate::core::render::{MainTree, RenderCommand, build_topology_batch};
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::{FontContext, FontLoader};
-use crate::core::render::Renderer;
 use crate::error::TurError;
 
 /// Engine → embedder: how to schedule the next frame after a `flush`.
@@ -73,23 +72,23 @@ pub struct TurAppInternal {
     /// each flush.
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Main-side render tree mirror, updated from each frame's command
-    /// batch (Phase 3+). Read by dev tools; Phase 7 will use it as the
-    /// worker→main wire endpoint for non-render queries (topology,
-    /// per-node state).
-    #[cfg_attr(feature = "direct-render", allow(dead_code))]
+    /// batch. Read by dev tools (worker-side query path).
     pub(crate) main_tree: RefCell<MainTree>,
     /// Last-frame element topology snapshot — input to
     /// [`build_topology_batch`] so the diff can emit `Remove` commands for
     /// ids that disappeared from the worker's tree since the previous
-    /// frame. Phase 3 v1 emits `SetChildren` for every node every frame
-    /// (full sync); diff optimization is deferred.
-    #[cfg_attr(feature = "direct-render", allow(dead_code, unused))]
+    /// frame. Emits `SetChildren` for every node every frame (full sync);
+    /// diff optimization is deferred.
     pub(crate) last_topology: RefCell<HashMap<ElementNodeId, Vec<ElementNodeId>>>,
+    /// Worker → main render-command batch produced by the last `flush()`
+    /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
+    /// to main via `MainMsg::RenderCommands`. `None` if no paint happened
+    /// this flush (or already drained).
+    pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
 }
 
 impl TurAppInternal {
     pub fn new(
-        renderer: Box<dyn Renderer>,
         font_context: FontContext,
         font_loader: std::sync::Arc<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
@@ -140,7 +139,6 @@ impl TurAppInternal {
             mutation_queue,
             focus_manager,
             image_resource_map,
-            renderer,
             font_context,
             font_loader,
             async_executor.clone(),
@@ -159,6 +157,7 @@ impl TurAppInternal {
             event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
             main_tree: RefCell::new(MainTree::new()),
             last_topology: RefCell::new(HashMap::new()),
+            pending_render_batch: RefCell::new(None),
         }
     }
 
@@ -225,7 +224,6 @@ impl TurAppInternal {
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    renderer: ctx.renderer.as_mut(),
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     async_executor: &ctx.async_executor,
@@ -282,7 +280,6 @@ impl TurAppInternal {
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    renderer: ctx.renderer.as_mut(),
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     async_executor: &ctx.async_executor,
@@ -333,28 +330,17 @@ impl TurAppInternal {
         }
 
         if needs_render {
-            #[cfg(feature = "direct-render")]
-            {
-                self.app_context.borrow_mut().render();
-            }
-            #[cfg(not(feature = "direct-render"))]
-            {
-                // Phase 3 record/playback path: build the topology batch
-                // (SetChildren + Remove), then let `render_commands`
-                // record the paint pass + dispatch the full batch to the
-                // renderer. The combined batch is also applied to
-                // `main_tree` for dev-tool / future main-side queries.
-                let topology_batch = self.build_topology_batch();
-                let batch_clone = topology_batch.clone();
-                self.app_context
-                    .borrow_mut()
-                    .render_commands(topology_batch);
-                self.main_tree.borrow_mut().apply_batch(&batch_clone);
-            }
-            if let Err(e) = self.app_context.borrow_mut().renderer.present() {
-                tracing::error!("present failed: {e}");
-                return Err(TurError::Render(e.to_string()));
-            }
+            // Record the paint pass + dispatch the topology/paint batch.
+            // The engine produces a `Vec<RenderCommand>`; main applies it
+            // to the renderer. The combined batch is also applied to
+            // `main_tree` for dev-tool queries.
+            let topology_batch = self.build_topology_batch();
+            let batch = self
+                .app_context
+                .borrow_mut()
+                .build_render_batch(topology_batch);
+            self.main_tree.borrow_mut().apply_batch(&batch);
+            *self.pending_render_batch.borrow_mut() = Some(batch);
         }
 
         // Decide how the caller should schedule the next frame.
@@ -608,7 +594,6 @@ impl TurAppInternal {
     /// single-threaded Phase 3 and revisited in Phase 7.
     ///
     /// Updates `last_topology` in place to reflect the current topology.
-    #[cfg_attr(feature = "direct-render", allow(dead_code))]
     fn build_topology_batch(&self) -> Vec<RenderCommand> {
         let element_ids: Vec<ElementNodeId> = self.js_context.element_tree.borrow().element_ids();
         // Capture the tree handle so the per-id closure can borrow without
@@ -622,6 +607,37 @@ impl TurAppInternal {
             &mut last_topology,
         )
     }
+
+    /// Drain the render-command batch produced by the last `flush()`, if any.
+    /// `MainBackend::worker_loop` calls this after each `pump()` to ship the
+    /// batch to main via `MainMsg::RenderCommands`. Returns `None` if no
+    /// paint happened this flush (or already drained).
+    pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
+        self.pending_render_batch.borrow_mut().take()
+    }
+
+    /// Snapshot the worker-side `ImageResourceMap` for shipping to main
+    /// alongside a render-command batch. The map is `Arc`-backed so the
+    /// clone is a refcount bump.
+    pub fn image_resource_map_snapshot(
+        &self,
+    ) -> std::sync::Arc<crate::core::image_resource::ImageResourceMap> {
+        // The engine stores the map as `Rc<RefCell<ImageResourceMap>>`
+        // (worker-side only). Cheap Arc-ify: clone the inner map into a
+        // fresh `Arc`. This is O(1) for the map structure itself; image
+        // pixel data is `Arc`-backed so it's a refcount bump per entry.
+        //
+        // The map is small (typically a handful of icons / decoded images
+        // per app), so the per-frame cost is negligible.
+        std::sync::Arc::new(
+            self.app_context
+                .borrow()
+                .image_resource_map
+                .borrow()
+                .clone(),
+        )
+    }
+
     /// Drain the pending-mutation queue and invoke each mutation via the
     /// reactive store, prepending the `{get, set}` context object. No element
     /// tree access is needed: every entry is a self-contained `(Mutation, args)`.

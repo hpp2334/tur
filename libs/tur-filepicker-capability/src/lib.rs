@@ -83,7 +83,7 @@ pub struct SaveOptions {
 /// for tests) and register it via
 /// `TurRuntimeBuilder::capability(FilePicker::new(backend))`. The bridge fns
 /// `pick` / `saveFile` in `tur:filepicker` consume it.
-pub trait FilePickerBackend: 'static {
+pub trait FilePickerBackend: Send + Sync + 'static {
     /// Open the platform file picker. Resolves with the picked files (empty
     /// `Vec` if cancelled/denied).
     fn pick(&self, opts: PickOptions) -> Pin<Box<dyn Future<Output = Vec<PickedFile>>>>;
@@ -104,16 +104,16 @@ pub trait FilePickerBackend: 'static {
 /// the bridge fns look it up at call time via
 /// `js_ctx.capability().of::<FilePicker>()`.
 #[derive(Clone)]
-pub struct FilePicker(Rc<dyn FilePickerBackend>);
+pub struct FilePicker(std::sync::Arc<dyn FilePickerBackend + Send + Sync>);
 
 impl FilePicker {
     /// Wrap a backend in the capability newtype.
     pub fn new(backend: impl FilePickerBackend + 'static) -> Self {
-        Self(Rc::new(backend))
+        Self(std::sync::Arc::new(backend))
     }
 
     /// Borrow the underlying backend handle.
-    pub fn backend(&self) -> &Rc<dyn FilePickerBackend> {
+    pub fn backend(&self) -> &std::sync::Arc<dyn FilePickerBackend + Send + Sync> {
         &self.0
     }
 }

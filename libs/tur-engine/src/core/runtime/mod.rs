@@ -25,9 +25,10 @@ use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
-pub use backend::{
-    AnySend, BoaClosure, ElementClosure, InlineBackend, ThreadedBackend, TurAppBackend,
-};
+pub use backend::{MainBackend, RenderSink};
+// `WorkerBackend` is `pub(crate)` — internal to the engine, only
+// `MainBackend` (which owns a worker running `WorkerBackend`) is public.
+pub(crate) use backend::WorkerBackend;
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
@@ -49,11 +50,12 @@ impl Clock for ClockProxy {
 
 /// Deferred capability-insert closure. Captures the typed capability value
 /// and the static type parameter, so the actual `Capabilities::insert::<C>`
-/// call (which requires a static `C`) happens once inside `build()` rather
-/// than at registration time. We store closures instead of
-/// `Vec<(TypeId, Box<dyn Any>)>` because `Box<dyn Any>` can't be cloned —
-/// the closure pattern sidesteps that limitation.
-type CapabilityInsert = Box<dyn FnOnce(&Capabilities)>;
+/// call (which requires a static `C`) happens inside `build()` and again
+/// per worker spawned from `create_app`. The closure is `Fn` (not `FnOnce`)
+/// + `Send + Sync` so it can be stored on the runtime and replayed into
+/// each worker's fresh `Capabilities`. Each call inserts a clone of the
+/// captured capability (Capability newtypes wrap `Arc` — cloning is cheap).
+type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 
 /// The shared engine runtime — created **once** and used to spawn any number
 /// of isolated [`TurApp`] instances.
@@ -98,6 +100,12 @@ pub struct TurRuntime {
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
+    /// Re-playable capability inserts. Each worker spawned from
+    /// [`Self::create_app`] replays these closures into its own fresh
+    /// `Capabilities` (the runtime's `Capabilities` uses `Rc<RefCell<…>>`
+    /// — `!Send`, can't cross threads directly; the closures capture
+    /// clonable capability newtypes and re-insert on the worker).
+    capability_inserts: Arc<Vec<CapabilityInsert>>,
     /// `Arc` so a threaded factory closure can cheaply clone the plugin
     /// list and re-register every plugin on the worker thread (Phase 8
     /// `create_app_threaded`). Each `Box<dyn Plugin>` is `Send + Sync`
@@ -116,8 +124,11 @@ impl TurRuntime {
         &self.capabilities
     }
 
-    /// Create an isolated [`TurApp`] instance attached to a render target
-    /// (a canvas/surface — supplied as a `Box<dyn Renderer>` by the embedder).
+    /// Create an isolated [`TurApp`] instance. The engine runs on a
+    /// worker thread (via [`MainBackend`]); the embedder installs a
+    /// `render_sink` callback on the returned `TurApp` to receive
+    /// `Vec<RenderCommand>` batches + the worker's `ImageResourceMap`
+    /// snapshot + viewport tuple, and apply them to its own renderer.
     ///
     /// The instance gets its own boa `Context` (JS realm), element tree,
     /// reactive store, focus manager, event queues, subsystems, screen and
@@ -126,70 +137,17 @@ impl TurRuntime {
     /// re-registered into the instance's fresh realm.
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
-    /// target; `dpr` is the device pixel ratio (passed to
-    /// [`Renderer::resize`]).
+    /// target; `dpr` is the device pixel ratio (shipped to the render_sink
+    /// with each frame so the embedder can call `renderer.resize(...)`).
+    ///
+    /// **Capabilities are NOT shared with the worker** — the runtime's
+    /// `Capabilities` is `Rc<RefCell<…>>` (`!Send`). The threaded factory
+    /// constructs a fresh, empty `Capabilities` on the worker; embedders
+    /// that need capabilities (Clipboard/Http/FilePicker/Cursor) should
+    /// construct them inside a custom factory via the lower-level
+    /// [`build_worker_backend`] helper.
     pub fn create_app(
         self: &Rc<Self>,
-        renderer: Box<dyn Renderer>,
-        viewport: (f64, f64),
-        dpr: f64,
-    ) -> Result<Rc<TurApp>, TurError> {
-        let app = self.create_instance(Some(renderer), viewport)?;
-        // Push the initial resize so the renderer configures its surface and
-        // the `viewportSize$` atom reflects the given size before frame 1.
-        app.push_platform_event(crate::core::platform::PlatformEvent::Resize {
-            logical_width: viewport.0 as u32,
-            logical_height: viewport.1 as u32,
-            dpr,
-        });
-        Ok(app)
-    }
-
-    /// Create an isolated headless [`TurApp`] instance — no render target, no
-    /// rendering. The instance still runs JS, owns a reactive store, accepts
-    /// platform events if fed any, and can use capabilities (http, clipboard,
-    /// etc.). Internally backed by a [`NoopRenderer`](crate::renderer).
-    ///
-    /// `viewport` sets the initial `viewportSize$` (read by JS layout); pass
-    /// `(0.0, 0.0)` if layout is irrelevant.
-    pub fn create_headless_app(
-        self: &Rc<Self>,
-        viewport: (f64, f64),
-    ) -> Result<Rc<TurApp>, TurError> {
-        self.create_instance(None, viewport)
-    }
-
-    /// Create an isolated [`TurApp`] instance backed by a **worker thread**.
-    /// The engine state (boa `Context`, element tree, reactive store,
-    /// subsystems) lives on the worker; the renderer is supplied via
-    /// `renderer_factory` (which runs ON THE WORKER THREAD).
-    ///
-    /// All `TurApp` methods dispatch via mpsc channels: synchronous from
-    /// the caller's perspective, blocking on the worker's reply.
-    ///
-    /// **Limitation (Phase 8.1):** capabilities are NOT shared with the
-    /// worker today — the runtime's `Capabilities` is `Rc<RefCell<…>>`
-    /// (`!Send`). The threaded factory constructs a fresh, empty
-    /// `Capabilities` on the worker; embedders that need capabilities
-    /// (Clipboard/Http/FilePicker/Cursor) should construct them inside
-    /// the `renderer_factory` closure via the lower-level
-    /// [`build_inline_backend`] helper. Phase 8.2 will migrate
-    /// `Capabilities` to `Arc<Mutex<…>>` and share.
-    ///
-    /// **What works cross-thread:** `load_module`/`load_js`/`eval_module`,
-    /// `pump`, `push_platform_event`/`push_app_event`/`request_paint`,
-    /// `focused_*`, `query_element`, `dev_tool_*`, `render_to_pixels`.
-    ///
-    /// **What panics:** `event_bus` (deferred), `set_cursor_backend`
-    /// (deferred), `with_boa_context`/`with_element` escape hatches
-    /// (inline-only by design). See [`ThreadedBackend`] docs.
-    ///
-    /// Cross-target: uses `std::thread` on native, `wasm_thread` (Web
-    /// Workers + `SharedArrayBuffer`) on wasm32 — see
-    /// [`ThreadedBackend::new`]. Wasm builds require `--profile wasm-dev`.
-    pub fn create_app_threaded(
-        self: &Rc<Self>,
-        renderer_factory: impl FnOnce() -> Box<dyn Renderer> + Send + 'static,
         viewport: (f64, f64),
         dpr: f64,
     ) -> Result<Rc<TurApp>, TurError> {
@@ -197,25 +155,29 @@ impl TurRuntime {
         let font_context = self.font_context.clone();
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
+        let capability_inserts = self.capability_inserts.clone();
         let backend_factory = move || {
-            let renderer = renderer_factory();
-            // Fresh, empty capabilities — Phase 8.1 limitation. Embedders
-            // needing capabilities should call `build_inline_backend`
-            // directly with their own pre-populated `Capabilities`.
+            // Re-play the runtime-registered capability inserts into a
+            // fresh per-worker `Capabilities`. Each insert clones the
+            // captured capability newtype (cheap — Arc bump).
             let capabilities = Capabilities::new();
-            build_inline_backend(
+            for insert_fn in capability_inserts.iter() {
+                insert_fn(&capabilities);
+            }
+            build_worker_backend(
                 clock,
                 font_context,
                 font_loader,
                 capabilities,
                 &plugins,
-                renderer,
                 viewport,
             )
             .expect("threaded backend factory failed")
         };
-        let backend = ThreadedBackend::new(backend_factory);
-        let app = Rc::new(TurApp::new(Box::new(backend)));
+        let backend = MainBackend::new(backend_factory);
+        let app = Rc::new(TurApp::new(backend));
+        // Push the initial resize so the worker's screen state + the
+        // `viewportSize$` atom reflect the given size before frame 1.
         app.push_platform_event(crate::core::platform::PlatformEvent::Resize {
             logical_width: viewport.0 as u32,
             logical_height: viewport.1 as u32,
@@ -223,43 +185,27 @@ impl TurRuntime {
         });
         Ok(app)
     }
-
-    fn create_instance(
-        self: &Rc<Self>,
-        renderer: Option<Box<dyn Renderer>>,
-        viewport: (f64, f64),
-    ) -> Result<Rc<TurApp>, TurError> {
-        let renderer = renderer.unwrap_or_else(|| Box::new(crate::renderer::NoopRenderer::new()));
-        let backend = build_inline_backend(
-            self.clock.clone(),
-            self.font_context.clone(),
-            self.font_loader.clone(),
-            self.capabilities.clone(),
-            &self.plugins,
-            renderer,
-            viewport,
-        )?;
-        Ok(Rc::new(TurApp::new(Box::new(backend))))
-    }
 }
 
-/// Construct an [`InlineBackend`] from individual engine pieces. Both
-/// [`TurRuntime::create_instance`] (inline) and the threaded factory
-/// closure (Phase 7's [`crate::core::runtime::ThreadedBackend`]) call
-/// this. The function itself is callable from any thread — the caller
-/// is responsible for ensuring `clock`, `font_loader`, etc. are
-/// constructed on the right thread (e.g. the threaded factory constructs
-/// them inside the closure so the `!Send` `Rc`s never cross threads).
+/// Construct a [`WorkerBackend`] from individual engine pieces. Used by
+/// [`TurRuntime::create_app`] (via a factory closure that runs on the
+/// worker thread) and by embedders that need to construct the worker
+/// backend with a custom pre-populated `Capabilities` (e.g. for
+/// Clipboard/Http/FilePicker).
+///
+/// The function itself is callable from any thread — the caller is
+/// responsible for ensuring `clock`, `font_loader`, etc. are constructed
+/// on the right thread (e.g. the threaded factory constructs them inside
+/// the closure so the `!Send` `Rc`s never cross threads).
 #[allow(clippy::too_many_arguments)]
-pub fn build_inline_backend(
+pub fn build_worker_backend(
     clock: Arc<dyn Clock + Send + Sync>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
-    renderer: Box<dyn Renderer>,
     viewport: (f64, f64),
-) -> Result<InlineBackend, TurError> {
+) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
     let mut boa_context = Context::builder()
@@ -270,7 +216,6 @@ pub fn build_inline_backend(
         .expect("failed to build boa context");
 
     let internal = TurAppInternal::new(
-        renderer,
         font_context,
         font_loader,
         executor.clone(),
@@ -350,7 +295,9 @@ pub fn build_inline_backend(
             .capability()
             .of::<crate::core::platform::CursorCap>()
             .map(|c| c.backend().clone())
-            .unwrap_or_else(|| Rc::new(std::cell::RefCell::new(crate::core::platform::NoopCursor)));
+            .unwrap_or_else(|| {
+                std::sync::Arc::new(std::sync::Mutex::new(crate::core::platform::NoopCursor))
+            });
         internal
             .app_context
             .borrow_mut()
@@ -358,8 +305,8 @@ pub fn build_inline_backend(
             .set_cursor_platform(cursor_backend);
     }
 
-    tracing::info!("InlineBackend built ({} plugins)", plugins.len());
-    Ok(InlineBackend::new(boa_context, internal, executor))
+    tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
+    Ok(WorkerBackend::new(boa_context, internal, executor))
 }
 
 pub struct TurRuntimeBuilder {
@@ -421,14 +368,19 @@ impl TurRuntimeBuilder {
 
     /// Register a capability (a plugin-swappable backend) so it's available
     /// to every instance spawned from this runtime. Capabilities are inserted
-    /// into the registry before any plugin's `compile`/`register` runs.
+    /// into the registry before any plugin's `compile`/`register` runs, and
+    /// replayed into each worker's fresh `Capabilities` during
+    /// `create_app`.
     ///
     /// Plugins declare hard dependencies via [`Plugin::requires`]; the runtime
     /// validates those before any plugin side effects.
-    pub fn capability<C: Capability>(mut self, cap: C) -> Self {
+    pub fn capability<C>(mut self, cap: C) -> Self
+    where
+        C: crate::core::capability::Capability + Send + Sync + 'static,
+    {
         self.capabilities
             .push(Box::new(move |registry: &Capabilities| {
-                registry.insert::<C>(cap);
+                registry.insert::<C>(cap.clone());
             }));
         self
     }
@@ -447,7 +399,12 @@ impl TurRuntimeBuilder {
         font_loader.load_preset_fonts(&mut font_context);
 
         let capabilities = Capabilities::new();
-        for insert_fn in self.capabilities {
+        // Replay each insert closure once here (validates that they all
+        // run cleanly + populates the runtime's Capabilities for
+        // compile-time `requires` validation). The closures are retained
+        // on the runtime (`capability_inserts`) and replayed again into
+        // every worker's fresh `Capabilities` from `create_app`.
+        for insert_fn in &self.capabilities {
             insert_fn(&capabilities);
         }
 
@@ -487,6 +444,7 @@ impl TurRuntimeBuilder {
             font_context,
             font_loader,
             capabilities,
+            capability_inserts: Arc::new(self.capabilities),
             plugins: Arc::new(self.plugins),
         }))
     }

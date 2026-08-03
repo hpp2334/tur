@@ -4,18 +4,16 @@
 //! vello-hybrid's [`WebGlRenderer`], which renders directly to the browser
 //! canvas via the native `WebGl2RenderingContext` — no wgpu dependency, ~3MB
 //! smaller binary than the WebGPU path.
+//!
+//! The engine runs on a worker thread and ships `Vec<RenderCommand>` to
+//! main; main applies the batch via [`WebGlVelloRenderer::render_commands`].
 
 use std::collections::HashMap;
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::NodeTreeData;
 use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
-use crate::core::shell::PaintShell;
-use crate::renderer::vello::scene_paint::{
-    new_scene, paint_commands_to_scene, paint_tree_to_scene,
-};
+use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer};
 use web_sys::HtmlCanvasElement;
@@ -61,37 +59,12 @@ impl WebGlVelloRenderer {
         }
     }
 
-    fn render_to_scene(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        self.upload_images(image_resource_map);
-
-        paint_tree_to_scene(
-            &mut self.scene,
-            &mut self.resources,
-            &self.image_uploads,
-            self.physical_width,
-            self.physical_height,
-            self.dpr,
-            tree,
-            focused_node_id,
-            image_resource_map,
-            shell,
-        );
-    }
-
-    /// New record/playback path: render a flat command batch into the scene.
-    /// Used by `TurRenderer::render_commands`. Image upload is performed
+    /// Render a flat command batch into the scene. Image upload is performed
     /// here; playback happens in `paint_commands_to_scene`.
     fn render_commands_to_scene(
         &mut self,
         commands: &[RenderCommand],
         image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
     ) {
         self.upload_images(image_resource_map);
         paint_commands_to_scene(
@@ -102,7 +75,6 @@ impl WebGlVelloRenderer {
             self.physical_height,
             self.dpr,
             commands,
-            shell,
         );
     }
 
@@ -145,16 +117,6 @@ impl WebGlVelloRenderer {
 }
 
 impl TurRenderer for WebGlVelloRenderer {
-    fn render(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        self.render_to_scene(tree, focused_node_id, image_resource_map, shell);
-    }
-
     fn render_commands(
         &mut self,
         commands: &[RenderCommand],
@@ -162,12 +124,11 @@ impl TurRenderer for WebGlVelloRenderer {
         _physical_height: u32,
         _dpr: f64,
         image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
     ) {
         // Surface geometry is already tracked on `self` (synced via
         // `resize`); trait-level args are ignored for the same reason as
         // `VelloRenderer::render_commands`.
-        self.render_commands_to_scene(commands, image_resource_map, shell);
+        self.render_commands_to_scene(commands, image_resource_map);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

@@ -1,5 +1,4 @@
 use crate::fonts::WasmFontLoader;
-use boa_engine::Source;
 use boa_engine::context::time::{Clock, JsInstant};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -70,6 +69,14 @@ struct WasmCursor {
     canvas: web_sys::HtmlCanvasElement,
 }
 
+// SAFETY: `WasmCursor` is only ever accessed from the main thread (it's
+// installed via `app.set_cursor_backend` after construction and invoked
+// from `MainMsg::CursorChanged` inside main's pump). The `HtmlCanvasElement`
+// isn't `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
+// our usage is single-threaded so the unsafe impl is sound.
+unsafe impl Send for WasmCursor {}
+unsafe impl Sync for WasmCursor {}
+
 impl tur_engine::CursorBackend for WasmCursor {
     fn set_cursor(&mut self, cursor: tur_engine::core::platform::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
@@ -111,31 +118,23 @@ impl WasmRuntime {
     /// plugins / capability overrides). No canvas/DOM — instances are spawned
     /// separately.
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
-        // Note on wasm threading:
+        // Architecture: the engine runs on a Web Worker (via `wasm_thread`,
+        // an `std::thread` drop-in for `wasm32` backed by `SharedArrayBuffer`).
+        // The WebGL renderer stays on the main thread (web-sys types are
+        // realm-local); the worker ships `Vec<RenderCommand>` batches to
+        // main each frame and main applies them via the render sink.
         //
-        // `tur-engine`'s `ThreadedBackend` uses `wasm_thread` (an
-        // `std::thread` drop-in for `wasm32`) on wasm targets — Web
-        // Workers backed by `SharedArrayBuffer`. Unlike the previous
-        // wasm-bindgen-rayon setup, no JS-side `initThreadPool(n)` call
-        // is required: workers spawn on demand from Rust via
-        // `wasm_thread::spawn` (or `ThreadedBackend::new`).
+        // Build-side config (in `.cargo/config.toml` + `rust-toolchain.toml`
+        // + `[profile.wasm-dev]` in workspace `Cargo.toml`):
+        //   • nightly toolchain (`nightly-2026-07-15`)
+        //   • `-Z build-std=panic_abort,std`
+        //   • `+atomics,+bulk-memory,+mutable-globals` target feature
+        //   • `--shared-memory` + `--import-memory` + `--max-memory=1GiB`
+        //   • `--export=__tls_*` / `__wasm_init_tls` (thread-id injection)
         //
-        // Build-side config (in .cargo/config.toml + rust-toolchain.toml
-        // + [profile.wasm-*] in workspace Cargo.toml):
-        //   • nightly-2025-11-15 toolchain
-        //   • -Z build-std=panic_abort,std
-        //   • +atomics,+bulk-memory,+mutable-globals target feature
-        //   • --shared-memory + --import-memory + --max-memory=1GiB
-        //   • --export=__tls_* / __wasm_init_tls (thread-id injection)
-        //
-        // The wasm embedder currently uses inline mode
-        // (`runtime.create_app`) because `WebGlVelloRenderer` holds
-        // web-sys types (`!Send` across web-worker realms). True
-        // threaded wasm *rendering* requires splitting the renderer
-        // (main) from the JS engine (worker) — future architectural
-        // work. The thread infrastructure is live, though, so any
-        // engine-side parallelism offloads to workers immediately via
-        // `TurRuntime::create_app_threaded`.
+        // No JS-side `initThreadPool(n)` is required: workers spawn on
+        // demand from Rust via `wasm_thread::spawn` (driven by
+        // `MainBackend::new`).
 
         let builder = tur_engine::TurRuntime::builder()
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
@@ -408,22 +407,35 @@ impl WasmApp {
         canvas.set_height(physical_height);
 
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
+        let renderer = Rc::new(RefCell::new(renderer));
 
-        // Spawn an isolated instance from the shared runtime, attached to this
-        // canvas's renderer. `create_app` pushes the initial Resize internally.
+        // Spawn an isolated engine instance. The engine runs on a worker
+        // thread; the renderer stays on main and is driven by a `render_sink`
+        // callback. `create_app` pushes the initial Resize internally.
         let app = runtime
             .runtime
-            .create_app(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )
+            .create_app((logical_width as f64, logical_height as f64), dpr)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        // Wire the render sink: each frame, the worker ships
+        // `Vec<RenderCommand>` + an image-map snapshot + viewport tuple;
+        // the sink applies them to the main-side WebGL renderer.
+        {
+            use tur_engine::core::render::Renderer as TurRenderer;
+            let sink_renderer = renderer.clone();
+            app.set_render_sink(move |commands, image_map, viewport| {
+                let mut r = sink_renderer.borrow_mut();
+                let (lw, lh, vdpr) = viewport;
+                r.resize(lw, lh, vdpr);
+                r.render_commands(commands, lw, lh, vdpr, image_map);
+                let _ = r.present();
+            });
+        }
 
         // The cursor backend is per-instance (it targets this canvas's DOM
         // element), so it can't be a shared runtime capability. Override the
-        // shell's cursor backend now that the instance exists.
-        app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor {
+        // main-side cursor backend now that the instance exists.
+        app.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
             canvas: canvas.clone(),
         })));
 
@@ -963,6 +975,12 @@ impl WasmApp {
         // (file-pick resolution, textarea focus / caret positioning). It
         // holds a `Weak` into `state` so there's no reference cycle
         // (`state` → `app` → `after_frame` → `state`).
+        //
+        // Async pump: the wake trampoline the engine installs hands a
+        // `Box::pin(async { wake().await })` future to the spawn closure
+        // we pass here. We use `wasm_bindgen_futures::spawn_local`, which
+        // runs the future cooperatively on the JS event loop — the wasm
+        // main thread never blocks (no `Atomics.wait`).
         let app = state_clone
             .borrow()
             .as_ref()
@@ -980,47 +998,59 @@ impl WasmApp {
                     return;
                 };
 
-                // Embedder-supplied after-frame work (run with a live
-                // `&mut Context` between frames). The generic textarea /
-                // caret focus logic below runs after it.
-                if let Some(hook) = after_frame_hook.as_ref() {
-                    let hook = hook.clone();
-                    s.app.with_boa_context(move |ctx| hook(ctx));
-                }
+                // Embedder-supplied after-frame hook (`AfterFrameHook`)
+                // required `&mut Context` access, which is incompatible with
+                // the threaded backend (the boa `Context` lives on the
+                // worker). The hook type is retained for API back-compat but
+                // is intentionally not invoked here. Embedders needing
+                // post-frame JS work should call `eval_module` / `eval_js`
+                // via the public TurApp RPC API from the after-frame
+                // callback instead.
+                let _ = after_frame_hook.as_ref();
 
-                let is_editable = s.app.focused_is_editable();
-                if is_editable {
+                // Read focus state from the engine's cache (non-blocking —
+                // updated by the worker's deduped
+                // `MainMsg::FocusedStateChanged` each frame, no RPC).
+                let focus = s.app.cached_focus();
+                if focus.is_editable {
                     let _ = s.textarea.focus();
-                    if let Some((x, y, _w, _h)) = s.app.focused_cursor_rect() {
+                    if let Some((x, y, _w, _h)) = focus.cursor_rect {
                         let _ = s.textarea.style().set_property("left", &format!("{x}px"));
                         let _ = s.textarea.style().set_property("top", &format!("{y}px"));
                     }
                 }
             });
         app.set_after_frame_hook(Some(after_frame));
-        // `start` registers the driver and runs frame 1 (which processes
-        // the resize pushed above), then arms follow-up wake-ups per the
-        // engine's verdict.
-        app.start(WasmLoopDriver::new());
+        // `start` registers the driver, the wake trampoline, and kicks off
+        // frame 1 via the spawn closure. The first frame processes the
+        // resize pushed above and arms follow-up wake-ups per the engine's
+        // verdict.
+        app.start(WasmLoopDriver::new(), |fut| {
+            wasm_bindgen_futures::spawn_local(fut)
+        });
 
         Ok(WasmApp { state: state_clone })
     }
 
-    pub fn load_and_run_js(&self, js_source: &str) -> Result<(), JsValue> {
-        let mut guard = self.state.borrow_mut();
-        let state = guard
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
-        state
-            .app
-            .load_js(js_source)
+    pub async fn load_and_run_js(&self, js_source: &str) -> Result<(), JsValue> {
+        // Clone the `Rc<TurApp>` out of the state RefCell before awaiting,
+        // so the borrow is released before the await point. Otherwise the
+        // after_frame hook (which borrow_mut's the same RefCell) would
+        // panic when it fires mid-RPC.
+        let app = {
+            let guard = self.state.borrow();
+            let Some(s) = guard.as_ref() else {
+                return Err(JsValue::from_str("app not initialized"));
+            };
+            s.app.clone()
+        };
+        app.load_js(js_source)
+            .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
         // Request a paint; `request_paint` re-arms the autonomous loop (via
         // the driver's `request_next(Vsync)`), so the bundle renders on the
         // next frame without any manual pump.
-        state.app.request_paint();
-
+        app.request_paint();
         Ok(())
     }
 
@@ -1028,51 +1058,77 @@ impl WasmApp {
     /// `import { ... } from "tur:..."`, resolved by the engine's module
     /// loader), then start the frame loop. Used by the website to load the
     /// playground-view bundle.
-    pub fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
-        let mut guard = self.state.borrow_mut();
-        let state = guard
-            .as_mut()
-            .ok_or_else(|| JsValue::from_str("app not initialized"))?;
-        state
-            .app
-            .load_module(js_source)
+    pub async fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
+        let app = {
+            let guard = self.state.borrow();
+            let Some(s) = guard.as_ref() else {
+                return Err(JsValue::from_str("app not initialized"));
+            };
+            s.app.clone()
+        };
+        app.load_module(js_source)
+            .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        state.app.request_paint();
-
+        app.request_paint();
         Ok(())
     }
 
     /// JSON snapshot of the root node, or `""` if no tree is mounted.
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
-    pub fn element_tree(&self) -> String {
-        let mut guard = self.state.borrow_mut();
-        let Some(s) = guard.as_mut() else {
-            return String::new();
+    ///
+    /// Async: the underlying RPC is `async`. Drives it to completion via
+    /// `wasm_bindgen_futures::future_to_promise` — the JS caller `await`s
+    /// the returned `Promise`.
+    pub fn element_tree(&self) -> js_sys::Promise {
+        // Bail out synchronously if no state is mounted (avoids borrowing
+        // the RefCell across the async boundary).
+        let app = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => s.app.clone(),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
+            }
         };
-        s.app.with_boa_context(|ctx| {
-            ctx.eval(Source::from_bytes(
-                "JSON.stringify(turDevTool.elementTree())",
-            ))
-            .ok()
-            .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
-            .unwrap_or_default()
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = app
+                .backend()
+                .eval_js("JSON.stringify(turDevTool.elementTree())")
+                .await;
+            Ok(JsValue::from_str(&s))
         })
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
     /// are returned as bare `{id}` handles). Returns `""` if not found.
-    pub fn get_element(&self, id: u32) -> String {
-        let mut guard = self.state.borrow_mut();
-        let Some(s) = guard.as_mut() else {
-            return String::new();
+    pub fn get_element(&self, id: u32) -> js_sys::Promise {
+        let app = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => s.app.clone(),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
+            }
         };
-        let id_str = format!("JSON.stringify(turDevTool.getElement({id}))");
-        s.app.with_boa_context(move |ctx| {
-            ctx.eval(Source::from_bytes(&id_str))
-                .ok()
-                .and_then(|r| r.as_string().map(|s| s.to_std_string_escaped()))
-                .unwrap_or_default()
+        let source = format!("JSON.stringify(turDevTool.getElement({id}))");
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = app.backend().eval_js(&source).await;
+            Ok(JsValue::from_str(&s))
+        })
+    }
+
+    /// Evaluate a JS expression on the worker and return its display form.
+    /// For debugging (the production code paths use structured RPCs).
+    pub fn eval_js(&self, src: &str) -> js_sys::Promise {
+        let app = {
+            let guard = self.state.borrow();
+            match guard.as_ref() {
+                Some(s) => s.app.clone(),
+                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
+            }
+        };
+        let src = src.to_string();
+        wasm_bindgen_futures::future_to_promise(async move {
+            let s = app.backend().eval_js(&src).await;
+            Ok(JsValue::from_str(&s))
         })
     }
 }

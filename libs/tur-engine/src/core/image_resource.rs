@@ -35,6 +35,11 @@ impl ImageResourceId {
 /// `tur-image::decode::{decode_image_bytes, decode_svg}` from raw PNG/JPEG/SVG
 /// input; read here by the engine's layout (`.natural_size`) and renderers
 /// (`.peniko_image`).
+///
+/// `Clone` is cheap — `ImageData` wraps an `Arc`-backed `Blob`, so cloning
+/// just bumps a refcount. This lets the worker ship its image map to main
+/// each frame without deep-copying pixel data.
+#[derive(Clone)]
 pub struct ImageResource {
     pub peniko_image: ImageData,
     pub natural_size: Size,
@@ -64,7 +69,7 @@ impl ImageResource {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ImageResourceMap {
     resources: HashMap<ImageResourceId, ImageResource>,
     next_id: u64,

@@ -7,7 +7,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use boa_engine::Source;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
@@ -17,18 +16,11 @@ use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 /// Eval a JS script on a `TurApp` and return the result as a string.
-/// Mirrors the old `TurApp::eval_js` via the `with_boa_context` escape hatch.
+/// Uses the engine's `eval_js` RPC (worker-thread JS evaluation).
+/// If the result is a string, returns its contents (no quotes);
+/// otherwise returns the display form.
 fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String> {
-    let source = source.to_string();
-    app.with_boa_context(move |ctx| {
-        ctx.eval(Source::from_bytes(&source))
-            .map(|r| {
-                r.as_string()
-                    .map(|s| s.to_std_string_escaped())
-                    .unwrap_or_else(|| r.display().to_string())
-            })
-            .map_err(|e| e.to_string())
-    })
+    Ok(futures::executor::block_on(app.backend().eval_js(source)))
 }
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
@@ -52,15 +44,13 @@ const SET_ID_JS: &str = r#"
 #[test]
 fn instances_have_isolated_js_realms() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("app A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("app B");
+    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("app A");
+    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("app B");
 
     // Load different state into each instance.
-    app_a
-        .load_module(SET_ID_JS.replace("VALUE", "A").as_str())
+    futures::executor::block_on(app_a.load_module(SET_ID_JS.replace("VALUE", "A").as_str()))
         .expect("load A");
-    app_b
-        .load_module(SET_ID_JS.replace("VALUE", "B").as_str())
+    futures::executor::block_on(app_b.load_module(SET_ID_JS.replace("VALUE", "B").as_str()))
         .expect("load B");
 
     // Each instance reads back its OWN global — they must differ.
@@ -78,45 +68,44 @@ fn instances_have_isolated_js_realms() {
 #[test]
 fn instances_have_isolated_element_trees() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("app A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("app B");
+    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("app A");
+    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("app B");
 
     // Mount a tree only in A.
-    app_a
-        .load_module(
-            r#"
+    futures::executor::block_on(app_a.load_module(
+        r#"
             import { Text, render } from "tur:std";
             render(Text({ text: "only-in-A", queryKey: ["a_only"] }));
         "#,
-        )
-        .expect("load A");
-    app_a.run_frame().expect("frame A");
+    ))
+    .expect("load A");
+    futures::executor::block_on(app_a.run_frame()).expect("frame A");
 
     // B has no tree mounted.
-    let b_tree = app_b.dev_tool_element_tree();
+    let b_tree = futures::executor::block_on(app_b.dev_tool_element_tree());
     assert!(b_tree.is_none(), "instance B should have no tree");
 
     // A does have a tree.
-    let a_tree = app_a.dev_tool_element_tree();
+    let a_tree = futures::executor::block_on(app_a.dev_tool_element_tree());
     assert!(a_tree.is_some(), "instance A should have a tree");
 }
 
 #[test]
 fn headless_instance_runs_js_without_rendering() {
     let runtime = build_runtime();
-    let app = runtime.create_headless_app((0.0, 0.0)).expect("headless");
+    let app = runtime.create_app((0.0, 0.0), 1.0).expect("headless");
 
     // JS executes; a frame runs without panic even with a zero viewport.
-    app.load_module(
+    futures::executor::block_on(app.load_module(
         r#"
         import { source, get } from "tur:std";
         globalThis.__val = source(42);
         const v = get(globalThis.__val);
         globalThis.__readBack = v;
     "#,
-    )
+    ))
     .expect("load");
-    app.run_frame().expect("frame");
+    futures::executor::block_on(app.run_frame()).expect("frame");
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "42", "headless instance ran JS");
@@ -129,9 +118,11 @@ fn many_instances_share_one_runtime() {
     let runtime = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
-        let app = runtime.create_headless_app((50.0, 50.0)).expect("app");
-        app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str())
-            .expect("load");
+        let app = runtime.create_app((50.0, 50.0), 1.0).expect("app");
+        futures::executor::block_on(
+            app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str()),
+        )
+        .expect("load");
         apps.push(app);
     }
     for (i, app) in apps.iter().enumerate() {
@@ -216,7 +207,7 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
 
     // Spawn 3 instances — register fires once each, compile stays at 1.
     for _ in 0..3 {
-        runtime.create_headless_app((10.0, 10.0)).expect("app");
+        runtime.create_app((10.0, 10.0), 1.0).expect("app");
     }
     assert_eq!(
         compile_count.load(Ordering::SeqCst),
@@ -249,15 +240,15 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 
     // Each spawned instance's `register` bumps the SAME shared cap — so after
     // N instances the cap reflects N bumps, proving they all see one backend.
-    runtime.create_headless_app((10.0, 10.0)).expect("A");
+    runtime.create_app((10.0, 10.0), 1.0).expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
-    runtime.create_headless_app((10.0, 10.0)).expect("B");
+    runtime.create_app((10.0, 10.0), 1.0).expect("B");
     assert_eq!(
         cap.get(),
         2,
         "instance B's register saw the same shared cap"
     );
-    runtime.create_headless_app((10.0, 10.0)).expect("C");
+    runtime.create_app((10.0, 10.0), 1.0).expect("C");
     assert_eq!(
         cap.get(),
         3,
@@ -270,8 +261,8 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 #[test]
 fn platform_events_route_to_the_correct_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("B");
+    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("A");
+    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("B");
 
     // Push a Resize to A only.
     app_a.push_platform_event(PlatformEvent::Resize {
@@ -279,17 +270,17 @@ fn platform_events_route_to_the_correct_instance() {
         logical_height: 180,
         dpr: 1.0,
     });
-    app_a.run_frame().expect("frame A");
-    app_b.run_frame().expect("frame B");
+    futures::executor::block_on(app_a.run_frame()).expect("frame A");
+    futures::executor::block_on(app_b.run_frame()).expect("frame B");
 
     // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
     // mode (no imports), so do the import in a module eval and stash the JSON
     // on globalThis, then read it back with eval_js.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
-        let _ = app.eval_module(
+        let _ = futures::executor::block_on(app.eval_module(
             r#"import { viewportSize$, get } from "tur:std";
                globalThis.__vp = JSON.stringify(get(viewportSize$));"#,
-        );
+        ));
         eval_js(app, "globalThis.__vp").unwrap_or_default()
     };
 
@@ -309,17 +300,16 @@ fn platform_events_route_to_the_correct_instance() {
 #[test]
 fn reactive_stores_are_isolated_per_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("B");
+    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("A");
+    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("B");
 
     // Create a source in A and set a value.
-    app_a
-        .eval_module(
-            r#"import { source, set } from "tur:std";
-               globalThis.__atom = source("from-A");
-               set(globalThis.__atom, "A2");"#,
-        )
-        .expect("setup A");
+    futures::executor::block_on(app_a.eval_module(
+        r#"import { source, set } from "tur:std";
+           globalThis.__atom = source("from-A");
+           set(globalThis.__atom, "A2");"#,
+    ))
+    .expect("setup A");
 
     // B has no such atom — `globalThis.__atom` is undefined in B's realm.
     let b_val = eval_js(

@@ -2,15 +2,10 @@
 //!
 //! This module is only compiled when the `wgpu-backend` feature is active.
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::NodeTreeData;
 use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
-use crate::core::shell::PaintShell;
-use crate::renderer::vello::scene_paint::{
-    new_scene, paint_commands_to_scene, paint_tree_to_scene,
-};
+use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use std::collections::HashMap;
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TextureBindings};
@@ -123,40 +118,12 @@ impl VelloRenderer {
         self.scene = new_scene(self.physical_width, self.physical_height);
     }
 
-    pub fn render_to_scene(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        // The WebGPU backend only supports `ImageSource::OpaqueId`, so upload
-        // any image resources that are not yet cached before painting.
-        self.upload_images(image_resource_map);
-
-        paint_tree_to_scene(
-            &mut self.scene,
-            &mut self.resources,
-            &self.image_uploads,
-            self.physical_width,
-            self.physical_height,
-            self.dpr,
-            tree,
-            focused_node_id,
-            image_resource_map,
-            shell,
-        );
-    }
-
-    /// New record/playback path: render a flat command batch into the scene.
-    /// Used by `TurRenderer::render_commands`. Image upload is performed
-    /// here (same as `render_to_scene`); playback itself happens in
-    /// `paint_commands_to_scene`.
+    /// Render a flat command batch into the scene. Image upload is performed
+    /// here; playback itself happens in `paint_commands_to_scene`.
     pub fn render_commands_to_scene(
         &mut self,
         commands: &[RenderCommand],
         image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
     ) {
         self.upload_images(image_resource_map);
         paint_commands_to_scene(
@@ -167,7 +134,6 @@ impl VelloRenderer {
             self.physical_height,
             self.dpr,
             commands,
-            shell,
         );
     }
 
@@ -375,16 +341,6 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        self.render_to_scene(tree, focused_node_id, image_resource_map, shell);
-    }
-
     fn render_commands(
         &mut self,
         commands: &[RenderCommand],
@@ -392,14 +348,11 @@ impl TurRenderer for VelloRenderer {
         _physical_height: u32,
         _dpr: f64,
         image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
     ) {
         // `physical_width` / `physical_height` / `dpr` are already tracked
         // on `self` (kept in sync via `resize`), so the trait-level args
-        // are ignored here. They're threaded through the trait for
-        // renderers that don't own their surface geometry (future main-side
-        // renderer in Phase 7).
-        self.render_commands_to_scene(commands, image_resource_map, shell);
+        // are ignored here.
+        self.render_commands_to_scene(commands, image_resource_map);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {

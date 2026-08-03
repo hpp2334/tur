@@ -1,54 +1,60 @@
-//! Worker ↔ main message vocabulary (the wire format for the upcoming
-//! multi-threaded runtime in Phase 7+).
+//! Worker ↔ main message vocabulary.
 //!
-//! Phase 4 introduces these types **without** wiring actual cross-thread
-//! channels. The single-threaded engine continues to run inline; existing
-//! pub fns (`push_platform_event`, `load_module`, …) become thin wrappers
-//! that build a [`WorkerMsg`], call
-//! [`TurApp::handle_worker_msg`](crate::TurApp::handle_worker_msg) on the
-//! same thread, and unwrap the [`Reply`] synchronously. Phase 7 swaps that
-//! inline call for a real `mpsc` send + worker task without changing the
-//! wire types or the public method shapes.
+//! The engine runs on a worker thread (see [`crate::core::runtime::MainBackend`]);
+//! the embedder drives it from main via [`WorkerMsg`]s and receives
+//! [`MainMsg`] replies. Every public `TurApp` method is a thin wrapper
+//! that builds a `WorkerMsg`, sends it via the channel, and awaits the
+//! matching [`Reply`] (one-shot slot).
 //!
-//! ## Why define the wire format before threads exist?
+//! ## Channel topology
 //!
-//! - Lets Phase 5 (event bus handle / async APIs / escape-hatch removal)
-//!   code against a stable target.
-//! - Lets Phase 6's `Send + Sync` prep verify against real types.
-//! - Keeps Phase 7's worker/main split a "wire the channels" change, not
-//!   a "redesign every API" change.
+//! All three channels use [`async_channel`]:
 //!
-//! ## Reply slots
+//! | Channel       | Direction       | Capacity    | Sender side       | Receiver side           |
+//! |---------------|-----------------|-------------|-------------------|-------------------------|
+//! | `WorkerMsg`   | main → worker   | unbounded   | main `try_send`   | worker `recv().await`   |
+//! | `MainMsg`     | worker → main   | unbounded   | worker `try_send` | main `recv().await`     |
+//! | `Reply<T>`    | worker → main   | bounded(1)  | worker `try_send` | main `recv().await`     |
 //!
-//! [`Reply`]`<T>` / [`ReplySender`]`<T>` are a minimal `Arc<Mutex<Option<T>>>`
-//! slot pair — no Condvar, no async runtime. The sender half fires once;
-//! the receiver half `try_recv`s. **Phase 4** uses them in single-threaded
-//! inline mode (the sender fires during `handle_worker_msg`, before the
-//! caller calls `try_recv`). **Phase 7** will replace them with
-//! `tokio::sync::oneshot` for cross-thread + `.await` support — the wire
-//! type names stay the same.
+//! The worker thread itself runs a sync thread entry-point that wraps an
+//! `async fn worker_loop(...)` via `futures::executor::block_on`. This lets
+//! the worker `await` on `worker_rx.recv()` instead of blocking on a
+//! `Mutex`+`Condvar` — the same primitive the main thread uses, so there's
+//! a single concurrency model across the engine.
 //!
 //! ## Send-ness
 //!
 //! Every variant is `Send` (verified by the compile-time assertion at the
-//! bottom of this file). [`AppEvent`] is deliberately **not** carried here
-//! yet — its `Box<dyn CustomAppEvent>` payload isn't `Send` until Phase 6
-//! adds that bound. Phase 6 will introduce `WorkerMsg::AppEvent(AppEvent)`
-//! once the bound is in place.
+//! bottom of this file).
 
 use std::fmt;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::DevNodeData;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
 
+/// main → worker channel sender. Unbounded — main pushes input (platform
+/// events, wake, RPC requests) and the worker drains them in arrival order.
+pub type WorkerTx = async_channel::Sender<WorkerMsg>;
+/// main → worker channel receiver. Held by the worker thread; awaited in
+/// `worker_loop`.
+pub type WorkerRx = async_channel::Receiver<WorkerMsg>;
+
+/// worker → main channel sender. Unbounded — the worker ships per-frame
+/// messages (render batch, FrameOutcome, cursor / focus changes) without
+/// coordinating with main. Main drains them in `pump`'s recv loop.
+pub type MainTx = async_channel::Sender<MainMsg>;
+/// worker → main channel receiver. Held by the main thread; awaited in
+/// `MainBackend::pump`.
+pub type MainRx = async_channel::Receiver<MainMsg>;
+
 /// main → worker. All input that can drive the engine flows through one of
-/// these variants. Phase 7's worker task is `while let Some(msg) =
-/// rx.blocking_recv() { app.handle_worker_msg(msg) }`.
+/// these variants.
 pub enum WorkerMsg {
     /// DOM / JNI / winit platform event (pointer, key, wheel, IME, resize,
     /// …). Dispatched to subsystems via `handle_platform_event` on the next
@@ -57,8 +63,7 @@ pub enum WorkerMsg {
     /// Mark the next frame for paint without enqueuing an event. Mirrors
     /// today's `TurApp::request_paint` — sets the `need_paint` flag.
     RequestPaint,
-    /// Drive one flush iteration. Sent by main's rAF loop. Returns once
-    /// the engine has reached quiescence for this frame; the worker then
+    /// Drive one flush iteration. Sent by main's rAF loop. The worker then
     /// emits [`MainMsg::RenderCommands`] (if it painted) and
     /// [`MainMsg::FrameOutcome`].
     Wake,
@@ -81,7 +86,15 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
-    /// Dev-tool: full element-tree snapshot. Async RPC.
+    /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
+    /// on the worker, converts the result to its display string, and replies.
+    /// Production code uses `LoadModule` / `EvalModule`; this is for tests
+    /// that read JS-side state via `globalThis.__x = ...`.
+    EvalJs {
+        source: Arc<str>,
+        reply: ReplySender<String>,
+    },
+    /// Dev-tool: full element-tree snapshot. RPC.
     DevElementTree {
         reply: ReplySender<Option<DevNodeData>>,
     },
@@ -90,12 +103,11 @@ pub enum WorkerMsg {
         id: NodeId,
         reply: ReplySender<Option<DevNodeData>>,
     },
-    /// Query the focused-element state. Used by threaded backend's
-    /// `focused_state` RPC (inline backend reads engine state directly).
+    /// Query the focused-element state.
     QueryFocusedState {
         reply: ReplySender<crate::FocusedState>,
     },
-    /// Query the focused-element id. Same pattern as `QueryFocusedState`.
+    /// Query the focused-element id.
     QueryFocusedElement {
         reply: ReplySender<Option<ElementNodeId>>,
     },
@@ -114,8 +126,7 @@ pub enum WorkerMsg {
     /// `__turEventBus.toJs` sink during the next flush.
     EventBusToJs(Vec<u8>),
     /// Push an engine-internal event (programmatic scroll, clipboard
-    /// write, etc.). `AppEvent`'s `Custom` payload's `Send + Sync` bound
-    /// (added in Phase 6 prep) makes this safe to ship across threads.
+    /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
     /// Screenshot RPC — read rendered pixels from the worker's renderer.
     /// Used by screenshot tests; returns `None` if the renderer doesn't
@@ -131,8 +142,20 @@ pub enum WorkerMsg {
 /// response to a [`WorkerMsg`] RPC ([`MainMsg::DevReply`]).
 pub enum MainMsg {
     /// One frame's worth of paint state. Main applies the batch to its
-    /// `MainTree` and plays it back into its renderer.
-    RenderCommands(Vec<RenderCommand>),
+    /// renderer via the `render_sink` callback.
+    ///
+    /// `image_map` is the worker's full image resource map (Arc-cloned —
+    /// cheap, since `ImageResource` wraps an Arc-backed `Blob`). Shipped
+    /// every frame so the main-side renderer can upload any newly-added
+    /// images. Optimization to ship only diffs is deferred.
+    ///
+    /// `viewport` is `(logical_width, logical_height, dpr)` — main calls
+    /// `renderer.resize(...)` when this changes before applying the batch.
+    RenderCommands {
+        commands: Vec<RenderCommand>,
+        image_map: Arc<ImageResourceMap>,
+        viewport: (u32, u32, f64),
+    },
     /// Schedule decision after a flush. Main arms the next rAF /
     /// `setTimeout` based on `schedule`. The `Err(String)` variant
     /// carries a flush error message (worker can't ship `TurError`
@@ -140,11 +163,12 @@ pub enum MainMsg {
     /// is `!Send` — main re-wraps as `TurError::Other`).
     FrameOutcome(Result<FrameOutcome, String>),
     /// Resolved cursor changed this frame (deduped: only emitted on
-    /// change). Main forwards to its `CursorBackend`.
+    /// change). Main forwards to its `CursorBackend` and caches it.
     CursorChanged(Cursor),
     /// Focused-element state changed (used by main for IME / caret
     /// placement on platforms where the IME target lives off-engine).
-    /// Pushed once per change, not per frame.
+    /// Pushed once per change, not per frame. Main caches it for
+    /// non-blocking reads from embedder callbacks.
     FocusedStateChanged {
         is_editable: bool,
         cursor_rect: Option<(f64, f64, f64, f64)>,
@@ -178,62 +202,36 @@ pub enum ModuleError {
     WorkerGone,
 }
 
-/// One-shot reply slot — sender side. See [module docs](self) for the
-/// Phase 4 → Phase 7 migration path.
+/// One-shot reply slot — sender side. Wraps an `async_channel::Sender<T>`
+/// with capacity 1. The sender fires once (via `try_send`); the receiver
+/// awaits the value via `recv().await`.
 pub struct ReplySender<T> {
-    slot: Arc<(Mutex<Option<T>>, Condvar)>,
+    pub(crate) tx: async_channel::Sender<T>,
 }
 
-/// One-shot reply slot — receiver side. `try_recv` is the inline-mode
-/// accessor (the sender fires synchronously during `handle_worker_msg`);
-/// `recv` blocks until the sender fires (Phase 7's threaded backend).
+/// One-shot reply slot — receiver side. `rx.recv().await` yields the value
+/// once the sender fires. Held by main; the worker ships the reply through
+/// the sender half.
 pub struct Reply<T> {
-    slot: Arc<(Mutex<Option<T>>, Condvar)>,
+    pub(crate) rx: async_channel::Receiver<T>,
 }
 
 impl<T> Reply<T> {
-    /// Create a paired (sender, receiver) slot pair.
+    /// Create a paired (sender, receiver) slot pair backed by
+    /// `async_channel::bounded(1)`.
     pub fn pair() -> (ReplySender<T>, Reply<T>) {
-        let slot = Arc::new((Mutex::new(None), Condvar::new()));
-        (ReplySender { slot: slot.clone() }, Reply { slot })
-    }
-
-    /// Non-blocking receive. Returns `None` if the sender hasn't fired yet,
-    /// `Some(value)` if it has (the slot is drained).
-    ///
-    /// Inline mode: the sender always fires before the receiver polls
-    /// (synchronous dispatch), so this never returns `None` unless the
-    /// worker dropped the sender without replying.
-    pub fn try_recv(&self) -> Option<T> {
-        self.slot.0.lock().ok().and_then(|mut g| g.take())
-    }
-
-    /// Blocking receive. Waits until the sender fires, then returns the
-    /// value. Used by `ThreadedBackend` to make the synchronous public API
-    /// (`load_module`, `dev_tool_*`, etc.) wait for the worker's reply.
-    ///
-    /// Inline mode never calls this — `try_recv` works because dispatch
-    /// is synchronous. If you call `recv` in inline mode, it blocks
-    /// forever (the sender is on the same thread, waiting for you to
-    /// finish).
-    pub fn recv(self) -> T {
-        let (lock, cvar) = &*self.slot;
-        let mut g = lock.lock().expect("reply slot poisoned");
-        while g.is_none() {
-            g = cvar.wait(g).expect("reply slot poisoned");
-        }
-        g.take().expect("slot filled above")
+        let (tx, rx) = async_channel::bounded(1);
+        (ReplySender { tx }, Reply { rx })
     }
 }
 
 impl<T> ReplySender<T> {
-    /// Fire the reply. Consumes the sender (one-shot semantics).
-    /// Wakes any thread blocked in [`Reply::recv`].
+    /// Fire the reply. Consumes the sender (one-shot semantics). Uses
+    /// `try_send` because the bounded(1) slot is always empty at fire
+    /// time (main hasn't consumed yet — RPC replies are request/response,
+    /// so main is awaiting on the receiver). Wakes the receiver.
     pub fn send(self, value: T) {
-        if let Ok(mut g) = self.slot.0.lock() {
-            *g = Some(value);
-            self.slot.1.notify_one();
-        }
+        let _ = self.tx.try_send(value);
     }
 }
 
@@ -255,6 +253,10 @@ impl fmt::Debug for WorkerMsg {
                 .finish_non_exhaustive(),
             Self::EvalModule { source, .. } => f
                 .debug_struct("EvalModule")
+                .field("source_len", &source.len())
+                .finish_non_exhaustive(),
+            Self::EvalJs { source, .. } => f
+                .debug_struct("EvalJs")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
             Self::DevElementTree { .. } => f.debug_struct("DevElementTree").finish(),
@@ -283,9 +285,10 @@ impl fmt::Debug for WorkerMsg {
 impl fmt::Debug for MainMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RenderCommands(cmds) => {
-                f.debug_tuple("RenderCommands").field(&cmds.len()).finish()
-            }
+            Self::RenderCommands { commands, .. } => f
+                .debug_tuple("RenderCommands")
+                .field(&commands.len())
+                .finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
             Self::CursorChanged(c) => f.debug_tuple("CursorChanged").field(c).finish(),
             Self::FocusedStateChanged {
@@ -328,15 +331,18 @@ impl<T> fmt::Debug for ReplySender<T> {
 
 // Compile-time Send assertions — guard against future variants breaking
 // the worker↔main channel contract. If these fail, a new field's type
-// isn't Send and needs wrapping (typically `Arc<T>`). `PlatformEvent` /
-// `AppEvent`'s `Box<dyn Custom…>` payloads aren't Send today; Phase 6
-// tightens those bounds.
+// isn't Send and needs wrapping (typically `Arc<T>`).
 const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<WorkerMsg>();
     assert_send::<MainMsg>();
     assert_send::<DevReply>();
     assert_send::<ModuleError>();
+    // Channels themselves must be Send + Sync.
+    assert_send::<WorkerTx>();
+    assert_send::<WorkerRx>();
+    assert_send::<MainTx>();
+    assert_send::<MainRx>();
 };
 
 #[cfg(test)]
@@ -367,15 +373,14 @@ mod tests {
         assert_eq!(ModuleError::WorkerGone.to_string(), "worker gone");
     }
 
-    /// Reply slot pair — sender fires, receiver drains.
+    /// Reply slot pair — sender fires, receiver drains (via try_recv on
+    /// the underlying async_channel).
     #[test]
     fn reply_slot_round_trip() {
         let (tx, rx) = Reply::<u32>::pair();
-        assert!(rx.try_recv().is_none());
+        assert!(rx.rx.try_recv().is_err());
         tx.send(42);
-        assert_eq!(rx.try_recv(), Some(42));
-        // Drained — subsequent reads return None.
-        assert!(rx.try_recv().is_none());
+        assert_eq!(rx.rx.try_recv(), Ok(42));
     }
 
     /// A dropped sender (without firing) leaves the receiver empty.
@@ -383,6 +388,6 @@ mod tests {
     fn reply_slot_dropped_sender_leaves_none() {
         let (tx, rx) = Reply::<u32>::pair();
         drop(tx);
-        assert!(rx.try_recv().is_none());
+        assert!(rx.rx.try_recv().is_err());
     }
 }

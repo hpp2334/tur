@@ -6,7 +6,7 @@ use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::render::Renderer as TurRenderer;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -28,12 +28,19 @@ pub enum TurVelloError {
     Handle(String),
 }
 
+/// Test harness that drives a real `VelloRenderer` on the main thread.
+///
+/// Architecture matches production: the engine runs on a worker thread
+/// (`TurRuntime::create_app`); the renderer lives on main + is driven by
+/// a `render_sink` callback installed after construction. Pixel readback
+/// happens directly on the main-side renderer.
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
 
 struct TurVelloAppInner {
     app: Rc<TurApp>,
+    renderer: Rc<RefCell<VelloRenderer>>,
     _window: Window,
 }
 
@@ -108,6 +115,7 @@ impl TurVelloApp {
             height as u32,
             dpr,
         );
+        let renderer = Rc::new(RefCell::new(renderer));
 
         let runtime = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
@@ -115,12 +123,24 @@ impl TurVelloApp {
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
-        let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
-        let _ = app.run_frame();
+
+        // Threaded engine: worker produces command batches; main applies
+        // them to the VelloRenderer via the render_sink.
+        let app = runtime.create_app((width, height), dpr)?;
+        let sink_renderer = renderer.clone();
+        app.set_render_sink(move |commands, image_map, viewport| {
+            let mut r = sink_renderer.borrow_mut();
+            let (logical_w, logical_h, vp_dpr) = viewport;
+            r.resize(logical_w, logical_h, vp_dpr);
+            r.render_commands(commands, logical_w, logical_h, vp_dpr, image_map);
+            let _ = r.present();
+        });
+        let _ = futures::executor::block_on(app.run_frame());
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
                 app,
+                renderer,
                 _window: window,
             }),
         })
@@ -136,26 +156,27 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.borrow().app.load_module(&source)?;
+        futures::executor::block_on(self.inner.borrow().app.load_module(&source))?;
         Ok(())
     }
 
-    pub fn with_element_tree<R>(&self, f: impl FnOnce(&NodeTreeData) -> R) -> R {
-        let inner = self.inner.borrow();
-        let tree = inner.app.element_tree();
-        f(&tree)
+    /// Direct access to the underlying `TurApp`.
+    pub fn app(&self) -> std::cell::Ref<'_, Rc<TurApp>> {
+        std::cell::Ref::map(self.inner.borrow(), |i| &i.app)
+    }
+
+    /// Direct access to the main-side renderer (for pixel readback).
+    pub fn renderer(&self) -> std::cell::Ref<'_, Rc<RefCell<VelloRenderer>>> {
+        std::cell::Ref::map(self.inner.borrow(), |i| &i.renderer)
     }
 
     pub fn render(&self) {
         self.inner.borrow().app.request_paint();
-        let _ = self.inner.borrow().app.run_frame();
+        let _ = futures::executor::block_on(self.inner.borrow().app.run_frame());
     }
 
+    /// Read rendered pixels directly from the main-side renderer.
     pub fn render_to_pixels(&self) -> Vec<u8> {
-        self.inner
-            .borrow()
-            .app
-            .render_to_pixels()
-            .expect("renderer does not support render_to_pixels")
+        self.inner.borrow().renderer.borrow_mut().render_to_pixels()
     }
 }

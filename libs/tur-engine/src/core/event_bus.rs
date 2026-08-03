@@ -101,17 +101,16 @@ impl EventBus {
         (self.host_to_js.clone(), self.js_to_host.clone())
     }
 
-    /// Retrieve the engine's always-installed event bus. Phase 5 promotes
-    /// this from an `Option<EventBus>` (`EventBus::of`) to a direct handle
-    /// — the bus is unconditionally installed by `TurStdPlugin`, so the
-    /// `Option` was always unwrappable in practice.
+    /// Retrieve the engine's cross-thread event bus handle. The full
+    /// `EventBus` lives on the worker thread; this handle routes
+    /// `emit_to_js` via the worker's channel and exposes `drain_js_to_host`
+    /// for tests that drive the worker inline (no thread).
     ///
-    /// Phase 5 keeps `of()` as a back-compat alias (it returns `Some(bus)`
-    /// unconditionally) so existing embedder/test code keeps working; new
-    /// code should use [`TurApp::event_bus`](crate::TurApp::event_bus)
-    /// directly.
-    pub fn of(app: &crate::TurApp) -> Option<Rc<EventBus>> {
-        Some(app.event_bus())
+    /// Production code uses [`TurApp::event_bus_handle`](crate::TurApp::event_bus_handle)
+    /// directly. This alias is kept for back-compat with code that imported
+    /// `EventBus` rather than reaching through `TurApp`.
+    pub fn of(app: &crate::TurApp) -> Option<EventBusHandle> {
+        Some(app.event_bus_handle())
     }
 
     pub fn emit_to_js(&self, payload: Vec<u8>) {
@@ -153,8 +152,8 @@ pub struct EventBusHandle {
 enum EventBusHandleInner {
     /// Inline mode — shared queues with the worker's `EventBus`.
     Queues(HostToJsQueue, JsToHostQueue),
-    /// Threaded mode — ship via the worker's mpsc.
-    Channel(std::sync::mpsc::Sender<crate::core::app::WorkerMsg>),
+    /// Threaded mode — ship via the worker's `async_channel` sender.
+    Channel(crate::core::app::WorkerTx),
 }
 
 impl EventBusHandle {
@@ -164,7 +163,7 @@ impl EventBusHandle {
         }
     }
 
-    pub fn from_channel(worker_tx: std::sync::mpsc::Sender<crate::core::app::WorkerMsg>) -> Self {
+    pub fn from_channel(worker_tx: crate::core::app::WorkerTx) -> Self {
         Self {
             inner: EventBusHandleInner::Channel(worker_tx),
         }
@@ -175,7 +174,7 @@ impl EventBusHandle {
         match &self.inner {
             EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
             EventBusHandleInner::Channel(tx) => {
-                let _ = tx.send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+                let _ = tx.try_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
             }
         }
     }

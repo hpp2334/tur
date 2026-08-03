@@ -1,136 +1,70 @@
-//! Backend abstraction for [`TurApp`](crate::TurApp) — encapsulates **where
-//! the engine state lives** and **how methods dispatch**.
+//! Backend types: `WorkerBackend` (engine state on the worker thread) and
+//! `MainBackend` (the public backend owned by `TurApp`, spawns + dispatches
+//! to the worker).
 //!
-//! - [`InlineBackend`] runs everything on the calling thread (today's
-//!   behavior). Used by `TurRuntime::create_app` / `create_headless_app`
-//!   and by every test.
-//! - [`ThreadedBackend`] runs the engine on a worker thread, dispatching
-//!   via `mpsc` channels. Production use; some methods panic until
-//!   Phase 8 wires cross-thread variants (see the trait impl docs).
+//! ## Architecture
 //!
-//! `TurApp` holds `Box<dyn TurAppBackend>` + the main-side scheduling state
-//! (driver / wake_fn / after_frame hook). Public methods delegate to the
-//! backend. The two backends are interchangeable from the embedder's
-//! perspective — the same `TurApp` API works either way.
+//! - [`WorkerBackend`] is `pub(crate)`: it lives on the worker thread and
+//!   owns the boa `Context`, element tree, reactive store, subsystems.
+//!   `pump()` runs one flush and produces a `Vec<RenderCommand>` batch
+//!   (stored in `TurAppInternal::pending_render_batch`).
 //!
-//! ## Escape hatches (with_boa_context / with_element)
+//! - [`MainBackend`] is public: `TurApp` owns one. It spawns a worker
+//!   thread (via [`crate::core::thread`]) running a `WorkerBackend`,
+//!   dispatches input via `async_channel`, and receives [`MainMsg`]
+//!   replies. The embedder wires a `render_sink` callback that receives
+//!   each `MainMsg::RenderCommands` batch + image map + viewport, and
+//!   applies it to the main-side renderer.
 //!
-//! These are generic over the return type `R`, which can't be expressed in
-//! a trait object directly. The trait exposes type-erased `_dyn` variants
-//! taking [`BoaClosure`] / [`ElementClosure`]; `TurApp` wraps them in
-//! ergonomic generic helpers that box/unbox automatically. **Inline-only**:
-//! closures can't easily be made `Send` without restricting the inline API,
-//! so threaded mode panics — production threaded code uses RPC variants
-//! (`load_module`, `dev_tool_*`, etc.) instead.
+//! ## Async model
+//!
+//! All channels use `async_channel`. The worker thread entry-point wraps
+//! an `async fn worker_loop(...)` via `futures::executor::block_on`, so the
+//! worker awaits on `worker_rx.recv()` instead of blocking on a Mutex +
+//! Condvar. Main-thread `pump` and `rpc` are `async fn`; the embedder
+//! supplies the runtime (`wasm_bindgen_futures::spawn_local` on wasm,
+//! `futures::executor::block_on` on native).
 
-use std::any::Any;
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use boa_engine::{Context, Source};
 
 use crate::FocusedState;
-use crate::core::app::AppEvent;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
+use crate::core::app::{MainMsg, MainRx, MainTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, DevNodeData};
 use crate::core::event_bus::EventBus;
+use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::CursorBackend;
+use crate::core::render::RenderCommand;
+use crate::core::thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
 use crate::error::TurError;
 
-/// Type-erased closure for [`TurAppBackend::with_boa_context_dyn`].
+// ---------------------------------------------------------------------------
+// WorkerBackend — engine state on the worker thread (pub(crate))
+// ---------------------------------------------------------------------------
+
+/// The engine state container, owned by the worker thread. Holds the boa
+/// `Context`, `TurAppInternal`, and the job executor.
 ///
-/// **Not `Send`** — inline-only. The threaded backend will panic if this
-/// is called (it doesn't support arbitrary closure-based boa access; it
-/// uses specific `WorkerMsg` RPC variants instead). Production threaded
-/// code doesn't need the escape hatches; they're for tests and embedder
-/// debugging.
-pub type BoaClosure = Box<dyn FnOnce(&mut Context) -> Box<dyn Any>>;
-
-/// Type-erased closure for [`TurAppBackend::with_element_dyn`].
-pub type ElementClosure = Box<dyn FnOnce(&AnyElement) -> Box<dyn Any>>;
-
-/// Type-erased return value from the escape hatches.
-pub type AnySend = Box<dyn Any>;
-
-/// Backend abstraction — see [module docs](self) for the inline vs threaded
-/// split. All methods are synchronous from the caller's perspective;
-/// `ThreadedBackend` blocks on its reply channel internally to preserve
-/// the synchronous API.
-pub trait TurAppBackend: 'static {
-    /// Internal dispatch — every [`WorkerMsg`] variant is processed here.
-    /// Inline runs on the calling thread; threaded sends to the worker.
-    fn handle_worker_msg(&self, msg: WorkerMsg);
-
-    /// Run one frame's flush + render. Returns the outcome including how
-    /// the next frame should be scheduled.
-    fn pump(&self) -> Result<FrameOutcome, TurError>;
-
-    /// Push an engine-internal event onto the app-event bus. Inline writes
-    /// directly to the queue; threaded must RPC (`AppEvent`'s `Custom`
-    /// payload may be `!Send`, so threaded panics until Phase 7 wires the
-    /// `Send` bound — see `WorkerMsg::AppEvent`).
-    fn push_app_event(&self, event: AppEvent);
-
-    /// Always-installed event bus.
-    fn event_bus(&self) -> Rc<EventBus>;
-
-    /// Cross-thread-safe event bus handle. Holds just the queue clones
-    /// (Arc<Mutex>) — safe to send across threads. Inline returns a
-    /// handle constructed from `internal.event_bus.queues()`; threaded
-    /// returns a pre-stored handle (constructed at worker-spawn time).
-    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle;
-
-    /// Combined focused-element state.
-    fn focused_state(&self) -> FocusedState;
-    fn focused_element(&self) -> Option<ElementNodeId>;
-    fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)>;
-    fn focused_is_editable(&self) -> bool;
-
-    /// Path-based element lookup.
-    fn query_element(&self, key: &[&str]) -> Option<NodeId>;
-
-    /// Dev tooling.
-    fn dev_tool_element_tree(&self) -> Option<DevNodeData>;
-    fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData>;
-
-    /// Read rendered pixels (used by screenshot tests).
-    fn render_to_pixels(&self) -> Option<Vec<u8>>;
-
-    /// Override the cursor backend. Per-instance (the wasm embedder's
-    /// `WasmCursor` holds the canvas DOM element).
-    fn set_cursor_backend(&self, backend: Rc<RefCell<dyn CursorBackend>>);
-
-    /// Escape hatch — run a closure with the boa `Context`. **Inline-only**:
-    /// the threaded backend panics (no mechanism to ship arbitrary
-    /// closures across threads). Production threaded code uses specific
-    /// `WorkerMsg` RPC variants; this escape hatch is for tests and
-    /// embedder debugging.
-    fn with_boa_context_dyn(&self, f: BoaClosure) -> AnySend;
-
-    /// Escape hatch — run a closure with an element by id. Returns
-    /// `None` if the element doesn't exist. **Inline-only** (see
-    /// [`Self::with_boa_context_dyn`]).
-    fn with_element_dyn(&self, id: ElementNodeId, f: ElementClosure) -> Option<AnySend>;
-
-    /// Trace-mode handle for the live element tree.
-    #[cfg(feature = "trace")]
-    fn element_tree_handle(&self) -> std::cell::Ref<'_, crate::core::elements::NodeTreeData>;
-}
-
-// ---------------------------------------------------------------------------
-// InlineBackend — today's behavior, engine state lives on the calling thread
-// ---------------------------------------------------------------------------
-
-pub struct InlineBackend {
+/// Constructed on the worker thread (via [`build_worker_backend`]) so it
+/// can capture `!Send` types like `Rc<dyn Clock>` and `boa::Context` —
+/// these never cross threads. Once constructed, [`WorkerBackend::pump`]
+/// runs one flush and stores the resulting `Vec<RenderCommand>` batch in
+/// `TurAppInternal::pending_render_batch`, where [`MainBackend`]'s
+/// `worker_loop` drains it and ships to main.
+pub(crate) struct WorkerBackend {
     pub(crate) boa_context: RefCell<Context>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
 }
 
-impl InlineBackend {
+impl WorkerBackend {
     pub(crate) fn new(
         boa_context: Context,
         internal: TurAppInternal,
@@ -145,14 +79,27 @@ impl InlineBackend {
 
     /// Read the latest cursor applied during the last flush (or `None` if
     /// no pointer was over the surface / no cursor change happened).
-    /// Used by `ThreadedBackend` to ship cursor changes via
-    /// `MainMsg::CursorChanged`.
     pub(crate) fn last_applied_cursor(&self) -> Option<crate::core::platform::Cursor> {
         self.internal
             .app_context
             .borrow()
             .shell
             .last_applied_cursor()
+    }
+
+    /// Snapshot the worker-side `ImageResourceMap` for shipping to main.
+    pub(crate) fn image_resource_map_snapshot(&self) -> std::sync::Arc<ImageResourceMap> {
+        self.internal.image_resource_map_snapshot()
+    }
+
+    pub(crate) fn screen_viewport(&self) -> (u32, u32, f64) {
+        let cx = self.internal.app_context.borrow();
+        let (w, h) = cx.screen.logical_size;
+        (w as u32, h as u32, cx.screen.dpr)
+    }
+
+    pub(crate) fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
+        self.internal.take_pending_render_batch()
     }
 
     fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -180,9 +127,22 @@ impl InlineBackend {
             tracing::error!("module parse error: {e}");
             ModuleError::Parse(e.to_string())
         })?;
-        let _promise = module.load_link_evaluate(&mut boa);
+        let promise = module.load_link_evaluate(&mut boa);
         if let Err(e) = boa.run_jobs() {
             tracing::error!("module run_jobs error: {e}");
+        }
+        // Surface module-body rejections as `ModuleError::Eval`. Without
+        // this check, errors thrown during evaluation silently vanish
+        // (run_jobs clears the rejection) — the engine appears to load
+        // successfully but the bundle's render() never runs.
+        if let boa_engine::builtins::promise::PromiseState::Rejected(reason) = promise.state() {
+            let to_string = reason
+                .to_string(&mut boa)
+                .map(|s| s.to_std_string_escaped())
+                .unwrap_or_default();
+            tracing::error!("module eval rejected: {to_string}");
+            drop(boa);
+            return Err(ModuleError::Eval(to_string));
         }
         drop(boa);
         if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
@@ -210,10 +170,10 @@ impl InlineBackend {
         let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
         Ok(())
     }
-}
 
-impl TurAppBackend for InlineBackend {
-    fn handle_worker_msg(&self, msg: WorkerMsg) {
+    /// Dispatch one [`WorkerMsg`]. RPC variants settle their own `Reply`;
+    /// non-RPC variants push state into the worker for the next `pump()`.
+    pub(crate) fn handle_worker_msg(&self, msg: WorkerMsg) {
         match msg {
             WorkerMsg::PlatformEvent(event) => {
                 self.internal
@@ -221,15 +181,13 @@ impl TurAppBackend for InlineBackend {
                     .borrow_mut()
                     .platform_event_queue
                     .push(event);
-                // Driver re-arm happens on TurApp (main side) —
-                // handle_worker_msg just queues.
             }
             WorkerMsg::RequestPaint => {
                 self.internal.js_context.need_paint.set(true);
             }
             WorkerMsg::Wake => {
-                // Single-threaded: caller (`pump`) drives flush directly so
-                // it can return FrameOutcome. Threaded would run flush here.
+                // The worker_loop drives flush via `pump()` (separate method
+                // so it can capture the FrameOutcome + ship commands).
             }
             WorkerMsg::LoadModule { source, reply } => {
                 let res = self.load_module_inner(&source);
@@ -243,13 +201,35 @@ impl TurAppBackend for InlineBackend {
                 let res = self.eval_module_inner(&source);
                 reply.send(res);
             }
+            WorkerMsg::EvalJs { source, reply } => {
+                // Test-only synchronous JS evaluation. Drains promise jobs
+                // + completions so `await`-free side effects settle before
+                // the reply fires. If the result is a JS string, returns
+                // the string contents (no quotes); otherwise returns the
+                // display form (matches the legacy `eval_js` semantics).
+                let source_str: &str = &source;
+                let mut boa = self.boa_context.borrow_mut();
+                let result = boa.eval(boa_engine::Source::from_bytes(source_str));
+                let display = match result {
+                    Ok(v) => v
+                        .as_string()
+                        .map(|s| s.to_std_string_escaped())
+                        .unwrap_or_else(|| v.display().to_string()),
+                    Err(e) => {
+                        tracing::error!("EvalJs error: {e}");
+                        String::new()
+                    }
+                };
+                let _ = boa.run_jobs();
+                drop(boa);
+                let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
+                reply.send(display);
+            }
             WorkerMsg::DevElementTree { reply } => {
-                let snap = self.dev_tool_element_tree();
-                reply.send(snap);
+                reply.send(self.dev_tool_element_tree());
             }
             WorkerMsg::DevGetElement { id, reply } => {
-                let snap = self.dev_tool_get_element(id);
-                reply.send(snap);
+                reply.send(self.dev_tool_get_element(id));
             }
             WorkerMsg::QueryFocusedState { reply } => {
                 reply.send(self.focused_state());
@@ -269,7 +249,7 @@ impl TurAppBackend for InlineBackend {
             }
             WorkerMsg::EventBusToJs(_bytes) => {
                 tracing::trace!(
-                    "EventBusToJs: {} bytes (Phase 5 wires delivery)",
+                    "EventBusToJs: {} bytes (not yet wired for delivery)",
                     _bytes.len()
                 );
             }
@@ -277,7 +257,11 @@ impl TurAppBackend for InlineBackend {
                 self.push_app_event(event);
             }
             WorkerMsg::RenderToPixels { reply } => {
-                reply.send(self.render_to_pixels());
+                // No renderer on the worker — main owns it. Always None.
+                let _ = reply;
+                tracing::warn!(
+                    "WorkerBackend::handle_worker_msg: RenderToPixels is a no-op (renderer lives on main)"
+                );
             }
             WorkerMsg::Destroy { reply } => {
                 reply.send(());
@@ -285,13 +269,15 @@ impl TurAppBackend for InlineBackend {
         }
     }
 
-    fn pump(&self) -> Result<FrameOutcome, TurError> {
-        self.handle_worker_msg(WorkerMsg::Wake);
+    pub(crate) fn pump(&self) -> Result<FrameOutcome, TurError> {
+        // `Wake` is a no-op above; flush is driven here so the outcome can
+        // be returned to the worker_loop, which then ships any pending
+        // render batch.
         let mut boa = self.boa_context.borrow_mut();
         self.internal.flush(&mut boa)
     }
 
-    fn push_app_event(&self, event: AppEvent) {
+    fn push_app_event(&self, event: crate::core::app::AppEvent) {
         self.internal
             .app_context
             .borrow_mut()
@@ -299,27 +285,27 @@ impl TurAppBackend for InlineBackend {
             .push(event);
     }
 
-    fn event_bus(&self) -> Rc<EventBus> {
+    pub(crate) fn event_bus(&self) -> Rc<EventBus> {
         self.internal.event_bus.clone()
     }
 
-    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
+    pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
         let (h, j) = self.internal.event_bus.queues();
         crate::core::event_bus::EventBusHandle::from_queues(h, j)
     }
 
-    fn focused_state(&self) -> FocusedState {
+    pub(crate) fn focused_state(&self) -> FocusedState {
         FocusedState {
             is_editable: self.focused_is_editable(),
             cursor_rect: self.focused_cursor_rect(),
         }
     }
 
-    fn focused_element(&self) -> Option<ElementNodeId> {
+    pub(crate) fn focused_element(&self) -> Option<ElementNodeId> {
         self.internal.js_context.focus_manager.borrow().focused()
     }
 
-    fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
+    pub(crate) fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
         let focused_id = self.focused_element()?;
         let tree = self.internal.js_context.element_tree.borrow();
 
@@ -340,14 +326,14 @@ impl TurAppBackend for InlineBackend {
         Some((abs_x + cx, abs_y + cy, cw, ch))
     }
 
-    fn focused_is_editable(&self) -> bool {
+    pub(crate) fn focused_is_editable(&self) -> bool {
         use crate::core::focus::helper;
         let tree = self.internal.js_context.element_tree.borrow();
         let focus = self.internal.js_context.focus_manager.borrow();
         helper::focused_is_editable(&tree, &focus)
     }
 
-    fn query_element(&self, key: &[&str]) -> Option<NodeId> {
+    pub(crate) fn query_element(&self, key: &[&str]) -> Option<NodeId> {
         self.internal
             .js_context
             .element_tree
@@ -355,155 +341,334 @@ impl TurAppBackend for InlineBackend {
             .query_element(key)
     }
 
-    fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
+    pub(crate) fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
         let tree = self.internal.js_context.element_tree.borrow();
         let root_id = tree.root_element_id()?;
         tree.dev_tool_node(root_id.into())
     }
 
-    fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
+    pub(crate) fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
         self.internal
             .js_context
             .element_tree
             .borrow()
             .dev_tool_node(id)
     }
-
-    fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.internal.app_context.borrow_mut().render_to_pixels()
-    }
-
-    fn set_cursor_backend(&self, backend: Rc<RefCell<dyn CursorBackend>>) {
-        self.internal
-            .app_context
-            .borrow_mut()
-            .shell
-            .set_cursor_platform(backend);
-    }
-
-    fn with_boa_context_dyn(&self, f: BoaClosure) -> AnySend {
-        f(&mut self.boa_context.borrow_mut())
-    }
-
-    fn with_element_dyn(&self, id: ElementNodeId, f: ElementClosure) -> Option<AnySend> {
-        let tree = self.internal.js_context.element_tree.borrow();
-        let node = tree.get_element(id)?;
-        let element = node.element.as_ref()?;
-        Some(f(element))
-    }
-
-    #[cfg(feature = "trace")]
-    fn element_tree_handle(&self) -> std::cell::Ref<'_, crate::core::elements::NodeTreeData> {
-        self.internal.js_context.element_tree.borrow()
-    }
 }
 
 // ---------------------------------------------------------------------------
-// ThreadedBackend — engine state on a worker thread, RPC via mpsc
+// MainBackend — TurApp's backend. Owns the worker + RPC plumbing + render sink
 // ---------------------------------------------------------------------------
 
-use std::sync::Mutex;
-use std::sync::mpsc;
+/// Render sink signature: receives a command batch + image map snapshot +
+/// viewport tuple, applies them to the main-side renderer. The embedder
+/// (tur-android / tur-wasm) installs this via [`MainBackend::set_render_sink`]
+/// after construction.
+pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u32, f64))>;
 
-use crate::core::app::MainMsg;
-
-// `std::thread` drop-in. On native we use `std::thread`; on wasm32 we use
-// `wasm_thread` (Web Workers backed by `SharedArrayBuffer`). Both expose
-// `Builder::new().name(String).spawn(F) -> io::Result<JoinHandle<T>>`
-// with `F: Send + 'static`, so the rest of `ThreadedBackend` is identical
-// across targets. Wasm builds require the atomics + shared-memory +
-// build-std config in `.cargo/config.toml` + `--profile wasm-dev`.
-#[cfg(target_arch = "wasm32")]
-use wasm_thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
-#[cfg(not(target_arch = "wasm32"))]
-use std::thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
-
-/// Worker thread owner of [`InlineBackend`]. The main thread holds
-/// [`ThreadedBackend`] (just the channel endpoints) and dispatches via RPC.
+/// The public backend owned by `TurApp`. Spawns a worker thread running a
+/// [`WorkerBackend`], dispatches input via `async_channel`, and receives
+/// [`MainMsg`] replies.
 ///
-/// ## What works cross-thread
+/// ## Async pump / rpc
 ///
-/// - [`handle_worker_msg`](TurAppBackend::handle_worker_msg) for input
-///   (`PlatformEvent`, `RequestPaint`, `EventBusToJs`) — fire-and-forget.
-/// - [`pump`](TurAppBackend::pump) — sends `Wake`, blocks on
-///   `MainMsg::FrameOutcome`.
-/// - RPC methods with `Reply` slots (`LoadModule`, `LoadJs`, `EvalModule`,
-///   `DevElementTree`, `DevGetElement`) — `TurApp` blocks on `Reply::recv`.
+/// All public methods on `MainBackend` are `async fn`. The embedder
+/// supplies the runtime — `wasm_bindgen_futures::spawn_local` on wasm
+/// (so the JS main thread never blocks), `futures::executor::block_on`
+/// on native (so the calling thread parks until the worker replies).
 ///
-/// ## What panics (deferred to Phase 8)
+/// ## Cross-thread render shipping
 ///
-/// - [`event_bus`](TurAppBackend::event_bus) — `EventBus` is `Rc`-backed.
-///   Phase 8 will introduce a main-side proxy or migrate the bus to
-///   `Arc<Mutex<>>`.
-/// - [`push_app_event`](TurAppBackend::push_app_event) — `AppEvent`'s
-///   `Custom` payload may be `!Send`. Phase 8 wires the bound + a
-///   `WorkerMsg::AppEvent` variant.
-/// - Escape hatches (`with_boa_context_dyn`, `with_element_dyn`) — closures
-///   can't be made `Send` without restricting the inline API. Tests use
-///   inline mode; production doesn't need these.
-/// - Direct-read accessors (`focused_state`, `query_element`, etc.) — these
-///   need either RPC variants or main-side caching from `MainMsg`. Phase 8
-///   adds the variants; for now, use `dev_tool_*` which IS RPC-able.
-pub struct ThreadedBackend {
-    worker_tx: mpsc::Sender<WorkerMsg>,
-    main_rx: Mutex<mpsc::Receiver<MainMsg>>,
+/// After each `pump()`, the worker_loop drains the worker's
+/// `pending_render_batch` and ships it via `MainMsg::RenderCommands { commands,
+/// image_map, viewport }`. `MainBackend::pump` matches that variant and
+/// invokes the [`render_sink`](Self::set_render_sink) callback, which applies
+/// the batch to the main-side renderer.
+///
+/// ## Cached cursor / focus state
+///
+/// The worker emits `MainMsg::CursorChanged` and `MainMsg::FocusedStateChanged`
+/// (deduped against the previous frame) alongside the FrameOutcome. Main
+/// caches the latest values in `cached_cursor` / `cached_focus`, available
+/// for non-blocking reads from embedder callbacks (e.g. the wasm
+/// after-frame hook reads focus state without an RPC).
+///
+/// `RenderToPixels` is no-op on the worker (the renderer lives on main);
+/// screenshot tests should run with main-side render access instead.
+pub struct MainBackend {
+    worker_tx: WorkerTx,
+    main_rx: MainRx,
     /// Holds the worker `JoinHandle` alive for the backend's lifetime so
     /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
-    /// On wasm the handle is `wasm_thread::JoinHandle`, on native it's
-    /// `std::thread::JoinHandle` — both are dropped silently here.
     _worker_handle: ThreadJoinHandle<()>,
-    /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged`
-    /// on cursor state change; main applies it here during `pump`. Set
-    /// via `set_cursor_backend` (called by embedder after
-    /// `create_app_threaded`). Stored as `RefCell` since
-    /// `ThreadedBackend` lives on the main thread only.
-    cursor_backend: RefCell<Option<Rc<RefCell<dyn CursorBackend>>>>,
+    /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
+    /// cursor state change; main applies it here during `pump`. Set via
+    /// `set_cursor_backend` (called by embedder after `create_app`).
+    cursor_backend: RefCell<Option<Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>>>,
+    /// Latest cursor received from the worker (cached for non-blocking
+    /// reads from embedder callbacks).
+    cached_cursor: RefCell<crate::core::platform::Cursor>,
+    /// Latest focus state received from the worker (cached for
+    /// non-blocking reads — e.g. wasm's after-frame hook reads focus
+    /// without an RPC).
+    cached_focus: RefCell<FocusedState>,
     /// Cross-thread event bus handle. Routes `emit_to_js` via
-    /// `WorkerMsg::EventBusToJs` (channel mode — no shared queues with
-    /// the worker, since the worker's `EventBus` is constructed inside
-    /// `build_inline_backend` and isn't reachable from main).
+    /// `WorkerMsg::EventBusToJs` (channel mode).
     event_bus_handle: crate::core::event_bus::EventBusHandle,
+    /// Main-side render sink. Worker emits `MainMsg::RenderCommands` after
+    /// each paint; main invokes the sink to drive its renderer.
+    render_sink: RefCell<Option<RenderSink>>,
 }
 
-impl ThreadedBackend {
-    /// Spawn a worker thread that owns an [`InlineBackend`] produced by
+impl MainBackend {
+    /// Spawn a worker thread that owns a [`WorkerBackend`] produced by
     /// `backend_factory`. The factory runs on the worker thread (so it can
     /// construct `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
     ///
     /// The factory must be `Send + 'static` — capture only `Send` config
     /// (plugin vecs, capability factories, etc.), not `Rc`/`RefCell` state.
     ///
-    /// Cross-target: uses `std::thread` on native, `wasm_thread` (Web
-    /// Worker + `SharedArrayBuffer`) on wasm32.
-    pub fn new(backend_factory: impl FnOnce() -> InlineBackend + Send + 'static) -> Self {
-        let (worker_tx, worker_rx) = mpsc::channel::<WorkerMsg>();
-        let (main_tx, main_rx) = mpsc::channel::<MainMsg>();
+    /// The worker thread's entry-point wraps `worker_loop` (an `async fn`)
+    /// in `futures::executor::block_on`. On wasm this is a real Web Worker
+    /// (via `wasm_thread`), where `block_on` + `Atomics.wait` are allowed
+    /// (workers can block; the main thread cannot).
+    pub fn new(backend_factory: impl FnOnce() -> WorkerBackend + Send + 'static) -> Self {
+        let (worker_tx, worker_rx) = async_channel::unbounded::<WorkerMsg>();
+        let (main_tx, main_rx) = async_channel::unbounded::<MainMsg>();
 
         let worker_handle = ThreadBuilder::new()
             .name("tur-worker".into())
             .spawn(move || {
                 let backend = backend_factory();
-                worker_loop(backend, worker_rx, main_tx);
+                // Drive the async worker_loop from this thread. block_on
+                // parks the worker thread when awaiting on
+                // `worker_rx.recv()`; async_channel's waker unparks it when
+                // main sends a message.
+                futures::executor::block_on(worker_loop(backend, worker_rx, main_tx));
             })
             .expect("failed to spawn tur worker thread");
 
         Self {
             worker_tx: worker_tx.clone(),
-            main_rx: Mutex::new(main_rx),
+            main_rx,
             _worker_handle: worker_handle,
             cursor_backend: RefCell::new(None),
+            cached_cursor: RefCell::new(crate::core::platform::Cursor::default()),
+            cached_focus: RefCell::new(FocusedState::default()),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
+            render_sink: RefCell::new(None),
         }
+    }
+
+    /// Install the main-side render sink. Called by the embedder after
+    /// `TurRuntime::create_app` (the worker ships commands; main renders).
+    pub fn set_render_sink<
+        F: FnMut(&[RenderCommand], &ImageResourceMap, (u32, u32, f64)) + 'static,
+    >(
+        &self,
+        f: F,
+    ) {
+        *self.render_sink.borrow_mut() = Some(Box::new(f));
+    }
+
+    /// Install the main-side cursor backend. Worker emits
+    /// `MainMsg::CursorChanged`; main applies here during `pump`.
+    pub fn set_cursor_backend(
+        &self,
+        backend: Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
+    ) {
+        *self.cursor_backend.borrow_mut() = Some(backend);
+    }
+
+    /// Cross-thread event bus handle (queues mode is unused; the worker's
+    /// `EventBus` isn't reachable from main).
+    pub fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
+        self.event_bus_handle.clone()
+    }
+
+    /// Send a fire-and-forget [`WorkerMsg`] (no Reply slot). Used by
+    /// `push_platform_event`, `request_paint`, `push_app_event`,
+    /// `emit_to_js`.
+    pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
+        let _ = self.worker_tx.try_send(msg);
+    }
+
+    /// Advance one frame: send `Wake` to the worker, await the next
+    /// `MainMsg::FrameOutcome`. Any `RenderCommands`, `CursorChanged`,
+    /// or `FocusedStateChanged` arriving in the meantime are dispatched
+    /// to the render sink / cursor backend / focus cache respectively.
+    ///
+    /// Async: the embedder drives this via its platform's runtime
+    /// (`wasm_bindgen_futures::spawn_local` on wasm;
+    /// `futures::executor::block_on` on native). The wasm main thread
+    /// never blocks — the future suspends on `main_rx.recv().await` and
+    /// resumes when the worker posts data.
+    pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
+        self.worker_tx
+            .try_send(WorkerMsg::Wake)
+            .map_err(|_| TurError::Other("worker gone".into()))?;
+        loop {
+            match self.main_rx.recv().await {
+                Ok(MainMsg::RenderCommands {
+                    commands,
+                    image_map,
+                    viewport,
+                }) => {
+                    if let Some(sink) = self.render_sink.borrow_mut().as_mut() {
+                        sink(&commands, &image_map, viewport);
+                    }
+                }
+                Ok(MainMsg::FrameOutcome(result)) => {
+                    return result.map_err(TurError::Other);
+                }
+                Ok(MainMsg::CursorChanged(cursor)) => {
+                    *self.cached_cursor.borrow_mut() = cursor;
+                    if let Some(backend) = self.cursor_backend.borrow().as_ref() {
+                        if let Ok(mut b) = backend.lock() {
+                            b.set_cursor(cursor);
+                        }
+                    }
+                }
+                Ok(MainMsg::FocusedStateChanged {
+                    is_editable,
+                    cursor_rect,
+                }) => {
+                    *self.cached_focus.borrow_mut() = FocusedState {
+                        is_editable,
+                        cursor_rect,
+                    };
+                }
+                Ok(MainMsg::Destroyed) => {
+                    return Err(TurError::Other("worker destroyed".into()));
+                }
+                // EventBusToHost / DevReply — pump ignores for now (the
+                // Reply<T> slot handles RPC replies; standalone MainMsg
+                // variants are reserved for future event-bus work).
+                Ok(_) => continue,
+                Err(_) => return Err(TurError::Other("worker gone".into())),
+            }
+        }
+    }
+
+    /// RPC dispatch — send a [`WorkerMsg`] with a Reply slot, await the
+    /// reply. Async: the caller (e.g. `eval_js`) is itself `async fn`;
+    /// the embedder drives it via its runtime.
+    pub(crate) async fn rpc<T: 'static>(
+        &self,
+        msg_builder: impl FnOnce(crate::core::app::ReplySender<T>) -> WorkerMsg,
+    ) -> T {
+        let (tx, rx) = Reply::<T>::pair();
+        let msg = msg_builder(tx);
+        let _ = self.worker_tx.try_send(msg);
+        rx.rx
+            .recv()
+            .await
+            .expect("reply sender dropped without firing")
+    }
+
+    pub async fn load_js(&self, source: &str) -> Result<(), ModuleError> {
+        self.rpc(|tx| WorkerMsg::LoadJs {
+            source: std::sync::Arc::from(source),
+            reply: tx,
+        })
+        .await
+    }
+
+    pub async fn load_module(&self, source: &str) -> Result<(), ModuleError> {
+        self.rpc(|tx| WorkerMsg::LoadModule {
+            source: std::sync::Arc::from(source),
+            reply: tx,
+        })
+        .await
+    }
+
+    pub async fn eval_module(&self, source: &str) -> Result<(), ModuleError> {
+        self.rpc(|tx| WorkerMsg::EvalModule {
+            source: std::sync::Arc::from(source),
+            reply: tx,
+        })
+        .await
+    }
+
+    /// Synchronous JS expression evaluation. Test-only — production code
+    /// uses `load_module` / `eval_module`. Useful for inspecting JS-side
+    /// state via `globalThis.__x = ...`.
+    pub async fn eval_js(&self, source: &str) -> String {
+        self.rpc(|tx| WorkerMsg::EvalJs {
+            source: std::sync::Arc::from(source),
+            reply: tx,
+        })
+        .await
+    }
+
+    pub async fn focused_state(&self) -> FocusedState {
+        self.rpc(|tx| WorkerMsg::QueryFocusedState { reply: tx })
+            .await
+    }
+
+    pub async fn focused_element(&self) -> Option<ElementNodeId> {
+        self.rpc(|tx| WorkerMsg::QueryFocusedElement { reply: tx })
+            .await
+    }
+
+    pub async fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        self.rpc(|tx| WorkerMsg::QueryFocusedCursorRect { reply: tx })
+            .await
+    }
+
+    pub async fn focused_is_editable(&self) -> bool {
+        self.rpc(|tx| WorkerMsg::QueryFocusedIsEditable { reply: tx })
+            .await
+    }
+
+    pub async fn query_element(&self, key: &[&str]) -> Option<NodeId> {
+        let key_owned: Vec<String> = key.iter().map(|s| s.to_string()).collect();
+        self.rpc(|tx| WorkerMsg::QueryElement {
+            key: key_owned,
+            reply: tx,
+        })
+        .await
+    }
+
+    pub async fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
+        self.rpc(|tx| WorkerMsg::DevElementTree { reply: tx }).await
+    }
+
+    pub async fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
+        self.rpc(|tx| WorkerMsg::DevGetElement { id, reply: tx })
+            .await
+    }
+
+    /// Read the latest cursor received from the worker (non-blocking).
+    /// Updated during `pump` when `MainMsg::CursorChanged` arrives.
+    pub fn cached_cursor(&self) -> crate::core::platform::Cursor {
+        *self.cached_cursor.borrow()
+    }
+
+    /// Read the latest focus state received from the worker (non-blocking).
+    /// Updated during `pump` when `MainMsg::FocusedStateChanged` arrives.
+    pub fn cached_focus(&self) -> FocusedState {
+        self.cached_focus.borrow().clone()
     }
 }
 
-fn worker_loop(
-    backend: InlineBackend,
-    worker_rx: mpsc::Receiver<WorkerMsg>,
-    main_tx: mpsc::Sender<MainMsg>,
-) {
+/// Worker thread loop. Runs as `async fn` driven by
+/// `futures::executor::block_on` in the worker thread entry-point.
+///
+/// Awaits on `worker_rx.recv()` for incoming `WorkerMsg`s. On `Wake`,
+/// pumps the engine (`backend.pump()`), then ships:
+/// 1. `MainMsg::RenderCommands` (if the flush painted)
+/// 2. `MainMsg::FrameOutcome` (always)
+/// 3. `MainMsg::CursorChanged` (deduped against `last_cursor`)
+/// 4. `MainMsg::FocusedStateChanged` (deduped against `last_focus`)
+///
+/// All other variants (`PlatformEvent`, `RequestPaint`, RPCs) are
+/// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
+/// `ReplySender`).
+async fn worker_loop(backend: WorkerBackend, worker_rx: WorkerRx, main_tx: MainTx) {
     let mut last_cursor: Option<crate::core::platform::Cursor> = None;
-    while let Ok(msg) = worker_rx.recv() {
+    let mut last_focus: Option<(bool, Option<(f64, f64, f64, f64)>)> = None;
+    while let Ok(msg) = worker_rx.recv().await {
         match msg {
             WorkerMsg::Wake => {
                 let outcome = backend.pump();
@@ -514,156 +679,46 @@ fn worker_loop(
                         Err(e.to_string())
                     }
                 };
-                let _ = main_tx.send(MainMsg::FrameOutcome(payload));
+                // Ship render commands if the flush painted.
+                if let Some(batch) = backend.take_pending_render_batch() {
+                    let image_map = backend.image_resource_map_snapshot();
+                    let viewport = backend.screen_viewport();
+                    let _ = main_tx.try_send(MainMsg::RenderCommands {
+                        commands: batch,
+                        image_map,
+                        viewport,
+                    });
+                }
+                let _ = main_tx.try_send(MainMsg::FrameOutcome(payload));
                 // Ship cursor changes (deduped against the last emitted).
-                let current = backend.last_applied_cursor();
-                if current != last_cursor {
-                    last_cursor = current;
-                    let _ = main_tx.send(MainMsg::CursorChanged(current.unwrap_or_default()));
+                let current_cursor = backend.last_applied_cursor();
+                if current_cursor != last_cursor {
+                    last_cursor = current_cursor;
+                    let _ = main_tx
+                        .try_send(MainMsg::CursorChanged(current_cursor.unwrap_or_default()));
+                }
+                // Ship focus-state changes (deduped against the last
+                // emitted) — main caches it for non-blocking reads from
+                // embedder callbacks (e.g. wasm's after-frame hook).
+                let current_focus = backend.focused_state();
+                let focus_key = (current_focus.is_editable, current_focus.cursor_rect);
+                if Some(focus_key) != last_focus {
+                    last_focus = Some(focus_key);
+                    let _ = main_tx.try_send(MainMsg::FocusedStateChanged {
+                        is_editable: current_focus.is_editable,
+                        cursor_rect: current_focus.cursor_rect,
+                    });
                 }
             }
             WorkerMsg::Destroy { reply } => {
+                let _ = main_tx.try_send(MainMsg::Destroyed);
                 reply.send(());
                 break;
             }
             // All other variants (PlatformEvent, RequestPaint, LoadModule,
-            // Dev*, EventBusToJs) delegate to the inline dispatch — RPC
-            // variants fire their own ReplySender, so main blocks on
-            // `Reply::recv` independently of `main_tx`.
+            // Dev*, EventBusToJs) delegate to the worker dispatch — RPC
+            // variants fire their own ReplySender.
             other => backend.handle_worker_msg(other),
         }
-    }
-}
-
-impl TurAppBackend for ThreadedBackend {
-    fn handle_worker_msg(&self, msg: WorkerMsg) {
-        // Fire-and-forget for non-RPC variants; RPC variants carry their
-        // own `ReplySender` and the caller blocks on `Reply::recv`.
-        let _ = self.worker_tx.send(msg);
-    }
-
-    fn pump(&self) -> Result<FrameOutcome, TurError> {
-        self.worker_tx
-            .send(WorkerMsg::Wake)
-            .map_err(|_| TurError::Other("worker gone".into()))?;
-        let main_rx = self.main_rx.lock().expect("main_rx poisoned");
-        loop {
-            match main_rx.recv() {
-                Ok(MainMsg::FrameOutcome(result)) => return result.map_err(TurError::Other),
-                Ok(MainMsg::CursorChanged(cursor)) => {
-                    // Apply to the main-side cursor backend (set via
-                    // `set_cursor_backend`). No backend → no-op.
-                    if let Some(backend) = self.cursor_backend.borrow().as_ref() {
-                        backend.borrow_mut().set_cursor(cursor);
-                    }
-                }
-                // FocusedStateChanged / EventBusToHost / RenderCommands /
-                // DevReply / Destroyed — pump ignores for now; Phase 8
-                // routes them to embedder-side handlers.
-                Ok(_) => continue,
-                Err(_) => return Err(TurError::Other("worker gone".into())),
-            }
-        }
-    }
-
-    fn push_app_event(&self, event: AppEvent) {
-        // AppEvent's Custom payload's Send + Sync bound (Phase 6 prep)
-        // lets us ship it across the thread boundary. Fire-and-forget —
-        // no Reply needed.
-        let _ = self.worker_tx.send(WorkerMsg::AppEvent(event));
-    }
-
-    fn event_bus(&self) -> Rc<EventBus> {
-        // The full EventBus lives on the worker. For threaded mode,
-        // embedders use `event_bus_handle()` (the cross-thread-safe
-        // handle that routes via mpsc). The inline-only `event_bus()`
-        // panics here — production threaded code uses the handle.
-        unimplemented!("event_bus (full API) not supported in threaded mode; use event_bus_handle()")
-    }
-
-    fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
-        self.event_bus_handle.clone()
-    }
-
-    fn focused_state(&self) -> FocusedState {
-        let (tx, rx) = crate::core::app::Reply::<FocusedState>::pair();
-        let _ = self
-            .worker_tx
-            .send(WorkerMsg::QueryFocusedState { reply: tx });
-        rx.recv()
-    }
-
-    fn focused_element(&self) -> Option<ElementNodeId> {
-        let (tx, rx) = crate::core::app::Reply::<Option<ElementNodeId>>::pair();
-        let _ = self
-            .worker_tx
-            .send(WorkerMsg::QueryFocusedElement { reply: tx });
-        rx.recv()
-    }
-
-    fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        let (tx, rx) = crate::core::app::Reply::<Option<(f64, f64, f64, f64)>>::pair();
-        let _ = self
-            .worker_tx
-            .send(WorkerMsg::QueryFocusedCursorRect { reply: tx });
-        rx.recv()
-    }
-
-    fn focused_is_editable(&self) -> bool {
-        let (tx, rx) = crate::core::app::Reply::<bool>::pair();
-        let _ = self
-            .worker_tx
-            .send(WorkerMsg::QueryFocusedIsEditable { reply: tx });
-        rx.recv()
-    }
-
-    fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        let (tx, rx) = crate::core::app::Reply::<Option<NodeId>>::pair();
-        let key_owned: Vec<String> = key.iter().map(|s| s.to_string()).collect();
-        let _ = self.worker_tx.send(WorkerMsg::QueryElement {
-            key: key_owned,
-            reply: tx,
-        });
-        rx.recv()
-    }
-
-    fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
-        // RPC via DevElementTree.
-        let (tx, rx) = crate::core::app::Reply::<Option<DevNodeData>>::pair();
-        let _ = self.worker_tx.send(WorkerMsg::DevElementTree { reply: tx });
-        rx.recv()
-    }
-
-    fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
-        let (tx, rx) = crate::core::app::Reply::<Option<DevNodeData>>::pair();
-        let _ = self
-            .worker_tx
-            .send(WorkerMsg::DevGetElement { id, reply: tx });
-        rx.recv()
-    }
-
-    fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        let (tx, rx) = crate::core::app::Reply::<Option<Vec<u8>>>::pair();
-        let _ = self.worker_tx.send(WorkerMsg::RenderToPixels { reply: tx });
-        rx.recv()
-    }
-
-    fn set_cursor_backend(&self, backend: Rc<RefCell<dyn CursorBackend>>) {
-        // Store on main. Worker emits `MainMsg::CursorChanged` during
-        // pump; main applies here.
-        *self.cursor_backend.borrow_mut() = Some(backend);
-    }
-
-    fn with_boa_context_dyn(&self, _f: BoaClosure) -> AnySend {
-        unimplemented!("with_boa_context not supported in threaded mode (use RPC variants)")
-    }
-
-    fn with_element_dyn(&self, _id: ElementNodeId, _f: ElementClosure) -> Option<AnySend> {
-        unimplemented!("with_element not supported in threaded mode (use dev_tool_* RPC)")
-    }
-
-    #[cfg(feature = "trace")]
-    fn element_tree_handle(&self) -> std::cell::Ref<'_, crate::core::elements::NodeTreeData> {
-        unimplemented!("element_tree not supported in threaded mode")
     }
 }

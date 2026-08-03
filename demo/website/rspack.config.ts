@@ -17,12 +17,26 @@ class WasmBuildPlugin implements RspackPluginInstance {
         const buildWasm = () => {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
-                .info("Building WASM with wasm-pack...");
-            // Plain `--no-opt` (panic=unwind) — single-threaded build that
-            // works without COOP/COEP. The threaded config in
-            // `.cargo/config.toml` + `--profile wasm-dev` enables
-            // `wasm_thread` (Web Workers via SharedArrayBuffer) — use that
-            // to opt into multi-threading.
+                .info(
+                    "Building WASM (multi-threaded, +atomics, --no-opt) with wasm-pack...",
+                );
+            // Multi-threaded build via `wasm_thread` (Web Workers via
+            // SharedArrayBuffer). The `+atomics` rustflags in
+            // `.cargo/config.toml` apply to ALL wasm32 builds regardless of
+            // profile, so workers spawn fine even with `--no-opt`.
+            //
+            // Using `--no-opt` instead of `--profile wasm-dev`:
+            // - Skips `wasm-opt` post-processing (which interacts badly
+            //   with boa_engine's AST codegen and traps at "null reference
+            //   produced" during JS module evaluation).
+            // - Uses default `panic = "unwind"` instead of `panic = "abort"`
+            //   (the latter is required only for shared-memory linkage in
+            //   some toolchain versions; current nightly works with unwind
+            //   for our case).
+            //
+            // The engine is fully async — main thread drives `pump` via
+            // `wasm_bindgen_futures::spawn_local`, worker blocks freely
+            // inside `futures::executor::block_on(worker_loop)`.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",
@@ -65,7 +79,9 @@ class WasmBuildPlugin implements RspackPluginInstance {
                                 const content = readFileSync(abs);
                                 compilation.emitAsset(
                                     rel,
-                                    new compiler.webpack.sources.RawSource(content),
+                                    new compiler.webpack.sources.RawSource(
+                                        content,
+                                    ),
                                 );
                                 logger.info(`Copied WASM snippet: ${rel}`);
                             }

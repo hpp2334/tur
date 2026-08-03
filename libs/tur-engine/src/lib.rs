@@ -24,55 +24,23 @@ pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
-// `runtime.create_app()` / `runtime.create_headless_app()` spawn isolated
-// `TurApp` instances.
-pub use crate::core::runtime::{InlineBackend, TurRuntime, TurRuntimeBuilder};
+// `runtime.create_app(viewport, dpr)` spawns an isolated `TurApp` instance
+// (engine on a worker thread; embedder installs a `render_sink` on main to
+// receive command batches + drive its own renderer).
+pub use crate::core::runtime::{MainBackend, RenderSink, TurRuntime, TurRuntimeBuilder};
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
-use std::sync::Arc;
-
-use boa_engine::Context;
 
 use error::TurError;
 
-use core::app::{FrameOutcome, ModuleError, Reply, WorkerMsg};
-use core::element::{ElementNodeId, NodeId};
-use core::elements::AnyElement;
-use core::runtime::backend::{BoaClosure, ElementClosure, TurAppBackend};
-
-#[cfg(feature = "trace")]
-use core::elements::NodeTreeData;
-
-pub struct TurApp {
-    /// Engine state + dispatch — owned by the backend. `InlineBackend`
-    /// runs everything on this thread (today's behavior, used by tests);
-    /// `ThreadedBackend` (Phase 7 follow-up) runs the engine on a worker.
-    backend: Box<dyn TurAppBackend>,
-    /// Autonomous-loop driver. `None` until [`Self::start`] is called
-    /// (production); tests leave it unset and pump via [`Self::run_frame`].
-    /// Always main-side: even in threaded mode, the driver's wake
-    /// trampoline must fire `TurApp::wake` on the main thread.
-    driver: RefCell<Option<Rc<dyn LoopDriver>>>,
-    /// Long-lived wake trampoline created in [`Self::start`]: upgrades a
-    /// `Weak<Self>` and calls [`Self::wake`]. Held here (and cloned into the
-    /// driver via [`LoopDriver::set_wake`]) so it stays alive for the loop's
-    /// lifetime; the `Weak` back-ref avoids a reference cycle.
-    wake_fn: RefCell<Option<Rc<dyn Fn()>>>,
-    /// Embedder-installed callback fired after each autonomous frame — used by
-    /// the wasm embedder for DOM side-effects (file-pick resolution, textarea
-    /// focus / caret positioning). `None` in tests.
-    after_frame: RefCell<Option<AfterFrameHook>>,
-}
-
-/// Per-frame hook fired at the end of [`TurApp::wake`] (after `run_frame`,
-/// before rescheduling). See [`TurApp::set_after_frame_hook`].
-pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
+use core::app::FrameOutcome;
 
 /// Snapshot of focused-element state — single struct for the two-value
 /// `focused_is_editable` + `focused_cursor_rect` pair. Used by
-/// [`TurApp::focused_state`]. Phase 7's worker emits the equivalent
-/// `MainMsg::FocusedStateChanged` on change.
+/// [`TurApp::focused_state`] (RPC) and [`TurApp::cached_focus`] (cached).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FocusedState {
     pub is_editable: bool,
@@ -81,278 +49,341 @@ pub struct FocusedState {
     pub cursor_rect: Option<(f64, f64, f64, f64)>,
 }
 
+/// Type-erased future driven by the embedder's async runtime. The wake
+/// trampoline (set via [`LoopDriver::set_wake`] inside [`TurApp::start`])
+/// hands one of these to the embedder-supplied `spawn` closure — which
+/// either `wasm_bindgen_futures::spawn_local`s it (wasm main thread,
+/// cooperatively scheduled on the JS event loop) or
+/// `futures::executor::block_on`s it (native, calling thread parks until
+/// the future completes).
+pub type WakeFuture = Pin<Box<dyn Future<Output = ()>>>;
+
+/// Type-erased spawn closure passed by the embedder to
+/// [`TurApp::start`]. Receives a future; the embedder decides how to drive
+/// it (`spawn_local` / `block_on` / custom executor).
+pub type SpawnWake = Rc<dyn Fn(WakeFuture)>;
+
+/// A running tur engine instance.
+///
+/// Wraps a [`MainBackend`] that owns a worker thread (running a
+/// [`WorkerBackend`](core::runtime::WorkerBackend)). The embedder drives
+/// rendering on the main thread via [`Self::set_render_sink`]; everything
+/// else (boa `Context`, element tree, reactive store, layout, subsystems)
+/// lives on the worker.
+///
+/// Construct via [`TurRuntime::create_app`].
+///
+/// ## Async API
+///
+/// All public methods are `async fn`. The embedder supplies the runtime:
+/// - On wasm, `wasm_bindgen_futures::spawn_local` runs futures
+///   cooperatively on the JS event loop (main thread never blocks).
+/// - On native (Android JNI, integration tests), `futures::executor::block_on`
+///   parks the calling thread until the future resolves.
+pub struct TurApp {
+    backend: MainBackend,
+    /// Autonomous-loop driver. `None` until [`Self::start`] is called
+    /// (production); tests leave it unset and pump via [`Self::pump`].
+    driver: RefCell<Option<Rc<dyn LoopDriver>>>,
+    /// Embedder-supplied spawn closure — drives the async wake trampoline
+    /// on the platform's runtime. Set once in [`Self::start`]; held so
+    /// [`Self::spawn_wake`] (the concurrency-guarded entry point used by
+    /// the wake trampoline) can re-invoke it for the next frame.
+    spawn: RefCell<Option<SpawnWake>>,
+    /// Embedder-installed callback fired after each autonomous frame —
+    /// typically used for DOM side-effects (file-pick resolution, textarea
+    /// focus / caret positioning). `None` in tests.
+    after_frame: RefCell<Option<AfterFrameHook>>,
+    /// Concurrency guard: true while a wake is in-flight. Prevents
+    /// re-entry (e.g. rAF firing while the previous frame's future is
+    /// still pending) from spawning overlapping pumps.
+    pump_in_progress: Cell<bool>,
+    /// Set when rAF fires while `pump_in_progress` is true. On wake exit,
+    /// if true, another wake is spawned.
+    wake_pending: Cell<bool>,
+    /// Set by [`Self::destroy`]. Subsequent wake attempts short-circuit.
+    destroyed: Cell<bool>,
+}
+
+/// Per-frame hook fired at the end of [`TurApp::wake`] (after `pump`,
+/// before rescheduling). See [`TurApp::set_after_frame_hook`].
+pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
+
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`TurAppBackend`]. The
-    /// runtime calls this with [`InlineBackend`] for `create_app` /
-    /// `create_headless_app`; Phase 7's `create_app_threaded` will pass
-    /// a `ThreadedBackend`.
-    pub fn new(backend: Box<dyn TurAppBackend>) -> Self {
+    /// Construct a `TurApp` backed by the given [`MainBackend`]. The runtime
+    /// calls this from [`TurRuntime::create_app`]; embedders normally don't
+    /// call it directly.
+    pub fn new(backend: MainBackend) -> Self {
         Self {
             backend,
             driver: RefCell::new(None),
-            wake_fn: RefCell::new(None),
+            spawn: RefCell::new(None),
             after_frame: RefCell::new(None),
+            pump_in_progress: Cell::new(false),
+            wake_pending: Cell::new(false),
+            destroyed: Cell::new(false),
         }
     }
 
-    pub fn load_js(&self, source: &str) -> Result<(), TurError> {
+    /// Direct accessor on the underlying [`MainBackend`]. Embedders use it
+    /// to install the render sink + cursor backend after construction.
+    pub fn backend(&self) -> &MainBackend {
+        &self.backend
+    }
+
+    pub async fn load_js(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
-        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.backend.handle_worker_msg(WorkerMsg::LoadJs {
-            source: Arc::from(source),
-            reply: tx,
-        });
-        rx.recv().map_err(TurError::from)
+        self.backend.load_js(source).await.map_err(TurError::from)
     }
 
-    pub fn load_module(&self, source: &str) -> Result<(), TurError> {
+    pub async fn load_module(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
-        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.backend.handle_worker_msg(WorkerMsg::LoadModule {
-            source: Arc::from(source),
-            reply: tx,
-        });
-        rx.recv().map_err(TurError::from)
+        self.backend
+            .load_module(source)
+            .await
+            .map_err(TurError::from)
     }
 
-    pub fn eval_module(&self, source: &str) -> Result<(), TurError> {
-        let (tx, rx) = Reply::<Result<(), ModuleError>>::pair();
-        self.backend.handle_worker_msg(WorkerMsg::EvalModule {
-            source: Arc::from(source),
-            reply: tx,
-        });
-        rx.recv().map_err(TurError::from)
+    pub async fn eval_module(&self, source: &str) -> Result<(), TurError> {
+        self.backend
+            .eval_module(source)
+            .await
+            .map_err(TurError::from)
     }
 
-    /// Advance exactly one frame: run the engine's fixed-point flush (events,
-    /// reactive updates, layout, microtasks, async polling) and render if
-    /// anything changed. Returns the outcome including how the next frame
-    /// should be scheduled.
-    ///
-    /// This is the canonical frame entry. `pump` and `run_frame` are
-    /// aliases; `pump` matches the worker/main vocabulary used in Phase 4+
-    /// (the main thread "pumps" the worker task once per rAF).
-    ///
-    /// Embedders normally drive the engine via [`Self::start`] (autonomous
-    /// loop); test harnesses and advanced embedders call this directly.
-    ///
-    /// Unlike the old `spawn_loop_once`, this takes no time argument — the
-    /// clock is the engine's own `Clock` (a real wall-clock in production,
-    /// a `FixedClock` the harness advances in tests).
-    pub fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
-        self.backend.pump()
+    /// Advance exactly one frame: send `Wake` to the worker, await the
+    /// next `MainMsg::FrameOutcome`. Any `RenderCommands` / `CursorChanged`
+    /// / `FocusedStateChanged` arriving in the meantime are dispatched to
+    /// the render sink / cursor backend / focus cache respectively.
+    pub async fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
+        self.backend.pump().await
     }
 
-    /// Legacy alias for [`Self::pump`]. Kept for embedder/test back-compat
-    /// during the Phase 4 transition; new code should call `pump`.
-    pub fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
-        self.pump()
+    /// Legacy alias for [`Self::pump`].
+    pub async fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
+        self.pump().await
     }
 
-    /// Escape hatch — run a closure with the boa `Context`. **Inline-only**:
-    /// panics on the threaded backend (it doesn't ship arbitrary closures
-    /// across threads — production threaded code uses specific RPC variants
-    /// like `load_module` / `eval_module`).
-    pub fn with_boa_context<R: 'static>(&self, f: impl FnOnce(&mut Context) -> R + 'static) -> R {
-        let boxed: BoaClosure = Box::new(move |ctx| Box::new(f(ctx)));
-        let result = self.backend.with_boa_context_dyn(boxed);
-        *result
-            .downcast::<R>()
-            .expect("with_boa_context: backend returned wrong type")
+    /// Install the main-side render sink. The worker ships
+    /// `Vec<RenderCommand>` + `Arc<ImageResourceMap>` + viewport tuple
+    /// each frame; the sink applies them to its renderer.
+    pub fn set_render_sink<
+        F: FnMut(
+                &[core::render::RenderCommand],
+                &core::image_resource::ImageResourceMap,
+                (u32, u32, f64),
+            ) + 'static,
+    >(
+        &self,
+        f: F,
+    ) {
+        self.backend.set_render_sink(f);
     }
 
-    /// Always-installed event bus handle. The bus is unconditionally
-    /// created by `TurAppInternal::new` and wired up by
-    /// `TurStdPlugin::register` via `install_event_bus`, so this never
-    /// fails — the historical `EventBus::of(&app) -> Option<EventBus>`
-    /// was always `Some`. New code should prefer this direct accessor.
-    ///
-    /// `EventBus::of` is kept as a back-compat alias (returns
-    /// `Some(self.event_bus())`).
-    pub fn event_bus(&self) -> Rc<core::event_bus::EventBus> {
-        self.backend.event_bus()
-    }
-
-    /// Cross-thread-safe event bus handle. Works for both inline and
-    /// threaded backends. Inline returns a queues-shared handle (full
-    /// functionality); threaded returns a channel-routed handle
-    /// (`emit_to_js` works; `drain_js_to_host` returns empty).
-    ///
-    /// Production threaded code should prefer this over
-    /// [`event_bus`](Self::event_bus) (which panics in threaded mode).
+    /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
+    /// worker's channel; `drain_js_to_host` returns empty on main (the
+    /// worker emits `MainMsg::EventBusToHost` separately when needed).
     pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
         self.backend.event_bus_handle()
     }
 
-    /// Combined focused-element state — single call replaces the
-    /// `focused_is_editable()` + `focused_cursor_rect()` pair when the
-    /// caller needs both. Phase 7's worker→main push will populate the
-    /// main-side cache via `MainMsg::FocusedStateChanged`; today this
-    /// reads live from the engine state (single-threaded).
-    pub fn focused_state(&self) -> FocusedState {
-        self.backend.focused_state()
+    /// Combined focused-element state — RPC variant (awaits the worker's
+    /// reply). For non-blocking reads, prefer [`Self::cached_focus`]
+    /// (updated by the worker's deduped `MainMsg::FocusedStateChanged`).
+    pub async fn focused_state(&self) -> FocusedState {
+        self.backend.focused_state().await
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
-    /// wheel, key, IME, or paste. These are dispatched to handlers via
-    /// [`AppHandler::handle_platform_event`](core::handler::AppHandler::handle_platform_event).
-    /// Also re-arms an idle autonomous loop (see [`Self::start`]) so the event
-    /// is processed on the next frame.
+    /// wheel, key, IME, or paste. Re-arms an idle autonomous loop.
     pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
         self.backend
-            .handle_worker_msg(WorkerMsg::PlatformEvent(event));
+            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event));
         self.request_wakeup();
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
-    /// scrolls, clipboard writes). Most embedders only need
-    /// [`Self::push_platform_event`] / [`Self::request_paint`]; this is
-    /// exposed for host-initiated app events and testing. Re-arms an idle
-    /// autonomous loop like [`Self::push_platform_event`].
+    /// scrolls, clipboard writes). Re-arms an idle autonomous loop.
     pub fn push_app_event(&self, event: core::app::AppEvent) {
-        // Inline backend writes directly to the queue. Threaded backend
-        // needs `AppEvent` to be `Send` (its `Custom` payload's bound
-        // lands with Phase 7's threaded work) — until then, threaded
-        // panics here.
-        self.backend.push_app_event(event);
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::AppEvent(event));
         self.request_wakeup();
     }
 
-    /// Request a paint on the next frame. Sets the `need_paint` flag directly
-    /// (no event is enqueued), which the flush loop turns into a re-layout +
-    /// re-render. Re-arms an idle autonomous loop so the request is processed
-    /// even when nothing else is pending (see [`Self::start`]). Used by
-    /// embedders after loading JS and by tests asserting an explicit paint.
+    /// Request a paint on the next frame. Sets the `need_paint` flag
+    /// directly on the worker. Re-arms an idle autonomous loop.
     pub fn request_paint(&self) {
-        self.backend.handle_worker_msg(WorkerMsg::RequestPaint);
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::RequestPaint);
         self.request_wakeup();
     }
 
-    /// Begin autonomous operation: the engine schedules its own frames via
-    /// `driver`. The driver fires the engine's wake trampoline when due;
-    /// each wake runs one [`Self::run_frame`], the [`Self::after_frame`] hook,
-    /// then requests the next wake-up per the frame outcome. Input pushed
-    /// via [`Self::push_platform_event`] re-arms an idle loop automatically.
+    /// Begin autonomous operation: install the driver + the embedder's
+    /// `spawn` closure, register the wake trampoline, and kick off frame 1.
     ///
-    /// Must be called exactly once, after JS is loaded. The engine holds a
-    /// `Weak` back-reference (no reference cycle), so the loop stops when the
-    /// last `Rc<TurApp>` is dropped.
-    pub fn start(self: &Rc<Self>, driver: Rc<dyn LoopDriver>) {
-        let wake_fn: Rc<dyn Fn()> = {
-            let weak = Rc::downgrade(self);
-            Rc::new(move || {
-                if let Some(app) = weak.upgrade() {
-                    app.wake();
-                }
-            })
-        };
-        driver.set_wake(wake_fn.clone());
-        *self.wake_fn.borrow_mut() = Some(wake_fn);
+    /// The wake trampoline the engine installs is a sync `Rc<dyn Fn()>`
+    /// (matching the [`LoopDriver::set_wake`] contract). When the driver
+    /// fires it (rAF / JNI / etc.), the trampoline wraps an async wake in
+    /// a `Box::pin` and hands the future to `spawn`, which the embedder
+    /// uses to drive the future on its platform's runtime.
+    ///
+    /// Concurrency: the trampoline guards against re-entry via
+    /// `pump_in_progress` — if a wake fires while one is already
+    /// in-flight, `wake_pending` is set and a fresh wake is spawned when
+    /// the in-flight one resolves.
+    pub fn start<S>(self: &Rc<Self>, driver: Rc<dyn LoopDriver>, spawn: S)
+    where
+        S: Fn(WakeFuture) + 'static,
+    {
+        let spawn: SpawnWake = Rc::new(spawn);
+        *self.spawn.borrow_mut() = Some(spawn.clone());
+        // Install the wake trampoline on the driver. When the driver fires
+        // (rAF / JNI / etc.), it calls this trampoline, which hands a
+        // fresh async wake to the embedder-supplied spawn closure.
+        let weak = Rc::downgrade(self);
+        driver.set_wake(Rc::new(move || {
+            if let Some(app) = weak.upgrade() {
+                app.spawn_wake();
+            }
+        }));
         *self.driver.borrow_mut() = Some(driver);
-        // Kick off frame 1.
-        self.wake();
+
+        // Kick off frame 1. spawn_wake sets pump_in_progress itself.
+        self.spawn_wake();
     }
 
     /// Install a callback fired after each autonomous frame (in [`Self::wake`],
-    /// after `run_frame`, before rescheduling). The wasm embedder uses it for
-    /// DOM side-effects (file-pick resolution, textarea focus / caret
-    /// positioning). Has no effect for manually-pumped (test) operation.
+    /// after `pump`, before rescheduling).
     pub fn set_after_frame_hook(&self, hook: Option<Rc<dyn Fn(FrameOutcome)>>) {
         *self.after_frame.borrow_mut() = hook;
     }
 
-    /// Re-arm an idle autonomous loop: ask the driver for one wake-up on the
-    /// next frame. No-op when no driver is installed (tests) or when a frame
-    /// is already pending — the driver treats `request_next` as idempotent.
+    /// Mark the app as destroyed. Subsequent `wake` attempts short-circuit.
+    /// Sends `WorkerMsg::Destroy` to drain the worker.
+    pub fn destroy(&self) {
+        self.destroyed.set(true);
+        // Fire-and-forget — the worker drains and exits. We don't await
+        // the reply (would block on a sync API).
+        let (tx, _rx) = core::app::Reply::<()>::pair();
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::Destroy { reply: tx });
+    }
+
+    /// Re-arm an idle autonomous loop: ask the driver for one wake-up on
+    /// the next frame. No-op when no driver is installed (tests) or when a
+    /// frame is already pending.
     fn request_wakeup(&self) {
         if let Some(driver) = self.driver.borrow().as_ref() {
             driver.request_next(core::app::NextFrame::Vsync);
         }
     }
 
-    /// One autonomous-frame tick: `run_frame`, the `after_frame` hook, then
-    /// reschedule via the driver. Called by the wake trampoline the driver
-    /// fires (and by [`Self::start`] for the first frame).
-    fn wake(self: &Rc<Self>) {
-        let outcome = match self.run_frame() {
+    /// Concurrency-guarded wake entry point. Spawns a fresh wake unless
+    /// one is already in-flight (in which case `wake_pending` is set and
+    /// the in-flight wake will pick it up on exit). The wake trampoline
+    /// set in [`Self::start`] calls this.
+    fn spawn_wake(self: &Rc<Self>) {
+        if self.destroyed.get() {
+            return;
+        }
+        if self.pump_in_progress.replace(true) {
+            // Already in flight — defer.
+            self.wake_pending.set(true);
+            return;
+        }
+        let Some(spawn) = self.spawn.borrow().clone() else {
+            // No spawn closure — must be a test path. Clear the guard.
+            self.pump_in_progress.set(false);
+            return;
+        };
+        let weak = Rc::downgrade(self);
+        spawn(Box::pin(async move {
+            if let Some(app) = weak.upgrade() {
+                app.wake().await;
+            }
+        }));
+    }
+
+    /// One autonomous-frame tick: pump, the `after_frame` hook, then
+    /// reschedule via the driver. Clears `pump_in_progress` and re-spawns
+    /// if a wake was deferred during this tick.
+    async fn wake(self: &Rc<Self>) {
+        if self.destroyed.get() {
+            self.pump_in_progress.set(false);
+            return;
+        }
+        let outcome = match self.pump().await {
             Ok(o) => o,
             Err(e) => {
-                tracing::error!("frame loop run_frame error: {e}");
+                tracing::error!("frame loop pump error: {e}");
+                self.pump_in_progress.set(false);
                 return;
             }
         };
-        if let Some(hook) = self.after_frame.borrow().as_ref() {
-            hook.clone()(outcome);
+        if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
+            hook(outcome);
         }
-        let next = outcome.schedule;
-        if let Some(driver) = self.driver.borrow().as_ref().cloned() {
-            driver.request_next(next);
+        if !self.destroyed.get() {
+            if let Some(driver) = self.driver.borrow().as_ref().cloned() {
+                driver.request_next(outcome.schedule);
+            }
+        }
+        // Re-arm the deferred wake before clearing the in-flight guard
+        // (the spawned wake will re-check `pump_in_progress`).
+        let pending = self.wake_pending.replace(false);
+        self.pump_in_progress.set(false);
+        if pending {
+            self.spawn_wake();
         }
     }
 
-    pub fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
-        self.backend.dev_tool_element_tree()
+    pub async fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
+        self.backend.dev_tool_element_tree().await
     }
 
-    pub fn dev_tool_get_element(
+    pub async fn dev_tool_get_element(
         &self,
         id: core::element::NodeId,
     ) -> Option<core::elements::DevNodeData> {
-        self.backend.dev_tool_get_element(id)
+        self.backend.dev_tool_get_element(id).await
     }
 
-    pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        self.backend.query_element(key)
+    pub async fn query_element(&self, key: &[&str]) -> Option<core::element::NodeId> {
+        self.backend.query_element(key).await
     }
 
-    pub fn focused_element(&self) -> Option<ElementNodeId> {
-        self.backend.focused_element()
+    pub async fn focused_element(&self) -> Option<core::element::ElementNodeId> {
+        self.backend.focused_element().await
     }
 
-    /// Escape hatch — run a closure with an element by id. Returns `None`
-    /// if the element doesn't exist. **Inline-only** (panics on threaded
-    /// backend — see [`Self::with_boa_context`]).
-    pub fn with_element<R: 'static>(
-        &self,
-        id: ElementNodeId,
-        cb: impl FnOnce(&AnyElement) -> R + 'static,
-    ) -> Option<R> {
-        let boxed: ElementClosure = Box::new(move |e| Box::new(cb(e)));
-        let result = self.backend.with_element_dyn(id, boxed)?;
-        Some(
-            *result
-                .downcast::<R>()
-                .expect("with_element: backend returned wrong type"),
-        )
-    }
-
-    pub fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        self.backend.focused_cursor_rect()
+    pub async fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
+        self.backend.focused_cursor_rect().await
     }
 
     /// True if the currently-focused element is an editable text element.
-    /// Used by embedders (e.g. tur-wasm) to manage IME state.
-    pub fn focused_is_editable(&self) -> bool {
-        self.backend.focused_is_editable()
+    pub async fn focused_is_editable(&self) -> bool {
+        self.backend.focused_is_editable().await
     }
 
-    #[cfg(feature = "trace")]
-    pub fn element_tree(&self) -> std::cell::Ref<'_, NodeTreeData> {
-        self.backend.element_tree_handle()
+    /// Latest cursor received from the worker (non-blocking). Updated
+    /// during [`Self::pump`] when `MainMsg::CursorChanged` arrives.
+    pub fn cached_cursor(&self) -> core::platform::Cursor {
+        self.backend.cached_cursor()
     }
 
-    pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.backend.render_to_pixels()
+    /// Latest focus state received from the worker (non-blocking). Updated
+    /// during [`Self::pump`] when `MainMsg::FocusedStateChanged` arrives.
+    /// Useful for embedder callbacks (e.g. the wasm after-frame hook) that
+    /// need focus info without an RPC round-trip.
+    pub fn cached_focus(&self) -> FocusedState {
+        self.backend.cached_focus()
     }
 
-    /// Override the shell's cursor backend. Used by embedders whose cursor
-    /// target is per-instance (e.g. the wasm embedder's `WasmCursor` holds the
-    /// instance's canvas DOM element) and thus can't be a shared runtime-level
-    /// capability. Called after [`TurRuntime::create_app`] (which installs the
-    /// runtime's `CursorCap` or falls back to `NoopCursor`).
+    /// Override the main-side cursor backend. The worker emits
+    /// `MainMsg::CursorChanged` on cursor state change; main applies here.
     pub fn set_cursor_backend(
         &self,
-        backend: Rc<std::cell::RefCell<dyn core::platform::CursorBackend>>,
+        backend: std::sync::Arc<std::sync::Mutex<dyn core::platform::CursorBackend + Send + Sync>>,
     ) {
         self.backend.set_cursor_backend(backend);
     }
@@ -362,11 +393,16 @@ impl TurApp {
 /// uses to wake itself for the next frame. Implementations live in the
 /// embedder: a wasm driver backed by `requestAnimationFrame` / `setTimeout`
 /// for the wake trampoline (tur-wasm), or any other platform's wake mechanism.
-/// Tests do not install one (they pump [`TurApp::run_frame`] manually).
+/// Tests do not install one (they pump [`TurApp::pump`] manually via
+/// `block_on`).
 pub trait LoopDriver {
     /// Install the engine's wake trampoline. The driver must call it exactly
     /// once whenever a wake-up requested via [`Self::request_next`] becomes
     /// due. Set once at [`TurApp::start`].
+    ///
+    /// The trampoline is sync (`Rc<dyn Fn()>`) but internally schedules an
+    /// async wake via the spawn closure passed to `TurApp::start`. The
+    /// driver sees only the sync surface.
     fn set_wake(&self, wake: Rc<dyn Fn()>);
 
     /// Request the next wake-up, replacing any pending request.

@@ -896,9 +896,13 @@ pub struct DevNodeData {
     pub(crate) label: String,
     pub(crate) props: Vec<(&'static str, TraceValue)>,
     pub layout_extra: Vec<(&'static str, TraceValue)>,
+    /// Node's absolute (world) position — the translation of its absolute
+    /// affine. Read by tests / dev tools to compute painted bounds without
+    /// direct element-tree access (the tree lives on the worker thread).
+    pub absolute: (f64, f64),
+    /// Node's painted size (layout-computed).
+    pub size: (f64, f64),
     pub(crate) relative: (f64, f64),
-    pub(crate) absolute: (f64, f64),
-    pub(crate) size: (f64, f64),
     pub(crate) query_key: Option<Vec<String>>,
     pub children: Vec<NodeId>,
 }

@@ -349,7 +349,7 @@ pub mod ops {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
             let js: String = env.get_string(&js)?.into();
             log::info!("loadModule: {} bytes", js.len());
-            instance.app.load_module(&js)?;
+            futures::executor::block_on(instance.app.load_module(&js))?;
             log::info!("loadModule: module evaluated OK");
             instance.app.request_paint();
             log::info!("loadModule: paint requested");
@@ -508,7 +508,7 @@ pub mod ops {
         let Some(instance) = handle_to_instance(handle) else {
             return 0;
         };
-        if instance.app.focused_is_editable() {
+        if futures::executor::block_on(instance.app.focused_is_editable()) {
             1
         } else {
             0

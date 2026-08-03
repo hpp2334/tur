@@ -77,9 +77,17 @@ impl TurWebsiteApp {
     /// Evaluate `js_source` as an ES module (supports real
     /// `import { ... } from "tur:..."`, resolved by the engine's module
     /// loader), then render. Used to load the playground-view bundle.
+    ///
+    /// Async: returns a Promise that resolves once the module finishes
+    /// loading + evaluating.
     #[wasm_bindgen(js_name = loadAndRunModule)]
-    pub fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
-        self.app.load_and_run_module(js_source)
+    pub fn load_and_run_module(&self, js_source: &str) -> js_sys::Promise {
+        let app = self.app.clone();
+        let js_source = js_source.to_string();
+        wasm_bindgen_futures::future_to_promise(async move {
+            app.load_and_run_module(&js_source).await?;
+            Ok(JsValue::undefined())
+        })
     }
 
     /// Return a host-side dev-tool handle. Methods eval the in-engine
@@ -92,8 +100,10 @@ impl TurWebsiteApp {
 }
 
 /// Host-side dev-tool handle, exposed via `TurWebsiteApp.dev_tool()`. Methods
-/// return JSON strings (the data originates inside the boa engine, a separate
-/// JS realm, so JSON is the simplest cross-realm transport).
+/// return Promises that resolve to JSON strings (the data originates inside
+/// the boa engine — a separate JS realm — and the underlying RPCs are now
+/// `async`, so JSON is the simplest cross-realm transport and the JS host
+/// `await`s each call).
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct TurDevTool {
@@ -106,14 +116,21 @@ impl TurDevTool {
     /// JSON snapshot of the root node, or `""` if no tree is mounted.
     /// Shape: `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`.
     #[wasm_bindgen(js_name = elementTree)]
-    pub fn element_tree(&self) -> String {
+    pub fn element_tree(&self) -> js_sys::Promise {
         self.app.element_tree()
     }
 
     /// JSON snapshot of a single node by id (full subtree metadata; children
     /// are returned as bare `{id}` handles). Returns `""` if not found.
     #[wasm_bindgen(js_name = getElement)]
-    pub fn get_element(&self, id: u32) -> String {
+    pub fn get_element(&self, id: u32) -> js_sys::Promise {
         self.app.get_element(id)
+    }
+
+    /// Evaluate a JS expression on the worker and return its display form.
+    /// For debugging.
+    #[wasm_bindgen(js_name = evalJs)]
+    pub fn eval_js(&self, src: &str) -> js_sys::Promise {
+        self.app.eval_js(src)
     }
 }

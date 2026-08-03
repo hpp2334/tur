@@ -125,6 +125,6 @@ fn build_app(
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)));
     let runtime = configure(builder).build()?;
-    let app = runtime.create_headless_app((400.0, 600.0))?;
+    let app = runtime.create_app((400.0, 600.0), 1.0)?;
     Ok(app)
 }

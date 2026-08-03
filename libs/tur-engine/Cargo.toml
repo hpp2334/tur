@@ -17,12 +17,6 @@ wgpu-backend = ["dep:wgpu", "vello_hybrid/wgpu", "vello_hybrid/wgpu_default"]
 # builds that enable `webgl` should disable default features (`default-features
 # = false, features = ["webgl"]`).
 webgl = ["vello_hybrid/webgl", "dep:web-sys"]
-# Direct-render path: skip the record/playback command-batch path and have
-# `Renderer::render` walk the live element tree directly. Kept as a parity
-# fallback — production uses the command-batch path (render_commands), which
-# is identical pixels but architecturally ready for the worker/main split
-# (Phase 7+).
-direct-render = []
 
 [dependencies]
 tur-async = { workspace = true }
@@ -42,6 +36,17 @@ parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 unicode-segmentation = { workspace = true }
+# Channel primitives for main↔worker + Reply<T> RPC slots. Pure Rust (no
+# platform-specific deps), works on both native (via `std::thread::park`)
+# and wasm (via `Atomics.wait` on workers, `wasm_bindgen_futures` on main).
+async-channel = { workspace = true }
+# `block_on` is used inside the engine only to drive the worker thread's
+# async `worker_loop` from a sync thread entry-point. The main-thread
+# pump/run_frame/rpc are exposed as `async fn` and driven by the embedder
+# (`wasm_bindgen_futures::spawn_local` on wasm, embedder-provided runtime
+# on native). The engine itself does not depend on any async runtime beyond
+# this minimal `block_on`.
+futures = { workspace = true }
 
 # `std::thread` drop-in for `wasm32-unknown-unknown`. Used by
 # `ThreadedBackend` to run the engine on a Web Worker (backed by

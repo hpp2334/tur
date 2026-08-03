@@ -98,6 +98,11 @@ mod imp {
         /// backed by the given Android `Surface`'s `ANativeWindow*`, using the
         /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
         /// cadence.
+        ///
+        /// Architecture: the engine runs on a worker thread; the wgpu
+        /// `VelloRenderer` lives on the caller thread (main) and is driven
+        /// by a `render_sink` callback that receives command batches +
+        /// image map snapshots from the worker each frame.
         pub async fn build_with_surface(
             runtime: &Rc<TurRuntime>,
             wgpu_instance: &wgpu::Instance,
@@ -107,62 +112,9 @@ mod imp {
             dpr: f64,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
-            Self::build_with_surface_inner(
-                runtime,
-                wgpu_instance,
-                window_handle,
-                logical_width,
-                logical_height,
-                dpr,
-                frame_loop,
-                false, // inline (default)
-            )
-            .await
-        }
+            use std::cell::RefCell;
+            use tur_engine::core::render::Renderer as TurRenderer;
 
-        /// Same as [`build_with_surface`](Self::build_with_surface) but
-        /// spawns the engine on a **worker thread** via
-        /// [`TurRuntime::create_app_threaded`]. The renderer is captured
-        /// into the worker factory closure (wgpu types are `Send + Sync`
-        /// on native). The embedder sees the same `TurApp` API; all
-        /// methods dispatch via mpsc to the worker.
-        ///
-        /// **Limitations:** capabilities are NOT shared with the worker
-        /// (worker gets a fresh `Capabilities::new()`). Embedders needing
-        /// per-instance capabilities should construct them inside the
-        /// `renderer_factory` closure pattern (Phase 8.1 limitation).
-        pub async fn build_with_surface_threaded(
-            runtime: &Rc<TurRuntime>,
-            wgpu_instance: &wgpu::Instance,
-            window_handle: AndroidWindowHandle,
-            logical_width: u32,
-            logical_height: u32,
-            dpr: f64,
-            frame_loop: FrameLoopRef,
-        ) -> Result<Self, TurAndroidError> {
-            Self::build_with_surface_inner(
-                runtime,
-                wgpu_instance,
-                window_handle,
-                logical_width,
-                logical_height,
-                dpr,
-                frame_loop,
-                true, // threaded
-            )
-            .await
-        }
-
-        async fn build_with_surface_inner(
-            runtime: &Rc<TurRuntime>,
-            wgpu_instance: &wgpu::Instance,
-            window_handle: AndroidWindowHandle,
-            logical_width: u32,
-            logical_height: u32,
-            dpr: f64,
-            frame_loop: FrameLoopRef,
-            threaded: bool,
-        ) -> Result<Self, TurAndroidError> {
             let raw_display = window_handle
                 .display_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("display: {e}")))?;
@@ -202,23 +154,25 @@ mod imp {
                 logical_height,
                 dpr,
             );
+            let renderer = Rc::new(RefCell::new(renderer));
 
-            let app = if threaded {
-                runtime.create_app_threaded(
-                    move || Box::new(renderer),
-                    (logical_width as f64, logical_height as f64),
-                    dpr,
-                )?
-            } else {
-                runtime.create_app(
-                    Box::new(renderer),
-                    (logical_width as f64, logical_height as f64),
-                    dpr,
-                )?
-            };
+            // Engine on worker; renderer on main driven by the sink.
+            let app = runtime.create_app((logical_width as f64, logical_height as f64), dpr)?;
+            let sink_renderer = renderer.clone();
+            app.set_render_sink(move |commands, image_map, viewport| {
+                let mut r = sink_renderer.borrow_mut();
+                let (lw, lh, vdpr) = viewport;
+                r.resize(lw, lh, vdpr);
+                r.render_commands(commands, lw, lh, vdpr, image_map);
+                let _ = r.present();
+            });
 
             let loop_driver = Rc::new(AndroidLoopDriver::new(frame_loop));
-            app.start(loop_driver.clone());
+            // Native: drive the async wake trampoline via `block_on`. The
+            // JNI render-tick parks the calling thread until the future
+            // resolves (functionally identical to a sync pump, but routed
+            // through the unified async API).
+            app.start(loop_driver.clone(), |fut| futures::executor::block_on(fut));
 
             Ok(Self { app, loop_driver })
         }
@@ -229,9 +183,9 @@ mod imp {
             runtime: &Rc<TurRuntime>,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
-            let app = runtime.create_headless_app((0.0, 0.0))?;
+            let app = runtime.create_app((0.0, 0.0), 1.0)?;
             let loop_driver = Rc::new(AndroidLoopDriver::new(frame_loop));
-            app.start(loop_driver.clone());
+            app.start(loop_driver.clone(), |fut| futures::executor::block_on(fut));
             Ok(Self { app, loop_driver })
         }
     }
