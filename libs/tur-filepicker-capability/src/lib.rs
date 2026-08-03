@@ -33,7 +33,6 @@ pub mod bridge;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 
 use tur_engine::core::capability::CapabilityDecls;
 use tur_engine::core::plugin::{Plugin, PluginContext};

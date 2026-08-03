@@ -30,7 +30,6 @@ pub mod bridge;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 
 use futures::StreamExt;
 use futures::stream::LocalBoxStream;

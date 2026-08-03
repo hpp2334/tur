@@ -61,7 +61,6 @@ use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue};
-use crate::core::render::Renderer;
 use crate::core::screen::Screen;
 
 /// A long-lived participant in the engine's per-frame flush loop.

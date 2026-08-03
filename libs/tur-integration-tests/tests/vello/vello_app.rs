@@ -166,6 +166,7 @@ impl TurVelloApp {
     }
 
     /// Direct access to the main-side renderer (for pixel readback).
+    #[allow(dead_code)]
     pub fn renderer(&self) -> std::cell::Ref<'_, Rc<RefCell<VelloRenderer>>> {
         std::cell::Ref::map(self.inner.borrow(), |i| &i.renderer)
     }

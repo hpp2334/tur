@@ -11,7 +11,7 @@ use crate::TurApp;
 use crate::core::app::TurAppInternal;
 use crate::core::app::render;
 use crate::core::async_::TurJobExecutor;
-use crate::core::capability::{Capabilities, Capability, CapabilityDecls};
+use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::dev::dev_tool;
 use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
@@ -20,7 +20,6 @@ use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
 use crate::core::plugin::{CompileContext, Plugin, PluginContext};
-use crate::core::render::Renderer;
 use crate::core::screen::Screen;
 use crate::error::TurError;
 
@@ -55,6 +54,7 @@ impl Clock for ClockProxy {
 /// + `Send + Sync` so it can be stored on the runtime and replayed into
 /// each worker's fresh `Capabilities`. Each call inserts a clone of the
 /// captured capability (Capability newtypes wrap `Arc` — cloning is cheap).
+#[allow(clippy::doc_lazy_continuation)]
 type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 
 /// The shared engine runtime — created **once** and used to spawn any number
@@ -195,7 +195,7 @@ impl TurRuntime {
 /// on the right thread (e.g. the threaded factory constructs them inside
 /// the closure so the `!Send` `Rc`s never cross threads).
 #[allow(clippy::too_many_arguments)]
-pub fn build_worker_backend(
+pub(crate) fn build_worker_backend(
     clock: Arc<dyn Clock + Send + Sync>,
     font_context: FontContext,
     font_loader: Arc<dyn FontLoader>,

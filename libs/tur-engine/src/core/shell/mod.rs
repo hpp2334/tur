@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,8 +6,6 @@ use std::time::Duration;
 use crate::core::layout::Offset;
 use crate::core::platform::Cursor;
 use boa_engine::context::time::Clock;
-
-use crate::core::platform::CursorBackend;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
 ///
@@ -124,6 +121,7 @@ impl Shell {
         let present = self.pointer_position.is_some();
         if present && self.applied_cursor != Some(resolved) {
             self.applied_cursor = Some(resolved);
+            #[allow(clippy::collapsible_if)]
             if let Some(backend) = self.cursor_platform.as_ref() {
                 if let Ok(mut b) = backend.lock() {
                     b.set_cursor(resolved);

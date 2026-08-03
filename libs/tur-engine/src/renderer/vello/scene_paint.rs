@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
+use crate::core::image_resource::ImageResourceId;
 use crate::core::render::RenderCommand;
 use crate::core::render::play_commands;
 use crate::renderer::vello::paint_context::VelloPaintContext;

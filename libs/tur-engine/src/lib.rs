@@ -323,10 +323,10 @@ impl TurApp {
         if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
             hook(outcome);
         }
-        if !self.destroyed.get() {
-            if let Some(driver) = self.driver.borrow().as_ref().cloned() {
-                driver.request_next(outcome.schedule);
-            }
+        if !self.destroyed.get()
+            && let Some(driver) = self.driver.borrow().as_ref().cloned()
+        {
+            driver.request_next(outcome.schedule);
         }
         // Re-arm the deferred wake before clearing the in-flight guard
         // (the spawned wake will re-check `pump_in_progress`).
@@ -375,7 +375,7 @@ impl TurApp {
             let result = tree
                 .get_element(id)
                 .and_then(|node| node.element.as_ref())
-                .map(|e| cb(e));
+                .map(cb);
             tx.send(result);
         });
         // Best-effort send — returns Err if the worker is gone. In that case

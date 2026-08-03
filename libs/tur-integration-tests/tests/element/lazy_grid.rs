@@ -25,14 +25,11 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     (app, ElementNodeId::new(id.as_u64()))
 }
 
-fn with_lg<R: 'static>(
+fn with_lg<R: Send + 'static>(
     app: &TurTestApp,
     id: ElementNodeId,
     f: impl FnOnce(&LazyGridElement) -> R + Send + 'static,
-) -> R
-where
-    R: Send + 'static,
-{
+) -> R {
     app.with_element(id, |e| {
         f(e.cast::<LazyGridElement>().expect("not a LazyGridElement"))
     })

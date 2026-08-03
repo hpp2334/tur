@@ -12,8 +12,6 @@
 //! threaded through the engine (MouseRegion prop, handler slot, embedder
 //! poll) and is consumed by [`CursorBackend::set_cursor`] below.
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::core::capability::Capability;

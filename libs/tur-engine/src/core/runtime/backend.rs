@@ -37,7 +37,7 @@ use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{MainMsg, MainRx, MainTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{AnyElement, DevNodeData, NodeTreeSnapshot};
+use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::CursorBackend;
@@ -237,9 +237,9 @@ impl WorkerBackend {
             WorkerMsg::WithElement { id, runner } => {
                 let tree = self.internal.js_context.element_tree.borrow();
                 runner(&tree);
-                // Drop the borrow before any other work; `id` is informational
-                // only (the closure did its own lookup).
-                drop(id);
+                // `id` is informational only (the closure did its own
+                // lookup); reference it so the variant's bind stays useful.
+                let _ = id;
             }
             WorkerMsg::QueryFocusedState { reply } => {
                 reply.send(self.focused_state());
@@ -295,10 +295,12 @@ impl WorkerBackend {
             .push(event);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn event_bus(&self) -> Rc<EventBus> {
         self.internal.event_bus.clone()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
         let (h, j) = self.internal.event_bus.queues();
         crate::core::event_bus::EventBusHandle::from_queues(h, j)
@@ -450,7 +452,7 @@ impl MainBackend {
     /// in `futures::executor::block_on`. On wasm this is a real Web Worker
     /// (via `wasm_thread`), where `block_on` + `Atomics.wait` are allowed
     /// (workers can block; the main thread cannot).
-    pub fn new(backend_factory: impl FnOnce() -> WorkerBackend + Send + 'static) -> Self {
+    pub(crate) fn new(backend_factory: impl FnOnce() -> WorkerBackend + Send + 'static) -> Self {
         let (worker_tx, worker_rx) = async_channel::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = async_channel::unbounded::<MainMsg>();
 
@@ -564,6 +566,7 @@ impl MainBackend {
                 }
                 Ok(MainMsg::CursorChanged(cursor)) => {
                     *self.cached_cursor.borrow_mut() = cursor;
+                    #[allow(clippy::collapsible_if)]
                     if let Some(backend) = self.cursor_backend.borrow().as_ref() {
                         if let Ok(mut b) = backend.lock() {
                             b.set_cursor(cursor);
@@ -714,7 +717,8 @@ impl MainBackend {
 /// `ReplySender`).
 async fn worker_loop(backend: WorkerBackend, worker_rx: WorkerRx, main_tx: MainTx) {
     let mut last_cursor: Option<crate::core::platform::Cursor> = None;
-    let mut last_focus: Option<(bool, Option<(f64, f64, f64, f64)>)> = None;
+    type FocusCache = Option<(bool, Option<(f64, f64, f64, f64)>)>;
+    let mut last_focus: FocusCache = None;
     while let Ok(msg) = worker_rx.recv().await {
         match msg {
             WorkerMsg::Wake => {

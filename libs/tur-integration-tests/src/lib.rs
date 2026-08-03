@@ -1,6 +1,3 @@
-use std::cell::Cell;
-use std::cell::Ref;
-use std::cell::RefCell;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -9,12 +6,10 @@ use std::time::Duration;
 
 use boa_engine::Context;
 use boa_engine::NativeFunction;
-use boa_engine::Source;
 use boa_engine::context::time::Clock;
 use futures::StreamExt;
 use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
-use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, NodeId};
 
