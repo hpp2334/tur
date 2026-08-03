@@ -152,7 +152,7 @@ pub struct EventBusHandle {
 enum EventBusHandleInner {
     /// Inline mode — shared queues with the worker's `EventBus`.
     Queues(HostToJsQueue, JsToHostQueue),
-    /// Threaded mode — ship via the worker's `async_channel` sender.
+    /// Threaded mode — ship via the worker's `futures::channel` sender.
     Channel(crate::core::app::WorkerTx),
 }
 
@@ -174,7 +174,7 @@ impl EventBusHandle {
         match &self.inner {
             EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
             EventBusHandleInner::Channel(tx) => {
-                let _ = tx.try_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+                let _ = tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
             }
         }
     }

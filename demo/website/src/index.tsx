@@ -23,6 +23,79 @@ function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
     });
 }
 
+// End-to-end probe of the wasm multi-threaded backend's browser
+// requirements. Spawn a Worker, hand it a `SharedArrayBuffer`, have it
+// read the value main wrote + write its own value back, then verify
+// both directions round-trip. This single probe covers:
+//   - `SharedArrayBuffer` is constructible (requires COOP/COEP)
+//   - `Worker` is spawnable from a blob URL
+//   - `postMessage` can carry a `SharedArrayBuffer` (requires
+//     `crossOriginIsolated`)
+//   - The Worker can read + write the shared memory
+// Any failure (browser doesn't support COOP/COEP, SAB missing, Worker
+// can't see shared memory, etc.) surfaces as a friendly red banner
+// instead of an opaque wasm trap.
+async function probeBrowserSupport(): Promise<{
+    ok: boolean;
+    reason?: string;
+}> {
+    let url: string | null = null;
+    let worker: Worker | null = null;
+    try {
+        const sab = new SharedArrayBuffer(4);
+        const view = new Int32Array(sab);
+        view[0] = 42;
+
+        const src = `
+self.onmessage = (e) => {
+    const view = new Int32Array(e.data);
+    const received = view[0];
+    view[0] = received + 1;
+    self.postMessage(received);
+};`;
+        url = URL.createObjectURL(
+            new Blob([src], { type: "application/javascript" }),
+        );
+        worker = new Worker(url);
+
+        const received = await new Promise<number>((resolve, reject) => {
+            worker.onmessage = (e: MessageEvent) => resolve(e.data as number);
+            worker.onerror = () =>
+                reject(new Error("Worker failed to spawn or errored."));
+            worker.postMessage(sab);
+            setTimeout(
+                () => reject(new Error("Worker probe timed out.")),
+                2000,
+            );
+        });
+
+        if (received !== 42) {
+            return {
+                ok: false,
+                reason: `Worker read ${received}, expected 42.`,
+            };
+        }
+        if (view[0] !== 43) {
+            return {
+                ok: false,
+                reason: `Shared memory not shared: worker wrote but main read ${view[0]}.`,
+            };
+        }
+        return { ok: true };
+    } catch (err) {
+        return {
+            ok: false,
+            reason:
+                err instanceof Error
+                    ? err.message
+                    : `Probe threw: ${String(err)}`,
+        };
+    } finally {
+        if (worker) worker.terminate();
+        if (url) URL.revokeObjectURL(url);
+    }
+}
+
 async function loadWasm(): Promise<Record<string, unknown>> {
     if (wasmReady) return wasmReady;
     wasmReady = (async () => {
@@ -49,6 +122,14 @@ async function loadWasm(): Promise<Record<string, unknown>> {
 async function main(): Promise<void> {
     const status = document.getElementById("status");
     try {
+        if (status) status.textContent = "checking browser support…";
+        const probe = await probeBrowserSupport();
+        if (!probe.ok) {
+            throw new Error(
+                `This browser cannot run tur's multi-threaded wasm backend: ${probe.reason} Try the latest Chrome or desktop Firefox/Chrome.`,
+            );
+        }
+
         if (status) status.textContent = "loading wasm…";
         const mod = await loadWasm();
         const { TurWebsiteApp } = mod as {

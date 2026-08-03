@@ -383,8 +383,8 @@ impl TurApp {
         let _ = self
             .backend
             .worker_tx()
-            .try_send(WorkerMsg::WithElement { id, runner });
-        rx.rx.recv().await.unwrap_or(None)
+            .unbounded_send(WorkerMsg::WithElement { id, runner });
+        rx.rx.await.unwrap_or(None)
     }
 
     pub async fn query_element(&self, key: &[&str]) -> Option<core::element::NodeId> {

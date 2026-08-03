@@ -11,14 +11,14 @@
 //!
 //! - [`MainBackend`] is public: `TurApp` owns one. It spawns a worker
 //!   thread (via [`crate::core::thread`]) running a `WorkerBackend`,
-//!   dispatches input via `async_channel`, and receives [`MainMsg`]
+//!   dispatches input via `futures::channel`, and receives [`MainMsg`]
 //!   replies. The embedder wires a `render_sink` callback that receives
 //!   each `MainMsg::RenderCommands` batch + image map + viewport, and
 //!   applies it to the main-side renderer.
 //!
 //! ## Async model
 //!
-//! All channels use `async_channel`. The worker thread entry-point wraps
+//! All channels use `futures::channel` (mpsc + oneshot). The worker thread entry-point wraps
 //! an `async fn worker_loop(...)` via `futures::executor::block_on`, so the
 //! worker awaits on `worker_rx.recv()` instead of blocking on a Mutex +
 //! Condvar. Main-thread `pump` and `rpc` are `async fn`; the embedder
@@ -31,6 +31,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use boa_engine::{Context, Source};
+use futures::StreamExt;
 
 use crate::FocusedState;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
@@ -387,7 +388,7 @@ impl WorkerBackend {
 pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u32, f64))>;
 
 /// The public backend owned by `TurApp`. Spawns a worker thread running a
-/// [`WorkerBackend`], dispatches input via `async_channel`, and receives
+/// [`WorkerBackend`], dispatches input via `futures::channel`, and receives
 /// [`MainMsg`] replies.
 ///
 /// ## Async pump / rpc
@@ -417,7 +418,13 @@ pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u
 /// screenshot tests should run with main-side render access instead.
 pub struct MainBackend {
     worker_tx: WorkerTx,
-    main_rx: MainRx,
+    /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
+    /// requires `&mut self`, but `MainBackend` is held inside `Rc<TurApp>`
+    /// on wasm + android (single-threaded ownership). The borrow is held
+    /// across the `next().await` in `pump` — safe because the wasm main
+    /// thread is single-threaded and `Rc<TurApp>` itself enforces
+    /// single-threaded access.
+    main_rx: RefCell<MainRx>,
     /// Holds the worker `JoinHandle` alive for the backend's lifetime so
     /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
     _worker_handle: ThreadJoinHandle<()>,
@@ -453,8 +460,8 @@ impl MainBackend {
     /// (via `wasm_thread`), where `block_on` + `Atomics.wait` are allowed
     /// (workers can block; the main thread cannot).
     pub(crate) fn new(backend_factory: impl FnOnce() -> WorkerBackend + Send + 'static) -> Self {
-        let (worker_tx, worker_rx) = async_channel::unbounded::<WorkerMsg>();
-        let (main_tx, main_rx) = async_channel::unbounded::<MainMsg>();
+        let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
+        let (main_tx, main_rx) = futures::channel::mpsc::unbounded::<MainMsg>();
 
         // One-shot init signal: worker fires after `backend_factory()` (which
         // runs `plugin.register` + capability replay) completes. Native main
@@ -472,7 +479,7 @@ impl MainBackend {
                 let _ = init_tx.send(());
                 // Drive the async worker_loop from this thread. block_on
                 // parks the worker thread when awaiting on
-                // `worker_rx.recv()`; async_channel's waker unparks it when
+                // `worker_rx.next()`; futures::channel's waker unparks it when
                 // main sends a message.
                 futures::executor::block_on(worker_loop(backend, worker_rx, main_tx));
             })
@@ -486,7 +493,7 @@ impl MainBackend {
 
         Self {
             worker_tx: worker_tx.clone(),
-            main_rx,
+            main_rx: RefCell::new(main_rx),
             _worker_handle: worker_handle,
             cursor_backend: RefCell::new(None),
             cached_cursor: RefCell::new(crate::core::platform::Cursor::default()),
@@ -526,7 +533,7 @@ impl MainBackend {
     /// `push_platform_event`, `request_paint`, `push_app_event`,
     /// `emit_to_js`.
     pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
-        let _ = self.worker_tx.try_send(msg);
+        let _ = self.worker_tx.unbounded_send(msg);
     }
 
     /// Borrow the worker→main channel sender. Used by call sites that
@@ -544,15 +551,22 @@ impl MainBackend {
     /// Async: the embedder drives this via its platform's runtime
     /// (`wasm_bindgen_futures::spawn_local` on wasm;
     /// `futures::executor::block_on` on native). The wasm main thread
-    /// never blocks — the future suspends on `main_rx.recv().await` and
+    /// never blocks — the future suspends on `main_rx.next().await` and
     /// resumes when the worker posts data.
+    /// `pump` holds a `RefCell<MainRx>::borrow_mut()` across `next().await`.
+    /// Clippy flags this as `await_holding_refcell_ref`, but it's safe:
+    /// `Rc<TurApp>` enforces single-threaded access on wasm + android, and
+    /// pump is driven sequentially from the rAF loop (the engine-side
+    /// `pump_in_progress` guard rejects overlap).
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
         self.worker_tx
-            .try_send(WorkerMsg::Wake)
+            .unbounded_send(WorkerMsg::Wake)
             .map_err(|_| TurError::Other("worker gone".into()))?;
+        let mut rx = self.main_rx.borrow_mut();
         loop {
-            match self.main_rx.recv().await {
-                Ok(MainMsg::RenderCommands {
+            match rx.next().await {
+                Some(MainMsg::RenderCommands {
                     commands,
                     image_map,
                     viewport,
@@ -561,10 +575,10 @@ impl MainBackend {
                         sink(&commands, &image_map, viewport);
                     }
                 }
-                Ok(MainMsg::FrameOutcome(result)) => {
+                Some(MainMsg::FrameOutcome(result)) => {
                     return result.map_err(TurError::Other);
                 }
-                Ok(MainMsg::CursorChanged(cursor)) => {
+                Some(MainMsg::CursorChanged(cursor)) => {
                     *self.cached_cursor.borrow_mut() = cursor;
                     #[allow(clippy::collapsible_if)]
                     if let Some(backend) = self.cursor_backend.borrow().as_ref() {
@@ -573,7 +587,7 @@ impl MainBackend {
                         }
                     }
                 }
-                Ok(MainMsg::FocusedStateChanged {
+                Some(MainMsg::FocusedStateChanged {
                     is_editable,
                     cursor_rect,
                 }) => {
@@ -582,14 +596,14 @@ impl MainBackend {
                         cursor_rect,
                     };
                 }
-                Ok(MainMsg::Destroyed) => {
+                Some(MainMsg::Destroyed) => {
                     return Err(TurError::Other("worker destroyed".into()));
                 }
                 // EventBusToHost / DevReply — pump ignores for now (the
                 // Reply<T> slot handles RPC replies; standalone MainMsg
                 // variants are reserved for future event-bus work).
-                Ok(_) => continue,
-                Err(_) => return Err(TurError::Other("worker gone".into())),
+                Some(_) => continue,
+                None => return Err(TurError::Other("worker gone".into())),
             }
         }
     }
@@ -603,11 +617,8 @@ impl MainBackend {
     ) -> T {
         let (tx, rx) = Reply::<T>::pair();
         let msg = msg_builder(tx);
-        let _ = self.worker_tx.try_send(msg);
-        rx.rx
-            .recv()
-            .await
-            .expect("reply sender dropped without firing")
+        let _ = self.worker_tx.unbounded_send(msg);
+        rx.rx.await.expect("reply sender dropped without firing")
     }
 
     pub async fn load_js(&self, source: &str) -> Result<(), ModuleError> {
@@ -715,11 +726,11 @@ impl MainBackend {
 /// All other variants (`PlatformEvent`, `RequestPaint`, RPCs) are
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
 /// `ReplySender`).
-async fn worker_loop(backend: WorkerBackend, worker_rx: WorkerRx, main_tx: MainTx) {
+async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, main_tx: MainTx) {
     let mut last_cursor: Option<crate::core::platform::Cursor> = None;
     type FocusCache = Option<(bool, Option<(f64, f64, f64, f64)>)>;
     let mut last_focus: FocusCache = None;
-    while let Ok(msg) = worker_rx.recv().await {
+    while let Some(msg) = worker_rx.next().await {
         match msg {
             WorkerMsg::Wake => {
                 let outcome = backend.pump();
@@ -734,19 +745,19 @@ async fn worker_loop(backend: WorkerBackend, worker_rx: WorkerRx, main_tx: MainT
                 if let Some(batch) = backend.take_pending_render_batch() {
                     let image_map = backend.image_resource_map_snapshot();
                     let viewport = backend.screen_viewport();
-                    let _ = main_tx.try_send(MainMsg::RenderCommands {
+                    let _ = main_tx.unbounded_send(MainMsg::RenderCommands {
                         commands: batch,
                         image_map,
                         viewport,
                     });
                 }
-                let _ = main_tx.try_send(MainMsg::FrameOutcome(payload));
+                let _ = main_tx.unbounded_send(MainMsg::FrameOutcome(payload));
                 // Ship cursor changes (deduped against the last emitted).
                 let current_cursor = backend.last_applied_cursor();
                 if current_cursor != last_cursor {
                     last_cursor = current_cursor;
                     let _ = main_tx
-                        .try_send(MainMsg::CursorChanged(current_cursor.unwrap_or_default()));
+                        .unbounded_send(MainMsg::CursorChanged(current_cursor.unwrap_or_default()));
                 }
                 // Ship focus-state changes (deduped against the last
                 // emitted) — main caches it for non-blocking reads from
@@ -755,14 +766,14 @@ async fn worker_loop(backend: WorkerBackend, worker_rx: WorkerRx, main_tx: MainT
                 let focus_key = (current_focus.is_editable, current_focus.cursor_rect);
                 if Some(focus_key) != last_focus {
                     last_focus = Some(focus_key);
-                    let _ = main_tx.try_send(MainMsg::FocusedStateChanged {
+                    let _ = main_tx.unbounded_send(MainMsg::FocusedStateChanged {
                         is_editable: current_focus.is_editable,
                         cursor_rect: current_focus.cursor_rect,
                     });
                 }
             }
             WorkerMsg::Destroy { reply } => {
-                let _ = main_tx.try_send(MainMsg::Destroyed);
+                let _ = main_tx.unbounded_send(MainMsg::Destroyed);
                 reply.send(());
                 break;
             }

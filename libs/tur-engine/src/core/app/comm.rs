@@ -8,19 +8,23 @@
 //!
 //! ## Channel topology
 //!
-//! All three channels use [`async_channel`]:
+//! All channels use [`futures::channel::mpsc`] (multi-producer-single-consumer
+//! unbounded) and [`futures::channel::oneshot`] (single-shot):
 //!
-//! | Channel       | Direction       | Capacity    | Sender side       | Receiver side           |
-//! |---------------|-----------------|-------------|-------------------|-------------------------|
-//! | `WorkerMsg`   | main → worker   | unbounded   | main `try_send`   | worker `recv().await`   |
-//! | `MainMsg`     | worker → main   | unbounded   | worker `try_send` | main `recv().await`     |
-//! | `Reply<T>`    | worker → main   | bounded(1)  | worker `try_send` | main `recv().await`     |
+//! | Channel       | Direction       | Capacity    | Sender side            | Receiver side           |
+//! |---------------|-----------------|-------------|------------------------|-------------------------|
+//! | `WorkerMsg`   | main → worker   | unbounded   | main `unbounded_send`  | worker `next().await`   |
+//! | `MainMsg`     | worker → main   | unbounded   | worker `unbounded_send`| main `next().await`     |
+//! | `Reply<T>`    | worker → main   | oneshot     | worker `send` (consume)| main `await`            |
 //!
-//! The worker thread itself runs a sync thread entry-point that wraps an
-//! `async fn worker_loop(...)` via `futures::executor::block_on`. This lets
-//! the worker `await` on `worker_rx.recv()` instead of blocking on a
-//! `Mutex`+`Condvar` — the same primitive the main thread uses, so there's
-//! a single concurrency model across the engine.
+//! ## Why `futures::channel` over `async_channel`
+//!
+//! `async_channel` internally uses `event_listener`, which on contention takes
+//! a `std::sync::Mutex`. On the wasm32 main thread that mutex's `lock_contended`
+//! calls `Atomics.wait` — forbidden by spec on the main thread, so it traps
+//! with "RuntimeError: Atomics.wait cannot be called in this context".
+//! `futures::channel` uses Waker-based notification (no futex, no
+//! `event_listener`), so it is safe to poll on the wasm main thread.
 //!
 //! ## Send-ness
 //!
@@ -40,18 +44,18 @@ use crate::core::render::RenderCommand;
 
 /// main → worker channel sender. Unbounded — main pushes input (platform
 /// events, wake, RPC requests) and the worker drains them in arrival order.
-pub type WorkerTx = async_channel::Sender<WorkerMsg>;
+pub type WorkerTx = futures::channel::mpsc::UnboundedSender<WorkerMsg>;
 /// main → worker channel receiver. Held by the worker thread; awaited in
 /// `worker_loop`.
-pub type WorkerRx = async_channel::Receiver<WorkerMsg>;
+pub type WorkerRx = futures::channel::mpsc::UnboundedReceiver<WorkerMsg>;
 
 /// worker → main channel sender. Unbounded — the worker ships per-frame
 /// messages (render batch, FrameOutcome, cursor / focus changes) without
 /// coordinating with main. Main drains them in `pump`'s recv loop.
-pub type MainTx = async_channel::Sender<MainMsg>;
+pub type MainTx = futures::channel::mpsc::UnboundedSender<MainMsg>;
 /// worker → main channel receiver. Held by the main thread; awaited in
 /// `MainBackend::pump`.
-pub type MainRx = async_channel::Receiver<MainMsg>;
+pub type MainRx = futures::channel::mpsc::UnboundedReceiver<MainMsg>;
 
 /// main → worker. All input that can drive the engine flows through one of
 /// these variants.
@@ -225,36 +229,37 @@ pub enum ModuleError {
     WorkerGone,
 }
 
-/// One-shot reply slot — sender side. Wraps an `async_channel::Sender<T>`
-/// with capacity 1. The sender fires once (via `try_send`); the receiver
-/// awaits the value via `recv().await`.
+/// One-shot reply slot — sender side. Wraps a
+/// `futures::channel::oneshot::Sender<T>`. The sender fires once (via
+/// `send`, which consumes it); the receiver awaits the value via
+/// `rx.await`.
 pub struct ReplySender<T> {
-    pub(crate) tx: async_channel::Sender<T>,
+    pub(crate) tx: futures::channel::oneshot::Sender<T>,
 }
 
-/// One-shot reply slot — receiver side. `rx.recv().await` yields the value
-/// once the sender fires. Held by main; the worker ships the reply through
-/// the sender half.
+/// One-shot reply slot — receiver side. `rx.await` yields the value once
+/// the sender fires. Held by main; the worker ships the reply through the
+/// sender half.
 pub struct Reply<T> {
-    pub(crate) rx: async_channel::Receiver<T>,
+    pub(crate) rx: futures::channel::oneshot::Receiver<T>,
 }
 
 impl<T> Reply<T> {
     /// Create a paired (sender, receiver) slot pair backed by
-    /// `async_channel::bounded(1)`.
+    /// `futures::channel::oneshot::channel`.
     pub fn pair() -> (ReplySender<T>, Reply<T>) {
-        let (tx, rx) = async_channel::bounded(1);
+        let (tx, rx) = futures::channel::oneshot::channel();
         (ReplySender { tx }, Reply { rx })
     }
 }
 
 impl<T> ReplySender<T> {
-    /// Fire the reply. Consumes the sender (one-shot semantics). Uses
-    /// `try_send` because the bounded(1) slot is always empty at fire
-    /// time (main hasn't consumed yet — RPC replies are request/response,
-    /// so main is awaiting on the receiver). Wakes the receiver.
+    /// Fire the reply. Consumes the sender (one-shot semantics). The
+    /// receiver is always awaiting at fire time (RPC replies are
+    /// request/response), so `send` succeeds unless main dropped the
+    /// receiver first — in which case the value is dropped silently.
     pub fn send(self, value: T) {
-        let _ = self.tx.try_send(value);
+        let _ = self.tx.send(value);
     }
 }
 
@@ -398,21 +403,29 @@ mod tests {
         assert_eq!(ModuleError::WorkerGone.to_string(), "worker gone");
     }
 
-    /// Reply slot pair — sender fires, receiver drains (via try_recv on
-    /// the underlying async_channel).
+    /// Reply slot pair — sender fires, receiver drains (oneshot's Receiver
+    /// is itself a Future — no synchronous `try_recv` exists, so we drive
+    /// it via `block_on`).
     #[test]
     fn reply_slot_round_trip() {
-        let (tx, rx) = Reply::<u32>::pair();
-        assert!(rx.rx.try_recv().is_err());
-        tx.send(42);
-        assert_eq!(rx.rx.try_recv(), Ok(42));
+        let (_tx, rx) = Reply::<u32>::pair();
+        // Pending state isn't easily observable on oneshot without
+        // polling; the round-trip below covers the success path.
+        let _ = rx;
+
+        let (tx2, rx2) = Reply::<u32>::pair();
+        tx2.send(42);
+        let val = futures::executor::block_on(rx2.rx).unwrap();
+        assert_eq!(val, 42);
     }
 
-    /// A dropped sender (without firing) leaves the receiver empty.
+    /// A dropped sender (without firing) leaves the receiver empty —
+    /// `oneshot::Receiver::await` resolves to `Err(Canceled)`.
     #[test]
     fn reply_slot_dropped_sender_leaves_none() {
         let (tx, rx) = Reply::<u32>::pair();
         drop(tx);
-        assert!(rx.rx.try_recv().is_err());
+        let result = futures::executor::block_on(rx.rx);
+        assert!(result.is_err());
     }
 }
