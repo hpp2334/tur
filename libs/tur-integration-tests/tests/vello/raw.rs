@@ -6,7 +6,8 @@ pub fn vello_counter_app() {
 
     // Worker owns the element tree; main reads snapshots via the dev-tool
     // RPC. The root must have at least one child for this case to render.
-    let root = app.app().dev_tool_element_tree().expect("element tree");
+    let root =
+        futures::executor::block_on(app.app().dev_tool_element_tree()).expect("element tree");
     assert!(!root.children.is_empty());
 
     app.render();
