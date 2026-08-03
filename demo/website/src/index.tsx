@@ -57,12 +57,12 @@ self.onmessage = (e) => {
             new Blob([src], { type: "application/javascript" }),
         );
         worker = new Worker(url);
-
+        const w = worker!;
         const received = await new Promise<number>((resolve, reject) => {
-            worker.onmessage = (e: MessageEvent) => resolve(e.data as number);
-            worker.onerror = () =>
+            w.onmessage = (e: MessageEvent) => resolve(e.data as number);
+            w.onerror = () =>
                 reject(new Error("Worker failed to spawn or errored."));
-            worker.postMessage(sab);
+            w.postMessage(sab);
             setTimeout(
                 () => reject(new Error("Worker probe timed out.")),
                 2000,
