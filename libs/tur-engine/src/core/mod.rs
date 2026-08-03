@@ -21,5 +21,4 @@ pub mod screen;
 pub mod shell;
 pub mod subsystem;
 pub mod text;
-pub mod thread;
 pub mod view;

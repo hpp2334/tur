@@ -19,7 +19,6 @@ wgpu-backend = ["dep:wgpu", "vello_hybrid/wgpu", "vello_hybrid/wgpu_default"]
 webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 
 [dependencies]
-tur-async = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
 vello_hybrid = { workspace = true }
@@ -36,21 +35,4 @@ parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 unicode-segmentation = { workspace = true }
-# Channel primitives for main↔worker + Reply<T> RPC slots. Pure Rust (no
-# platform-specific deps), works on both native (via `std::thread::park`)
-# and wasm (via `Atomics.wait` on workers, `wasm_bindgen_futures` on main).
-async-channel = { workspace = true }
-# `block_on` is used inside the engine only to drive the worker thread's
-# async `worker_loop` from a sync thread entry-point. The main-thread
-# pump/run_frame/rpc are exposed as `async fn` and driven by the embedder
-# (`wasm_bindgen_futures::spawn_local` on wasm, embedder-provided runtime
-# on native). The engine itself does not depend on any async runtime beyond
-# this minimal `block_on`.
 futures = { workspace = true }
-
-# `std::thread` drop-in for `wasm32-unknown-unknown`. Used by
-# `ThreadedBackend` to run the engine on a Web Worker (backed by
-# `SharedArrayBuffer`). Target-gated: on native `ThreadedBackend` uses
-# `std::thread` directly.
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm_thread = { workspace = true }

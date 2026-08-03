@@ -4442,7 +4442,6 @@ dependencies = [
 name = "tur-engine"
 version = "0.1.0"
 dependencies = [
- "async-channel",
  "boa_engine",
  "boa_gc",
  "futures",
@@ -4454,12 +4453,10 @@ dependencies = [
  "resvg",
  "thiserror 2.0.18",
  "tracing",
- "tur-async",
  "unicode-segmentation",
  "usvg",
  "vello_common",
  "vello_hybrid",
- "wasm_thread",
  "web-sys",
  "wgpu",
 ]

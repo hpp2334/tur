@@ -3,12 +3,11 @@ use boa_engine::context::time::{Clock, JsInstant};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
-use tur_engine::core::app::NextFrame;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
-use tur_engine::{LoopDriver, TurApp};
+use tur_engine::TurApp;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::JsCast;
@@ -136,7 +135,9 @@ impl WasmRuntime {
         // demand from Rust via `wasm_thread::spawn` (driven by
         // `MainBackend::new`).
 
+        let driver = crate::scheduler::WasmSchedulerDriver::new();
         let builder = tur_engine::TurRuntime::builder()
+            .scheduler(driver)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
             .capability(Clipboard::new(WasmClipboard))
@@ -1021,13 +1022,13 @@ impl WasmApp {
                 }
             });
         app.set_after_frame_hook(Some(after_frame));
-        // `start` registers the driver, the wake trampoline, and kicks off
-        // frame 1 via the spawn closure. The first frame processes the
-        // resize pushed above and arms follow-up wake-ups per the engine's
-        // verdict.
-        app.start(WasmLoopDriver::new(), |fut| {
-            wasm_bindgen_futures::spawn_local(fut)
-        });
+        // Spawn the autonomous loop. The embedder (wasm main thread)
+        // drives the future via `wasm_bindgen_futures::spawn_local`. The
+        // loop bootstraps automatically: `create_app` pushed an initial
+        // resize → worker pumps → FrameOutcome arrives → main requests
+        // the next vsync. No manual kick needed.
+        let app_clone = app.clone();
+        wasm_bindgen_futures::spawn_local(app_clone.start_loop());
 
         Ok(WasmApp { state: state_clone })
     }
@@ -1133,111 +1134,3 @@ impl WasmApp {
     }
 }
 
-/// `LoopDriver` for the wasm embedder, backed by `requestAnimationFrame`
-/// (`Vsync`) and `setTimeout` (`After(d)`). The engine drives itself: each
-/// autonomous frame runs in [`TurApp::wake`] (clock advance is the engine's
-/// own `StdClock` — no manual time forwarding), the `after_frame` hook handles
-/// DOM side-effects, and this driver just arms the next wake-up per the
-/// engine's `NextFrame` verdict. When the engine reports `Idle`, the loop
-/// stops entirely (zero rAF, zero renders) until [`TurApp::push_platform_event`]
-/// re-arms it via `request_next(Vsync)`.
-///
-/// The two `Closure`s are long-lived and re-registered for every wake-up
-/// (created once via `Rc::new_cyclic` with `Weak` back-refs) so a wake that
-/// requests the next wake-up mid-invocation doesn't drop its own trampoline —
-/// the same closure-lifetime fix the old `FrameLoop` needed.
-struct WasmLoopDriver {
-    /// Engine wake trampoline, set once via [`LoopDriver::set_wake`] at
-    /// [`TurApp::start`].
-    wake: RefCell<Option<Rc<dyn Fn()>>>,
-    /// Pending rAF / setTimeout handle, if any. `None` ⇒ nothing pending
-    /// (the loop is idle). Cleared by the trampoline when it fires.
-    raf_id: Cell<Option<i32>>,
-    timeout_id: Cell<Option<i32>>,
-    raf_closure: Closure<dyn Fn()>,
-    #[allow(dead_code)]
-    timeout_closure: Closure<dyn Fn()>,
-}
-
-impl WasmLoopDriver {
-    fn new() -> Rc<Self> {
-        Rc::<Self>::new_cyclic(|weak| {
-            let weak_raf = weak.clone();
-            let raf_closure = Closure::<dyn Fn()>::new(move || {
-                if let Some(d) = weak_raf.upgrade() {
-                    d.fire_raf();
-                }
-            });
-            let weak_to = weak.clone();
-            let timeout_closure = Closure::<dyn Fn()>::new(move || {
-                if let Some(d) = weak_to.upgrade() {
-                    d.fire_timeout();
-                }
-            });
-            Self {
-                wake: RefCell::new(None),
-                raf_id: Cell::new(None),
-                timeout_id: Cell::new(None),
-                raf_closure,
-                timeout_closure,
-            }
-        })
-    }
-
-    /// rAF trampoline entry: clear the handle, then fire the engine wake.
-    fn fire_raf(&self) {
-        self.raf_id.set(None);
-        if let Some(wake) = self.wake.borrow().as_ref().cloned() {
-            wake();
-        }
-    }
-
-    /// setTimeout trampoline entry: clear the handle, then fire the wake
-    /// (which re-arms via `request_next` for any further scheduling).
-    fn fire_timeout(&self) {
-        self.timeout_id.set(None);
-        if let Some(wake) = self.wake.borrow().as_ref().cloned() {
-            wake();
-        }
-    }
-
-    /// Cancel any pending rAF / setTimeout so a fresh `request_next` starts
-    /// from a clean slate (avoids double-firing when input re-arms an idle
-    /// loop that had a timer outstanding).
-    fn cancel_pending(&self) {
-        if let Some(id) = self.raf_id.take()
-            && let Some(window) = web_sys::window()
-        {
-            let _ = window.cancel_animation_frame(id);
-        }
-        if let Some(id) = self.timeout_id.take()
-            && let Some(window) = web_sys::window()
-        {
-            window.clear_timeout_with_handle(id);
-        }
-    }
-}
-
-impl LoopDriver for WasmLoopDriver {
-    fn set_wake(&self, wake: Rc<dyn Fn()>) {
-        *self.wake.borrow_mut() = Some(wake);
-    }
-
-    fn request_next(&self, next: NextFrame) {
-        self.cancel_pending();
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        match next {
-            NextFrame::Idle => {}
-            NextFrame::Vsync => {
-                let id = window
-                    .request_animation_frame(self.raf_closure.as_ref().unchecked_ref())
-                    .unwrap_or(-1);
-                if id >= 0 {
-                    self.raf_id.set(Some(id));
-                }
-            }
-        }
-    }
-}

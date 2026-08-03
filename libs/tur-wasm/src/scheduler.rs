@@ -150,10 +150,27 @@ impl MainScheduler for WasmSchedulerDriver {
     }
 }
 
-/// Worker-side scheduler for wasm. Zero-state — all methods delegate to
-/// global wasm primitives (`wasm_bindgen_futures::spawn_local`,
-/// `futures::executor::block_on`, `setTimeout`). Constructed fresh on
-/// each worker thread inside `spawn_worker`.
+/// `WasmSchedulerDriver` also implements `WorkerScheduler` so it can be
+/// passed via `TurRuntimeBuilder::scheduler(driver)`. The worker methods
+/// are identical to the main methods (wasm primitives work on any thread).
+impl WorkerScheduler for WasmSchedulerDriver {
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+        wasm_bindgen_futures::spawn_local(fut);
+    }
+
+    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+        futures::executor::block_on(fut);
+    }
+
+    fn sleep(&self, d: Duration) -> Sleep {
+        wasm_sleep(d)
+    }
+}
+
+/// Internal worker-only scheduler — zero state, used by `spawn_worker`.
+/// This is kept for potential future use but `WasmSchedulerDriver` itself
+/// implements `WorkerScheduler` (above), so this struct is currently unused.
+#[allow(dead_code)]
 struct WasmWorkerScheduler;
 
 impl WorkerScheduler for WasmWorkerScheduler {
