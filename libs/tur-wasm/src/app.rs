@@ -1155,6 +1155,7 @@ struct WasmLoopDriver {
     raf_id: Cell<Option<i32>>,
     timeout_id: Cell<Option<i32>>,
     raf_closure: Closure<dyn Fn()>,
+    #[allow(dead_code)]
     timeout_closure: Closure<dyn Fn()>,
 }
 
