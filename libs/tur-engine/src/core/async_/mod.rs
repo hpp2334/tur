@@ -80,6 +80,7 @@ impl std::fmt::Debug for AsyncExecutor {
 }
 
 impl AsyncExecutor {
+    #![allow(dead_code)]
     /// Create with a wall-clock time source (boa's `Clock`) for `sleep`/timer
     /// support. Internally adapts to `tur_async::Clock`.
     pub fn new(clock: Rc<dyn BoaClock>) -> Self {

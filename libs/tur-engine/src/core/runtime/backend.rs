@@ -557,6 +557,7 @@ impl MainBackend {
     }
 
     /// Update the cached cursor + apply to the cursor backend.
+    #[allow(dead_code)]
     pub(crate) fn apply_cursor_changed(&self, cursor: crate::core::platform::Cursor) {
         *self.cached_cursor.borrow_mut() = cursor;
         #[allow(clippy::collapsible_if)]
@@ -568,6 +569,7 @@ impl MainBackend {
     }
 
     /// Update the cached focus state.
+    #[allow(dead_code)]
     pub(crate) fn apply_focused_state_changed(
         &self,
         is_editable: bool,

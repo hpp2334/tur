@@ -279,6 +279,7 @@ impl TurApp {
     ///
     /// Concurrency: single-loop serialized. The embedder must spawn this
     /// future exactly once per `TurApp`. Multiple concurrent calls panic.
+    #[allow(clippy::await_holding_refcell_ref)]
     pub async fn start_loop(self: Rc<Self>) {
         assert!(
             !self.loop_started.replace(true),
@@ -296,14 +297,14 @@ impl TurApp {
 
         loop {
             // Race vsync + main_msg streams — first to fire wins.
-            let vsync_fut = (&mut vsync_rx).next();
-            let main_fut = (&mut *main_rx).next();
+            let vsync_fut = vsync_rx.next();
+            let main_fut = main_rx.next();
             let event = select(vsync_fut, main_fut).await;
 
             match event {
                 Either::Left((Some(()), _)) => {
                     if self.destroyed.get() { break; }
-                    let _ = self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
+                    self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
@@ -323,7 +324,7 @@ impl TurApp {
             }
             core::app::MainMsg::FrameOutcome(Ok(outcome)) => {
                 if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
-                    hook(outcome.clone());
+                    hook(outcome);
                 }
                 if outcome.schedule == core::app::NextFrame::Vsync {
                     self.main_sched.request_vsync();

@@ -20,7 +20,6 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context as TaskContext, Poll, Waker};
 use std::time::Duration;
 
-use futures::task::LocalSpawnExt;
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
 

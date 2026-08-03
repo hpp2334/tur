@@ -348,6 +348,7 @@ fn tur_net_request_stream(
 /// Build the resolved `{ ok, status, statusText, headers, body }` object where
 /// `body` is a `JsObject` carrying the stream state + `[Symbol.asyncIterator]`
 /// + `next()` methods.
+#[allow(clippy::too_many_arguments)]
 fn build_stream_response(
     status: u16,
     status_text: &str,
