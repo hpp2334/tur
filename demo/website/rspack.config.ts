@@ -178,9 +178,19 @@ export default defineConfig({
         // `Worker.postMessage` fails with
         // `DataCloneError: SharedArrayBuffer transfer requires
         // self.crossOriginIsolated` at engine init.
+        //
+        // COEP value: `require-corp` (NOT `credentialless`). Firefox
+        // (desktop + Android) never implemented `credentialless` —
+        // Chromium-only. With `credentialless`, Firefox silently ignores
+        // the header and `crossOriginIsolated` stays false, so SAB is
+        // unavailable and the probe fails. `require-corp` is universally
+        // supported; the dev server only serves same-origin assets
+        // (wasm, JS, snippets), so no cross-origin resource needs a
+        // CORP opt-in.
         headers: {
             "Cross-Origin-Opener-Policy": "same-origin",
-            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cross-Origin-Resource-Policy": "same-origin",
             "Cache-Control": "no-store",
         },
     },

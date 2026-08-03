@@ -556,7 +556,7 @@ cd demo/website && pnpm dev
 # → https://localhost:8080/ (self-signed cert)
 ```
 
-The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `wasm_thread`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`.
+The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` + `Cross-Origin-Resource-Policy: same-origin`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `wasm_thread`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`. COEP value must be `require-corp`, NOT `credentialless` — `credentialless` is Chromium-only (Firefox desktop + Android never implemented it and silently ignore it, so `crossOriginIsolated` stays false).
 
 ### JS (js/ workspace — also covers demo/website + demo/playground-view)
 
