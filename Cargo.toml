@@ -51,6 +51,10 @@ tur-wasm = { path = "libs/tur-wasm" }
 num-derive = "0.4"
 num-traits = "0.2"
 futures = "0.3"
+# Native async runtime — used by `AndroidSchedulerDriver` for `sleep`
+# (via `tokio::time::sleep`) + shared with `NativeHttp` for reqwest.
+# The engine itself is tokio-free; only native embedders depend on this.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
 # `mpsc` replacement used throughout the engine — main↔worker, RPC replies.
 # Pure Rust, no platform deps; works on native (via std::thread::park) and
 # wasm (via Atomics.wait on workers, wasm_bindgen_futures on main).

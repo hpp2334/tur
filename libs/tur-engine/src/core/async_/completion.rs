@@ -26,7 +26,6 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use boa_engine::Context;
-use boa_engine::JsResult;
 
 // `Completion` is the same closure type the existing `AsyncExecutor::complete`
 // API uses — re-exported from `super` to keep a single canonical definition

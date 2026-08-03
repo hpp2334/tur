@@ -4,15 +4,16 @@ use std::rc::Rc;
 use boa_engine::JsData;
 use boa_gc::{Finalize, Trace};
 
-use crate::core::async_::AsyncExecutor;
+use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::ImageResourceMap;
+use crate::core::scheduler::WorkerScheduler;
 
-#[derive(Clone, Debug, Trace, Finalize, JsData)]
+#[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurJsContext {
     pub element_tree: NodeTree,
@@ -22,12 +23,20 @@ pub struct TurJsContext {
     pub need_paint: Rc<Cell<bool>>,
     pub(crate) image_resource_map: Rc<RefCell<ImageResourceMap>>,
     pub(crate) store: Store,
-    /// Engine-owned async executor. Always present (created in
-    /// [`crate::core::app::TurAppInternal::new`]); exposed to ctx-bound bridge
-    /// fns via [`TurJsContext::async_executor`] instead of the capability
-    /// registry, since — unlike `Clipboard`/`Http` — it is not a swappable
-    /// plugin backend.
-    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Worker-thread scheduler — bridges call `spawn_local(fut)` to drive
+    /// async work (clipboard reads, http requests, sleep futures). Set by
+    /// `build_worker_backend` from the worker_sched passed by the runtime.
+    ///
+    /// Sound to keep out of boa's GC trace: it's pure Rust state
+    /// (`Rc<dyn WorkerScheduler>`), no `boa_gc::Gc`/`GcRefCell`. The
+    /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this
+    /// same trade-off for the other fields.
+    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    /// Cheap-cloned completion handle — bridges call `push(closure)` from
+    /// inside spawned futures to settle JsPromises under `&mut Context` on
+    /// the next flush. Pushing fires `on_push`, which self-sends
+    /// `WorkerMsg::Wake` so the worker flushes promptly.
+    pub(crate) completion_handle: CompletionHandle,
     /// Type-erased capability registry shared with the engine builder,
     /// plugin context, event handlers, and ctx-bound bridge fns. Plugins
     /// declare their hard dependencies via [`Plugin::requires`] so the engine
@@ -59,7 +68,8 @@ impl TurJsContext {
         need_paint: Rc<Cell<bool>>,
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
         store: Store,
-        async_executor: Rc<AsyncExecutor>,
+        worker_sched: Rc<dyn WorkerScheduler>,
+        completion_handle: CompletionHandle,
         capabilities: Capabilities,
     ) -> Self {
         Self {
@@ -70,14 +80,24 @@ impl TurJsContext {
             need_paint,
             image_resource_map,
             store,
-            async_executor,
+            worker_sched,
+            completion_handle,
             capabilities,
         }
     }
 
-    /// Engine-owned async executor. Always present.
-    pub fn async_executor(&self) -> &Rc<AsyncExecutor> {
-        &self.async_executor
+    /// Worker-thread scheduler. Bridge fns extract this via
+    /// [`crate::core::js_runtime::helpers::extract_ctx`] and call
+    /// `spawn_local(fut)` to drive async work.
+    pub fn worker_sched(&self) -> &Rc<dyn WorkerScheduler> {
+        &self.worker_sched
+    }
+
+    /// Cheap-cloned completion handle. Bridge fns extract this via
+    /// `extract_ctx` and call `push(closure)` from inside spawned futures
+    /// to settle JsPromises under `&mut Context` on the next flush.
+    pub fn completion_handle(&self) -> CompletionHandle {
+        self.completion_handle.clone()
     }
 
     /// Cheaply-cloned view over the capability registry. Bridge fns extract
@@ -96,3 +116,4 @@ impl TurJsContext {
         &self.image_resource_map
     }
 }
+

@@ -1,15 +1,15 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Duration;
 
 use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::{AsyncExecutor, TurJobExecutor};
+use crate::core::async_::{CompletionHandle, CompletionQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
 use crate::core::render::{MainTree, RenderCommand, build_topology_batch};
+use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::{FontContext, FontLoader};
@@ -24,9 +24,6 @@ pub enum NextFrame {
     /// A continuous animation is running — re-arm on the next vsync (i.e.
     /// request another animation frame immediately).
     Vsync,
-    /// Wake after the given delay (e.g. until the next caret-blink toggle),
-    /// then render. Used when no animation is active but a timed paint is.
-    After(Duration),
 }
 
 /// Outcome of a single [`TurAppInternal::flush`] / `run_frame` call.
@@ -42,12 +39,21 @@ pub struct TurAppInternal {
     pub(crate) js_context: TurJsContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) executor: Rc<TurJobExecutor>,
-    /// Engine-owned async executor. Drives spawned Rust futures via
-    /// [`AsyncExecutor::tick`] inside `flush`, with real wakers (backed by
-    /// `async_task`). Used by host bridge fns (clipboard, http) and by
-    /// `ClipboardWriteSubsystem` to perform async platform work without
-    /// blocking the sync flush loop.
-    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Worker-thread scheduler. Bridges grab it via
+    /// [`PluginContext::worker_sched`] / [`SubsystemFlushContext::worker_sched`]
+    /// and call `spawn_local(fut)` to drive async work (clipboard reads,
+    /// http requests, sleep futures). The driver's `sleep` returns a
+    /// platform-specific `Sleep(BoxFuture)`.
+    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    /// Completion queue — closures pushed by spawned futures (e.g. promise
+    /// settle closures) are drained inside `flush()` under `&mut Context`.
+    /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
+    /// worker flushes promptly whenever a future completes.
+    pub(crate) completion_queue: Rc<CompletionQueue>,
+    /// Cheap-cloned handle on the completion queue, handed out to bridges
+    /// via [`PluginContext::completion_handle`] /
+    /// [`SubsystemFlushContext::completion_handle`].
+    pub(crate) completion_handle: CompletionHandle,
     /// Plugin-registered flush subsystems. Each is `flush`-ed **every
     /// fixed-point iteration** of `flush()` (possibly several times per
     /// frame), in registration order, before `flush_reactive`. Time-driven
@@ -68,8 +74,10 @@ pub struct TurAppInternal {
     /// `install_event_bus`) read this via
     /// [`crate::core::plugin::PluginContext::event_bus`] to register the
     /// JS-side bridge (`eventBus.on`/`send`) and the
-    /// [`crate::core::event_bus::HostBusSubsystem`] that drains the queues
+    /// [`HostBusSubsystem`] that drains the queues
     /// each flush.
+    ///
+    /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Main-side render tree mirror, updated from each frame's command
     /// batch. Read by dev tools (worker-side query path).
@@ -94,6 +102,8 @@ impl TurAppInternal {
         executor: Rc<TurJobExecutor>,
         clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
+        worker_sched: Rc<dyn WorkerScheduler>,
+        wake_worker: impl Fn() + 'static,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
@@ -108,11 +118,19 @@ impl TurAppInternal {
         let image_resource_map = Rc::new(RefCell::new(ImageResourceMap::default()));
 
         // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
-        // `Rc<dyn Clock>` that `AsyncExecutor` and `Shell` expect (they're
-        // per-instance + worker-side only, never shared across threads).
-        // ClockProxy is a Sized adapter that delegates to the Arc.
+        // `Rc<dyn Clock>` that `Shell` expects (per-instance + worker-side
+        // only, never shared across threads). ClockProxy is a Sized adapter
+        // that delegates to the Arc.
         let clock_rc: Rc<dyn Clock> = Rc::new(crate::core::runtime::ClockProxy(clock));
-        let async_executor = Rc::new(AsyncExecutor::new(clock_rc.clone()));
+
+        // Completion queue: closures pushed by spawned futures (e.g. promise
+        // settle closures) are drained inside `flush()` under `&mut Context`.
+        // The `on_push` callback self-sends `WorkerMsg::Wake` so the worker
+        // flushes promptly whenever a future completes — without it, an
+        // idle worker would never wake to drain a completion arriving
+        // between frames.
+        let completion_queue = Rc::new(CompletionQueue::new(wake_worker));
+        let completion_handle = completion_queue.handle();
 
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
@@ -125,7 +143,8 @@ impl TurAppInternal {
             need_paint,
             image_resource_map.clone(),
             store.clone(),
-            async_executor.clone(),
+            worker_sched.clone(),
+            completion_handle.clone(),
             capabilities,
         );
 
@@ -141,7 +160,8 @@ impl TurAppInternal {
             image_resource_map,
             font_context,
             font_loader,
-            async_executor.clone(),
+            worker_sched.clone(),
+            completion_handle.clone(),
             capabilities,
             clock_rc,
             store,
@@ -151,7 +171,9 @@ impl TurAppInternal {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
             executor,
-            async_executor,
+            worker_sched,
+            completion_queue,
+            completion_handle,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
@@ -186,12 +208,11 @@ impl TurAppInternal {
         };
 
         loop {
-            // Drive spawned Rust futures one poll step. Completions they
-            // produce (settle-JsPromise closures) are drained right after,
-            // before boa's microtask drain — so PromiseJobs enqueued by
-            // `resolvers.resolve.call(...)` run in the same iteration.
-            let async_progress = self.async_executor.tick();
-            self.async_executor.drain_completions(boa_context);
+            // Drain completions produced by spawned futures since the last
+            // flush iteration. Completions settle JsPromises (e.g.
+            // clipboard read resolve) under `&mut Context`, enqueuing
+            // PromiseJobs that boa's microtask drain (below) picks up.
+            self.completion_queue.drain(boa_context);
 
             let handled_events = self.flush_app_events(boa_context, &signals);
 
@@ -226,7 +247,8 @@ impl TurAppInternal {
                     app_event_queue: &mut ctx.app_event_queue,
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    async_executor: &ctx.async_executor,
+                    worker_sched: &ctx.worker_sched,
+                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -282,7 +304,8 @@ impl TurAppInternal {
                     app_event_queue: &mut ctx.app_event_queue,
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    async_executor: &ctx.async_executor,
+                    worker_sched: &ctx.worker_sched,
+                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -306,23 +329,17 @@ impl TurAppInternal {
             }
             let handled_mutations = self.flush_pending_mutations(boa_context);
             // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
-            // PromiseJobs fire `.then` callbacks which may call bridge fns that
-            // `spawn_detached` more Rust futures — those land in
-            // `async_executor.ready` and are caught by the `async_progress`
-            // termination check on the next iteration, keeping the fixed-point
-            // loop alive.
+            // PromiseJobs fire `.then` callbacks which may call bridge fns
+            // that spawn more Rust futures via `worker_sched.spawn_local`.
+            // Those futures' completions are drained at the top of the next
+            // iteration, keeping the fixed-point loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
-            // Quiescence: no events, no mutations, no dirty state, no async
-            // task was polled, no microtasks ran. We deliberately do NOT
-            // check `has_pending()` here — a task waiting on a `sleep` timer
-            // is not immediately-available work. The `schedule` decision
-            // below uses `has_pending` + `next_timer_delay` to decide when
-            // to wake the engine next.
+            // Quiescence: no events, no mutations, no dirty state, no
+            // completions drained this iteration, no microtasks ran.
             if !handled_events
                 && !handled_mutations
                 && !new_dirty
-                && !async_progress
                 && jobs_run == 0
             {
                 break;
@@ -345,23 +362,14 @@ impl TurAppInternal {
 
         // Decide how the caller should schedule the next frame.
         //
-        // - `Vsync` (continuous): a subsystem requested a frame (e.g. an
-        //   animation is running), or a Rust async task is live without a
-        //   timer deadline (e.g. clipboard/http futures awaiting external
-        //   wake-up). Animations need smooth 60fps; subsystems like audio
-        //   need polling; timer-less async tasks need polling each frame.
-        // - `After(d)`: nothing continuous is pending, but an async `sleep`
-        //   deadline is outstanding (driving a `launch` coroutine or a plain
-        //   `sleep().then(...)`). Wake at the deadline rather than polling.
-        // - `Idle`: nothing time-driven is pending — the loop can stop
-        //   until the next platform input arrives.
-        let async_pending = self.async_executor.has_pending();
-        let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if sub_request_frame.get() || (async_pending && async_timer_delay.is_none())
-        {
+        // - `Vsync`: a subsystem requested a frame (e.g. an animation is
+        //   running). Sleep-driven async work drives its own wake via
+        //   `CompletionHandle::on_push` (self-sends Wake), so it doesn't
+        //   keep the loop busy on idle.
+        // - `Idle`: nothing time-driven is pending — the loop stops until
+        //   the next platform input or async completion.
+        let schedule = if sub_request_frame.get() {
             NextFrame::Vsync
-        } else if let Some(delay) = async_timer_delay {
-            NextFrame::After(delay)
         } else {
             NextFrame::Idle
         };

@@ -1,10 +1,10 @@
 //! `tur:net` HTTP bridge: `request(opts) -> Promise<ResponseResult>`.
 //!
 //! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
-//! pointer** (no captures) that reads its `Rc<dyn Http>` and
-//! `Rc<AsyncExecutor>` from `TurJsContext`'s capability registry. The fn
-//! creates a pending `JsPromise`, spawns a future via the executor that
-//! calls `Http::request(opts).await`, and pushes a completion closure that
+//! pointer** (no captures) that reads its `Rc<dyn Http>` + scheduler
+//! primitives from `TurJsContext`. The fn creates a pending `JsPromise`,
+//! spawns a future via [`WorkerScheduler::spawn_local`] that calls
+//! `Http::request(opts).await`, and pushes a completion closure that
 //! builds the JS response object and resolves/rejects the promise under
 //! `&mut Context`.
 //!
@@ -15,6 +15,7 @@
 //! [`crate::TurNetPlugin`] during `register`).
 
 use std::cell::RefCell;
+use std::pin::Pin;
 use std::rc::Rc;
 
 use boa_engine::object::FunctionObjectBuilder;
@@ -29,6 +30,10 @@ use boa_gc::{Finalize, Trace};
 use futures::StreamExt;
 use futures::stream::LocalBoxStream;
 
+use tur_engine::core::async_::CompletionHandle;
+use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
+use tur_engine::core::scheduler::WorkerScheduler;
+
 /// Shorthand for the boxed byte-chunk stream used by the streaming bridge.
 type ByteChunkStream = LocalBoxStream<'static, Result<Vec<u8>, String>>;
 
@@ -36,15 +41,11 @@ type ByteChunkStream = LocalBoxStream<'static, Result<Vec<u8>, String>>;
 /// out, poll one chunk, and put it back.
 type SharedStream = Rc<RefCell<Option<ByteChunkStream>>>;
 
-use tur_engine::core::async_::AsyncExecutor;
-use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
-
 use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
-/// Bridge function table entries for `tur:net`.
+/// Bridge function tables entries for `tur:net`.
 ///
 /// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
-/// that reads its `Http` + executor from `TurJsContext`'s capability
-/// registry.
+/// that reads its `Http` + scheduler from `TurJsContext`.
 pub fn fns() -> Vec<FnEntry> {
     vec![
         ("request", 1, tur_net_request as Ptr),
@@ -67,7 +68,8 @@ fn tur_net_request(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http capability")))?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
 
@@ -90,14 +92,14 @@ fn tur_net_request(
         }
     };
 
-    let executor_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         let outcome = http.request(opts).await;
-        executor_for_complete.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             resolve_outcome(&outcome, &resolvers, ctx)?;
             Ok(())
         }));
     });
+    worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -256,7 +258,8 @@ fn resolve_outcome(
 #[boa_gc(unsafe_empty_trace)]
 struct StreamHandle {
     stream: SharedStream,
-    executor: Rc<AsyncExecutor>,
+    worker_sched: Rc<dyn WorkerScheduler>,
+    completion_handle: CompletionHandle,
 }
 
 /// `requestStream(opts): Promise<StreamResponse>` — performs a streaming HTTP
@@ -274,7 +277,8 @@ fn tur_net_request_stream(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no http capability")))?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
 
@@ -294,23 +298,26 @@ fn tur_net_request_stream(
         }
     };
 
-    let exec_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let completion_handle_for_complete = completion_handle.clone();
+    let worker_sched_for_spawn = worker_sched.clone();
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         match http.request_stream(opts).await {
             Ok(resp) => {
                 let status = resp.status;
                 let status_text = resp.status_text;
                 let headers = resp.headers;
                 let stream_rc = Rc::new(RefCell::new(Some(resp.body)));
-                let exec_clone = exec_for_complete.clone();
+                let worker_sched_clone = worker_sched_for_spawn.clone();
+                let completion_handle_clone = completion_handle_for_complete.clone();
 
-                exec_for_complete.complete(Box::new(move |ctx| {
+                completion_handle_for_complete.push(Box::new(move |ctx| {
                     build_stream_response(
                         status,
                         &status_text,
                         &headers,
                         stream_rc,
-                        exec_clone,
+                        worker_sched_clone,
+                        completion_handle_clone,
                         &resolvers,
                         ctx,
                     )?;
@@ -318,7 +325,7 @@ fn tur_net_request_stream(
                 }));
             }
             Err(e) => {
-                exec_for_complete.complete(Box::new(move |ctx| {
+                completion_handle_for_complete.push(Box::new(move |ctx| {
                     let err_obj = JsObject::with_object_proto(ctx.intrinsics());
                     let _ = err_obj.create_data_property(
                         js_string!("message"),
@@ -333,6 +340,7 @@ fn tur_net_request_stream(
             }
         }
     });
+    worker_sched.spawn_local(fut);
 
     Ok(promise.into())
 }
@@ -345,7 +353,8 @@ fn build_stream_response(
     status_text: &str,
     headers: &[(String, String)],
     stream: SharedStream,
-    executor: Rc<AsyncExecutor>,
+    worker_sched: Rc<dyn WorkerScheduler>,
+    completion_handle: CompletionHandle,
     resolvers: &boa_engine::builtins::promise::ResolvingFunctions,
     ctx: &mut Context,
 ) -> JsResult<()> {
@@ -369,7 +378,11 @@ fn build_stream_response(
     let _ = o.create_data_property(js_string!("headers"), JsValue::from(hmap), ctx);
 
     // Body object: JsData = StreamHandle, with next() + [Symbol.asyncIterator]
-    let handle = StreamHandle { stream, executor };
+    let handle = StreamHandle {
+        stream,
+        worker_sched,
+        completion_handle,
+    };
     let proto = ctx.intrinsics().constructors().object().prototype();
     let body = JsObject::from_proto_and_data(proto, handle);
 
@@ -435,10 +448,10 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
     // Take the stream out so we can poll it inside the spawned future.
     let stream_opt = handle.stream.borrow_mut().take();
     let stream_rc = handle.stream.clone();
-    let exec = handle.executor.clone();
-    let exec_inner = exec.clone();
+    let sched = handle.worker_sched.clone();
+    let completion_handle = handle.completion_handle.clone();
 
-    exec.spawn_detached(async move {
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         let mut s = stream_opt;
         let polled = match s.as_mut() {
             Some(stream) => stream.next().await,
@@ -448,7 +461,7 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
         match polled {
             Some(Ok(chunk)) => {
                 *stream_rc.borrow_mut() = s;
-                exec_inner.complete(Box::new(move |ctx| {
+                completion_handle.push(Box::new(move |ctx| {
                     let result = JsObject::with_object_proto(ctx.intrinsics());
                     let _ =
                         result.create_data_property(js_string!("done"), JsValue::from(false), ctx);
@@ -463,7 +476,7 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
             }
             Some(Err(e)) => {
                 *stream_rc.borrow_mut() = s;
-                exec_inner.complete(Box::new(move |ctx| {
+                completion_handle.push(Box::new(move |ctx| {
                     let err_obj = JsObject::with_object_proto(ctx.intrinsics());
                     let _ = err_obj.create_data_property(
                         js_string!("message"),
@@ -478,7 +491,7 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
             }
             None => {
                 // Stream ended — leave stream as None
-                exec_inner.complete(Box::new(move |ctx| {
+                completion_handle.push(Box::new(move |ctx| {
                     let result = JsObject::with_object_proto(ctx.intrinsics());
                     let _ =
                         result.create_data_property(js_string!("done"), JsValue::from(true), ctx);
@@ -490,6 +503,7 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
             }
         }
     });
+    sched.spawn_local(fut);
 
     Ok(promise.into())
 }

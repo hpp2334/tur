@@ -32,6 +32,9 @@ thiserror = { workspace = true }
 # embedder supplies the runtime. The JNI render-tick blocks on each frame's
 # future via `futures::executor::block_on`.
 futures = { workspace = true }
+# Tokio runtime — used by `AndroidSchedulerDriver` for **timers only**
+# (`tokio::time::sleep`). Shared with `HttpBackend` for reqwest calls.
+tokio = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.14"

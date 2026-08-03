@@ -9,15 +9,18 @@
 //! Promise settlement flow:
 //!
 //! 1. Bridge fn creates a pending `JsPromise` synchronously and returns it.
-//! 2. Spawns a future via the executor that calls `clipboard.read_text()`
-//!    (or `write_text`) — this is the only async part.
+//! 2. Spawns a future via [`WorkerScheduler::spawn_local`] that calls
+//!    `clipboard.read_text()` (or `write_text`) — this is the only async
+//!    part.
 //! 3. On completion, the future pushes a `Completion` closure into the
-//!    executor that runs under `&mut Context` on the next `flush` and
-//!    resolves the promise.
+//!    [`CompletionHandle`] that runs under `&mut Context` on the next
+//!    `flush` and resolves the promise.
 //!
 //! Promise settlement enqueues a PromiseJob; boa's `executor.drain` (called
-//! right after `tick`/`drain_completion` in `flush`) runs the `.then`
+//! right after `drain_completions` in `flush`) runs the `.then`
 //! callbacks, which can `set()` reactive atoms that drive re-layout.
+
+use std::pin::Pin;
 
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
@@ -80,22 +83,23 @@ fn tur_clipboard_read_text(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
-    let executor_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         let text = clipboard.read_text().await;
         // Push a completion closure that resolves the promise under
         // `&mut Context`. Runs on the next `flush`'s `drain_completions`
         // pass, which is followed by boa's `executor.drain` — so the
         // promise's `.then` callbacks fire in the same iteration.
-        executor_for_complete.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             let v = JsValue::from(js_string!(text.as_str()));
             resolvers.resolve.call(&JsValue::undefined(), &[v], ctx)?;
             Ok(())
         }));
     });
+    worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -113,7 +117,8 @@ fn tur_clipboard_write_text(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let text = args
@@ -121,15 +126,15 @@ fn tur_clipboard_write_text(
         .as_string()
         .map(|s| s.to_std_string_escaped())
         .unwrap_or_default();
-    let executor_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         clipboard.write_text(text).await;
-        executor_for_complete.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             resolvers
                 .resolve
                 .call(&JsValue::undefined(), &[JsValue::undefined()], ctx)?;
             Ok(())
         }));
     });
+    worker_sched.spawn_local(fut);
     Ok(promise.into())
 }

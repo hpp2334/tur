@@ -216,6 +216,21 @@ impl<'a> PluginContext<'a> {
         &self.js_ctx.need_paint
     }
 
+    /// Worker-thread scheduler. Plugins' bridge fns call
+    /// `worker_sched.spawn_local(fut)` (via `Pin::pin(fut).into()` to box
+    /// it) to drive async work (clipboard reads, http requests, sleep
+    /// futures).
+    pub fn worker_sched(&self) -> &Rc<dyn crate::core::scheduler::WorkerScheduler> {
+        self.js_ctx.worker_sched()
+    }
+
+    /// Cheap-cloned completion handle. Plugins' bridge fns capture this
+    /// inside spawned futures and call `push(closure)` to settle
+    /// JsPromises under `&mut Context` on the next flush.
+    pub fn completion_handle(&self) -> crate::core::async_::CompletionHandle {
+        self.js_ctx.completion_handle()
+    }
+
     /// The engine-wide mutation queue (shared with `flush_pending_mutations`).
     /// Plugins that defer JS callbacks (e.g. animation `onTick`/`onEnd`) stash
     /// this handle at registration time and push onto the queue when their

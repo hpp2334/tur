@@ -19,6 +19,8 @@
 //! `ClipboardPasteSubsystem` then inserts the text into the focused
 //! `EditableTextElement`.
 
+use std::pin::Pin;
+
 use crate::core::app::AppEvent;
 use crate::core::platform::PlatformEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -69,8 +71,10 @@ impl Subsystem for ClipboardWriteSubsystem {
             return;
         };
         let backend = clipboard_cap.backend().clone();
-        cx.async_executor.spawn_detached(async move {
-            backend.write_text(text).await;
-        });
+        let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> =
+            Box::pin(async move {
+                backend.write_text(text).await;
+            });
+        cx.worker_sched.spawn_local(fut);
     }
 }

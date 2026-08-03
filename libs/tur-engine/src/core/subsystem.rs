@@ -55,7 +55,6 @@ use std::rc::Rc;
 use boa_engine::Context;
 
 use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::async_::AsyncExecutor;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::elements::NodeTree;
@@ -200,10 +199,18 @@ pub struct SubsystemFlushContext<'a> {
     /// read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
     pub screen: &'a mut Screen,
     pub need_paint: &'a Cell<bool>,
-    /// Engine-owned async executor. Subsystems call `spawn_detached(...)` to
-    /// run Rust futures (e.g. `clipboard.write_text`); the executor is driven
-    /// each frame inside `flush`. See [`AsyncExecutor::spawn_detached`].
-    pub async_executor: &'a Rc<AsyncExecutor>,
+    /// Worker-thread scheduler. Subsystems call
+    /// [`WorkerScheduler::spawn_local`] to drive Rust futures (e.g.
+    /// `clipboard.write_text`). The future's completion pushes a closure
+    /// via [`Self::completion_handle`]; the engine drains it on the next
+    /// flush iteration.
+    pub worker_sched: &'a Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    /// Completion handle for spawned futures. A spawned future calls
+    /// `completion_handle.push(closure)` from inside its body to settle a
+    /// `JsPromise` (or similar) under `&mut Context` on the next flush.
+    /// Pushing fires `on_push`, which self-sends `WorkerMsg::Wake` so the
+    /// worker flushes promptly.
+    pub completion_handle: &'a crate::core::async_::CompletionHandle,
     /// Capability registry view. Subsystems look up plugin-injected backends
     /// (e.g. `Clipboard`, `Http`) at dispatch time via
     /// `cx.capabilities.of::<C>()`. Missing capabilities return `None` —

@@ -17,7 +17,8 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 mod app;
-mod loop_driver;
+pub mod loop_driver;
+pub mod scheduler;
 mod surface;
 
 // Re-export the JNI primitive types so the `standard_jni_exports!()` macro

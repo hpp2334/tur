@@ -1,3 +1,6 @@
+pub mod test_scheduler;
+pub use test_scheduler::TestSchedulerDriver;
+
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -331,27 +334,13 @@ pub struct TurTestApp {
     /// [`Self::advance`]). Shared with the engine `Shell` and the boa
     /// `Context`, so `Date.now()` and timer scheduling see the same time.
     clock: std::sync::Arc<MutexFixedClock>,
-    /// Shared with the `RecordingCursorPlatform` installed in the engine. The engine
-    /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
-    /// drains it through `take_current_cursor`.
+    /// The scheduler driver's virtual clock. Advanced alongside `clock`
+    /// so `sleep()` futures fire on the same virtual timeline.
+    driver: Rc<TestSchedulerDriver>,
     cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
-    /// Shared with the `RecordingClipboard` installed in the engine. Tests
-    /// pre-canned reads via `set_clipboard_read`; assert writes via
-    /// `take_clipboard_write`.
     clipboard: RecordingClipboard,
-    /// Shared with the `RecordingHttp` installed in the engine (only when
-    /// constructed via [`Self::new_with_http`]). `None` for the default
-    /// constructor — those tests don't register `tur:net`.
     http: Option<RecordingHttp>,
-    /// Shared with the `RecordingFilePicker` installed in the engine (only
-    /// when constructed via [`Self::new_with_filepicker`]). `None` for the
-    /// default constructor — those tests don't register `tur:filepicker`.
     filepicker: Option<RecordingFilePicker>,
-    /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
-    /// events for engine-side multi-click classification. Advanced in small
-    /// steps (well under the 500 ms threshold) on each pointer-down so
-    /// consecutive `double_click` / `triple_click` calls register as a
-    /// multi-click streak.
     synthetic_time_ms: u64,
 }
 
@@ -405,9 +394,11 @@ impl TurTestApp {
         let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
+        let driver = TestSchedulerDriver::new();
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
+            .scheduler(driver.clone())
             .capability(CursorCap::new(RecordingCursor {
                 last: cursor_slot.clone(),
             }))
@@ -429,20 +420,26 @@ impl TurTestApp {
             builder = builder.plugin_boxed(p);
         }
         let runtime = builder.build()?;
-        // Headless instance — engine runs on a worker thread; the test
-        // harness inspects state via RPC (dev_tool_*, eval_module, etc.).
-        // Viewport of (0,0) is treated as a headless marker by some tests.
         let inner = runtime.create_app((width, height), 1.0)?;
         let _ = block_on(inner.run_frame());
         Ok(Self {
             inner,
             clock,
+            driver,
             cursor_slot,
             clipboard,
             http,
             filepicker,
-            synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
+            synthetic_time_ms: 1_700_000_000_000,
         })
+    }
+
+    /// Advance both the boa clock + the scheduler driver's virtual clock
+    /// by `ms`. Sleep futures fire when the virtual clock reaches their
+    /// deadline.
+    fn advance_clock(&self, ms: u64) {
+        self.clock.forward(ms);
+        self.driver.advance(ms);
     }
 
     /// Bump the synthetic time source so the next pointer-down stamps a
@@ -534,7 +531,7 @@ impl TurTestApp {
     /// from the frame count.
     pub fn wait_frames(&mut self, frames: usize) {
         for _ in 0..frames {
-            self.clock.forward(FRAME_STEP_MS);
+            self.advance_clock(FRAME_STEP_MS);
             let _ = block_on(self.inner.run_frame());
         }
         self.settle();
@@ -550,7 +547,7 @@ impl TurTestApp {
             if predicate(self) {
                 return;
             }
-            self.clock.forward(FRAME_STEP_MS);
+            self.advance_clock(FRAME_STEP_MS);
             let _ = block_on(self.inner.run_frame());
         }
     }
@@ -578,7 +575,7 @@ impl TurTestApp {
     /// express time as frame counts); this remains for the few cases that need
     /// a precise non-16 ms-aligned step.
     pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
-        self.clock.forward(duration.as_millis() as u64);
+        self.advance_clock(duration.as_millis() as u64);
         block_on(self.inner.run_frame()).map(|_| ())
     }
 
@@ -821,7 +818,7 @@ impl TurTestApp {
             }));
         self.settle();
         for i in 1..=steps {
-            self.clock.forward(FRAME_STEP_MS);
+            self.advance_clock(FRAME_STEP_MS);
             let t = i as f64 / steps as f64;
             let x = start.0 + (end.0 - start.0) * t;
             let y = start.1 + (end.1 - start.1) * t;
@@ -834,7 +831,7 @@ impl TurTestApp {
                 }));
             let _ = block_on(self.inner.run_frame());
         }
-        self.clock.forward(FRAME_STEP_MS);
+        self.advance_clock(FRAME_STEP_MS);
         let time_ms = self.clock.now().millis_since_epoch();
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {

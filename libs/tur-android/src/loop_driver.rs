@@ -86,16 +86,6 @@ impl LoopDriver for AndroidLoopDriver {
             NextFrame::Vsync => {
                 call_void(&mut env, &loop_obj, "scheduleVsync", "()V", &[]);
             }
-            NextFrame::After(delay) => {
-                let ms = delay.as_millis().min(i64::MAX as u128) as i64;
-                call_void(
-                    &mut env,
-                    &loop_obj,
-                    "scheduleDelayed",
-                    "(J)V",
-                    &[jni::objects::JValue::Long(ms.max(1))],
-                );
-            }
         }
     }
 }

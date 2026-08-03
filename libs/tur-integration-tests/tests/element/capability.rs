@@ -121,7 +121,7 @@ fn capability_chain_order_irrelevant() {
 fn build_app(
     configure: impl FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder,
 ) -> Result<Rc<tur_engine::TurApp>, TurError> {
-    let builder = TurRuntime::builder()
+    let builder = TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)));
     let runtime = configure(builder).build()?;

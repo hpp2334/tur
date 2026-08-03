@@ -1237,16 +1237,6 @@ impl LoopDriver for WasmLoopDriver {
                     self.raf_id.set(Some(id));
                 }
             }
-            NextFrame::After(delay) => {
-                let ms = delay.as_millis().min(i32::MAX as u128) as i32;
-                let id = window
-                    .set_timeout_with_callback_and_timeout_and_arguments_0(
-                        self.timeout_closure.as_ref().unchecked_ref(),
-                        ms.max(1),
-                    )
-                    .unwrap_or(0);
-                self.timeout_id.set(Some(id));
-            }
         }
     }
 }

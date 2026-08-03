@@ -8,7 +8,7 @@ use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 
 use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::async_::AsyncExecutor;
+use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
@@ -18,6 +18,7 @@ use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
 use crate::core::render::{RecordingCanvas, RenderCommand};
+use crate::core::scheduler::WorkerScheduler;
 use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -32,10 +33,15 @@ pub struct TurAppContext {
     pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
-    /// Engine-owned async executor. Cloned from the one `TurAppInternal`
-    /// owns; surfaced to subsystems via [`SubsystemFlushContext`] so they
-    /// can spawn Rust futures (clipboard writes, etc.) at dispatch time.
-    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Worker-thread scheduler — cloned from `TurAppInternal::worker_sched`.
+    /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
+    /// spawn Rust futures (clipboard writes, etc.) at dispatch time.
+    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    /// Cheap-cloned completion handle — cloned from
+    /// `TurAppInternal::completion_handle`. Surfaced to subsystems so
+    /// spawned futures can push promise-settle closures for `flush()` to
+    /// drain under `&mut Context`.
+    pub(crate) completion_handle: CompletionHandle,
     /// Capability registry view, shared with `TurJsContext.capabilities`.
     /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
     /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
@@ -64,7 +70,8 @@ impl TurAppContext {
         image_resource_map: Rc<RefCell<ImageResourceMap>>,
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
-        async_executor: Rc<AsyncExecutor>,
+        worker_sched: Rc<dyn WorkerScheduler>,
+        completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
         store: Store,
@@ -80,7 +87,8 @@ impl TurAppContext {
             screen: Screen::new(store),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
-            async_executor,
+            worker_sched,
+            completion_handle,
             capabilities,
             shell: Shell::new(clock),
         }
@@ -117,7 +125,8 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             screen: &mut self.screen,
             need_paint,
-            async_executor: &self.async_executor,
+            worker_sched: &self.worker_sched,
+            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,
@@ -147,7 +156,8 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             screen: &mut self.screen,
             need_paint,
-            async_executor: &self.async_executor,
+            worker_sched: &self.worker_sched,
+            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,

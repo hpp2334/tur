@@ -1,4 +1,7 @@
 use std::sync::Arc;
+use std::cell::Cell;
+use std::pin::Pin;
+use std::rc::Rc;
 use std::time::Duration;
 
 use crate::core::render::brush::Color;
@@ -13,7 +16,7 @@ use crate::builtin_plugins::text::controller::{
     InputEvent, SelectionChangeEvent,
 };
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
-use crate::core::async_::Task;
+
 use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
 use crate::core::edgy::reactive::AnyReadable;
 use crate::core::element::{ElementNodeId, NodeId};
@@ -162,7 +165,7 @@ impl View for EditableTextView {
                 resolved_obscured: false,
                 resolved_obscuring_char: '\u{2022}',
                 painting: EditableTextPainting::default(),
-                blink_task: None,
+                blink_task_cancel: None,
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
@@ -202,10 +205,20 @@ pub struct EditableTextElement {
     /// Last-resolved `obscuringCharacter` (default `•`).
     pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
-    /// Handle to the async caret-blink task. `Some` while focused (task is
-    /// alive and periodically requesting paints); `None` when unfocused
-    /// (task cancelled by dropping the handle).
-    pub(crate) blink_task: Option<Task>,
+    /// Cancellation flag for the caret-blink task. `Some(flag)` while focused
+    /// (the spawned blink loop checks it each tick + exits when set); `None`
+    /// when unfocused. On blur or element drop, the flag is set so the loop
+    /// exits on its next tick.
+    pub(crate) blink_task_cancel: Option<Rc<Cell<bool>>>,
+}
+
+impl Drop for EditableTextElement {
+    fn drop(&mut self) {
+        // Signal the spawned blink loop to exit on its next tick.
+        if let Some(c) = self.blink_task_cancel.take() {
+            c.set(true);
+        }
+    }
 }
 
 /// Half-period of the caret blink, in milliseconds. The caret is visible on
@@ -832,19 +845,27 @@ impl IntoJsArgs for ContextMenuEvent {
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
         if focused {
-            let exec = cx.js_ctx().async_executor().clone();
+            let worker_sched = cx.js_ctx().worker_sched().clone();
             let need_paint = cx.js_ctx().need_paint.clone();
-            let exec_clone = exec.clone();
-            self.blink_task = Some(exec.spawn_task(async move {
+            // Cooperative cancellation flag. The spawned blink loop
+            // checks this each tick + exits when set. Dropping the
+            // handle (on blur or element drop) sets it.
+            let cancelled = Rc::new(Cell::new(false));
+            let cancelled_for_loop = cancelled.clone();
+            self.blink_task_cancel = Some(cancelled);
+            let worker_sched_for_loop = worker_sched.clone();
+            let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
                 loop {
-                    exec_clone
-                        .sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
-                        .await;
+                    let sleep = worker_sched_for_loop.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS));
+                    sleep.await;
+                    if cancelled_for_loop.get() { return; }
                     need_paint.set(true);
                 }
-            }));
+            });
+            worker_sched.spawn_local(fut);
         } else {
-            self.blink_task = None;
+            // Signal the spawned loop to exit on its next tick.
+            if let Some(c) = self.blink_task_cancel.take() { c.set(true); }
         }
     }
 }

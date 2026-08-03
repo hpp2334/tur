@@ -5,8 +5,12 @@
 //! cancel handle — instead:
 //!
 //! - `sleep(ms): Promise<void>` resolves after `ms` (engine time), backed by
-//!   [`AsyncExecutor::sleep`]. The frame scheduler already wakes precisely at
-//!   the deadline via `AsyncExecutor::next_timer_delay`, so no extra wiring.
+//!   [`crate::core::scheduler::WorkerScheduler::sleep`]. The worker-side
+//!   scheduler provides a platform-specific `Sleep(BoxFuture)` (setTimeout
+//!   on wasm, tokio::time::sleep on native, virtual clock on tests). When
+//!   the Sleep resolves, the completion settles the promise + fires
+//!   `on_push`, which self-sends `WorkerMsg::Wake` so the worker flushes
+//!   promptly to drain.
 //! - `launch(gen): Task` runs a generator function as a cancellable coroutine.
 //!   The generator `yield`s Promises (typically `sleep(ms)`); the driver
 //!   resumes it when each yielded promise resolves. The returned `Task`
@@ -31,8 +35,8 @@
 //! `TurJsContext`, user args start at `args[1]`.
 
 use std::cell::Cell;
+use std::pin::Pin;
 use std::rc::Rc;
-use std::time::Duration;
 
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
@@ -48,27 +52,31 @@ pub fn fns() -> Vec<FnEntry> {
 }
 
 /// `sleep(ms): Promise<void>` — resolves after `ms` milliseconds (engine
-/// time). Backed by [`AsyncExecutor::sleep`]; the engine's frame loop wakes at
-/// the deadline via `next_timer_delay`.
+/// time). Backed by [`crate::core::scheduler::WorkerScheduler::sleep`]; the
+/// completion self-sends `WorkerMsg::Wake` so the worker flushes promptly.
 fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let executor = js_ctx.async_executor().clone();
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
     let ms = args.get_or_undefined(1).as_number().unwrap_or(0.0).max(0.0) as u64;
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let need_paint = js_ctx.need_paint.clone();
-    let exec = executor.clone();
-    executor.spawn_detached(async move {
-        exec.sleep(Duration::from_millis(ms)).await;
+    let worker_sched_for_loop = worker_sched.clone();
+    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+        worker_sched_for_loop
+            .sleep(std::time::Duration::from_millis(ms))
+            .await;
         // Settle the promise under `&mut Context` on the next flush. Setting
         // `need_paint` mirrors the old timer's flush flag so a paint follows
         // even if the `.then` body makes no reactive `set`.
-        exec.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             need_paint.set(true);
             resolvers.resolve.call(&JsValue::undefined(), &[], ctx)?;
             Ok(())
         }));
     });
+    worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 

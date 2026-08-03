@@ -114,6 +114,7 @@ pub struct TurRuntime {
     /// two `Rc<dyn>` trait objects pointing at it. The convenience
     /// `.scheduler(driver)` builder method sets both from one `Rc<S>`.
     main_scheduler: Rc<dyn crate::core::scheduler::MainScheduler>,
+    #[allow(dead_code)]
     worker_scheduler: Rc<dyn crate::core::scheduler::WorkerScheduler>,
 }
 
@@ -159,10 +160,9 @@ impl TurRuntime {
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
-        let backend_factory = move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>| {
-            // Re-play the runtime-registered capability inserts into a
-            // fresh per-worker `Capabilities`. Each insert clones the
-            // captured capability newtype (cheap — Arc bump).
+        let backend_factory = move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+                                    wake_worker: Box<dyn Fn() + Send>|
+              -> WorkerBackend {
             let capabilities = Capabilities::new();
             for insert_fn in capability_inserts.iter() {
                 insert_fn(&capabilities);
@@ -175,6 +175,7 @@ impl TurRuntime {
                 &plugins,
                 viewport,
                 worker_sched,
+                wake_worker,
             )
             .expect("threaded backend factory failed")
         };
@@ -209,7 +210,8 @@ pub(crate) fn build_worker_backend(
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
     viewport: (f64, f64),
-    _worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    wake_worker: Box<dyn Fn() + Send>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -226,6 +228,8 @@ pub(crate) fn build_worker_backend(
         executor.clone(),
         clock,
         capabilities,
+        worker_sched,
+        wake_worker,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);

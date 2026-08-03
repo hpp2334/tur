@@ -104,9 +104,23 @@ pub struct TurApp {
     /// Set when rAF fires while `pump_in_progress` is true. On wake exit,
     /// if true, another wake is spawned.
     wake_pending: Cell<bool>,
+    /// Set by [`Self::start_loop`] — guards against double-spawn of the
+    /// autonomous loop.
+    loop_started: Cell<bool>,
     /// Set by [`Self::destroy`]. Subsequent wake attempts short-circuit.
     destroyed: Cell<bool>,
 }
+
+/// Result of [`TurApp::handle_main_msg`] — does the loop keep going?
+#[derive(Copy, Clone)]
+enum HandleResult {
+    Continue,
+    Stop,
+}
+impl HandleResult {
+    fn should_stop(self) -> bool { matches!(self, Self::Stop) }
+}
+
 
 /// Per-frame hook fired at the end of [`TurApp::wake`] (after `pump`,
 /// before rescheduling). See [`TurApp::set_after_frame_hook`].
@@ -125,6 +139,7 @@ impl TurApp {
             after_frame: RefCell::new(None),
             pump_in_progress: Cell::new(false),
             wake_pending: Cell::new(false),
+            loop_started: Cell::new(false),
             destroyed: Cell::new(false),
         }
     }
@@ -225,16 +240,9 @@ impl TurApp {
     /// Begin autonomous operation: install the driver + the embedder's
     /// `spawn` closure, register the wake trampoline, and kick off frame 1.
     ///
-    /// The wake trampoline the engine installs is a sync `Rc<dyn Fn()>`
-    /// (matching the [`LoopDriver::set_wake`] contract). When the driver
-    /// fires it (rAF / JNI / etc.), the trampoline wraps an async wake in
-    /// a `Box::pin` and hands the future to `spawn`, which the embedder
-    /// uses to drive the future on its platform's runtime.
-    ///
-    /// Concurrency: the trampoline guards against re-entry via
-    /// `pump_in_progress` — if a wake fires while one is already
-    /// in-flight, `wake_pending` is set and a fresh wake is spawned when
-    /// the in-flight one resolves.
+    /// **Deprecated** in favor of [`Self::start_loop`] (the new
+    /// event-driven loop that doesn't take a `LoopDriver`). Kept for
+    /// migration purposes.
     pub fn start<S>(self: &Rc<Self>, driver: Rc<dyn LoopDriver>, spawn: S)
     where
         S: Fn(WakeFuture) + 'static,
@@ -254,6 +262,87 @@ impl TurApp {
 
         // Kick off frame 1. spawn_wake sets pump_in_progress itself.
         self.spawn_wake();
+    }
+
+    /// New autonomous frame loop. The embedder spawns this on its platform's
+    /// runtime; the engine owns all the logic.
+    ///
+    /// Subscribes to vsync events from `main_sched`, merges with the
+    /// worker's MainMsg stream, dispatches events. On `Vsync` events sends
+    /// `WorkerMsg::Wake` to trigger a worker pump. On `FrameOutcome` events
+    /// fire-and-forgets `request_vsync()` if the schedule is `Vsync`.
+    ///
+    /// The bootstrap is automatic: `create_app` pushes an initial resize
+    /// event to the worker, the worker pumps + ships `FrameOutcome` back,
+    /// and `handle_main_msg` requests the next vsync based on the outcome.
+    /// No initial `request_vsync()` is needed.
+    ///
+    /// Concurrency: single-loop serialized. The embedder must spawn this
+    /// future exactly once per `TurApp`. Multiple concurrent calls panic.
+    pub async fn start_loop(self: Rc<Self>) {
+        assert!(
+            !self.loop_started.replace(true),
+            "start_loop called twice on the same TurApp"
+        );
+
+        let mut vsync_rx = self.main_sched.vsync_events();
+        // `main_rx` is in a RefCell; borrow for the lifetime of this loop.
+        // Safe: start_loop is called exactly once per app (asserted above).
+        #[allow(clippy::await_holding_refcell_ref)]
+        let mut main_rx = self.backend.main_rx.borrow_mut();
+
+        use futures::future::{Either, select};
+        use futures::stream::StreamExt;
+
+        loop {
+            // Race vsync + main_msg streams — first to fire wins.
+            let vsync_fut = (&mut vsync_rx).next();
+            let main_fut = (&mut *main_rx).next();
+            let event = select(vsync_fut, main_fut).await;
+
+            match event {
+                Either::Left((Some(()), _)) => {
+                    if self.destroyed.get() { break; }
+                    let _ = self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
+                }
+                Either::Left((None, _)) => break,
+                Either::Right((Some(msg), _)) => {
+                    if self.handle_main_msg(msg).should_stop() { break; }
+                }
+                Either::Right((None, _)) => break,
+            }
+        }
+    }
+
+    /// Dispatch one MainMsg from the worker. Returns whether the loop
+    /// should stop (e.g. on Destroyed).
+    fn handle_main_msg(&self, msg: core::app::MainMsg) -> HandleResult {
+        match msg {
+            core::app::MainMsg::RenderCommands { commands, image_map, viewport } => {
+                self.backend.apply_render(commands, &image_map, viewport);
+            }
+            core::app::MainMsg::FrameOutcome(Ok(outcome)) => {
+                if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
+                    hook(outcome.clone());
+                }
+                if outcome.schedule == core::app::NextFrame::Vsync {
+                    self.main_sched.request_vsync();
+                }
+                // Idle: no-op. The loop will block on the next event.
+            }
+            core::app::MainMsg::FrameOutcome(Err(e)) => {
+                tracing::error!("worker frame error: {e}");
+            }
+            core::app::MainMsg::CursorChanged(_c) => {
+                // Applied via cached_cursor — embedder reads via cached_cursor().
+            }
+            core::app::MainMsg::FocusedStateChanged { .. } => {
+                // Applied via cached_focus — embedder reads via cached_focus().
+            }
+            core::app::MainMsg::Destroyed => return HandleResult::Stop,
+            _ => {}
+        }
+        HandleResult::Continue
     }
 
     /// Install a callback fired after each autonomous frame (in [`Self::wake`],

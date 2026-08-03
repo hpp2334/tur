@@ -424,7 +424,7 @@ pub struct MainBackend {
     /// across the `next().await` in `pump` — safe because the wasm main
     /// thread is single-threaded and `Rc<TurApp>` itself enforces
     /// single-threaded access.
-    main_rx: RefCell<MainRx>,
+    pub(crate) main_rx: RefCell<MainRx>,
     /// Holds the worker `JoinHandle` alive for the backend's lifetime so
     /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
     _worker_handle: WorkerHandle,
@@ -463,19 +463,39 @@ impl MainBackend {
     /// drives the async worker_loop from the worker thread entry point.
     pub(crate) fn new(
         main_sched: Rc<dyn crate::core::scheduler::MainScheduler>,
-        backend_factory: impl FnOnce(Rc<dyn crate::core::scheduler::WorkerScheduler>) -> WorkerBackend + Send + 'static,
+        backend_factory: impl FnOnce(Rc<dyn crate::core::scheduler::WorkerScheduler>, Box<dyn Fn() + Send>) -> WorkerBackend + Send + 'static,
     ) -> Self {
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = futures::channel::mpsc::unbounded::<MainMsg>();
 
+        // One-shot init signal: worker fires after `backend_factory()` (which
+        // runs `plugin.register` + capability replay) completes. Native main
+        // blocks on this so `create_app` returning guarantees the worker's
+        // plugin-level side effects are observable. On wasm the main thread
+        // cannot block — embedders must await an RPC instead.
+        #[cfg(not(target_arch = "wasm32"))]
+        let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
+
+        let worker_tx_for_on_push = worker_tx.clone();
+        #[cfg(not(target_arch = "wasm32"))]
+        let init_tx = init_tx;
         let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
-            let backend = backend_factory(worker_sched.clone());
-            // Drive the async worker_loop from this worker thread. The
-            // WorkerScheduler's block_on uses the per-thread LocalPool,
-            // which the driver set up before invoking this closure.
+            let worker_tx_for_on_push = worker_tx_for_on_push.clone();
+            let wake_worker: Box<dyn Fn() + Send> = Box::new(move || {
+                let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
+            });
+            let backend = backend_factory(worker_sched.clone(), wake_worker);
+            #[cfg(not(target_arch = "wasm32"))]
+            let _ = init_tx.send(());
             let fut = Box::pin(worker_loop(backend, worker_rx, main_tx));
             worker_sched.block_on(fut);
         }));
+
+        // Native: synchronously wait for the worker to finish init.
+        #[cfg(not(target_arch = "wasm32"))]
+        init_rx
+            .recv()
+            .expect("worker thread died during backend_factory");
 
         Self {
             worker_tx: worker_tx.clone(),
@@ -520,6 +540,43 @@ impl MainBackend {
     /// `emit_to_js`.
     pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
         let _ = self.worker_tx.unbounded_send(msg);
+    }
+
+    /// Apply a render-command batch to the main-side render sink. Called
+    /// from both `pump` (legacy path) and `TurApp::handle_main_msg` (new
+    /// event-driven path) — single source of truth for render application.
+    pub(crate) fn apply_render(
+        &self,
+        commands: Vec<RenderCommand>,
+        image_map: &ImageResourceMap,
+        viewport: (u32, u32, f64),
+    ) {
+        if let Some(sink) = self.render_sink.borrow_mut().as_mut() {
+            sink(&commands, image_map, viewport);
+        }
+    }
+
+    /// Update the cached cursor + apply to the cursor backend.
+    pub(crate) fn apply_cursor_changed(&self, cursor: crate::core::platform::Cursor) {
+        *self.cached_cursor.borrow_mut() = cursor;
+        #[allow(clippy::collapsible_if)]
+        if let Some(backend) = self.cursor_backend.borrow().as_ref() {
+            if let Ok(mut b) = backend.lock() {
+                b.set_cursor(cursor);
+            }
+        }
+    }
+
+    /// Update the cached focus state.
+    pub(crate) fn apply_focused_state_changed(
+        &self,
+        is_editable: bool,
+        cursor_rect: Option<(f64, f64, f64, f64)>,
+    ) {
+        *self.cached_focus.borrow_mut() = FocusedState {
+            is_editable,
+            cursor_rect,
+        };
     }
 
     /// Borrow the worker→main channel sender. Used by call sites that

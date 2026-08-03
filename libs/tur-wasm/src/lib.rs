@@ -1,9 +1,13 @@
 #[cfg(target_arch = "wasm32")]
 mod app;
+#[cfg(target_arch = "wasm32")]
+pub mod scheduler;
 pub mod fonts;
 
 #[cfg(target_arch = "wasm32")]
 pub use app::{AfterFrameHook, WasmApp, WasmAppConfig, WasmRuntime, WasmRuntimeConfig};
+#[cfg(target_arch = "wasm32")]
+pub use scheduler::WasmSchedulerDriver;
 pub use fonts::WasmFontLoader;
 
 /// One-time wasm runtime init: install the panic hook (readable backtraces in

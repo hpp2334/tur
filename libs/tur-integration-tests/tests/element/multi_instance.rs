@@ -26,7 +26,7 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String>
 /// Build a runtime with the std + animation plugins (no extra capabilities —
 /// instances are headless).
 fn build_runtime() -> Rc<TurRuntime> {
-    TurRuntime::builder()
+    TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -181,7 +181,7 @@ impl Plugin for CounterPlugin {
 fn plugin_compile_runs_once_register_runs_per_instance() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
-    let runtime = TurRuntime::builder()
+    let runtime = TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -226,7 +226,7 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
-    let runtime = TurRuntime::builder()
+    let runtime = TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .capability(cap.clone())
