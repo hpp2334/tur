@@ -552,10 +552,11 @@ The website is the browser host app. Building it automatically runs `wasm-pack` 
 cd js && pnpm build
 cd demo/website && pnpm build
 # Or use the rspack dev server
-cd demo/website && TUR_TUNNEL=1 pnpm dev
+cd demo/website && pnpm dev
+# → https://localhost:8080/ (self-signed cert)
 ```
 
-Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer; `TUR_TUNNEL=1` switches to HTTP so Playwright MCP can connect).
+The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: credentialless`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `wasm_thread`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`.
 
 ### JS (js/ workspace — also covers demo/website + demo/playground-view)
 
@@ -610,9 +611,22 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 
 ```sh
 node scripts/prepare-js-fixtures.cjs    # build JS fixtures once
-cd demo/website && TUR_TUNNEL=1 pnpm dev
-# → http://localhost:8080/ (must be HTTP: Playwright MCP rejects the self-signed HTTPS cert)
+cd demo/website && pnpm dev
+# → https://localhost:8080/ (self-signed cert)
 ```
+
+The dev server runs over HTTPS with a self-signed cert. Playwright MCP's default context rejects the cert — **bypass it** by opening a fresh context with `ignoreHTTPSErrors: true` via `playwright_browser_run_code_unsafe`:
+
+```js
+async (page) => {
+  const newCtx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+  const newPage = await newCtx.newPage();
+  await newPage.goto('https://localhost:8080/', { waitUntil: 'load' });
+  // ...interact via newPage (the MCP snapshot tools won't see it — use evaluate / screenshot)
+}
+```
+
+The new context's page isn't tracked by the MCP snapshot/click tools — use `newPage.evaluate(...)`, `newPage.screenshot(...)`, `newPage.on('console' | 'pageerror', ...)` directly inside the `run_code_unsafe` callback.
 
 ### Drive the canvas
 

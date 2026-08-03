@@ -172,13 +172,17 @@ export default defineConfig({
         port: 8080,
         host: "0.0.0.0",
         allowedHosts: "all",
-        headers: process.env.TUR_TUNNEL
-            ? {
-                  "Cross-Origin-Opener-Policy": "same-origin",
-                  "Cross-Origin-Embedder-Policy": "credentialless",
-                  "Cache-Control": "no-store",
-              }
-            : {},
+        // Always set COOP/COEP — the wasm multi-threaded backend uses
+        // SharedArrayBuffer + Web Workers (via `wasm_thread`), which
+        // requires `self.crossOriginIsolated`. Without these headers
+        // `Worker.postMessage` fails with
+        // `DataCloneError: SharedArrayBuffer transfer requires
+        // self.crossOriginIsolated` at engine init.
+        headers: {
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cache-Control": "no-store",
+        },
     },
     entry: {
         main: "./src/index.tsx",
