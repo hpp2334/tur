@@ -324,8 +324,12 @@ fn reactive_stores_are_isolated_per_instance() {
 
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
-    let _ = app_a
-        .eval_module(r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#);
+    futures::executor::block_on(
+        app_a.eval_module(
+            r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#,
+        ),
+    )
+    .expect("read A");
     let a_val = eval_js(&app_a, "globalThis.__r").unwrap_or_default();
     assert_eq!(a_val, "A2", "instance A retains its own reactive state");
 }

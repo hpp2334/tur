@@ -1,16 +1,15 @@
 use tur_engine::core::element::ElementKind;
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_integration_tests::TurTestApp;
 
 /// Count nodes of a given element kind anywhere in the tree.
-fn count_kind(tree: &NodeTreeData, kind: &str) -> usize {
+fn count_kind(tree: &NodeTreeSnapshot, kind: &str) -> usize {
     let want = ElementKind::new(kind);
     tree.element_ids()
         .iter()
         .filter(|id| {
             tree.get_element(**id)
-                .and_then(|n| n.element.as_ref())
-                .map(|e| e.kind() == want)
+                .map(|n| n.kind() == Some(want.clone()))
                 .unwrap_or(false)
         })
         .count()

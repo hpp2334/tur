@@ -1,16 +1,14 @@
-use std::cell::Ref;
-
 use tur_engine::core::element::{ElementNodeId, NodeId};
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_integration_tests::TurTestApp;
 
-fn print_tree(tree: &Ref<NodeTreeData>) {
-    fn go(tree: &NodeTreeData, id: NodeId, depth: usize) {
+fn print_tree(tree: &NodeTreeSnapshot) {
+    fn go(tree: &NodeTreeSnapshot, id: NodeId, depth: usize) {
         if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
             eprintln!(
                 "{}{} id={} children={}",
                 "  ".repeat(depth),
-                node.element.as_ref().unwrap().kind(),
+                node.kind().unwrap(),
                 node.id,
                 node.children.len(),
             );

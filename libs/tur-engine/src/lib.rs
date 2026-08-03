@@ -348,6 +348,45 @@ impl TurApp {
         self.backend.dev_tool_get_element(id).await
     }
 
+    /// Run `cb` against the live `AnyElement` at `id`, on the worker
+    /// thread. The closure executes where the element actually lives, so
+    /// it can do typed introspection that can't be serialized across the
+    /// thread boundary (e.g. `e.cast::<TextElement>().spans()`). Returns
+    /// `None` if the id is unknown or the node has no element (fragment
+    /// host).
+    ///
+    /// Constraints:
+    /// - `R: Send + 'static` — the result crosses the worker→main channel.
+    /// - `cb: Send + 'static` — the closure crosses main→worker.
+    ///
+    /// Production code should never call this — it pins test-only typed
+    /// element access to the worker. Use `dev_tool_get_element` /
+    /// `query_tree_snapshot` for serializable snapshots.
+    pub async fn with_element<R: Send + 'static>(
+        &self,
+        id: core::element::ElementNodeId,
+        cb: impl FnOnce(&core::elements::AnyElement) -> R + Send + 'static,
+    ) -> Option<R> {
+        use core::app::comm::{Reply, WorkerMsg};
+        use core::elements::NodeTreeData;
+
+        let (tx, rx) = Reply::<Option<R>>::pair();
+        let runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static> = Box::new(move |tree| {
+            let result = tree
+                .get_element(id)
+                .and_then(|node| node.element.as_ref())
+                .map(|e| cb(e));
+            tx.send(result);
+        });
+        // Best-effort send — returns Err if the worker is gone. In that case
+        // we'll just await on `rx` which yields None.
+        let _ = self
+            .backend
+            .worker_tx()
+            .try_send(WorkerMsg::WithElement { id, runner });
+        rx.rx.recv().await.unwrap_or(None)
+    }
+
     pub async fn query_element(&self, key: &[&str]) -> Option<core::element::NodeId> {
         self.backend.query_element(key).await
     }

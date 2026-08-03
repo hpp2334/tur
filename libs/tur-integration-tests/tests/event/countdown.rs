@@ -41,15 +41,12 @@ fn find_input_id(app: &TurTestApp) -> ElementNodeId {
     let inner = tree
         .get_element(ElementNodeId::new(wrapper.children[0].as_u64()))
         .unwrap();
-    assert_eq!(
-        inner.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_container")
-    );
+    assert_eq!(inner.kind().unwrap(), ElementKind::new("tur_container"));
     let input_node = tree
         .get_element(ElementNodeId::new(inner.children[0].as_u64()))
         .unwrap();
     assert_eq!(
-        input_node.element.as_ref().unwrap().kind(),
+        input_node.kind().unwrap(),
         ElementKind::new("tur_editable_text")
     );
     input_node.id

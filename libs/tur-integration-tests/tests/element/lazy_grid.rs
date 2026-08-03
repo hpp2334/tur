@@ -28,8 +28,11 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
 fn with_lg<R: 'static>(
     app: &TurTestApp,
     id: ElementNodeId,
-    f: impl FnOnce(&LazyGridElement) -> R + 'static,
-) -> R {
+    f: impl FnOnce(&LazyGridElement) -> R + Send + 'static,
+) -> R
+where
+    R: Send + 'static,
+{
     app.with_element(id, |e| {
         f(e.cast::<LazyGridElement>().expect("not a LazyGridElement"))
     })
@@ -41,10 +44,7 @@ fn lazy_grid_mounts_as_tur_lazy_grid() {
     let (app, id) = setup_virtualized();
     let tree = app.element_tree();
     let lg = tree.get_element(id).unwrap();
-    assert_eq!(
-        lg.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_lazy_grid")
-    );
+    assert_eq!(lg.kind().unwrap(), ElementKind::new("tur_lazy_grid"));
 }
 
 /// Only the viewport + overscan cells mount, not all 10,000.

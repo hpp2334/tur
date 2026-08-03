@@ -32,7 +32,7 @@ use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::DevNodeData;
+use crate::core::elements::{DevNodeData, NodeTreeData, NodeTreeSnapshot};
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
@@ -103,6 +103,14 @@ pub enum WorkerMsg {
         id: NodeId,
         reply: ReplySender<Option<DevNodeData>>,
     },
+    /// Test/dev-tool: full element-tree snapshot (every node, with kind +
+    /// children + computed_layout). Used by `TurTestApp::element_tree` to
+    /// serve the legacy `NodeTreeData`-shaped read surface from the worker
+    /// side (the live `NodeTreeData` is `!Send` because `ElementObject`
+    /// owns a boxed `AnyElement`).
+    QueryTreeSnapshot {
+        reply: ReplySender<NodeTreeSnapshot>,
+    },
     /// Query the focused-element state.
     QueryFocusedState {
         reply: ReplySender<crate::FocusedState>,
@@ -121,6 +129,21 @@ pub enum WorkerMsg {
     QueryElement {
         key: Vec<String>,
         reply: ReplySender<Option<NodeId>>,
+    },
+    /// Test-only: run a closure against the worker's live `NodeTreeData`.
+    /// The closure runs on the worker thread (where the tree + its boxed
+    /// `AnyElement`s live), so it can do typed introspection that isn't
+    /// serializable across the thread boundary (e.g.
+    /// `element.cast::<TextElement>().spans()`). The closure receives
+    /// `&NodeTreeData` and is responsible for shipping its result via a
+    /// reply channel it captures — there's no generic return on the variant
+    /// so the enum stays monomorphic.
+    ///
+    /// `id` is passed for ergonomics (and so the variant is `Debug`); the
+    /// closure looks the element up itself.
+    WithElement {
+        id: ElementNodeId,
+        runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
     },
     /// Event bus — host → JS bytes. Worker forwards to the JS-side
     /// `__turEventBus.toJs` sink during the next flush.
@@ -263,6 +286,8 @@ impl fmt::Debug for WorkerMsg {
             Self::DevGetElement { id, .. } => {
                 f.debug_struct("DevGetElement").field("id", id).finish()
             }
+            Self::QueryTreeSnapshot { .. } => f.debug_struct("QueryTreeSnapshot").finish(),
+            Self::WithElement { id, .. } => f.debug_struct("WithElement").field("id", id).finish(),
             Self::QueryFocusedState { .. } => f.debug_struct("QueryFocusedState").finish(),
             Self::QueryFocusedElement { .. } => f.debug_struct("QueryFocusedElement").finish(),
             Self::QueryFocusedCursorRect { .. } => {

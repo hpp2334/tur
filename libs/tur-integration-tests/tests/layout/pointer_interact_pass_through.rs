@@ -14,19 +14,13 @@ fn pointer_interact_passes_constraints_and_size() {
         let pi = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            pi.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_pointer_interact")
-        );
+        assert_eq!(pi.kind().unwrap(), ElementKind::new("tur_pointer_interact"));
         assert_eq!(pi.children.len(), 1);
 
         let container = tree
             .get_element(ElementNodeId::new(pi.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
 
         (pi.id, container.id)
     };
@@ -65,11 +59,11 @@ fn pointer_interact_passes_through_in_column() {
             .get_element(ElementNodeId::new(col.children[1].as_u64()))
             .unwrap();
         assert_eq!(
-            pi1.element.as_ref().unwrap().kind(),
+            pi1.kind().unwrap(),
             ElementKind::new("tur_pointer_interact")
         );
         assert_eq!(
-            pi2.element.as_ref().unwrap().kind(),
+            pi2.kind().unwrap(),
             ElementKind::new("tur_pointer_interact")
         );
 

@@ -9,19 +9,13 @@ fn row_basic_horizontal_stacking() {
     let (row_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        assert_eq!(
-            root.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_root")
-        );
+        assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
         let row = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            row.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
-        );
+        assert_eq!(row.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(row.children.len(), 2);
 
         let sb1 = tree
@@ -30,14 +24,8 @@ fn row_basic_horizontal_stacking() {
         let sb2 = tree
             .get_element(ElementNodeId::new(row.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb1.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
-        assert_eq!(
-            sb2.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb1.kind().unwrap(), ElementKind::new("tur_container"));
+        assert_eq!(sb2.kind().unwrap(), ElementKind::new("tur_container"));
 
         (row.id, sb1.id, sb2.id)
     };

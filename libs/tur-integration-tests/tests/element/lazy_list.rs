@@ -9,19 +9,13 @@ fn lazy_list_viewport_size() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        assert_eq!(
-            root.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_root")
-        );
+        assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
         let ll = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            ll.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_lazy_list")
-        );
+        assert_eq!(ll.kind().unwrap(), ElementKind::new("tur_lazy_list"));
         ll.id
     };
 
@@ -342,10 +336,10 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
 
 /// `with_element` helper that returns the closure's R directly (panics if
 /// the lookup fails, which is fine for tests that just constructed the id).
-fn with_ll<R: 'static>(
+fn with_ll<R: Send + 'static>(
     app: &TurTestApp,
     id: ElementNodeId,
-    f: impl FnOnce(&LazyListElement) -> R + 'static,
+    f: impl FnOnce(&LazyListElement) -> R + Send + 'static,
 ) -> R {
     app.with_element(id, |e| {
         f(e.cast::<LazyListElement>().expect("not a LazyListElement"))

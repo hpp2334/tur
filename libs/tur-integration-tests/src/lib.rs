@@ -46,7 +46,7 @@ impl MutexFixedClock {
     }
 }
 use tur_engine::core::elements::AnyElement;
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::Cursor;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
@@ -587,14 +587,13 @@ impl TurTestApp {
         block_on(self.inner.run_frame()).map(|_| ())
     }
 
-    pub fn element_tree(&self) -> Ref<'_, NodeTreeData> {
-        // The live element tree lives on the worker; this returns a stub
-        // reference. Tests should use `dev_tool_element_tree()` (RPC)
-        // instead.
-        unimplemented!(
-            "TurTestApp::element_tree() is incompatible with the threaded backend; \
-             use dev_tool_element_tree() instead"
-        )
+    /// Snapshot of the live element tree, fetched via RPC from the worker.
+    /// Returns an owned value (not a `Ref`) — the live tree lives on the
+    /// worker thread; main can only see snapshots of it. Tests should call
+    /// this once per `render()` / input step they want to inspect (the
+    /// snapshot is not auto-refreshed).
+    pub fn element_tree(&self) -> NodeTreeSnapshot {
+        block_on(self.inner.backend().query_tree_snapshot())
     }
 
     pub fn click(&mut self, x: f64, y: f64) {
@@ -913,17 +912,24 @@ impl TurTestApp {
         self.settle();
     }
 
-    pub fn has_click_handler(&self, _id: ElementNodeId) -> bool {
-        // Broken in the threaded backend — see `with_element` doc.
-        // Tests that need this should migrate to a JS-side flag
-        // (e.g. the case exposes `__hasClickHandler` via a getter) or
-        // to a future `WorkerMsg::QueryElementState` RPC variant.
-        false
+    pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
+        use tur_engine::builtin_plugins::gesture::PointerInteractElement;
+        self.with_element(id, |e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.has_on_click())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
     }
 
-    pub fn has_mouse_region_callbacks(&self, _id: ElementNodeId) -> bool {
-        // Broken in the threaded backend — see `with_element` doc.
-        false
+    pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
+        use tur_engine::builtin_plugins::gesture::MouseRegionElement;
+        self.with_element(id, |e| {
+            e.cast::<MouseRegionElement>()
+                .map(|m| m.has_region_callbacks())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
@@ -957,23 +963,20 @@ impl TurTestApp {
         block_on(self.inner.focused_is_editable())
     }
 
-    /// Inspect an element's internal state via a closure. **Broken in the
-    /// threaded backend** — the closure can't cross the thread boundary.
-    /// Callers should migrate to RPC variants (`dev_tool_get_element`,
-    /// `query_element`) or to JS-side state exposed via `globalThis`.
+    /// Inspect an element's internal state via a closure. The closure runs
+    /// on the worker thread (where the live `AnyElement` lives), so it can
+    /// do typed introspection that isn't serializable across the thread
+    /// boundary — `e.cast::<TextElement>().map(|t| t.spans())`, etc.
     ///
-    /// TODO: rework element-introspection tests to not require a closure
-    /// into the worker's element tree. For now this panics — affected
-    /// tests are marked `#[ignore]`.
-    pub fn with_element<R: 'static>(
+    /// Constraints:
+    /// - `R: Send + 'static` — the result crosses worker→main.
+    /// - `cb: Send + 'static` — the closure crosses main→worker.
+    pub fn with_element<R: Send + 'static>(
         &self,
-        _id: ElementNodeId,
-        _cb: impl FnOnce(&AnyElement) -> R + 'static,
+        id: ElementNodeId,
+        cb: impl FnOnce(&AnyElement) -> R + Send + 'static,
     ) -> Option<R> {
-        unimplemented!(
-            "TurTestApp::with_element is incompatible with the threaded backend; \
-             migrate the test to dev_tool_get_element / query_element / eval_js"
-        )
+        block_on(self.inner.with_element(id, cb))
     }
 
     /// Returns the most recent cursor pushed by the engine since the last

@@ -87,11 +87,8 @@ type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 ///     .build()?;
 ///
 /// // Two isolated instances sharing fonts/clock/capabilities/plugins:
-/// let app_a = runtime.create_app(renderer_a, (800.0, 600.0), 2.0)?;
-/// let app_b = runtime.create_app(renderer_b, (400.0, 300.0), 1.0)?;
-///
-/// // A headless instance (no surface, no rendering):
-/// let headless = runtime.create_headless_app((0.0, 0.0))?;
+/// let app_a = runtime.create_app((800.0, 600.0), 2.0)?;
+/// let app_b = runtime.create_app((400.0, 300.0), 1.0)?;
 /// # Ok(())
 /// # }
 /// ```

@@ -12,10 +12,7 @@ fn stack_children_overlap() {
         let stack = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            stack.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_stack")
-        );
+        assert_eq!(stack.kind().unwrap(), ElementKind::new("tur_stack"));
         assert_eq!(stack.children.len(), 2);
 
         let sb1 = tree
@@ -24,14 +21,8 @@ fn stack_children_overlap() {
         let sb2 = tree
             .get_element(ElementNodeId::new(stack.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb1.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
-        assert_eq!(
-            sb2.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb1.kind().unwrap(), ElementKind::new("tur_container"));
+        assert_eq!(sb2.kind().unwrap(), ElementKind::new("tur_container"));
 
         (sb1.id, sb2.id)
     };

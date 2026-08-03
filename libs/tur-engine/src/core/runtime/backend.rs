@@ -37,7 +37,7 @@ use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{MainMsg, MainRx, MainTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{AnyElement, DevNodeData};
+use crate::core::elements::{AnyElement, DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::CursorBackend;
@@ -231,6 +231,16 @@ impl WorkerBackend {
             WorkerMsg::DevGetElement { id, reply } => {
                 reply.send(self.dev_tool_get_element(id));
             }
+            WorkerMsg::QueryTreeSnapshot { reply } => {
+                reply.send(self.query_tree_snapshot());
+            }
+            WorkerMsg::WithElement { id, runner } => {
+                let tree = self.internal.js_context.element_tree.borrow();
+                runner(&tree);
+                // Drop the borrow before any other work; `id` is informational
+                // only (the closure did its own lookup).
+                drop(id);
+            }
             WorkerMsg::QueryFocusedState { reply } => {
                 reply.send(self.focused_state());
             }
@@ -354,6 +364,14 @@ impl WorkerBackend {
             .borrow()
             .dev_tool_node(id)
     }
+
+    pub(crate) fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
+        self.internal
+            .js_context
+            .element_tree
+            .borrow()
+            .tree_snapshot()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -436,10 +454,20 @@ impl MainBackend {
         let (worker_tx, worker_rx) = async_channel::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = async_channel::unbounded::<MainMsg>();
 
+        // One-shot init signal: worker fires after `backend_factory()` (which
+        // runs `plugin.register` + capability replay) completes. Native main
+        // blocks on this so `create_app` returning guarantees the worker's
+        // plugin-level side effects are observable. On wasm the main thread
+        // cannot block — embedders must await an RPC instead.
+        #[cfg(not(target_arch = "wasm32"))]
+        let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
+
         let worker_handle = ThreadBuilder::new()
             .name("tur-worker".into())
             .spawn(move || {
                 let backend = backend_factory();
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = init_tx.send(());
                 // Drive the async worker_loop from this thread. block_on
                 // parks the worker thread when awaiting on
                 // `worker_rx.recv()`; async_channel's waker unparks it when
@@ -447,6 +475,12 @@ impl MainBackend {
                 futures::executor::block_on(worker_loop(backend, worker_rx, main_tx));
             })
             .expect("failed to spawn tur worker thread");
+
+        // Native: synchronously wait for the worker to finish init.
+        #[cfg(not(target_arch = "wasm32"))]
+        init_rx
+            .recv()
+            .expect("worker thread died during backend_factory");
 
         Self {
             worker_tx: worker_tx.clone(),
@@ -491,6 +525,13 @@ impl MainBackend {
     /// `emit_to_js`.
     pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
         let _ = self.worker_tx.try_send(msg);
+    }
+
+    /// Borrow the worker→main channel sender. Used by call sites that
+    /// build a `WorkerMsg` carrying a closure / reply slot directly (e.g.
+    /// [`TurApp::with_element`](crate::TurApp::with_element)).
+    pub(crate) fn worker_tx(&self) -> &WorkerTx {
+        &self.worker_tx
     }
 
     /// Advance one frame: send `Wake` to the worker, await the next
@@ -636,6 +677,12 @@ impl MainBackend {
 
     pub async fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
         self.rpc(|tx| WorkerMsg::DevGetElement { id, reply: tx })
+            .await
+    }
+
+    /// Test/dev-tool RPC: full element-tree snapshot.
+    pub async fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
+        self.rpc(|tx| WorkerMsg::QueryTreeSnapshot { reply: tx })
             .await
     }
 

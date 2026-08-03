@@ -18,10 +18,7 @@ fn row_with_each_does_not_inflate() {
         let col = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            col.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
-        );
+        assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         let row = tree
             .get_element(ElementNodeId::new(col.children[0].as_u64()))
             .unwrap();

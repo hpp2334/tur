@@ -12,19 +12,13 @@ fn image_with_explicit_size() {
         let container = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
 
         let image = tree
             .get_element(ElementNodeId::new(container.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            image.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_image")
-        );
+        assert_eq!(image.kind().unwrap(), ElementKind::new("tur_image"));
         assert_eq!(image.children.len(), 0);
         image.id
     };

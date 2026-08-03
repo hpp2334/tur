@@ -12,10 +12,7 @@ fn text_content_and_measurement() {
         let container = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_paragraph")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_paragraph"));
         container.id
     };
 
@@ -259,8 +256,8 @@ fn text_ellipsis_truncates_to_one_line() {
         let node = rt
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        let elem = node.element.as_ref().unwrap();
-        assert_eq!(elem.kind(), ElementKind::new("tur_paragraph"));
+        let elem_kind = node.kind().unwrap();
+        assert_eq!(elem_kind, ElementKind::new("tur_paragraph"));
         (
             node.computed_layout.size.height,
             node.computed_layout.size.width,

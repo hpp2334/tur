@@ -9,36 +9,24 @@ fn column_basic_vertical_stacking() {
     let (col_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        assert_eq!(
-            root.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_root")
-        );
+        assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
         let col = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            col.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
-        );
+        assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(col.children.len(), 2);
 
         let sb1 = tree
             .get_element(ElementNodeId::new(col.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb1.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb1.kind().unwrap(), ElementKind::new("tur_container"));
 
         let sb2 = tree
             .get_element(ElementNodeId::new(col.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb2.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb2.kind().unwrap(), ElementKind::new("tur_container"));
 
         (col.id, sb1.id, sb2.id)
     };

@@ -12,12 +12,7 @@ fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
         let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
-        if node
-            .element
-            .as_ref()
-            .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
-            .unwrap_or(false)
-        {
+        if node.kind() == Some(ElementKind::new("tur_editable_text")) {
             return ElementNodeId::new(cid.as_u64());
         }
     }

@@ -907,6 +907,154 @@ pub struct DevNodeData {
     pub children: Vec<NodeId>,
 }
 
+/// Owned snapshot of a single element node — the test/dev-tool counterpart
+/// of [`ElementObject`] that can cross the worker→main thread boundary
+/// (ElementObject itself holds a boxed `AnyElement` which is `!Send`).
+///
+/// Carries exactly the fields tests + dev tools read: identity (`id`),
+/// tree shape (`children`), element kind, and the resolved layout
+/// (`computed_layout`). Built by [`NodeTreeData::snapshot`] /
+/// [`NodeTreeData::tree_snapshot`].
+#[derive(Debug, Clone)]
+pub struct ElementSnapshot {
+    pub id: ElementNodeId,
+    pub kind: Option<crate::core::element::ElementKind>,
+    pub children: Vec<NodeId>,
+    pub parent: Option<NodeId>,
+    pub computed_layout: crate::core::layout::ComputedLayout,
+}
+
+impl ElementSnapshot {
+    /// Convenience accessor mirroring `element.as_ref().map(|e| e.kind())`
+    /// on the live [`ElementObject`]. Returns `None` for fragment hosts
+    /// (which have no element).
+    pub fn kind(&self) -> Option<crate::core::element::ElementKind> {
+        self.kind.clone()
+    }
+}
+
+/// Owned snapshot of the entire element tree — what
+/// [`crate::core::runtime::MainBackend::query_tree_snapshot`] ships from the
+/// worker to main. The accessor surface mirrors the read-only methods on
+/// [`NodeTreeData`] (root_element / get_element / element_count / …) so
+/// existing test code keeps compiling when `TurTestApp::element_tree()` is
+/// retyped from `Ref<'_, NodeTreeData>` to an owned `NodeTreeSnapshot`.
+#[derive(Debug, Clone, Default)]
+pub struct NodeTreeSnapshot {
+    pub elements: std::collections::HashMap<ElementNodeId, ElementSnapshot>,
+    /// Control-flow fragment hosts (Each/Condition/Switch) — keyed by id
+    /// (same counter as `elements`, so a `NodeId` from `children` may land
+    /// in either map). Fragments have no element box and aren't laid out
+    /// directly; their `children` are spliced into the enclosing flex.
+    pub fragments: std::collections::HashMap<FragmentNodeId, FragmentSnapshot>,
+    pub root_id: Option<ElementNodeId>,
+}
+
+/// Snapshot of a fragment host (Each/Condition/Switch). Only carries the
+/// children list — that's all tests read off the worker side.
+#[derive(Debug, Clone)]
+pub struct FragmentSnapshot {
+    pub children: Vec<NodeId>,
+}
+
+impl NodeTreeSnapshot {
+    /// Empty snapshot — no elements, no root.
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn root_element_id(&self) -> Option<ElementNodeId> {
+        self.root_id
+    }
+
+    pub fn root_element(&self) -> Option<&ElementSnapshot> {
+        self.root_id.and_then(|id| self.elements.get(&id))
+    }
+
+    pub fn get_element(&self, id: ElementNodeId) -> Option<&ElementSnapshot> {
+        self.elements.get(&id)
+    }
+
+    pub fn element_count(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn element_ids(&self) -> Vec<ElementNodeId> {
+        self.elements.keys().copied().collect()
+    }
+
+    pub fn raw_children_of_element(&self, id: ElementNodeId) -> Vec<NodeId> {
+        self.elements
+            .get(&id)
+            .map(|e| e.children.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn children_of_element(&self, id: ElementNodeId) -> Vec<ElementNodeId> {
+        self.elements
+            .get(&id)
+            .map(|e| {
+                e.children
+                    .iter()
+                    .filter(|n| self.elements.contains_key(&ElementNodeId::new(n.as_u64())))
+                    .map(|n| ElementNodeId::new(n.as_u64()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn get_fragment(&self, id: FragmentNodeId) -> Option<&FragmentSnapshot> {
+        self.fragments.get(&id)
+    }
+
+    pub fn is_fragment(&self, id: NodeId) -> bool {
+        self.fragments
+            .contains_key(&FragmentNodeId::new(id.as_u64()))
+    }
+}
+
+impl NodeTreeData {
+    /// Build a snapshot of one element node. Returns `None` if the id is
+    /// unknown or belongs to a fragment host.
+    pub fn snapshot(&self, id: ElementNodeId) -> Option<ElementSnapshot> {
+        let node = self.elements.get(&id)?;
+        Some(ElementSnapshot {
+            id: node.id,
+            kind: node.element.as_ref().map(|e| e.kind()),
+            children: node.children.clone(),
+            parent: node.parent,
+            computed_layout: node.computed_layout,
+        })
+    }
+
+    /// Build a snapshot of the whole tree (every element node + every
+    /// fragment host).
+    pub fn tree_snapshot(&self) -> NodeTreeSnapshot {
+        let elements = self
+            .elements
+            .iter()
+            .map(|(&id, _)| (id, self.snapshot(id).unwrap()))
+            .collect();
+        let fragments = self
+            .fragments
+            .iter()
+            .map(|(&id, f)| {
+                (
+                    id,
+                    FragmentSnapshot {
+                        children: f.children.clone(),
+                    },
+                )
+            })
+            .collect();
+        NodeTreeSnapshot {
+            elements,
+            fragments,
+            root_id: self.root_id,
+        }
+    }
+}
+
 impl fmt::Debug for NodeTreeData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("NodeTreeData")

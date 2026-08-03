@@ -13,19 +13,13 @@ fn scroll_view_viewport_constrained() {
         let sv = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sv.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_scroll_view")
-        );
+        assert_eq!(sv.kind().unwrap(), ElementKind::new("tur_scroll_view"));
         assert_eq!(sv.children.len(), 1);
 
         let col = tree
             .get_element(ElementNodeId::new(sv.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            col.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
-        );
+        assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(col.children.len(), 3);
 
         (sv.id, col.id)

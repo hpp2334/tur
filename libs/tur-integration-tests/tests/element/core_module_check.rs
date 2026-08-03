@@ -46,22 +46,21 @@ fn core_render_importable() {
 }
 
 /// Views, enums, and colors are NOT in core anymore — they moved to
-/// `tur:std`. A named import for a widget from core resolves to
-/// `undefined` (boa synthetic modules don't error on missing named exports,
-/// they bind them to undefined). This confirms the widget is genuinely absent.
+/// `tur:std`. A named import for a widget from core fails at link time
+/// (boa errors on missing named exports for synthetic modules).
 #[test]
 fn core_does_not_export_widgets() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
-    app.eval_module_source(
-        r#"
-            import { Container } from "tur:core";
-            globalThis.__container_type = typeof Container;
-        "#,
-    )
-    .unwrap();
-    assert_eq!(
-        app.eval_js("globalThis.__container_type"),
-        "undefined",
-        "Container should not be exported from tur:core — it lives in std now"
+    let err = app
+        .eval_module_source(
+            r#"
+                import { Container } from "tur:core";
+                globalThis.__container_type = typeof Container;
+            "#,
+        )
+        .expect_err("importing Container from tur:core should fail at link time");
+    assert!(
+        format!("{err:?}").contains("Container"),
+        "error should mention Container, got: {err:?}"
     );
 }
