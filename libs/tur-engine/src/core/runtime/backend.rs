@@ -43,7 +43,7 @@ use crate::core::event_bus::EventBus;
 use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::CursorBackend;
 use crate::core::render::RenderCommand;
-use crate::core::thread::{Builder as ThreadBuilder, JoinHandle as ThreadJoinHandle};
+use crate::core::scheduler::WorkerHandle;
 use crate::error::TurError;
 
 // ---------------------------------------------------------------------------
@@ -427,7 +427,7 @@ pub struct MainBackend {
     main_rx: RefCell<MainRx>,
     /// Holds the worker `JoinHandle` alive for the backend's lifetime so
     /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
-    _worker_handle: ThreadJoinHandle<()>,
+    _worker_handle: WorkerHandle,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
     /// cursor state change; main applies it here during `pump`. Set via
     /// `set_cursor_backend` (called by embedder after `create_app`).
@@ -448,48 +448,34 @@ pub struct MainBackend {
 }
 
 impl MainBackend {
-    /// Spawn a worker thread that owns a [`WorkerBackend`] produced by
-    /// `backend_factory`. The factory runs on the worker thread (so it can
-    /// construct `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
+    /// Spawn a worker via [`MainScheduler::spawn_worker`]. The factory runs
+    /// on the worker thread and constructs the [`WorkerBackend`] (so it can
+    /// build `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
     ///
-    /// The factory must be `Send + 'static` — capture only `Send` config
-    /// (plugin vecs, capability factories, etc.), not `Rc`/`RefCell` state.
+    /// The driver's `spawn_worker` impl sets up thread-locals on the worker
+    /// thread and constructs a `WorkerScheduler` for it, then passes that
+    /// to the factory. The factory uses it to call `block_on(worker_loop)`
+    /// and (via `WorkerBackend`) hands it to bridges through
+    /// `PluginContext` / `SubsystemFlushContext`.
     ///
-    /// The worker thread's entry-point wraps `worker_loop` (an `async fn`)
-    /// in `futures::executor::block_on`. On wasm this is a real Web Worker
-    /// (via `wasm_thread`), where `block_on` + `Atomics.wait` are allowed
-    /// (workers can block; the main thread cannot).
-    pub(crate) fn new(backend_factory: impl FnOnce() -> WorkerBackend + Send + 'static) -> Self {
+    /// On wasm this is a real Web Worker (via `wasm_thread`); on native a
+    /// dedicated OS thread. Either way, `worker_sched.block_on(worker_loop)`
+    /// drives the async worker_loop from the worker thread entry point.
+    pub(crate) fn new(
+        main_sched: Rc<dyn crate::core::scheduler::MainScheduler>,
+        backend_factory: impl FnOnce(Rc<dyn crate::core::scheduler::WorkerScheduler>) -> WorkerBackend + Send + 'static,
+    ) -> Self {
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = futures::channel::mpsc::unbounded::<MainMsg>();
 
-        // One-shot init signal: worker fires after `backend_factory()` (which
-        // runs `plugin.register` + capability replay) completes. Native main
-        // blocks on this so `create_app` returning guarantees the worker's
-        // plugin-level side effects are observable. On wasm the main thread
-        // cannot block — embedders must await an RPC instead.
-        #[cfg(not(target_arch = "wasm32"))]
-        let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
-
-        let worker_handle = ThreadBuilder::new()
-            .name("tur-worker".into())
-            .spawn(move || {
-                let backend = backend_factory();
-                #[cfg(not(target_arch = "wasm32"))]
-                let _ = init_tx.send(());
-                // Drive the async worker_loop from this thread. block_on
-                // parks the worker thread when awaiting on
-                // `worker_rx.next()`; futures::channel's waker unparks it when
-                // main sends a message.
-                futures::executor::block_on(worker_loop(backend, worker_rx, main_tx));
-            })
-            .expect("failed to spawn tur worker thread");
-
-        // Native: synchronously wait for the worker to finish init.
-        #[cfg(not(target_arch = "wasm32"))]
-        init_rx
-            .recv()
-            .expect("worker thread died during backend_factory");
+        let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
+            let backend = backend_factory(worker_sched.clone());
+            // Drive the async worker_loop from this worker thread. The
+            // WorkerScheduler's block_on uses the per-thread LocalPool,
+            // which the driver set up before invoking this closure.
+            let fut = Box::pin(worker_loop(backend, worker_rx, main_tx));
+            worker_sched.block_on(fut);
+        }));
 
         Self {
             worker_tx: worker_tx.clone(),

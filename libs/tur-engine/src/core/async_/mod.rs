@@ -34,9 +34,11 @@ use boa_engine::context::time::Clock as BoaClock;
 
 pub use tur_async::{Sleep, Task};
 
+pub mod completion;
 pub mod executor;
 pub mod task;
 
+pub use completion::{CompletionHandle, CompletionQueue};
 pub use executor::TurJobExecutor;
 
 /// Adapter that bridges boa's `Clock` trait to `tur_async::Clock`. The engine

@@ -82,6 +82,9 @@ pub type SpawnWake = Rc<dyn Fn(WakeFuture)>;
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
     backend: MainBackend,
+    /// Platform main-thread scheduler (vsync events, request_vsync,
+    /// spawn_local). Cloned from the runtime at construction.
+    main_sched: Rc<dyn core::scheduler::MainScheduler>,
     /// Autonomous-loop driver. `None` until [`Self::start`] is called
     /// (production); tests leave it unset and pump via [`Self::pump`].
     driver: RefCell<Option<Rc<dyn LoopDriver>>>,
@@ -110,12 +113,13 @@ pub struct TurApp {
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`MainBackend`]. The runtime
-    /// calls this from [`TurRuntime::create_app`]; embedders normally don't
-    /// call it directly.
-    pub fn new(backend: MainBackend) -> Self {
+    /// Construct a `TurApp` backed by the given [`MainBackend`] + scheduler.
+    /// The runtime calls this from [`TurRuntime::create_app`]; embedders
+    /// normally don't call it directly.
+    pub fn new(backend: MainBackend, main_sched: Rc<dyn core::scheduler::MainScheduler>) -> Self {
         Self {
             backend,
+            main_sched,
             driver: RefCell::new(None),
             spawn: RefCell::new(None),
             after_frame: RefCell::new(None),

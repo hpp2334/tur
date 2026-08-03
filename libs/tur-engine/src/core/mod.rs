@@ -16,6 +16,7 @@ pub mod platform;
 pub mod plugin;
 pub mod render;
 pub mod runtime;
+pub mod scheduler;
 pub mod screen;
 pub mod shell;
 pub mod subsystem;
