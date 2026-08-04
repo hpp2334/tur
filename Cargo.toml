@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "libs/tur-async",
     "libs/tur-engine",
     "libs/tur-animation",
     "libs/tur-clipboard-wasm",
@@ -30,7 +29,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/hpp2334/tur"
 
 [workspace.dependencies]
-tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-animation = { path = "libs/tur-animation" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
