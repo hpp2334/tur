@@ -14,12 +14,14 @@
 //! expose primitives (spawn, vsync events, sleep futures) and the engine
 //! drives itself via [`crate::TurApp::start_loop`].
 
+use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
 use futures::Stream;
+use futures::future::{AbortHandle, Abortable};
 
 /// Newtype around a boxed future. Drivers construct it from their
 /// platform-specific timer primitive (setTimeout on wasm, tokio::time::sleep
@@ -65,6 +67,75 @@ impl WorkerHandle {
     }
 }
 
+/// Handle to a `spawn_local`-ed task. Cheap to construct; dropping it
+/// **detaches** the task (the future keeps running, you just can't join
+/// or abort it anymore).
+///
+/// - [`abort`](Self::abort) cancels the task: its future is dropped at the
+///   next poll point, freeing any resources it held (pending `Sleep`s,
+///   promise slots, etc.).
+/// - [`join`](Self::join) awaits the task's completion (whether it finished
+///   naturally or was aborted).
+///
+/// Built generically by [`track_spawn`] around any platform spawn, so all
+/// drivers (wasm `wasm_bindgen_futures`, native `LocalPool`, test `LocalSet`)
+/// share one implementation. The handle is `!Send` (single-threaded
+/// executors; the engine's `TurApp` is `Rc`-based anyway).
+pub struct TaskHandle {
+    abort_handle: AbortHandle,
+    join_rx: RefCell<Option<futures::channel::oneshot::Receiver<()>>>,
+}
+
+impl TaskHandle {
+    /// Cancel the task. Its future is dropped at the next poll point.
+    /// Idempotent — calling after the task already completed is a no-op.
+    pub fn abort(&self) {
+        self.abort_handle.abort();
+    }
+
+    /// Await the task's completion. Consumes the handle. Resolves on both
+    /// natural completion and abort. Returns `None` if the task was
+    /// dropped without completing (e.g. the executor shut down).
+    pub async fn join(self) -> Option<()> {
+        // Take the receiver out of the RefCell BEFORE awaiting so the
+        // RefCell borrow isn't held across the await point. The `let`
+        // statement ends the temporary `RefMut` at its `;`.
+        let rx = self.join_rx.borrow_mut().take();
+        match rx {
+            Some(rx) => rx.await.ok(),
+            None => None,
+        }
+    }
+}
+
+/// Wrap a future so it is abortable + joinable, then hand the wrapped
+/// future to a platform spawn function (`wasm_bindgen_futures::spawn_local`,
+/// a `LocalPool`/`LocalSet` spawn, etc.). Returns a [`TaskHandle`] that
+/// can abort or await the task.
+///
+/// The wrapper pairs `futures::future::Abortable` (cancel signal) with a
+/// oneshot (completion signal) — both pure-Rust and executor-independent,
+/// so no driver needs executor-level task-handle support.
+pub fn track_spawn(
+    fut: Pin<Box<dyn Future<Output = ()> + 'static>>,
+    spawn: impl FnOnce(Pin<Box<dyn Future<Output = ()> + 'static>>),
+) -> TaskHandle {
+    let (abort_handle, abort_registration) = AbortHandle::new_pair();
+    let (tx, rx) = futures::channel::oneshot::channel();
+    let tracked: Pin<Box<dyn Future<Output = ()> + 'static>> = Box::pin(async move {
+        // `Abortable::await` resolves Ok(()) on natural completion or
+        // Err(Aborted) on abort — either way the task has stopped, so
+        // signal the joiner.
+        let _ = Abortable::new(fut, abort_registration).await;
+        let _ = tx.send(());
+    });
+    spawn(tracked);
+    TaskHandle {
+        abort_handle,
+        join_rx: RefCell::new(Some(rx)),
+    }
+}
+
 /// Main-thread scheduling surface. Methods here are valid only when called
 /// from the main thread.
 ///
@@ -91,8 +162,9 @@ pub trait MainScheduler: 'static {
         factory: Box<dyn FnOnce(Rc<dyn WorkerScheduler>) + Send + 'static>,
     ) -> WorkerHandle;
 
-    /// Spawn a future on the main thread's local executor.
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>);
+    /// Spawn a future on the main thread's local executor. Returns a
+    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
 
     /// Subscribe to vsync events. Each item is one vsync tick.
     /// Call once at engine startup (inside `TurApp::start_loop`).
@@ -113,8 +185,9 @@ pub trait MainScheduler: 'static {
 /// the *current thread's* executor (thread-local LocalPool), so the same
 /// `Rc<dyn WorkerScheduler>` works on any worker thread.
 pub trait WorkerScheduler: 'static {
-    /// Spawn a future on this worker thread's local executor.
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>);
+    /// Spawn a future on this worker thread's local executor. Returns a
+    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
 
     /// Block the calling (worker) thread on a `()`-returning future. Drives
     /// both the future AND any `spawn_local`'d side-futures (LocalPool

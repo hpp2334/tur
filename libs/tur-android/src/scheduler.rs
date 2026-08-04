@@ -50,7 +50,7 @@ use futures::task::LocalSpawnExt;
 use jni::objects::JObject;
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, VsyncEvents, WorkerHandle, WorkerScheduler,
+    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
 };
 
 /// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so
@@ -75,7 +75,7 @@ thread_local! {
 }
 
 /// Helper: spawn a future on the current thread's LocalPool.
-fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
     CURRENT_POOL.with(|pool| {
         // We need a `&self` reference to call `spawner()`. RefCell::borrow
         // gives us that. The spawned future's lifecycle extends beyond
@@ -85,8 +85,10 @@ fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>
         let pool_ref = guard
             .as_ref()
             .expect("spawn_local called with no LocalPool set on this thread");
-        let _ = pool_ref.spawner().spawn_local(fut);
-    });
+        track_spawn(fut, |f| {
+            let _ = pool_ref.spawner().spawn_local(f);
+        })
+    })
 }
 
 /// Helper: drive a future to completion on the current thread's LocalPool.
@@ -193,8 +195,8 @@ impl MainScheduler for AndroidSchedulerDriver {
         }))
     }
 
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
 
     fn vsync_events(&self) -> VsyncEvents {
@@ -237,8 +239,8 @@ impl MainScheduler for AndroidSchedulerDriver {
 }
 
 impl WorkerScheduler for AndroidSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
 
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
@@ -258,8 +260,8 @@ struct AndroidWorkerScheduler {
 }
 
 impl WorkerScheduler for AndroidWorkerScheduler {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
 
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {

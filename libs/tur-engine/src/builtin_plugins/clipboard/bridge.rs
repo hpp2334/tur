@@ -99,7 +99,7 @@ fn tur_clipboard_read_text(
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -135,6 +135,6 @@ fn tur_clipboard_write_text(
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }

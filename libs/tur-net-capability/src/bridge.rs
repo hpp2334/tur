@@ -99,7 +99,7 @@ fn tur_net_request(
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -340,7 +340,7 @@ fn tur_net_request_stream(
             }
         }
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
 
     Ok(promise.into())
 }
@@ -504,7 +504,7 @@ fn tur_stream_next(this: &JsValue, _args: &[JsValue], ctx: &mut Context) -> JsRe
             }
         }
     });
-    sched.spawn_local(fut);
+    let _ = sched.spawn_local(fut);
 
     Ok(promise.into())
 }

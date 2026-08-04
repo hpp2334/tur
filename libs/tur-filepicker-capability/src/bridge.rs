@@ -92,7 +92,7 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -133,7 +133,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 

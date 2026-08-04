@@ -44,7 +44,8 @@ pub struct TurAppInternal {
     /// and call `spawn_local(fut)` to drive async work (clipboard reads,
     /// http requests, sleep futures). The driver's `sleep` returns a
     /// platform-specific `Sleep(BoxFuture)`.
-    #[allow(dead_code)] pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    #[allow(dead_code)]
+    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
     /// Completion queue — closures pushed by spawned futures (e.g. promise
     /// settle closures) are drained inside `flush()` under `&mut Context`.
     /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
@@ -53,7 +54,8 @@ pub struct TurAppInternal {
     /// Cheap-cloned handle on the completion queue, handed out to bridges
     /// via [`PluginContext::completion_handle`] /
     /// [`SubsystemFlushContext::completion_handle`].
-    #[allow(dead_code)] pub(crate) completion_handle: CompletionHandle,
+    #[allow(dead_code)]
+    pub(crate) completion_handle: CompletionHandle,
     /// Plugin-registered flush subsystems. Each is `flush`-ed **every
     /// fixed-point iteration** of `flush()` (possibly several times per
     /// frame), in registration order, before `flush_reactive`. Time-driven
@@ -337,11 +339,7 @@ impl TurAppInternal {
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
             // Quiescence: no events, no mutations, no dirty state, no
             // completions drained this iteration, no microtasks ran.
-            if !handled_events
-                && !handled_mutations
-                && !new_dirty
-                && jobs_run == 0
-            {
+            if !handled_events && !handled_mutations && !new_dirty && jobs_run == 0 {
                 break;
             }
         }

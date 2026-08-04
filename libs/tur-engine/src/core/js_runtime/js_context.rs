@@ -116,4 +116,3 @@ impl TurJsContext {
         &self.image_resource_map
     }
 }
-

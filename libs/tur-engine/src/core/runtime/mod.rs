@@ -160,25 +160,26 @@ impl TurRuntime {
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
-        let backend_factory = move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-                                    wake_worker: Box<dyn Fn() + Send>|
-              -> WorkerBackend {
-            let capabilities = Capabilities::new();
-            for insert_fn in capability_inserts.iter() {
-                insert_fn(&capabilities);
-            }
-            build_worker_backend(
-                clock,
-                font_context,
-                font_loader,
-                capabilities,
-                &plugins,
-                viewport,
-                worker_sched,
-                wake_worker,
-            )
-            .expect("threaded backend factory failed")
-        };
+        let backend_factory =
+            move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+                  wake_worker: Box<dyn Fn() + Send>|
+                  -> WorkerBackend {
+                let capabilities = Capabilities::new();
+                for insert_fn in capability_inserts.iter() {
+                    insert_fn(&capabilities);
+                }
+                build_worker_backend(
+                    clock,
+                    font_context,
+                    font_loader,
+                    capabilities,
+                    &plugins,
+                    viewport,
+                    worker_sched,
+                    wake_worker,
+                )
+                .expect("threaded backend factory failed")
+            };
         let backend = MainBackend::new(self.main_scheduler.clone(), backend_factory);
         let app = Rc::new(TurApp::new(backend, self.main_scheduler.clone()));
         // Push the initial resize so the worker's screen state + the
@@ -421,10 +422,11 @@ impl TurRuntimeBuilder {
     /// common case (one struct implementing both traits).
     pub fn scheduler<S>(self, driver: Rc<S>) -> Self
     where
-        S: crate::core::scheduler::MainScheduler + crate::core::scheduler::WorkerScheduler + 'static,
+        S: crate::core::scheduler::MainScheduler
+            + crate::core::scheduler::WorkerScheduler
+            + 'static,
     {
-        self.main_scheduler(driver.clone())
-            .worker_scheduler(driver)
+        self.main_scheduler(driver.clone()).worker_scheduler(driver)
     }
 
     pub fn build(self) -> Result<Rc<TurRuntime>, TurError> {
@@ -434,12 +436,12 @@ impl TurRuntimeBuilder {
         let clock = self
             .clock
             .expect("clock must be set (use TurRuntimeBuilder::clock)");
-        let main_scheduler = self
-            .main_scheduler
-            .expect("main_scheduler must be set (use TurRuntimeBuilder::main_scheduler or .scheduler)");
-        let worker_scheduler = self
-            .worker_scheduler
-            .expect("worker_scheduler must be set (use TurRuntimeBuilder::worker_scheduler or .scheduler)");
+        let main_scheduler = self.main_scheduler.expect(
+            "main_scheduler must be set (use TurRuntimeBuilder::main_scheduler or .scheduler)",
+        );
+        let worker_scheduler = self.worker_scheduler.expect(
+            "worker_scheduler must be set (use TurRuntimeBuilder::worker_scheduler or .scheduler)",
+        );
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.

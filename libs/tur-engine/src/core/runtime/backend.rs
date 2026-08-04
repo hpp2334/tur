@@ -463,7 +463,12 @@ impl MainBackend {
     /// drives the async worker_loop from the worker thread entry point.
     pub(crate) fn new(
         main_sched: Rc<dyn crate::core::scheduler::MainScheduler>,
-        backend_factory: impl FnOnce(Rc<dyn crate::core::scheduler::WorkerScheduler>, Box<dyn Fn() + Send>) -> WorkerBackend + Send + 'static,
+        backend_factory: impl FnOnce(
+            Rc<dyn crate::core::scheduler::WorkerScheduler>,
+            Box<dyn Fn() + Send>,
+        ) -> WorkerBackend
+        + Send
+        + 'static,
     ) -> Self {
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = futures::channel::mpsc::unbounded::<MainMsg>();

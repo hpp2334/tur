@@ -8,35 +8,47 @@
 //!   [`crate::core::scheduler::WorkerScheduler::sleep`]. The worker-side
 //!   scheduler provides a platform-specific `Sleep(BoxFuture)` (setTimeout
 //!   on wasm, tokio::time::sleep on native, virtual clock on tests). When
-//!   the Sleep resolves, the completion settles the promise + fires
+//!   the Sleep resolves, the completion settle the promise + fires
 //!   `on_push`, which self-sends `WorkerMsg::Wake` so the worker flushes
 //!   promptly to drain.
-//! - `launch(gen): Task` runs a generator function as a cancellable coroutine.
-//!   The generator `yield`s Promises (typically `sleep(ms)`); the driver
-//!   resumes it when each yielded promise resolves. The returned `Task`
-//!   exposes `cancel()`, which stops further resumption. Generators — unlike
-//!   async functions — can be externally stepped/abandoned, which is what
-//!   makes real cancellation possible.
+//! - `launch(gen): Task` runs a generator function as a cancellable
+//!   coroutine. The generator `yield`s Promises (typically `sleep(ms)`);
+//!   each resolved promise resumes the generator, passing the resolved
+//!   value back as the `yield` result. A rejected yielded promise throws
+//!   its reason into the generator at the `yield` (catchable with
+//!   `try/catch`); if uncaught, the driver logs and stops. Returns a `Task`
+//!   with a `cancel()` method.
 //!
-//! Rejection semantics: when a yielded promise rejects, the driver throws the
-//! rejection reason into the generator at the `yield` point (via
-//! `iterator.throw`), so a `try/catch` around the `yield` catches it — the
-//! same ergonomics as `await`. If the generator body does not catch it, the
-//! driver logs the uncaught rejection and stops resuming. This is safe to use
-//! with fallible Promises (`clipboard.readText`, `http`, `fetch`), not just
-//! `sleep`.
+//! ## Cancellation model
 //!
-//! Cancellation semantics: `cancel()` simply stops resuming. The in-flight
-//! `sleep` Rust future still fires later and resolves its promise; the driver
-//! ignores a cancelled task's resolution, so the generator body after the
-//! current `yield` never runs again.
+//! `launch` runs the generator inside a task spawned via
+//! [`WorkerScheduler::spawn_local`], which returns a [`TaskHandle`]. The
+//! `Task.cancel()` JS method calls `TaskHandle::abort()`, which **drops the
+//! driver future at its next `.await`** — so a pending `sleep` is dropped
+//! (its timer cancelled) and the generator never resumes past the current
+//! `yield`. This is real cancellation, not a soft flag.
+//!
+//! The driver is structured so every boa-touching op (calling the generator
+//! function, `iter.next(v)`, `iter.throw(r)`, attaching `.then`) runs inside
+//! a [`CompletionHandle::run`] closure (has `&mut Context`); awaiting a
+//! yielded promise uses [`promise_to_future`], which attaches `.then` under
+//! `Context` and then polls a shared slot from the async task.
+//!
+//! ## Generators vs. async functions
+//!
+//! Driven via `.next(value)` / `.throw(reason)` (the ES iterator protocol),
+//! so it works with native `function*` generators AND SWC/TypeScript
+//! down-levelled generators (tslib `_ts_generator`), which is what bundled
+//! code (e.g. the rspack-built playground `impl.js`) produces.
 //!
 //! Both fns are ctx-bound `Ptr`s (see `bound_native`): `args[0]` is the
 //! `TurJsContext`, user args start at `args[1]`.
 
-use std::cell::Cell;
+use std::cell::RefCell;
+use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::task::{Poll, Waker};
 
 use boa_engine::js_string;
 use boa_engine::native_function::NativeFunction;
@@ -45,6 +57,7 @@ use boa_engine::object::{FunctionObjectBuilder, JsObject};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::core::js_runtime::helpers::{FnEntry, extract_ctx};
+use crate::core::scheduler::TaskHandle;
 
 /// Bridge function table entries for `tur:std`: `sleep` + `launch`.
 pub fn fns() -> Vec<FnEntry> {
@@ -76,23 +89,19 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
             Ok(())
         }));
     });
-    worker_sched.spawn_local(fut);
+    // Fire-and-forget: the sleep resolves once, settling the promise.
+    // Dropping the handle detaches (no abort needed).
+    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
 /// `launch(gen): Task` — runs a zero-arg generator function as a cancellable
-/// coroutine. The generator must `yield` Promises (e.g. `yield sleep(ms)`);
-/// each resolved promise resumes the generator, passing the resolved value
-/// back as the `yield` result. A rejected yielded promise throws its reason
-/// into the generator at the `yield` (catchable with `try/catch`); if
-/// uncaught, the driver logs and stops. Returns a `Task` with a `cancel()`
-/// method.
-///
-/// Drives the iterator generically via `.next(value)` (the ES iterator
-/// protocol), so it works with native `function*` generators AND
-/// SWC/TypeScript-down-levelled generators (tslib `_ts_generator`), which is
-/// what bundled code (e.g. the rspack-built playground `impl.js`) produces.
+/// coroutine. See the module docs for the full model.
 fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    let js_ctx = extract_ctx(args)?;
+    let worker_sched = js_ctx.worker_sched().clone();
+    let completion_handle = js_ctx.completion_handle();
+
     let gen_fn = args
         .get_or_undefined(1)
         .as_object()
@@ -103,30 +112,66 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
             )
         })?;
 
-    // Invoke the generator function to obtain the iterator object. For native
-    // generators this is a `Generator`; for down-levelled (tslib) generators
-    // it's a plain object with a `.next` method. We drive both the same way.
-    let gen_value = gen_fn.call(&JsValue::undefined(), &[], ctx)?;
-    let gen_obj = gen_value.as_object().ok_or_else(|| {
-        JsError::from(
-            JsNativeError::typ()
-                .with_message("launch: generator function did not return an iterator"),
-        )
-    })?;
-    require_iterator(&gen_obj, ctx)?;
+    // Drive the generator inside a spawned, abortable task. Returns a
+    // TaskHandle whose `abort()` becomes the JS `Task.cancel()`.
+    let handle: TaskHandle = worker_sched.spawn_local(Box::pin(async move {
+        // Construct the iterator under Context.
+        let iter = match completion_handle
+            .run(move |ctx| {
+                let gen_value = gen_fn.call(&JsValue::undefined(), &[], ctx)?;
+                let obj = gen_value.as_object().ok_or_else(|| {
+                    JsError::from(JsNativeError::typ()
+                        .with_message("launch: generator function did not return an iterator"))
+                })?;
+                require_iterator(&obj, ctx)?;
+                Ok::<_, JsError>(obj)
+            })
+            .await
+        {
+            Some(Ok(iter)) => iter,
+            Some(Err(e)) => {
+                tracing::error!("launch: {e}");
+                return;
+            }
+            None => return,
+        };
 
-    let cancelled = Rc::new(Cell::new(false));
+        // Resume value threaded between steps: `Ok(v)` → next(v),
+        // `Err(r)` → throw(r).
+        let mut resume: StepResume = StepResume::Next(JsValue::undefined());
+        loop {
+            let iter_for_step = iter.clone();
+            let resume_for_step = std::mem::replace(&mut resume, StepResume::Next(JsValue::undefined()));
+            // Drive one iterator step under Context (next or throw), then
+            // attach `.then` to the yielded thenable.
+            let step_result = completion_handle
+                .run(move |ctx| step_under_ctx(ctx, &iter_for_step, resume_for_step))
+                .await;
+            let pf = match step_result {
+                None => return,
+                Some(Err(e)) => {
+                    tracing::error!("launch: generator threw: {e}");
+                    return;
+                }
+                Some(Ok(Step::Done)) => return,
+                Some(Ok(Step::Pending(pf))) => pf,
+            };
+            // Await the yielded promise outside Context.
+            match pf.await {
+                Ok(v) => resume = StepResume::Next(v),
+                Err(reason) => resume = StepResume::Throw(reason),
+            }
+        }
+    }));
 
-    // Kick off the first step synchronously. The generator runs until its
-    // first `yield`, then parks on the yielded promise.
-    let initial = build_step(gen_obj, cancelled.clone(), ctx)?;
-    initial.call(&JsValue::undefined(), &[], ctx)?;
-
-    // Build the `Task` handle: `{ cancel(): void }`.
-    let cancelled_for_cancel = cancelled;
+    // Build the `Task` handle: `{ cancel(): void }`. The TaskHandle is
+    // shared (Rc) between this scope + the cancel closure; abort(&self)
+    // needs only &self, so the Fn closure can fire it any number of times.
+    let handle = Rc::new(handle);
+    let handle_for_cancel = handle.clone();
     let cancel_fn = unsafe {
         NativeFunction::from_closure(move |_this, _args, _ctx| {
-            cancelled_for_cancel.set(true);
+            handle_for_cancel.abort();
             Ok(JsValue::undefined())
         })
     };
@@ -137,6 +182,49 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
     let task = JsObject::from_proto_and_data(proto, ());
     task.create_data_property(js_string!("cancel"), JsValue::from(cancel_obj), ctx)?;
     Ok(task.into())
+}
+
+/// Resume directive for the next iterator step.
+enum StepResume {
+    /// `iter.next(value)` — feed the previously-yielded promise's resolved
+    /// value back into the generator.
+    Next(JsValue),
+    /// `iter.throw(reason)` — deliver a rejection at the `yield` point.
+    Throw(JsValue),
+}
+
+/// Outcome of one iterator step.
+enum Step {
+    /// The generator returned `{ done: true }` — finished.
+    Done,
+    /// Still alive; await this thenable before the next step.
+    Pending(PromiseFuture),
+}
+
+/// Run one iterator step (`next` or `throw`) under `&mut Context`, parse the
+/// result, and (if the generator is still alive) attach `.then` to the
+/// yielded value. Returns the [`Step`] to drive next.
+fn step_under_ctx(
+    ctx: &mut Context,
+    iter: &JsObject,
+    resume: StepResume,
+) -> JsResult<Step> {
+    let result = match resume {
+        StepResume::Next(v) => iter_next(iter, v, ctx)?,
+        StepResume::Throw(r) => iter_throw(iter, r, ctx)?,
+    };
+    let result_obj = result.as_object().ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ().with_message("launch: iterator did not return an object"),
+        )
+    })?;
+    let done = result_obj.get(js_string!("done"), ctx)?.to_boolean();
+    if done {
+        return Ok(Step::Done);
+    }
+    let value = result_obj.get(js_string!("value"), ctx)?;
+    let pf = promise_to_future(value, ctx)?;
+    Ok(Step::Pending(pf))
 }
 
 /// Confirm `obj` has a callable `.next` (i.e. is an iterator).
@@ -184,112 +272,106 @@ fn iter_throw(iter: &JsObject, reason: JsValue, ctx: &mut Context) -> JsResult<J
     throw_fn.call(&iter.clone().into(), &[reason], ctx)
 }
 
-/// Shared post-resume logic: parse the iterator result `{done, value}`, and
-/// if the generator is still alive, attach the next pair of `.then` handlers
-/// (fulfilled + rejected) to the newly-yielded thenable so the coroutine
-/// resumes — or surfaces a rejection — when it settles.
-fn drive_result(
-    result: JsValue,
-    iterator: &JsObject,
-    cancelled: Rc<Cell<bool>>,
-    ctx: &mut Context,
-) -> JsResult<JsValue> {
-    let Some(result_obj) = result.as_object() else {
-        tracing::error!("launch: iterator did not return an object");
-        return Ok(JsValue::undefined());
-    };
-    let done = result_obj.get(js_string!("done"), ctx)?.to_boolean();
-    if done {
-        return Ok(JsValue::undefined());
-    }
-    let value = result_obj.get(js_string!("value"), ctx)?;
+// ── Promise → Future bridge ──────────────────────────────────────────────
 
-    // The yielded value must be a thenable (a Promise such as `sleep(ms)`).
-    // Attach both the fulfilled and rejected handlers to its `.then`.
-    if let Some(obj) = value.as_object()
-        && let Some(then_fn) = obj
-            .get(js_string!("then"), ctx)?
-            .as_object()
-            .filter(|f| f.is_callable())
-    {
-        let on_fulfilled = build_step(iterator.clone(), cancelled.clone(), ctx)?;
-        let on_rejected = build_reject_step(iterator.clone(), cancelled.clone(), ctx)?;
-        then_fn.call(
-            &obj.clone().into(),
-            &[on_fulfilled.into(), on_rejected.into()],
-            ctx,
-        )?;
-        return Ok(JsValue::undefined());
-    }
-    tracing::error!("launch: generator yielded a non-thenable; yield a Promise (e.g. sleep(ms))");
-    Ok(JsValue::undefined())
+/// A thenable (object with a callable `.then`) turned into a Rust future.
+///
+/// Built by [`promise_to_future`] under `&mut Context` (it attaches `.then`
+/// then). Polling stores the [`Waker`]; when the promise settles, the
+/// `.then` reaction fills the shared slot and wakes the task.
+///
+/// Single-threaded (holds `Rc`); fine for `spawn_local` tasks.
+struct PromiseFuture {
+    /// `Ok(value)` on fulfill, `Err(reason)` on reject. Filled by the
+    /// `.then` reaction; taken by `poll`.
+    slot: Rc<RefCell<Option<Result<JsValue, JsValue>>>>,
+    /// Waker registered on first `poll`; used by the `.then` reaction to
+    /// re-poll when the promise settles later (e.g. after `sleep(ms)`).
+    waker: Rc<RefCell<Option<Waker>>>,
 }
 
-/// Build the resume callback for one step of a coroutine. Invoked when the
-/// previously-yielded promise resolves: passes the resolved value back into
-/// the generator as the `yield` result, then drives the new result. A fresh
-/// closure is built per resume (rather than reusing one self-referencing fn)
-/// to sidestep Rust's recursive-closure limitation.
-fn build_step(
-    iterator: JsObject,
-    cancelled: Rc<Cell<bool>>,
-    ctx: &mut Context,
-) -> JsResult<JsObject> {
-    let iter_for_step = iterator.clone();
-    let cancelled_for_step = cancelled.clone();
-    let step_fn = unsafe {
-        NativeFunction::from_closure(move |_this, args, ctx| {
-            if cancelled_for_step.get() {
-                return Ok(JsValue::undefined());
-            }
-            // `args[0]` is the resolved value of the previously-yielded
-            // promise; feed it back into the generator as the `yield` result.
-            let resume_value = args.get_or_undefined(0).clone();
-            match iter_next(&iter_for_step, resume_value, ctx) {
-                Ok(result) => drive_result(result, &iter_for_step, cancelled_for_step.clone(), ctx),
-                Err(e) => {
-                    tracing::error!("launch: generator threw: {e}");
-                    Ok(JsValue::undefined())
-                }
-            }
-        })
-    };
-    Ok(FunctionObjectBuilder::new(ctx.realm(), step_fn)
-        .name(js_string!("launchStep"))
-        .build()
-        .into())
+impl Future for PromiseFuture {
+    type Output = Result<JsValue, JsValue>;
+    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        // Register/refresh the waker before checking the slot: if the
+        // promise settles after this poll, the reaction can wake us.
+        *self.waker.borrow_mut() = Some(cx.waker().clone());
+        match self.slot.borrow_mut().take() {
+            Some(v) => Poll::Ready(v),
+            None => Poll::Pending,
+        }
+    }
 }
 
-/// Build the rejection callback for one step of a coroutine. Invoked when the
-/// previously-yielded promise rejects: throws the rejection reason into the
-/// generator at the `yield` point (via `iterator.throw`), where it surfaces as
-/// a thrown error catchable by a `try/catch` around the `yield`. If the body
-/// does not catch it, `.throw()` rethrows and the driver logs + stops.
-fn build_reject_step(
-    iterator: JsObject,
-    cancelled: Rc<Cell<bool>>,
-    ctx: &mut Context,
-) -> JsResult<JsObject> {
-    let iter_for_step = iterator.clone();
-    let cancelled_for_step = cancelled.clone();
-    let step_fn = unsafe {
-        NativeFunction::from_closure(move |_this, args, ctx| {
-            if cancelled_for_step.get() {
-                return Ok(JsValue::undefined());
+/// Attach `.then(on_fulfilled, on_rejected)` to a yielded thenable and
+/// return a [`PromiseFuture`] that resolves when it settles. The thenable
+/// must be a JS object with a callable `.then` (a `JsPromise` or any
+/// promise-like value — works with SWC/tslib-down-levelled code too).
+///
+/// The `.then` reactions run under `&mut Context` during boa's microtask
+/// drain (inside `flush()`); they fill the shared slot + wake the polling
+/// task. If the promise was already settled, the reaction runs on the next
+/// boa drain — but the [`CompletionHandle::run`] completion that built this
+/// future has already returned, and its oneshot re-polls the task, so the
+/// pre-filled slot is read on that same cycle. No set-waker race.
+fn promise_to_future(thenable: JsValue, ctx: &mut Context) -> JsResult<PromiseFuture> {
+    let thenable_obj = thenable.as_object().ok_or_else(|| {
+        JsError::from(JsNativeError::typ().with_message(
+            "launch: generator yielded a non-thenable; yield a Promise (e.g. sleep(ms))",
+        ))
+    })?;
+    let then_fn = thenable_obj
+        .get(js_string!("then"), ctx)?
+        .as_object()
+        .filter(|f| f.is_callable())
+        .ok_or_else(|| {
+            JsError::from(
+                JsNativeError::typ().with_message("launch: yielded value has no callable .then"),
+            )
+        })?;
+
+    let slot: Rc<RefCell<Option<Result<JsValue, JsValue>>>> = Rc::new(RefCell::new(None));
+    let waker: Rc<RefCell<Option<Waker>>> = Rc::new(RefCell::new(None));
+
+    let slot_f = slot.clone();
+    let waker_f = waker.clone();
+    let on_fulfilled = unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let v = args.get_or_undefined(0).clone();
+            // Guard against a double-settle (shouldn't happen, but cheap).
+            if slot_f.borrow_mut().replace(Ok(v)).is_none()
+                && let Some(w) = waker_f.borrow().as_ref()
+            {
+                w.wake_by_ref();
             }
-            // `args[0]` is the rejection reason; throw it into the generator.
-            let reason = args.get_or_undefined(0).clone();
-            match iter_throw(&iter_for_step, reason, ctx) {
-                Ok(result) => drive_result(result, &iter_for_step, cancelled_for_step.clone(), ctx),
-                Err(e) => {
-                    tracing::error!("launch: generator threw (uncaught rejection): {e}");
-                    Ok(JsValue::undefined())
-                }
-            }
+            Ok(JsValue::undefined())
         })
     };
-    Ok(FunctionObjectBuilder::new(ctx.realm(), step_fn)
-        .name(js_string!("launchRejectStep"))
-        .build()
-        .into())
+    let slot_r = slot.clone();
+    let waker_r = waker.clone();
+    let on_rejected = unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let r = args.get_or_undefined(0).clone();
+            if slot_r.borrow_mut().replace(Err(r)).is_none()
+                && let Some(w) = waker_r.borrow().as_ref()
+            {
+                w.wake_by_ref();
+            }
+            Ok(JsValue::undefined())
+        })
+    };
+
+    let on_fulfilled_obj = FunctionObjectBuilder::new(ctx.realm(), on_fulfilled)
+        .name(js_string!("launchThenFulfilled"))
+        .build();
+    let on_rejected_obj = FunctionObjectBuilder::new(ctx.realm(), on_rejected)
+        .name(js_string!("launchThenRejected"))
+        .build();
+    then_fn.call(
+        &thenable_obj.clone().into(),
+        &[on_fulfilled_obj.into(), on_rejected_obj.into()],
+        ctx,
+    )?;
+
+    Ok(PromiseFuture { slot, waker })
 }

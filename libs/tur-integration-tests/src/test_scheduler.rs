@@ -24,7 +24,7 @@ use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, VsyncEvents, WorkerHandle, WorkerScheduler,
+    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
 };
 
 /// Shared virtual clock state. The test harness holds a clone + advances
@@ -86,14 +86,16 @@ fn init_thread_exec(clock: Arc<Mutex<VirtualClock>>) {
     CURRENT_CLOCK.with(|c| *c.borrow_mut() = Some(clock));
 }
 
-fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
     let local = CURRENT_EXEC.with(|c| {
         c.borrow()
             .as_ref()
             .map(|(_, local)| local.clone())
             .expect("spawn_local called with no LocalSet on current thread")
     });
-    local.spawn_local(fut);
+    track_spawn(fut, |f| {
+        local.spawn_local(f);
+    })
 }
 
 fn block_on_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
@@ -200,8 +202,8 @@ impl MainScheduler for TestSchedulerDriver {
         }))
     }
 
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
 
     fn vsync_events(&self) -> VsyncEvents {
@@ -218,8 +220,8 @@ impl MainScheduler for TestSchedulerDriver {
 }
 
 impl WorkerScheduler for TestSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
         block_on_on_current_thread(fut);
@@ -232,8 +234,8 @@ impl WorkerScheduler for TestSchedulerDriver {
 struct TestWorkerScheduler;
 
 impl WorkerScheduler for TestWorkerScheduler {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        spawn_local_on_current_thread(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        spawn_local_on_current_thread(fut)
     }
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
         block_on_on_current_thread(fut);

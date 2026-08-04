@@ -23,6 +23,8 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::future::Future;
+use std::pin::Pin;
 use std::rc::Rc;
 
 use boa_engine::Context;
@@ -102,6 +104,52 @@ impl CompletionHandle {
     pub fn push(&self, completion: Completion) {
         self.pending.borrow_mut().push_back(completion);
         (self.on_push)();
+    }
+
+    /// Push a completion that returns a value, and return a [`Future`] that
+    /// resolves with that value once the completion drains (on the next
+    /// `flush()`). Used by async code running on a [`WorkerScheduler`]'s
+    /// executor that needs to run boa-touching logic under `&mut Context`
+    /// and hand the result back into the async flow — e.g. driving a JS
+    /// generator from a spawned task (see `tur_launch`).
+    ///
+    /// The future resolves to `None` if the completion queue is dropped
+    /// before the completion runs (shouldn't happen in normal operation —
+    /// the queue lives for the app's lifetime).
+    ///
+    /// `T` must be `'static` (it crosses the drain boundary via a oneshot);
+    /// single-threaded, so `!Send` values (e.g. `JsValue`) are fine.
+    pub fn run<T: 'static>(&self, f: impl FnOnce(&mut Context) -> T + 'static) -> RunFuture<T> {
+        let (tx, rx) = futures::channel::oneshot::channel();
+        let completion: Completion = Box::new(move |ctx| {
+            let v = f(ctx);
+            // Send failure means the caller's future was dropped (e.g.
+            // aborted) before the completion drained — harmless.
+            let _ = tx.send(v);
+            Ok(())
+        });
+        self.push(completion);
+        RunFuture { rx }
+    }
+}
+
+/// Future returned by [`CompletionHandle::run`]. Resolves to the
+/// completion closure's return value (or `None` if the queue was dropped).
+pub struct RunFuture<T> {
+    rx: futures::channel::oneshot::Receiver<T>,
+}
+
+impl<T> Future for RunFuture<T> {
+    type Output = Option<T>;
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        match Pin::new(&mut self.rx).poll(cx) {
+            std::task::Poll::Ready(Ok(v)) => std::task::Poll::Ready(Some(v)),
+            std::task::Poll::Ready(Err(_)) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
     }
 }
 

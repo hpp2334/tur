@@ -41,7 +41,7 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen::closure::Closure;
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, VsyncEvents, WorkerHandle, WorkerScheduler,
+    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
 };
 
 /// Wasm-backed scheduler driver. Construct via [`WasmSchedulerDriver::new`].
@@ -117,8 +117,8 @@ impl MainScheduler for WasmSchedulerDriver {
         }))
     }
 
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        wasm_bindgen_futures::spawn_local(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }
 
     fn vsync_events(&self) -> VsyncEvents {
@@ -156,8 +156,8 @@ impl MainScheduler for WasmSchedulerDriver {
 /// passed via `TurRuntimeBuilder::scheduler(driver)`. The worker methods
 /// are identical to the main methods (wasm primitives work on any thread).
 impl WorkerScheduler for WasmSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        wasm_bindgen_futures::spawn_local(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }
 
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
@@ -176,8 +176,8 @@ impl WorkerScheduler for WasmSchedulerDriver {
 struct WasmWorkerScheduler;
 
 impl WorkerScheduler for WasmWorkerScheduler {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        wasm_bindgen_futures::spawn_local(fut);
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }
 
     fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {

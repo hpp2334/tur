@@ -71,10 +71,9 @@ impl Subsystem for ClipboardWriteSubsystem {
             return;
         };
         let backend = clipboard_cap.backend().clone();
-        let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> =
-            Box::pin(async move {
-                backend.write_text(text).await;
-            });
-        cx.worker_sched.spawn_local(fut);
+        let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+            backend.write_text(text).await;
+        });
+        let _ = cx.worker_sched.spawn_local(fut);
     }
 }

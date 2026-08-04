@@ -1,7 +1,5 @@
-use std::sync::Arc;
-use std::cell::Cell;
 use std::pin::Pin;
-use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::render::brush::Color;
@@ -10,8 +8,7 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::builtin_plugins::text::controller::TextEditingController;
-use crate::builtin_plugins::text::controller::{
+use crate::builtin_plugins::text::controller::TextEditingController;use crate::builtin_plugins::text::controller::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };
@@ -32,6 +29,7 @@ use crate::core::platform::ImeEvent;
 use crate::core::platform::PointerDeviceKind;
 use crate::core::platform::key_event::KeydownEvent;
 use crate::core::platform::key_event::{KeyEvent, KeyEventType};
+use crate::core::scheduler::TaskHandle;
 use crate::core::text::text_layout::TextLayoutData;
 use crate::core::view::{Lifecycle, SharedViewCx, Val, View, ViewCx, read_atom_raw};
 
@@ -165,7 +163,7 @@ impl View for EditableTextView {
                 resolved_obscured: false,
                 resolved_obscuring_char: '\u{2022}',
                 painting: EditableTextPainting::default(),
-                blink_task_cancel: None,
+                blink_task: None,
             })
             .with_callbacks()
             .with_cursor_rect::<EditableTextElement>()
@@ -205,18 +203,19 @@ pub struct EditableTextElement {
     /// Last-resolved `obscuringCharacter` (default `•`).
     pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
-    /// Cancellation flag for the caret-blink task. `Some(flag)` while focused
-    /// (the spawned blink loop checks it each tick + exits when set); `None`
-    /// when unfocused. On blur or element drop, the flag is set so the loop
-    /// exits on its next tick.
-    pub(crate) blink_task_cancel: Option<Rc<Cell<bool>>>,
+    /// Handle to the caret-blink task. `Some` while focused (the spawned
+    /// loop ticks `need_paint` each half-period); `None` when unfocused.
+    /// On blur or element drop, the handle is aborted, which drops the
+    /// pending `Sleep` and halts the loop immediately.
+    pub(crate) blink_task: Option<TaskHandle>,
 }
 
 impl Drop for EditableTextElement {
     fn drop(&mut self) {
-        // Signal the spawned blink loop to exit on its next tick.
-        if let Some(c) = self.blink_task_cancel.take() {
-            c.set(true);
+        // Abort the spawned blink loop — drops its pending Sleep so the
+        // next tick never fires.
+        if let Some(h) = self.blink_task.take() {
+            h.abort();
         }
     }
 }
@@ -847,25 +846,24 @@ impl Lifecycle for EditableTextElement {
         if focused {
             let worker_sched = cx.js_ctx().worker_sched().clone();
             let need_paint = cx.js_ctx().need_paint.clone();
-            // Cooperative cancellation flag. The spawned blink loop
-            // checks this each tick + exits when set. Dropping the
-            // handle (on blur or element drop) sets it.
-            let cancelled = Rc::new(Cell::new(false));
-            let cancelled_for_loop = cancelled.clone();
-            self.blink_task_cancel = Some(cancelled);
             let worker_sched_for_loop = worker_sched.clone();
-            let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
-                loop {
-                    let sleep = worker_sched_for_loop.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS));
-                    sleep.await;
-                    if cancelled_for_loop.get() { return; }
-                    need_paint.set(true);
-                }
-            });
-            worker_sched.spawn_local(fut);
+            // Spawn the blink loop; abort() on blur/drop drops the pending
+            // Sleep + halts the loop immediately (no per-tick flag).
+            let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> =
+                Box::pin(async move {
+                    loop {
+                        worker_sched_for_loop
+                            .sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
+                            .await;
+                        need_paint.set(true);
+                    }
+                });
+            self.blink_task = Some(worker_sched.spawn_local(fut));
         } else {
-            // Signal the spawned loop to exit on its next tick.
-            if let Some(c) = self.blink_task_cancel.take() { c.set(true); }
+            // Abort the spawned loop — drops its pending Sleep.
+            if let Some(h) = self.blink_task.take() {
+                h.abort();
+            }
         }
     }
 }
