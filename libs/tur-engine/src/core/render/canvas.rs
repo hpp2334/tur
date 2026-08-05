@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
-use vello_common::kurbo::Affine;
+use vello_common::kurbo::{Affine, Rect};
 
 use crate::core::image_resource::ImageResourceId;
 use crate::core::text::text_layout::TextLayoutData;
@@ -56,6 +56,23 @@ pub trait Canvas: fmt::Debug {
     /// `pop_transform` is called.
     fn push_transform(&mut self, transform: Affine);
     fn pop_transform(&mut self);
+
+    /// Current clip rectangle in the canvas's coordinate space (logical, same
+    /// space as the accumulated transform stack), if any clip is currently
+    /// active. Used by the paint walk to **cull fully-clipped subtrees before
+    /// painting them** — `NodeTreeData::paint_element` tests each node's
+    /// transformed bbox against this rect and skips the subtree when they
+    /// don't intersect.
+    ///
+    /// The rect is conservative: rounded/circle clips report their AABB, and
+    /// a node's bbox is the AABB of its transformed corners — so a visible
+    /// node is never wrongly culled (only extra off-screen nodes may be kept).
+    ///
+    /// Default: `None` (no clip known → paint everything). Implementations
+    /// that track clips (`RecordingCanvas`, `VelloPaintContext`) override this.
+    fn current_clip_rect(&self) -> Option<Rect> {
+        None
+    }
 
     /// Called by the paint walk at the start of each node, before
     /// `push_transform`. Default: no-op. `RecordingCanvas` overrides this

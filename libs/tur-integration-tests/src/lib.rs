@@ -50,6 +50,7 @@ use tur_engine::core::platform::Cursor;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::render::Renderer;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
@@ -347,7 +348,7 @@ pub struct TurTestApp {
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new())
+        Self::build(width, height, None, None, Vec::new(), None)
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -355,7 +356,14 @@ impl TurTestApp {
     /// responses via [`Self::set_http_response`]; capture requests via
     /// [`Self::last_http_request`].
     pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, Some(RecordingHttp::new()), None, Vec::new())
+        Self::build(
+            width,
+            height,
+            Some(RecordingHttp::new()),
+            None,
+            Vec::new(),
+            None,
+        )
     }
 
     /// Construct with `TurFilePickerPlugin` registered against a fresh
@@ -369,6 +377,7 @@ impl TurTestApp {
             None,
             Some(RecordingFilePicker::new()),
             Vec::new(),
+            None,
         )
     }
 
@@ -381,7 +390,19 @@ impl TurTestApp {
         height: f64,
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, extra_plugins)
+        Self::build(width, height, None, None, extra_plugins, None)
+    }
+
+    /// Construct with a custom [`Renderer`] (instead of the default
+    /// `NoopRenderer`), keeping every other harness ergonomic (load / wheel /
+    /// render / element_tree). Used by tests that need to inspect the actual
+    /// `RenderCommand` stream a frame produces (e.g. paint-walk culling).
+    pub fn new_with_renderer(
+        width: f64,
+        height: f64,
+        renderer: Box<dyn Renderer>,
+    ) -> Result<Self, TurError> {
+        Self::build(width, height, None, None, Vec::new(), Some(renderer))
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -391,6 +412,7 @@ impl TurTestApp {
         http: Option<RecordingHttp>,
         filepicker: Option<RecordingFilePicker>,
         extra_plugins: Vec<Box<dyn Plugin>>,
+        renderer: Option<Box<dyn Renderer>>,
     ) -> Result<Self, TurError> {
         let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let clipboard = RecordingClipboard::new();
@@ -421,7 +443,8 @@ impl TurTestApp {
             builder = builder.plugin_boxed(p);
         }
         let runtime = builder.build()?;
-        let inner = runtime.create_app(Box::new(NoopRenderer::new()), (width, height), 1.0)?;
+        let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
+        let inner = runtime.create_app(renderer, (width, height), 1.0)?;
         let _ = block_on(inner.run_frame());
         Ok(Self {
             inner,

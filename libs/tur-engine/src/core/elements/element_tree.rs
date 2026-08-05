@@ -619,6 +619,36 @@ impl NodeTreeData {
         // threaded through `PaintContext` for pointer-space conversions.
         let rel = element.relative_transform(&node.computed_layout);
         let absolute = parent_absolute * rel;
+
+        // Cull fully-clipped subtrees before painting. Conservative: the
+        // node's bbox is the AABB of its 4 transformed corners (a superset
+        // for rotated/scaled nodes), and the clip is itself an AABB — so a
+        // visible node is never wrongly skipped (only extra off-screen nodes
+        // may be kept). Scroll offsets are baked into `absolute` via layout
+        // offsets (no element uses `canvas.push_transform`), so a scrolled-
+        // out node's bbox genuinely lies outside the ScrollView's clip.
+        // Skipping here elides `notify_node_entry`, the element paint body,
+        // and the whole recursion — the main win for long scrollable lists.
+        if let Some(clip) = canvas.current_clip_rect() {
+            let s = node.computed_layout.size;
+            let c = [
+                absolute * Point::new(0.0, 0.0),
+                absolute * Point::new(s.width, 0.0),
+                absolute * Point::new(0.0, s.height),
+                absolute * Point::new(s.width, s.height),
+            ];
+            let min_x = c[0].x.min(c[1].x).min(c[2].x).min(c[3].x);
+            let max_x = c[0].x.max(c[1].x).max(c[2].x).max(c[3].x);
+            let min_y = c[0].y.min(c[1].y).min(c[2].y).min(c[3].y);
+            let max_y = c[0].y.max(c[1].y).max(c[2].y).max(c[3].y);
+            // Inclusive overlap test (a hair's-breadth touch keeps the node).
+            let intersects =
+                max_x >= clip.x0 && min_x <= clip.x1 && max_y >= clip.y0 && min_y <= clip.y1;
+            if !intersects {
+                return;
+            }
+        }
+
         canvas.notify_node_entry(id, absolute, node.computed_layout.size);
 
         let paint_ctx = PaintContext::new(

@@ -209,9 +209,16 @@ impl TurAppContext {
     pub fn build_render_batch(&mut self, extra_commands: Vec<RenderCommand>) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();
 
-        // Record the paint pass.
+        // Record the paint pass. Seed the recording canvas with the logical
+        // viewport as the bottom-of-stack clip so off-screen subtrees are
+        // culled during the walk (content outside the screen is invisible
+        // anyway). Explicit element clips (ScrollView, overflow-Flex, …)
+        // push further inner clips intersected with this viewport.
         let tree = self.element_tree.borrow();
-        let mut recording = RecordingCanvas::new();
+        let (vp_w, vp_h) = self.screen.logical_size;
+        let mut recording = RecordingCanvas::new_with_viewport(vello_common::kurbo::Rect::new(
+            0.0, 0.0, vp_w, vp_h,
+        ));
         {
             let shell = self.shell.paint_face();
             tree.paint(

@@ -22,7 +22,7 @@ use crate::core::render::command::{CanvasOp, RenderCommand};
 use crate::core::text::text_layout::TextLayoutData;
 use std::fmt;
 use std::sync::Arc;
-use vello_common::kurbo::Affine;
+use vello_common::kurbo::{Affine, Point, Rect};
 
 /// Internal recording entry — either a recorded canvas op or a per-node
 /// boundary marker placed by the paint walk's `notify_node_entry` /
@@ -46,8 +46,24 @@ enum RecordingOp {
 /// paint walk. Owns its op vec so the record pass can extract it via
 /// [`into_render_commands`](Self::into_render_commands) without lifetime
 /// gymnastics.
+///
+/// In addition to recording, it mirrors the transform + clip stacks the
+/// playback canvas would maintain, so the record pass can answer
+/// [`Canvas::current_clip_rect`] and let `NodeTreeData::paint_element`
+/// **cull fully-clipped subtrees before recording them** (skips the element
+/// paint body + the whole subtree — the high-value win for long scrollable
+/// lists where most children are off-screen).
 pub struct RecordingCanvas {
     ops: Vec<RecordingOp>,
+    /// Mirror of the playback transform stack, in **logical** space (root =
+    /// `IDENTITY`). `notify_node_entry` pushes the node's `absolute`
+    /// affine; `push_transform` composes. Used only to compute clip rects.
+    transform_stack: Vec<Affine>,
+    /// Conservative logical-space AABBs of active clips, innermost last.
+    /// Empty when no clip is active (→ [`Canvas::current_clip_rect`] returns
+    /// `None` → no culling). A viewport seed can populate it at construction
+    /// (see [`RecordingCanvas::new_with_viewport`]).
+    clip_stack: Vec<Rect>,
 }
 
 impl fmt::Debug for RecordingCanvas {
@@ -66,7 +82,60 @@ impl Default for RecordingCanvas {
 
 impl RecordingCanvas {
     pub fn new() -> Self {
-        Self { ops: Vec::new() }
+        Self {
+            ops: Vec::new(),
+            transform_stack: vec![Affine::IDENTITY],
+            clip_stack: Vec::new(),
+        }
+    }
+
+    /// Construct with a viewport seed (logical-space rect). The viewport is
+    /// pushed as the bottom-of-stack clip so content outside the screen is
+    /// culled too. Used by the production record path; tests that want the
+    /// legacy no-culling behavior keep using [`RecordingCanvas::new`].
+    pub fn new_with_viewport(viewport: Rect) -> Self {
+        Self {
+            ops: Vec::new(),
+            transform_stack: vec![Affine::IDENTITY],
+            clip_stack: vec![viewport],
+        }
+    }
+
+    /// Current accumulated transform (logical space). Always defined because
+    /// the stack is seeded with `IDENTITY`.
+    fn current_transform(&self) -> Affine {
+        self.transform_stack
+            .last()
+            .copied()
+            .unwrap_or(Affine::IDENTITY)
+    }
+
+    /// Push a clip defined in **local** space (relative to the current
+    /// transform). Transforms the local rect's 4 corners into scene space,
+    /// takes the AABB, and intersects it with the current innermost clip (or
+    /// keeps it as-is when no clip is active yet). Conservative: rotated
+    /// clips report their AABB, so a visible node is never wrongly culled.
+    fn push_clip_local(&mut self, local_rect: Rect) {
+        let t = self.current_transform();
+        let corners = [
+            t * Point::new(local_rect.x0, local_rect.y0),
+            t * Point::new(local_rect.x1, local_rect.y0),
+            t * Point::new(local_rect.x0, local_rect.y1),
+            t * Point::new(local_rect.x1, local_rect.y1),
+        ];
+        let xs = [corners[0].x, corners[1].x, corners[2].x, corners[3].x];
+        let ys = [corners[0].y, corners[1].y, corners[2].y, corners[3].y];
+        let x0 = xs.iter().copied().fold(f64::INFINITY, f64::min);
+        let y0 = ys.iter().copied().fold(f64::INFINITY, f64::min);
+        let x1 = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let y1 = ys.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let scene_rect = Rect::new(x0, y0, x1, y1);
+        let intersected = self
+            .clip_stack
+            .last()
+            .map(|top| top.intersect(scene_rect))
+            .unwrap_or(scene_rect);
+        self.clip_stack.push(intersected);
     }
 
     /// Post-process the recorded op stream into a flat `Vec<RenderCommand>`
@@ -200,6 +269,12 @@ impl Canvas for RecordingCanvas {
     fn push_clip(&mut self, offset: Offset, size: Size) {
         self.ops
             .push(RecordingOp::Canvas(CanvasOp::PushClip { offset, size }));
+        self.push_clip_local(Rect::new(
+            offset.x,
+            offset.y,
+            offset.x + size.width,
+            offset.y + size.height,
+        ));
     }
 
     fn push_clip_geometry(&mut self, offset: Offset, geometry: &Geometry) {
@@ -208,10 +283,27 @@ impl Canvas for RecordingCanvas {
                 offset,
                 geometry: *geometry,
             }));
+        // Conservative local AABB of the clip shape (rounded/circle → its
+        // bounding box) — a rotated clip's true shape isn't axis-aligned,
+        // but its AABB is a superset, so culling never drops a visible node.
+        let local = match geometry {
+            Geometry::Rect(size) => Rect::new(0.0, 0.0, size.width, size.height),
+            Geometry::RoundedRect { size, .. } => Rect::new(0.0, 0.0, size.width, size.height),
+            Geometry::Circle { radius } => {
+                let d = radius * 2.0;
+                Rect::new(0.0, 0.0, d, d)
+            }
+        }
+        .with_origin((offset.x, offset.y));
+        self.push_clip_local(local);
     }
 
     fn pop_clip(&mut self) {
         self.ops.push(RecordingOp::Canvas(CanvasOp::PopClip));
+        // The viewport seed (if any) is the bottom of the stack and is never
+        // popped by element paint bodies, so only pop when there's more than
+        // the seed. Defensive: never drain below empty.
+        self.clip_stack.pop();
     }
 
     fn push_opacity(&mut self, opacity: f32) {
@@ -226,10 +318,14 @@ impl Canvas for RecordingCanvas {
     fn push_transform(&mut self, transform: Affine) {
         self.ops
             .push(RecordingOp::Canvas(CanvasOp::PushTransform(transform)));
+        // Mirror VelloPaintContext: compose onto the current top.
+        let next = self.current_transform() * transform;
+        self.transform_stack.push(next);
     }
 
     fn pop_transform(&mut self) {
         self.ops.push(RecordingOp::Canvas(CanvasOp::PopTransform));
+        self.transform_stack.pop();
     }
 
     fn notify_node_entry(&mut self, id: ElementNodeId, transform: Affine, size: Size) {
@@ -238,10 +334,19 @@ impl Canvas for RecordingCanvas {
             transform,
             size,
         });
+        // Mirror VelloPaintContext::notify_node_entry: each node draws at
+        // `root * absolute`. The record-pass root is `IDENTITY` (logical
+        // space), so this is just the node's `absolute` affine.
+        self.transform_stack.push(transform);
     }
 
     fn notify_node_exit(&mut self) {
         self.ops.push(RecordingOp::NodeEnd);
+        self.transform_stack.pop();
+    }
+
+    fn current_clip_rect(&self) -> Option<Rect> {
+        self.clip_stack.last().copied()
     }
 }
 

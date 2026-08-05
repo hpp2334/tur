@@ -171,6 +171,12 @@ impl Canvas for VelloPaintContext<'_> {
             builder
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
+                // Cache rasterized glyphs in vello's persistent `GlyphAtlas`
+                // (lives on `Resources`, survives `scene.reset()`). Steady
+                // state replaces per-frame bezier→strip flattening with a
+                // single textured-quad push per glyph. Rotated/skewed text
+                // auto-falls-back to the uncached outline path.
+                .atlas_cache(true)
                 .fill_glyphs(run.glyphs.iter().map(|g| Glyph {
                     id: g.id,
                     x: g.x,

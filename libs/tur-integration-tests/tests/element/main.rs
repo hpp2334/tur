@@ -19,6 +19,7 @@ mod lazy_grid;
 mod lazy_list;
 mod multi_instance;
 mod net_stream;
+mod paint_culling;
 mod positioned;
 mod reactive;
 mod readable_subscribe;
