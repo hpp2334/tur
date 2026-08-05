@@ -71,6 +71,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     let js_ctx = extract_ctx(args)?;
     let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
+    let flush_tasks = js_ctx.flush_task_handle();
     let ms = args.get_or_undefined(1).as_number().unwrap_or(0.0).max(0.0) as u64;
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
@@ -89,9 +90,11 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
             Ok(())
         }));
     });
-    // Fire-and-forget: the sleep resolves once, settling the promise.
-    // Dropping the handle detaches (no abort needed).
-    let _ = worker_sched.spawn_local(fut);
+    // Push to the flush-driven queue (not `worker_sched.spawn_local`) so the
+    // sleep future is polled inside `flush()` — letting a clock `advance`
+    // that reaches the deadline resolve the sleep *within the same frame*
+    // rather than lagging to the next. See `core::async_::flush_tasks`.
+    flush_tasks.spawn(fut);
     Ok(promise.into())
 }
 
@@ -99,8 +102,8 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
 /// coroutine. See the module docs for the full model.
 fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_ctx(args)?;
-    let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
+    let flush_tasks = js_ctx.flush_task_handle();
 
     let gen_fn = args
         .get_or_undefined(1)
@@ -112,16 +115,19 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
             )
         })?;
 
-    // Drive the generator inside a spawned, abortable task. Returns a
-    // TaskHandle whose `abort()` becomes the JS `Task.cancel()`.
-    let handle: TaskHandle = worker_sched.spawn_local(Box::pin(async move {
+    // Drive the generator inside a flush-driven, abortable task (see
+    // `core::async_::flush_tasks`). Returns a `TaskHandle` whose `abort()`
+    // becomes the JS `Task.cancel()` — real cancellation, not a soft flag.
+    let handle: TaskHandle = flush_tasks.spawn(Box::pin(async move {
         // Construct the iterator under Context.
         let iter = match completion_handle
             .run(move |ctx| {
                 let gen_value = gen_fn.call(&JsValue::undefined(), &[], ctx)?;
                 let obj = gen_value.as_object().ok_or_else(|| {
-                    JsError::from(JsNativeError::typ()
-                        .with_message("launch: generator function did not return an iterator"))
+                    JsError::from(
+                        JsNativeError::typ()
+                            .with_message("launch: generator function did not return an iterator"),
+                    )
                 })?;
                 require_iterator(&obj, ctx)?;
                 Ok::<_, JsError>(obj)
@@ -141,7 +147,8 @@ fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<
         let mut resume: StepResume = StepResume::Next(JsValue::undefined());
         loop {
             let iter_for_step = iter.clone();
-            let resume_for_step = std::mem::replace(&mut resume, StepResume::Next(JsValue::undefined()));
+            let resume_for_step =
+                std::mem::replace(&mut resume, StepResume::Next(JsValue::undefined()));
             // Drive one iterator step under Context (next or throw), then
             // attach `.then` to the yielded thenable.
             let step_result = completion_handle
@@ -204,11 +211,7 @@ enum Step {
 /// Run one iterator step (`next` or `throw`) under `&mut Context`, parse the
 /// result, and (if the generator is still alive) attach `.then` to the
 /// yielded value. Returns the [`Step`] to drive next.
-fn step_under_ctx(
-    ctx: &mut Context,
-    iter: &JsObject,
-    resume: StepResume,
-) -> JsResult<Step> {
+fn step_under_ctx(ctx: &mut Context, iter: &JsObject, resume: StepResume) -> JsResult<Step> {
     let result = match resume {
         StepResume::Next(v) => iter_next(iter, v, ctx)?,
         StepResume::Throw(r) => iter_throw(iter, r, ctx)?,

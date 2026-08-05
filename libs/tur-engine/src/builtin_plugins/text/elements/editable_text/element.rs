@@ -8,7 +8,8 @@ use boa_engine::object::JsObject;
 use boa_engine::{Context, JsValue};
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::builtin_plugins::text::controller::TextEditingController;use crate::builtin_plugins::text::controller::{
+use crate::builtin_plugins::text::controller::TextEditingController;
+use crate::builtin_plugins::text::controller::{
     CompositionEndEvent, CompositionStartEvent, CompositionUpdateEvent, CursorChangeEvent,
     InputEvent, SelectionChangeEvent,
 };

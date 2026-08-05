@@ -54,16 +54,41 @@ impl Stream for VsyncEvents {
 
 /// Returned by [`MainScheduler::spawn_worker`]. Held for the worker's
 /// lifetime; `join()` blocks the caller until the worker exits.
+///
+/// `notify` is a cross-thread wake callback the embedder calls after every
+/// main→worker channel send. On native it is a no-op — the mpsc waker
+/// unparks the worker's OS thread directly. On wasm it is
+/// `worker.postMessage(0)` — the only way to kick an idle Web Worker's JS
+/// event loop without a sync `Atomics.wait` (which would freeze the loop).
+/// The callback is `Rc<dyn Fn>` (`!Send`) because it captures a
+/// `web_sys::Worker` handle that lives only on the main thread.
 pub struct WorkerHandle {
     join: Box<dyn FnOnce()>,
+    notify: Rc<dyn Fn()>,
 }
 
 impl WorkerHandle {
     pub fn new(join: Box<dyn FnOnce()>) -> Self {
-        Self { join }
+        Self {
+            join,
+            notify: Rc::new(|| {}),
+        }
     }
+
+    /// Construct with a non-trivial cross-thread `notify` wake (used by the
+    /// wasm driver to install a `worker.postMessage(0)` kick).
+    pub fn with_notify(join: Box<dyn FnOnce()>, notify: Rc<dyn Fn()>) -> Self {
+        Self { join, notify }
+    }
+
     pub fn join(self) {
         (self.join)()
+    }
+
+    /// Clone of the cross-thread wake callback. `MainBackend` calls this
+    /// after every main→worker send.
+    pub fn notify(&self) -> Rc<dyn Fn()> {
+        self.notify.clone()
     }
 }
 
@@ -156,9 +181,12 @@ pub trait MainScheduler: 'static {
     /// - **Native** (std::thread): drive the future to completion on the
     ///   worker thread's LocalPool (an infinite loop → the thread blocks
     ///   forever, polling the loop + all `spawn_local`'d side tasks).
-    /// - **Wasm** (Web Worker): root the future on the JS event loop via
-    ///   `spawn_local` and return — the worker stays alive because the
-    ///   loop's pending channel-waker keeps event-loop tasks scheduled.
+    /// - **Wasm** (Web Worker): the worker drives its `loop_fut`
+    ///   cooperatively on the JS event loop (a mini single-task executor —
+    ///   no `block_on`, no `Atomics.wait` freeze). Cross-thread wake is
+    ///   `worker.postMessage(0)` (the returned [`WorkerHandle`]'s `notify`
+    ///   callback); same-thread wake is a `setTimeout(0)` repoll. See
+    ///   `tur_wasm::worker_spawn`.
     ///
     /// The returned future runs on the worker thread only (never crosses
     /// threads), so it is `+ 'static` but not `Send`; the factory closure

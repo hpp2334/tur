@@ -5,7 +5,7 @@ use std::rc::Rc;
 use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::{CompletionHandle, CompletionQueue, TurJobExecutor};
+use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
 use crate::core::render::{RenderCommand, build_topology_batch};
@@ -56,6 +56,14 @@ pub struct TurAppInternal {
     /// [`SubsystemFlushContext::completion_handle`].
     #[allow(dead_code)]
     pub(crate) completion_handle: CompletionHandle,
+    /// Flush-driven task queue for engine-internal async (`sleep`,
+    /// `launch`). Tasks pushed here are polled every fixed-point iteration
+    /// of `flush()` so a sleep whose deadline is reached by a clock
+    /// advance resolves *inside* the same flush (instead of lagging to the
+    /// next frame, which the single-pump-per-tick countdown tests never
+    /// observe). Real platform async (HTTP / clipboard / file-picker)
+    /// still uses `worker_sched.spawn_local`.
+    pub(crate) flush_task_queue: Rc<FlushTaskQueue>,
     /// Plugin-registered flush subsystems. Each is `flush`-ed **every
     /// fixed-point iteration** of `flush()` (possibly several times per
     /// frame), in registration order, before `flush_reactive`. Time-driven
@@ -102,7 +110,7 @@ impl TurAppInternal {
         clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
         worker_sched: Rc<dyn WorkerScheduler>,
-        wake_worker: impl Fn() + 'static,
+        wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
         main_tx: crate::core::app::MainTx,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
@@ -133,9 +141,17 @@ impl TurAppInternal {
         // The `on_push` callback self-sends `WorkerMsg::Wake` so the worker
         // flushes promptly whenever a future completes — without it, an
         // idle worker would never wake to drain a completion arriving
-        // between frames.
-        let completion_queue = Rc::new(CompletionQueue::new(wake_worker));
+        // between frames. The same `wake_worker` Arc is shared with the
+        // flush-driven task queue below (it doubles as the task waker,
+        // which sleep futures register with the test `VirtualClock`).
+        let completion_queue = Rc::new(CompletionQueue::new(wake_worker.clone()));
         let completion_handle = completion_queue.handle();
+        // Flush-driven task queue: `sleep` + `launch` push their driver
+        // futures here (instead of `worker_sched.spawn_local`) so `flush`
+        // polls them in lockstep with completions / microtasks — closing
+        // the cross-frame lag that otherwise breaks single-frame sleep
+        // semantics. See `async_::flush_tasks`.
+        let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker));
 
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
@@ -152,6 +168,7 @@ impl TurAppInternal {
             store.clone(),
             worker_sched.clone(),
             completion_handle.clone(),
+            flush_task_queue.handle(),
             capabilities,
         );
 
@@ -181,6 +198,7 @@ impl TurAppInternal {
             worker_sched,
             completion_queue,
             completion_handle,
+            flush_task_queue,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
@@ -219,6 +237,15 @@ impl TurAppInternal {
             // clipboard read resolve) under `&mut Context`, enqueuing
             // PromiseJobs that boa's microtask drain (below) picks up.
             self.completion_queue.drain(boa_context);
+
+            // Poll engine-internal async tasks (`sleep`, `launch`) pushed
+            // to the flush-driven queue. Done BEFORE the rest of the
+            // iteration so a sleep that just resolved pushes its
+            // completion this same iteration (drained at the top of the
+            // NEXT iteration) and the launch driver resumes in lockstep.
+            // `tasks_completed > 0` keeps the fixed-point loop alive to
+            // drain those completions. See `async_::flush_tasks`.
+            let tasks_completed = self.flush_task_queue.poll_all();
 
             let handled_events = self.flush_app_events(boa_context, &signals);
 
@@ -342,8 +369,15 @@ impl TurAppInternal {
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
             // Quiescence: no events, no mutations, no dirty state, no
-            // completions drained this iteration, no microtasks ran.
-            if !handled_events && !handled_mutations && !new_dirty && jobs_run == 0 {
+            // completions drained this iteration, no microtasks ran, and no
+            // flush-driven task completed (a completed task likely pushed a
+            // completion we need to drain next iteration).
+            if !handled_events
+                && !handled_mutations
+                && !new_dirty
+                && jobs_run == 0
+                && tasks_completed == 0
+            {
                 break;
             }
         }

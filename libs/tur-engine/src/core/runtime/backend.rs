@@ -407,6 +407,9 @@ pub struct MainBackend {
     /// Holds the worker `JoinHandle` alive for the backend's lifetime so
     /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
     _worker_handle: WorkerHandle,
+    /// Cross-thread wake. Called after every main→worker send. No-op on
+    /// native; `worker.postMessage(0)` on wasm.
+    worker_notify: Rc<dyn Fn()>,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
     /// cursor state change; main applies it here during `pump`. Set via
     /// `set_cursor_backend` (called by embedder after `create_app`).
@@ -455,7 +458,7 @@ impl MainBackend {
         renderer: Box<dyn Renderer>,
         backend_factory: impl FnOnce(
             Rc<dyn crate::core::scheduler::WorkerScheduler>,
-            Box<dyn Fn() + Send>,
+            std::sync::Arc<dyn Fn() + Send + Sync>,
             crate::core::app::MainTx,
         ) -> WorkerBackend
         + Send
@@ -482,16 +485,27 @@ impl MainBackend {
         let init_tx = init_tx;
         let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
             let worker_tx_for_on_push = worker_tx_for_on_push.clone();
-            let wake_worker: Box<dyn Fn() + Send> = Box::new(move || {
-                let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
-            });
+            // `Send + Sync` so the flush-driven task waker (which sleep
+            // futures register with the test `VirtualClock`, fired
+            // cross-thread) can hold an `Arc` clone.
+            let wake_worker: std::sync::Arc<dyn Fn() + Send + Sync> =
+                std::sync::Arc::new(move || {
+                    let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
+                });
             let backend = backend_factory(worker_sched.clone(), wake_worker, main_tx_for_backend);
             #[cfg(not(target_arch = "wasm32"))]
             let _ = init_tx.send(());
             // Return the worker's main future; the driver drives it
-            // (native blocks on LocalPool; wasm roots via spawn_local).
+            // (native blocks on LocalPool; wasm runs the cooperative
+            // mini-executor + cross-thread postMessage wake).
             Box::pin(worker_loop(backend, worker_rx, main_tx))
         }));
+
+        // Cross-thread wake callback. No-op on native (mpsc waker unparks
+        // the OS thread); `worker.postMessage(0)` on wasm (the only way to
+        // kick an idle Web Worker's JS event loop without a sync
+        // `Atomics.wait`). Called after every main→worker send below.
+        let worker_notify = worker_handle.notify();
 
         // Native: synchronously wait for the worker to finish init.
         #[cfg(not(target_arch = "wasm32"))]
@@ -503,6 +517,7 @@ impl MainBackend {
             worker_tx: worker_tx.clone(),
             main_rx: RefCell::new(main_rx),
             _worker_handle: worker_handle,
+            worker_notify,
             cursor_backend: RefCell::new(None),
             cached_cursor: RefCell::new(crate::core::platform::Cursor::default()),
             cached_focus: RefCell::new(FocusedState::default()),
@@ -532,9 +547,18 @@ impl MainBackend {
 
     /// Send a fire-and-forget [`WorkerMsg`] (no Reply slot). Used by
     /// `push_platform_event`, `request_paint`, `push_app_event`,
-    /// `emit_to_js`.
+    /// `emit_to_js`. Wakes the worker cross-thread after the send (no-op on
+    /// native; `postMessage` on wasm).
     pub(crate) fn send_worker_msg(&self, msg: WorkerMsg) {
         let _ = self.worker_tx.unbounded_send(msg);
+        self.wake_worker();
+    }
+
+    /// Fire the cross-thread wake callback. Cheap; safe to call after every
+    /// main→worker send. `(&*rc)()` derefs the `Rc<dyn Fn>` to call it.
+    fn wake_worker(&self) {
+        use std::ops::Deref;
+        self.worker_notify.deref()();
     }
 
     /// Apply a render-command batch to the main-side state: update the
@@ -638,6 +662,7 @@ impl MainBackend {
         self.worker_tx
             .unbounded_send(WorkerMsg::Wake)
             .map_err(|_| TurError::Other("worker gone".into()))?;
+        self.wake_worker();
         let mut rx = self.main_rx.borrow_mut();
         loop {
             match rx.next().await {
@@ -693,6 +718,7 @@ impl MainBackend {
         let (tx, rx) = Reply::<T>::pair();
         let msg = msg_builder(tx);
         let _ = self.worker_tx.unbounded_send(msg);
+        self.wake_worker();
         rx.rx.await.expect("reply sender dropped without firing")
     }
 

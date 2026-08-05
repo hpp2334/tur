@@ -166,7 +166,7 @@ impl TurRuntime {
         let capability_inserts = self.capability_inserts.clone();
         let backend_factory =
             move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-                  wake_worker: Box<dyn Fn() + Send>,
+                  wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
                   main_tx: crate::core::app::MainTx|
                   -> WorkerBackend {
                 let capabilities = Capabilities::new();
@@ -216,7 +216,7 @@ pub(crate) fn build_worker_backend(
     plugins: &[Box<dyn Plugin>],
     viewport: (f64, f64),
     worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-    wake_worker: Box<dyn Fn() + Send>,
+    wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());

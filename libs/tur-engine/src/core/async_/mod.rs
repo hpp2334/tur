@@ -26,10 +26,12 @@ use boa_engine::JsResult;
 
 pub mod completion;
 pub mod executor;
+pub mod flush_tasks;
 pub mod task;
 
 pub use completion::{CompletionHandle, CompletionQueue};
 pub use executor::TurJobExecutor;
+pub use flush_tasks::{FlushTaskHandle, FlushTaskQueue};
 
 /// A closure that runs under `&mut Context` to settle a JsPromise (or any
 /// other synchronous side-effect that needs Context access). Produced by a

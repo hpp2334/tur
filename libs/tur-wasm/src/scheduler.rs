@@ -15,28 +15,28 @@
 //! ## Sleep
 //!
 //! `sleep(d)` returns a `Sleep(BoxFuture)` backed by `setTimeout` + an
-//! oneshot channel.
+//! oneshot channel. `setTimeout` is resolved off `js_sys::global()` so it
+//! works on BOTH the main thread (`Window`) and the worker
+//! (`DedicatedWorkerGlobalScope`) — `web_sys::window()` returns `None` on a
+//! worker, which would silently drop the timer and never resolve `sleep`.
 //!
 //! ## Spawn primitives
 //!
 //! `spawn_local` delegates to `wasm_bindgen_futures::spawn_local` (works
-//! on both the main thread and Web Workers — both drive the JS event
-//! loop). There is no `block_on`: blocking cannot be implemented honestly
-//! on wasm, so the engine's worker loop is driven by `spawn_worker`
-//! directly (see below) and side-futures are always `spawn_local`'d.
+//! on both the main thread and Web Workers — both drive a JS event loop).
+//! Side-futures (HTTP/clipboard/file-picker) run freely because the worker
+//! no longer parks in a sync `Atomics.wait` (see below).
 //!
 //! ## Worker spawn
 //!
-//! `spawn_worker` uses `wasm_thread::spawn` to create a Web Worker. The
-//! worker side has no shared state (all primitives are global wasm APIs),
-//! so the worker view is a zero-state [`WasmWorkerScheduler`]. The factory
-//! returns the worker's main future (the engine's `worker_loop`), which
-//! the driver runs via `futures::executor::block_on`: it parks the worker
-//! via `Atomics.wait`, and the `SharedArrayBuffer`-backed worker→main
-//! channel unparks it via `Atomics.notify` on each message (a real
-//! cross-thread signal — `spawn_local` would queue a microtask that an
-//! idle worker has no task to drain). `block_on` never returns, which is
-//! what keeps the Web Worker alive for the engine's lifetime.
+//! `spawn_worker` uses the in-tree spawner ([`crate::worker_spawn::spawn`])
+//! — NOT `wasm_thread` — to create a shared-memory Web Worker whose
+//! bootstrap script does NOT call `close()`, and to keep the `Worker`
+//! handle so main can `worker.postMessage(0)` to wake an idle worker
+//! cross-thread (the only way to kick a Web Worker's JS event loop without
+//! a sync `Atomics.wait`, which would freeze the loop). The worker drives
+//! its `loop_fut` cooperatively in [`crate::worker_spawn`] (mini-executor +
+//! `NoopWaker`). See that module's docs for the full driving model.
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -44,12 +44,14 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
-use wasm_bindgen::JsCast;
-use wasm_bindgen::closure::Closure;
+use js_sys::Reflect;
+use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 use tur_engine::core::scheduler::{
     MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
 };
+
+use crate::worker_spawn::{self, LoopFactory};
 
 /// Wasm-backed scheduler driver. Construct via [`WasmSchedulerDriver::new`].
 pub struct WasmSchedulerDriver {
@@ -104,41 +106,30 @@ impl WasmInner {
 }
 
 impl MainScheduler for WasmSchedulerDriver {
-    fn spawn_worker(
-        &self,
-        factory: Box<
-            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
-                + Send
-                + 'static,
-        >,
-    ) -> WorkerHandle {
-        // `wasm_thread::spawn` requires the closure to be `Send + 'static`.
-        // We can't pass an `Rc<dyn WorkerScheduler>` across — but the wasm
-        // worker side has no shared state anyway: all primitives
-        // (`spawn_local`, `sleep`) delegate to global wasm primitives that
-        // work on any thread. So the worker view is a zero-state
-        // `WasmWorkerScheduler`.
-        let _join_handle = wasm_thread::spawn(move || {
-            let worker_view: Rc<dyn WorkerScheduler> = Rc::new(WasmWorkerScheduler);
-            let loop_fut = factory(worker_view);
-            // Drive the worker_loop by blocking the worker thread on it.
-            // Unlike `spawn_local` (which would queue a microtask that an
-            // idle worker has no task to drain), `block_on` parks the
-            // worker via `Atomics.wait`; the worker→main channel is
-            // `SharedArrayBuffer`-backed, so a sender on main unparks the
-            // worker via `Atomics.notify` — a real cross-thread signal.
-            // (Side-futures spawned via `WorkerScheduler::spawn_local` run
-            // on the same JS event loop and interleave correctly between
-            // `block_on`'s polls.) `block_on` never returns because
-            // `worker_loop` is infinite, which is exactly what keeps the
-            // Web Worker alive for the engine's lifetime.
-            futures::executor::block_on(loop_fut);
+    fn spawn_worker(&self, factory: LoopFactory) -> WorkerHandle {
+        // Spawn a shared-memory Web Worker via the in-tree spawner. The
+        // worker's bootstrap does NOT `close()` on entry-return, so it
+        // stays alive while its JS event loop has pending tasks (the
+        // `onmessage` wake handler + the `setTimeout` repoll chain). We
+        // keep the `Worker` handle so main can `postMessage(0)` to wake
+        // it cross-thread.
+        let worker = worker_spawn::spawn(factory);
+
+        // Cross-thread wake: `worker.postMessage(0)`. Held alive for the
+        // app's lifetime by both the `notify` Rc (MainBackend) and the
+        // `join` closure (the `_worker_handle` field) — two references so
+        // the Worker isn't GC'd if either drops.
+        let worker_for_notify = worker.clone();
+        let notify: Rc<dyn Fn()> = Rc::new(move || {
+            let _ = worker_for_notify.post_message(&JsValue::from(0i32));
         });
-        WorkerHandle::new(Box::new(|| {
-            // wasm_thread doesn't expose a join in the std::thread sense —
-            // the Web Worker terminates when its closure returns (never,
-            // since `block_on(worker_loop)` blocks forever).
-        }))
+        let worker_for_join = worker;
+        let join: Box<dyn FnOnce()> = Box::new(move || {
+            // terminate the worker if MainBackend is ever dropped (it
+            // never is in practice — TurApp lives for the page lifetime).
+            worker_for_join.terminate();
+        });
+        WorkerHandle::with_notify(join, notify)
     }
 
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
@@ -189,9 +180,11 @@ impl WorkerScheduler for WasmSchedulerDriver {
     }
 }
 
-/// Internal worker-only scheduler — zero state, used by `spawn_worker`.
-#[allow(dead_code)]
-struct WasmWorkerScheduler;
+/// Worker-side scheduler view — zero state, constructed inside
+/// [`crate::worker_spawn::tur_worker_main`] on the worker thread. Methods
+/// delegate to global wasm primitives (`spawn_local`, `setTimeout`-backed
+/// `sleep`) that work on any JS thread.
+pub(crate) struct WasmWorkerScheduler;
 
 impl WorkerScheduler for WasmWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
@@ -206,6 +199,11 @@ impl WorkerScheduler for WasmWorkerScheduler {
 /// Shared `sleep` implementation used by both `WasmSchedulerDriver`
 /// (main-side) and `WasmWorkerScheduler` (worker-side). Backed by
 /// `setTimeout` + an oneshot channel.
+///
+/// Resolves `setTimeout` off `js_sys::global()` (not `web_sys::window()`)
+/// so it works on a `DedicatedWorkerGlobalScope` — `window()` returns
+/// `None` on a worker, which would silently drop the timer and the
+/// `sleep()`/`launch()` it backs would never resolve.
 fn wasm_sleep(d: Duration) -> Sleep {
     let (tx, rx) = futures::channel::oneshot::channel();
     let ms = d.as_millis().min(i32::MAX as u128) as i32;
@@ -216,11 +214,20 @@ fn wasm_sleep(d: Duration) -> Sleep {
             let _ = t.send(());
         }
     });
-    if let Some(window) = web_sys::window() {
-        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(
+    // `setTimeout` lives on both `Window` and `WorkerGlobalScope`; fetch it
+    // off the current global so this works on either thread.
+    let global = js_sys::global();
+    if let Some(set_timeout) = Reflect::get(&global, &JsValue::from("setTimeout"))
+        .ok()
+        .and_then(|v| v.dyn_into::<js_sys::Function>().ok())
+    {
+        let _ = set_timeout.call2(
+            &global,
             closure.as_ref().unchecked_ref(),
-            ms.max(1),
+            &JsValue::from(ms.max(1)),
         );
+    } else {
+        tracing::error!("wasm_sleep: global has no `setTimeout`");
     }
     // Leak the Closure so setTimeout can call it. The closure's captured
     // state (the oneshot sender) is consumed on fire, so the leaked memory

@@ -26,6 +26,7 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
+use std::sync::Arc;
 
 use boa_engine::Context;
 
@@ -40,7 +41,7 @@ use super::Completion;
 /// spawned futures.
 pub struct CompletionQueue {
     pending: Rc<RefCell<VecDeque<Completion>>>,
-    on_push: Rc<dyn Fn()>,
+    on_push: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl std::fmt::Debug for CompletionQueue {
@@ -54,11 +55,12 @@ impl std::fmt::Debug for CompletionQueue {
 impl CompletionQueue {
     /// Construct with an `on_push` callback. The engine wires this to
     /// send `WorkerMsg::Wake` to the worker, ensuring the worker flushes
-    /// promptly whenever a future completes.
-    pub fn new(on_push: impl Fn() + 'static) -> Self {
+    /// promptly whenever a future completes. Shared with the flush-driven
+    /// task queue (same `Arc<dyn Fn() + Send + Sync>`).
+    pub fn new(on_push: Arc<dyn Fn() + Send + Sync>) -> Self {
         Self {
             pending: Rc::new(RefCell::new(VecDeque::new())),
-            on_push: Rc::new(on_push),
+            on_push,
         }
     }
 
@@ -93,7 +95,7 @@ impl CompletionQueue {
 /// `on_push` callback with the parent [`CompletionQueue`].
 pub struct CompletionHandle {
     pending: Rc<RefCell<VecDeque<Completion>>>,
-    on_push: Rc<dyn Fn()>,
+    on_push: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl CompletionHandle {

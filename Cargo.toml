@@ -81,17 +81,12 @@ getrandom = "0.4"
 wasm-bindgen-futures = "0.4"
 winit = "0.30"
 
-# `std::thread` API replacement for `wasm32-unknown-unknown`. Spawns real
-# Web Workers backed by `SharedArrayBuffer` (requires the same atomics +
-# shared-memory + build-std config as wasm-bindgen-rayon, but no JS-side
-# pre-init — workers spawn on demand from Rust).
-wasm_thread = "0.3"
-
-# Wasm thread builds (wasm_thread) require `panic = "abort"` so the
-# resulting wasm can be loaded into web workers via shared memory.
-# Native builds keep `panic = "unwind"` (tur-android JNI trampoline
-# and vello integration tests rely on `catch_unwind`). The dedicated
-# profile is selected via `wasm-pack build --profile wasm-dev`.
+# Wasm thread builds (shared-memory Web Workers for the engine's worker
+# thread) require `panic = "abort"` so the resulting wasm can be loaded
+# into web workers via shared memory. Native builds keep `panic = "unwind"`
+# (tur-android JNI trampoline and vello integration tests rely on
+# `catch_unwind`). The dedicated profile is selected via
+# `wasm-pack build --profile wasm-dev`.
 [profile.wasm-dev]
 inherits = "dev"
 panic = "abort"

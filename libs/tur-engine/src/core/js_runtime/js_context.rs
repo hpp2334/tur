@@ -57,6 +57,11 @@ pub struct TurJsContext {
     /// the next flush. Pushing fires `on_push`, which self-sends
     /// `WorkerMsg::Wake` so the worker flushes promptly.
     pub(crate) completion_handle: CompletionHandle,
+    /// Cheap-cloned handle to the flush-driven task queue — `sleep` +
+    /// `launch` push their driver futures here (instead of
+    /// `worker_sched.spawn_local`) so `flush` polls them in lockstep with
+    /// completions / microtasks. See `core::async_::flush_tasks`.
+    pub(crate) flush_task_handle: crate::core::async_::FlushTaskHandle,
     /// Type-erased capability registry shared with the engine builder,
     /// plugin context, event handlers, and ctx-bound bridge fns. Plugins
     /// declare their hard dependencies via [`Plugin::requires`] so the engine
@@ -92,6 +97,7 @@ impl TurJsContext {
         store: Store,
         worker_sched: Rc<dyn WorkerScheduler>,
         completion_handle: CompletionHandle,
+        flush_task_handle: crate::core::async_::FlushTaskHandle,
         capabilities: Capabilities,
     ) -> Self {
         Self {
@@ -106,6 +112,7 @@ impl TurJsContext {
             store,
             worker_sched,
             completion_handle,
+            flush_task_handle,
             capabilities,
         }
     }
@@ -122,6 +129,13 @@ impl TurJsContext {
     /// to settle JsPromises under `&mut Context` on the next flush.
     pub fn completion_handle(&self) -> CompletionHandle {
         self.completion_handle.clone()
+    }
+
+    /// Cheap-cloned flush-task handle. `sleep` + `launch` extract this via
+    /// `extract_ctx` and call `spawn(fut)` to push engine-internal driver
+    /// futures onto the flush-driven queue.
+    pub fn flush_task_handle(&self) -> crate::core::async_::FlushTaskHandle {
+        self.flush_task_handle.clone()
     }
 
     /// Cheaply-cloned view over the capability registry. Bridge fns extract
