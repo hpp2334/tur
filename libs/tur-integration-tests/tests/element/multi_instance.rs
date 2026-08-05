@@ -12,6 +12,7 @@ use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
+use tur_engine::renderer::NoopRenderer;
 use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
@@ -26,7 +27,8 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String>
 /// Build a runtime with the std + animation plugins (no extra capabilities —
 /// instances are headless).
 fn build_runtime() -> Rc<TurRuntime> {
-    TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
+    TurRuntime::builder()
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -44,8 +46,12 @@ const SET_ID_JS: &str = r#"
 #[test]
 fn instances_have_isolated_js_realms() {
     let runtime = build_runtime();
-    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("app A");
-    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("app B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app B");
 
     // Load different state into each instance.
     futures::executor::block_on(app_a.load_module(SET_ID_JS.replace("VALUE", "A").as_str()))
@@ -68,8 +74,12 @@ fn instances_have_isolated_js_realms() {
 #[test]
 fn instances_have_isolated_element_trees() {
     let runtime = build_runtime();
-    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("app A");
-    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("app B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app B");
 
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_module(
@@ -93,7 +103,9 @@ fn instances_have_isolated_element_trees() {
 #[test]
 fn headless_instance_runs_js_without_rendering() {
     let runtime = build_runtime();
-    let app = runtime.create_app((0.0, 0.0), 1.0).expect("headless");
+    let app = runtime
+        .create_app(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
+        .expect("headless");
 
     // JS executes; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_module(
@@ -118,7 +130,9 @@ fn many_instances_share_one_runtime() {
     let runtime = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
-        let app = runtime.create_app((50.0, 50.0), 1.0).expect("app");
+        let app = runtime
+            .create_app(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+            .expect("app");
         futures::executor::block_on(
             app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str()),
         )
@@ -181,7 +195,8 @@ impl Plugin for CounterPlugin {
 fn plugin_compile_runs_once_register_runs_per_instance() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
-    let runtime = TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
+    let runtime = TurRuntime::builder()
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -207,7 +222,9 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
 
     // Spawn 3 instances — register fires once each, compile stays at 1.
     for _ in 0..3 {
-        runtime.create_app((10.0, 10.0), 1.0).expect("app");
+        runtime
+            .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+            .expect("app");
     }
     assert_eq!(
         compile_count.load(Ordering::SeqCst),
@@ -226,7 +243,8 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
-    let runtime = TurRuntime::builder().scheduler(tur_integration_tests::TestSchedulerDriver::new())
+    let runtime = TurRuntime::builder()
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .capability(cap.clone())
@@ -240,15 +258,21 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 
     // Each spawned instance's `register` bumps the SAME shared cap — so after
     // N instances the cap reflects N bumps, proving they all see one backend.
-    runtime.create_app((10.0, 10.0), 1.0).expect("A");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
-    runtime.create_app((10.0, 10.0), 1.0).expect("B");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("B");
     assert_eq!(
         cap.get(),
         2,
         "instance B's register saw the same shared cap"
     );
-    runtime.create_app((10.0, 10.0), 1.0).expect("C");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("C");
     assert_eq!(
         cap.get(),
         3,
@@ -261,8 +285,12 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 #[test]
 fn platform_events_route_to_the_correct_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("A");
-    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("B");
 
     // Push a Resize to A only.
     app_a.push_platform_event(PlatformEvent::Resize {
@@ -300,8 +328,12 @@ fn platform_events_route_to_the_correct_instance() {
 #[test]
 fn reactive_stores_are_isolated_per_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_app((100.0, 100.0), 1.0).expect("A");
-    let app_b = runtime.create_app((100.0, 100.0), 1.0).expect("B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("B");
 
     // Create a source in A and set a value.
     futures::executor::block_on(app_a.eval_module(

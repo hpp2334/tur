@@ -24,7 +24,7 @@ use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
-pub use backend::{MainBackend, RenderSink};
+pub use backend::MainBackend;
 // `WorkerBackend` is `pub(crate)` — internal to the engine, only
 // `MainBackend` (which owns a worker running `WorkerBackend`) is public.
 pub(crate) use backend::WorkerBackend;
@@ -71,24 +71,26 @@ type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 ///   plugin objects register into every instance's fresh boa `Context`).
 ///
 /// Spawn instances via [`TurRuntime::create_app`] (rendering, attached to a
-/// surface) or [`TurRuntime::create_headless_app`] (no rendering — JS +
-/// capabilities + events only).
+/// surface — embedders pass a `Box<dyn Renderer>`; headless instances pass
+/// `Box::new(NoopRenderer::new())`).
 ///
 /// ```no_run
 ///
 /// # use tur_engine::*;
 /// # use tur_engine::core::fonts::FontLoader;
 /// # use tur_engine::core::render::Renderer;
-/// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>, renderer_a: Box<dyn Renderer>, renderer_b: Box<dyn Renderer>) -> Result<(), tur_engine::error::TurError> {
+/// # use tur_engine::renderer::noop::NoopRenderer;
+/// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>) -> Result<(), tur_engine::error::TurError> {
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
 ///     .clock(std::sync::Arc::new(boa_engine::context::time::StdClock::new()))
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
 ///
-/// // Two isolated instances sharing fonts/clock/capabilities/plugins:
-/// let app_a = runtime.create_app((800.0, 600.0), 2.0)?;
-/// let app_b = runtime.create_app((400.0, 300.0), 1.0)?;
+/// // Two isolated instances sharing fonts/clock/capabilities/plugins.
+/// // Each owns its renderer (created by the embedder; no render_sink):
+/// let app_a = runtime.create_app(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)?;
+/// let app_b = runtime.create_app(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)?;
 /// # Ok(())
 /// # }
 /// ```
@@ -129,10 +131,12 @@ impl TurRuntime {
     }
 
     /// Create an isolated [`TurApp`] instance. The engine runs on a
-    /// worker thread (via [`MainBackend`]); the embedder installs a
-    /// `render_sink` callback on the returned `TurApp` to receive
-    /// `Vec<RenderCommand>` batches + the worker's `ImageResourceMap`
-    /// snapshot + viewport tuple, and apply them to its own renderer.
+    /// worker thread (via [`MainBackend`]); the renderer lives on the main
+    /// thread and is owned by `MainBackend` (passed in here — no
+    /// `render_sink` callback). `MainBackend` applies each
+    /// `Vec<RenderCommand>` batch directly to the renderer, uploads new
+    /// image resources incrementally, and calls `renderer.resize(...)` on
+    /// viewport-change events only.
     ///
     /// The instance gets its own boa `Context` (JS realm), element tree,
     /// reactive store, focus manager, event queues, subsystems, screen and
@@ -141,8 +145,7 @@ impl TurRuntime {
     /// re-registered into the instance's fresh realm.
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
-    /// target; `dpr` is the device pixel ratio (shipped to the render_sink
-    /// with each frame so the embedder can call `renderer.resize(...)`).
+    /// target; `dpr` is the device pixel ratio.
     ///
     /// **Capabilities are NOT shared with the worker** — the runtime's
     /// `Capabilities` is `Rc<RefCell<…>>` (`!Send`). The threaded factory
@@ -152,6 +155,7 @@ impl TurRuntime {
     /// [`build_worker_backend`] helper.
     pub fn create_app(
         self: &Rc<Self>,
+        renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
     ) -> Result<Rc<TurApp>, TurError> {
@@ -162,7 +166,8 @@ impl TurRuntime {
         let capability_inserts = self.capability_inserts.clone();
         let backend_factory =
             move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-                  wake_worker: Box<dyn Fn() + Send>|
+                  wake_worker: Box<dyn Fn() + Send>,
+                  main_tx: crate::core::app::MainTx|
                   -> WorkerBackend {
                 let capabilities = Capabilities::new();
                 for insert_fn in capability_inserts.iter() {
@@ -177,18 +182,17 @@ impl TurRuntime {
                     viewport,
                     worker_sched,
                     wake_worker,
+                    main_tx,
                 )
                 .expect("threaded backend factory failed")
             };
-        let backend = MainBackend::new(self.main_scheduler.clone(), backend_factory);
+        let backend = MainBackend::new(self.main_scheduler.clone(), renderer, backend_factory);
         let app = Rc::new(TurApp::new(backend, self.main_scheduler.clone()));
-        // Push the initial resize so the worker's screen state + the
-        // `viewportSize$` atom reflect the given size before frame 1.
-        app.push_platform_event(crate::core::platform::PlatformEvent::Resize {
-            logical_width: viewport.0 as u32,
-            logical_height: viewport.1 as u32,
-            dpr,
-        });
+        // Bootstrap the viewport: resize the main-side renderer directly
+        // AND seed the worker's screen state + `viewportSize$` atom before
+        // frame 1 (the forwarded `PlatformEvent::Resize` does the worker
+        // half).
+        app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok(app)
     }
 }
@@ -213,6 +217,7 @@ pub(crate) fn build_worker_backend(
     viewport: (f64, f64),
     worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
     wake_worker: Box<dyn Fn() + Send>,
+    main_tx: crate::core::app::MainTx,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -231,6 +236,7 @@ pub(crate) fn build_worker_backend(
         capabilities,
         worker_sched,
         wake_worker,
+        main_tx,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);

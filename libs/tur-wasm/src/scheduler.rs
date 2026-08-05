@@ -21,15 +21,22 @@
 //!
 //! `spawn_local` delegates to `wasm_bindgen_futures::spawn_local` (works
 //! on both the main thread and Web Workers — both drive the JS event
-//! loop). `block_on` delegates to `futures::executor::block_on` (workers
-//! can block; the main thread cannot — `block_on` is worker-only by
-//! convention).
+//! loop). There is no `block_on`: blocking cannot be implemented honestly
+//! on wasm, so the engine's worker loop is driven by `spawn_worker`
+//! directly (see below) and side-futures are always `spawn_local`'d.
 //!
 //! ## Worker spawn
 //!
 //! `spawn_worker` uses `wasm_thread::spawn` to create a Web Worker. The
 //! worker side has no shared state (all primitives are global wasm APIs),
-//! so the worker view is a zero-state [`WasmWorkerScheduler`].
+//! so the worker view is a zero-state [`WasmWorkerScheduler`]. The factory
+//! returns the worker's main future (the engine's `worker_loop`), which
+//! the driver runs via `futures::executor::block_on`: it parks the worker
+//! via `Atomics.wait`, and the `SharedArrayBuffer`-backed worker→main
+//! channel unparks it via `Atomics.notify` on each message (a real
+//! cross-thread signal — `spawn_local` would queue a microtask that an
+//! idle worker has no task to drain). `block_on` never returns, which is
+//! what keeps the Web Worker alive for the engine's lifetime.
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -99,21 +106,38 @@ impl WasmInner {
 impl MainScheduler for WasmSchedulerDriver {
     fn spawn_worker(
         &self,
-        factory: Box<dyn FnOnce(Rc<dyn WorkerScheduler>) + Send + 'static>,
+        factory: Box<
+            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
+                + Send
+                + 'static,
+        >,
     ) -> WorkerHandle {
         // `wasm_thread::spawn` requires the closure to be `Send + 'static`.
         // We can't pass an `Rc<dyn WorkerScheduler>` across — but the wasm
         // worker side has no shared state anyway: all primitives
-        // (`spawn_local`, `block_on`, `sleep`) delegate to global wasm
-        // primitives that work on any thread. So the worker view is a
-        // zero-state `WasmWorkerScheduler`.
+        // (`spawn_local`, `sleep`) delegate to global wasm primitives that
+        // work on any thread. So the worker view is a zero-state
+        // `WasmWorkerScheduler`.
         let _join_handle = wasm_thread::spawn(move || {
             let worker_view: Rc<dyn WorkerScheduler> = Rc::new(WasmWorkerScheduler);
-            factory(worker_view);
+            let loop_fut = factory(worker_view);
+            // Drive the worker_loop by blocking the worker thread on it.
+            // Unlike `spawn_local` (which would queue a microtask that an
+            // idle worker has no task to drain), `block_on` parks the
+            // worker via `Atomics.wait`; the worker→main channel is
+            // `SharedArrayBuffer`-backed, so a sender on main unparks the
+            // worker via `Atomics.notify` — a real cross-thread signal.
+            // (Side-futures spawned via `WorkerScheduler::spawn_local` run
+            // on the same JS event loop and interleave correctly between
+            // `block_on`'s polls.) `block_on` never returns because
+            // `worker_loop` is infinite, which is exactly what keeps the
+            // Web Worker alive for the engine's lifetime.
+            futures::executor::block_on(loop_fut);
         });
         WorkerHandle::new(Box::new(|| {
             // wasm_thread doesn't expose a join in the std::thread sense —
-            // the Web Worker terminates when its closure returns.
+            // the Web Worker terminates when its closure returns (never,
+            // since `block_on(worker_loop)` blocks forever).
         }))
     }
 
@@ -160,28 +184,18 @@ impl WorkerScheduler for WasmSchedulerDriver {
         track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }
 
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        futures::executor::block_on(fut);
-    }
-
     fn sleep(&self, d: Duration) -> Sleep {
         wasm_sleep(d)
     }
 }
 
 /// Internal worker-only scheduler — zero state, used by `spawn_worker`.
-/// This is kept for potential future use but `WasmSchedulerDriver` itself
-/// implements `WorkerScheduler` (above), so this struct is currently unused.
 #[allow(dead_code)]
 struct WasmWorkerScheduler;
 
 impl WorkerScheduler for WasmWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         track_spawn(fut, wasm_bindgen_futures::spawn_local)
-    }
-
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        futures::executor::block_on(fut);
     }
 
     fn sleep(&self, d: Duration) -> Sleep {

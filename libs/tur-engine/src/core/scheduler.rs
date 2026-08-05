@@ -2,11 +2,11 @@
 //!
 //! Two traits split by thread context:
 //! - [`MainScheduler`] — main-thread surface (spawn_worker, vsync, request_vsync).
-//! - [`WorkerScheduler`] — worker-thread surface (spawn_local, block_on, sleep).
+//! - [`WorkerScheduler`] — worker-thread surface (spawn_local, sleep).
 //!
 //! The same driver object implements both; the runtime holds two `Rc<dyn>`
 //! trait objects pointing at it. Thread-locals inside the impl dispatch
-//! `spawn_local` / `block_on` to the right per-thread `LocalPool`.
+//! `spawn_local` to the right per-thread `LocalPool`.
 //!
 //! ## Dependency direction
 //!
@@ -145,21 +145,33 @@ pub fn track_spawn(
 /// autonomous loop.
 pub trait MainScheduler: 'static {
     /// Spawn a worker. The factory runs on a new worker thread
-    /// (`std::thread` on native, Web Worker via `wasm_thread` on wasm).
+    /// (`std::thread` on native, Web Worker via `wasm_thread` on wasm) and
+    /// **returns the worker's main future** (the engine's `worker_loop`).
     /// The driver sets up thread-locals (e.g. the LocalPool) on the worker
     /// thread *before* invoking the factory, then constructs a
     /// `Rc<dyn WorkerScheduler>` for that thread and passes it to the
-    /// factory. The factory uses it to call `block_on(worker_loop)` and
-    /// to share with bridges via `PluginContext`.
+    /// factory, and finally drives the returned future the way that
+    /// platform keeps a worker alive:
     ///
-    /// The factory must be `Send + 'static`. Capturing `Rc`/`!Send` state
-    /// from main is not safe; capture only `Send + Sync` config (Arcs,
-    /// config structs, tokio Handles). The `WorkerScheduler` argument is
-    /// the canonical way for the factory to access worker-thread
-    /// scheduling primitives.
+    /// - **Native** (std::thread): drive the future to completion on the
+    ///   worker thread's LocalPool (an infinite loop → the thread blocks
+    ///   forever, polling the loop + all `spawn_local`'d side tasks).
+    /// - **Wasm** (Web Worker): root the future on the JS event loop via
+    ///   `spawn_local` and return — the worker stays alive because the
+    ///   loop's pending channel-waker keeps event-loop tasks scheduled.
+    ///
+    /// The returned future runs on the worker thread only (never crosses
+    /// threads), so it is `+ 'static` but not `Send`; the factory closure
+    /// itself must be `Send + 'static` (it crosses main → worker and may
+    /// capture only `Send + Sync` config).
+    #[allow(clippy::type_complexity)]
     fn spawn_worker(
         &self,
-        factory: Box<dyn FnOnce(Rc<dyn WorkerScheduler>) + Send + 'static>,
+        factory: Box<
+            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
+                + Send
+                + 'static,
+        >,
     ) -> WorkerHandle;
 
     /// Spawn a future on the main thread's local executor. Returns a
@@ -184,16 +196,17 @@ pub trait MainScheduler: 'static {
 /// it from `PluginContext` / `SubsystemFlushContext`. Methods dispatch to
 /// the *current thread's* executor (thread-local LocalPool), so the same
 /// `Rc<dyn WorkerScheduler>` works on any worker thread.
+///
+/// There is deliberately **no `block_on`**: blocking the calling thread on
+/// a future cannot be implemented honestly on wasm (you cannot block; the
+/// idiomatic pattern is `spawn_local` + event-loop driving). The engine's
+/// worker loop is driven by [`MainScheduler::spawn_worker`], which moves
+/// the per-platform "how to keep the worker alive" decision into the
+/// driver.
 pub trait WorkerScheduler: 'static {
     /// Spawn a future on this worker thread's local executor. Returns a
     /// [`TaskHandle`] that can abort or await the task; drop it to detach.
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
-
-    /// Block the calling (worker) thread on a `()`-returning future. Drives
-    /// both the future AND any `spawn_local`'d side-futures (LocalPool
-    /// semantics). Used by `MainBackend` to drive `worker_loop` from the
-    /// worker thread entry point.
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>);
 
     /// Create a Sleep future.
     fn sleep(&self, d: Duration) -> Sleep;

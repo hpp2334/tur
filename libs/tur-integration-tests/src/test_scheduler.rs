@@ -184,7 +184,11 @@ impl TestSchedulerDriver {
 impl MainScheduler for TestSchedulerDriver {
     fn spawn_worker(
         &self,
-        factory: Box<dyn FnOnce(Rc<dyn WorkerScheduler>) + Send + 'static>,
+        factory: Box<
+            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
+                + Send
+                + 'static,
+        >,
     ) -> WorkerHandle {
         let clock = self.clock.clone();
         let join = std::thread::Builder::new()
@@ -192,7 +196,11 @@ impl MainScheduler for TestSchedulerDriver {
             .spawn(move || {
                 init_thread_exec(clock);
                 let worker_view: Rc<dyn WorkerScheduler> = Rc::new(TestWorkerScheduler);
-                factory(worker_view);
+                let loop_fut = factory(worker_view);
+                // Drive the worker's main future to completion on the test
+                // executor — an infinite loop, so the thread blocks forever,
+                // polling the loop + all spawn_local'd side tasks.
+                block_on_on_current_thread(loop_fut);
                 CURRENT_EXEC.with(|c| *c.borrow_mut() = None);
                 CURRENT_CLOCK.with(|c| *c.borrow_mut() = None);
             })
@@ -223,9 +231,6 @@ impl WorkerScheduler for TestSchedulerDriver {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         spawn_local_on_current_thread(fut)
     }
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        block_on_on_current_thread(fut);
-    }
     fn sleep(&self, d: Duration) -> Sleep {
         virtual_sleep(d)
     }
@@ -236,9 +241,6 @@ struct TestWorkerScheduler;
 impl WorkerScheduler for TestWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         spawn_local_on_current_thread(fut)
-    }
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        block_on_on_current_thread(fut);
     }
     fn sleep(&self, d: Duration) -> Sleep {
         virtual_sleep(d)

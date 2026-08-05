@@ -3,11 +3,11 @@ use boa_engine::context::time::{Clock, JsInstant};
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
+use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
 use tur_engine::renderer::vello::WebGlVelloRenderer;
-use tur_engine::TurApp;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::JsCast;
@@ -408,30 +408,20 @@ impl WasmApp {
         canvas.set_height(physical_height);
 
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
-        let renderer = Rc::new(RefCell::new(renderer));
 
         // Spawn an isolated engine instance. The engine runs on a worker
-        // thread; the renderer stays on main and is driven by a `render_sink`
-        // callback. `create_app` pushes the initial Resize internally.
+        // thread; `MainBackend` owns the WebGL renderer on main and drives
+        // it directly (render batches, image uploads, resize-on-event) —
+        // no render_sink callback. `create_app` pushes the initial Resize
+        // internally.
         let app = runtime
             .runtime
-            .create_app((logical_width as f64, logical_height as f64), dpr)
+            .create_app(
+                Box::new(renderer),
+                (logical_width as f64, logical_height as f64),
+                dpr,
+            )
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        // Wire the render sink: each frame, the worker ships
-        // `Vec<RenderCommand>` + an image-map snapshot + viewport tuple;
-        // the sink applies them to the main-side WebGL renderer.
-        {
-            use tur_engine::core::render::Renderer as TurRenderer;
-            let sink_renderer = renderer.clone();
-            app.set_render_sink(move |commands, image_map, viewport| {
-                let mut r = sink_renderer.borrow_mut();
-                let (lw, lh, vdpr) = viewport;
-                r.resize(lw, lh, vdpr);
-                r.render_commands(commands, lw, lh, vdpr, image_map);
-                let _ = r.present();
-            });
-        }
 
         // The cursor backend is per-instance (it targets this canvas's DOM
         // element), so it can't be a shared runtime capability. Override the
@@ -468,11 +458,10 @@ impl WasmApp {
                 let physical_height = (logical_height as f64 * dpr) as u32;
                 s._canvas.set_width(physical_width);
                 s._canvas.set_height(physical_height);
-                s.app.push_platform_event(PlatformEvent::Resize {
-                    logical_width,
-                    logical_height,
-                    dpr,
-                });
+                // Resize the main-side renderer directly + forward the
+                // resize to the worker for layout (single call — see
+                // `TurApp::resize`).
+                s.app.resize(logical_width, logical_height, dpr);
             }
         });
 
@@ -1133,4 +1122,3 @@ impl WasmApp {
         })
     }
 }
-

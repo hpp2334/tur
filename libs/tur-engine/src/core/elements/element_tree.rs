@@ -11,7 +11,7 @@ use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Stor
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::ImageResourceMap;
+use crate::core::image_resource::ImageMetadataMap;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
@@ -465,7 +465,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &ImageResourceMap,
+        image_metadata_map: &ImageMetadataMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -484,7 +484,7 @@ impl NodeTreeData {
             constraints,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_metadata_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -499,7 +499,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &'a ImageResourceMap,
+        image_metadata_map: &'a ImageMetadataMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -541,7 +541,7 @@ impl NodeTreeData {
             id,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_metadata_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -572,7 +572,7 @@ impl NodeTreeData {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_metadata_map: &ImageMetadataMap,
         shell: PaintShell<'_>,
     ) {
         let root_id = match self.root_id {
@@ -584,7 +584,7 @@ impl NodeTreeData {
             canvas,
             Affine::IDENTITY,
             focused_node_id,
-            image_resource_map,
+            image_metadata_map,
             shell,
         );
     }
@@ -596,7 +596,7 @@ impl NodeTreeData {
         canvas: &mut dyn Canvas,
         parent_absolute: Affine,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_metadata_map: &ImageMetadataMap,
         shell: PaintShell<'_>,
     ) {
         let node = match self.elements.get(&id) {
@@ -625,7 +625,7 @@ impl NodeTreeData {
             self,
             focused_node_id,
             id,
-            image_resource_map,
+            image_metadata_map,
             shell,
             absolute,
         );
@@ -1232,7 +1232,7 @@ impl NodeTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &ImageResourceMap,
+        image_metadata_map: &ImageMetadataMap,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -1244,7 +1244,7 @@ impl NodeTree {
             constraints,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_metadata_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -1256,12 +1256,12 @@ impl NodeTree {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_metadata_map: &ImageMetadataMap,
         shell: PaintShell<'_>,
     ) {
         self.data
             .borrow()
-            .paint(canvas, focused_node_id, image_resource_map, shell);
+            .paint(canvas, focused_node_id, image_metadata_map, shell);
     }
 }
 

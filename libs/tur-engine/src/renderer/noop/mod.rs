@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use crate::core::image_resource::ImageResourceMap;
 use crate::core::render::{NullCanvas, RenderCommand, Renderer, play_commands};
 
 pub struct NoopRenderer;
@@ -18,14 +17,7 @@ impl NoopRenderer {
 }
 
 impl Renderer for NoopRenderer {
-    fn render_commands(
-        &mut self,
-        commands: &[RenderCommand],
-        _physical_width: u32,
-        _physical_height: u32,
-        _dpr: f64,
-        _image_resource_map: &ImageResourceMap,
-    ) {
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
         // Drive playback against a null canvas so any side effects baked
         // into Canvas ops (none today, but defensive) still run. Paint
         // counts come from the recorded batch.

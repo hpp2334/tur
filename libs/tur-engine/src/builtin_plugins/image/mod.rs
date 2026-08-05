@@ -11,10 +11,12 @@
 //! part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract —
-//! `crate::core::image_resource::{ImageResourceId, ImageResourceMap,
+//! `crate::core::image_resource::{ImageResourceId, ImageMetadataMap,
 //! ImageResource}` (pure-data struct with `pub` fields) — which
 //! `Canvas::draw_image` consumes. This plugin produces these structs from
-//! raw bytes / SVG strings via [`decode`].
+//! raw bytes / SVG strings via [`decode`]. Decoded images are registered via
+//! `TurJsContext::register_image` (worker keeps sizes only; the pixel `Blob`
+//! ships to main via `MainMsg::UploadImage`).
 
 pub mod bridge;
 pub mod decode;

@@ -29,3 +29,27 @@ fn image_with_explicit_size() {
     assert_eq!(image_node.computed_layout.size.width, 200.0);
     assert_eq!(image_node.computed_layout.size.height, 100.0);
 }
+
+/// Phase-4 image ownership split: the worker keeps only metadata (sizes);
+/// the decoded pixel `Blob` ships to main directly from the
+/// `createImageResource` bridge (one `MainMsg::UploadImage` per decode,
+/// via the shared `main_tx`). Main retains the full `ImageResource` (for
+/// context-loss re-upload).
+#[test]
+fn image_blob_ships_to_main() {
+    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    app.load_bundle("image-basic").unwrap();
+
+    // The bridge shipped exactly one `UploadImage` at `createImageResource`
+    // time; main inserted it into its `ImageResourceMap`.
+    let count = app.with_app(|a| a.backend().image_resource_count());
+    assert_eq!(count, 1, "main should retain the shipped pixel Blob");
+
+    // Settle a few more frames — the bridge ships once per decode (no
+    // staging, no re-shipping), so the count stays at 1.
+    for _ in 0..3 {
+        app.pump().unwrap();
+    }
+    let count = app.with_app(|a| a.backend().image_resource_count());
+    assert_eq!(count, 1, "images ship exactly once per decode");
+}

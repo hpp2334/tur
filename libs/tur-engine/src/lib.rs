@@ -24,10 +24,10 @@ pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
-// `runtime.create_app(viewport, dpr)` spawns an isolated `TurApp` instance
-// (engine on a worker thread; embedder installs a `render_sink` on main to
-// receive command batches + drive its own renderer).
-pub use crate::core::runtime::{MainBackend, RenderSink, TurRuntime, TurRuntimeBuilder};
+// `runtime.create_app(Box<dyn Renderer>, viewport, dpr)` spawns an isolated
+// `TurApp` instance (engine on a worker thread; `MainBackend` owns the
+// renderer on main and drives it directly — no render_sink callback).
+pub use crate::core::runtime::{MainBackend, TurRuntime, TurRuntimeBuilder};
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -50,8 +50,9 @@ pub struct FocusedState {
 /// A running tur engine instance.
 ///
 /// Wraps a [`MainBackend`] that owns a worker thread (running a
-/// [`WorkerBackend`](core::runtime::WorkerBackend)). The embedder drives
-/// rendering on the main thread via [`Self::set_render_sink`]; everything
+/// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the main-side
+/// renderer (passed to `TurRuntime::create_app`). Main drives the renderer
+/// directly from [`MainBackend`] — no `render_sink` callback. Everything
 /// else (boa `Context`, element tree, reactive store, layout, subsystems)
 /// lives on the worker.
 ///
@@ -121,7 +122,7 @@ impl TurApp {
     }
 
     /// Direct accessor on the underlying [`MainBackend`]. Embedders use it
-    /// to install the render sink + cursor backend after construction.
+    /// to install the cursor backend after construction.
     pub fn backend(&self) -> &MainBackend {
         &self.backend
     }
@@ -159,20 +160,10 @@ impl TurApp {
         self.pump().await
     }
 
-    /// Install the main-side render sink. The worker ships
-    /// `Vec<RenderCommand>` + `Arc<ImageResourceMap>` + viewport tuple
-    /// each frame; the sink applies them to its renderer.
-    pub fn set_render_sink<
-        F: FnMut(
-                &[core::render::RenderCommand],
-                &core::image_resource::ImageResourceMap,
-                (u32, u32, f64),
-            ) + 'static,
-    >(
-        &self,
-        f: F,
-    ) {
-        self.backend.set_render_sink(f);
+    /// Read rendered pixels back from the owned renderer (screenshot
+    /// tests). Returns `None` if the renderer doesn't support readback.
+    pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
+        self.backend.render_to_pixels()
     }
 
     /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
@@ -197,6 +188,25 @@ impl TurApp {
         self.request_wakeup();
     }
 
+    /// Resize the surface. The embedder calls this at resize-event-receipt
+    /// time (DOM `ResizeObserver` / winit / JNI): it resizes the main-side
+    /// renderer directly (no flush + worker→main round-trip — lower
+    /// latency) AND forwards `PlatformEvent::Resize` to the worker so
+    /// `ResizeSubsystem` updates `Screen` / `viewportSize$` for layout.
+    /// Event-driven, not per-frame, so no dedup is needed.
+    pub fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
+        self.backend.resize(logical_width, logical_height, dpr);
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(
+                core::platform::PlatformEvent::Resize {
+                    logical_width,
+                    logical_height,
+                    dpr,
+                },
+            ));
+        self.request_wakeup();
+    }
+
     /// Push an engine-internal event onto the app-event bus (programmatic
     /// scrolls, clipboard writes). Re-arms an idle autonomous loop.
     pub fn push_app_event(&self, event: core::app::AppEvent) {
@@ -218,8 +228,21 @@ impl TurApp {
     ///
     /// Subscribes to vsync events from `main_sched`, merges with the
     /// worker's MainMsg stream, dispatches events. On `Vsync` events sends
-    /// `WorkerMsg::Wake` to trigger a worker pump. On `FrameOutcome` events
+    /// `WorkerMsg::Wake` to trigger a worker pump + renders the latest
+    /// buffered batch (vsync-aligned). On `FrameOutcome` events
     /// fire-and-forgets `request_vsync()` if the schedule is `Vsync`.
+    ///
+    /// ## Pipelining (latest-wins, at most 1 frame ahead)
+    ///
+    /// The batch is NOT rendered when it arrives — it's buffered
+    /// (`pending`) and rendered at the next vsync. The `Wake` for the
+    /// worker is sent BEFORE rendering, so the worker computes frame N+1
+    /// while main encodes frame N (overlapping the worker's flush+record
+    /// with main's vello encode — recovering the serialization gap).
+    /// Backpressure: `Wake` is sent exactly once per vsync event, and main
+    /// renders once per vsync event, so the worker can never get more than
+    /// one frame ahead. Rendered frames are one vsync behind the worker
+    /// (latest-wins — stale batches are dropped by replacement).
     ///
     /// The bootstrap is automatic: `create_app` pushes an initial resize
     /// event to the worker, the worker pumps + ships `FrameOutcome` back,
@@ -244,6 +267,9 @@ impl TurApp {
         use futures::future::{Either, select};
         use futures::stream::StreamExt;
 
+        // Pipelining buffer: the latest un-rendered batch from the worker.
+        let mut pending: Option<core::render::RenderCommandBatch> = None;
+
         loop {
             // Race vsync + main_msg streams — first to fire wins.
             let vsync_fut = vsync_rx.next();
@@ -255,11 +281,18 @@ impl TurApp {
                     if self.destroyed.get() {
                         break;
                     }
+                    // 1) Kick the worker for the NEXT frame first — it
+                    //    flushes+records N+1 while main encodes N below.
                     self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
+                    // 2) Render the latest buffered batch (vsync-aligned,
+                    //    latest-wins).
+                    if let Some(batch) = pending.take() {
+                        self.backend.render_batch(&batch);
+                    }
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
-                    if self.handle_main_msg(msg).should_stop() {
+                    if self.handle_main_msg(msg, &mut pending).should_stop() {
                         break;
                     }
                 }
@@ -270,14 +303,22 @@ impl TurApp {
 
     /// Dispatch one MainMsg from the worker. Returns whether the loop
     /// should stop (e.g. on Destroyed).
-    fn handle_main_msg(&self, msg: core::app::MainMsg) -> HandleResult {
+    fn handle_main_msg(
+        &self,
+        msg: core::app::MainMsg,
+        pending: &mut Option<core::render::RenderCommandBatch>,
+    ) -> HandleResult {
         match msg {
-            core::app::MainMsg::RenderCommands {
-                commands,
-                image_map,
-                viewport,
-            } => {
-                self.backend.apply_render(commands, &image_map, viewport);
+            core::app::MainMsg::RenderCommands { commands } => {
+                // Pipelined: buffer (latest-wins); rendered at the next
+                // vsync. `MainTree` is updated at render time too.
+                *pending = Some(commands);
+            }
+            core::app::MainMsg::UploadImage { id, image } => {
+                // Retain the full resource (pixel Blob) on main for
+                // context-loss re-upload, then upload into the GPU atlas.
+                self.backend.insert_image_resource(id, image.clone());
+                self.backend.upload_image_resource(id, &image);
             }
             core::app::MainMsg::FrameOutcome(Ok(outcome)) => {
                 if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
@@ -285,8 +326,16 @@ impl TurApp {
                 }
                 if outcome.schedule == core::app::NextFrame::Vsync {
                     self.main_sched.borrow().request_vsync();
+                } else if let Some(batch) = pending.take() {
+                    // Quiescence: no vsync is armed (nothing time-driven
+                    // pending), so the pipeline would stall with an
+                    // un-rendered batch (e.g. the initial frame, or a
+                    // one-shot paint request). Flush it now — the next
+                    // frame only starts on a new input event anyway.
+                    self.backend.render_batch(&batch);
                 }
-                // Idle: no-op. The loop will block on the next event.
+                // Idle + empty pending: no-op. The loop blocks on the next
+                // event.
             }
             core::app::MainMsg::FrameOutcome(Err(e)) => {
                 tracing::error!("worker frame error: {e}");

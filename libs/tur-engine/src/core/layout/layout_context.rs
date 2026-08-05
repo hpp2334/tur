@@ -9,7 +9,7 @@ use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::element::ElementNodeId;
 use crate::core::elements::{NodeTree, NodeTreeData};
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
+use crate::core::image_resource::{ImageMetadataMap, ImageResourceId};
 use crate::core::view::{FromJs, Val};
 
 pub struct LayoutContext<'a, 'js> {
@@ -17,7 +17,7 @@ pub struct LayoutContext<'a, 'js> {
     node_id: ElementNodeId,
     font_manager: &'a mut FontManager,
     text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-    image_resource_map: &'a ImageResourceMap,
+    image_metadata_map: &'a ImageMetadataMap,
     /// Shared handles needed to build a `LayoutViewCx` for layout-phase
     /// mount/unmount (LazyList remount). The `node_tree` is a clonable
     /// handle so controllers captured at build time can reach the tree at
@@ -41,7 +41,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
         node_id: ElementNodeId,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &'a ImageResourceMap,
+        image_metadata_map: &'a ImageMetadataMap,
         node_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         dirty: Rc<Cell<bool>>,
@@ -52,7 +52,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
             node_id,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_metadata_map,
             node_tree,
             mutation_queue,
             dirty,
@@ -66,7 +66,7 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
             constraints,
             self.font_manager,
             self.text_layout_cx,
-            self.image_resource_map,
+            self.image_metadata_map,
             self.node_tree.clone(),
             self.mutation_queue.clone(),
             self.dirty.clone(),
@@ -131,9 +131,9 @@ impl<'a, 'js> LayoutContext<'a, 'js> {
     }
 
     pub fn get_image_natural_size(&self, image_resource_id: ImageResourceId) -> Option<Size> {
-        self.image_resource_map
-            .get_image(image_resource_id)
-            .map(|r| r.natural_size)
+        self.image_metadata_map
+            .get(&image_resource_id)
+            .map(|m| m.size)
     }
 
     /// Resolve a `Val<T>` to its current `T` value. For reactive vals the atom

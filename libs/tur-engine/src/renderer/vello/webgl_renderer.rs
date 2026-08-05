@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
+use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
@@ -59,14 +59,11 @@ impl WebGlVelloRenderer {
         }
     }
 
-    /// Render a flat command batch into the scene. Image upload is performed
-    /// here; playback happens in `paint_commands_to_scene`.
-    fn render_commands_to_scene(
-        &mut self,
-        commands: &[RenderCommand],
-        image_resource_map: &ImageResourceMap,
-    ) {
-        self.upload_images(image_resource_map);
+    /// Render a flat command batch into the scene. Playback happens in
+    /// `paint_commands_to_scene`; image upload happens incrementally via
+    /// `TurRenderer::upload_image_resource` as the worker registers
+    /// resources.
+    fn render_commands_to_scene(&mut self, commands: &[RenderCommand]) {
         paint_commands_to_scene(
             &mut self.scene,
             &mut self.resources,
@@ -76,26 +73,6 @@ impl WebGlVelloRenderer {
             self.dpr,
             commands,
         );
-    }
-
-    /// Upload any new image resources to the hybrid image cache (atlas),
-    /// caching their `ImageId` keyed by `ImageResourceId`. Stale entries (images no
-    /// longer in the resource map) are pruned from the cache.
-    fn upload_images(&mut self, image_resource_map: &ImageResourceMap) {
-        for (rid, img_res) in image_resource_map.iter_images() {
-            if self.image_uploads.contains_key(&rid) {
-                continue;
-            }
-            let source = ImageSource::from_peniko_image_data(&img_res.peniko_image);
-            let pixmap = match source {
-                ImageSource::Pixmap(p) => p,
-                _ => continue,
-            };
-            let image_id = self.renderer.upload_image(&mut self.resources, &pixmap);
-            self.image_uploads.insert(rid, image_id);
-        }
-        self.image_uploads
-            .retain(|rid, _| image_resource_map.has_image(*rid));
     }
 
     fn present(&mut self) {
@@ -117,18 +94,10 @@ impl WebGlVelloRenderer {
 }
 
 impl TurRenderer for WebGlVelloRenderer {
-    fn render_commands(
-        &mut self,
-        commands: &[RenderCommand],
-        _physical_width: u32,
-        _physical_height: u32,
-        _dpr: f64,
-        image_resource_map: &ImageResourceMap,
-    ) {
-        // Surface geometry is already tracked on `self` (synced via
-        // `resize`); trait-level args are ignored for the same reason as
-        // `VelloRenderer::render_commands`.
-        self.render_commands_to_scene(commands, image_resource_map);
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        // Surface geometry is tracked on `self` (synced via `resize`, which
+        // fires on viewport-change events only).
+        self.render_commands_to_scene(commands);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -143,5 +112,18 @@ impl TurRenderer for WebGlVelloRenderer {
         // The hybrid `Scene` is created with fixed pixel dimensions, so it must
         // be recreated on resize.
         self.scene = new_scene(self.physical_width, self.physical_height);
+    }
+
+    fn upload_image_resource(&mut self, id: ImageResourceId, image: &ImageResource) {
+        if self.image_uploads.contains_key(&id) {
+            return;
+        }
+        let source = ImageSource::from_peniko_image_data(&image.peniko_image);
+        let pixmap = match source {
+            ImageSource::Pixmap(p) => p,
+            _ => return,
+        };
+        let image_id = self.renderer.upload_image(&mut self.resources, &pixmap);
+        self.image_uploads.insert(id, image_id);
     }
 }

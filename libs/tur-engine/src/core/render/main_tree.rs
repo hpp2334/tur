@@ -1,8 +1,7 @@
 //! Long-lived render tree on main, updated by applying batches of
 //! [`RenderCommand`]s (commit-log style).
 //!
-//! Phase 3 introduces this as the engine's record-and-playback render path:
-//! the worker-side record pass produces `Vec<RenderCommand>` per frame, which
+//! The worker-side record pass produces `Vec<RenderCommand>` per frame, which
 //! the renderer plays linearly into the scene (see
 //! [`crate::core::render::play_commands`]). `MainTree` mirrors the same batch
 //! into a persisted topology+paint-state map for non-render queries —
@@ -11,10 +10,10 @@
 //! `MainTree` (the command batch is self-describing: each
 //! [`RenderCommand::Paint`] carries its own absolute transform).
 //!
-//! Phase 3 v1 emits [`RenderCommand::SetChildren`] for every node every
-//! frame (full sync) — diff optimization is deferred. [`RenderCommand::Remove`]
-//! is emitted for any id that disappears from the worker's tree between
-//! frames (computed as `last_topology.keys() \ current_keys`).
+//! Topology is diffed: [`build_topology_batch`] emits
+//! [`RenderCommand::SetChildren`] only when a node's child list changed and
+//! [`RenderCommand::Remove`] for any id that disappears from the worker's
+//! tree between frames — steady-state frames ship zero topology commands.
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -29,7 +28,7 @@ use vello_common::kurbo::Affine;
 /// One node's last-applied paint + topology state.
 ///
 /// All fields are replaced on each [`RenderCommand::Paint`] / `SetChildren`
-/// for the id — Phase 3 v1 is full-sync, no segment accumulation.
+/// for the id (diffed topology — `SetChildren` only arrives on change).
 #[derive(Debug, Clone)]
 struct MainNode {
     /// Last `Paint.transform` (absolute affine).
@@ -55,10 +54,8 @@ impl Default for MainNode {
 
 /// The main-side render tree mirror.
 ///
-/// Owned by `TurAppInternal` in Phase 3 (single-threaded); will migrate to
-/// the main side in Phase 7 when the worker/main split goes live. Either
-/// way, the worker→main wire contract is `Vec<RenderCommand>`, applied
-/// verbatim via [`MainTree::apply_batch`].
+/// Owned by `MainBackend` on the main thread (the worker→main wire contract
+/// is `Vec<RenderCommand>`, applied verbatim via [`MainTree::apply_batch`]).
 #[derive(Debug, Default)]
 pub struct MainTree {
     nodes: HashMap<ElementNodeId, MainNode>,
@@ -168,11 +165,10 @@ pub struct MainNodeRef<'a> {
 /// (`SetChildren` + `Remove`) by diffing the current element-tree topology
 /// against the previous frame's.
 ///
-/// Phase 3 v1: `SetChildren` is emitted **for every node every frame**
-/// (full sync). `Remove` is emitted for any id present in `last_topology`
-/// but missing from `current_ids`. The diff optimization (emit
-/// `SetChildren` only when topology changes) is deferred — the wire
-/// cost is negligible in single-threaded Phase 3 and revisited in Phase 7.
+/// `SetChildren` is emitted **only when a node's child list changed**
+/// (diff against `last_topology` — steady-state frames emit zero topology
+/// commands). `Remove` is emitted for any id present in `last_topology`
+/// but missing from `current_ids`.
 ///
 /// `child_ids_of` is called for each id in `current_ids` to fetch its
 /// flattened children. Callers typically pass a closure that borrows the
@@ -194,14 +190,15 @@ pub fn build_topology_batch(
     }
     last_topology.retain(|id, _| current_set.contains(id));
 
-    // SetChildren: full sync — emit for every current id.
+    // SetChildren: diff — emit only when a node's child list changed
+    // (steady-state animation frames ship zero topology commands).
     for &id in current_ids {
         let child_ids = child_ids_of(id);
-        let prev = last_topology.insert(id, child_ids.clone());
-        // Phase 3 v1: always emit, even if unchanged. The wire cost in
-        // single-threaded mode is negligible; Phase 7 revisits with a diff.
-        let _ = prev;
-        batch.push(RenderCommand::SetChildren { id, child_ids });
+        let changed = last_topology.get(&id) != Some(&child_ids);
+        if changed {
+            last_topology.insert(id, child_ids.clone());
+            batch.push(RenderCommand::SetChildren { id, child_ids });
+        }
     }
 
     batch
@@ -309,7 +306,7 @@ mod tests {
     }
 
     #[test]
-    fn build_topology_batch_full_sync_and_remove() {
+    fn build_topology_batch_diff_and_remove() {
         let mut last: HashMap<ElementNodeId, Vec<ElementNodeId>> = HashMap::new();
         // Pretend the previous frame had nodes 1, 2, 99.
         last.insert(nid(1), vec![]);
@@ -326,7 +323,8 @@ mod tests {
             &mut last,
         );
 
-        // 1 Remove (id=99) + 3 SetChildren (full sync).
+        // 1 Remove (id=99) + 2 SetChildren (id=1 changed, id=3 new;
+        // id=2 unchanged → no diff entry).
         let removes = batch
             .iter()
             .filter(|c| matches!(c, RenderCommand::Remove { .. }))
@@ -336,11 +334,25 @@ mod tests {
             .filter(|c| matches!(c, RenderCommand::SetChildren { .. }))
             .count();
         assert_eq!(removes, 1, "got {batch:?}");
-        assert_eq!(sets, 3, "got {batch:?}");
+        assert_eq!(sets, 2, "got {batch:?}");
 
         // last_topology should now be exactly the current set.
         assert!(!last.contains_key(&nid(99)));
         assert!(last.contains_key(&nid(3)));
+
+        // Steady state: a second batch with no changes emits nothing.
+        let batch2 = build_topology_batch(
+            &current,
+            |id| match id {
+                x if x == nid(1) => vec![nid(2), nid(3)],
+                _ => vec![],
+            },
+            &mut last,
+        );
+        assert!(
+            batch2.is_empty(),
+            "steady-state topology must be empty, got {batch2:?}"
+        );
     }
 
     #[test]

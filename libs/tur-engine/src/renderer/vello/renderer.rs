@@ -2,7 +2,7 @@
 //!
 //! This module is only compiled when the `wgpu-backend` feature is active.
 
-use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
+use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
@@ -118,14 +118,11 @@ impl VelloRenderer {
         self.scene = new_scene(self.physical_width, self.physical_height);
     }
 
-    /// Render a flat command batch into the scene. Image upload is performed
-    /// here; playback itself happens in `paint_commands_to_scene`.
-    pub fn render_commands_to_scene(
-        &mut self,
-        commands: &[RenderCommand],
-        image_resource_map: &ImageResourceMap,
-    ) {
-        self.upload_images(image_resource_map);
+    /// Render a flat command batch into the scene. Playback happens in
+    /// `paint_commands_to_scene`; image upload happens incrementally via
+    /// `TurRenderer::upload_image_resource` as the worker registers
+    /// resources.
+    pub fn render_commands_to_scene(&mut self, commands: &[RenderCommand]) {
         paint_commands_to_scene(
             &mut self.scene,
             &mut self.resources,
@@ -137,43 +134,34 @@ impl VelloRenderer {
         );
     }
 
-    /// Upload any new image resources to the hybrid image cache (atlas),
-    /// caching their `ImageId` keyed by `ImageResourceId`. Stale entries (images no
-    /// longer in the resource map) are pruned from the cache.
-    fn upload_images(&mut self, image_resource_map: &ImageResourceMap) {
-        let VelloRenderer {
-            renderer,
-            resources,
-            device,
-            queue,
-            image_uploads,
-            ..
-        } = self;
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("image upload"),
-        });
-        let mut uploaded_any = false;
-        for (rid, img_res) in image_resource_map.iter_images() {
-            if image_uploads.contains_key(&rid) {
-                continue;
-            }
-            let source = ImageSource::from_peniko_image_data(&img_res.peniko_image);
-            let pixmap = match source {
-                ImageSource::Pixmap(p) => p,
-                // Only inline pixmap sources are produced from decoded image data.
-                _ => continue,
-            };
-            let image_id = renderer.upload_image(resources, device, queue, &mut encoder, &pixmap);
-            image_uploads.insert(rid, image_id);
-            uploaded_any = true;
+    /// Upload one image resource to the hybrid image cache (atlas), caching
+    /// its `ImageId` keyed by `ImageResourceId`. Called once per
+    /// newly-registered resource (replaces the old per-frame full-map
+    /// upload sweep).
+    pub fn upload_image_resource(&mut self, id: ImageResourceId, image: &ImageResource) {
+        if self.image_uploads.contains_key(&id) {
+            return;
         }
-        // Prune stale entries so removed images don't keep atlas slots forever.
-        image_uploads.retain(|rid, _| image_resource_map.has_image(*rid));
-
-        if uploaded_any {
-            queue.submit(std::iter::once(encoder.finish()));
-        }
+        let source = ImageSource::from_peniko_image_data(&image.peniko_image);
+        let pixmap = match source {
+            ImageSource::Pixmap(p) => p,
+            // Only inline pixmap sources are produced from decoded image data.
+            _ => return,
+        };
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("image upload"),
+            });
+        let image_id = self.renderer.upload_image(
+            &mut self.resources,
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &pixmap,
+        );
+        self.image_uploads.insert(id, image_id);
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     pub fn present(&mut self) -> Result<(), VelloRendererError> {
@@ -341,18 +329,11 @@ impl VelloRenderer {
 }
 
 impl TurRenderer for VelloRenderer {
-    fn render_commands(
-        &mut self,
-        commands: &[RenderCommand],
-        _physical_width: u32,
-        _physical_height: u32,
-        _dpr: f64,
-        image_resource_map: &ImageResourceMap,
-    ) {
-        // `physical_width` / `physical_height` / `dpr` are already tracked
-        // on `self` (kept in sync via `resize`), so the trait-level args
-        // are ignored here.
-        self.render_commands_to_scene(commands, image_resource_map);
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        // `physical_width` / `physical_height` / `dpr` are tracked on `self`
+        // (kept in sync via `resize`, which fires on viewport-change events
+        // only).
+        self.render_commands_to_scene(commands);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -361,6 +342,10 @@ impl TurRenderer for VelloRenderer {
 
     fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
         VelloRenderer::resize(self, logical_width, logical_height, dpr);
+    }
+
+    fn upload_image_resource(&mut self, id: ImageResourceId, image: &ImageResource) {
+        VelloRenderer::upload_image_resource(self, id, image);
     }
 
     fn render_to_pixels(&mut self) -> Option<Vec<u8>> {

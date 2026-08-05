@@ -51,6 +51,7 @@ use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
+use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
 use tur_engine::{CursorBackend, CursorCap, TurApp, TurRuntime};
 use tur_filepicker_capability::{
@@ -420,7 +421,7 @@ impl TurTestApp {
             builder = builder.plugin_boxed(p);
         }
         let runtime = builder.build()?;
-        let inner = runtime.create_app((width, height), 1.0)?;
+        let inner = runtime.create_app(Box::new(NoopRenderer::new()), (width, height), 1.0)?;
         let _ = block_on(inner.run_frame());
         Ok(Self {
             inner,

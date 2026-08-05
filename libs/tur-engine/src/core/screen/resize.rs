@@ -14,11 +14,10 @@ impl Subsystem for ResizeSubsystem {
             return;
         };
 
-        // The actual renderer lives on main (worker→main command shipping).
-        // Main-side `render_sink` callback receives the current viewport
-        // tuple `(width, height, dpr)` with each `MainMsg::RenderCommands`
-        // and is responsible for calling `renderer.resize(...)` when the
-        // size changes. Here we only update the worker-side screen state.
+        // The renderer lives on main; the embedder resizes it directly at
+        // event-receipt time via `TurApp::resize` (which also forwards this
+        // `PlatformEvent::Resize` to the worker). Here we only update the
+        // worker-side screen state.
         cx.screen.logical_size = (*logical_width as f64, *logical_height as f64);
         cx.screen.dpr = *dpr;
         // Push the new size into the `viewportSize$` source atom now

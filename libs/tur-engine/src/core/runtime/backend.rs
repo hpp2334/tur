@@ -12,9 +12,10 @@
 //! - [`MainBackend`] is public: `TurApp` owns one. It spawns a worker
 //!   thread (via [`crate::core::thread`]) running a `WorkerBackend`,
 //!   dispatches input via `futures::channel`, and receives [`MainMsg`]
-//!   replies. The embedder wires a `render_sink` callback that receives
-//!   each `MainMsg::RenderCommands` batch + image map + viewport, and
-//!   applies it to the main-side renderer.
+//!   replies. `MainBackend` owns the main-side [`Renderer`] (passed to
+//!   `TurRuntime::create_app`) + the [`MainTree`] mirror; it applies each
+//!   `MainMsg::RenderCommands` batch to both directly — no `render_sink`
+//!   callback.
 //!
 //! ## Async model
 //!
@@ -40,9 +41,9 @@ use crate::core::async_::TurJobExecutor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
-use crate::core::image_resource::ImageResourceMap;
+use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::platform::CursorBackend;
-use crate::core::render::RenderCommand;
+use crate::core::render::{MainTree, RenderCommand, Renderer};
 use crate::core::scheduler::WorkerHandle;
 use crate::error::TurError;
 
@@ -86,17 +87,6 @@ impl WorkerBackend {
             .borrow()
             .shell
             .last_applied_cursor()
-    }
-
-    /// Snapshot the worker-side `ImageResourceMap` for shipping to main.
-    pub(crate) fn image_resource_map_snapshot(&self) -> std::sync::Arc<ImageResourceMap> {
-        self.internal.image_resource_map_snapshot()
-    }
-
-    pub(crate) fn screen_viewport(&self) -> (u32, u32, f64) {
-        let cx = self.internal.app_context.borrow();
-        let (w, h) = cx.screen.logical_size;
-        (w as u32, h as u32, cx.screen.dpr)
     }
 
     pub(crate) fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
@@ -267,13 +257,6 @@ impl WorkerBackend {
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
             }
-            WorkerMsg::RenderToPixels { reply } => {
-                // No renderer on the worker — main owns it. Always None.
-                let _ = reply;
-                tracing::warn!(
-                    "WorkerBackend::handle_worker_msg: RenderToPixels is a no-op (renderer lives on main)"
-                );
-            }
             WorkerMsg::Destroy { reply } => {
                 reply.send(());
             }
@@ -378,14 +361,8 @@ impl WorkerBackend {
 }
 
 // ---------------------------------------------------------------------------
-// MainBackend — TurApp's backend. Owns the worker + RPC plumbing + render sink
+// MainBackend — TurApp's backend. Owns the worker + RPC plumbing + renderer
 // ---------------------------------------------------------------------------
-
-/// Render sink signature: receives a command batch + image map snapshot +
-/// viewport tuple, applies them to the main-side renderer. The embedder
-/// (tur-android / tur-wasm) installs this via [`MainBackend::set_render_sink`]
-/// after construction.
-pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u32, f64))>;
 
 /// The public backend owned by `TurApp`. Spawns a worker thread running a
 /// [`WorkerBackend`], dispatches input via `futures::channel`, and receives
@@ -398,13 +375,18 @@ pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u
 /// (so the JS main thread never blocks), `futures::executor::block_on`
 /// on native (so the calling thread parks until the worker replies).
 ///
-/// ## Cross-thread render shipping
+/// ## Renderer ownership
 ///
-/// After each `pump()`, the worker_loop drains the worker's
-/// `pending_render_batch` and ships it via `MainMsg::RenderCommands { commands,
-/// image_map, viewport }`. `MainBackend::pump` matches that variant and
-/// invokes the [`render_sink`](Self::set_render_sink) callback, which applies
-/// the batch to the main-side renderer.
+/// `MainBackend` owns the main-side [`Renderer`] — passed to
+/// `TurRuntime::create_app(Box<dyn Renderer>, …)` and stored here, exactly
+/// like `main`'s `create_app(Box::new(renderer), …)`. Both `MainBackend`
+/// and the renderer live on the main thread, so there is no callback
+/// indirection: each `MainMsg::RenderCommands` batch is applied directly
+/// via [`Self::render_batch`] (MainTree mirror + renderer). Resize is
+/// driven by the embedder at event-receipt time via
+/// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
+/// / JNI), which calls [`Self::resize`] directly and forwards
+/// `PlatformEvent::Resize` to the worker for layout — no `MainMsg` round-trip.
 ///
 /// ## Cached cursor / focus state
 ///
@@ -413,9 +395,6 @@ pub type RenderSink = Box<dyn FnMut(&[RenderCommand], &ImageResourceMap, (u32, u
 /// caches the latest values in `cached_cursor` / `cached_focus`, available
 /// for non-blocking reads from embedder callbacks (e.g. the wasm
 /// after-frame hook reads focus state without an RPC).
-///
-/// `RenderToPixels` is no-op on the worker (the renderer lives on main);
-/// screenshot tests should run with main-side render access instead.
 pub struct MainBackend {
     worker_tx: WorkerTx,
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
@@ -442,9 +421,19 @@ pub struct MainBackend {
     /// Cross-thread event bus handle. Routes `emit_to_js` via
     /// `WorkerMsg::EventBusToJs` (channel mode).
     event_bus_handle: crate::core::event_bus::EventBusHandle,
-    /// Main-side render sink. Worker emits `MainMsg::RenderCommands` after
-    /// each paint; main invokes the sink to drive its renderer.
-    render_sink: RefCell<Option<RenderSink>>,
+    /// Main-side renderer (owned — no sink callback). Worker ships
+    /// `MainMsg::RenderCommands` batches; main applies them here.
+    renderer: RefCell<Box<dyn Renderer>>,
+    /// Main-side image resources — the full `ImageResource` (pixel `Blob`
+    /// retained) per worker-assigned id. Inserted on `MainMsg::UploadImage`
+    /// (under the worker-assigned id) alongside the GPU upload; retained for
+    /// context-loss re-upload. The worker only ever holds the sizes
+    /// (`ImageMetadataMap`).
+    image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
+    /// Main-side render-tree mirror, updated from each frame's command
+    /// batch (applied before rendering). Query-able for dev-tool /
+    /// hit-test / cursor state without touching the worker.
+    main_tree: RefCell<MainTree>,
 }
 
 impl MainBackend {
@@ -453,19 +442,21 @@ impl MainBackend {
     /// build `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
     ///
     /// The driver's `spawn_worker` impl sets up thread-locals on the worker
-    /// thread and constructs a `WorkerScheduler` for it, then passes that
-    /// to the factory. The factory uses it to call `block_on(worker_loop)`
-    /// and (via `WorkerBackend`) hands it to bridges through
-    /// `PluginContext` / `SubsystemFlushContext`.
-    ///
-    /// On wasm this is a real Web Worker (via `wasm_thread`); on native a
-    /// dedicated OS thread. Either way, `worker_sched.block_on(worker_loop)`
-    /// drives the async worker_loop from the worker thread entry point.
+    /// thread, constructs a `WorkerScheduler` for it, passes that to the
+    /// factory, and finally drives the factory's returned future (the
+    /// engine's `worker_loop`) the way that platform keeps a worker alive
+    /// — native blocks the OS thread on its LocalPool; wasm roots the
+    /// future on the JS event loop via `spawn_local`. The factory also
+    /// receives a worker→main channel sender clone (`main_tx`) so bridges
+    /// can ship messages (e.g. `MainMsg::UploadImage` from
+    /// `createImageResource`) directly without a staging vec.
     pub(crate) fn new(
         main_sched: Rc<dyn crate::core::scheduler::MainScheduler>,
+        renderer: Box<dyn Renderer>,
         backend_factory: impl FnOnce(
             Rc<dyn crate::core::scheduler::WorkerScheduler>,
             Box<dyn Fn() + Send>,
+            crate::core::app::MainTx,
         ) -> WorkerBackend
         + Send
         + 'static,
@@ -482,6 +473,11 @@ impl MainBackend {
         let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
 
         let worker_tx_for_on_push = worker_tx.clone();
+        // Clone of the worker→main sender handed to the backend so bridges
+        // can ship messages directly (FIFO order is preserved across the
+        // shared channel — the bridge enqueues during flush, worker_loop
+        // enqueues after flush).
+        let main_tx_for_backend = main_tx.clone();
         #[cfg(not(target_arch = "wasm32"))]
         let init_tx = init_tx;
         let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
@@ -489,11 +485,12 @@ impl MainBackend {
             let wake_worker: Box<dyn Fn() + Send> = Box::new(move || {
                 let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
             });
-            let backend = backend_factory(worker_sched.clone(), wake_worker);
+            let backend = backend_factory(worker_sched.clone(), wake_worker, main_tx_for_backend);
             #[cfg(not(target_arch = "wasm32"))]
             let _ = init_tx.send(());
-            let fut = Box::pin(worker_loop(backend, worker_rx, main_tx));
-            worker_sched.block_on(fut);
+            // Return the worker's main future; the driver drives it
+            // (native blocks on LocalPool; wasm roots via spawn_local).
+            Box::pin(worker_loop(backend, worker_rx, main_tx))
         }));
 
         // Native: synchronously wait for the worker to finish init.
@@ -510,19 +507,12 @@ impl MainBackend {
             cached_cursor: RefCell::new(crate::core::platform::Cursor::default()),
             cached_focus: RefCell::new(FocusedState::default()),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
-            render_sink: RefCell::new(None),
+            renderer: RefCell::new(renderer),
+            image_resource_map: RefCell::new(
+                crate::core::image_resource::ImageResourceMap::default(),
+            ),
+            main_tree: RefCell::new(MainTree::new()),
         }
-    }
-
-    /// Install the main-side render sink. Called by the embedder after
-    /// `TurRuntime::create_app` (the worker ships commands; main renders).
-    pub fn set_render_sink<
-        F: FnMut(&[RenderCommand], &ImageResourceMap, (u32, u32, f64)) + 'static,
-    >(
-        &self,
-        f: F,
-    ) {
-        *self.render_sink.borrow_mut() = Some(Box::new(f));
     }
 
     /// Install the main-side cursor backend. Worker emits
@@ -547,18 +537,52 @@ impl MainBackend {
         let _ = self.worker_tx.unbounded_send(msg);
     }
 
-    /// Apply a render-command batch to the main-side render sink. Called
-    /// from both `pump` (legacy path) and `TurApp::handle_main_msg` (new
-    /// event-driven path) — single source of truth for render application.
-    pub(crate) fn apply_render(
-        &self,
-        commands: Vec<RenderCommand>,
-        image_map: &ImageResourceMap,
-        viewport: (u32, u32, f64),
-    ) {
-        if let Some(sink) = self.render_sink.borrow_mut().as_mut() {
-            sink(&commands, image_map, viewport);
-        }
+    /// Apply a render-command batch to the main-side state: update the
+    /// `MainTree` mirror, then drive the owned renderer (encode + present).
+    /// Called from both `pump` (request/response path) and
+    /// `TurApp::start_loop` (vsync path) — single source of truth for
+    /// render application.
+    pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
+        self.main_tree.borrow_mut().apply_batch(commands);
+        let mut r = self.renderer.borrow_mut();
+        r.render_commands(commands);
+        let _ = r.present();
+    }
+
+    /// Upload a newly-registered image resource to the owned renderer.
+    pub(crate) fn upload_image_resource(&self, id: ImageResourceId, image: &ImageResource) {
+        self.renderer.borrow_mut().upload_image_resource(id, image);
+    }
+
+    /// Retain a shipped image resource on main (under the worker-assigned
+    /// id) — the main-side `ImageResourceMap` is the pixel `Blob` owner,
+    /// kept for context-loss re-upload. The worker never retains the Blob.
+    pub(crate) fn insert_image_resource(&self, id: ImageResourceId, image: ImageResource) {
+        self.image_resource_map
+            .borrow_mut()
+            .insert_with_id(id, image);
+    }
+
+    /// Resize the owned renderer. Called by `TurApp::resize`, which the
+    /// embedder invokes at resize-event-receipt time (DOM `ResizeObserver`
+    /// / winit / JNI) — event-driven, not per-frame, so no dedup is needed.
+    pub(crate) fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
+        self.renderer
+            .borrow_mut()
+            .resize(logical_width, logical_height, dpr);
+    }
+
+    /// Pixel readback from the owned renderer (screenshot tests). Returns
+    /// `None` if the renderer doesn't support readback.
+    pub(crate) fn render_to_pixels(&self) -> Option<Vec<u8>> {
+        self.renderer.borrow_mut().render_to_pixels()
+    }
+
+    /// Read-only access to the main-side `MainTree` mirror (dev-tool /
+    /// hit-test state without an RPC).
+    #[allow(dead_code)]
+    pub(crate) fn main_tree(&self) -> std::cell::Ref<'_, MainTree> {
+        self.main_tree.borrow()
     }
 
     /// Update the cached cursor + apply to the cursor backend.
@@ -595,8 +619,9 @@ impl MainBackend {
 
     /// Advance one frame: send `Wake` to the worker, await the next
     /// `MainMsg::FrameOutcome`. Any `RenderCommands`, `CursorChanged`,
-    /// or `FocusedStateChanged` arriving in the meantime are dispatched
-    /// to the render sink / cursor backend / focus cache respectively.
+    /// `FocusedStateChanged`, `UploadImage`, or `Resized` arriving in the
+    /// meantime are dispatched to the renderer / cursor backend / focus
+    /// cache respectively.
     ///
     /// Async: the embedder drives this via its platform's runtime
     /// (`wasm_bindgen_futures::spawn_local` on wasm;
@@ -616,14 +641,14 @@ impl MainBackend {
         let mut rx = self.main_rx.borrow_mut();
         loop {
             match rx.next().await {
-                Some(MainMsg::RenderCommands {
-                    commands,
-                    image_map,
-                    viewport,
-                }) => {
-                    if let Some(sink) = self.render_sink.borrow_mut().as_mut() {
-                        sink(&commands, &image_map, viewport);
-                    }
+                Some(MainMsg::RenderCommands { commands }) => {
+                    self.render_batch(&commands);
+                }
+                Some(MainMsg::UploadImage { id, image }) => {
+                    // Retain the full resource (pixel Blob) on main for
+                    // context-loss re-upload, then upload into the GPU atlas.
+                    self.insert_image_resource(id, image.clone());
+                    self.upload_image_resource(id, &image);
                 }
                 Some(MainMsg::FrameOutcome(result)) => {
                     return result.map_err(TurError::Other);
@@ -761,10 +786,19 @@ impl MainBackend {
     pub fn cached_focus(&self) -> FocusedState {
         self.cached_focus.borrow().clone()
     }
+
+    /// Count of image resources retained on main (pixel `Blob`s). Test-only
+    /// introspection: asserts `MainMsg::UploadImage` was received (shipped
+    /// directly from the `createImageResource` bridge) and inserted into
+    /// main's `ImageResourceMap`.
+    #[doc(hidden)]
+    pub fn image_resource_count(&self) -> usize {
+        self.image_resource_map.borrow().iter_images().count()
+    }
 }
 
-/// Worker thread loop. Runs as `async fn` driven by
-/// `futures::executor::block_on` in the worker thread entry-point.
+/// Worker thread loop. Runs as `async fn` driven by the platform's
+/// `spawn_worker` (native: `LocalPool::run_until`; wasm: `spawn_local`).
 ///
 /// Awaits on `worker_rx.recv()` for incoming `WorkerMsg`s. On `Wake`,
 /// pumps the engine (`backend.pump()`), then ships:
@@ -772,6 +806,13 @@ impl MainBackend {
 /// 2. `MainMsg::FrameOutcome` (always)
 /// 3. `MainMsg::CursorChanged` (deduped against `last_cursor`)
 /// 4. `MainMsg::FocusedStateChanged` (deduped against `last_focus`)
+///
+/// `MainMsg::UploadImage` is **not** shipped here — decoded images are
+/// shipped directly from the `createImageResource` bridge via the shared
+/// `main_tx` clone held in `TurJsContext` (one ship per decode, FIFO).
+/// `MainMsg::Resized` is also not shipped — the embedder resizes the
+/// main-side renderer directly at event-receipt time and forwards
+/// `PlatformEvent::Resize` here for layout.
 ///
 /// All other variants (`PlatformEvent`, `RequestPaint`, RPCs) are
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
@@ -793,13 +834,7 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, main_tx: M
                 };
                 // Ship render commands if the flush painted.
                 if let Some(batch) = backend.take_pending_render_batch() {
-                    let image_map = backend.image_resource_map_snapshot();
-                    let viewport = backend.screen_viewport();
-                    let _ = main_tx.unbounded_send(MainMsg::RenderCommands {
-                        commands: batch,
-                        image_map,
-                        viewport,
-                    });
+                    let _ = main_tx.unbounded_send(MainMsg::RenderCommands { commands: batch });
                 }
                 let _ = main_tx.unbounded_send(MainMsg::FrameOutcome(payload));
                 // Ship cursor changes (deduped against the last emitted).

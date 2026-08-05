@@ -172,10 +172,10 @@ mod imp {
         /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
         /// cadence.
         ///
-        /// Architecture: the engine runs on a worker thread; the wgpu
-        /// `VelloRenderer` lives on the caller thread (main) and is driven
-        /// by a `render_sink` callback that receives command batches +
-        /// image map snapshots from the worker each frame.
+        /// Architecture: the engine runs on a worker thread; `MainBackend`
+        /// owns the wgpu `VelloRenderer` on the caller thread (main) and
+        /// drives it directly — command batches, incremental image uploads,
+        /// and resize-on-event.
         #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             runtime: &Rc<TurRuntime>,
@@ -187,9 +187,6 @@ mod imp {
             dpr: f64,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
-            use std::cell::RefCell;
-            use tur_engine::core::render::Renderer as TurRenderer;
-
             let raw_display = window_handle
                 .display_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("display: {e}")))?;
@@ -229,18 +226,15 @@ mod imp {
                 logical_height,
                 dpr,
             );
-            let renderer = Rc::new(RefCell::new(renderer));
 
-            // Engine on worker; renderer on main driven by the sink.
-            let app = runtime.create_app((logical_width as f64, logical_height as f64), dpr)?;
-            let sink_renderer = renderer.clone();
-            app.set_render_sink(move |commands, image_map, viewport| {
-                let mut r = sink_renderer.borrow_mut();
-                let (lw, lh, vdpr) = viewport;
-                r.resize(lw, lh, vdpr);
-                r.render_commands(commands, lw, lh, vdpr, image_map);
-                let _ = r.present();
-            });
+            // Engine on worker; `MainBackend` owns the wgpu renderer on
+            // main and drives it directly (render batches, image uploads,
+            // resize-on-event) — no render_sink callback.
+            let app = runtime.create_app(
+                Box::new(renderer),
+                (logical_width as f64, logical_height as f64),
+                dpr,
+            )?;
 
             let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
 
@@ -258,7 +252,11 @@ mod imp {
             tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
-            let app = runtime.create_app((0.0, 0.0), 1.0)?;
+            let app = runtime.create_app(
+                Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
+                (0.0, 0.0),
+                1.0,
+            )?;
             let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
 
             Ok(Self {

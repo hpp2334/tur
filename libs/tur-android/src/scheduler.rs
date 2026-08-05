@@ -29,13 +29,17 @@
 //! ## Spawn primitives
 //!
 //! `spawn_local` uses thread-local `futures::executor::LocalPool` per
-//! thread (main + each worker). `block_on` uses the same pool.
+//! thread (main + each worker). There is no trait-level `block_on`; the
+//! worker's main future is driven by `spawn_worker` via the pool's
+//! `run_until` (an infinite loop → the thread blocks forever, polling the
+//! loop + all `spawn_local`'d side tasks).
 //!
 //! ## Worker spawn
 //!
 //! `spawn_worker` uses `std::thread::spawn` (dedicated OS thread,
 //! guarantees main ≠ worker). The driver sets up the thread-local
-//! LocalPool on the worker thread before invoking the factory.
+//! LocalPool on the worker thread before invoking the factory, which
+//! returns the worker's main future (the engine's `worker_loop`).
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -172,13 +176,21 @@ impl AndroidSchedulerDriver {
 impl MainScheduler for AndroidSchedulerDriver {
     fn spawn_worker(
         &self,
-        factory: Box<dyn FnOnce(Rc<dyn WorkerScheduler>) + Send + 'static>,
+        factory: Box<
+            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
+                + Send
+                + 'static,
+        >,
     ) -> WorkerHandle {
         // Dedicated OS thread — guarantees main ≠ worker. The driver sets
         // up the thread-local LocalPool on the worker thread before
         // invoking the factory; the worker view is a fresh driver-like
         // object holding the same tokio Handle (cloned, Send + Sync) but
-        // no JNI state (workers don't need vsync).
+        // no JNI state (workers don't need vsync). The factory returns the
+        // worker's main future (the engine's `worker_loop`), which the
+        // driver drives to completion on the pool — an infinite loop, so
+        // the thread blocks forever, polling the loop + all
+        // `spawn_local`'d side tasks.
         let runtime = self.runtime.clone();
         let join = std::thread::Builder::new()
             .name("tur-worker".into())
@@ -186,7 +198,8 @@ impl MainScheduler for AndroidSchedulerDriver {
                 CURRENT_POOL.with(|c| *c.borrow_mut() = Some(LocalPool::new()));
                 let worker_view: Rc<dyn WorkerScheduler> =
                     Rc::new(AndroidWorkerScheduler { runtime });
-                factory(worker_view);
+                let loop_fut = factory(worker_view);
+                block_on_on_current_thread(loop_fut);
                 CURRENT_POOL.with(|c| *c.borrow_mut() = None);
             })
             .expect("failed to spawn tur worker thread");
@@ -243,10 +256,6 @@ impl WorkerScheduler for AndroidSchedulerDriver {
         spawn_local_on_current_thread(fut)
     }
 
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        block_on_on_current_thread(fut);
-    }
-
     fn sleep(&self, d: Duration) -> Sleep {
         tokio_sleep(self.runtime.clone(), d)
     }
@@ -262,10 +271,6 @@ struct AndroidWorkerScheduler {
 impl WorkerScheduler for AndroidWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         spawn_local_on_current_thread(fut)
-    }
-
-    fn block_on(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-        block_on_on_current_thread(fut);
     }
 
     fn sleep(&self, d: Duration) -> Sleep {

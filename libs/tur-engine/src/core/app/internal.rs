@@ -8,7 +8,7 @@ use crate::core::app::TurAppContext;
 use crate::core::async_::{CompletionHandle, CompletionQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
-use crate::core::render::{MainTree, RenderCommand, build_topology_batch};
+use crate::core::render::{RenderCommand, build_topology_batch};
 use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
 
@@ -81,14 +81,10 @@ pub struct TurAppInternal {
     ///
     /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
-    /// Main-side render tree mirror, updated from each frame's command
-    /// batch. Read by dev tools (worker-side query path).
-    pub(crate) main_tree: RefCell<MainTree>,
     /// Last-frame element topology snapshot — input to
     /// [`build_topology_batch`] so the diff can emit `Remove` commands for
     /// ids that disappeared from the worker's tree since the previous
-    /// frame. Emits `SetChildren` for every node every frame (full sync);
-    /// diff optimization is deferred.
+    /// frame. Emits `SetChildren` only when a node's child list changed.
     pub(crate) last_topology: RefCell<HashMap<ElementNodeId, Vec<ElementNodeId>>>,
     /// Worker → main render-command batch produced by the last `flush()`
     /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
@@ -98,6 +94,7 @@ pub struct TurAppInternal {
 }
 
 impl TurAppInternal {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         font_context: FontContext,
         font_loader: std::sync::Arc<dyn FontLoader>,
@@ -106,18 +103,24 @@ impl TurAppInternal {
         capabilities: crate::core::capability::Capabilities,
         worker_sched: Rc<dyn WorkerScheduler>,
         wake_worker: impl Fn() + 'static,
+        main_tx: crate::core::app::MainTx,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
         use crate::core::elements::NodeTree;
         use crate::core::focus::FocusManager;
-        use crate::core::image_resource::ImageResourceMap;
+        use crate::core::image_resource::ImageMetadataMap;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
-        let image_resource_map = Rc::new(RefCell::new(ImageResourceMap::default()));
+        // Worker-side image state: metadata (sizes) only — the pixel `Blob`
+        // ships to main directly from the `createImageResource` bridge via
+        // the shared `main_tx` channel (one `MainMsg::UploadImage` per
+        // decode). The worker never retains pixels across a frame boundary.
+        let image_metadata_map = Rc::new(RefCell::new(ImageMetadataMap::new()));
+        let image_next_id = Rc::new(Cell::new(0));
 
         // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
         // `Rc<dyn Clock>` that `Shell` expects (per-instance + worker-side
@@ -143,7 +146,9 @@ impl TurAppInternal {
             focus_manager.clone(),
             dirty,
             need_paint,
-            image_resource_map.clone(),
+            image_metadata_map.clone(),
+            image_next_id.clone(),
+            main_tx,
             store.clone(),
             worker_sched.clone(),
             completion_handle.clone(),
@@ -159,7 +164,7 @@ impl TurAppInternal {
             element_tree,
             mutation_queue,
             focus_manager,
-            image_resource_map,
+            image_metadata_map,
             font_context,
             font_loader,
             worker_sched.clone(),
@@ -179,7 +184,6 @@ impl TurAppInternal {
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
-            main_tree: RefCell::new(MainTree::new()),
             last_topology: RefCell::new(HashMap::new()),
             pending_render_batch: RefCell::new(None),
         }
@@ -347,14 +351,12 @@ impl TurAppInternal {
         if needs_render {
             // Record the paint pass + dispatch the topology/paint batch.
             // The engine produces a `Vec<RenderCommand>`; main applies it
-            // to the renderer. The combined batch is also applied to
-            // `main_tree` for dev-tool queries.
+            // to its renderer + `MainTree` mirror (`MainBackend::render_batch`).
             let topology_batch = self.build_topology_batch();
             let batch = self
                 .app_context
                 .borrow_mut()
                 .build_render_batch(topology_batch);
-            self.main_tree.borrow_mut().apply_batch(&batch);
             *self.pending_render_batch.borrow_mut() = Some(batch);
         }
 
@@ -593,11 +595,10 @@ impl TurAppInternal {
     /// (`SetChildren` + `Remove` commands) by diffing the current
     /// element-tree topology against `last_topology`.
     ///
-    /// Phase 3 v1: `SetChildren` is emitted **for every node every frame**
-    /// (full sync). `Remove` is emitted for any id present in
-    /// `last_topology` but missing from the current tree. The diff
-    /// optimization is deferred — the wire cost is negligible in
-    /// single-threaded Phase 3 and revisited in Phase 7.
+    /// `SetChildren` is emitted only when a node's child list changed
+    /// (steady-state frames emit zero topology commands); `Remove` is
+    /// emitted for any id present in `last_topology` but missing from the
+    /// current tree.
     ///
     /// Updates `last_topology` in place to reflect the current topology.
     fn build_topology_batch(&self) -> Vec<RenderCommand> {
@@ -620,28 +621,6 @@ impl TurAppInternal {
     /// paint happened this flush (or already drained).
     pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
         self.pending_render_batch.borrow_mut().take()
-    }
-
-    /// Snapshot the worker-side `ImageResourceMap` for shipping to main
-    /// alongside a render-command batch. The map is `Arc`-backed so the
-    /// clone is a refcount bump.
-    pub fn image_resource_map_snapshot(
-        &self,
-    ) -> std::sync::Arc<crate::core::image_resource::ImageResourceMap> {
-        // The engine stores the map as `Rc<RefCell<ImageResourceMap>>`
-        // (worker-side only). Cheap Arc-ify: clone the inner map into a
-        // fresh `Arc`. This is O(1) for the map structure itself; image
-        // pixel data is `Arc`-backed so it's a refcount bump per entry.
-        //
-        // The map is small (typically a handful of icons / decoded images
-        // per app), so the per-frame cost is negligible.
-        std::sync::Arc::new(
-            self.app_context
-                .borrow()
-                .image_resource_map
-                .borrow()
-                .clone(),
-        )
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the

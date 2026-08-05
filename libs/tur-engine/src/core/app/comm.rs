@@ -37,7 +37,6 @@ use std::sync::Arc;
 use crate::core::app::FrameOutcome;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{DevNodeData, NodeTreeData, NodeTreeSnapshot};
-use crate::core::image_resource::ImageResourceMap;
 use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
@@ -155,10 +154,6 @@ pub enum WorkerMsg {
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
-    /// Screenshot RPC — read rendered pixels from the worker's renderer.
-    /// Used by screenshot tests; returns `None` if the renderer doesn't
-    /// support pixel readback.
-    RenderToPixels { reply: ReplySender<Option<Vec<u8>>> },
     /// Initiate shutdown. Worker drains pending work, replies when safe
     /// to drop.
     Destroy { reply: ReplySender<()> },
@@ -169,19 +164,22 @@ pub enum WorkerMsg {
 /// response to a [`WorkerMsg`] RPC ([`MainMsg::DevReply`]).
 pub enum MainMsg {
     /// One frame's worth of paint state. Main applies the batch to its
-    /// renderer via the `render_sink` callback.
+    /// renderer (owned by `MainBackend`) directly.
     ///
-    /// `image_map` is the worker's full image resource map (Arc-cloned —
-    /// cheap, since `ImageResource` wraps an Arc-backed `Blob`). Shipped
-    /// every frame so the main-side renderer can upload any newly-added
-    /// images. Optimization to ship only diffs is deferred.
-    ///
-    /// `viewport` is `(logical_width, logical_height, dpr)` — main calls
-    /// `renderer.resize(...)` when this changes before applying the batch.
-    RenderCommands {
-        commands: Vec<RenderCommand>,
-        image_map: Arc<ImageResourceMap>,
-        viewport: (u32, u32, f64),
+    /// Images are NOT shipped here — they travel once per new resource via
+    /// [`MainMsg::UploadImage`] (main uploads them into its atlas
+    /// incrementally). Resizes travel via [`MainMsg::Resized`] (main calls
+    /// `renderer.resize(...)` only when the viewport actually changes).
+    RenderCommands { commands: Vec<RenderCommand> },
+    /// A newly-registered image resource (`createImageResource` /
+    /// `createSvgResource` on the worker). Shipped exactly once per id
+    /// (sent directly from the `createImageResource` bridge via the shared
+    /// `main_tx`); main uploads it to the renderer's image atlas and
+    /// retains the `ImageResource` (pixel `Blob`) keyed by
+    /// `ImageResourceId` for context-loss re-upload.
+    UploadImage {
+        id: crate::core::image_resource::ImageResourceId,
+        image: crate::core::image_resource::ImageResource,
     },
     /// Schedule decision after a flush. Main arms the next rAF /
     /// `setTimeout` based on `schedule`. The `Err(String)` variant
@@ -306,7 +304,6 @@ impl fmt::Debug for WorkerMsg {
             }
             Self::EventBusToJs(bytes) => f.debug_tuple("EventBusToJs").field(&bytes.len()).finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
-            Self::RenderToPixels { .. } => f.debug_struct("RenderToPixels").finish(),
             Self::Destroy { .. } => write!(f, "Destroy"),
         }
     }
@@ -319,6 +316,7 @@ impl fmt::Debug for MainMsg {
                 .debug_tuple("RenderCommands")
                 .field(&commands.len())
                 .finish(),
+            Self::UploadImage { id, .. } => f.debug_tuple("UploadImage").field(id).finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
             Self::CursorChanged(c) => f.debug_tuple("CursorChanged").field(c).finish(),
             Self::FocusedStateChanged {

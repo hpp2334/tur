@@ -6,7 +6,6 @@ use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
-use tur_engine::core::render::Renderer as TurRenderer;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -31,16 +30,15 @@ pub enum TurVelloError {
 /// Test harness that drives a real `VelloRenderer` on the main thread.
 ///
 /// Architecture matches production: the engine runs on a worker thread
-/// (`TurRuntime::create_app`); the renderer lives on main + is driven by
-/// a `render_sink` callback installed after construction. Pixel readback
-/// happens directly on the main-side renderer.
+/// (`TurRuntime::create_app`); `MainBackend` owns the renderer on main and
+/// drives it directly (no render_sink). Pixel readback happens via
+/// `TurApp::render_to_pixels`.
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
 
 struct TurVelloAppInner {
     app: Rc<TurApp>,
-    renderer: Rc<RefCell<VelloRenderer>>,
     _window: Window,
 }
 
@@ -115,32 +113,23 @@ impl TurVelloApp {
             height as u32,
             dpr,
         );
-        let renderer = Rc::new(RefCell::new(renderer));
 
         let runtime = TurRuntime::builder()
+            .scheduler(tur_integration_tests::TestSchedulerDriver::new())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
 
-        // Threaded engine: worker produces command batches; main applies
-        // them to the VelloRenderer via the render_sink.
-        let app = runtime.create_app((width, height), dpr)?;
-        let sink_renderer = renderer.clone();
-        app.set_render_sink(move |commands, image_map, viewport| {
-            let mut r = sink_renderer.borrow_mut();
-            let (logical_w, logical_h, vp_dpr) = viewport;
-            r.resize(logical_w, logical_h, vp_dpr);
-            r.render_commands(commands, logical_w, logical_h, vp_dpr, image_map);
-            let _ = r.present();
-        });
+        // Threaded engine: worker produces command batches; `MainBackend`
+        // owns the VelloRenderer on main and applies them directly.
+        let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
         let _ = futures::executor::block_on(app.run_frame());
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
                 app,
-                renderer,
                 _window: window,
             }),
         })
@@ -165,19 +154,17 @@ impl TurVelloApp {
         std::cell::Ref::map(self.inner.borrow(), |i| &i.app)
     }
 
-    /// Direct access to the main-side renderer (for pixel readback).
-    #[allow(dead_code)]
-    pub fn renderer(&self) -> std::cell::Ref<'_, Rc<RefCell<VelloRenderer>>> {
-        std::cell::Ref::map(self.inner.borrow(), |i| &i.renderer)
-    }
-
     pub fn render(&self) {
         self.inner.borrow().app.request_paint();
         let _ = futures::executor::block_on(self.inner.borrow().app.run_frame());
     }
 
-    /// Read rendered pixels directly from the main-side renderer.
+    /// Read rendered pixels back from the app-owned renderer.
     pub fn render_to_pixels(&self) -> Vec<u8> {
-        self.inner.borrow().renderer.borrow_mut().render_to_pixels()
+        self.inner
+            .borrow()
+            .app
+            .render_to_pixels()
+            .expect("renderer does not support render_to_pixels")
     }
 }

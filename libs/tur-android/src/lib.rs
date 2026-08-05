@@ -410,17 +410,17 @@ pub mod ops {
         }
     }
 
-    /// Push a `Resize` event reflecting the new surface dimensions. (v1 keeps
-    /// the original wgpu surface for the instance lifetime; full surface
-    /// re-attach with a renderer swap is a follow-up.)
+    /// Resize the surface. Resizes the main-side renderer directly AND
+    /// forwards `PlatformEvent::Resize` to the worker for layout (single
+    /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
+    /// for the instance lifetime; full surface re-attach with a renderer
+    /// swap is a follow-up.)
     pub fn resize(env: &mut JNIEnv, handle: jlong, width: jint, height: jint, dpr: jdouble) {
         catch_void(env, "resize", |_env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
-            instance.app.push_platform_event(PlatformEvent::Resize {
-                logical_width: width.max(1) as u32,
-                logical_height: height.max(1) as u32,
-                dpr: dpr.max(1.0),
-            });
+            instance
+                .app
+                .resize(width.max(1) as u32, height.max(1) as u32, dpr.max(1.0));
             Ok(())
         });
     }
