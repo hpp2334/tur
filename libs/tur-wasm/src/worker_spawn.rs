@@ -48,7 +48,7 @@ use js_sys::Reflect;
 use wasm_bindgen::{JsCast, JsValue, prelude::*};
 use web_sys::MessageEvent;
 
-use tur_engine::core::scheduler::WorkerScheduler;
+use tur_engine::core::scheduler::{WorkerFactory, WorkerScheduler};
 
 use crate::scheduler::WasmWorkerScheduler;
 
@@ -57,11 +57,11 @@ use crate::scheduler::WasmWorkerScheduler;
 /// worker's main future. `Send + 'static` so it can be boxed on main,
 /// posted as a raw pointer, and reconstituted on the worker (valid because
 /// the wasm linear memory is shared across threads).
-pub(crate) type LoopFactory = Box<
-    dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
-        + Send
-        + 'static,
->;
+///
+/// This is a re-export of the engine's [`WorkerFactory`] type alias so the
+/// wasm driver's `spawn_worker` impl and `tur_worker_main` agree on the
+/// exact factory shape.
+pub(crate) type LoopFactory = WorkerFactory;
 
 /// Wrapper around [`LoopFactory`] so it can be boxed + passed as a raw
 /// pointer (the engine hands us an already-boxed `dyn FnOnce`).
@@ -181,7 +181,7 @@ pub fn tur_worker_main(ptr: f64) {
     // the wasm linear memory is shared, so the pointer is valid here.
     let entry = unsafe { Box::from_raw(ptr as u32 as *mut WorkerEntry) };
     let factory = entry.0;
-    let worker_sched: Rc<dyn WorkerScheduler> = Rc::new(WasmWorkerScheduler);
+    let worker_sched = WorkerScheduler::new(Rc::new(WasmWorkerScheduler));
     let loop_fut = factory(worker_sched);
     run_loop(loop_fut);
 }

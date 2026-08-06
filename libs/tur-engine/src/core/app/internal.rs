@@ -44,7 +44,7 @@ pub struct TurAppInternal {
     /// http requests, sleep futures). The driver's `sleep` returns a
     /// platform-specific `Sleep(BoxFuture)`.
     #[allow(dead_code)]
-    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    pub(crate) worker_sched: WorkerScheduler,
     /// Completion queue — closures pushed by spawned futures (e.g. promise
     /// settle closures) are drained inside `flush()` under `&mut Context`.
     /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
@@ -115,7 +115,7 @@ impl TurAppInternal {
         executor: Rc<TurJobExecutor>,
         clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
-        worker_sched: Rc<dyn WorkerScheduler>,
+        worker_sched: WorkerScheduler,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
         main_tx: crate::core::app::MainTx,
     ) -> Self {

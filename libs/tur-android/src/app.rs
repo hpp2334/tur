@@ -139,7 +139,7 @@ mod imp {
             use tur_engine::core::scheduler::MainScheduler;
 
             let driver = AndroidSchedulerDriver::new(tokio.clone(), Some(frame_loop));
-            app.set_main_scheduler(driver.clone());
+            app.set_main_scheduler(MainScheduler::new(driver.clone()));
             // Bootstrap: arm the first Choreographer callback. Subsequent
             // frames re-arm via the loop's `request_vsync` on `FrameOutcome`.
             driver.request_vsync();

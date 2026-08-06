@@ -204,7 +204,7 @@ pub struct SubsystemFlushContext<'a> {
     /// `clipboard.write_text`). The future's completion pushes a closure
     /// via [`Self::completion_handle`]; the engine drains it on the next
     /// flush iteration.
-    pub worker_sched: &'a Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    pub worker_sched: &'a crate::core::scheduler::WorkerScheduler,
     /// Completion handle for spawned futures. A spawned future calls
     /// `completion_handle.push(closure)` from inside its body to settle a
     /// `JsPromise` (or similar) under `&mut Context` on the next flush.

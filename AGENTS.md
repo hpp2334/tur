@@ -327,10 +327,14 @@ libs/
                              #   completion invocations drained each flush)
                              #   + executor (TurJobExecutor — boa
                              #   JobExecutor impl)
-        scheduler.rs         # MainScheduler + WorkerScheduler traits,
-                             #   Sleep/VsyncEvents/WorkerHandle (drivers:
-                             #   WasmSchedulerDriver, AndroidSchedulerDriver,
-                             #   TestSchedulerDriver)
+         scheduler.rs         # MainSchedulerDriver + WorkerSchedulerDriver
+                              #   traits + MainScheduler/WorkerScheduler view
+                              #   structs + WorkerFactory +
+                              #   Sleep/VsyncEvents/WorkerHandle (main drivers:
+                              #   WasmSchedulerDriver, AndroidSchedulerDriver,
+                              #   TestSchedulerDriver; per-worker drivers:
+                              #   WasmWorkerScheduler, AndroidWorkerScheduler,
+                              #   TestWorkerScheduler)
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge

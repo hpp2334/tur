@@ -69,10 +69,11 @@ pub struct TurJsContext {
     /// `build_worker_backend` from the worker_sched passed by the runtime.
     ///
     /// Sound to keep out of boa's GC trace: it's pure Rust state
-    /// (`Rc<dyn WorkerScheduler>`), no `boa_gc::Gc`/`GcRefCell`. The
+    /// Worker-thread scheduler view (`WorkerScheduler`, wrapping an
+    /// `Rc<dyn WorkerSchedulerDriver>`), no `boa_gc::Gc`/`GcRefCell`. The
     /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this
     /// same trade-off for the other fields.
-    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    pub(crate) worker_sched: WorkerScheduler,
     /// Cheap-cloned completion handle — bridges call `push(closure)` from
     /// inside spawned futures to settle JsPromises under `&mut Context` on
     /// the next flush. Pushing fires `on_push`, which self-sends
@@ -116,7 +117,7 @@ impl TurJsContext {
         image_next_id: Rc<Cell<u64>>,
         main_tx: MainTx,
         store: Store,
-        worker_sched: Rc<dyn WorkerScheduler>,
+        worker_sched: WorkerScheduler,
         completion_handle: CompletionHandle,
         flush_task_handle: crate::core::async_::FlushTaskHandle,
         wake_worker: Arc<dyn Fn() + Send + Sync>,
@@ -193,7 +194,7 @@ impl TurJsContext {
     /// closure receives the context by value; capture it (`async move`) into
     /// the returned future to use it across `.await`s.
     ///
-    /// ```
+    /// ```text
     /// js_ctx.spawn_local(|aw| async move {
     ///     loop {
     ///         aw.sleep(half_period).await;
@@ -215,7 +216,7 @@ impl TurJsContext {
     /// fns (`sleep` / `launch`) and [`AsyncWorkerContext`] use it for timers
     /// / nested spawns. External async work goes through [`Self::spawn_local`]
     /// (which hands the task an [`AsyncWorkerContext`]).
-    pub(crate) fn worker_sched(&self) -> &Rc<dyn WorkerScheduler> {
+    pub(crate) fn worker_sched(&self) -> &WorkerScheduler {
         &self.worker_sched
     }
 

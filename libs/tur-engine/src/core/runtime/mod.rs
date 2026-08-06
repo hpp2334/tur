@@ -111,13 +111,9 @@ pub struct TurRuntime {
     /// (Phase 7 prep), and `register` takes `&self`, so the same plugin
     /// objects work for both inline and threaded instances.
     plugins: Arc<Vec<Box<dyn Plugin>>>,
-    /// Platform scheduling primitives (split by thread context).
-    /// The same driver object implements both traits; the runtime holds
-    /// two `Rc<dyn>` trait objects pointing at it. The convenience
-    /// `.scheduler(driver)` builder method sets both from one `Rc<S>`.
-    main_scheduler: Rc<dyn crate::core::scheduler::MainScheduler>,
-    #[allow(dead_code)]
-    worker_scheduler: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    /// Main-thread scheduling view. Built once from the driver supplied to
+    /// the runtime builder; cloned into each `TurApp` + `MainBackend`.
+    main_scheduler: crate::core::scheduler::MainScheduler,
 }
 
 impl TurRuntime {
@@ -164,28 +160,27 @@ impl TurRuntime {
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
-        let backend_factory =
-            move |worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-                  wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
-                  main_tx: crate::core::app::MainTx|
-                  -> WorkerBackend {
-                let capabilities = Capabilities::new();
-                for insert_fn in capability_inserts.iter() {
-                    insert_fn(&capabilities);
-                }
-                build_worker_backend(
-                    clock,
-                    font_context,
-                    font_loader,
-                    capabilities,
-                    &plugins,
-                    viewport,
-                    worker_sched,
-                    wake_worker,
-                    main_tx,
-                )
-                .expect("threaded backend factory failed")
-            };
+        let backend_factory = move |worker_sched: crate::core::scheduler::WorkerScheduler,
+                                    wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
+                                    main_tx: crate::core::app::MainTx|
+              -> WorkerBackend {
+            let capabilities = Capabilities::new();
+            for insert_fn in capability_inserts.iter() {
+                insert_fn(&capabilities);
+            }
+            build_worker_backend(
+                clock,
+                font_context,
+                font_loader,
+                capabilities,
+                &plugins,
+                viewport,
+                worker_sched,
+                wake_worker,
+                main_tx,
+            )
+            .expect("threaded backend factory failed")
+        };
         let backend = MainBackend::new(self.main_scheduler.clone(), renderer, backend_factory);
         let app = Rc::new(TurApp::new(backend, self.main_scheduler.clone()));
         // Bootstrap the viewport: resize the main-side renderer directly
@@ -215,7 +210,7 @@ pub(crate) fn build_worker_backend(
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
     viewport: (f64, f64),
-    worker_sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
+    worker_sched: crate::core::scheduler::WorkerScheduler,
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
 ) -> Result<WorkerBackend, TurError> {
@@ -330,8 +325,7 @@ pub struct TurRuntimeBuilder {
     clock: Option<Arc<dyn Clock + Send + Sync>>,
     plugins: Vec<Box<dyn Plugin>>,
     capabilities: Vec<CapabilityInsert>,
-    main_scheduler: Option<Rc<dyn crate::core::scheduler::MainScheduler>>,
-    worker_scheduler: Option<Rc<dyn crate::core::scheduler::WorkerScheduler>>,
+    scheduler: Option<Rc<dyn crate::core::scheduler::MainSchedulerDriver>>,
 }
 
 impl Default for TurRuntimeBuilder {
@@ -347,8 +341,7 @@ impl TurRuntimeBuilder {
             clock: None,
             plugins: Vec::new(),
             capabilities: Vec::new(),
-            main_scheduler: None,
-            worker_scheduler: None,
+            scheduler: None,
         }
     }
 
@@ -405,34 +398,20 @@ impl TurRuntimeBuilder {
         self
     }
 
-    /// Set the main-thread scheduler. Required before `build()`. The driver
-    /// must implement `MainScheduler`; if the same object also implements
-    /// `WorkerScheduler`, use [`Self::scheduler`] to set both at once.
-    pub fn main_scheduler(mut self, sched: Rc<dyn crate::core::scheduler::MainScheduler>) -> Self {
-        self.main_scheduler = Some(sched);
-        self
-    }
-
-    /// Set the worker-thread scheduler. Required before `build()`.
-    pub fn worker_scheduler(
-        mut self,
-        sched: Rc<dyn crate::core::scheduler::WorkerScheduler>,
-    ) -> Self {
-        self.worker_scheduler = Some(sched);
-        self
-    }
-
-    /// Convenience: pass one driver object that implements both
-    /// `MainScheduler` and `WorkerScheduler`. The runtime stores two `Rc<dyn>`
-    /// trait objects pointing at the same underlying driver. This is the
-    /// common case (one struct implementing both traits).
-    pub fn scheduler<S>(self, driver: Rc<S>) -> Self
+    /// Set the scheduler driver. Required before `build()`. The driver
+    /// must implement [`MainSchedulerDriver`]; the runtime wraps it in a
+    /// [`MainScheduler`] view. (The per-worker driver is a separate object
+    /// constructed inside the driver's own `spawn_worker` impl — the
+    /// engine never sees it at build time.)
+    ///
+    /// [`MainSchedulerDriver`]: crate::core::scheduler::MainSchedulerDriver
+    /// [`MainScheduler`]: crate::core::scheduler::MainScheduler
+    pub fn scheduler<S>(mut self, driver: Rc<S>) -> Self
     where
-        S: crate::core::scheduler::MainScheduler
-            + crate::core::scheduler::WorkerScheduler
-            + 'static,
+        S: crate::core::scheduler::MainSchedulerDriver + 'static,
     {
-        self.main_scheduler(driver.clone()).worker_scheduler(driver)
+        self.scheduler = Some(driver);
+        self
     }
 
     pub fn build(self) -> Result<Rc<TurRuntime>, TurError> {
@@ -442,12 +421,9 @@ impl TurRuntimeBuilder {
         let clock = self
             .clock
             .expect("clock must be set (use TurRuntimeBuilder::clock)");
-        let main_scheduler = self.main_scheduler.expect(
-            "main_scheduler must be set (use TurRuntimeBuilder::main_scheduler or .scheduler)",
-        );
-        let worker_scheduler = self.worker_scheduler.expect(
-            "worker_scheduler must be set (use TurRuntimeBuilder::worker_scheduler or .scheduler)",
-        );
+        let scheduler = self
+            .scheduler
+            .expect("scheduler must be set (use TurRuntimeBuilder::scheduler)");
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
@@ -502,8 +478,7 @@ impl TurRuntimeBuilder {
             capabilities,
             capability_inserts: Arc::new(self.capabilities),
             plugins: Arc::new(self.plugins),
-            main_scheduler,
-            worker_scheduler,
+            main_scheduler: crate::core::scheduler::MainScheduler::new(scheduler),
         }))
     }
 }

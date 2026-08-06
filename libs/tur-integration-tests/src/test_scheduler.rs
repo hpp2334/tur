@@ -1,9 +1,10 @@
 //! Test scheduler driver.
 //!
-//! Implements both [`MainScheduler`] and [`WorkerScheduler`] for the
-//! integration test harness. Uses real `std::thread::spawn` per worker
-//! (faithful to production threading) + a per-thread `tokio::task::LocalSet`
-//! for `spawn_local` / `block_on`.
+//! Implements [`MainSchedulerDriver`] (main thread) and
+//! [`WorkerSchedulerDriver`] (worker thread, via [`TestWorkerScheduler`])
+//! for the integration test harness. Uses real `std::thread::spawn` per
+//! worker (faithful to production threading) + a per-thread
+//! `tokio::task::LocalSet` for `spawn_local` / `block_on`.
 //!
 //! **Virtual clock**: sleep futures register deadlines against a shared
 //! virtual clock ([`VirtualClock`]). The test harness calls
@@ -24,7 +25,8 @@ use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
+    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler,
+    WorkerSchedulerDriver, track_spawn,
 };
 
 /// Shared virtual clock state. The test harness holds a clone + advances
@@ -181,21 +183,14 @@ impl TestSchedulerDriver {
     }
 }
 
-impl MainScheduler for TestSchedulerDriver {
-    fn spawn_worker(
-        &self,
-        factory: Box<
-            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
-                + Send
-                + 'static,
-        >,
-    ) -> WorkerHandle {
+impl MainSchedulerDriver for TestSchedulerDriver {
+    fn spawn_worker(&self, factory: tur_engine::core::scheduler::WorkerFactory) -> WorkerHandle {
         let clock = self.clock.clone();
         let join = std::thread::Builder::new()
             .name("tur-test-worker".into())
             .spawn(move || {
                 init_thread_exec(clock);
-                let worker_view: Rc<dyn WorkerScheduler> = Rc::new(TestWorkerScheduler);
+                let worker_view = WorkerScheduler::new(Rc::new(TestWorkerScheduler));
                 let loop_fut = factory(worker_view);
                 // Drive the worker's main future to completion on the test
                 // executor — an infinite loop, so the thread blocks forever,
@@ -227,18 +222,9 @@ impl MainScheduler for TestSchedulerDriver {
     }
 }
 
-impl WorkerScheduler for TestSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        spawn_local_on_current_thread(fut)
-    }
-    fn sleep(&self, d: Duration) -> Sleep {
-        virtual_sleep(d)
-    }
-}
-
 struct TestWorkerScheduler;
 
-impl WorkerScheduler for TestWorkerScheduler {
+impl WorkerSchedulerDriver for TestWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         spawn_local_on_current_thread(fut)
     }

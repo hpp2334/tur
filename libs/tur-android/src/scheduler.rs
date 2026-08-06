@@ -1,7 +1,8 @@
 //! Android scheduler driver (JNI-backed).
 //!
-//! Implements both [`MainScheduler`] and [`WorkerScheduler`] for Android.
-//! Replaces the old `loop_driver.rs` (`LoopDriver`-based, now deleted).
+//! Implements [`MainSchedulerDriver`] (main thread) and
+//! [`WorkerSchedulerDriver`] (worker thread, via [`AndroidWorkerScheduler`])
+//! for Android.
 //!
 //! ## Vsync events
 //!
@@ -54,7 +55,8 @@ use futures::task::LocalSpawnExt;
 use jni::objects::JObject;
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
+    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler,
+    WorkerSchedulerDriver, track_spawn,
 };
 
 /// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so
@@ -173,19 +175,12 @@ impl AndroidSchedulerDriver {
     }
 }
 
-impl MainScheduler for AndroidSchedulerDriver {
-    fn spawn_worker(
-        &self,
-        factory: Box<
-            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
-                + Send
-                + 'static,
-        >,
-    ) -> WorkerHandle {
+impl MainSchedulerDriver for AndroidSchedulerDriver {
+    fn spawn_worker(&self, factory: tur_engine::core::scheduler::WorkerFactory) -> WorkerHandle {
         // Dedicated OS thread — guarantees main ≠ worker. The driver sets
         // up the thread-local LocalPool on the worker thread before
-        // invoking the factory; the worker view is a fresh driver-like
-        // object holding the same tokio Handle (cloned, Send + Sync) but
+        // invoking the factory; the worker view wraps a fresh per-worker
+        // driver holding the same tokio Handle (cloned, Send + Sync) but
         // no JNI state (workers don't need vsync). The factory returns the
         // worker's main future (the engine's `worker_loop`), which the
         // driver drives to completion on the pool — an infinite loop, so
@@ -196,8 +191,7 @@ impl MainScheduler for AndroidSchedulerDriver {
             .name("tur-worker".into())
             .spawn(move || {
                 CURRENT_POOL.with(|c| *c.borrow_mut() = Some(LocalPool::new()));
-                let worker_view: Rc<dyn WorkerScheduler> =
-                    Rc::new(AndroidWorkerScheduler { runtime });
+                let worker_view = WorkerScheduler::new(Rc::new(AndroidWorkerScheduler { runtime }));
                 let loop_fut = factory(worker_view);
                 block_on_on_current_thread(loop_fut);
                 CURRENT_POOL.with(|c| *c.borrow_mut() = None);
@@ -251,24 +245,14 @@ impl MainScheduler for AndroidSchedulerDriver {
     }
 }
 
-impl WorkerScheduler for AndroidSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        spawn_local_on_current_thread(fut)
-    }
-
-    fn sleep(&self, d: Duration) -> Sleep {
-        tokio_sleep(self.runtime.clone(), d)
-    }
-}
-
-/// Worker-side scheduler view. Constructed on each worker thread inside
-/// `spawn_worker`. Holds the shared tokio Handle for `sleep` but no JNI
-/// state (workers don't call vsync APIs).
+/// Worker-side scheduler driver. Constructed on each worker thread inside
+/// `spawn_worker` (wrapped in a [`WorkerScheduler`] view). Holds the shared
+/// tokio Handle for `sleep` but no JNI state (workers don't call vsync APIs).
 struct AndroidWorkerScheduler {
     runtime: Arc<tokio::runtime::Handle>,
 }
 
-impl WorkerScheduler for AndroidWorkerScheduler {
+impl WorkerSchedulerDriver for AndroidWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         spawn_local_on_current_thread(fut)
     }

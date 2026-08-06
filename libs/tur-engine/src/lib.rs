@@ -71,7 +71,7 @@ pub struct TurApp {
     /// spawn_local). Cloned from the runtime at construction; embedders
     /// with per-instance scheduling (Android) replace it via
     /// [`Self::set_main_scheduler`].
-    main_sched: RefCell<Rc<dyn core::scheduler::MainScheduler>>,
+    main_sched: RefCell<core::scheduler::MainScheduler>,
     /// Embedder-installed callback fired after each autonomous frame —
     /// typically used for DOM side-effects (file-pick resolution, textarea
     /// focus / caret positioning). `None` in tests.
@@ -103,7 +103,7 @@ impl TurApp {
     /// Construct a `TurApp` backed by the given [`MainBackend`] + scheduler.
     /// The runtime calls this from [`TurRuntime::create_app`]; embedders
     /// normally don't call it directly.
-    pub fn new(backend: MainBackend, main_sched: Rc<dyn core::scheduler::MainScheduler>) -> Self {
+    pub fn new(backend: MainBackend, main_sched: core::scheduler::MainScheduler) -> Self {
         Self {
             backend,
             main_sched: RefCell::new(main_sched),
@@ -117,7 +117,7 @@ impl TurApp {
     /// per-instance scheduler (e.g. Android, where each instance has its
     /// own JNI `FrameLoop`). Call after `runtime.create_app(...)` and
     /// before `start_loop()`.
-    pub fn set_main_scheduler(&self, sched: Rc<dyn core::scheduler::MainScheduler>) {
+    pub fn set_main_scheduler(&self, sched: core::scheduler::MainScheduler) {
         *self.main_sched.borrow_mut() = sched;
     }
 

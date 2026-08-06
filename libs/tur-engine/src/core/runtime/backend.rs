@@ -465,10 +465,10 @@ impl MainBackend {
     /// can ship messages (e.g. `MainMsg::UploadImage` from
     /// `createImageResource`) directly without a staging vec.
     pub(crate) fn new(
-        main_sched: Rc<dyn crate::core::scheduler::MainScheduler>,
+        main_sched: crate::core::scheduler::MainScheduler,
         renderer: Box<dyn Renderer>,
         backend_factory: impl FnOnce(
-            Rc<dyn crate::core::scheduler::WorkerScheduler>,
+            crate::core::scheduler::WorkerScheduler,
             std::sync::Arc<dyn Fn() + Send + Sync>,
             crate::core::app::MainTx,
         ) -> WorkerBackend

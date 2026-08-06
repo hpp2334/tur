@@ -1,12 +1,22 @@
 //! Platform scheduling primitives.
 //!
-//! Two traits split by thread context:
-//! - [`MainScheduler`] — main-thread surface (spawn_worker, vsync, request_vsync).
-//! - [`WorkerScheduler`] — worker-thread surface (spawn_local, sleep).
+//! Two driver traits split by thread context, each wrapped in a concrete
+//! view struct that the engine holds:
+//! - [`MainSchedulerDriver`] / [`MainScheduler`] — main-thread surface
+//!   (`spawn_worker`, `vsync_events`, `request_vsync`, `spawn_local`,
+//!   `sleep`).
+//! - [`WorkerSchedulerDriver`] / [`WorkerScheduler`] — worker-thread
+//!   surface (`spawn_local`, `sleep`).
 //!
-//! The same driver object implements both; the runtime holds two `Rc<dyn>`
-//! trait objects pointing at it. Thread-locals inside the impl dispatch
-//! `spawn_local` to the right per-thread `LocalPool`.
+//! The view structs (`MainScheduler`, `WorkerScheduler`) each hold an
+//! `Rc<dyn …Driver>` and delegate. The underlying driver objects are
+//! platform-specific: a main driver (`WasmSchedulerDriver` /
+//! `AndroidSchedulerDriver` / `TestSchedulerDriver`) impls
+//! `MainSchedulerDriver`, and a separate per-worker driver
+//! (`WasmWorkerScheduler` etc., constructed inside `spawn_worker` on the
+//! worker thread) impls `WorkerSchedulerDriver`. They are genuinely
+//! different objects — the main driver is `!Send` (stays on main); the
+//! worker driver is built fresh on each worker thread.
 //!
 //! ## Dependency direction
 //!
@@ -161,22 +171,91 @@ pub fn track_spawn(
     }
 }
 
-/// Main-thread scheduling surface. Methods here are valid only when called
-/// from the main thread.
+/// Worker-thread driver trait. Impl'd by the per-worker driver structs
+/// (`WasmWorkerScheduler`, `AndroidWorkerScheduler`,
+/// `TestWorkerScheduler`) constructed inside
+/// [`MainSchedulerDriver::spawn_worker`] on the worker thread. These are
+/// the only scheduling primitives valid on a worker thread.
 ///
-/// Implemented by `WasmSchedulerDriver` (tur-wasm), `AndroidSchedulerDriver`
-/// (tur-android), and `TestSchedulerDriver` (tur-integration-tests). The
-/// runtime holds an `Rc<dyn MainScheduler>`; `TurApp` clones it for its
-/// autonomous loop.
-pub trait MainScheduler: 'static {
+/// `spawn_local`/`sleep` have identical signatures to the ones on
+/// [`MainSchedulerDriver`] — both sides support them, but the driver
+/// objects differ, so the two traits are independent and self-contained
+/// (a shared super-trait would break `dyn` dispatch: super-trait methods
+/// are not in a `dyn MainSchedulerDriver` vtable without nightly
+/// upcasting, so the main view couldn't call them).
+pub trait WorkerSchedulerDriver: 'static {
+    /// Spawn a future on this worker thread's local executor. Returns a
+    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
+
+    /// Create a Sleep future.
+    fn sleep(&self, d: Duration) -> Sleep;
+}
+
+/// Worker-thread scheduling view. Concrete struct wrapping a
+/// [`WorkerSchedulerDriver`]. Cheap to clone (inner `Rc`); held by
+/// `TurJsContext`, `SubsystemFlushContext`, `TurAppInternal`, and passed
+/// to bridges.
+///
+/// There is deliberately **no `block_on`**: blocking the calling thread on
+/// a future cannot be implemented honestly on wasm (you cannot block; the
+/// idiomatic pattern is `spawn_local` + event-loop driving). The engine's
+/// worker loop is driven by [`MainSchedulerDriver::spawn_worker`], which
+/// moves the per-platform "how to keep the worker alive" decision into the
+/// main driver.
+#[derive(Clone)]
+pub struct WorkerScheduler {
+    driver: Rc<dyn WorkerSchedulerDriver>,
+}
+
+impl WorkerScheduler {
+    /// Wrap a worker driver. Called by the main driver's `spawn_worker`
+    /// impl (in each platform crate) to hand the engine its per-thread
+    /// scheduling handle.
+    pub fn new(driver: Rc<dyn WorkerSchedulerDriver>) -> Self {
+        Self { driver }
+    }
+
+    /// Spawn a future on this worker thread's local executor. Returns a
+    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
+    pub fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        self.driver.spawn_local(fut)
+    }
+
+    /// Create a Sleep future.
+    pub fn sleep(&self, d: Duration) -> Sleep {
+        self.driver.sleep(d)
+    }
+}
+
+/// The engine's `worker_loop` factory: runs on the worker thread,
+/// constructs the `WorkerBackend` (`!Send` types built there), returns the
+/// worker's main future. `Send + 'static` so it can be boxed on main and
+/// moved across to the worker thread (native `std::thread`) or reconstituted
+/// from a raw pointer (wasm shared linear memory).
+pub type WorkerFactory = Box<
+    dyn FnOnce(WorkerScheduler) -> Pin<Box<dyn Future<Output = ()> + 'static>> + Send + 'static,
+>;
+
+/// Main-thread driver trait. Impl'd by the platform's main driver
+/// (`WasmSchedulerDriver`, `AndroidSchedulerDriver`,
+/// `TestSchedulerDriver`). The runtime holds one `Rc<dyn
+/// MainSchedulerDriver>` (wrapped in [`MainScheduler`]).
+///
+/// Methods here are valid only when called from the main thread. The main
+/// driver is `!Send` (it may hold `Rc`/`RefCell`/JNI handles), so it stays
+/// on main for the app's lifetime; per-instance replacement (Android's
+/// per-`FrameLoop` driver) goes through [`crate::TurApp::set_main_scheduler`].
+pub trait MainSchedulerDriver: 'static {
     /// Spawn a worker. The factory runs on a new worker thread
-    /// (`std::thread` on native, Web Worker via `wasm_thread` on wasm) and
-    /// **returns the worker's main future** (the engine's `worker_loop`).
-    /// The driver sets up thread-locals (e.g. the LocalPool) on the worker
-    /// thread *before* invoking the factory, then constructs a
-    /// `Rc<dyn WorkerScheduler>` for that thread and passes it to the
-    /// factory, and finally drives the returned future the way that
-    /// platform keeps a worker alive:
+    /// (`std::thread` on native, Web Worker via the in-tree spawner on
+    /// wasm) and **returns the worker's main future** (the engine's
+    /// `worker_loop`). The driver sets up thread-locals (e.g. the
+    /// LocalPool) on the worker thread *before* invoking the factory,
+    /// then constructs a [`WorkerScheduler`] for that thread (wrapping a
+    /// fresh per-worker driver) and passes it to the factory, and finally
+    /// drives the returned future the way that platform keeps a worker
+    /// alive:
     ///
     /// - **Native** (std::thread): drive the future to completion on the
     ///   worker thread's LocalPool (an infinite loop → the thread blocks
@@ -185,26 +264,13 @@ pub trait MainScheduler: 'static {
     ///   cooperatively on the JS event loop (a mini single-task executor —
     ///   no `block_on`, no `Atomics.wait` freeze). Cross-thread wake is
     ///   `worker.postMessage(0)` (the returned [`WorkerHandle`]'s `notify`
-    ///   callback); same-thread wake is a `setTimeout(0)` repoll. See
-    ///   `tur_wasm::worker_spawn`.
+    ///   callback); same-thread wake is a `setTimeout(0)` repoll.
     ///
     /// The returned future runs on the worker thread only (never crosses
     /// threads), so it is `+ 'static` but not `Send`; the factory closure
     /// itself must be `Send + 'static` (it crosses main → worker and may
     /// capture only `Send + Sync` config).
-    #[allow(clippy::type_complexity)]
-    fn spawn_worker(
-        &self,
-        factory: Box<
-            dyn FnOnce(Rc<dyn WorkerScheduler>) -> Pin<Box<dyn Future<Output = ()> + 'static>>
-                + Send
-                + 'static,
-        >,
-    ) -> WorkerHandle;
-
-    /// Spawn a future on the main thread's local executor. Returns a
-    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
+    fn spawn_worker(&self, factory: WorkerFactory) -> WorkerHandle;
 
     /// Subscribe to vsync events. Each item is one vsync tick.
     /// Call once at engine startup (inside `TurApp::start_loop`).
@@ -216,26 +282,60 @@ pub trait MainScheduler: 'static {
     /// rAF churn perf bug as a side effect).
     fn request_vsync(&self);
 
-    /// Create a Sleep future. Implementation is platform-specific.
+    /// Spawn a future on the main thread's local executor. Returns a
+    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
+    /// The engine core does not currently call this on the main thread
+    /// (the autonomous `start_loop` future is driven directly by the
+    /// embedder — `wasm_bindgen_futures::spawn_local` on wasm, JNI
+    /// `nativePump` on Android, `block_on` in tests), but it is available
+    /// for embedders/main-thread code that needs it.
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
+
+    /// Create a Sleep future. Implementation is platform-specific. Like
+    /// [`Self::spawn_local`], not used by engine core on the main thread
+    /// but available for main-thread callers that need it.
     fn sleep(&self, d: Duration) -> Sleep;
 }
 
-/// Worker-thread scheduling surface. Held by `WorkerBackend`; bridges grab
-/// it from `PluginContext` / `SubsystemFlushContext`. Methods dispatch to
-/// the *current thread's* executor (thread-local LocalPool), so the same
-/// `Rc<dyn WorkerScheduler>` works on any worker thread.
-///
-/// There is deliberately **no `block_on`**: blocking the calling thread on
-/// a future cannot be implemented honestly on wasm (you cannot block; the
-/// idiomatic pattern is `spawn_local` + event-loop driving). The engine's
-/// worker loop is driven by [`MainScheduler::spawn_worker`], which moves
-/// the per-platform "how to keep the worker alive" decision into the
-/// driver.
-pub trait WorkerScheduler: 'static {
-    /// Spawn a future on this worker thread's local executor. Returns a
-    /// [`TaskHandle`] that can abort or await the task; drop it to detach.
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle;
+/// Main-thread scheduling view. Concrete struct wrapping a
+/// [`MainSchedulerDriver`]. Cheap to clone (inner `Rc`); held by
+/// `TurRuntime`, `MainBackend`, and `TurApp` (the latter in a `RefCell`
+/// so Android can swap the per-instance driver).
+#[derive(Clone)]
+pub struct MainScheduler {
+    driver: Rc<dyn MainSchedulerDriver>,
+}
 
-    /// Create a Sleep future.
-    fn sleep(&self, d: Duration) -> Sleep;
+impl MainScheduler {
+    /// Wrap a main driver. Called by the runtime builder internally and by
+    /// embedders that replace the per-instance driver
+    /// ([`crate::TurApp::set_main_scheduler`]).
+    pub fn new(driver: Rc<dyn MainSchedulerDriver>) -> Self {
+        Self { driver }
+    }
+
+    /// Spawn a worker. See [`MainSchedulerDriver::spawn_worker`].
+    pub fn spawn_worker(&self, factory: WorkerFactory) -> WorkerHandle {
+        self.driver.spawn_worker(factory)
+    }
+
+    /// Subscribe to vsync events. Each item is one vsync tick.
+    pub fn vsync_events(&self) -> VsyncEvents {
+        self.driver.vsync_events()
+    }
+
+    /// Arm the next vsync. Idempotent — coalesces into one rAF/Choreographer.
+    pub fn request_vsync(&self) {
+        self.driver.request_vsync()
+    }
+
+    /// Spawn a future on the main thread's local executor.
+    pub fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        self.driver.spawn_local(fut)
+    }
+
+    /// Create a Sleep future on the main thread.
+    pub fn sleep(&self, d: Duration) -> Sleep {
+        self.driver.sleep(d)
+    }
 }

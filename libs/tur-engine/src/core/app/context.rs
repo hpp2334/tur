@@ -38,7 +38,7 @@ pub struct TurAppContext {
     /// Worker-thread scheduler — cloned from `TurAppInternal::worker_sched`.
     /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
     /// spawn Rust futures (clipboard writes, etc.) at dispatch time.
-    pub(crate) worker_sched: Rc<dyn WorkerScheduler>,
+    pub(crate) worker_sched: WorkerScheduler,
     /// Cheap-cloned completion handle — cloned from
     /// `TurAppInternal::completion_handle`. Surfaced to subsystems so
     /// spawned futures can push promise-settle closures for `flush()` to
@@ -72,7 +72,7 @@ impl TurAppContext {
         image_metadata_map: Rc<RefCell<ImageMetadataMap>>,
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
-        worker_sched: Rc<dyn WorkerScheduler>,
+        worker_sched: WorkerScheduler,
         completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,

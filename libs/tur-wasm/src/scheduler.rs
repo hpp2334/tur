@@ -1,8 +1,10 @@
 //! Wasm-backed scheduler driver.
 //!
-//! Implements both [`MainScheduler`] and [`WorkerScheduler`] for the wasm32
-//! target. The same driver object backs both trait objects stored on
-//! `TurRuntime` (set together via `TurRuntimeBuilder::scheduler(driver)`).
+//! Implements [`MainSchedulerDriver`] (main thread) and
+//! [`WorkerSchedulerDriver`] (worker thread, via [`WasmWorkerScheduler`])
+//! for the wasm32 target. The runtime builder wraps the main driver in a
+//! `MainScheduler` view via `.scheduler(driver)`; the per-worker driver is
+//! a separate stateless object constructed inside `spawn_worker`.
 //!
 //! ## Vsync events
 //!
@@ -48,10 +50,11 @@ use js_sys::Reflect;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 use tur_engine::core::scheduler::{
-    MainScheduler, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler, track_spawn,
+    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerSchedulerDriver,
+    track_spawn,
 };
 
-use crate::worker_spawn::{self, LoopFactory};
+use crate::worker_spawn;
 
 /// Wasm-backed scheduler driver. Construct via [`WasmSchedulerDriver::new`].
 pub struct WasmSchedulerDriver {
@@ -105,8 +108,8 @@ impl WasmInner {
     }
 }
 
-impl MainScheduler for WasmSchedulerDriver {
-    fn spawn_worker(&self, factory: LoopFactory) -> WorkerHandle {
+impl MainSchedulerDriver for WasmSchedulerDriver {
+    fn spawn_worker(&self, factory: tur_engine::core::scheduler::WorkerFactory) -> WorkerHandle {
         // Spawn a shared-memory Web Worker via the in-tree spawner. The
         // worker's bootstrap does NOT `close()` on entry-return, so it
         // stays alive while its JS event loop has pending tasks (the
@@ -167,26 +170,13 @@ impl MainScheduler for WasmSchedulerDriver {
     }
 }
 
-/// `WasmSchedulerDriver` also implements `WorkerScheduler` so it can be
-/// passed via `TurRuntimeBuilder::scheduler(driver)`. The worker methods
-/// are identical to the main methods (wasm primitives work on any thread).
-impl WorkerScheduler for WasmSchedulerDriver {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        track_spawn(fut, wasm_bindgen_futures::spawn_local)
-    }
-
-    fn sleep(&self, d: Duration) -> Sleep {
-        wasm_sleep(d)
-    }
-}
-
-/// Worker-side scheduler view — zero state, constructed inside
-/// [`crate::worker_spawn::tur_worker_main`] on the worker thread. Methods
-/// delegate to global wasm primitives (`spawn_local`, `setTimeout`-backed
-/// `sleep`) that work on any JS thread.
+/// Worker-side scheduler driver — zero state, constructed inside
+/// [`crate::worker_spawn::tur_worker_main`] on the worker thread (wrapped in
+/// a [`WorkerScheduler`] view). Methods delegate to global wasm primitives
+/// (`spawn_local`, `setTimeout`-backed `sleep`) that work on any JS thread.
 pub(crate) struct WasmWorkerScheduler;
 
-impl WorkerScheduler for WasmWorkerScheduler {
+impl WorkerSchedulerDriver for WasmWorkerScheduler {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }
