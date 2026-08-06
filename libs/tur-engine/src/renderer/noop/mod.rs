@@ -26,30 +26,26 @@ impl Renderer for NoopRenderer {
 
         let mut counts: HashMap<&str, usize> = HashMap::new();
         for cmd in commands {
-            if let RenderCommand::Paint { ops, .. } = cmd {
-                for op in ops {
-                    let key: &str = match op {
-                        crate::core::render::CanvasOp::FillGeometry { .. } => "fill",
-                        crate::core::render::CanvasOp::StrokeGeometry { .. } => "stroke",
-                        crate::core::render::CanvasOp::FillTextLayout { .. } => "text",
-                        crate::core::render::CanvasOp::DrawImage { .. } => "image",
-                        crate::core::render::CanvasOp::DrawShadow { .. } => "shadow",
-                        crate::core::render::CanvasOp::PushClip { .. }
-                        | crate::core::render::CanvasOp::PushClipGeometry { .. } => "clip",
-                        crate::core::render::CanvasOp::PopClip => "pop_clip",
-                        crate::core::render::CanvasOp::PushOpacity(_) => "opacity",
-                        crate::core::render::CanvasOp::PopOpacity => "pop_opacity",
-                        crate::core::render::CanvasOp::PushTransform(_) => "transform",
-                        crate::core::render::CanvasOp::PopTransform => "pop_transform",
-                    };
-                    *counts.entry(key).or_insert(0) += 1;
-                }
+            let RenderCommand::Paint { ops, .. } = cmd;
+            for op in ops {
+                let key: &str = match op {
+                    crate::core::render::CanvasOp::FillGeometry { .. } => "fill",
+                    crate::core::render::CanvasOp::StrokeGeometry { .. } => "stroke",
+                    crate::core::render::CanvasOp::FillTextLayout { .. } => "text",
+                    crate::core::render::CanvasOp::DrawImage { .. } => "image",
+                    crate::core::render::CanvasOp::DrawShadow { .. } => "shadow",
+                    crate::core::render::CanvasOp::PushClip { .. }
+                    | crate::core::render::CanvasOp::PushClipGeometry { .. } => "clip",
+                    crate::core::render::CanvasOp::PopClip => "pop_clip",
+                    crate::core::render::CanvasOp::PushOpacity(_) => "opacity",
+                    crate::core::render::CanvasOp::PopOpacity => "pop_opacity",
+                    crate::core::render::CanvasOp::PushTransform(_) => "transform",
+                    crate::core::render::CanvasOp::PopTransform => "pop_transform",
+                };
+                *counts.entry(key).or_insert(0) += 1;
             }
         }
-        let paint_count = commands
-            .iter()
-            .filter(|c| matches!(c, RenderCommand::Paint { .. }))
-            .count();
+        let paint_count = commands.len();
         let total_ops: usize = counts.values().sum();
         tracing::debug!(
             "noop-renderer: {paint_count} Paint commands, {total_ops} total ops, breakdown: {:?}",

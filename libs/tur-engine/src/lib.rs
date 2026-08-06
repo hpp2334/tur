@@ -310,8 +310,7 @@ impl TurApp {
     ) -> HandleResult {
         match msg {
             core::app::MainMsg::RenderCommands { commands } => {
-                // Pipelined: buffer (latest-wins); rendered at the next
-                // vsync. `MainTree` is updated at render time too.
+                // Pipelined: buffer (latest-wins); rendered at the next vsync.
                 *pending = Some(commands);
             }
             core::app::MainMsg::UploadImage { id, image } => {

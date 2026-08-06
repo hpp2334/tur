@@ -34,7 +34,6 @@ use std::sync::Arc;
 use crate::core::element::ElementNodeId;
 use crate::core::image_resource::ImageResourceId;
 use crate::core::layout::{Geometry, Offset, Size};
-use crate::core::platform::Cursor;
 use crate::core::render::brush::{Brush, Color};
 use crate::core::text::text_layout::TextLayoutData;
 use vello_common::kurbo::Affine;
@@ -46,11 +45,6 @@ use vello_common::kurbo::Affine;
 /// `Brush` and `TextLayoutData` own `Vec`s of plain-data structs; the
 /// `Arc<TextLayoutData>` on `FillTextLayout` lets the worker hand the same
 /// shaped layout to main by refcount bump instead of a deep clone.
-///
-/// `Clone` is derived for the engine-internal `MainTree` mirror, which
-/// snapshots the latest `Paint.ops` per node for dev-tool queries. The
-/// wire path (worker→main) consumes the original `Vec` by ownership, not
-/// by clone.
 #[derive(Debug, Clone)]
 pub enum CanvasOp {
     // ─── Draw ops (1:1 with the Canvas trait) ───
@@ -100,10 +94,9 @@ pub enum CanvasOp {
 
 /// Top-level commit-log entry emitted by the worker each frame.
 ///
-/// Main maintains a long-lived tree (`HashMap<ElementNodeId, MainNode>`) by
-/// applying these commands: `Paint`/`SetChildren`/`Remove` update the
-/// tree's per-node state; `Cursor` is a transient side-channel that main
-/// forwards to its `CursorBackend`.
+/// Each frame the worker emits a `Vec<RenderCommand>` (a batch of
+/// `Paint` ops) describing that frame's paint state. Main plays the
+/// batch linearly into its renderer via [`super::play_commands`].
 #[derive(Debug, Clone)]
 pub enum RenderCommand {
     /// Paint `ops` for node `id` at absolute `transform` and `size`.
@@ -119,24 +112,6 @@ pub enum RenderCommand {
         size: Size,
         ops: Vec<CanvasOp>,
     },
-    /// Declare topology: node `id` has these children in this order.
-    /// Emitted when the topology under `id` changes (insert / remove /
-    /// reorder). Main records it for dev-tool queries; playback itself
-    /// doesn't require topology (the `Paint` order is self-describing).
-    SetChildren {
-        id: ElementNodeId,
-        child_ids: Vec<ElementNodeId>,
-    },
-    /// Cursor claim for this frame. The worker resolves the claim during
-    /// its record walk (deepest painted `MouseRegion` wins, matching
-    /// today's `Shell::CursorSink` last-write-wins semantics) using the
-    /// worker's synced pointer position, then emits `Cursor` only when the
-    /// resolved value differs from the previous frame.
-    Cursor { cursor: Cursor },
-    /// Node destroyed — main drops its tree entry. Emitted whenever the
-    /// worker destroys a subtree (fragment rebuild, lazy-list item
-    /// recycle, controller-driven remount).
-    Remove { id: ElementNodeId },
 }
 
 // Compile-time Send assertions — guard against future fields breaking the

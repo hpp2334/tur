@@ -195,18 +195,14 @@ impl TurAppContext {
 
     /// Walk the element tree with a [`RecordingCanvas`] to capture per-node
     /// paint ops + boundaries, post-process the recording into
-    /// `Vec<RenderCommand>` (topology + paint commands in playback order),
-    /// and return the batch.
-    ///
-    /// `extra_commands` (typically the topology batch from
-    /// [`crate::core::render::build_topology_batch`]) is prepended to the
-    /// paint commands so a single batch consumes the full frame's payload.
+    /// `Vec<RenderCommand>` (paint commands in playback order), and return
+    /// the batch.
     ///
     /// The caller is responsible for shipping the batch to whichever
     /// thread/realm owns the actual renderer. The worker stores it in
     /// `TurAppInternal::pending_render_batch` for `MainBackend::worker_loop`
     /// to drain and ship via `MainMsg::RenderCommands`.
-    pub fn build_render_batch(&mut self, extra_commands: Vec<RenderCommand>) -> Vec<RenderCommand> {
+    pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();
 
         // Record the paint pass. Seed the recording canvas with the logical
@@ -230,9 +226,8 @@ impl TurAppContext {
         }
         drop(tree);
 
-        // Combine extra (topology) + paint into one batch.
-        let mut batch = extra_commands;
-        batch.extend(recording.into_render_commands());
+        // Collect the paint commands into one batch.
+        let batch = recording.into_render_commands();
 
         // Flush cursor claims accumulated during the record pass.
         self.shell.apply_changes();

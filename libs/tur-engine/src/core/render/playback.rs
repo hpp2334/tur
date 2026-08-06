@@ -34,12 +34,6 @@ use crate::core::render::RenderCommand;
 /// Play `commands` into `canvas` in order.
 ///
 /// `Paint` → `notify_node_entry` + ops + `notify_node_exit`.
-/// `SetChildren` / `Remove` → no canvas effect (they update
-/// [`super::MainTree`] only).
-/// `Cursor` → no canvas effect (cursor claim goes through the
-/// `Shell::CursorSink`, not the canvas — Phase 3 keeps the existing
-/// `Shell::apply_changes` cursor flow; Phase 7 routes cursor through the
-/// command batch end-to-end).
 pub fn play_commands(canvas: &mut dyn Canvas, commands: &[RenderCommand]) {
     for cmd in commands {
         match cmd {
@@ -55,8 +49,6 @@ pub fn play_commands(canvas: &mut dyn Canvas, commands: &[RenderCommand]) {
                 }
                 canvas.notify_node_exit();
             }
-            RenderCommand::SetChildren { .. } | RenderCommand::Remove { .. } => {}
-            RenderCommand::Cursor { .. } => {}
         }
     }
 }
@@ -288,25 +280,6 @@ mod tests {
             );
         }
         assert_eq!(canvas.transform_depth, 0);
-    }
-
-    /// SetChildren / Remove / Cursor are no-ops at the canvas level.
-    #[test]
-    fn non_paint_commands_are_canvas_noops() {
-        let commands = vec![
-            RenderCommand::SetChildren {
-                id: nid(1),
-                child_ids: vec![nid(2)],
-            },
-            RenderCommand::Remove { id: nid(2) },
-            RenderCommand::Cursor {
-                cursor: crate::core::platform::Cursor::Pointer,
-            },
-        ];
-
-        let mut canvas = CapturingCanvas::new();
-        play_commands(&mut canvas, &commands);
-        assert!(canvas.calls.is_empty());
     }
 
     /// Record-then-playback roundtrip: recording into a `RecordingCanvas`

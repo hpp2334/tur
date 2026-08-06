@@ -1,7 +1,6 @@
 mod canvas;
 mod command;
 mod element_render;
-mod main_tree;
 mod paint_context;
 mod playback;
 mod recording_canvas;
@@ -12,7 +11,6 @@ pub mod brush;
 pub use canvas::*;
 pub use command::{CanvasOp, RenderCommand};
 pub use element_render::*;
-pub use main_tree::{MainNodeRef, MainTree, build_topology_batch};
 pub use paint_context::*;
 pub use playback::play_commands;
 pub use recording_canvas::RecordingCanvas;

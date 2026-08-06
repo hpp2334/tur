@@ -13,9 +13,8 @@
 //!   thread (via [`crate::core::thread`]) running a `WorkerBackend`,
 //!   dispatches input via `futures::channel`, and receives [`MainMsg`]
 //!   replies. `MainBackend` owns the main-side [`Renderer`] (passed to
-//!   `TurRuntime::create_app`) + the [`MainTree`] mirror; it applies each
-//!   `MainMsg::RenderCommands` batch to both directly — no `render_sink`
-//!   callback.
+//!   `TurRuntime::create_app`); it applies each `MainMsg::RenderCommands`
+//!   batch directly to the renderer — no `render_sink` callback.
 //!
 //! ## Async model
 //!
@@ -43,7 +42,7 @@ use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::platform::CursorBackend;
-use crate::core::render::{MainTree, RenderCommand, Renderer};
+use crate::core::render::{RenderCommand, Renderer};
 use crate::core::scheduler::WorkerHandle;
 use crate::error::TurError;
 
@@ -382,7 +381,7 @@ impl WorkerBackend {
 /// like `main`'s `create_app(Box::new(renderer), …)`. Both `MainBackend`
 /// and the renderer live on the main thread, so there is no callback
 /// indirection: each `MainMsg::RenderCommands` batch is applied directly
-/// via [`Self::render_batch`] (MainTree mirror + renderer). Resize is
+/// via [`Self::render_batch`] (renderer only). Resize is
 /// driven by the embedder at event-receipt time via
 /// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
 /// / JNI), which calls [`Self::resize`] directly and forwards
@@ -433,10 +432,6 @@ pub struct MainBackend {
     /// context-loss re-upload. The worker only ever holds the sizes
     /// (`ImageMetadataMap`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
-    /// Main-side render-tree mirror, updated from each frame's command
-    /// batch (applied before rendering). Query-able for dev-tool /
-    /// hit-test / cursor state without touching the worker.
-    main_tree: RefCell<MainTree>,
 }
 
 impl MainBackend {
@@ -526,7 +521,6 @@ impl MainBackend {
             image_resource_map: RefCell::new(
                 crate::core::image_resource::ImageResourceMap::default(),
             ),
-            main_tree: RefCell::new(MainTree::new()),
         }
     }
 
@@ -561,13 +555,11 @@ impl MainBackend {
         self.worker_notify.deref()();
     }
 
-    /// Apply a render-command batch to the main-side state: update the
-    /// `MainTree` mirror, then drive the owned renderer (encode + present).
-    /// Called from both `pump` (request/response path) and
+    /// Apply a render-command batch to the owned renderer (encode +
+    /// present). Called from both `pump` (request/response path) and
     /// `TurApp::start_loop` (vsync path) — single source of truth for
     /// render application.
     pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
-        self.main_tree.borrow_mut().apply_batch(commands);
         let mut r = self.renderer.borrow_mut();
         r.render_commands(commands);
         let _ = r.present();
@@ -600,13 +592,6 @@ impl MainBackend {
     /// `None` if the renderer doesn't support readback.
     pub(crate) fn render_to_pixels(&self) -> Option<Vec<u8>> {
         self.renderer.borrow_mut().render_to_pixels()
-    }
-
-    /// Read-only access to the main-side `MainTree` mirror (dev-tool /
-    /// hit-test state without an RPC).
-    #[allow(dead_code)]
-    pub(crate) fn main_tree(&self) -> std::cell::Ref<'_, MainTree> {
-        self.main_tree.borrow()
     }
 
     /// Update the cached cursor + apply to the cursor backend.

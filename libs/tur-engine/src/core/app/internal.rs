@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use boa_engine::context::time::Clock;
@@ -8,7 +7,7 @@ use crate::core::app::TurAppContext;
 use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
-use crate::core::render::{RenderCommand, build_topology_batch};
+use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
 
@@ -89,11 +88,6 @@ pub struct TurAppInternal {
     ///
     /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
-    /// Last-frame element topology snapshot — input to
-    /// [`build_topology_batch`] so the diff can emit `Remove` commands for
-    /// ids that disappeared from the worker's tree since the previous
-    /// frame. Emits `SetChildren` only when a node's child list changed.
-    pub(crate) last_topology: RefCell<HashMap<ElementNodeId, Vec<ElementNodeId>>>,
     /// Worker → main render-command batch produced by the last `flush()`
     /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
     /// to main via `MainMsg::RenderCommands`. `None` if no paint happened
@@ -202,7 +196,6 @@ impl TurAppInternal {
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
-            last_topology: RefCell::new(HashMap::new()),
             pending_render_batch: RefCell::new(None),
         }
     }
@@ -383,14 +376,9 @@ impl TurAppInternal {
         }
 
         if needs_render {
-            // Record the paint pass + dispatch the topology/paint batch.
-            // The engine produces a `Vec<RenderCommand>`; main applies it
-            // to its renderer + `MainTree` mirror (`MainBackend::render_batch`).
-            let topology_batch = self.build_topology_batch();
-            let batch = self
-                .app_context
-                .borrow_mut()
-                .build_render_batch(topology_batch);
+            // Record the paint pass into a `Vec<RenderCommand>`; main
+            // applies it to its renderer (`MainBackend::render_batch`).
+            let batch = self.app_context.borrow_mut().build_render_batch();
             *self.pending_render_batch.borrow_mut() = Some(batch);
         }
 
@@ -623,30 +611,6 @@ impl TurAppInternal {
         }
 
         true
-    }
-
-    /// Build the topology portion of this frame's render batch
-    /// (`SetChildren` + `Remove` commands) by diffing the current
-    /// element-tree topology against `last_topology`.
-    ///
-    /// `SetChildren` is emitted only when a node's child list changed
-    /// (steady-state frames emit zero topology commands); `Remove` is
-    /// emitted for any id present in `last_topology` but missing from the
-    /// current tree.
-    ///
-    /// Updates `last_topology` in place to reflect the current topology.
-    fn build_topology_batch(&self) -> Vec<RenderCommand> {
-        let element_ids: Vec<ElementNodeId> = self.js_context.element_tree.borrow().element_ids();
-        // Capture the tree handle so the per-id closure can borrow without
-        // re-borrowing inside `build_topology_batch` (which would conflict
-        // with the `last_topology` borrow).
-        let tree_handle = self.js_context.element_tree.clone();
-        let mut last_topology = self.last_topology.borrow_mut();
-        build_topology_batch(
-            &element_ids,
-            |id| tree_handle.borrow().children_of_element(id),
-            &mut last_topology,
-        )
     }
 
     /// Drain the render-command batch produced by the last `flush()`, if any.
