@@ -1,4 +1,3 @@
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -205,9 +204,11 @@ pub struct EditableTextElement {
     pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
     /// Handle to the caret-blink task. `Some` while focused (the spawned
-    /// loop ticks `need_paint` each half-period); `None` when unfocused.
-    /// On blur or element drop, the handle is aborted, which drops the
-    /// pending `Sleep` and halts the loop immediately.
+    /// loop sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
+    /// `request_paint`, which self-wakes the worker to render the toggle);
+    /// `None` when unfocused. On blur or element drop, the handle is
+    /// aborted, which drops the pending `Sleep` and halts the loop
+    /// immediately.
     pub(crate) blink_task: Option<TaskHandle>,
 }
 
@@ -845,21 +846,19 @@ impl IntoJsArgs for ContextMenuEvent {
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
         if focused {
-            let worker_sched = cx.js_ctx().worker_sched().clone();
-            let need_paint = cx.js_ctx().need_paint.clone();
-            let worker_sched_for_loop = worker_sched.clone();
-            // Spawn the blink loop; abort() on blur/drop drops the pending
-            // Sleep + halts the loop immediately (no per-tick flag).
-            let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> =
-                Box::pin(async move {
-                    loop {
-                        worker_sched_for_loop
-                            .sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
-                            .await;
-                        need_paint.set(true);
-                    }
-                });
-            self.blink_task = Some(worker_sched.spawn_local(fut));
+            // Spawn the blink loop on the worker. Each half-period it sleeps,
+            // then calls `request_paint`, which sets the paint flag and —
+            // since the task runs out-of-flush — emits a coalesced
+            // `WorkerMsg::Wake` so the worker's own loop pumps a flush and
+            // renders the caret toggle. `abort()` on blur/drop drops the
+            // pending Sleep + halts the loop immediately (no per-tick flag).
+            self.blink_task = Some(cx.js_ctx().spawn_local(|aw| async move {
+                loop {
+                    aw.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
+                        .await;
+                    aw.request_paint();
+                }
+            }));
         } else {
             // Abort the spawned loop — drops its pending Sleep.
             if let Some(h) = self.blink_task.take() {

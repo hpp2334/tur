@@ -63,9 +63,6 @@ pub enum WorkerMsg {
     /// …). Dispatched to subsystems via `handle_platform_event` on the next
     /// flush iteration.
     PlatformEvent(PlatformEvent),
-    /// Mark the next frame for paint without enqueuing an event. Mirrors
-    /// today's `TurApp::request_paint` — sets the `need_paint` flag.
-    RequestPaint,
     /// Drive one flush iteration. Sent by main's rAF loop. The worker then
     /// emits [`MainMsg::RenderCommands`] (if it painted) and
     /// [`MainMsg::FrameOutcome`].
@@ -267,7 +264,6 @@ impl fmt::Debug for WorkerMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PlatformEvent(_) => f.debug_tuple("PlatformEvent").finish_non_exhaustive(),
-            Self::RequestPaint => write!(f, "RequestPaint"),
             Self::Wake => write!(f, "Wake"),
             Self::LoadModule { source, .. } => f
                 .debug_struct("LoadModule")

@@ -155,7 +155,6 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        self.inner.borrow().app.request_paint();
         let _ = futures::executor::block_on(self.inner.borrow().app.run_frame());
     }
 

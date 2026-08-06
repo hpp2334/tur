@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
@@ -211,17 +210,17 @@ impl<'a> PluginContext<'a> {
         self.boa
     }
 
-    /// The `need_paint` flag — setting it triggers a re-layout on the next frame.
-    pub fn need_paint(&self) -> &Rc<Cell<bool>> {
-        &self.js_ctx.need_paint
-    }
-
-    /// Worker-thread scheduler. Plugins' bridge fns call
-    /// `worker_sched.spawn_local(fut)` (via `Pin::pin(fut).into()` to box
-    /// it) to drive async work (clipboard reads, http requests, sleep
-    /// futures).
-    pub fn worker_sched(&self) -> &Rc<dyn crate::core::scheduler::WorkerScheduler> {
-        self.js_ctx.worker_sched()
+    /// Spawn a worker-side async task, handing it an
+    /// [`AsyncWorkerContext`](crate::core::async_::AsyncWorkerContext) for
+    /// timers / nested spawns / paint signals. Plugins' bridge fns use this
+    /// instead of the raw scheduler. See
+    /// [`TurJsContext::spawn_local`](crate::core::js_runtime::TurJsContext::spawn_local).
+    pub fn spawn_local<F, Fut>(&self, f: F) -> crate::core::scheduler::TaskHandle
+    where
+        F: FnOnce(crate::core::async_::AsyncWorkerContext) -> Fut,
+        Fut: std::future::Future<Output = ()> + 'static,
+    {
+        self.js_ctx.spawn_local(f)
     }
 
     /// Cheap-cloned completion handle. Plugins' bridge fns capture this

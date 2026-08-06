@@ -16,8 +16,6 @@
 //!    resolves the promise (building the JS `{ name, bytes, type, size }`
 //!    objects + `ArrayBuffer`s there, where the boa `Context` is available).
 
-use std::pin::Pin;
-
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::object::builtins::{JsArray, JsArrayBuffer, JsPromise};
@@ -73,12 +71,11 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         })?
         .backend()
         .clone();
-    let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let opts = parse_pick_opts(args, ctx);
-    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         let files = picker.pick(opts).await;
         completion_handle.push(Box::new(move |ctx| {
             let arr = JsArray::new(ctx)?;
@@ -92,7 +89,6 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -108,7 +104,6 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         })?
         .backend()
         .clone();
-    let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
@@ -124,7 +119,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .and_then(|ab| ab.to_vec())
         .unwrap_or_default();
     let opts = parse_save_opts(args, ctx);
-    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         picker.save(name, bytes, opts).await;
         completion_handle.push(Box::new(move |ctx| {
             resolvers
@@ -133,7 +128,6 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
             Ok(())
         }));
     });
-    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 

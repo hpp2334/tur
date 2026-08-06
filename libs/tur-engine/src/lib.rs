@@ -215,14 +215,6 @@ impl TurApp {
         self.request_wakeup();
     }
 
-    /// Request a paint on the next frame. Sets the `need_paint` flag
-    /// directly on the worker. Re-arms an idle autonomous loop.
-    pub fn request_paint(&self) {
-        self.backend
-            .send_worker_msg(core::app::WorkerMsg::RequestPaint);
-        self.request_wakeup();
-    }
-
     /// New autonomous frame loop. The embedder spawns this on its platform's
     /// runtime; the engine owns all the logic.
     ///

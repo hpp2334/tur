@@ -576,11 +576,10 @@ impl TurTestApp {
         }
     }
 
-    /// Request a paint and settle. Mostly redundant now that the input
-    /// helpers settle automatically; kept for tests that assert a paint after
-    /// an explicit paint request.
+    /// Settle (pump to quiescence). The worker self-paints on any state
+    /// change, so an explicit paint request isn't needed — kept for tests
+    /// that previously asserted a paint after an explicit request.
     pub fn render(&mut self) {
-        self.inner.request_paint();
         self.settle();
     }
 

@@ -20,8 +20,6 @@
 //! right after `drain_completions` in `flush`) runs the `.then`
 //! callbacks, which can `set()` reactive atoms that drive re-layout.
 
-use std::pin::Pin;
-
 use boa_engine::js_string;
 use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsPromise;
@@ -83,11 +81,10 @@ fn tur_clipboard_read_text(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
         .backend()
         .clone();
-    let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
-    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         let text = clipboard.read_text().await;
         // Push a completion closure that resolves the promise under
         // `&mut Context`. Runs on the next `flush`'s `drain_completions`
@@ -99,7 +96,6 @@ fn tur_clipboard_read_text(
             Ok(())
         }));
     });
-    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }
 
@@ -117,7 +113,6 @@ fn tur_clipboard_write_text(
         .ok_or_else(|| JsError::from(JsNativeError::typ().with_message("no clipboard capability")))?
         .backend()
         .clone();
-    let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
@@ -126,7 +121,7 @@ fn tur_clipboard_write_text(
         .as_string()
         .map(|s| s.to_std_string_escaped())
         .unwrap_or_default();
-    let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         clipboard.write_text(text).await;
         completion_handle.push(Box::new(move |ctx| {
             resolvers
@@ -135,6 +130,5 @@ fn tur_clipboard_write_text(
             Ok(())
         }));
     });
-    let _ = worker_sched.spawn_local(fut);
     Ok(promise.into())
 }

@@ -75,17 +75,20 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     let ms = args.get_or_undefined(1).as_number().unwrap_or(0.0).max(0.0) as u64;
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
-    let need_paint = js_ctx.need_paint.clone();
+    // The completion runs in-flush (drained at the top of the flush loop),
+    // so `request_paint` is the flag-only fast path there — it sets the
+    // paint flag this same flush reads.
+    let js_ctx_for_completion = js_ctx.clone();
     let worker_sched_for_loop = worker_sched.clone();
     let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
         worker_sched_for_loop
             .sleep(std::time::Duration::from_millis(ms))
             .await;
-        // Settle the promise under `&mut Context` on the next flush. Setting
-        // `need_paint` mirrors the old timer's flush flag so a paint follows
-        // even if the `.then` body makes no reactive `set`.
+        // Settle the promise under `&mut Context` on the next flush.
+        // `request_paint` mirrors the old timer's flush flag so a paint
+        // follows even if the `.then` body makes no reactive `set`.
         completion_handle.push(Box::new(move |ctx| {
-            need_paint.set(true);
+            js_ctx_for_completion.request_paint();
             resolvers.resolve.call(&JsValue::undefined(), &[], ctx)?;
             Ok(())
         }));

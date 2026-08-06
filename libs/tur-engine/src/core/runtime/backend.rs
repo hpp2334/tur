@@ -172,23 +172,28 @@ impl WorkerBackend {
                     .platform_event_queue
                     .push(event);
             }
-            WorkerMsg::RequestPaint => {
-                self.internal.js_context.need_paint.set(true);
-            }
             WorkerMsg::Wake => {
                 // The worker_loop drives flush via `pump()` (separate method
                 // so it can capture the FrameOutcome + ship commands).
             }
             WorkerMsg::LoadModule { source, reply } => {
                 let res = self.load_module_inner(&source);
+                // The worker owns its paint state: if eval produced paint-
+                // worthy state (element creation already self-wakes via
+                // `set_dirty`; this also covers a pure reactive `set`),
+                // re-arm an idle worker so the bundle renders without an
+                // embedder paint request.
+                self.wake_if_dirty();
                 reply.send(res);
             }
             WorkerMsg::LoadJs { source, reply } => {
                 let res = self.load_js_inner(&source);
+                self.wake_if_dirty();
                 reply.send(res);
             }
             WorkerMsg::EvalModule { source, reply } => {
                 let res = self.eval_module_inner(&source);
+                self.wake_if_dirty();
                 reply.send(res);
             }
             WorkerMsg::EvalJs { source, reply } => {
@@ -276,6 +281,17 @@ impl WorkerBackend {
             .borrow_mut()
             .app_event_queue
             .push(event);
+    }
+
+    /// After a module/script eval, re-arm an idle worker if the eval left
+    /// paint-worthy state (dirty tree / `need_paint`). Coalesced + in-flush
+    /// gated by `TurJsContext::wake_if_idle`. Lets the worker self-paint on
+    /// load with no embedder paint request.
+    fn wake_if_dirty(&self) {
+        let js = &self.internal.js_context;
+        if js.dirty.get() || js.need_paint.get() {
+            js.wake_if_idle();
+        }
     }
 
     #[allow(dead_code)]
@@ -644,6 +660,26 @@ impl MainBackend {
     /// `pump_in_progress` guard rejects overlap).
     #[allow(clippy::await_holding_refcell_ref)]
     pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
+        // Drain stale messages produced by worker self-wakes (e.g. the
+        // post-load render) that raced this pump. Process their
+        // side-effects (render batches, cursor, focus, images); their
+        // FrameOutcomes are discarded — they describe already-completed
+        // frames, not this pump's result. Without this, a self-wake's
+        // FrameOutcome would be consumed by the next pump's `rx.next()`,
+        // desynchronizing pump-based sequencing.
+        use futures::future::FutureExt;
+        loop {
+            let stale = self.main_rx.borrow_mut().next().now_or_never();
+            match stale {
+                Some(Some(msg)) => {
+                    let _ = self.apply_main_msg(msg);
+                }
+                // Queue drained (pending) or closed — either way, stop
+                // draining. A closed stream surfaces as a send error below.
+                Some(None) | None => break,
+            }
+        }
+
         self.worker_tx
             .unbounded_send(WorkerMsg::Wake)
             .map_err(|_| TurError::Other("worker gone".into()))?;
@@ -651,45 +687,60 @@ impl MainBackend {
         let mut rx = self.main_rx.borrow_mut();
         loop {
             match rx.next().await {
-                Some(MainMsg::RenderCommands { commands }) => {
-                    self.render_batch(&commands);
-                }
-                Some(MainMsg::UploadImage { id, image }) => {
-                    // Retain the full resource (pixel Blob) on main for
-                    // context-loss re-upload, then upload into the GPU atlas.
-                    self.insert_image_resource(id, image.clone());
-                    self.upload_image_resource(id, &image);
-                }
-                Some(MainMsg::FrameOutcome(result)) => {
-                    return result.map_err(TurError::Other);
-                }
-                Some(MainMsg::CursorChanged(cursor)) => {
-                    *self.cached_cursor.borrow_mut() = cursor;
-                    #[allow(clippy::collapsible_if)]
-                    if let Some(backend) = self.cursor_backend.borrow().as_ref() {
-                        if let Ok(mut b) = backend.lock() {
-                            b.set_cursor(cursor);
-                        }
+                Some(msg) => {
+                    if let Some(outcome) = self.apply_main_msg(msg) {
+                        return outcome;
                     }
                 }
-                Some(MainMsg::FocusedStateChanged {
-                    is_editable,
-                    cursor_rect,
-                }) => {
-                    *self.cached_focus.borrow_mut() = FocusedState {
-                        is_editable,
-                        cursor_rect,
-                    };
-                }
-                Some(MainMsg::Destroyed) => {
-                    return Err(TurError::Other("worker destroyed".into()));
-                }
-                // EventBusToHost / DevReply — pump ignores for now (the
-                // Reply<T> slot handles RPC replies; standalone MainMsg
-                // variants are reserved for future event-bus work).
-                Some(_) => continue,
                 None => return Err(TurError::Other("worker gone".into())),
             }
+        }
+    }
+
+    /// Apply one [`MainMsg`]'s side-effects (render batch, cursor, focus,
+    /// image upload). Returns `Some(Ok(FrameOutcome))` for a `FrameOutcome`
+    /// msg (the pump's terminal result), `Some(Err)` for `Destroyed`, and
+    /// `None` for non-terminal msgs (side-effects only). Used by both
+    /// [`Self::pump`] (fresh) and its stale-drain prefix.
+    fn apply_main_msg(&self, msg: MainMsg) -> Option<Result<FrameOutcome, TurError>> {
+        match msg {
+            MainMsg::RenderCommands { commands } => {
+                self.render_batch(&commands);
+                None
+            }
+            MainMsg::UploadImage { id, image } => {
+                // Retain the full resource (pixel Blob) on main for
+                // context-loss re-upload, then upload into the GPU atlas.
+                self.insert_image_resource(id, image.clone());
+                self.upload_image_resource(id, &image);
+                None
+            }
+            MainMsg::CursorChanged(cursor) => {
+                *self.cached_cursor.borrow_mut() = cursor;
+                #[allow(clippy::collapsible_if)]
+                if let Some(backend) = self.cursor_backend.borrow().as_ref() {
+                    if let Ok(mut b) = backend.lock() {
+                        b.set_cursor(cursor);
+                    }
+                }
+                None
+            }
+            MainMsg::FocusedStateChanged {
+                is_editable,
+                cursor_rect,
+            } => {
+                *self.cached_focus.borrow_mut() = FocusedState {
+                    is_editable,
+                    cursor_rect,
+                };
+                None
+            }
+            MainMsg::FrameOutcome(result) => Some(result.map_err(TurError::Other)),
+            MainMsg::Destroyed => Some(Err(TurError::Other("worker destroyed".into()))),
+            // EventBusToHost / DevReply — pump ignores (the Reply<T> slot
+            // handles RPC replies; standalone MainMsg variants are reserved
+            // for future event-bus work).
+            _ => None,
         }
     }
 

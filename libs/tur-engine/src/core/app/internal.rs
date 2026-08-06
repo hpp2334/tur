@@ -95,6 +95,18 @@ pub struct TurAppInternal {
     pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
 }
 
+/// RAII guard set up at `flush()` entry; clears `in_flush` on drop so the
+/// worker is "idle" again for out-of-flush self-wakes. Drop runs on every
+/// exit path (normal return or future `?`), guaranteeing `end_flush` pairs
+/// with `begin_flush`.
+struct FlushGuard<'a>(&'a TurAppInternal);
+
+impl Drop for FlushGuard<'_> {
+    fn drop(&mut self) {
+        self.0.js_context.end_flush();
+    }
+}
+
 impl TurAppInternal {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -145,7 +157,7 @@ impl TurAppInternal {
         // polls them in lockstep with completions / microtasks — closing
         // the cross-frame lag that otherwise breaks single-frame sleep
         // semantics. See `async_::flush_tasks`.
-        let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker));
+        let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker.clone()));
 
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
@@ -163,6 +175,7 @@ impl TurAppInternal {
             worker_sched.clone(),
             completion_handle.clone(),
             flush_task_queue.handle(),
+            wake_worker.clone(),
             capabilities,
         );
 
@@ -201,6 +214,13 @@ impl TurAppInternal {
     }
 
     pub fn flush(&self, boa_context: &mut boa_engine::Context) -> Result<FrameOutcome, TurError> {
+        // Enter the flush window: mark in-flush (so out-of-flush self-wakes
+        // raised by `request_paint` / `set_dirty` during this flush don't
+        // emit redundant `Wake`s) and re-arm the wake coalescing gate for
+        // any paint request raised mid-flush (it must emit a fresh wake for
+        // the *next* pump). See `TurJsContext::begin_flush` / `end_flush`.
+        self.js_context.begin_flush();
+        let _flush_guard = FlushGuard(self);
         let mut needs_render = false;
         // Per-`flush()` epoch, bumped once per call. Stable across the
         // fixed-point iterations below so subsystems can self-gate "advance

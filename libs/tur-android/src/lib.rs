@@ -355,7 +355,6 @@ pub mod ops {
             log::info!("loadModule: {} bytes", js.len());
             futures::executor::block_on(instance.app.load_module(&js))?;
             log::info!("loadModule: module evaluated OK");
-            instance.app.request_paint();
             log::info!("loadModule: paint requested");
             Ok(())
         });

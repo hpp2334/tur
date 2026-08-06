@@ -24,11 +24,13 @@
 use boa_engine::Context;
 use boa_engine::JsResult;
 
+pub mod async_worker_context;
 pub mod completion;
 pub mod executor;
 pub mod flush_tasks;
 pub mod task;
 
+pub use async_worker_context::AsyncWorkerContext;
 pub use completion::{CompletionHandle, CompletionQueue};
 pub use executor::TurJobExecutor;
 pub use flush_tasks::{FlushTaskHandle, FlushTaskQueue};

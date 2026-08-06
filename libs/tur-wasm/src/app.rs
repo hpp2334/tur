@@ -1037,10 +1037,9 @@ impl WasmApp {
         app.load_js(js_source)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        // Request a paint; `request_paint` re-arms the autonomous loop (via
-        // the driver's `request_next(Vsync)`), so the bundle renders on the
-        // next frame without any manual pump.
-        app.request_paint();
+        // The worker self-paints on load: eval sets dirty state, which the
+        // worker's `wake_if_dirty` turns into a coalesced self-wake — no
+        // embedder paint request needed.
         Ok(())
     }
 
@@ -1059,7 +1058,8 @@ impl WasmApp {
         app.load_module(js_source)
             .await
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        app.request_paint();
+        // The worker self-paints on load (dirty state → coalesced self-wake);
+        // no embedder paint request needed.
         Ok(())
     }
 
