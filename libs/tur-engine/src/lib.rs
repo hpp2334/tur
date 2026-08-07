@@ -28,6 +28,17 @@ pub use crate::core::event_bus::EventBus;
 // `TurApp` instance (engine on a worker thread; `MainBackend` owns the
 // renderer on main and drives it directly — no render_sink callback).
 pub use crate::core::runtime::{MainBackend, TurRuntime, TurRuntimeBuilder};
+// Re-export the plugin-layer main-thread hop surface so backends in other
+// crates (`tur-clipboard-native`, future OS-API backends) can name the type
+// without reaching into `core::plugin`. OS-API backends receive an
+// `AsyncPluginContext` clone at construction (via the closure form of
+// `TurRuntimeBuilder::capability`) and hop OS-API calls onto the engine's
+// main thread (required by some platforms — e.g. macOS
+// `arboard`/`NSPasteboard`); plugin code reaches the same channel via
+// `PluginContext::to_async`. The engine creates the channel internally at
+// `build()`, so no embedder wiring is required.
+pub use crate::core::plugin::{AsyncPluginContext, MainRunFuture};
+pub use crate::core::scheduler::SpawnError;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

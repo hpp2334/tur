@@ -19,7 +19,7 @@ use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
-use crate::core::plugin::{CompileContext, Plugin, PluginContext};
+use crate::core::plugin::{AsyncPluginContext, CompileContext, Plugin, PluginContext};
 use crate::core::screen::Screen;
 use crate::error::TurError;
 
@@ -47,15 +47,24 @@ impl Clock for ClockProxy {
     }
 }
 
-/// Deferred capability-insert closure. Captures the typed capability value
-/// and the static type parameter, so the actual `Capabilities::insert::<C>`
-/// call (which requires a static `C`) happens inside `build()` and again
-/// per worker spawned from `create_app`. The closure is `Fn` (not `FnOnce`)
-/// + `Send + Sync` so it can be stored on the runtime and replayed into
-/// each worker's fresh `Capabilities`. Each call inserts a clone of the
-/// captured capability (Capability newtypes wrap `Arc` — cloning is cheap).
-#[allow(clippy::doc_lazy_continuation)]
+/// Deferred capability-insert closure (the per-worker replay). Built by a
+/// [`CapabilityBuilder`] (which receives the [`AsyncPluginContext`]) and
+/// stored on the runtime; each worker spawned from `create_app` replays its
+/// closures into its own fresh `Capabilities`. The closure is `Fn` (not
+/// `FnOnce`) + `Send + Sync` so it can be stored on the runtime and replayed
+/// into every worker. Each call inserts a clone of the captured capability
+/// (Capability newtypes wrap `Arc` — cloning is cheap).
 type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
+
+/// Deferred capability-construction closure. Captures the embedder's backend
+/// construction (which may need the [`AsyncPluginContext`], e.g. an OS-API
+/// backend that hops calls onto the main thread) and produces a
+/// [`CapabilityInsert`] replay closure. Runs **once** in `build()` (after the
+/// main-thread channel is created) — the resulting backend is shared across
+/// every instance (Capability newtypes are `Arc`-backed). `FnOnce` + `Send +
+/// Sync` so it can be stored on the builder and consumed in `build()`.
+type CapabilityBuilder =
+    Box<dyn FnOnce(&AsyncPluginContext) -> Result<CapabilityInsert, TurError> + Send + Sync>;
 
 /// The shared engine runtime — created **once** and used to spawn any number
 /// of isolated [`TurApp`] instances.
@@ -114,6 +123,13 @@ pub struct TurRuntime {
     /// Main-thread scheduling view. Built once from the driver supplied to
     /// the runtime builder; cloned into each `TurApp` + `MainBackend`.
     main_scheduler: crate::core::scheduler::MainScheduler,
+    /// The engine's main-thread hop context. Created internally in `build()`
+    /// (the channel + drain are engine-internal — embedders never wire them).
+    /// Cloned into each worker's [`PluginContext`] (so plugins reach main via
+    /// [`PluginContext::to_async`](crate::core::plugin::PluginContext::to_async))
+    /// and handed to capability constructors that need it (via the closure
+    /// form of [`TurRuntimeBuilder::capability`]).
+    main_cx: AsyncPluginContext,
 }
 
 impl TurRuntime {
@@ -160,6 +176,7 @@ impl TurRuntime {
         let font_loader = self.font_loader.clone();
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
+        let main_cx = self.main_cx.clone();
         let backend_factory = move |worker_sched: crate::core::scheduler::WorkerScheduler,
                                     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
                                     main_tx: crate::core::app::MainTx|
@@ -178,6 +195,7 @@ impl TurRuntime {
                 worker_sched,
                 wake_worker,
                 main_tx,
+                main_cx.clone(),
             )
             .expect("threaded backend factory failed")
         };
@@ -213,6 +231,7 @@ pub(crate) fn build_worker_backend(
     worker_sched: crate::core::scheduler::WorkerScheduler,
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
+    async_cx: AsyncPluginContext,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -296,6 +315,7 @@ pub(crate) fn build_worker_backend(
             subsystems: internal.subsystems.clone(),
             event_bus: internal.event_bus.clone(),
             viewport_size: viewport_size_js.clone(),
+            async_cx: async_cx.clone(),
         };
         plugin.register(&mut plugin_ctx)?;
     }
@@ -324,7 +344,7 @@ pub struct TurRuntimeBuilder {
     font_loader: Option<Arc<dyn FontLoader>>,
     clock: Option<Arc<dyn Clock + Send + Sync>>,
     plugins: Vec<Box<dyn Plugin>>,
-    capabilities: Vec<CapabilityInsert>,
+    capability_builders: Vec<CapabilityBuilder>,
     scheduler: Option<Rc<dyn crate::core::scheduler::MainSchedulerDriver>>,
 }
 
@@ -340,7 +360,7 @@ impl TurRuntimeBuilder {
             font_loader: None,
             clock: None,
             plugins: Vec::new(),
-            capabilities: Vec::new(),
+            capability_builders: Vec::new(),
             scheduler: None,
         }
     }
@@ -380,20 +400,53 @@ impl TurRuntimeBuilder {
     }
 
     /// Register a capability (a plugin-swappable backend) so it's available
-    /// to every instance spawned from this runtime. Capabilities are inserted
-    /// into the registry before any plugin's `compile`/`register` runs, and
-    /// replayed into each worker's fresh `Capabilities` during
-    /// `create_app`.
+    /// to every instance spawned from this runtime. Capabilities are
+    /// constructed once in [`build`](Self::build) (after the engine creates
+    /// its main-thread channel) and replayed into each worker's fresh
+    /// `Capabilities` during [`create_app`](TurRuntime::create_app).
     ///
-    /// Plugins declare hard dependencies via [`Plugin::requires`]; the runtime
-    /// validates those before any plugin side effects.
-    pub fn capability<C>(mut self, cap: C) -> Self
+    /// The closure receives an [`AsyncPluginContext`] clone — the engine's
+    /// main-thread hop. Backends that need to run OS-API calls on the main
+    /// thread (e.g. macOS `arboard`/`NSPasteboard`) store it and self-hop
+    /// via [`AsyncPluginContext::run_on_main`]; backends that don't (wasm,
+    /// HTTP via tokio, filepicker via `rfd`) ignore the argument. The
+    /// closure is `FnOnce`: the backend is constructed exactly once and
+    /// shared (Capability newtypes wrap `Arc`, so per-worker replay is a
+    /// cheap clone).
+    ///
+    /// May fail at `build()` (e.g. no clipboard available on headless CI) —
+    /// the `Err` propagates from `build()`.
+    ///
+    /// Plugins declare hard dependencies via [`Plugin::requires`]; the
+    /// runtime validates those before any plugin side effects.
+    ///
+    /// ```no_run
+    /// # use tur_engine::{Clipboard, ClipboardBackend, TurRuntimeBuilder};
+    /// # use std::future::Future;
+    /// # use std::pin::Pin;
+    /// # struct MyBackend;
+    /// # impl ClipboardBackend for MyBackend {
+    /// #     fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> { Box::pin(async { String::new() }) }
+    /// #     fn write_text(&self, _t: String) -> Pin<Box<dyn Future<Output = ()>>> { Box::pin(async {}) }
+    /// # }
+    /// TurRuntimeBuilder::new()
+    ///     // A backend that needs main-thread access takes the context:
+    ///     //   .capability(|cx| Ok(Clipboard::new(my_native_clipboard(cx)?)))
+    ///     // A backend that doesn't ignores it:
+    ///     .capability(|_| Ok(Clipboard::new(MyBackend)))
+    ///     # ;
+    /// ```
+    pub fn capability<C, F>(mut self, build: F) -> Self
     where
         C: crate::core::capability::Capability + Send + Sync + 'static,
+        F: FnOnce(&AsyncPluginContext) -> Result<C, TurError> + Send + Sync + 'static,
     {
-        self.capabilities
-            .push(Box::new(move |registry: &Capabilities| {
-                registry.insert::<C>(cap.clone());
+        self.capability_builders
+            .push(Box::new(move |cx: &AsyncPluginContext| {
+                let cap = build(cx)?;
+                Ok(Box::new(move |registry: &Capabilities| {
+                    registry.insert::<C>(cap.clone());
+                }))
             }));
         self
     }
@@ -430,13 +483,32 @@ impl TurRuntimeBuilder {
         let mut font_context = FontContext::new();
         font_loader.load_preset_fonts(&mut font_context);
 
+        let main_scheduler = crate::core::scheduler::MainScheduler::new(scheduler);
+
+        // Create the engine-internal main-thread channel + spawn the drain on
+        // main. `build()` runs on the main thread, so `spawn_local` is valid
+        // here; the drain runs on the next main-executor tick and serves the
+        // `AsyncPluginContext` (plugin/bridge hops) for the runtime's life.
+        let (tx, drain) = crate::core::scheduler::main_channel();
+        main_scheduler.spawn_local(Box::pin(drain.run()));
+        let main_cx = AsyncPluginContext::from_sender(tx);
+
+        // Run each capability-construction closure once (receives the
+        // `AsyncPluginContext`), producing the per-worker replay closures.
+        // A failing backend (e.g. no clipboard on headless CI) propagates
+        // `Err` out of `build()`.
+        let mut capability_inserts: Vec<CapabilityInsert> = Vec::new();
+        for builder in self.capability_builders {
+            capability_inserts.push(builder(&main_cx)?);
+        }
+
         let capabilities = Capabilities::new();
         // Replay each insert closure once here (validates that they all
         // run cleanly + populates the runtime's Capabilities for
         // compile-time `requires` validation). The closures are retained
         // on the runtime (`capability_inserts`) and replayed again into
         // every worker's fresh `Capabilities` from `create_app`.
-        for insert_fn in &self.capabilities {
+        for insert_fn in &capability_inserts {
             insert_fn(&capabilities);
         }
 
@@ -452,7 +524,7 @@ impl TurRuntimeBuilder {
                 if !capabilities.contains_id(cap_id) {
                     return Err(TurError::Other(format!(
                         "plugin requires capability `{cap_name}` which is not registered; \
-                         add `.capability({cap_name}::new(...))` to the runtime builder"
+                         add `.capability(|_| Ok({cap_name}::new(...)))` to the runtime builder"
                     )));
                 }
             }
@@ -476,9 +548,10 @@ impl TurRuntimeBuilder {
             font_context,
             font_loader,
             capabilities,
-            capability_inserts: Arc::new(self.capabilities),
+            capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),
-            main_scheduler: crate::core::scheduler::MainScheduler::new(scheduler),
+            main_scheduler,
+            main_cx,
         }))
     }
 }

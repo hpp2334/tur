@@ -61,9 +61,12 @@ fn capability_round_trip_via_plugin() {
 
     let seen = Arc::new(Mutex::new(None));
     let app = build_app(|b| {
-        b.capability(counter.clone())
-            .plugin(TurStdPlugin)
-            .plugin(CapturePlugin { seen: seen.clone() })
+        b.capability({
+            let c = counter.clone();
+            move |_| Ok(c)
+        })
+        .plugin(TurStdPlugin)
+        .plugin(CapturePlugin { seen: seen.clone() })
     });
     let got = seen
         .lock()
@@ -108,7 +111,7 @@ fn capability_chain_order_irrelevant() {
     let app = build_app(|b| {
         b.plugin(TurStdPlugin)
             .plugin(NeedsCounterPlugin)
-            .capability(CountersCapability::new())
+            .capability(|_| Ok(CountersCapability::new()))
     });
     assert!(
         app.is_ok(),

@@ -31,6 +31,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use futures::Stream;
+use futures::StreamExt;
+use futures::channel::mpsc;
 use futures::future::{AbortHandle, Abortable};
 
 /// Newtype around a boxed future. Drivers construct it from their
@@ -102,67 +104,114 @@ impl WorkerHandle {
     }
 }
 
+/// Why a [`TaskHandle<T>`]'s `join` did not yield a value.
+///
+/// `join` returns `Result<T, SpawnError>`: `Ok(t)` on natural completion,
+/// `Err(Aborted)` when the task was canceled via [`TaskHandle::abort`], and
+/// `Err(Dropped)` when the task's future was dropped before it could complete
+/// (executor shutdown, or `join` called twice on the same handle).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpawnError {
+    /// The task was canceled via [`TaskHandle::abort`].
+    Aborted,
+    /// The task was dropped before completing — the executor shut down, or
+    /// the handle's oneshot was already consumed (double-join).
+    Dropped,
+}
+
+impl std::fmt::Display for SpawnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SpawnError::Aborted => write!(f, "task was aborted"),
+            SpawnError::Dropped => write!(f, "task was dropped before completing"),
+        }
+    }
+}
+
+impl std::error::Error for SpawnError {}
+
 /// Handle to a `spawn_local`-ed task. Cheap to construct; dropping it
 /// **detaches** the task (the future keeps running, you just can't join
 /// or abort it anymore).
 ///
+/// Generic over the task future's output `T` (defaults to `()`); [`join`]
+/// returns `Result<T, SpawnError>`. Built generically by [`track_spawn`]
+/// around any platform spawn, so all drivers (wasm `wasm_bindgen_futures`,
+/// native `LocalPool`, test `LocalSet`) share one implementation.
+///
 /// - [`abort`](Self::abort) cancels the task: its future is dropped at the
 ///   next poll point, freeing any resources it held (pending `Sleep`s,
 ///   promise slots, etc.).
-/// - [`join`](Self::join) awaits the task's completion (whether it finished
-///   naturally or was aborted).
+/// - [`join`](Self::join) awaits the task's completion: `Ok(t)` on natural
+///   finish, `Err(SpawnError::Aborted)` if aborted, `Err(SpawnError::Dropped)`
+///   if the future was dropped before completing.
 ///
-/// Built generically by [`track_spawn`] around any platform spawn, so all
-/// drivers (wasm `wasm_bindgen_futures`, native `LocalPool`, test `LocalSet`)
-/// share one implementation. The handle is `!Send` (single-threaded
-/// executors; the engine's `TurApp` is `Rc`-based anyway).
-pub struct TaskHandle {
+/// The handle is `!Send` (single-threaded executors; the engine's `TurApp`
+/// is `Rc`-based anyway).
+///
+/// [`join`]: Self::join
+pub struct TaskHandle<T = ()> {
     abort_handle: AbortHandle,
-    join_rx: RefCell<Option<futures::channel::oneshot::Receiver<()>>>,
+    join_rx: RefCell<Option<futures::channel::oneshot::Receiver<Result<T, SpawnError>>>>,
 }
 
-impl TaskHandle {
+impl<T> TaskHandle<T> {
     /// Cancel the task. Its future is dropped at the next poll point.
     /// Idempotent — calling after the task already completed is a no-op.
     pub fn abort(&self) {
         self.abort_handle.abort();
     }
 
-    /// Await the task's completion. Consumes the handle. Resolves on both
-    /// natural completion and abort. Returns `None` if the task was
-    /// dropped without completing (e.g. the executor shut down).
-    pub async fn join(self) -> Option<()> {
+    /// Await the task's completion. Consumes the handle.
+    ///
+    /// - `Ok(t)` — the task finished and produced `t`.
+    /// - `Err(SpawnError::Aborted)` — the task was canceled via [`abort`](Self::abort).
+    /// - `Err(SpawnError::Dropped)` — the future was dropped before it could
+    ///   complete (executor shutdown), or `join` was already called.
+    pub async fn join(self) -> Result<T, SpawnError> {
         // Take the receiver out of the RefCell BEFORE awaiting so the
         // RefCell borrow isn't held across the await point. The `let`
         // statement ends the temporary `RefMut` at its `;`.
         let rx = self.join_rx.borrow_mut().take();
         match rx {
-            Some(rx) => rx.await.ok(),
-            None => None,
+            // `rx.await` is `Result<Result<T, SpawnError>, Canceled>`:
+            //   Ok(inner) → inner carries Ok(t) | Err(Aborted) (sent by the
+            //               tracked wrapper based on Abortable's result);
+            //   Err(_)    → the wrapper future was dropped before sending
+            //               (executor shutdown) → Dropped.
+            Some(rx) => rx.await.unwrap_or(Err(SpawnError::Dropped)),
+            // Handle already consumed by a prior join.
+            None => Err(SpawnError::Dropped),
         }
     }
 }
 
 /// Wrap a future so it is abortable + joinable, then hand the wrapped
 /// future to a platform spawn function (`wasm_bindgen_futures::spawn_local`,
-/// a `LocalPool`/`LocalSet` spawn, etc.). Returns a [`TaskHandle`] that
+/// a `LocalPool`/`LocalSet` spawn, etc.). Returns a [`TaskHandle<T>`] that
 /// can abort or await the task.
 ///
 /// The wrapper pairs `futures::future::Abortable` (cancel signal) with a
-/// oneshot (completion signal) — both pure-Rust and executor-independent,
-/// so no driver needs executor-level task-handle support.
-pub fn track_spawn(
-    fut: Pin<Box<dyn Future<Output = ()> + 'static>>,
+/// oneshot carrying `Result<T, SpawnError>` (completion signal) — both
+/// pure-Rust and executor-independent, so no driver needs executor-level
+/// task-handle support. The abort/drop distinction is made inside the
+/// wrapper: `Abortable`'s `Err(Aborted)` becomes `SpawnError::Aborted`;
+/// the wrapper future being dropped (executor shutdown) surfaces as
+/// `SpawnError::Dropped` at the joiner (a canceled oneshot).
+pub fn track_spawn<T: Send + 'static>(
+    fut: Pin<Box<dyn Future<Output = T> + 'static>>,
     spawn: impl FnOnce(Pin<Box<dyn Future<Output = ()> + 'static>>),
-) -> TaskHandle {
+) -> TaskHandle<T> {
     let (abort_handle, abort_registration) = AbortHandle::new_pair();
-    let (tx, rx) = futures::channel::oneshot::channel();
+    let (tx, rx) = futures::channel::oneshot::channel::<Result<T, SpawnError>>();
     let tracked: Pin<Box<dyn Future<Output = ()> + 'static>> = Box::pin(async move {
-        // `Abortable::await` resolves Ok(()) on natural completion or
-        // Err(Aborted) on abort — either way the task has stopped, so
-        // signal the joiner.
-        let _ = Abortable::new(fut, abort_registration).await;
-        let _ = tx.send(());
+        // `Abortable::await` resolves Ok(t) on natural completion or
+        // Err(Aborted) on abort. Forward either to the joiner; the
+        // Aborted variant is what lets join() distinguish abort from drop.
+        let result = Abortable::new(fut, abort_registration)
+            .await
+            .map_err(|_| SpawnError::Aborted);
+        let _ = tx.send(result);
     });
     spawn(tracked);
     TaskHandle {
@@ -337,5 +386,76 @@ impl MainScheduler {
     /// Create a Sleep future on the main thread.
     pub fn sleep(&self, d: Duration) -> Sleep {
         self.driver.sleep(d)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Main-thread task hop — raw mechanics (pub(crate))
+// ---------------------------------------------------------------------------
+//
+// The plugin-layer abstraction over these is `AsyncPluginContext`
+// (`core/plugin.rs`), which wraps the sender half and exposes
+// `run_on_main` / `run_on_main_async` / `spawn_on_main`. The engine creates
+// the channel here in `TurRuntimeBuilder::build` and spawns the drain on the
+// main thread. Keeping the raw channel in the scheduler module (not the
+// plugin module) preserves the dependency direction: plugin → scheduler.
+
+/// A boxed, `Send` future runnable on the main thread. Crosses the worker →
+/// main boundary, so it must be `Send` (a stronger bound than a single-threaded
+/// `spawn_local` requires).
+pub(crate) type MainTask = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+
+/// Receiver side of the main-thread channel. Spawned on the main thread once
+/// (via
+/// [`MainScheduler::spawn_local`](crate::core::scheduler::MainScheduler::spawn_local))
+/// at runtime `build()`; runs received tasks inline, in arrival order. When
+/// the last sender (the [`AsyncPluginContext`](crate::core::plugin::AsyncPluginContext))
+/// is dropped the channel closes and [`MainDrain::run`] completes.
+pub(crate) struct MainDrain {
+    pub(crate) rx: mpsc::UnboundedReceiver<MainTask>,
+}
+
+/// Create the `(sender, drain)` pair. The engine wraps the sender into an
+/// [`AsyncPluginContext`](crate::core::plugin::AsyncPluginContext) (plugin
+/// layer) and spawns the drain on the main thread in `build()`.
+pub(crate) fn main_channel() -> (mpsc::UnboundedSender<MainTask>, MainDrain) {
+    let (tx, rx) = mpsc::unbounded();
+    (tx, MainDrain { rx })
+}
+
+impl MainDrain {
+    /// Run the drain loop: receive tasks and `await` them, one at a time,
+    /// until the last sender is dropped. Must be spawned on the **main
+    /// thread** (via
+    /// [`MainScheduler::spawn_local`](crate::core::scheduler::MainScheduler::spawn_local))
+    /// so the tasks' OS-API calls execute there.
+    ///
+    /// Tasks run **inline + serialized**: a blocking OS call briefly delays
+    /// the next queued task. This is intentional — OS APIs are often
+    /// non-reentrant, and serialization avoids reentrancy bugs.
+    pub(crate) async fn run(mut self) {
+        while let Some(task) = self.rx.next().await {
+            task.await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `track_spawn` returns `Ok(t)` for a value-producing future joined
+    /// naturally, and the generic `TaskHandle<T>` carries the output. The
+    /// `AsyncPluginContext` (main-thread hop) round-trip tests live in
+    /// `core/plugin.rs` next to that type.
+    #[test]
+    fn task_handle_join_returns_value() {
+        use futures::executor::block_on;
+
+        let handle: TaskHandle<u32> = track_spawn(Box::pin(async { 99 }), |f| {
+            // Drive the future to completion synchronously.
+            block_on(f);
+        });
+        assert_eq!(block_on(handle.join()), Ok(99));
     }
 }

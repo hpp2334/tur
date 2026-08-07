@@ -80,8 +80,8 @@ mod imp {
                 .scheduler(driver)
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
                 .clock(std::sync::Arc::new(StdClock::new()))
-                .capability(CursorCap::new(NoopCursor))
-                .capability(Clipboard::new(AndroidClipboard::new(context)));
+                .capability(|_| Ok(CursorCap::new(NoopCursor)))
+                .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))));
             builder = configure(builder);
             let runtime = builder.build()?;
 

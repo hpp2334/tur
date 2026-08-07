@@ -422,21 +422,25 @@ impl TurTestApp {
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .scheduler(driver.clone())
-            .capability(CursorCap::new(RecordingCursor {
-                last: cursor_slot.clone(),
-            }))
-            .capability(Clipboard::new(clipboard.clone()))
+            .capability({
+                let last = cursor_slot.clone();
+                move |_| Ok(CursorCap::new(RecordingCursor { last }))
+            })
+            .capability({
+                let clip = clipboard.clone();
+                move |_| Ok(Clipboard::new(clip))
+            })
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {
             builder = builder
-                .capability(Http::new(http_impl))
+                .capability(move |_| Ok(Http::new(http_impl)))
                 .plugin(TurNetPlugin);
         }
         if let Some(filepicker_impl) = filepicker.clone() {
             builder = builder
-                .capability(FilePicker::new(filepicker_impl))
+                .capability(move |_| Ok(FilePicker::new(filepicker_impl)))
                 .plugin(TurFilePickerPlugin);
         }
         for p in extra_plugins {

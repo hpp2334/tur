@@ -247,7 +247,10 @@ fn shared_capability_backend_is_visible_from_all_instances() {
         .scheduler(tur_integration_tests::TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
-        .capability(cap.clone())
+        .capability({
+            let c = cap.clone();
+            move |_| Ok(c)
+        })
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {
             compile_count: compile_count.clone(),
