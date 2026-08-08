@@ -1,9 +1,10 @@
-// Android stub: `tur-android` ships no `Http` backend (so `TurNetPlugin` skips
-// `tur:net`) and no file-picker backend (so `tur:filepicker` is absent). Swapped
-// in for the Android build (resolve.alias in rspack.config.ts) so the playground
-// bundle has no `tur:net` / `tur:filepicker` imports at all. Case code that
-// imports them resolves to these empty namespaces — `request`, `filePicker`,
-// etc. are absent (no-op). Only the github-viewer case uses them; the ~80 other
-// cases render unaffected.
+// Android stub: `tur-android` registers `NativeHttp` (reqwest + rustls on the
+// shared tokio runtime), so `tur:net` is available — re-export it. No
+// file-picker backend exists, so `tur:filepicker` is stubbed to an empty
+// namespace. Swapped in for the Android build (resolve.alias in
+// rspack.config.ts). Case code that imports `filePicker` resolves to
+// `undefined` (no-op); `request` works normally.
+import * as Net from "tur:net";
+
+export { Net };
 export const FilePicker: Record<string, unknown> = {};
-export const Net: Record<string, unknown> = {};

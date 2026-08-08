@@ -17,6 +17,7 @@ crate-type = ["rlib"]
 tur-engine = { workspace = true, features = ["wgpu-backend"], default-features = false }
 tur-animation = { workspace = true }
 tur-clipboard-android = { path = "../tur-clipboard-android" }
+tur-net-native = { workspace = true }
 boa_engine = { workspace = true }
 parley = { workspace = true }
 tur-native = { workspace = true }

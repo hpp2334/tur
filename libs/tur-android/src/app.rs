@@ -18,6 +18,7 @@ mod imp {
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
+    use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that schedules
     /// a Choreographer vsync. Used as the waker for `pump_loop` so that when
@@ -65,10 +66,9 @@ mod imp {
         /// Build the shared runtime. `configure` receives the
         /// [`TurRuntimeBuilder`] (by value) AFTER the Android defaults are
         /// installed (native font loader, wall-clock `StdClock`, `NoopCursor`,
-        /// `AndroidClipboard`, the base scheduler driver), so the callback
-        /// only needs to chain `.plugin(…)` calls (and, if HTTP is wanted,
-        /// register a `NativeHttp` backend against the same tokio runtime
-        /// via [`Self::tokio_handle`]) and return the builder.
+        /// `AndroidClipboard`, `NativeHttp`, the base scheduler driver), so the
+        /// callback only needs to chain `.plugin(…)` calls and return the
+        /// builder.
         pub fn build(
             context: GlobalRef,
             configure: impl FnOnce(TurRuntimeBuilder) -> TurRuntimeBuilder,
@@ -77,10 +77,11 @@ mod imp {
             // per call to reach ClipboardManager).
             tur_clipboard_android::set_java_vm(crate::java_vm().expect("JavaVM set before create"));
 
-            // Timers for scheduler `sleep`. Also shared with `NativeHttp`.
+            // Timers for scheduler `sleep` + IO for `NativeHttp` (reqwest TCP).
             let tokio = tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(2)
                 .enable_time()
+                .enable_io()
                 .build()
                 .map_err(|e| TurAndroidError::Engine(TurError::Other(format!("tokio: {e}"))))?;
 
@@ -93,7 +94,11 @@ mod imp {
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
                 .clock(std::sync::Arc::new(StdClock::new()))
                 .capability(|_| Ok(CursorCap::new(NoopCursor)))
-                .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))));
+                .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))))
+                .capability({
+                    let handle = tokio.handle().clone();
+                    move |_| Ok(Http::new(NativeHttp::new(handle.clone())))
+                });
             builder = configure(builder);
             let runtime = builder.build()?;
 
