@@ -63,14 +63,23 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
 fn clipboard_write_logs_to_recording() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
+    // `writeText` spawns the write on the worker's executor; the spawned
+    // future is polled asynchronously after the load-module RPC returns
+    // (and after each frame's `FrameOutcome` is shipped). `settle()` can
+    // exit after a single frame — before the worker has polled the write
+    // future — so we synchronize on the promise's `.then` (which fires only
+    // after `clipboard.write_text` has logged the write), mirroring the
+    // read test. This eliminates the main↔worker race that flaked under CI.
     app.eval_module_source(
         r#"
         import { clipboard } from "tur:clipboard";
-        clipboard.writeText("payload");
+        clipboard.writeText("payload").then(() => {
+            globalThis.__wrote = "1";
+        });
         "#,
     )
     .unwrap();
-    app.settle();
+    app.wait_for(|a| a.eval_js("globalThis.__wrote") == "1");
 
     assert_eq!(app.take_clipboard_write().as_deref(), Some("payload"));
 }
