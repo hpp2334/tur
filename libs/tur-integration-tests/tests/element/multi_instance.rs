@@ -123,6 +123,34 @@ fn headless_instance_runs_js_without_rendering() {
     assert_eq!(val, "42", "headless instance ran JS");
 }
 
+/// `TurRuntime::create_headless_app` is the dedicated headless entry point
+/// (no render target). Unlike the pre-threading inline headless path, it
+/// must run the engine on a worker — i.e. JS execution round-trips through
+/// the worker pipeline (load_module / run_frame / eval_js are all RPCs that
+/// cross main↔worker). This test pins both the API surface and that the
+/// worker is actually driving the instance.
+#[test]
+fn create_headless_app_runs_engine_on_worker() {
+    let runtime = build_runtime();
+    let app = runtime
+        .create_headless_app((0.0, 0.0))
+        .expect("headless_app");
+
+    // JS executes via the worker RPC path.
+    futures::executor::block_on(app.load_module(
+        r#"
+        import { source, get } from "tur:std";
+        globalThis.__val = source(7);
+        globalThis.__readBack = get(globalThis.__val);
+    "#,
+    ))
+    .expect("load");
+    futures::executor::block_on(app.run_frame()).expect("frame");
+
+    let val = eval_js(&app, "globalThis.__readBack").expect("eval");
+    assert_eq!(val, "7", "create_headless_app ran JS on the worker");
+}
+
 #[test]
 fn many_instances_share_one_runtime() {
     // Smoke test: spawn several instances from one runtime to confirm no
