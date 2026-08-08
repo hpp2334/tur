@@ -8,8 +8,7 @@ mod core_module_check;
 mod debug;
 mod each_in_row;
 mod encode;
-// mod event_bus; // TODO: rework for threaded backend — `on_bus_event`
-//                 on EventBusHandle needs MainMsg::EventBusToHost plumbing.
+mod event_bus;
 mod expanded;
 mod filepicker;
 mod grid;
