@@ -94,6 +94,14 @@ fn pick_returns_empty_array_when_cancelled() {
 fn save_file_logs_to_recording() {
     let mut app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
 
+    // `saveFile` spawns the save on the worker's executor; the spawned
+    // future is polled asynchronously after the load-module RPC returns
+    // (and after each frame's `FrameOutcome` is shipped). `settle()` can
+    // exit after a single frame — before the worker has polled the save
+    // future — so we synchronize on the promise's `.then` (which fires only
+    // after `FilePickerBackend::save_file` has logged the save), mirroring
+    // the `pick` tests. This eliminates the main↔worker race that flaked
+    // under CI.
     app.eval_module_source(
         r#"
         import { filePicker } from "tur:filepicker";
@@ -101,11 +109,13 @@ fn save_file_logs_to_recording() {
         const bytes = new ArrayBuffer(4);
         const view = new Uint8Array(bytes);
         view[0] = 10; view[1] = 20; view[2] = 30; view[3] = 40;
-        filePicker.saveFile("out.bin", bytes);
+        filePicker.saveFile("out.bin", bytes).then(() => {
+            globalThis.__saved = "1";
+        });
         "#,
     )
     .unwrap();
-    app.settle();
+    app.wait_for(|a| a.eval_js("globalThis.__saved") == "1");
 
     let save = app.last_save().expect("expected one saveFile call");
     assert_eq!(save.name, "out.bin");

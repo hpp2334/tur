@@ -208,6 +208,33 @@ impl TurRuntime {
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok(app)
     }
+
+    /// Create an isolated headless [`TurApp`] instance — no render target,
+    /// no rendering. The instance still runs JS, owns a reactive store,
+    /// accepts platform events if fed any, and can use capabilities (http,
+    /// clipboard, etc.).
+    ///
+    /// Like [`create_app`](Self::create_app), the engine runs on a worker
+    /// thread (via [`MainBackend`]) — headless is **not** an inline
+    /// short-circuit. JS execution, frame flushes, and every
+    /// `async` RPC (`load_module` / `eval_js` / `run_frame` / …) round-trip
+    /// through the same main↔worker channel as a rendering instance; the
+    /// only difference is the main-side [`Renderer`] is a
+    /// [`NoopRenderer`](crate::renderer::NoopRenderer), so paint batches
+    /// are discarded.
+    ///
+    /// `viewport` sets the initial `viewportSize$` (read by JS layout);
+    /// pass `(0.0, 0.0)` if layout is irrelevant.
+    pub fn create_headless_app(
+        self: &Rc<Self>,
+        viewport: (f64, f64),
+    ) -> Result<Rc<TurApp>, TurError> {
+        self.create_app(
+            Box::new(crate::renderer::NoopRenderer::new()),
+            viewport,
+            1.0,
+        )
+    }
 }
 
 /// Construct a [`WorkerBackend`] from individual engine pieces. Used by
