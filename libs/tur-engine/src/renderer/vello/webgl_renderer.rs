@@ -4,15 +4,16 @@
 //! vello-hybrid's [`WebGlRenderer`], which renders directly to the browser
 //! canvas via the native `WebGl2RenderingContext` — no wgpu dependency, ~3MB
 //! smaller binary than the WebGPU path.
+//!
+//! The engine runs on a worker thread and ships `Vec<RenderCommand>` to
+//! main; main applies the batch via [`WebGlVelloRenderer::render_commands`].
 
 use std::collections::HashMap;
 
-use crate::core::element::ElementNodeId;
-use crate::core::elements::NodeTreeData;
-use crate::core::image_resource::{ImageResourceId, ImageResourceMap};
+use crate::core::image_resource::{ImageResource, ImageResourceId};
+use crate::core::render::RenderCommand;
 use crate::core::render::Renderer as TurRenderer;
-use crate::core::shell::PaintShell;
-use crate::renderer::vello::scene_paint::{new_scene, paint_tree_to_scene};
+use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer};
 use web_sys::HtmlCanvasElement;
@@ -58,47 +59,20 @@ impl WebGlVelloRenderer {
         }
     }
 
-    fn render_to_scene(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        self.upload_images(image_resource_map);
-
-        paint_tree_to_scene(
+    /// Render a flat command batch into the scene. Playback happens in
+    /// `paint_commands_to_scene`; image upload happens incrementally via
+    /// `TurRenderer::upload_image_resource` as the worker registers
+    /// resources.
+    fn render_commands_to_scene(&mut self, commands: &[RenderCommand]) {
+        paint_commands_to_scene(
             &mut self.scene,
             &mut self.resources,
             &self.image_uploads,
             self.physical_width,
             self.physical_height,
             self.dpr,
-            tree,
-            focused_node_id,
-            image_resource_map,
-            shell,
+            commands,
         );
-    }
-
-    /// Upload any new image resources to the hybrid image cache (atlas),
-    /// caching their `ImageId` keyed by `ImageResourceId`. Stale entries (images no
-    /// longer in the resource map) are pruned from the cache.
-    fn upload_images(&mut self, image_resource_map: &ImageResourceMap) {
-        for (rid, img_res) in image_resource_map.iter_images() {
-            if self.image_uploads.contains_key(&rid) {
-                continue;
-            }
-            let source = ImageSource::from_peniko_image_data(&img_res.peniko_image);
-            let pixmap = match source {
-                ImageSource::Pixmap(p) => p,
-                _ => continue,
-            };
-            let image_id = self.renderer.upload_image(&mut self.resources, &pixmap);
-            self.image_uploads.insert(rid, image_id);
-        }
-        self.image_uploads
-            .retain(|rid, _| image_resource_map.has_image(*rid));
     }
 
     fn present(&mut self) {
@@ -120,14 +94,10 @@ impl WebGlVelloRenderer {
 }
 
 impl TurRenderer for WebGlVelloRenderer {
-    fn render(
-        &mut self,
-        tree: &NodeTreeData,
-        focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
-        shell: PaintShell<'_>,
-    ) {
-        self.render_to_scene(tree, focused_node_id, image_resource_map, shell);
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        // Surface geometry is tracked on `self` (synced via `resize`, which
+        // fires on viewport-change events only).
+        self.render_commands_to_scene(commands);
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
@@ -142,5 +112,18 @@ impl TurRenderer for WebGlVelloRenderer {
         // The hybrid `Scene` is created with fixed pixel dimensions, so it must
         // be recreated on resize.
         self.scene = new_scene(self.physical_width, self.physical_height);
+    }
+
+    fn upload_image_resource(&mut self, id: ImageResourceId, image: &ImageResource) {
+        if self.image_uploads.contains_key(&id) {
+            return;
+        }
+        let source = ImageSource::from_peniko_image_data(&image.peniko_image);
+        let pixmap = match source {
+            ImageSource::Pixmap(p) => p,
+            _ => return,
+        };
+        let image_id = self.renderer.upload_image(&mut self.resources, &pixmap);
+        self.image_uploads.insert(id, image_id);
     }
 }

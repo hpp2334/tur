@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-    "libs/tur-async",
     "libs/tur-engine",
     "libs/tur-animation",
     "libs/tur-clipboard-wasm",
@@ -30,7 +29,6 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/hpp2334/tur"
 
 [workspace.dependencies]
-tur-async = { path = "libs/tur-async" }
 tur-engine = { path = "libs/tur-engine", default-features = false }
 tur-animation = { path = "libs/tur-animation" }
 tur-clipboard-wasm = { path = "libs/tur-clipboard-wasm" }
@@ -51,6 +49,14 @@ tur-wasm = { path = "libs/tur-wasm" }
 num-derive = "0.4"
 num-traits = "0.2"
 futures = "0.3"
+# Native async runtime — used by `AndroidSchedulerDriver` for `sleep`
+# (via `tokio::time::sleep`) + shared with `NativeHttp` for reqwest.
+# The engine itself is tokio-free; only native embedders depend on this.
+tokio = { version = "1", default-features = false, features = ["rt", "rt-multi-thread", "time", "sync"] }
+# `mpsc` replacement used throughout the engine — main↔worker, RPC replies.
+# Pure Rust, no platform deps; works on native (via std::thread::park) and
+# wasm (via Atomics.wait on workers, wasm_bindgen_futures on main).
+async-channel = "2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"
@@ -67,10 +73,24 @@ tracing-subscriber = "0.3"
 tracing-wasm = "0.2"
 thiserror = "2"
 unicode-segmentation = "1"
-wasm-bindgen = "0.2.100"
+wasm-bindgen = "0.2.126"
 web-sys = "0.3"
 js-sys = "0.3"
 console_error_panic_hook = "0.1"
 getrandom = "0.4"
 wasm-bindgen-futures = "0.4"
 winit = "0.30"
+
+# Wasm thread builds (shared-memory Web Workers for the engine's worker
+# thread) require `panic = "abort"` so the resulting wasm can be loaded
+# into web workers via shared memory. Native builds keep `panic = "unwind"`
+# (tur-android JNI trampoline and vello integration tests rely on
+# `catch_unwind`). The dedicated profile is selected via
+# `wasm-pack build --profile wasm-dev`.
+[profile.wasm-dev]
+inherits = "dev"
+panic = "abort"
+
+[profile.wasm-release]
+inherits = "release"
+panic = "abort"

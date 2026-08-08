@@ -37,17 +37,11 @@ fn grid_mounts_as_tur_grid() {
     let _ = id;
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    assert_eq!(
-        root.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_root")
-    );
+    assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
     let g = tree
         .get_element(ElementNodeId::new(root.children[0].as_u64()))
         .unwrap();
-    assert_eq!(
-        g.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_grid")
-    );
+    assert_eq!(g.kind().unwrap(), ElementKind::new("tur_grid"));
 }
 
 /// 400px wide, maxExtent 100, no spacing → 4 columns of 100px each.

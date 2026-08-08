@@ -46,8 +46,19 @@ web-sys = { workspace = true, features = [
     "ClipboardEvent",
     "DataTransfer",
     "ResizeObserver",
+    # Worker spawn (replaces wasm_thread):
+    "Blob",
+    "Url",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+    "WorkerGlobalScope",
+    "DedicatedWorkerGlobalScope",
+    "MessageEvent",
+    "ErrorEvent",
 ] }
 js-sys = "0.3"
 console_error_panic_hook = { workspace = true }
 getrandom = { workspace = true, features = ["wasm_js"] }
 wasm-bindgen-futures = { workspace = true }
+futures = { workspace = true }

@@ -2,27 +2,28 @@
 //! plugin, from a bridge fn, from an event handler, and the build-time
 //! `requires` validation.
 
-use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::{Capability, CapabilityDecls};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::error::TurError;
+use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 // ---------- Test capability newtype ---------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct CountersCapability {
-    value: Rc<RefCell<u32>>,
+    value: Arc<Mutex<u32>>,
 }
 
 impl CountersCapability {
     fn new() -> Self {
         Self {
-            value: Rc::new(RefCell::new(0)),
+            value: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -49,23 +50,37 @@ fn capability_round_trip_via_plugin() {
     let captured = counter.value.clone();
 
     struct CapturePlugin {
-        seen: Rc<RefCell<Option<CountersCapability>>>,
+        seen: Arc<Mutex<Option<CountersCapability>>>,
     }
     impl Plugin for CapturePlugin {
         fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-            *self.seen.borrow_mut() = ctx.capability().of::<CountersCapability>();
+            *self.seen.lock().unwrap() = ctx.capability().of::<CountersCapability>();
             Ok(())
         }
     }
 
-    let seen = Rc::new(RefCell::new(None));
+    let seen = Arc::new(Mutex::new(None));
     let app = build_app(|b| {
-        b.capability(counter.clone())
-            .plugin(TurStdPlugin)
-            .plugin(CapturePlugin { seen: seen.clone() })
+        b.capability({
+            let c = counter.clone();
+            move |_| Ok(c)
+        })
+        .plugin(TurStdPlugin)
+        .plugin(CapturePlugin { seen: seen.clone() })
     });
-    let got = seen.borrow().clone().expect("plugin should see capability");
-    assert_eq!(got.value.as_ptr(), captured.as_ptr(), "same Rc backing");
+    let got = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("plugin should see capability");
+    // Phase 7: `captured` and `got.value` are clones of the SAME
+    // `Arc<Mutex<u32>>` (the capability registry handed out an Arc clone,
+    // not a deep copy). Locking the same Mutex twice in one expression
+    // deadlocks, so compare Arc pointers instead.
+    assert!(
+        Arc::ptr_eq(&got.value, &captured),
+        "plugin should see the same Arc-backed counter"
+    );
     assert!(app.is_ok());
     drop(app);
 }
@@ -96,7 +111,7 @@ fn capability_chain_order_irrelevant() {
     let app = build_app(|b| {
         b.plugin(TurStdPlugin)
             .plugin(NeedsCounterPlugin)
-            .capability(CountersCapability::new())
+            .capability(|_| Ok(CountersCapability::new()))
     });
     assert!(
         app.is_ok(),
@@ -109,12 +124,15 @@ fn capability_chain_order_irrelevant() {
 fn build_app(
     configure: impl FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder,
 ) -> Result<Rc<tur_engine::TurApp>, TurError> {
-    use boa_engine::context::time::FixedClock;
-    use std::rc::Rc;
     let builder = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)));
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)));
     let runtime = configure(builder).build()?;
-    let app = runtime.create_headless_app((400.0, 600.0))?;
+    let app = runtime.create_app(
+        Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
+        (400.0, 600.0),
+        1.0,
+    )?;
     Ok(app)
 }

@@ -25,7 +25,11 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     (app, ElementNodeId::new(id.as_u64()))
 }
 
-fn with_lg<R>(app: &TurTestApp, id: ElementNodeId, f: impl FnOnce(&LazyGridElement) -> R) -> R {
+fn with_lg<R: Send + 'static>(
+    app: &TurTestApp,
+    id: ElementNodeId,
+    f: impl FnOnce(&LazyGridElement) -> R + Send + 'static,
+) -> R {
     app.with_element(id, |e| {
         f(e.cast::<LazyGridElement>().expect("not a LazyGridElement"))
     })
@@ -37,10 +41,7 @@ fn lazy_grid_mounts_as_tur_lazy_grid() {
     let (app, id) = setup_virtualized();
     let tree = app.element_tree();
     let lg = tree.get_element(id).unwrap();
-    assert_eq!(
-        lg.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_lazy_grid")
-    );
+    assert_eq!(lg.kind().unwrap(), ElementKind::new("tur_lazy_grid"));
 }
 
 /// Only the viewport + overscan cells mount, not all 10,000.
@@ -80,7 +81,8 @@ fn lazy_grid_position_math_matches_formula() {
     };
     assert!(!child_ids.is_empty());
     for child_id in &child_ids {
-        let logical = with_lg(&app, id, |lg| lg.visible_index_of(*child_id))
+        let child_id = *child_id;
+        let logical = with_lg(&app, id, move |lg| lg.visible_index_of(child_id))
             .expect("every mounted cell should have a logical index");
         let row = logical as usize / cols;
         let col = logical as usize % cols;
@@ -143,7 +145,7 @@ fn lazy_grid_children_ordered_after_scroll() {
     };
     let mut prev: i64 = -1;
     for child_id in child_ids {
-        let logical = with_lg(&app, id, |lg| lg.visible_index_of(child_id))
+        let logical = with_lg(&app, id, move |lg| lg.visible_index_of(child_id))
             .expect("child should have a logical index");
         assert!(
             (logical as i64) > prev,

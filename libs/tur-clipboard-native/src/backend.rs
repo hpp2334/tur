@@ -1,53 +1,102 @@
-//! `ClipboardBackend` impl backed by the `arboard` crate. `arboard` is
-//! synchronous (it talks to the OS clipboard API directly), so both methods
-//! resolve eagerly via `std::future::ready`. Errors are logged and the
-//! methods return empty/`()` to match the trait's "best-effort" contract.
+//! `ClipboardBackend` impl backed by the `arboard` crate, with each OS call
+//! hopped onto the engine's main thread via an [`AsyncPluginContext`].
+//!
+//! `arboard` is synchronous and, on macOS, talks to AppKit's `NSPasteboard`
+//! — which requires main-thread access. Since `flush()` (and thus the bridge
+//! that calls this backend) runs on the worker thread after the
+//! worker-owns-paint refactor, each `read_text` / `write_text` posts its
+//! `arboard` call to the main thread via `cx.run_on_main(...)` and awaits the
+//! result on the worker. On platforms without a main-thread requirement the
+//! hop is a harmless extra channel round-trip.
+//!
+//! The backend receives its [`AsyncPluginContext`] at construction, via the
+//! closure form of `TurRuntimeBuilder::capability` (the engine creates the
+//! channel internally in `build()` and passes the context to the closure).
+//!
+//! [`AsyncPluginContext`]: tur_engine::AsyncPluginContext
 
 use std::future::Future;
 use std::pin::Pin;
 
 use arboard::Clipboard as ArboardClipboard;
-use tur_engine::ClipboardBackend;
+use tur_engine::error::TurError;
+use tur_engine::{AsyncPluginContext, ClipboardBackend};
 
-/// Native clipboard backend. Wraps an [`arboard::Clipboard`] handle.
+/// Native clipboard backend. Wraps an [`AsyncPluginContext`] used to hop each
+/// read/write onto the main thread (`arboard` is synchronous; macOS
+/// `NSPasteboard` requires main-thread access).
 ///
 /// Construction can fail on systems without a clipboard (e.g. headless CI).
 /// Embedders should fall back to the test stub (or skip registering the
 /// capability) when [`NativeClipboard::new`] returns `Err`.
 ///
-/// Note: the `arboard::Clipboard` field isn't read directly because the
-/// trait methods are `&self` while `arboard::Clipboard::get_text` /
-/// `set_text` take `&mut`. Each method opens a fresh handle internally —
-/// the field is kept only as a marker that construction succeeded.
-pub struct NativeClipboard(());
+/// Register via the closure form of `TurRuntimeBuilder::capability`:
+///
+/// ```no_run
+/// # use tur_clipboard_native::{Clipboard, NativeClipboard};
+/// # use tur_engine::TurRuntimeBuilder;
+/// TurRuntimeBuilder::new()
+///     .capability(|cx| Ok(Clipboard::new(NativeClipboard::new(cx)?)))
+///     // .plugin(TurClipboardPlugin) ...
+/// # ;
+/// ```
+pub struct NativeClipboard {
+    cx: AsyncPluginContext,
+}
 
 impl NativeClipboard {
-    /// Open the platform clipboard. Fails on systems without one.
-    pub fn new() -> Result<Self, arboard::Error> {
-        ArboardClipboard::new().map(|_| Self(()))
+    /// Open the platform clipboard and capture the engine's async context
+    /// (cloned internally).
+    ///
+    /// The engine calls this in `build()` (which runs on the main thread), so
+    /// the `arboard` constructor (which touches AppKit on macOS) runs on main.
+    /// Construction fails on systems without a clipboard (e.g. headless CI).
+    pub fn new(cx: &AsyncPluginContext) -> Result<Self, TurError> {
+        // Validate that a clipboard is available (fails on headless CI). The
+        // handle is dropped — each method opens a fresh one below because
+        // `arboard::Clipboard::get_text`/`set_text` take `&mut self` while
+        // the trait methods are `&self`.
+        ArboardClipboard::new()
+            .map(|_| Self { cx: cx.clone() })
+            .map_err(|e| TurError::Other(format!("arboard clipboard unavailable: {e}")))
     }
 }
 
 impl ClipboardBackend for NativeClipboard {
     fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
-        // `arboard::Clipboard::get_text` borrows `&self` mutably (some
-        // platforms open/close the clipboard around each call). We can't
-        // take `&mut` here (the trait method is `&self`), so we open a
-        // fresh handle for each read — cheap, and matches how the Wasm
-        // backend treats each call as independent.
-        let result = ArboardClipboard::new()
-            .and_then(|mut cb| cb.get_text())
-            .unwrap_or_else(|e| {
-                tracing::warn!("clipboard read failed: {e}");
-                String::new()
-            });
-        Box::pin(std::future::ready(result))
+        let cx = self.cx.clone();
+        Box::pin(async move {
+            // Hop the `arboard` call onto the main thread and await the
+            // result on the worker. `Err(Dropped)` ⇒ the drain was dropped
+            // (engine shutting down) — resolve empty like the error path.
+            match cx
+                .run_on_main(|| ArboardClipboard::new().and_then(|mut cb| cb.get_text()))
+                .await
+            {
+                Ok(Ok(text)) => text,
+                Ok(Err(e)) => {
+                    tracing::warn!("clipboard read failed: {e}");
+                    String::new()
+                }
+                Err(_) => {
+                    tracing::warn!("clipboard read: main-thread drain gone");
+                    String::new()
+                }
+            }
+        })
     }
 
     fn write_text(&self, text: String) -> Pin<Box<dyn Future<Output = ()>>> {
-        if let Err(e) = ArboardClipboard::new().and_then(|mut cb| cb.set_text(&text)) {
-            tracing::warn!("clipboard write failed: {e}");
-        }
-        Box::pin(std::future::ready(()))
+        let cx = self.cx.clone();
+        Box::pin(async move {
+            match cx
+                .run_on_main(move || ArboardClipboard::new().and_then(|mut cb| cb.set_text(&text)))
+                .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => tracing::warn!("clipboard write failed: {e}"),
+                Err(_) => tracing::warn!("clipboard write: main-thread drain gone"),
+            }
+        })
     }
 }

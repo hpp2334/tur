@@ -12,8 +12,7 @@
 //! threaded through the engine (MouseRegion prop, handler slot, embedder
 //! poll) and is consumed by [`CursorBackend::set_cursor`] below.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use crate::core::capability::Capability;
 
@@ -166,7 +165,7 @@ impl Cursor {
 /// builder looks the cap up after all plugins register and installs the
 /// backend on [`crate::core::shell::Shell`]. If absent, the engine falls
 /// back to [`NoopCursor`] (cursor never changes).
-pub trait CursorBackend {
+pub trait CursorBackend: Send + Sync + 'static {
     fn set_cursor(&mut self, cursor: Cursor);
 }
 
@@ -176,10 +175,9 @@ impl CursorBackend for NoopCursor {
     fn set_cursor(&mut self, _cursor: Cursor) {}
 }
 
-/// Capability newtype wrapping a `Rc<RefCell<dyn CursorBackend>>`. The
-/// `RefCell` is required because [`CursorBackend::set_cursor`] takes
-/// `&mut self` but the engine holds the backend in a shared `Rc` (cloned
-/// across the registry).
+/// Capability newtype wrapping an `Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>`.
+/// The `Mutex` is required because [`CursorBackend::set_cursor`] takes
+/// `&mut self` but the engine holds the backend in a shared `Arc`.
 ///
 /// Named `CursorCap` (not `Cursor`) because [`Cursor`] above names the
 /// cursor-kind enum (`Default`, `Pointer`, ...) used pervasively across the
@@ -191,16 +189,16 @@ impl CursorBackend for NoopCursor {
 /// `CursorCap::new(backend)`; the engine builder installs the backend on the
 /// Shell at `build()` time.
 #[derive(Clone)]
-pub struct CursorCap(Rc<RefCell<dyn CursorBackend>>);
+pub struct CursorCap(Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>);
 
 impl CursorCap {
     /// Wrap a backend in the capability newtype.
     pub fn new(backend: impl CursorBackend + 'static) -> Self {
-        Self(Rc::new(RefCell::new(backend)))
+        Self(Arc::new(std::sync::Mutex::new(backend)))
     }
 
     /// Borrow the underlying backend handle.
-    pub fn backend(&self) -> &Rc<RefCell<dyn CursorBackend>> {
+    pub fn backend(&self) -> &Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>> {
         &self.0
     }
 }

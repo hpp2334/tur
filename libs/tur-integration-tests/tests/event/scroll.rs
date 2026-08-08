@@ -149,7 +149,7 @@ fn wheel_chains_to_parent_at_boundary() {
         );
     });
 
-    app.with_element(inner_id, |e| {
+    app.with_element(inner_id, move |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
         assert_eq!(
             sv.scroll_offset(),

@@ -44,8 +44,20 @@ class FrameLoop {
      */
     var onAfterPump: (() -> Unit)? = null
 
-    /** Schedule a wake on the next display frame (Android `Choreographer`). */
+    /**
+     * Schedule a wake on the next display frame (Android `Choreographer`).
+     *
+     * `Choreographer.getInstance()` is **thread-local** — it returns the
+     * calling thread's Choreographer, which only exists on threads with a
+     * `Looper`. The engine worker thread has no Looper, so calling this from
+     * the worker would get a wrong/no Choreographer and the frame callback
+     * would never fire. Hop to the main thread first when called off-main.
+     */
     fun scheduleVsync() {
+        if (Looper.getMainLooper().thread != Thread.currentThread()) {
+            handler.post { scheduleVsync() }
+            return
+        }
         if (frameCallback != null) return // already armed
         val cb = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {

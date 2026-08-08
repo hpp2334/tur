@@ -12,17 +12,14 @@ fn positioned_with_left_top() {
         let stack = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            stack.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_stack")
-        );
+        assert_eq!(stack.kind().unwrap(), ElementKind::new("tur_stack"));
         assert_eq!(stack.children.len(), 1);
 
         let positioned = tree
             .get_element(ElementNodeId::new(stack.children[0].as_u64()))
             .unwrap();
         assert_eq!(
-            positioned.element.as_ref().unwrap().kind(),
+            positioned.kind().unwrap(),
             ElementKind::new("tur_positioned")
         );
         assert_eq!(positioned.children.len(), 1);
@@ -30,10 +27,7 @@ fn positioned_with_left_top() {
         let sb = tree
             .get_element(ElementNodeId::new(positioned.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
 
         positioned.id
     };

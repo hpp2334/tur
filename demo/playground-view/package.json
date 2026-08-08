@@ -7,6 +7,7 @@
         "gen-cases": "node scripts/gen-cases.cjs",
         "prebuild": "node scripts/gen-cases.cjs",
         "build": "rspack build",
+        "build:android": "TUR_PLATFORM=android rspack build",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {

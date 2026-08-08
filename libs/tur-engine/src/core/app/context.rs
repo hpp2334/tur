@@ -8,16 +8,17 @@ use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 
 use crate::core::app::{AppEvent, AppEventQueue};
-use crate::core::async_::AsyncExecutor;
+use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::ImageResourceMap;
+use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
-use crate::core::render::Renderer;
+use crate::core::render::{RecordingCanvas, RenderCommand};
+use crate::core::scheduler::WorkerScheduler;
 use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -26,17 +27,23 @@ pub struct TurAppContext {
     pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
-    pub(crate) image_resource_map: Rc<RefCell<ImageResourceMap>>,
-    pub(crate) renderer: Box<dyn Renderer>,
+    /// Worker-side image state (natural-size map + next-id counter — the
+    /// pixel `Blob` lives on main, shipped via `MainMsg::UploadImage`).
+    pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
-    /// Engine-owned async executor. Cloned from the one `TurAppInternal`
-    /// owns; surfaced to subsystems via [`SubsystemFlushContext`] so they
-    /// can spawn Rust futures (clipboard writes, etc.) at dispatch time.
-    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Worker-thread scheduler — cloned from `TurAppInternal::worker_sched`.
+    /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
+    /// spawn Rust futures (clipboard writes, etc.) at dispatch time.
+    pub(crate) worker_sched: WorkerScheduler,
+    /// Cheap-cloned completion handle — cloned from
+    /// `TurAppInternal::completion_handle`. Surfaced to subsystems so
+    /// spawned futures can push promise-settle closures for `flush()` to
+    /// drain under `&mut Context`.
+    pub(crate) completion_handle: CompletionHandle,
     /// Capability registry view, shared with `TurJsContext.capabilities`.
     /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
     /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
@@ -62,11 +69,11 @@ impl TurAppContext {
         element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
-        image_resource_map: Rc<RefCell<ImageResourceMap>>,
-        renderer: Box<dyn Renderer>,
+        image_manager: Rc<RefCell<ImageManager>>,
         font_context: crate::core::fonts::FontContext,
-        font_loader: Rc<dyn crate::core::fonts::FontLoader>,
-        async_executor: Rc<AsyncExecutor>,
+        font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
+        worker_sched: WorkerScheduler,
+        completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
         store: Store,
@@ -76,14 +83,14 @@ impl TurAppContext {
             element_tree,
             mutation_queue,
             focus_manager,
-            image_resource_map,
-            renderer,
+            image_manager,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             screen: Screen::new(store),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
-            async_executor,
+            worker_sched,
+            completion_handle,
             capabilities,
             shell: Shell::new(clock),
         }
@@ -118,10 +125,10 @@ impl TurAppContext {
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            renderer: self.renderer.as_mut(),
             screen: &mut self.screen,
             need_paint,
-            async_executor: &self.async_executor,
+            worker_sched: &self.worker_sched,
+            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,
@@ -149,10 +156,10 @@ impl TurAppContext {
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            renderer: self.renderer.as_mut(),
             screen: &mut self.screen,
             need_paint,
-            async_executor: &self.async_executor,
+            worker_sched: &self.worker_sched,
+            completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
             sub_dirty: signals.sub_dirty,
@@ -172,13 +179,13 @@ impl TurAppContext {
             max_height: height,
         };
 
-        let image_resource_map = self.image_resource_map.borrow();
+        let image_manager = self.image_manager.borrow();
         let mut tree = self.element_tree.borrow_mut();
         tree.compute_layout(
             &constraints,
             &mut self.font_manager,
             &mut self.text_layout_cx,
-            &image_resource_map,
+            &image_manager,
             self.element_tree.clone(),
             self.mutation_queue.clone(),
             dirty,
@@ -186,22 +193,45 @@ impl TurAppContext {
         );
     }
 
-    pub fn render(&mut self) {
+    /// Walk the element tree with a [`RecordingCanvas`] to capture per-node
+    /// paint ops + boundaries, post-process the recording into
+    /// `Vec<RenderCommand>` (paint commands in playback order), and return
+    /// the batch.
+    ///
+    /// The caller is responsible for shipping the batch to whichever
+    /// thread/realm owns the actual renderer. The worker stores it in
+    /// `TurAppInternal::pending_render_batch` for `MainBackend::worker_loop`
+    /// to drain and ship via `MainMsg::RenderCommands`.
+    pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();
-        let image_resource_map = self.image_resource_map.borrow();
+
+        // Record the paint pass. Seed the recording canvas with the logical
+        // viewport as the bottom-of-stack clip so off-screen subtrees are
+        // culled during the walk (content outside the screen is invisible
+        // anyway). Explicit element clips (ScrollView, overflow-Flex, …)
+        // push further inner clips intersected with this viewport.
         let tree = self.element_tree.borrow();
-        // Borrow the biz face for the paint pass, then flush the accumulated
-        // cursor claims through the host API. The face is scoped so the
-        // immutable shell borrow ends before `apply_changes` takes &mut.
+        let (vp_w, vp_h) = self.screen.logical_size;
+        let mut recording = RecordingCanvas::new_with_viewport(vello_common::kurbo::Rect::new(
+            0.0, 0.0, vp_w, vp_h,
+        ));
         {
             let shell = self.shell.paint_face();
-            self.renderer
-                .render(&tree, focused_node_id, &image_resource_map, shell);
+            tree.paint(
+                &mut recording,
+                focused_node_id,
+                &self.image_manager.borrow(),
+                shell,
+            );
         }
-        self.shell.apply_changes();
-    }
+        drop(tree);
 
-    pub fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
-        self.renderer.render_to_pixels()
+        // Collect the paint commands into one batch.
+        let batch = recording.into_render_commands();
+
+        // Flush cursor claims accumulated during the record pass.
+        self.shell.apply_changes();
+
+        batch
     }
 }

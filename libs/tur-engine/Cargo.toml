@@ -19,7 +19,6 @@ wgpu-backend = ["dep:wgpu", "vello_hybrid/wgpu", "vello_hybrid/wgpu_default"]
 webgl = ["vello_hybrid/webgl", "dep:web-sys"]
 
 [dependencies]
-tur-async = { workspace = true }
 boa_engine = { workspace = true }
 boa_gc = { workspace = true }
 vello_hybrid = { workspace = true }
@@ -36,3 +35,4 @@ parley = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 unicode-segmentation = { workspace = true }
+futures = { workspace = true }

@@ -1,6 +1,7 @@
 use crate::core::layout::{Constraints, Size};
 use crate::core::render::brush::Color;
 use parley::{Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, StyleProperty};
+use std::sync::Arc;
 
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
 use crate::builtin_plugins::text::text_layout;
@@ -198,7 +199,7 @@ impl ElementLayout for EditableTextElement {
             remap_layout_bytes(&mut layout_data, &map, ml);
         }
 
-        self.cached_layout = Some(layout_data);
+        self.cached_layout = Some(Arc::new(layout_data));
 
         constraints.constrain(Size::new(width as f64, height as f64))
     }

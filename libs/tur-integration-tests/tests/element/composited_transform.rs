@@ -1,17 +1,17 @@
 use std::path::Path;
 
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_integration_tests::TurTestApp;
 
 /// Depth-first walk; return the first node whose element `kind()` matches.
 fn find_by_kind(
-    tree: &NodeTreeData,
+    tree: &NodeTreeSnapshot,
     id: ElementNodeId,
     kind: &ElementKind,
 ) -> Option<ElementNodeId> {
     let node = tree.get_element(id)?;
-    if node.element.as_ref().map(|e| e.kind()) == Some(kind.clone()) {
+    if node.kind() == Some(kind.clone()) {
         return Some(id);
     }
     for c in &node.children {
@@ -323,7 +323,8 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
             .join("js/packages/tur-test-cases/dist/composited-transform-follower-anchor.js"),
     )
     .unwrap();
-    app.with_app(|a| a.load_module(&source)).unwrap();
+    app.with_app(|a| futures::executor::block_on(a.load_module(&source)))
+        .unwrap();
     // Exactly one frame.
     let _ = app.pump();
 

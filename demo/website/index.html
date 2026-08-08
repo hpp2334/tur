@@ -6,18 +6,146 @@
     <title>tur playground</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background: #fbfcfd; touch-action: none; }
-        body { display: block; }
-        #status {
-            position: fixed; top: 12px; left: 12px; z-index: 10;
-            font: 12px ui-monospace, monospace; color: #94a3b8;
-            background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 4px;
-            pointer-events: none;
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #fbfcfd; touch-action: none;
         }
+        body { display: block; }
+
+        /* Bootstrap overlay — full-viewport flex center. Stays mounted
+         * while #status is present; removed (with all its paint) the
+         * instant the playground canvas takes over. */
+        #overlay {
+            position: fixed; inset: 0; z-index: 10;
+            display: flex; align-items: center; justify-content: center;
+            padding: 24px;
+            background:
+                radial-gradient(1200px 600px at 50% -10%, #eef2ff 0%, transparent 60%),
+                radial-gradient(900px 500px at 100% 110%, #fdf4ff 0%, transparent 55%),
+                #fbfcfd;
+            font: 14px/1.5 ui-sans-serif, system-ui, -apple-system,
+                "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            color: #0f172a;
+            transition: opacity 220ms ease;
+        }
+        #overlay.fade-out { opacity: 0; pointer-events: none; }
+
+        .card {
+            width: 100%; max-width: 540px;
+            padding: 32px 28px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(15, 23, 42, 0.06);
+            border-radius: 16px;
+            box-shadow:
+                0 1px 2px rgba(15, 23, 42, 0.04),
+                0 8px 32px rgba(15, 23, 42, 0.08);
+        }
+
+        /* Loading layout: spinner + status line. */
+        .spinner {
+            width: 28px; height: 28px;
+            margin: 0 auto 18px;
+            border: 3px solid #e2e8f0;
+            border-top-color: #6366f1;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .brand {
+            text-align: center;
+            font-size: 13px; font-weight: 600;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            color: #6366f1;
+            margin-bottom: 6px;
+        }
+        #status {
+            display: block; text-align: center;
+            font-size: 14px; color: #475569;
+            min-height: 1.5em;
+        }
+
+        /* Error layout: hidden by default; swaps in when JS adds
+         * the `error` class to #overlay. */
+        .error-row { display: none; }
+        #overlay.error .spinner { display: none; }
+        #overlay.error .error-row { display: block; }
+        #overlay.error .card {
+            border-color: rgba(239, 68, 68, 0.18);
+            box-shadow:
+                0 1px 2px rgba(239, 68, 68, 0.06),
+                0 8px 32px rgba(239, 68, 68, 0.12);
+        }
+        #overlay.error .brand { color: #ef4444; }
+
+        .error-icon {
+            width: 36px; height: 36px;
+            margin: 0 auto 14px;
+            border-radius: 50%;
+            background: #fee2e2;
+            color: #dc2626;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .error-icon svg { width: 20px; height: 20px; }
+
+        .error-title {
+            text-align: center;
+            font-size: 15px; font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+        #error-message {
+            display: block;
+            font-size: 13px; color: #475569;
+            text-align: center;
+            margin-bottom: 14px;
+            word-break: break-word;
+        }
+        .diag {
+            font: 11px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+            color: #334155;
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px 10px;
+            text-align: center;
+            white-space: pre-wrap;
+        }
+        .hint {
+            display: block; text-align: center;
+            margin-top: 14px;
+            font-size: 12px; color: #94a3b8;
+        }
+
+        /* Respect reduced motion. */
+        @media (prefers-reduced-motion: reduce) {
+            .spinner { animation-duration: 2.5s; }
+            #overlay { transition: none; }
+        }
+
+        /* tur mounts a full-viewport canvas on <body>. */
     </style>
 </head>
 <body>
-    <div id="status">starting…</div>
-    <!-- tur mounts a full-viewport canvas on <body>. -->
+    <div id="overlay">
+        <div class="card">
+            <div class="spinner" aria-hidden="true"></div>
+            <div class="error-row error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <title>Error</title>
+                    <line x1="12" y1="8" x2="12" y2="13"></line>
+                    <circle cx="12" cy="17" r="0.5" fill="currentColor"></circle>
+                </svg>
+            </div>
+            <div class="brand">tur playground</div>
+            <div class="error-row error-title">Couldn't start</div>
+            <span id="status">starting…</span>
+            <span id="error-message" class="error-row"></span>
+            <div id="error-diag" class="error-row diag"></div>
+            <span class="error-row hint">Reload the page to try again. If this keeps happening, try the latest Chrome or desktop Firefox.</span>
+        </div>
+    </div>
 </body>
 </html>

@@ -90,7 +90,7 @@ impl SharedViewCx {
             .borrow_mut()
             .append_child(parent, child);
         self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Insert `child` into `parent` immediately before the existing node
@@ -112,7 +112,7 @@ impl SharedViewCx {
             .element_tree
             .borrow_mut()
             .mark_dirty(parent.into());
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Reorder an already-linked `child` under `parent` so that it sits
@@ -125,7 +125,7 @@ impl SharedViewCx {
         self.js_ctx
             .element_tree
             .move_child_before(parent, child, ref_child);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Remove `child` from its parent (does not delete the node).
@@ -135,26 +135,26 @@ impl SharedViewCx {
             .borrow_mut()
             .remove_child(parent, child);
         self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Recursively remove a node and all its descendants from the tree.
     pub fn destroy_subtree(&self, id: ElementNodeId) {
         self.js_ctx.element_tree.destroy_subtree(id);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
     /// fragments — dispatches via `is_fragment`).
     pub fn destroy_child(&self, id: NodeId) {
         self.js_ctx.element_tree.destroy_child(id);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Recursively remove a fragment and all its descendants from the tree.
     pub fn destroy_fragment(&self, id: crate::core::element::FragmentNodeId) {
         self.js_ctx.element_tree.destroy_fragment(id);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Build a child view under `parent` and return the resulting node id.
@@ -170,7 +170,7 @@ impl SharedViewCx {
     /// Mark a node dirty (needs re-layout + re-paint).
     pub fn mark_dirty(&self, id: NodeId) {
         self.js_ctx.element_tree.mark_dirty(id);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Set the query-key on a tree node (for test selectors).
@@ -181,7 +181,7 @@ impl SharedViewCx {
         }
         tree.mark_dirty(id.into());
         drop(tree);
-        self.js_ctx.dirty.set(true);
+        self.js_ctx.set_dirty();
     }
 
     /// Read the computed layout of a node (for scroll controllers etc.).

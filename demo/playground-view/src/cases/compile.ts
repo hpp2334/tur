@@ -1,9 +1,8 @@
 import * as Anim from "tur:animation";
 import * as Clipboard from "tur:clipboard";
-import * as FilePicker from "tur:filepicker";
-import * as Net from "tur:net";
 import type { Color, SpanData } from "tur:std";
 import * as Std from "tur:std";
+import { FilePicker, Net } from "@tur-pg/optional-ns";
 import type { AstNode, TokenSpan } from "tur-ext/demo-helper";
 import * as Host from "tur-ext/demo-helper";
 import { code } from "../theme/tokens";

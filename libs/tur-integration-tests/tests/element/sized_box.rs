@@ -12,19 +12,13 @@ fn sized_box_fixed_dimensions() {
         let sb = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(sb.children.len(), 1);
 
         let text = tree
             .get_element(ElementNodeId::new(sb.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            text.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_paragraph")
-        );
+        assert_eq!(text.kind().unwrap(), ElementKind::new("tur_paragraph"));
 
         sb.id
     };

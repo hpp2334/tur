@@ -11,7 +11,7 @@ use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Stor
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::ImageResourceMap;
+use crate::core::image_resource::ImageManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
@@ -465,7 +465,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &ImageResourceMap,
+        image_manager: &ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -484,7 +484,7 @@ impl NodeTreeData {
             constraints,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -499,7 +499,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &'a ImageResourceMap,
+        image_manager: &'a ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -541,7 +541,7 @@ impl NodeTreeData {
             id,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -572,7 +572,7 @@ impl NodeTreeData {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         let root_id = match self.root_id {
@@ -584,7 +584,7 @@ impl NodeTreeData {
             canvas,
             Affine::IDENTITY,
             focused_node_id,
-            image_resource_map,
+            image_manager,
             shell,
         );
     }
@@ -596,7 +596,7 @@ impl NodeTreeData {
         canvas: &mut dyn Canvas,
         parent_absolute: Affine,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         let node = match self.elements.get(&id) {
@@ -611,26 +611,53 @@ impl NodeTreeData {
 
         // The node's relative transform (default: translate(layout.offset);
         // `Transform` folds in rotate/scale; the follower uses its link-tracked
-        // offset). Push it so the element paints in its own local space; the
-        // canvas transform stack accumulates the absolute position. `absolute`
-        // is threaded through `PaintContext` for pointer-space conversions.
+        // offset). The paint walk delegates transform-stack management to
+        // `notify_node_entry` / `notify_node_exit` so recording canvases can
+        // capture per-node boundaries without also recording the auto-push
+        // (the absolute is carried by the `NodeStart` marker; main playback
+        // pushes it from the `Paint.transform` field). `absolute` is also
+        // threaded through `PaintContext` for pointer-space conversions.
         let rel = element.relative_transform(&node.computed_layout);
         let absolute = parent_absolute * rel;
-        canvas.push_transform(rel);
 
-        let paint_ctx = PaintContext::new(
-            self,
-            focused_node_id,
-            id,
-            image_resource_map,
-            shell,
-            absolute,
-        );
+        // Cull fully-clipped subtrees before painting. Conservative: the
+        // node's bbox is the AABB of its 4 transformed corners (a superset
+        // for rotated/scaled nodes), and the clip is itself an AABB — so a
+        // visible node is never wrongly skipped (only extra off-screen nodes
+        // may be kept). Scroll offsets are baked into `absolute` via layout
+        // offsets (no element uses `canvas.push_transform`), so a scrolled-
+        // out node's bbox genuinely lies outside the ScrollView's clip.
+        // Skipping here elides `notify_node_entry`, the element paint body,
+        // and the whole recursion — the main win for long scrollable lists.
+        if let Some(clip) = canvas.current_clip_rect() {
+            let s = node.computed_layout.size;
+            let c = [
+                absolute * Point::new(0.0, 0.0),
+                absolute * Point::new(s.width, 0.0),
+                absolute * Point::new(0.0, s.height),
+                absolute * Point::new(s.width, s.height),
+            ];
+            let min_x = c[0].x.min(c[1].x).min(c[2].x).min(c[3].x);
+            let max_x = c[0].x.max(c[1].x).max(c[2].x).max(c[3].x);
+            let min_y = c[0].y.min(c[1].y).min(c[2].y).min(c[3].y);
+            let max_y = c[0].y.max(c[1].y).max(c[2].y).max(c[3].y);
+            // Inclusive overlap test (a hair's-breadth touch keeps the node).
+            let intersects =
+                max_x >= clip.x0 && min_x <= clip.x1 && max_y >= clip.y0 && min_y <= clip.y1;
+            if !intersects {
+                return;
+            }
+        }
+
+        canvas.notify_node_entry(id, absolute, node.computed_layout.size);
+
+        let paint_ctx =
+            PaintContext::new(self, focused_node_id, id, image_manager, shell, absolute);
         // Flatten: paint fragment children as direct children of this node.
         let children = self.flatten_children(&node.children);
         element.paint(canvas, &node.computed_layout, &children, &paint_ctx);
 
-        canvas.pop_transform();
+        canvas.notify_node_exit();
     }
 
     pub fn hit_test(&self, position: Offset) -> bool {
@@ -893,11 +920,163 @@ pub struct DevNodeData {
     pub(crate) label: String,
     pub(crate) props: Vec<(&'static str, TraceValue)>,
     pub layout_extra: Vec<(&'static str, TraceValue)>,
+    /// Node's absolute (world) position — the translation of its absolute
+    /// affine. Read by tests / dev tools to compute painted bounds without
+    /// direct element-tree access (the tree lives on the worker thread).
+    pub absolute: (f64, f64),
+    /// Node's painted size (layout-computed).
+    pub size: (f64, f64),
     pub(crate) relative: (f64, f64),
-    pub(crate) absolute: (f64, f64),
-    pub(crate) size: (f64, f64),
     pub(crate) query_key: Option<Vec<String>>,
     pub children: Vec<NodeId>,
+}
+
+/// Owned snapshot of a single element node — the test/dev-tool counterpart
+/// of [`ElementObject`] that can cross the worker→main thread boundary
+/// (ElementObject itself holds a boxed `AnyElement` which is `!Send`).
+///
+/// Carries exactly the fields tests + dev tools read: identity (`id`),
+/// tree shape (`children`), element kind, and the resolved layout
+/// (`computed_layout`). Built by [`NodeTreeData::snapshot`] /
+/// [`NodeTreeData::tree_snapshot`].
+#[derive(Debug, Clone)]
+pub struct ElementSnapshot {
+    pub id: ElementNodeId,
+    pub kind: Option<crate::core::element::ElementKind>,
+    pub children: Vec<NodeId>,
+    pub parent: Option<NodeId>,
+    pub computed_layout: crate::core::layout::ComputedLayout,
+}
+
+impl ElementSnapshot {
+    /// Convenience accessor mirroring `element.as_ref().map(|e| e.kind())`
+    /// on the live [`ElementObject`]. Returns `None` for fragment hosts
+    /// (which have no element).
+    pub fn kind(&self) -> Option<crate::core::element::ElementKind> {
+        self.kind.clone()
+    }
+}
+
+/// Owned snapshot of the entire element tree — what
+/// [`crate::core::runtime::MainBackend::query_tree_snapshot`] ships from the
+/// worker to main. The accessor surface mirrors the read-only methods on
+/// [`NodeTreeData`] (root_element / get_element / element_count / …) so
+/// existing test code keeps compiling when `TurTestApp::element_tree()` is
+/// retyped from `Ref<'_, NodeTreeData>` to an owned `NodeTreeSnapshot`.
+#[derive(Debug, Clone, Default)]
+pub struct NodeTreeSnapshot {
+    pub elements: std::collections::HashMap<ElementNodeId, ElementSnapshot>,
+    /// Control-flow fragment hosts (Each/Condition/Switch) — keyed by id
+    /// (same counter as `elements`, so a `NodeId` from `children` may land
+    /// in either map). Fragments have no element box and aren't laid out
+    /// directly; their `children` are spliced into the enclosing flex.
+    pub fragments: std::collections::HashMap<FragmentNodeId, FragmentSnapshot>,
+    pub root_id: Option<ElementNodeId>,
+}
+
+/// Snapshot of a fragment host (Each/Condition/Switch). Only carries the
+/// children list — that's all tests read off the worker side.
+#[derive(Debug, Clone)]
+pub struct FragmentSnapshot {
+    pub children: Vec<NodeId>,
+}
+
+impl NodeTreeSnapshot {
+    /// Empty snapshot — no elements, no root.
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
+    pub fn root_element_id(&self) -> Option<ElementNodeId> {
+        self.root_id
+    }
+
+    pub fn root_element(&self) -> Option<&ElementSnapshot> {
+        self.root_id.and_then(|id| self.elements.get(&id))
+    }
+
+    pub fn get_element(&self, id: ElementNodeId) -> Option<&ElementSnapshot> {
+        self.elements.get(&id)
+    }
+
+    pub fn element_count(&self) -> usize {
+        self.elements.len()
+    }
+
+    pub fn element_ids(&self) -> Vec<ElementNodeId> {
+        self.elements.keys().copied().collect()
+    }
+
+    pub fn raw_children_of_element(&self, id: ElementNodeId) -> Vec<NodeId> {
+        self.elements
+            .get(&id)
+            .map(|e| e.children.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn children_of_element(&self, id: ElementNodeId) -> Vec<ElementNodeId> {
+        self.elements
+            .get(&id)
+            .map(|e| {
+                e.children
+                    .iter()
+                    .filter(|n| self.elements.contains_key(&ElementNodeId::new(n.as_u64())))
+                    .map(|n| ElementNodeId::new(n.as_u64()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn get_fragment(&self, id: FragmentNodeId) -> Option<&FragmentSnapshot> {
+        self.fragments.get(&id)
+    }
+
+    pub fn is_fragment(&self, id: NodeId) -> bool {
+        self.fragments
+            .contains_key(&FragmentNodeId::new(id.as_u64()))
+    }
+}
+
+impl NodeTreeData {
+    /// Build a snapshot of one element node. Returns `None` if the id is
+    /// unknown or belongs to a fragment host.
+    pub fn snapshot(&self, id: ElementNodeId) -> Option<ElementSnapshot> {
+        let node = self.elements.get(&id)?;
+        Some(ElementSnapshot {
+            id: node.id,
+            kind: node.element.as_ref().map(|e| e.kind()),
+            children: node.children.clone(),
+            parent: node.parent,
+            computed_layout: node.computed_layout,
+        })
+    }
+
+    /// Build a snapshot of the whole tree (every element node + every
+    /// fragment host).
+    pub fn tree_snapshot(&self) -> NodeTreeSnapshot {
+        let elements = self
+            .elements
+            .iter()
+            .map(|(&id, _)| (id, self.snapshot(id).unwrap()))
+            .collect();
+        let fragments = self
+            .fragments
+            .iter()
+            .map(|(&id, f)| {
+                (
+                    id,
+                    FragmentSnapshot {
+                        children: f.children.clone(),
+                    },
+                )
+            })
+            .collect();
+        NodeTreeSnapshot {
+            elements,
+            fragments,
+            root_id: self.root_id,
+        }
+    }
 }
 
 impl fmt::Debug for NodeTreeData {
@@ -1077,7 +1256,7 @@ impl NodeTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_resource_map: &ImageResourceMap,
+        image_manager: &ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -1089,7 +1268,7 @@ impl NodeTree {
             constraints,
             font_manager,
             text_layout_cx,
-            image_resource_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -1101,12 +1280,12 @@ impl NodeTree {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_resource_map: &ImageResourceMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         self.data
             .borrow()
-            .paint(canvas, focused_node_id, image_resource_map, shell);
+            .paint(canvas, focused_node_id, image_manager, shell);
     }
 }
 

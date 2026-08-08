@@ -4,11 +4,13 @@ use crate::core::layout::{Geometry, Offset, Size};
 use crate::core::render::brush::{Brush, Color};
 use glifo::Glyph;
 use std::collections::HashMap;
+use std::sync::Arc;
 use vello_common::kurbo::{Affine, Circle, Line, Rect, RoundedRect, Shape, Stroke};
 use vello_common::paint::{Image, ImageId, ImageSource, PaintType};
 use vello_common::peniko::{BlendMode, Color as PenikoColor, Fill, Gradient};
 use vello_hybrid::{Resources, Scene};
 
+use crate::core::element::ElementNodeId;
 use crate::core::image_resource::ImageResourceId;
 use crate::core::render::Canvas;
 use crate::core::text::text_layout::TextLayoutData;
@@ -152,7 +154,8 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     #[allow(private_interfaces)]
-    fn fill_text_layout(&mut self, offset: Offset, layout: &TextLayoutData) {
+    fn fill_text_layout(&mut self, offset: Offset, layout: &Arc<TextLayoutData>) {
+        let layout: &TextLayoutData = layout;
         let transform = self.current_transform() * Affine::translate((offset.x, offset.y));
         for run in &layout.runs {
             let brush_color =
@@ -168,6 +171,12 @@ impl Canvas for VelloPaintContext<'_> {
             builder
                 .font_size(run.font_size)
                 .normalized_coords(&run.normalized_coords)
+                // Cache rasterized glyphs in vello's persistent `GlyphAtlas`
+                // (lives on `Resources`, survives `scene.reset()`). Steady
+                // state replaces per-frame bezier→strip flattening with a
+                // single textured-quad push per glyph. Rotated/skewed text
+                // auto-falls-back to the uncached outline path.
+                .atlas_cache(true)
                 .fill_glyphs(run.glyphs.iter().map(|g| Glyph {
                     id: g.id,
                     x: g.x,
@@ -293,6 +302,21 @@ impl Canvas for VelloPaintContext<'_> {
     }
 
     fn pop_transform(&mut self) {
+        self.transform_stack.pop();
+    }
+
+    fn notify_node_entry(&mut self, _id: ElementNodeId, absolute: Affine, _size: Size) {
+        // Compose the node's absolute with the root transform (bottom of
+        // the stack — the dpr scale) and push without composing with the
+        // current top. This matches today's behavior: a node draws at
+        // `dpr * node_logical_absolute`, regardless of how deep it is in
+        // the tree. The stack always has at least one entry (the root
+        // transform seeded in `VelloPaintContext::new`).
+        let root_t = self.transform_stack[0];
+        self.transform_stack.push(root_t * absolute);
+    }
+
+    fn notify_node_exit(&mut self) {
         self.transform_stack.pop();
     }
 }

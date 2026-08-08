@@ -1,11 +1,11 @@
 use tur_engine::core::element::{ElementKind, ElementNodeId};
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_integration_tests::TurTestApp;
 
 /// Walk from `id` depth-first; return the first `tur_paragraph` node's width.
-fn find_text_width(tree: &NodeTreeData, id: ElementNodeId) -> Option<f64> {
+fn find_text_width(tree: &NodeTreeSnapshot, id: ElementNodeId) -> Option<f64> {
     let node = tree.get_element(id)?;
-    if node.element.as_ref().map(|e| e.kind()) == Some(ElementKind::new("tur_paragraph")) {
+    if node.kind() == Some(ElementKind::new("tur_paragraph")) {
         return Some(node.computed_layout.size.width);
     }
     for c in &node.children {

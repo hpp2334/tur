@@ -1,6 +1,7 @@
 use parley::{
     Alignment, AlignmentOptions, FontStyle, FontWeight, GenericFamily, Layout, StyleProperty,
 };
+use std::sync::Arc;
 
 use crate::core::element::ElementNodeId;
 use crate::core::layout::{Constraints, ElementLayout, LayoutContext, Size};
@@ -260,7 +261,7 @@ impl ElementLayout for TextElement {
 
             let (layout_data, width, height) =
                 text_layout::extract_layout_data(&mut layout, &underline_ranges, &full_text);
-            self.cached_layout = Some(layout_data);
+            self.cached_layout = Some(Arc::new(layout_data));
             return constraints.constrain(Size::new(width as f64, height as f64));
         }
 
@@ -299,7 +300,7 @@ impl ElementLayout for TextElement {
         if !need_ellipsis {
             let (layout_data, width, height) =
                 text_layout::extract_layout_data(&mut layout, &underline_ranges, &full_text);
-            self.cached_layout = Some(layout_data);
+            self.cached_layout = Some(Arc::new(layout_data));
             return constraints.constrain(Size::new(width as f64, height as f64));
         }
 
@@ -312,7 +313,7 @@ impl ElementLayout for TextElement {
         let Some(nth) = probe_data.line_infos.get(n - 1) else {
             // Fewer than N lines despite `leftover` (defensive — parley's
             // breaker shouldn't allow this). Fall back to the capped layout.
-            self.cached_layout = Some(probe_data);
+            self.cached_layout = Some(Arc::new(probe_data));
             let width = layout.width();
             let height = layout.height();
             return constraints.constrain(Size::new(width as f64, height as f64));
@@ -337,7 +338,7 @@ impl ElementLayout for TextElement {
 
         let (layout_data, width, height) =
             text_layout::extract_layout_data(&mut trunc_layout, &trunc_underlines, &truncated_text);
-        self.cached_layout = Some(layout_data);
+        self.cached_layout = Some(Arc::new(layout_data));
         constraints.constrain(Size::new(width as f64, height as f64))
     }
 }

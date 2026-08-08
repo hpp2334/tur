@@ -1,19 +1,17 @@
-use std::any::TypeId;
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::Rc;
-use std::time::Duration;
 
 use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
-use crate::core::async_::{AsyncExecutor, TurJobExecutor};
+use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
+use crate::core::render::RenderCommand;
+use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::{FontContext, FontLoader};
-use crate::core::render::Renderer;
 use crate::error::TurError;
 
 /// Engine → embedder: how to schedule the next frame after a `flush`.
@@ -25,9 +23,6 @@ pub enum NextFrame {
     /// A continuous animation is running — re-arm on the next vsync (i.e.
     /// request another animation frame immediately).
     Vsync,
-    /// Wake after the given delay (e.g. until the next caret-blink toggle),
-    /// then render. Used when no animation is active but a timed paint is.
-    After(Duration),
 }
 
 /// Outcome of a single [`TurAppInternal::flush`] / `run_frame` call.
@@ -43,12 +38,31 @@ pub struct TurAppInternal {
     pub(crate) js_context: TurJsContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) executor: Rc<TurJobExecutor>,
-    /// Engine-owned async executor. Drives spawned Rust futures via
-    /// [`AsyncExecutor::tick`] inside `flush`, with real wakers (backed by
-    /// `async_task`). Used by host bridge fns (clipboard, http) and by
-    /// `ClipboardWriteSubsystem` to perform async platform work without
-    /// blocking the sync flush loop.
-    pub(crate) async_executor: Rc<AsyncExecutor>,
+    /// Worker-thread scheduler. Bridges grab it via
+    /// [`PluginContext::worker_sched`] / [`SubsystemFlushContext::worker_sched`]
+    /// and call `spawn_local(fut)` to drive async work (clipboard reads,
+    /// http requests, sleep futures). The driver's `sleep` returns a
+    /// platform-specific `Sleep(BoxFuture)`.
+    #[allow(dead_code)]
+    pub(crate) worker_sched: WorkerScheduler,
+    /// Completion queue — closures pushed by spawned futures (e.g. promise
+    /// settle closures) are drained inside `flush()` under `&mut Context`.
+    /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
+    /// worker flushes promptly whenever a future completes.
+    pub(crate) completion_queue: Rc<CompletionQueue>,
+    /// Cheap-cloned handle on the completion queue, handed out to bridges
+    /// via [`PluginContext::completion_handle`] /
+    /// [`SubsystemFlushContext::completion_handle`].
+    #[allow(dead_code)]
+    pub(crate) completion_handle: CompletionHandle,
+    /// Flush-driven task queue for engine-internal async (`sleep`,
+    /// `launch`). Tasks pushed here are polled every fixed-point iteration
+    /// of `flush()` so a sleep whose deadline is reached by a clock
+    /// advance resolves *inside* the same flush (instead of lagging to the
+    /// next frame, which the single-pump-per-tick countdown tests never
+    /// observe). Real platform async (HTTP / clipboard / file-picker)
+    /// still uses `worker_sched.spawn_local`.
+    pub(crate) flush_task_queue: Rc<FlushTaskQueue>,
     /// Plugin-registered flush subsystems. Each is `flush`-ed **every
     /// fixed-point iteration** of `flush()` (possibly several times per
     /// frame), in registration order, before `flush_reactive`. Time-driven
@@ -62,36 +76,88 @@ pub struct TurAppInternal {
     /// Incremented once at the top of each `flush()` call; stable across the
     /// fixed-point iterations within that call.
     pub(crate) frame_id: Cell<u64>,
-    /// Per-instance plugin data: a type-keyed map (`TypeId → Rc<dyn Any>`)
-    /// that plugins populate during `register` and embedders retrieve via
-    /// [`TurApp::instance_data`](crate::TurApp::instance_data). Each entry is
-    /// an `Rc<T>` so all sides (bridge fns, subsystems, host code) share one
-    /// handle without re-borrowing the `RefCell`.
-    pub(crate) instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn std::any::Any>>>>,
+    /// Always-installed event bus — bidirectional byte channel
+    /// between the Rust host and the JS realm. Created in
+    /// [`TurAppInternal::new`]; the host-side handle is retrieved via
+    /// [`crate::TurApp::event_bus`]. Plugins (specifically
+    /// `install_event_bus`) read this via
+    /// [`crate::core::plugin::PluginContext::event_bus`] to register the
+    /// JS-side bridge (`eventBus.on`/`send`) and the
+    /// [`HostBusSubsystem`] that drains the queues
+    /// each flush.
+    ///
+    /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
+    pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
+    /// Worker → main render-command batch produced by the last `flush()`
+    /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
+    /// to main via `MainMsg::RenderCommands`. `None` if no paint happened
+    /// this flush (or already drained).
+    pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
+}
+
+/// RAII guard set up at `flush()` entry; clears `in_flush` on drop so the
+/// worker is "idle" again for out-of-flush self-wakes. Drop runs on every
+/// exit path (normal return or future `?`), guaranteeing `end_flush` pairs
+/// with `begin_flush`.
+struct FlushGuard<'a>(&'a TurAppInternal);
+
+impl Drop for FlushGuard<'_> {
+    fn drop(&mut self) {
+        self.0.js_context.end_flush();
+    }
 }
 
 impl TurAppInternal {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        renderer: Box<dyn Renderer>,
         font_context: FontContext,
-        font_loader: Rc<dyn FontLoader>,
+        font_loader: std::sync::Arc<dyn FontLoader>,
         executor: Rc<TurJobExecutor>,
-        clock: std::rc::Rc<dyn Clock>,
+        clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
+        worker_sched: WorkerScheduler,
+        wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
+        main_tx: crate::core::app::MainTx,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
         use crate::core::elements::NodeTree;
         use crate::core::focus::FocusManager;
-        use crate::core::image_resource::ImageResourceMap;
+        use crate::core::image_resource::ImageManager;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
-        let image_resource_map = Rc::new(RefCell::new(ImageResourceMap::default()));
+        // Worker-side image state: metadata (sizes) + next-id counter,
+        // bundled in one `ImageManager`. The pixel `Blob` ships to main
+        // directly from the `createImageResource` bridge via the shared
+        // `main_tx` channel (one `MainMsg::UploadImage` per decode). The
+        // worker never retains pixels across a frame boundary.
+        let image_manager = Rc::new(RefCell::new(ImageManager::new()));
 
-        let async_executor = Rc::new(AsyncExecutor::new(clock.clone()));
+        // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
+        // `Rc<dyn Clock>` that `Shell` expects (per-instance + worker-side
+        // only, never shared across threads). ClockProxy is a Sized adapter
+        // that delegates to the Arc.
+        let clock_rc: Rc<dyn Clock> = Rc::new(crate::core::runtime::ClockProxy(clock));
+
+        // Completion queue: closures pushed by spawned futures (e.g. promise
+        // settle closures) are drained inside `flush()` under `&mut Context`.
+        // The `on_push` callback self-sends `WorkerMsg::Wake` so the worker
+        // flushes promptly whenever a future completes — without it, an
+        // idle worker would never wake to drain a completion arriving
+        // between frames. The same `wake_worker` Arc is shared with the
+        // flush-driven task queue below (it doubles as the task waker,
+        // which sleep futures register with the test `VirtualClock`).
+        let completion_queue = Rc::new(CompletionQueue::new(wake_worker.clone()));
+        let completion_handle = completion_queue.handle();
+        // Flush-driven task queue: `sleep` + `launch` push their driver
+        // futures here (instead of `worker_sched.spawn_local`) so `flush`
+        // polls them in lockstep with completions / microtasks — closing
+        // the cross-frame lag that otherwise breaks single-frame sleep
+        // semantics. See `async_::flush_tasks`.
+        let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker.clone()));
 
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
@@ -102,9 +168,13 @@ impl TurAppInternal {
             focus_manager.clone(),
             dirty,
             need_paint,
-            image_resource_map.clone(),
+            image_manager.clone(),
+            main_tx,
             store.clone(),
-            async_executor.clone(),
+            worker_sched.clone(),
+            completion_handle.clone(),
+            flush_task_queue.handle(),
+            wake_worker.clone(),
             capabilities,
         );
 
@@ -117,13 +187,13 @@ impl TurAppInternal {
             element_tree,
             mutation_queue,
             focus_manager,
-            image_resource_map,
-            renderer,
+            image_manager,
             font_context,
             font_loader,
-            async_executor.clone(),
+            worker_sched.clone(),
+            completion_handle.clone(),
             capabilities,
-            clock,
+            clock_rc,
             store,
         );
 
@@ -131,14 +201,25 @@ impl TurAppInternal {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
             executor,
-            async_executor,
+            worker_sched,
+            completion_queue,
+            completion_handle,
+            flush_task_queue,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
-            instance_data: Rc::new(RefCell::new(HashMap::new())),
+            event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
+            pending_render_batch: RefCell::new(None),
         }
     }
 
     pub fn flush(&self, boa_context: &mut boa_engine::Context) -> Result<FrameOutcome, TurError> {
+        // Enter the flush window: mark in-flush (so out-of-flush self-wakes
+        // raised by `request_paint` / `set_dirty` during this flush don't
+        // emit redundant `Wake`s) and re-arm the wake coalescing gate for
+        // any paint request raised mid-flush (it must emit a fresh wake for
+        // the *next* pump). See `TurJsContext::begin_flush` / `end_flush`.
+        self.js_context.begin_flush();
+        let _flush_guard = FlushGuard(self);
         let mut needs_render = false;
         // Per-`flush()` epoch, bumped once per call. Stable across the
         // fixed-point iterations below so subsystems can self-gate "advance
@@ -163,12 +244,20 @@ impl TurAppInternal {
         };
 
         loop {
-            // Drive spawned Rust futures one poll step. Completions they
-            // produce (settle-JsPromise closures) are drained right after,
-            // before boa's microtask drain — so PromiseJobs enqueued by
-            // `resolvers.resolve.call(...)` run in the same iteration.
-            let async_progress = self.async_executor.tick();
-            self.async_executor.drain_completions(boa_context);
+            // Drain completions produced by spawned futures since the last
+            // flush iteration. Completions settle JsPromises (e.g.
+            // clipboard read resolve) under `&mut Context`, enqueuing
+            // PromiseJobs that boa's microtask drain (below) picks up.
+            self.completion_queue.drain(boa_context);
+
+            // Poll engine-internal async tasks (`sleep`, `launch`) pushed
+            // to the flush-driven queue. Done BEFORE the rest of the
+            // iteration so a sleep that just resolved pushes its
+            // completion this same iteration (drained at the top of the
+            // NEXT iteration) and the launch driver resumes in lockstep.
+            // `tasks_completed > 0` keeps the fixed-point loop alive to
+            // drain those completions. See `async_::flush_tasks`.
+            let tasks_completed = self.flush_task_queue.poll_all();
 
             let handled_events = self.flush_app_events(boa_context, &signals);
 
@@ -201,10 +290,10 @@ impl TurAppInternal {
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    renderer: ctx.renderer.as_mut(),
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    async_executor: &ctx.async_executor,
+                    worker_sched: &ctx.worker_sched,
+                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -258,10 +347,10 @@ impl TurAppInternal {
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    renderer: ctx.renderer.as_mut(),
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    async_executor: &ctx.async_executor,
+                    worker_sched: &ctx.worker_sched,
+                    completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
                     sub_dirty: signals.sub_dirty,
@@ -285,56 +374,43 @@ impl TurAppInternal {
             }
             let handled_mutations = self.flush_pending_mutations(boa_context);
             // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
-            // PromiseJobs fire `.then` callbacks which may call bridge fns that
-            // `spawn_detached` more Rust futures — those land in
-            // `async_executor.ready` and are caught by the `async_progress`
-            // termination check on the next iteration, keeping the fixed-point
-            // loop alive.
+            // PromiseJobs fire `.then` callbacks which may call bridge fns
+            // that spawn more Rust futures via `worker_sched.spawn_local`.
+            // Those futures' completions are drained at the top of the next
+            // iteration, keeping the fixed-point loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);
             let new_dirty = self.js_context.dirty.get() || self.js_context.need_paint.get();
-            // Quiescence: no events, no mutations, no dirty state, no async
-            // task was polled, no microtasks ran. We deliberately do NOT
-            // check `has_pending()` here — a task waiting on a `sleep` timer
-            // is not immediately-available work. The `schedule` decision
-            // below uses `has_pending` + `next_timer_delay` to decide when
-            // to wake the engine next.
+            // Quiescence: no events, no mutations, no dirty state, no
+            // completions drained this iteration, no microtasks ran, and no
+            // flush-driven task completed (a completed task likely pushed a
+            // completion we need to drain next iteration).
             if !handled_events
                 && !handled_mutations
                 && !new_dirty
-                && !async_progress
                 && jobs_run == 0
+                && tasks_completed == 0
             {
                 break;
             }
         }
 
         if needs_render {
-            self.app_context.borrow_mut().render();
-            if let Err(e) = self.app_context.borrow_mut().renderer.present() {
-                tracing::error!("present failed: {e}");
-                return Err(TurError::Render(e.to_string()));
-            }
+            // Record the paint pass into a `Vec<RenderCommand>`; main
+            // applies it to its renderer (`MainBackend::render_batch`).
+            let batch = self.app_context.borrow_mut().build_render_batch();
+            *self.pending_render_batch.borrow_mut() = Some(batch);
         }
 
         // Decide how the caller should schedule the next frame.
         //
-        // - `Vsync` (continuous): a subsystem requested a frame (e.g. an
-        //   animation is running), or a Rust async task is live without a
-        //   timer deadline (e.g. clipboard/http futures awaiting external
-        //   wake-up). Animations need smooth 60fps; subsystems like audio
-        //   need polling; timer-less async tasks need polling each frame.
-        // - `After(d)`: nothing continuous is pending, but an async `sleep`
-        //   deadline is outstanding (driving a `launch` coroutine or a plain
-        //   `sleep().then(...)`). Wake at the deadline rather than polling.
-        // - `Idle`: nothing time-driven is pending — the loop can stop
-        //   until the next platform input arrives.
-        let async_pending = self.async_executor.has_pending();
-        let async_timer_delay = self.async_executor.next_timer_delay();
-        let schedule = if sub_request_frame.get() || (async_pending && async_timer_delay.is_none())
-        {
+        // - `Vsync`: a subsystem requested a frame (e.g. an animation is
+        //   running). Sleep-driven async work drives its own wake via
+        //   `CompletionHandle::on_push` (self-sends Wake), so it doesn't
+        //   keep the loop busy on idle.
+        // - `Idle`: nothing time-driven is pending — the loop stops until
+        //   the next platform input or async completion.
+        let schedule = if sub_request_frame.get() {
             NextFrame::Vsync
-        } else if let Some(delay) = async_timer_delay {
-            NextFrame::After(delay)
         } else {
             NextFrame::Idle
         };
@@ -554,6 +630,14 @@ impl TurAppInternal {
         }
 
         true
+    }
+
+    /// Drain the render-command batch produced by the last `flush()`, if any.
+    /// `MainBackend::worker_loop` calls this after each `pump()` to ship the
+    /// batch to main via `MainMsg::RenderCommands`. Returns `None` if no
+    /// paint happened this flush (or already drained).
+    pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
+        self.pending_render_batch.borrow_mut().take()
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the

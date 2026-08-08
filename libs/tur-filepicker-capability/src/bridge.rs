@@ -71,14 +71,13 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         })?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let opts = parse_pick_opts(args, ctx);
-    let executor_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         let files = picker.pick(opts).await;
-        executor_for_complete.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             let arr = JsArray::new(ctx)?;
             for f in files {
                 let o = build_picked_file_object(&f, ctx)?;
@@ -105,7 +104,7 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         })?
         .backend()
         .clone();
-    let executor = js_ctx.async_executor().clone();
+    let completion_handle = js_ctx.completion_handle();
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     let name = args
@@ -120,10 +119,9 @@ fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
         .and_then(|ab| ab.to_vec())
         .unwrap_or_default();
     let opts = parse_save_opts(args, ctx);
-    let executor_for_complete = executor.clone();
-    executor.spawn_detached(async move {
+    let _ = js_ctx.spawn_local(|_aw| async move {
         picker.save(name, bytes, opts).await;
-        executor_for_complete.complete(Box::new(move |ctx| {
+        completion_handle.push(Box::new(move |ctx| {
             resolvers
                 .resolve
                 .call(&JsValue::undefined(), &[JsValue::undefined()], ctx)?;

@@ -132,7 +132,9 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.addCallback(surfaceCallback)
         setOnTouchListener { _, event ->
             userInteracted = true
-            val inst = instance ?: return@setOnTouchListener false
+            val inst = instance ?: run {
+                return@setOnTouchListener false
+            }
             // `MotionEvent.getX/Y` are in physical px (Android's view coord
             // space); the engine hit-tests in logical px, so divide by dpr to
             // land taps in the same space as the layout.

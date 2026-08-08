@@ -64,7 +64,7 @@ fn tur_create_image_resource(
             JsNativeError::range().with_message("failed to decode image (supported: PNG, JPEG)"),
         )
     })?;
-    let id = js_ctx.image_resource_map().borrow_mut().insert_image(image);
+    let id = js_ctx.register_image(image);
     Ok(JsValue::from(id.as_u64() as f64))
 }
 
@@ -82,6 +82,6 @@ fn tur_create_svg_resource(
     let image = decode_svg(&svg_str).ok_or_else(|| {
         JsError::from(JsNativeError::range().with_message("failed to parse/render SVG"))
     })?;
-    let id = js_ctx.image_resource_map().borrow_mut().insert_image(image);
+    let id = js_ctx.register_image(image);
     Ok(JsValue::from(id.as_u64() as f64))
 }

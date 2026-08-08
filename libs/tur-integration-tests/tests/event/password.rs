@@ -48,12 +48,7 @@ fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
         let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
-        if node
-            .element
-            .as_ref()
-            .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
-            .unwrap_or(false)
-        {
+        if node.kind() == Some(ElementKind::new("tur_editable_text")) {
             return ElementNodeId::new(cid.as_u64());
         }
     }
@@ -93,7 +88,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 }
 
 fn cursor_x(app: &TurTestApp, id: ElementNodeId, byte: usize) -> f32 {
-    app.with_element(id, |e| {
+    app.with_element(id, move |e| {
         e.cast::<EditableTextElement>()
             .and_then(|el| el.cursor_x_at(byte))
             .unwrap_or(0.0)

@@ -7,7 +7,7 @@
 //! `TurRuntimeBuilder::capability(Http::new(NativeHttp::new(handle)))`, where
 //! `handle: tokio::runtime::Handle` comes from a runtime the embedder owns.
 //!
-//! The engine itself (`tur-engine`, `tur-async`) is tokio-free. Only this
+//! The engine itself (`tur-engine`) is tokio-free. Only this
 //! crate depends on tokio, and it never builds or enters a runtime of its own
 //! — the embedder does that and passes the handle in. See
 //! [`backend`][crate::backend] for the bridge details.

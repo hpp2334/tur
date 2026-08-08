@@ -7,33 +7,43 @@
 use std::path::Path;
 
 use boa_engine::{JsArgs, JsValue, Module, NativeFunction, Source, js_string};
-use tur_integration_tests::{HostModulePlugin, TurTestApp};
+use tur_integration_tests::{HostExport, HostModulePlugin, TurTestApp};
 
 #[test]
 fn reentrant_module_load_via_host_fn() {
     // `loadModule(src)` — parses + evaluates `src` as a module on the
     // current context (re-entrant safe if boa supports nested module eval).
-    let load_module_fn = NativeFunction::from_copy_closure(|_this, args, ctx| {
-        let src = args
-            .get_or_undefined(0)
-            .as_string()
-            .ok_or_else(|| {
-                boa_engine::JsNativeError::typ().with_message("loadModule: expected string")
-            })?
-            .to_std_string_escaped();
-        let module = Module::parse(
-            Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
-            None,
-            ctx,
-        )?;
-        let _ = module.load_link_evaluate(ctx);
-        ctx.run_jobs()?;
-        Ok(JsValue::undefined())
-    });
+    // Built fresh per instance via the HostExport builder (Phase 7).
 
     let plugin = HostModulePlugin {
         specifier: "tur:cases",
-        exports: vec![("loadModule".to_string(), load_module_fn, 1)],
+        exports: vec![HostExport {
+            name: "loadModule".to_string(),
+            // Builder produces a fresh NativeFunction per instance (Phase 7:
+            // `NativeFunction` is `!Send`, so we hold a Send+Sync builder
+            // closure instead of a pre-built value).
+            builder: Box::new(|_ctx| {
+                NativeFunction::from_copy_closure(|_this, args, ctx| {
+                    let src = args
+                        .get_or_undefined(0)
+                        .as_string()
+                        .ok_or_else(|| {
+                            boa_engine::JsNativeError::typ()
+                                .with_message("loadModule: expected string")
+                        })?
+                        .to_std_string_escaped();
+                    let module = Module::parse(
+                        Source::from_bytes(&src).with_path(Path::new("inner.mjs")),
+                        None,
+                        ctx,
+                    )?;
+                    let _ = module.load_link_evaluate(ctx);
+                    ctx.run_jobs()?;
+                    Ok(JsValue::undefined())
+                })
+            }),
+            length: 1,
+        }],
     };
     let app = TurTestApp::new_with_extra_plugins(100.0, 100.0, vec![Box::new(plugin)]).unwrap();
 

@@ -14,19 +14,13 @@ fn container_with_padding() {
         let container = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
 
         let sb = tree
             .get_element(ElementNodeId::new(container.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
 
         container.id
     };
@@ -56,10 +50,7 @@ fn container_update_clears_removed_props() {
         let checkbox = tree
             .get_element(ElementNodeId::new(pointer.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            checkbox.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container"),
-        );
+        assert_eq!(checkbox.kind().unwrap(), ElementKind::new("tur_container"),);
         checkbox.id
     };
 
@@ -77,20 +68,19 @@ fn container_update_clears_removed_props() {
     app.click(cx, cy);
     app.render();
 
-    let tree = app.element_tree();
-    let checkbox_node = tree.get_element(checkbox_id).unwrap();
-    let checkbox_el = checkbox_node.element.as_ref().unwrap();
-    let c = checkbox_el.cast::<ContainerElement>().unwrap();
-    eprintln!(
-        "[test] after toggle: color={:?}, border_color={:?}",
-        c.color(),
-        c.border_color()
-    );
-    assert!(
-        c.color().is_none(),
-        "unchecked state should NOT have color, got {:?}",
-        c.color()
-    );
+    app.with_element(checkbox_id, |el| {
+        let c = el.cast::<ContainerElement>().unwrap();
+        eprintln!(
+            "[test] after toggle: color={:?}, border_color={:?}",
+            c.color(),
+            c.border_color()
+        );
+        assert!(
+            c.color().is_none(),
+            "unchecked state should NOT have color, got {:?}",
+            c.color()
+        );
+    });
 }
 
 #[test]
@@ -104,10 +94,7 @@ fn container_with_border() {
         let container = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
         container.id
     };
@@ -218,10 +205,7 @@ fn container_with_shadow() {
         let container = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            container.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
         container.id
     };

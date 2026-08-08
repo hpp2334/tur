@@ -132,12 +132,12 @@ node ./scripts/local_ci.cjs
 Use a timeout of at least **600000ms** (10 minutes) when running this. If the timeout is hit but all preceding steps show success, the CI can be considered passed.
 
 **If CI fails:**
-1. Report the failure output back to the caller.
+1. Simply report that CI failed — do NOT investigate, analyze, or report the reason/failure output.
 2. Do NOT attempt to fix issues — the caller will fix and re-dispatch this agent.
 
 ### Step 6: Return Result
 
 Return a summary to the caller including:
 - All changes committed and pushed
-- Whether local CI passed or failed (include error output if failed)
+- Whether local CI passed or failed (if failed, just say "CI failed" — do NOT include the reason or error output)
 - The PR URL

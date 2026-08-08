@@ -3,38 +3,34 @@
 //! global state), shared-runtime semantics (same fonts/clock/capabilities),
 //! the plugin compile/register split, and independent event routing.
 
-use std::cell::Cell;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
-use boa_engine::Source;
-use boa_engine::context::time::FixedClock;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
+use tur_engine::renderer::NoopRenderer;
+use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 /// Eval a JS script on a `TurApp` and return the result as a string.
-/// Mirrors the old `TurApp::eval_js` via the `with_boa_context` escape hatch.
+/// Uses the engine's `eval_js` RPC (worker-thread JS evaluation).
+/// If the result is a string, returns its contents (no quotes);
+/// otherwise returns the display form.
 fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String> {
-    app.with_boa_context(|ctx| {
-        ctx.eval(Source::from_bytes(source))
-            .map(|r| {
-                r.as_string()
-                    .map(|s| s.to_std_string_escaped())
-                    .unwrap_or_else(|| r.display().to_string())
-            })
-            .map_err(|e| e.to_string())
-    })
+    Ok(futures::executor::block_on(app.backend().eval_js(source)))
 }
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
 /// instances are headless).
 fn build_runtime() -> Rc<TurRuntime> {
     TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .build()
@@ -50,15 +46,17 @@ const SET_ID_JS: &str = r#"
 #[test]
 fn instances_have_isolated_js_realms() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("app A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("app B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app B");
 
     // Load different state into each instance.
-    app_a
-        .load_module(SET_ID_JS.replace("VALUE", "A").as_str())
+    futures::executor::block_on(app_a.load_module(SET_ID_JS.replace("VALUE", "A").as_str()))
         .expect("load A");
-    app_b
-        .load_module(SET_ID_JS.replace("VALUE", "B").as_str())
+    futures::executor::block_on(app_b.load_module(SET_ID_JS.replace("VALUE", "B").as_str()))
         .expect("load B");
 
     // Each instance reads back its OWN global — they must differ.
@@ -76,45 +74,50 @@ fn instances_have_isolated_js_realms() {
 #[test]
 fn instances_have_isolated_element_trees() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("app A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("app B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("app B");
 
     // Mount a tree only in A.
-    app_a
-        .load_module(
-            r#"
+    futures::executor::block_on(app_a.load_module(
+        r#"
             import { Text, render } from "tur:std";
             render(Text({ text: "only-in-A", queryKey: ["a_only"] }));
         "#,
-        )
-        .expect("load A");
-    app_a.run_frame().expect("frame A");
+    ))
+    .expect("load A");
+    futures::executor::block_on(app_a.run_frame()).expect("frame A");
 
     // B has no tree mounted.
-    let b_tree = app_b.dev_tool_element_tree();
+    let b_tree = futures::executor::block_on(app_b.dev_tool_element_tree());
     assert!(b_tree.is_none(), "instance B should have no tree");
 
     // A does have a tree.
-    let a_tree = app_a.dev_tool_element_tree();
+    let a_tree = futures::executor::block_on(app_a.dev_tool_element_tree());
     assert!(a_tree.is_some(), "instance A should have a tree");
 }
 
 #[test]
 fn headless_instance_runs_js_without_rendering() {
     let runtime = build_runtime();
-    let app = runtime.create_headless_app((0.0, 0.0)).expect("headless");
+    let app = runtime
+        .create_app(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
+        .expect("headless");
 
     // JS executes; a frame runs without panic even with a zero viewport.
-    app.load_module(
+    futures::executor::block_on(app.load_module(
         r#"
         import { source, get } from "tur:std";
         globalThis.__val = source(42);
         const v = get(globalThis.__val);
         globalThis.__readBack = v;
     "#,
-    )
+    ))
     .expect("load");
-    app.run_frame().expect("frame");
+    futures::executor::block_on(app.run_frame()).expect("frame");
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "42", "headless instance ran JS");
@@ -127,9 +130,13 @@ fn many_instances_share_one_runtime() {
     let runtime = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
-        let app = runtime.create_headless_app((50.0, 50.0)).expect("app");
-        app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str())
-            .expect("load");
+        let app = runtime
+            .create_app(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+            .expect("app");
+        futures::executor::block_on(
+            app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str()),
+        )
+        .expect("load");
         apps.push(app);
     }
     for (i, app) in apps.iter().enumerate() {
@@ -143,20 +150,20 @@ fn many_instances_share_one_runtime() {
 /// A test-only capability carrying a shared counter.
 #[derive(Clone)]
 struct SharedCounterCap {
-    value: Rc<Cell<u32>>,
+    value: Arc<AtomicU32>,
 }
 impl Capability for SharedCounterCap {}
 impl SharedCounterCap {
     fn new() -> Self {
         Self {
-            value: Rc::new(Cell::new(0)),
+            value: Arc::new(AtomicU32::new(0)),
         }
     }
     fn get(&self) -> u32 {
-        self.value.get()
+        self.value.load(Ordering::SeqCst)
     }
     fn bump(&self) {
-        self.value.set(self.value.get() + 1);
+        self.value.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -164,17 +171,17 @@ impl SharedCounterCap {
 /// capability registry and bumps it. Counts `compile` vs `register` invocations
 /// to pin the compile/register split.
 struct CounterPlugin {
-    compile_count: Rc<Cell<u32>>,
-    register_count: Rc<Cell<u32>>,
+    compile_count: Arc<AtomicU32>,
+    register_count: Arc<AtomicU32>,
 }
 
 impl Plugin for CounterPlugin {
     fn compile(&self, _cx: &mut CompileContext) -> Result<(), tur_engine::error::TurError> {
-        self.compile_count.set(self.compile_count.get() + 1);
+        self.compile_count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), tur_engine::error::TurError> {
-        self.register_count.set(self.register_count.get() + 1);
+        self.register_count.fetch_add(1, Ordering::SeqCst);
         // Look up the shared capability (registered on the runtime builder) and
         // bump it — proves every instance's register sees the SAME backend.
         if let Some(cap) = ctx.capability().of::<SharedCounterCap>() {
@@ -186,11 +193,12 @@ impl Plugin for CounterPlugin {
 
 #[test]
 fn plugin_compile_runs_once_register_runs_per_instance() {
-    let compile_count = Rc::new(Cell::new(0));
-    let register_count = Rc::new(Cell::new(0));
+    let compile_count = Arc::new(AtomicU32::new(0));
+    let register_count = Arc::new(AtomicU32::new(0));
     let runtime = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {
             compile_count: compile_count.clone(),
@@ -200,21 +208,31 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
         .expect("runtime");
 
     // compile ran exactly once at build time.
-    assert_eq!(compile_count.get(), 1, "compile runs once on the runtime");
+    assert_eq!(
+        compile_count.load(Ordering::SeqCst),
+        1,
+        "compile runs once on the runtime"
+    );
     // register has NOT run yet (no instances created).
     assert_eq!(
-        register_count.get(),
+        register_count.load(Ordering::SeqCst),
         0,
         "register runs per instance, not at build"
     );
 
     // Spawn 3 instances — register fires once each, compile stays at 1.
     for _ in 0..3 {
-        runtime.create_headless_app((10.0, 10.0)).expect("app");
+        runtime
+            .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+            .expect("app");
     }
-    assert_eq!(compile_count.get(), 1, "compile never re-runs per instance");
     assert_eq!(
-        register_count.get(),
+        compile_count.load(Ordering::SeqCst),
+        1,
+        "compile never re-runs per instance"
+    );
+    assert_eq!(
+        register_count.load(Ordering::SeqCst),
         3,
         "register ran once per spawned instance"
     );
@@ -222,13 +240,17 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
 
 #[test]
 fn shared_capability_backend_is_visible_from_all_instances() {
-    let compile_count = Rc::new(Cell::new(0));
-    let register_count = Rc::new(Cell::new(0));
+    let compile_count = Arc::new(AtomicU32::new(0));
+    let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
     let runtime = TurRuntime::builder()
-        .font_loader(Rc::new(NativeFontLoader::new()))
-        .clock(Rc::new(FixedClock::from_millis(0)))
-        .capability(cap.clone())
+        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+        .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .capability({
+            let c = cap.clone();
+            move |_| Ok(c)
+        })
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {
             compile_count: compile_count.clone(),
@@ -239,15 +261,21 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 
     // Each spawned instance's `register` bumps the SAME shared cap — so after
     // N instances the cap reflects N bumps, proving they all see one backend.
-    runtime.create_headless_app((10.0, 10.0)).expect("A");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
-    runtime.create_headless_app((10.0, 10.0)).expect("B");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("B");
     assert_eq!(
         cap.get(),
         2,
         "instance B's register saw the same shared cap"
     );
-    runtime.create_headless_app((10.0, 10.0)).expect("C");
+    runtime
+        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .expect("C");
     assert_eq!(
         cap.get(),
         3,
@@ -260,8 +288,12 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 #[test]
 fn platform_events_route_to_the_correct_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("B");
 
     // Push a Resize to A only.
     app_a.push_platform_event(PlatformEvent::Resize {
@@ -269,17 +301,17 @@ fn platform_events_route_to_the_correct_instance() {
         logical_height: 180,
         dpr: 1.0,
     });
-    app_a.run_frame().expect("frame A");
-    app_b.run_frame().expect("frame B");
+    futures::executor::block_on(app_a.run_frame()).expect("frame A");
+    futures::executor::block_on(app_b.run_frame()).expect("frame B");
 
     // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
     // mode (no imports), so do the import in a module eval and stash the JSON
     // on globalThis, then read it back with eval_js.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
-        let _ = app.eval_module(
+        let _ = futures::executor::block_on(app.eval_module(
             r#"import { viewportSize$, get } from "tur:std";
                globalThis.__vp = JSON.stringify(get(viewportSize$));"#,
-        );
+        ));
         eval_js(app, "globalThis.__vp").unwrap_or_default()
     };
 
@@ -299,17 +331,20 @@ fn platform_events_route_to_the_correct_instance() {
 #[test]
 fn reactive_stores_are_isolated_per_instance() {
     let runtime = build_runtime();
-    let app_a = runtime.create_headless_app((100.0, 100.0)).expect("A");
-    let app_b = runtime.create_headless_app((100.0, 100.0)).expect("B");
+    let app_a = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("A");
+    let app_b = runtime
+        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .expect("B");
 
     // Create a source in A and set a value.
-    app_a
-        .eval_module(
-            r#"import { source, set } from "tur:std";
-               globalThis.__atom = source("from-A");
-               set(globalThis.__atom, "A2");"#,
-        )
-        .expect("setup A");
+    futures::executor::block_on(app_a.eval_module(
+        r#"import { source, set } from "tur:std";
+           globalThis.__atom = source("from-A");
+           set(globalThis.__atom, "A2");"#,
+    ))
+    .expect("setup A");
 
     // B has no such atom — `globalThis.__atom` is undefined in B's realm.
     let b_val = eval_js(
@@ -324,8 +359,12 @@ fn reactive_stores_are_isolated_per_instance() {
 
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
-    let _ = app_a
-        .eval_module(r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#);
+    futures::executor::block_on(
+        app_a.eval_module(
+            r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#,
+        ),
+    )
+    .expect("read A");
     let a_val = eval_js(&app_a, "globalThis.__r").unwrap_or_default();
     assert_eq!(a_val, "A2", "instance A retains its own reactive state");
 }

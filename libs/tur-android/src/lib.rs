@@ -17,7 +17,7 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 mod app;
-mod loop_driver;
+pub mod scheduler;
 mod surface;
 
 // Re-export the JNI primitive types so the `standard_jni_exports!()` macro
@@ -229,7 +229,6 @@ fn init_logger_once() {
 #[cfg(target_os = "android")]
 pub mod ops {
     use std::ffi::c_void;
-    use std::rc::Rc;
 
     use jni::JNIEnv;
     use jni::objects::{JObject, JString};
@@ -297,7 +296,7 @@ pub mod ops {
                 return Err("ANativeWindow_fromSurface returned null".into());
             }
             let window_handle = unsafe { crate::surface::AndroidWindowHandle::new(anw) };
-            let frame_loop_handle = crate::loop_driver::FrameLoopRef::new(frame_loop_ref);
+            let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
             log::info!(
                 "createInstance: building instance ({}x{} @{}x)",
                 width,
@@ -306,6 +305,7 @@ pub mod ops {
             );
             let instance = pollster::block_on(AndroidInstance::build_with_surface(
                 &runtime.runtime,
+                &runtime.tokio_handle(),
                 &runtime.wgpu_instance,
                 window_handle,
                 width.max(1) as u32,
@@ -331,9 +331,13 @@ pub mod ops {
         catch_into_zero(env, "createHeadlessInstance", |env| {
             let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
             let frame_loop_ref = env.new_global_ref(frame_loop)?;
-            let frame_loop_handle = crate::loop_driver::FrameLoopRef::new(frame_loop_ref);
+            let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
             log::info!("createHeadlessInstance: building headless instance");
-            let instance = AndroidInstance::build_headless(&runtime.runtime, frame_loop_handle)?;
+            let instance = AndroidInstance::build_headless(
+                &runtime.runtime,
+                &runtime.tokio_handle(),
+                frame_loop_handle,
+            )?;
             log::info!("createHeadlessInstance: instance built OK");
             let boxed = Box::new(instance);
             Ok(Box::into_raw(boxed) as jlong)
@@ -349,9 +353,8 @@ pub mod ops {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
             let js: String = env.get_string(&js)?.into();
             log::info!("loadModule: {} bytes", js.len());
-            instance.app.load_module(&js)?;
+            futures::executor::block_on(instance.app.load_module(&js))?;
             log::info!("loadModule: module evaluated OK");
-            instance.app.request_paint();
             log::info!("loadModule: paint requested");
             Ok(())
         });
@@ -388,8 +391,9 @@ pub mod ops {
                 }
                 panic_from_nested_call("tur-android panic-hook backtrace test (debug.tur.crash=1)");
             }
-            log::trace!("pump: firing wake");
-            instance.loop_driver.fire();
+            log::trace!("pump: firing vsync + polling loop");
+            instance.scheduler.fire_vsync();
+            instance.pump_loop();
         }));
         match result {
             Ok(()) => 1,
@@ -405,17 +409,17 @@ pub mod ops {
         }
     }
 
-    /// Push a `Resize` event reflecting the new surface dimensions. (v1 keeps
-    /// the original wgpu surface for the instance lifetime; full surface
-    /// re-attach with a renderer swap is a follow-up.)
+    /// Resize the surface. Resizes the main-side renderer directly AND
+    /// forwards `PlatformEvent::Resize` to the worker for layout (single
+    /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
+    /// for the instance lifetime; full surface re-attach with a renderer
+    /// swap is a follow-up.)
     pub fn resize(env: &mut JNIEnv, handle: jlong, width: jint, height: jint, dpr: jdouble) {
         catch_void(env, "resize", |_env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
-            instance.app.push_platform_event(PlatformEvent::Resize {
-                logical_width: width.max(1) as u32,
-                logical_height: height.max(1) as u32,
-                dpr: dpr.max(1.0),
-            });
+            instance
+                .app
+                .resize(width.max(1) as u32, height.max(1) as u32, dpr.max(1.0));
             Ok(())
         });
     }
@@ -508,7 +512,7 @@ pub mod ops {
         let Some(instance) = handle_to_instance(handle) else {
             return 0;
         };
-        if instance.app.focused_is_editable() {
+        if instance.app.cached_focus().is_editable {
             1
         } else {
             0

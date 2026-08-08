@@ -12,10 +12,7 @@ fn pointer_interact_no_child_zero_size() {
         let pi = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            pi.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_pointer_interact")
-        );
+        assert_eq!(pi.kind().unwrap(), ElementKind::new("tur_pointer_interact"));
         assert_eq!(pi.children.len(), 0);
         pi.id
     };

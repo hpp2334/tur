@@ -13,12 +13,7 @@ fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
         let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
-        if node
-            .element
-            .as_ref()
-            .map(|e| e.kind() == ElementKind::new("tur_editable_text"))
-            .unwrap_or(false)
-        {
+        if node.kind() == Some(ElementKind::new("tur_editable_text")) {
             return ElementNodeId::new(cid.as_u64());
         }
     }
@@ -30,16 +25,16 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
     let tree = app.element_tree();
     let mut current = tree.get_element(id).unwrap().parent;
     while let Some(cid) = current {
-        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
-        if node
-            .element
-            .as_ref()
-            .map(|e| e.cast::<ScrollViewElement>().is_some())
-            .unwrap_or(false)
-        {
+        let is_scroll = app.with_element(ElementNodeId::new(cid.as_u64()), |e| {
+            e.cast::<ScrollViewElement>().is_some()
+        });
+        if is_scroll == Some(true) {
             return Some(ElementNodeId::new(cid.as_u64()));
         }
-        current = node.parent;
+        current = tree
+            .get_element(ElementNodeId::new(cid.as_u64()))
+            .unwrap()
+            .parent;
     }
     None
 }
@@ -53,7 +48,7 @@ fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
     let inner = tree
         .get_element(ElementNodeId::new(child.children[0].as_u64()))
         .unwrap();
-    let kind = inner.element.as_ref().unwrap().kind();
+    let kind = inner.kind().unwrap();
     if kind == ElementKind::new("tur_editable_text") {
         inner.id
     } else {
@@ -987,7 +982,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     let (cx, cy) = app.get_element_absolute_bounds(sv_id).unwrap().center();
     app.wheel(0.0, scroll_amount, cx, cy);
     app.render();
-    app.with_element(sv_id, |e| {
+    app.with_element(sv_id, move |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
         assert!(
             (sv.scroll_offset() - scroll_amount).abs() < 0.5,

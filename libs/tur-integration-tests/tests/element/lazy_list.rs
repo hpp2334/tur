@@ -9,19 +9,13 @@ fn lazy_list_viewport_size() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        assert_eq!(
-            root.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_root")
-        );
+        assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
         let ll = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            ll.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_lazy_list")
-        );
+        assert_eq!(ll.kind().unwrap(), ElementKind::new("tur_lazy_list"));
         ll.id
     };
 
@@ -342,7 +336,11 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
 
 /// `with_element` helper that returns the closure's R directly (panics if
 /// the lookup fails, which is fine for tests that just constructed the id).
-fn with_ll<R>(app: &TurTestApp, id: ElementNodeId, f: impl FnOnce(&LazyListElement) -> R) -> R {
+fn with_ll<R: Send + 'static>(
+    app: &TurTestApp,
+    id: ElementNodeId,
+    f: impl FnOnce(&LazyListElement) -> R + Send + 'static,
+) -> R {
     app.with_element(id, |e| {
         f(e.cast::<LazyListElement>().expect("not a LazyListElement"))
     })
@@ -466,7 +464,7 @@ fn virtualized_scroll_up_keeps_children_ordered() {
     };
     let mut prev: i64 = -1;
     for child_id in child_ids {
-        let logical = with_ll(&app, id, |ll| ll.visible_index_of(child_id));
+        let logical = with_ll(&app, id, move |ll| ll.visible_index_of(child_id));
         let logical = logical.expect("every mounted child should have a logical index");
         assert!(
             (logical as i64) > prev,
@@ -494,7 +492,7 @@ fn virtualized_repeated_scroll_down_keeps_order() {
         };
         let mut prev: i64 = -1;
         for child_id in child_ids {
-            let logical = with_ll(&app, id, |ll| ll.visible_index_of(child_id));
+            let logical = with_ll(&app, id, move |ll| ll.visible_index_of(child_id));
             let logical = logical.expect("child should have a logical index");
             assert!(
                 (logical as i64) > prev,
@@ -522,7 +520,8 @@ fn virtualized_position_math_matches_content_index_formula() {
         tree.get_element(id).unwrap().children.to_vec()
     };
     for child_id in child_ids {
-        let logical = with_ll(&app, id, |ll| ll.visible_index_of(child_id)).expect("logical index");
+        let logical =
+            with_ll(&app, id, move |ll| ll.visible_index_of(child_id)).expect("logical index");
         let expected_y = (logical as f64) * extent - scroll_amount;
         let actual_y = app
             .element_tree()

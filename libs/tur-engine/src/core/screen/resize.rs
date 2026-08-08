@@ -14,8 +14,12 @@ impl Subsystem for ResizeSubsystem {
             return;
         };
 
-        cx.renderer.resize(*logical_width, *logical_height, *dpr);
+        // The renderer lives on main; the embedder resizes it directly at
+        // event-receipt time via `TurApp::resize` (which also forwards this
+        // `PlatformEvent::Resize` to the worker). Here we only update the
+        // worker-side screen state.
         cx.screen.logical_size = (*logical_width as f64, *logical_height as f64);
+        cx.screen.dpr = *dpr;
         // Push the new size into the `viewportSize$` source atom now
         // (event-driven), so subscribers re-layout in this same fixed-point
         // iteration. `sync_source` no-ops when the size is unchanged.

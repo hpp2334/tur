@@ -12,36 +12,24 @@ fn expanded_fills_remaining() {
         let col = tree
             .get_element(ElementNodeId::new(root.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            col.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex")
-        );
+        assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(col.children.len(), 2);
 
         let sb = tree
             .get_element(ElementNodeId::new(col.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            sb.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
 
         let expanded = tree
             .get_element(ElementNodeId::new(col.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            expanded.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex_item")
-        );
+        assert_eq!(expanded.kind().unwrap(), ElementKind::new("tur_flex_item"));
         assert_eq!(expanded.children.len(), 1);
 
         let inner_sb = tree
             .get_element(ElementNodeId::new(expanded.children[0].as_u64()))
             .unwrap();
-        assert_eq!(
-            inner_sb.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_container")
-        );
+        assert_eq!(inner_sb.kind().unwrap(), ElementKind::new("tur_container"));
 
         (expanded.id, inner_sb.id)
     };
@@ -72,14 +60,8 @@ fn expanded_multiple_share_evenly() {
         let exp2 = tree
             .get_element(ElementNodeId::new(col.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            exp1.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex_item")
-        );
-        assert_eq!(
-            exp2.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex_item")
-        );
+        assert_eq!(exp1.kind().unwrap(), ElementKind::new("tur_flex_item"));
+        assert_eq!(exp2.kind().unwrap(), ElementKind::new("tur_flex_item"));
 
         (exp1.id, exp2.id)
     };
@@ -115,14 +97,8 @@ fn expanded_flex_weights_proportional() {
         let exp2 = tree
             .get_element(ElementNodeId::new(col.children[1].as_u64()))
             .unwrap();
-        assert_eq!(
-            exp1.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex_item")
-        );
-        assert_eq!(
-            exp2.element.as_ref().unwrap().kind(),
-            ElementKind::new("tur_flex_item")
-        );
+        assert_eq!(exp1.kind().unwrap(), ElementKind::new("tur_flex_item"));
+        assert_eq!(exp2.kind().unwrap(), ElementKind::new("tur_flex_item"));
 
         (exp1.id, exp2.id)
     };

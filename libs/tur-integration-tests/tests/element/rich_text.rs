@@ -7,10 +7,7 @@ fn get_container(app: &TurTestApp) -> ElementNodeId {
     let container = tree
         .get_element(ElementNodeId::new(root.children[0].as_u64()))
         .unwrap();
-    assert_eq!(
-        container.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_paragraph")
-    );
+    assert_eq!(container.kind().unwrap(), ElementKind::new("tur_paragraph"));
     assert!(
         container.children.is_empty(),
         "Paragraph should have no children (spans are a prop)"
@@ -63,10 +60,7 @@ fn rich_text_bold_wider_than_normal() {
     let container = tree
         .get_element(ElementNodeId::new(root.children[0].as_u64()))
         .unwrap();
-    assert_eq!(
-        container.element.as_ref().unwrap().kind(),
-        ElementKind::new("tur_paragraph")
-    );
+    assert_eq!(container.kind().unwrap(), ElementKind::new("tur_paragraph"));
 
     assert!(container.computed_layout.size.width > 0.0);
 }

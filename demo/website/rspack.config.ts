@@ -1,5 +1,5 @@
 import { execSync } from "node:child_process";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "@rspack/cli";
@@ -17,7 +17,26 @@ class WasmBuildPlugin implements RspackPluginInstance {
         const buildWasm = () => {
             compiler
                 .getInfrastructureLogger("WasmBuildPlugin")
-                .info("Building WASM with wasm-pack...");
+                .info(
+                    "Building WASM (multi-threaded, +atomics, --no-opt) with wasm-pack...",
+                );
+            // Multi-threaded build via `wasm_thread` (Web Workers via
+            // SharedArrayBuffer). The `+atomics` rustflags in
+            // `.cargo/config.toml` apply to ALL wasm32 builds regardless of
+            // profile, so workers spawn fine even with `--no-opt`.
+            //
+            // Using `--no-opt` instead of `--profile wasm-dev`:
+            // - Skips `wasm-opt` post-processing (which interacts badly
+            //   with boa_engine's AST codegen and traps at "null reference
+            //   produced" during JS module evaluation).
+            // - Uses default `panic = "unwind"` instead of `panic = "abort"`
+            //   (the latter is required only for shared-memory linkage in
+            //   some toolchain versions; current nightly works with unwind
+            //   for our case).
+            //
+            // The engine is fully async — main thread drives `pump` via
+            // `wasm_bindgen_futures::spawn_local`, worker blocks freely
+            // inside `futures::executor::block_on(worker_loop)`.
             execSync("wasm-pack build --target web --no-opt", {
                 cwd: wasmDir,
                 stdio: "inherit",
@@ -33,6 +52,7 @@ class WasmBuildPlugin implements RspackPluginInstance {
             "WasmBuildPlugin",
             async (compilation) => {
                 const logger = compilation.getLogger("WasmBuildPlugin");
+                // Emit top-level files (tur_website.{js,wasm,d.ts}).
                 for (const file of readdirSync(wasmPkgDir)) {
                     if (!/\.(js|wasm|d\.ts)$/.test(file)) continue;
                     const content = readFileSync(join(wasmPkgDir, file));
@@ -41,6 +61,33 @@ class WasmBuildPlugin implements RspackPluginInstance {
                         new compiler.webpack.sources.RawSource(content),
                     );
                     logger.info(`Copied WASM asset: ${file}`);
+                }
+                // Emit per-snippet files (e.g. wasm_thread's web worker
+                // helper, wasm-streams inline modules) preserving the
+                // `snippets/<crate-hash>/<file>` path the JS glue expects.
+                // Recurses into subdirs (wasm_thread's worker script lives
+                // under `snippets/<crate-hash>/src/...`).
+                const snippetsDir = join(wasmPkgDir, "snippets");
+                if (existsSync(snippetsDir)) {
+                    const walk = (dir: string, relPrefix: string) => {
+                        for (const entry of readdirSync(dir)) {
+                            const abs = join(dir, entry);
+                            const rel = `${relPrefix}/${entry}`;
+                            if (statSync(abs).isDirectory()) {
+                                walk(abs, rel);
+                            } else {
+                                const content = readFileSync(abs);
+                                compilation.emitAsset(
+                                    rel,
+                                    new compiler.webpack.sources.RawSource(
+                                        content,
+                                    ),
+                                );
+                                logger.info(`Copied WASM snippet: ${rel}`);
+                            }
+                        }
+                    };
+                    walk(snippetsDir, "snippets");
                 }
             },
         );
@@ -125,13 +172,27 @@ export default defineConfig({
         port: 8080,
         host: "0.0.0.0",
         allowedHosts: "all",
-        headers: process.env.TUR_TUNNEL
-            ? {
-                  "Cross-Origin-Opener-Policy": "same-origin",
-                  "Cross-Origin-Embedder-Policy": "credentialless",
-                  "Cache-Control": "no-store",
-              }
-            : {},
+        // Always set COOP/COEP — the wasm multi-threaded backend uses
+        // SharedArrayBuffer + Web Workers (via `wasm_thread`), which
+        // requires `self.crossOriginIsolated`. Without these headers
+        // `Worker.postMessage` fails with
+        // `DataCloneError: SharedArrayBuffer transfer requires
+        // self.crossOriginIsolated` at engine init.
+        //
+        // COEP value: `require-corp` (NOT `credentialless`). Firefox
+        // (desktop + Android) never implemented `credentialless` —
+        // Chromium-only. With `credentialless`, Firefox silently ignores
+        // the header and `crossOriginIsolated` stays false, so SAB is
+        // unavailable and the probe fails. `require-corp` is universally
+        // supported; the dev server only serves same-origin assets
+        // (wasm, JS, snippets), so no cross-origin resource needs a
+        // CORP opt-in.
+        headers: {
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cross-Origin-Resource-Policy": "same-origin",
+            "Cache-Control": "no-store",
+        },
     },
     entry: {
         main: "./src/index.tsx",

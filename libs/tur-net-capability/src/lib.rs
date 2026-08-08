@@ -30,7 +30,6 @@ pub mod bridge;
 
 use std::future::Future;
 use std::pin::Pin;
-use std::rc::Rc;
 
 use futures::StreamExt;
 use futures::stream::LocalBoxStream;
@@ -103,7 +102,7 @@ pub struct HttpStreamResponse {
 /// for tests) and register it via
 /// `TurRuntimeBuilder::capability(Http::new(backend))`. The bridge fn
 /// `request` in `tur:net` consumes it.
-pub trait HttpBackend: 'static {
+pub trait HttpBackend: Send + Sync + 'static {
     fn request(&self, opts: RequestOpts) -> HttpFuture;
 
     /// Streaming variant: returns the response headers immediately, then the
@@ -156,16 +155,16 @@ impl HttpBackend for NoopHttp {
 /// [`tur_engine::TurRuntimeBuilder::capability`] with `Http::new(backend)`;
 /// the bridge fn `request` in `tur:net` looks it up at call time.
 #[derive(Clone)]
-pub struct Http(Rc<dyn HttpBackend>);
+pub struct Http(std::sync::Arc<dyn HttpBackend + Send + Sync>);
 
 impl Http {
     /// Wrap a backend in the capability newtype.
     pub fn new(backend: impl HttpBackend + 'static) -> Self {
-        Self(Rc::new(backend))
+        Self(std::sync::Arc::new(backend))
     }
 
     /// Borrow the underlying backend handle.
-    pub fn backend(&self) -> &Rc<dyn HttpBackend> {
+    pub fn backend(&self) -> &std::sync::Arc<dyn HttpBackend + Send + Sync> {
         &self.0
     }
 }

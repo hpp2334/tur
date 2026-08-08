@@ -28,8 +28,8 @@ impl ElementRender for ImageElement {
             }
         };
 
-        let img_res = match paint_ctx.get_image_resource(rid) {
-            Some(r) => r,
+        let size = match paint_ctx.get_image_size(rid) {
+            Some(size) => size,
             None => {
                 for &child_id in children {
                     paint_ctx.paint_child(child_id, canvas);
@@ -38,8 +38,8 @@ impl ElementRender for ImageElement {
             }
         };
 
-        let natural_w = img_res.natural_size.width;
-        let natural_h = img_res.natural_size.height;
+        let natural_w = size.width;
+        let natural_h = size.height;
         if natural_w > 0.0 && natural_h > 0.0 {
             let fit = self.painting.fit.unwrap_or_default();
 
@@ -58,7 +58,7 @@ impl ElementRender for ImageElement {
             let transform = vello_common::kurbo::Affine::translate((offset_x, offset_y))
                 * vello_common::kurbo::Affine::scale_non_uniform(scale_x, scale_y);
 
-            canvas.draw_image(rid, img_res.natural_size, transform);
+            canvas.draw_image(rid, size, transform);
         }
 
         for &child_id in children {

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::render::brush::Color;
@@ -12,7 +13,7 @@ use crate::builtin_plugins::text::controller::{
     InputEvent, SelectionChangeEvent,
 };
 use crate::builtin_plugins::text::elements::text_shared::span_data::SpanData;
-use crate::core::async_::Task;
+
 use crate::core::edgy::mutation::{IntoJsArgs, MutationHandle};
 use crate::core::edgy::reactive::AnyReadable;
 use crate::core::element::{ElementNodeId, NodeId};
@@ -28,6 +29,7 @@ use crate::core::platform::ImeEvent;
 use crate::core::platform::PointerDeviceKind;
 use crate::core::platform::key_event::KeydownEvent;
 use crate::core::platform::key_event::{KeyEvent, KeyEventType};
+use crate::core::scheduler::TaskHandle;
 use crate::core::text::text_layout::TextLayoutData;
 use crate::core::view::{Lifecycle, SharedViewCx, Val, View, ViewCx, read_atom_raw};
 
@@ -192,7 +194,7 @@ pub struct EditableTextPainting {
 
 pub struct EditableTextElement {
     pub(crate) view: EditableTextView,
-    pub(crate) cached_layout: Option<TextLayoutData>,
+    pub(crate) cached_layout: Option<Arc<TextLayoutData>>,
     pub(crate) resolved_multiline: bool,
     /// Last-resolved `obscureText` flag (refreshed during layout). Read by
     /// the keyboard handler (to suppress copy/cut) and the render path (to
@@ -201,10 +203,23 @@ pub struct EditableTextElement {
     /// Last-resolved `obscuringCharacter` (default `•`).
     pub(crate) resolved_obscuring_char: char,
     pub(crate) painting: EditableTextPainting,
-    /// Handle to the async caret-blink task. `Some` while focused (task is
-    /// alive and periodically requesting paints); `None` when unfocused
-    /// (task cancelled by dropping the handle).
-    pub(crate) blink_task: Option<Task>,
+    /// Handle to the caret-blink task. `Some` while focused (the spawned
+    /// loop sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
+    /// `request_paint`, which self-wakes the worker to render the toggle);
+    /// `None` when unfocused. On blur or element drop, the handle is
+    /// aborted, which drops the pending `Sleep` and halts the loop
+    /// immediately.
+    pub(crate) blink_task: Option<TaskHandle>,
+}
+
+impl Drop for EditableTextElement {
+    fn drop(&mut self) {
+        // Abort the spawned blink loop — drops its pending Sleep so the
+        // next tick never fires.
+        if let Some(h) = self.blink_task.take() {
+            h.abort();
+        }
+    }
 }
 
 /// Half-period of the caret blink, in milliseconds. The caret is visible on
@@ -831,19 +846,24 @@ impl IntoJsArgs for ContextMenuEvent {
 impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
         if focused {
-            let exec = cx.js_ctx().async_executor().clone();
-            let need_paint = cx.js_ctx().need_paint.clone();
-            let exec_clone = exec.clone();
-            self.blink_task = Some(exec.spawn_task(async move {
+            // Spawn the blink loop on the worker. Each half-period it sleeps,
+            // then calls `request_paint`, which sets the paint flag and —
+            // since the task runs out-of-flush — emits a coalesced
+            // `WorkerMsg::Wake` so the worker's own loop pumps a flush and
+            // renders the caret toggle. `abort()` on blur/drop drops the
+            // pending Sleep + halts the loop immediately (no per-tick flag).
+            self.blink_task = Some(cx.js_ctx().spawn_local(|aw| async move {
                 loop {
-                    exec_clone
-                        .sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
+                    aw.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
                         .await;
-                    need_paint.set(true);
+                    aw.request_paint();
                 }
             }));
         } else {
-            self.blink_task = None;
+            // Abort the spawned loop — drops its pending Sleep.
+            if let Some(h) = self.blink_task.take() {
+                h.abort();
+            }
         }
     }
 }

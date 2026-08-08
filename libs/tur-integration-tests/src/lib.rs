@@ -1,28 +1,58 @@
-use std::cell::Cell;
-use std::cell::Ref;
-use std::cell::RefCell;
+pub mod test_scheduler;
+pub use test_scheduler::TestSchedulerDriver;
+
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::time::Duration;
 
+use boa_engine::Context;
 use boa_engine::NativeFunction;
-use boa_engine::Source;
-use boa_engine::context::time::{Clock, FixedClock};
+use boa_engine::context::time::Clock;
 use futures::StreamExt;
+use futures::executor::block_on;
 use tur_engine::TurStdPlugin;
-use tur_engine::builtin_plugins::gesture::PointerInteractElement;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::element::{ElementNodeId, NodeId};
+
+/// `Send + Sync` wrapper around boa's `FixedClock` (which uses `RefCell`
+/// internally and is therefore `!Sync`). The runtime requires
+/// `Arc<dyn Clock + Send + Sync>` so its config can be shared across
+/// worker threads (Phase 8 threaded mode). Tests are single-threaded but
+/// must satisfy the same bound — `Mutex` adds negligible overhead for the
+/// test's per-frame clock access.
+pub struct MutexFixedClock(pub std::sync::Mutex<boa_engine::context::time::FixedClock>);
+
+impl boa_engine::context::time::Clock for MutexFixedClock {
+    fn now(&self) -> boa_engine::context::time::JsInstant {
+        self.0.lock().unwrap().now()
+    }
+    fn system_time_millis(&self) -> i64 {
+        self.0.lock().unwrap().system_time_millis()
+    }
+}
+
+impl MutexFixedClock {
+    pub fn new(start_millis: u64) -> Self {
+        Self(std::sync::Mutex::new(
+            boa_engine::context::time::FixedClock::from_millis(start_millis),
+        ))
+    }
+    pub fn forward(&self, millis: u64) {
+        self.0.lock().unwrap().forward(millis);
+    }
+}
 use tur_engine::core::elements::AnyElement;
-use tur_engine::core::elements::NodeTreeData;
+use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::Cursor;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::render::Renderer;
 use tur_engine::error::TurError;
+use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
 use tur_engine::{CursorBackend, CursorCap, TurApp, TurRuntime};
 use tur_filepicker_capability::{
@@ -38,16 +68,34 @@ use tur_net_capability::{
 /// build time. Test-only convenience for the cases that previously used the
 /// runtime `TurApp::register_host_module` API (now removed) — lets a test
 /// inject `tur:<whatever>` exports through the plugin path.
+///
+/// **Phase 7**: holds builder closures (not pre-built `NativeFunction`s)
+/// because `NativeFunction` wraps a boa `TraceableClosure` (`!Send`). Each
+/// instance's `register()` calls the builder to produce a fresh
+/// `NativeFunction` against its own boa `Context`.
 pub struct HostModulePlugin {
     /// Module specifier to register (e.g. `"tur:test"`).
     pub specifier: &'static str,
-    /// `(name, fn, length)` exports.
-    pub exports: Vec<(String, NativeFunction, usize)>,
+    /// `(name, builder, length)` exports.
+    pub exports: Vec<HostExport>,
+}
+
+/// One export of a [`HostModulePlugin`]. The `builder` closure produces a
+/// fresh `NativeFunction` for each instance (called inside `register`).
+pub struct HostExport {
+    pub name: String,
+    pub builder: Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>,
+    pub length: usize,
 }
 
 impl Plugin for HostModulePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        ctx.register_host_module(self.specifier, self.exports.clone());
+        let exports: Vec<(String, NativeFunction, usize)> = self
+            .exports
+            .iter()
+            .map(|e| (e.name.clone(), (e.builder)(ctx.boa_mut()), e.length))
+            .collect();
+        ctx.register_host_module(self.specifier, exports);
         Ok(())
     }
 }
@@ -64,13 +112,13 @@ const FRAME_STEP_MS: u64 = 16;
 /// inside a single `flush` iteration — tests stay deterministic.
 #[derive(Default, Clone)]
 pub struct RecordingClipboard {
-    inner: Rc<RecordingClipboardInner>,
+    inner: std::sync::Arc<RecordingClipboardInner>,
 }
 
 #[derive(Default)]
 struct RecordingClipboardInner {
-    next_read: RefCell<String>,
-    writes: RefCell<Vec<String>>,
+    next_read: std::sync::Mutex<String>,
+    writes: std::sync::Mutex<Vec<String>>,
 }
 
 impl RecordingClipboard {
@@ -80,12 +128,12 @@ impl RecordingClipboard {
 
     /// Pre-canned text returned by the next `clipboard.read_text().await`.
     pub fn set_next_read(&self, s: impl Into<String>) {
-        *self.inner.next_read.borrow_mut() = s.into();
+        *self.inner.next_read.lock().unwrap() = s.into();
     }
 
     /// Drain all writes logged so far, in insertion order.
     pub fn take_writes(&self) -> Vec<String> {
-        std::mem::take(&mut *self.inner.writes.borrow_mut())
+        std::mem::take(&mut *self.inner.writes.lock().unwrap())
     }
 
     /// Drain all writes and return the last one (matches the old
@@ -97,11 +145,11 @@ impl RecordingClipboard {
 
 impl ClipboardBackend for RecordingClipboard {
     fn read_text(&self) -> Pin<Box<dyn Future<Output = String>>> {
-        let s = self.inner.next_read.borrow().clone();
+        let s = self.inner.next_read.lock().unwrap().clone();
         Box::pin(std::future::ready(s))
     }
     fn write_text(&self, text: String) -> Pin<Box<dyn Future<Output = ()>>> {
-        self.inner.writes.borrow_mut().push(text);
+        self.inner.writes.lock().unwrap().push(text);
         Box::pin(std::future::ready(()))
     }
 }
@@ -112,14 +160,14 @@ impl ClipboardBackend for RecordingClipboard {
 /// deterministic.
 #[derive(Default, Clone)]
 pub struct RecordingHttp {
-    inner: Rc<RecordingHttpInner>,
+    inner: std::sync::Arc<RecordingHttpInner>,
 }
 
 #[derive(Default)]
 struct RecordingHttpInner {
-    next_response: RefCell<Option<HttpOutcome>>,
-    next_stream_chunks: RefCell<Option<(u16, Vec<Vec<u8>>)>>,
-    last_request: RefCell<Option<RecordedRequest>>,
+    next_response: std::sync::Mutex<Option<HttpOutcome>>,
+    next_stream_chunks: std::sync::Mutex<Option<(u16, Vec<Vec<u8>>)>>,
+    last_request: std::sync::Mutex<Option<RecordedRequest>>,
 }
 
 /// Simplified view of an HTTP request captured by [`RecordingHttp`].
@@ -137,32 +185,33 @@ impl RecordingHttp {
     /// Pre-canned response returned by the next `request(opts).await`. If
     /// `None`, the request resolves to `HttpOutcome::Err("no canned response")`.
     pub fn set_next_response(&self, outcome: HttpOutcome) {
-        *self.inner.next_response.borrow_mut() = Some(outcome);
+        *self.inner.next_response.lock().unwrap() = Some(outcome);
     }
 
     /// Pre-canned streaming response: returns the given status + chunks via
     /// `request_stream`. The next `request_stream` call drains these.
     pub fn set_next_stream(&self, status: u16, chunks: Vec<Vec<u8>>) {
-        *self.inner.next_stream_chunks.borrow_mut() = Some((status, chunks));
+        *self.inner.next_stream_chunks.lock().unwrap() = Some((status, chunks));
     }
 
     /// The most recent request seen by the recording (or `None` if no
     /// request has been issued).
     pub fn last_request(&self) -> Option<RecordedRequest> {
-        self.inner.last_request.borrow().clone()
+        self.inner.last_request.lock().unwrap().clone()
     }
 }
 
 impl HttpBackend for RecordingHttp {
     fn request(&self, opts: RequestOpts) -> HttpFuture {
-        *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
+        *self.inner.last_request.lock().unwrap() = Some(RecordedRequest {
             url: opts.url.clone(),
             method: opts.method.clone(),
         });
         let outcome = self
             .inner
             .next_response
-            .borrow()
+            .lock()
+            .unwrap()
             .clone()
             .unwrap_or_else(|| HttpOutcome::Err("no canned response".to_string()));
         Box::pin(std::future::ready(outcome))
@@ -170,11 +219,11 @@ impl HttpBackend for RecordingHttp {
 
     fn request_stream(&self, opts: RequestOpts) -> HttpStreamFuture {
         use futures::stream;
-        *self.inner.last_request.borrow_mut() = Some(RecordedRequest {
+        *self.inner.last_request.lock().unwrap() = Some(RecordedRequest {
             url: opts.url.clone(),
             method: opts.method.clone(),
         });
-        let canned = self.inner.next_stream_chunks.borrow().clone();
+        let canned = self.inner.next_stream_chunks.lock().unwrap().clone();
         match canned {
             Some((status, chunks)) => {
                 let body_stream = stream::iter(chunks.into_iter().map(Ok)).boxed_local();
@@ -206,13 +255,13 @@ pub fn text_response(status: u16, body: impl Into<String>) -> HttpOutcome {
 /// deterministic.
 #[derive(Default, Clone)]
 pub struct RecordingFilePicker {
-    inner: Rc<RecordingFilePickerInner>,
+    inner: std::sync::Arc<RecordingFilePickerInner>,
 }
 
 #[derive(Default)]
 struct RecordingFilePickerInner {
-    next_pick: RefCell<Vec<PickedFile>>,
-    saves: RefCell<Vec<RecordedSave>>,
+    next_pick: std::sync::Mutex<Vec<PickedFile>>,
+    saves: std::sync::Mutex<Vec<RecordedSave>>,
 }
 
 /// Simplified view of a `saveFile` call captured by [`RecordingFilePicker`].
@@ -230,12 +279,12 @@ impl RecordingFilePicker {
     /// Pre-canned files returned by the next `pick(opts).await`. Returned
     /// unchanged on every subsequent pick until replaced.
     pub fn set_next_pick(&self, files: Vec<PickedFile>) {
-        *self.inner.next_pick.borrow_mut() = files;
+        *self.inner.next_pick.lock().unwrap() = files;
     }
 
     /// Drain all `saveFile` calls logged so far, in insertion order.
     pub fn take_saves(&self) -> Vec<RecordedSave> {
-        std::mem::take(&mut *self.inner.saves.borrow_mut())
+        std::mem::take(&mut *self.inner.saves.lock().unwrap())
     }
 
     /// Drain all saves and return the last one.
@@ -246,7 +295,7 @@ impl RecordingFilePicker {
 
 impl FilePickerBackend for RecordingFilePicker {
     fn pick(&self, _opts: PickOptions) -> Pin<Box<dyn Future<Output = Vec<PickedFile>>>> {
-        let files = self.inner.next_pick.borrow().clone();
+        let files = self.inner.next_pick.lock().unwrap().clone();
         Box::pin(std::future::ready(files))
     }
     fn save(
@@ -257,7 +306,8 @@ impl FilePickerBackend for RecordingFilePicker {
     ) -> Pin<Box<dyn Future<Output = ()>>> {
         self.inner
             .saves
-            .borrow_mut()
+            .lock()
+            .unwrap()
             .push(RecordedSave { name, bytes });
         Box::pin(std::future::ready(()))
     }
@@ -285,34 +335,20 @@ pub struct TurTestApp {
     /// [`Self::wait_frames`] / [`Self::wait_for`] (and the legacy
     /// [`Self::advance`]). Shared with the engine `Shell` and the boa
     /// `Context`, so `Date.now()` and timer scheduling see the same time.
-    clock: Rc<FixedClock>,
-    /// Shared with the `RecordingCursorPlatform` installed in the engine. The engine
-    /// pushes cursor changes here (via `CursorPlatform::set_cursor`); the harness
-    /// drains it through `take_current_cursor`.
-    cursor_slot: Rc<Cell<Option<Cursor>>>,
-    /// Shared with the `RecordingClipboard` installed in the engine. Tests
-    /// pre-canned reads via `set_clipboard_read`; assert writes via
-    /// `take_clipboard_write`.
+    clock: std::sync::Arc<MutexFixedClock>,
+    /// The scheduler driver's virtual clock. Advanced alongside `clock`
+    /// so `sleep()` futures fire on the same virtual timeline.
+    driver: Rc<TestSchedulerDriver>,
+    cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
     clipboard: RecordingClipboard,
-    /// Shared with the `RecordingHttp` installed in the engine (only when
-    /// constructed via [`Self::new_with_http`]). `None` for the default
-    /// constructor — those tests don't register `tur:net`.
     http: Option<RecordingHttp>,
-    /// Shared with the `RecordingFilePicker` installed in the engine (only
-    /// when constructed via [`Self::new_with_filepicker`]). `None` for the
-    /// default constructor — those tests don't register `tur:filepicker`.
     filepicker: Option<RecordingFilePicker>,
-    /// Synthetic wall-clock ms used to stamp `PointerInput::PointerDown`
-    /// events for engine-side multi-click classification. Advanced in small
-    /// steps (well under the 500 ms threshold) on each pointer-down so
-    /// consecutive `double_click` / `triple_click` calls register as a
-    /// multi-click streak.
     synthetic_time_ms: u64,
 }
 
 impl TurTestApp {
     pub fn new(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, Vec::new())
+        Self::build(width, height, None, None, Vec::new(), None)
     }
 
     /// Construct with `TurNetPlugin` registered against a fresh
@@ -320,7 +356,14 @@ impl TurTestApp {
     /// responses via [`Self::set_http_response`]; capture requests via
     /// [`Self::last_http_request`].
     pub fn new_with_http(width: f64, height: f64) -> Result<Self, TurError> {
-        Self::build(width, height, Some(RecordingHttp::new()), None, Vec::new())
+        Self::build(
+            width,
+            height,
+            Some(RecordingHttp::new()),
+            None,
+            Vec::new(),
+            None,
+        )
     }
 
     /// Construct with `TurFilePickerPlugin` registered against a fresh
@@ -334,6 +377,7 @@ impl TurTestApp {
             None,
             Some(RecordingFilePicker::new()),
             Vec::new(),
+            None,
         )
     }
 
@@ -346,7 +390,19 @@ impl TurTestApp {
         height: f64,
         extra_plugins: Vec<Box<dyn Plugin>>,
     ) -> Result<Self, TurError> {
-        Self::build(width, height, None, None, extra_plugins)
+        Self::build(width, height, None, None, extra_plugins, None)
+    }
+
+    /// Construct with a custom [`Renderer`] (instead of the default
+    /// `NoopRenderer`), keeping every other harness ergonomic (load / wheel /
+    /// render / element_tree). Used by tests that need to inspect the actual
+    /// `RenderCommand` stream a frame produces (e.g. paint-walk culling).
+    pub fn new_with_renderer(
+        width: f64,
+        height: f64,
+        renderer: Box<dyn Renderer>,
+    ) -> Result<Self, TurError> {
+        Self::build(width, height, None, None, Vec::new(), Some(renderer))
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -356,46 +412,62 @@ impl TurTestApp {
         http: Option<RecordingHttp>,
         filepicker: Option<RecordingFilePicker>,
         extra_plugins: Vec<Box<dyn Plugin>>,
+        renderer: Option<Box<dyn Renderer>>,
     ) -> Result<Self, TurError> {
-        let cursor_slot = Rc::new(Cell::new(None));
+        let cursor_slot = std::sync::Arc::new(std::sync::Mutex::new(None));
         let clipboard = RecordingClipboard::new();
-        let clock = Rc::new(FixedClock::from_millis(0));
+        let clock = std::sync::Arc::new(MutexFixedClock::new(0));
+        let driver = TestSchedulerDriver::new();
         let mut builder = TurRuntime::builder()
-            .font_loader(Rc::new(NativeFontLoader::new()))
+            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
-            .capability(CursorCap::new(RecordingCursor {
-                last: cursor_slot.clone(),
-            }))
-            .capability(Clipboard::new(clipboard.clone()))
+            .scheduler(driver.clone())
+            .capability({
+                let last = cursor_slot.clone();
+                move |_| Ok(CursorCap::new(RecordingCursor { last }))
+            })
+            .capability({
+                let clip = clipboard.clone();
+                move |_| Ok(Clipboard::new(clip))
+            })
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .plugin(TurClipboardPlugin);
         if let Some(http_impl) = http.clone() {
             builder = builder
-                .capability(Http::new(http_impl))
+                .capability(move |_| Ok(Http::new(http_impl)))
                 .plugin(TurNetPlugin);
         }
         if let Some(filepicker_impl) = filepicker.clone() {
             builder = builder
-                .capability(FilePicker::new(filepicker_impl))
+                .capability(move |_| Ok(FilePicker::new(filepicker_impl)))
                 .plugin(TurFilePickerPlugin);
         }
         for p in extra_plugins {
             builder = builder.plugin_boxed(p);
         }
         let runtime = builder.build()?;
-        // Headless instance — the test harness renders via NoopRenderer.
-        let inner = runtime.create_headless_app((width, height))?;
-        let _ = inner.run_frame();
+        let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
+        let inner = runtime.create_app(renderer, (width, height), 1.0)?;
+        let _ = block_on(inner.run_frame());
         Ok(Self {
             inner,
             clock,
+            driver,
             cursor_slot,
             clipboard,
             http,
             filepicker,
-            synthetic_time_ms: 1_700_000_000_000, // arbitrary stable epoch base
+            synthetic_time_ms: 1_700_000_000_000,
         })
+    }
+
+    /// Advance both the boa clock + the scheduler driver's virtual clock
+    /// by `ms`. Sleep futures fire when the virtual clock reaches their
+    /// deadline.
+    fn advance_clock(&self, ms: u64) {
+        self.clock.forward(ms);
+        self.driver.advance(ms);
     }
 
     /// Bump the synthetic time source so the next pointer-down stamps a
@@ -434,7 +506,7 @@ impl TurTestApp {
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         // Case dist files are ES modules that import `tur:std` (resolved by
         // the engine's module loader) and call `render(<case default>)`.
-        self.inner.load_module(&source)?;
+        block_on(self.inner.load_module(&source))?;
         self.ensure_flushed();
         Ok(())
     }
@@ -456,13 +528,13 @@ impl TurTestApp {
     /// reactive updates, layout, microtasks, async polling) and render if
     /// anything changed. No time advance — the `FixedClock` is untouched.
     pub fn pump(&mut self) -> Result<FrameOutcome, TurError> {
-        self.inner.run_frame()
+        block_on(self.inner.run_frame())
     }
 
     /// Legacy alias for [`Self::pump`] (drops the `FrameOutcome`). Prefer
     /// `pump` in new code.
     pub fn tick(&mut self) -> Result<(), TurError> {
-        self.inner.run_frame().map(|_| ())
+        block_on(self.inner.run_frame()).map(|_| ())
     }
 
     /// Pump until the engine has no more immediately-available work (nothing
@@ -471,7 +543,7 @@ impl TurTestApp {
     /// rather than spun indefinitely. Capped at 8 frames to guard cascades.
     pub fn settle(&mut self) {
         for _ in 0..8 {
-            let outcome = match self.inner.run_frame() {
+            let outcome = match block_on(self.inner.run_frame()) {
                 Ok(o) => o,
                 Err(_) => return,
             };
@@ -487,8 +559,8 @@ impl TurTestApp {
     /// from the frame count.
     pub fn wait_frames(&mut self, frames: usize) {
         for _ in 0..frames {
-            self.clock.forward(FRAME_STEP_MS);
-            let _ = self.inner.run_frame();
+            self.advance_clock(FRAME_STEP_MS);
+            let _ = block_on(self.inner.run_frame());
         }
         self.settle();
     }
@@ -503,16 +575,15 @@ impl TurTestApp {
             if predicate(self) {
                 return;
             }
-            self.clock.forward(FRAME_STEP_MS);
-            let _ = self.inner.run_frame();
+            self.advance_clock(FRAME_STEP_MS);
+            let _ = block_on(self.inner.run_frame());
         }
     }
 
-    /// Request a paint and settle. Mostly redundant now that the input
-    /// helpers settle automatically; kept for tests that assert a paint after
-    /// an explicit paint request.
+    /// Settle (pump to quiescence). The worker self-paints on any state
+    /// change, so an explicit paint request isn't needed — kept for tests
+    /// that previously asserted a paint after an explicit request.
     pub fn render(&mut self) {
-        self.inner.request_paint();
         self.settle();
     }
 
@@ -531,12 +602,17 @@ impl TurTestApp {
     /// express time as frame counts); this remains for the few cases that need
     /// a precise non-16 ms-aligned step.
     pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
-        self.clock.forward(duration.as_millis() as u64);
-        self.inner.run_frame().map(|_| ())
+        self.advance_clock(duration.as_millis() as u64);
+        block_on(self.inner.run_frame()).map(|_| ())
     }
 
-    pub fn element_tree(&self) -> Ref<'_, NodeTreeData> {
-        self.inner.element_tree()
+    /// Snapshot of the live element tree, fetched via RPC from the worker.
+    /// Returns an owned value (not a `Ref`) — the live tree lives on the
+    /// worker thread; main can only see snapshots of it. Tests should call
+    /// this once per `render()` / input step they want to inspect (the
+    /// snapshot is not auto-refreshed).
+    pub fn element_tree(&self) -> NodeTreeSnapshot {
+        block_on(self.inner.backend().query_tree_snapshot())
     }
 
     pub fn click(&mut self, x: f64, y: f64) {
@@ -769,7 +845,7 @@ impl TurTestApp {
             }));
         self.settle();
         for i in 1..=steps {
-            self.clock.forward(FRAME_STEP_MS);
+            self.advance_clock(FRAME_STEP_MS);
             let t = i as f64 / steps as f64;
             let x = start.0 + (end.0 - start.0) * t;
             let y = start.1 + (end.1 - start.1) * t;
@@ -780,9 +856,9 @@ impl TurTestApp {
                     device: PointerDeviceKind::Touch,
                     time_ms,
                 }));
-            let _ = self.inner.run_frame();
+            let _ = block_on(self.inner.run_frame());
         }
-        self.clock.forward(FRAME_STEP_MS);
+        self.advance_clock(FRAME_STEP_MS);
         let time_ms = self.clock.now().millis_since_epoch();
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
@@ -791,7 +867,7 @@ impl TurTestApp {
                 device: PointerDeviceKind::Touch,
                 time_ms,
             }));
-        let _ = self.inner.run_frame();
+        let _ = block_on(self.inner.run_frame());
         self.settle();
     }
 
@@ -856,72 +932,77 @@ impl TurTestApp {
     }
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
-        self.inner
-            .with_element(id, |e| {
-                e.cast::<PointerInteractElement>()
-                    .map(|p| p.has_on_click())
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false)
+        use tur_engine::builtin_plugins::gesture::PointerInteractElement;
+        self.with_element(id, |e| {
+            e.cast::<PointerInteractElement>()
+                .map(|p| p.has_on_click())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
     }
 
     pub fn has_mouse_region_callbacks(&self, id: ElementNodeId) -> bool {
         use tur_engine::builtin_plugins::gesture::MouseRegionElement;
-        self.inner
-            .with_element(id, |e| {
-                e.cast::<MouseRegionElement>()
-                    .map(|m| m.has_region_callbacks())
-                    .unwrap_or(false)
-            })
-            .unwrap_or(false)
+        self.with_element(id, |e| {
+            e.cast::<MouseRegionElement>()
+                .map(|m| m.has_region_callbacks())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
     }
 
     pub fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        self.inner.query_element(key)
+        block_on(self.inner.query_element(key))
     }
 
     pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
-        let tree = self.inner.element_tree();
-        let node = tree.get_element(id)?;
-        // The node's painted canvas origin = the translation of its absolute
-        // (world) affine. This includes ancestor `Transform` rotate/scale and
-        // (for followers) link-tracked translations, so the bounds match where
-        // the element is actually painted + hit-tested.
-        let origin = tree.absolute_affine_of(id).translation();
-        let (x, y) = (origin.x, origin.y);
+        // RPC: the worker returns a `DevNodeData` snapshot carrying the
+        // node's absolute position (translation of its world affine) + its
+        // painted size.
+        let node = block_on(self.inner.dev_tool_get_element(id.into()))?;
+        let (x, y) = node.absolute;
+        let (w, h) = node.size;
         Some(Rect {
             left: x,
             top: y,
-            right: x + node.computed_layout.size.width,
-            bottom: y + node.computed_layout.size.height,
+            right: x + w,
+            bottom: y + h,
         })
     }
 
     pub fn focused_element(&self) -> Option<ElementNodeId> {
-        self.inner.focused_element()
+        block_on(self.inner.focused_element())
     }
 
     pub fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        self.inner.focused_cursor_rect()
+        block_on(self.inner.focused_cursor_rect())
     }
 
     pub fn focused_is_editable(&self) -> bool {
-        self.inner.focused_is_editable()
+        block_on(self.inner.focused_is_editable())
     }
 
-    pub fn with_element<R>(
+    /// Inspect an element's internal state via a closure. The closure runs
+    /// on the worker thread (where the live `AnyElement` lives), so it can
+    /// do typed introspection that isn't serializable across the thread
+    /// boundary — `e.cast::<TextElement>().map(|t| t.spans())`, etc.
+    ///
+    /// Constraints:
+    /// - `R: Send + 'static` — the result crosses worker→main.
+    /// - `cb: Send + 'static` — the closure crosses main→worker.
+    pub fn with_element<R: Send + 'static>(
         &self,
         id: ElementNodeId,
-        cb: impl FnOnce(&AnyElement) -> R,
+        cb: impl FnOnce(&AnyElement) -> R + Send + 'static,
     ) -> Option<R> {
-        self.inner.with_element(id, cb)
+        block_on(self.inner.with_element(id, cb))
     }
 
     /// Returns the most recent cursor pushed by the engine since the last
     /// call. The engine pushes cursor changes through the `RecordingCursorPlatform`
     /// during `apply_changes`; this drains that recording.
     pub fn take_current_cursor(&self) -> Option<Cursor> {
-        self.cursor_slot.take()
+        self.cursor_slot.lock().unwrap().take()
     }
 
     /// Drain any text written to the clipboard via `AppEvent::Custom`
@@ -1004,31 +1085,27 @@ impl TurTestApp {
     }
 
     pub fn eval_js(&self, source: &str) -> String {
-        self.inner
-            .with_boa_context(|ctx| match ctx.eval(Source::from_bytes(source)) {
-                Ok(r) => r
-                    .as_string()
-                    .map(|s| s.to_std_string_escaped())
-                    .unwrap_or_else(|| r.display().to_string()),
-                Err(_) => String::new(),
-            })
+        // RPC to the worker: it runs `ctx.eval(source)`, drains jobs, and
+        // replies with the display string. Synchronous from the test's POV
+        // (blocks on the worker's reply via `block_on`).
+        block_on(self.inner.backend().eval_js(source))
     }
 
     pub fn load_bundle_source(&self, source: &str) -> Result<(), TurError> {
-        self.inner.load_js(source)
+        block_on(self.inner.load_js(source))
     }
 
     /// Evaluate `source` as an ES module — supports real
     /// `import { … } from "tur:std"` (or `tur-ext/demo-helper`/`tur:net`). Returns
     /// nothing; read results back via [`eval_js`](Self::eval_js).
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
-        self.inner.load_module(source)
+        block_on(self.inner.load_module(source))
     }
 
     /// Structured dev-tool snapshot of the root node, or `None` if no tree
     /// is mounted. Children are bare ids; iterate with `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<tur_engine::core::elements::DevNodeData> {
-        self.inner.dev_tool_element_tree()
+        block_on(self.inner.dev_tool_element_tree())
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.
@@ -1036,7 +1113,7 @@ impl TurTestApp {
         &self,
         id: NodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
-        self.inner.dev_tool_get_element(id)
+        block_on(self.inner.dev_tool_get_element(id))
     }
 }
 
@@ -1045,11 +1122,14 @@ impl TurTestApp {
 /// `take_current_cursor`.
 #[derive(Clone)]
 struct RecordingCursor {
-    last: Rc<Cell<Option<Cursor>>>,
+    last: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
 }
 
 impl CursorBackend for RecordingCursor {
     fn set_cursor(&mut self, cursor: Cursor) {
-        self.last.set(Some(cursor));
+        {
+            let mut g = self.last.lock().unwrap();
+            *g = Some(cursor);
+        };
     }
 }

@@ -6,7 +6,6 @@ use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
-use tur_engine::core::elements::NodeTreeData;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -28,6 +27,12 @@ pub enum TurVelloError {
     Handle(String),
 }
 
+/// Test harness that drives a real `VelloRenderer` on the main thread.
+///
+/// Architecture matches production: the engine runs on a worker thread
+/// (`TurRuntime::create_app`); `MainBackend` owns the renderer on main and
+/// drives it directly (no render_sink). Pixel readback happens via
+/// `TurApp::render_to_pixels`.
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
@@ -110,13 +115,17 @@ impl TurVelloApp {
         );
 
         let runtime = TurRuntime::builder()
-            .font_loader(Rc::new(NativeFontLoader::new()))
-            .clock(Rc::new(StdClock::new()))
+            .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+            .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
+            .clock(std::sync::Arc::new(StdClock::new()))
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
+
+        // Threaded engine: worker produces command batches; `MainBackend`
+        // owns the VelloRenderer on main and applies them directly.
         let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
-        let _ = app.run_frame();
+        let _ = futures::executor::block_on(app.run_frame());
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -136,21 +145,20 @@ impl TurVelloApp {
             .join("js/packages/tur-test-cases/dist")
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
-        self.inner.borrow().app.load_module(&source)?;
+        futures::executor::block_on(self.inner.borrow().app.load_module(&source))?;
         Ok(())
     }
 
-    pub fn with_element_tree<R>(&self, f: impl FnOnce(&NodeTreeData) -> R) -> R {
-        let inner = self.inner.borrow();
-        let tree = inner.app.element_tree();
-        f(&tree)
+    /// Direct access to the underlying `TurApp`.
+    pub fn app(&self) -> std::cell::Ref<'_, Rc<TurApp>> {
+        std::cell::Ref::map(self.inner.borrow(), |i| &i.app)
     }
 
     pub fn render(&self) {
-        self.inner.borrow().app.request_paint();
-        let _ = self.inner.borrow().app.run_frame();
+        let _ = futures::executor::block_on(self.inner.borrow().app.run_frame());
     }
 
+    /// Read rendered pixels back from the app-owned renderer.
     pub fn render_to_pixels(&self) -> Vec<u8> {
         self.inner
             .borrow()

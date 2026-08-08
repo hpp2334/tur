@@ -64,7 +64,10 @@ fn host_emits_multiple_messages_js_collects_all() {
     bus.emit_to_js(b"third".to_vec());
 
     app.wait_for(|a| a.eval_js("globalThis.__messages.length") == "3");
-    assert_eq!(app.eval_js(r#"globalThis.__messages.join(",")"#), "first,second,third");
+    assert_eq!(
+        app.eval_js(r#"globalThis.__messages.join(",")"#),
+        "first,second,third"
+    );
 }
 
 // ===========================================================================
@@ -93,7 +96,7 @@ fn js_sends_bytes_host_receives() {
     )
     .expect("module");
 
-    app.wait_for(|_| received.lock().unwrap().len() >= 1);
+    app.wait_for(|_| !received.lock().unwrap().is_empty());
 
     let msgs = received.lock().unwrap();
     assert_eq!(msgs.len(), 1);
@@ -122,7 +125,7 @@ fn js_sends_raw_uint8array() {
     )
     .expect("module");
 
-    app.wait_for(|_| received.lock().unwrap().len() >= 1);
+    app.wait_for(|_| !received.lock().unwrap().is_empty());
 
     let msgs = received.lock().unwrap();
     assert_eq!(msgs.len(), 1);
@@ -164,7 +167,10 @@ fn json_round_trip_with_id_correlation() {
 
     app.wait_for(|a| !a.eval_js("globalThis.__result").is_empty());
     let result = app.eval_js("globalThis.__result");
-    assert!(result.contains("echo:"), "should contain echo prefix: {result}");
+    assert!(
+        result.contains("echo:"),
+        "should contain echo prefix: {result}"
+    );
     assert!(result.contains("\"id\":42"), "should contain id: {result}");
 }
 

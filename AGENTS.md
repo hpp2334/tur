@@ -129,16 +129,17 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │     ├── tur-filepicker-wasm   (WasmFilePicker via web-sys)│
 │     └── tur-filepicker-native (NativeFilePicker via rfd)│
 │  Backend crates for the inlined Clipboard cap:         │
-│     ├── tur-clipboard-wasm  (WasmClipboard — re-exports│
-│     │                       Clipboard/ClipboardBackend/│
-│     │                       TurClipboardPlugin from    │
-│     │                       tur_engine)                │
+│     ├── tur-clipboard-wasm  (WasmClipboard; re-exports │
+│     │   Clipboard/ClipboardBackend/TurClipboardPlugin) │
 │     └── tur-clipboard-native (NativeClipboard via      │
-│                                arboard, same re-exports)│
-│  Embedders register backends via                       │
-│    TurRuntimeBuilder::capability(Clipboard::new(backend))│
-│    TurRuntimeBuilder::capability(Http::new(backend))    │
-│    TurRuntimeBuilder::capability(FilePicker::new(backend))│
+│         arboard; same re-exports + AsyncPluginContext; │
+│         new(&cx) self-hops each read/write to main)    │
+│  Embedders register backends via .capability(|cx|...): │
+│    the closure receives &AsyncPluginContext -- backends │
+│    needing main take cx (NativeClipboard self-hops);   │
+│    the rest ignore it (WasmClipboard/Http/FilePicker). │
+│    Engine creates the channel internally in build();   │
+│    no main_handle/main_drain builder wiring needed.    │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -167,15 +168,17 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). The cursor is per-instance (set via `TurApp::set_cursor_backend` after `create_app`, since it targets a specific surface):
+Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &AsyncPluginContext| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal main-thread channel) and receives an `AsyncPluginContext` — the engine's main-thread hop. Backends that need to run OS-API calls on main (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_main(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance (set via `TurApp::set_cursor_backend` after `create_app`, since it targets a specific surface):
 
 ```rust
 let runtime = TurRuntime::builder()
     .font_loader(Rc::new(WasmFontLoader::new()))
     .clock(Rc::new(WasmClock))
-    .capability(Clipboard::new(WasmClipboard))   // tur-clipboard-wasm
-    .capability(Http::new(WasmHttp))             // tur-net-wasm
-    .capability(FilePicker::new(WasmFilePicker)) // tur-filepicker-wasm
+    .capability(|_| Ok(Clipboard::new(WasmClipboard)))   // tur-clipboard-wasm
+    .capability(|_| Ok(Http::new(WasmHttp)))             // tur-net-wasm
+    .capability(|_| Ok(FilePicker::new(WasmFilePicker))) // tur-filepicker-wasm
+    // A backend that needs main-thread access takes the context:
+    //   .capability(|cx| Ok(Clipboard::new(NativeClipboard::new(cx)?)))
     .plugin(TurStdPlugin)
     .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
     .plugin(TurClipboardPlugin)                  // requires: Clipboard
@@ -193,6 +196,15 @@ let headless = runtime.create_headless_app((0.0, 0.0))?;
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
   newtype (`Clipboard`, `Http`, `FilePicker`, `CursorCap`).
+- `AsyncPluginContext` (`core::plugin`, re-exported at the crate root) — the
+  engine's `Send + Sync + Clone` main-thread hop. The engine creates the
+  channel internally in `build()` and spawns the drain on the main thread, so
+  **no embedder wiring is required** (no `main_handle`/`main_drain` builder
+  methods). OS-API backends receive a clone at construction (via the
+  capability closure) and self-hop; plugin/bridge code reaches the same
+  channel via `PluginContext::to_async()`. The raw `MainTask`/`MainDrain`/
+  `main_channel()` live `pub(crate)` in `core::scheduler` (the plugin layer
+  wraps the sender — dependency direction: plugin → scheduler, never reverse).
 - `Plugin::requires(&mut CapabilityDecls)` — declare hard deps; the builder
   validates them BEFORE any plugin's `register` runs, so missing capabilities
   fail fast at `build()` with a clear error. (`TurNetPlugin` is the exception —
@@ -223,7 +235,9 @@ The engine has a **one runtime, many instances** architecture:
   surface) or `runtime.create_headless_app(viewport)` (no rendering — JS +
   capabilities + events only, backed by `NoopRenderer`). Each instance gets its
   own boa `Context` (JS realm), element tree, reactive store, focus manager,
-  event queues, subsystems, screen, and LoopDriver. Plugins are re-registered
+  event queues, subsystems, screen, and scheduler (per-instance vsync drivers —
+  e.g. Android instances install their own JNI `FrameLoop`-bound scheduler via
+  `TurApp::set_main_scheduler`). Plugins are re-registered
   into each instance's fresh realm (the same plugin objects — `register` takes
   `&self`, so no factory needed).
 
@@ -321,10 +335,19 @@ libs/
         app/                 # TurAppInternal + FrameOutcome + AppEvent/
                              #   AppEventQueue + render() mount +
                              #   RootView/RootElement generic-root wrapper
-        async_/              # AsyncExecutor (tur_async wrapper) + task
-                             #   primitives (sleep/launch, the bridge fns
-                             #   for tur:std) + executor
-                             #   (TurJobExecutor — boa JobExecutor impl)
+        async_/              # CompletionQueue/CompletionHandle (pending
+                             #   completion invocations drained each flush)
+                             #   + executor (TurJobExecutor — boa
+                             #   JobExecutor impl)
+          scheduler.rs         # MainSchedulerDriver + WorkerSchedulerDriver
+                               #   traits + MainScheduler/WorkerScheduler view
+                               #   structs + WorkerFactory +
+                               #   Sleep/VsyncEvents/WorkerHandle +
+                               #   SpawnError/TaskHandle/track_spawn (generic
+                               #   task tracking) + the raw main-thread hop
+                               #   mechanics (pub(crate) MainTask/MainDrain/
+                               #   main_channel — the plugin-layer
+                               #   AsyncPluginContext wraps the sender)
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge
@@ -363,6 +386,12 @@ libs/
                              #   KeyEventType/KeydownEvent/KeyupEvent —
                              #   engine contract types)
         plugin.rs            # Plugin trait (register + requires) + PluginContext
+                             #   + CompileContext + AsyncPluginContext
+                             #   (Send+Sync+Clone main-thread hop — wraps the
+                             #   scheduler's pub(crate) channel sender; the
+                             #   engine creates the channel internally in
+                             #   build() so no embedder wiring is needed) +
+                             #   MainRunFuture + PluginContext::to_async()
         render/              # PaintContext, Renderer, ElementRender trait,
                              #   Canvas + brush/ (Color/Brush/GradientStop/
                              #   RGB types + JS bindings)
@@ -433,7 +462,10 @@ libs/
                              #   re-exports Clipboard/ClipboardBackend/
                              #   TurClipboardPlugin from tur_engine
   tur-clipboard-native/      # NativeClipboard (arboard) backend — same
-                             #   re-exports
+                             #   re-exports + AsyncPluginContext.
+                             #   NativeClipboard::new(&AsyncPluginContext)
+                             #   stores it and self-hops each read/write to
+                             #   main (macOS NSPasteboard needs main-thread)
   tur-net-capability/        # HttpBackend trait + Http cap + tur:net
   tur-net-wasm/              # WasmHttp (reqwest-wasm) backend
    tur-net-native/            # NativeHttp (reqwest) backend — runs each request
@@ -552,10 +584,11 @@ The website is the browser host app. Building it automatically runs `wasm-pack` 
 cd js && pnpm build
 cd demo/website && pnpm build
 # Or use the rspack dev server
-cd demo/website && TUR_TUNNEL=1 pnpm dev
+cd demo/website && pnpm dev
+# → https://localhost:8080/ (self-signed cert)
 ```
 
-Requires COOP/COEP headers for `SharedArrayBuffer` (configured in devServer; `TUR_TUNNEL=1` switches to HTTP so Playwright MCP can connect).
+The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` + `Cross-Origin-Resource-Policy: same-origin`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `wasm_thread`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`. COEP value must be `require-corp`, NOT `credentialless` — `credentialless` is Chromium-only (Firefox desktop + Android never implemented it and silently ignore it, so `crossOriginIsolated` stays false).
 
 ### JS (js/ workspace — also covers demo/website + demo/playground-view)
 
@@ -610,9 +643,22 @@ The whole playground (sidebar + editor + viewer) renders to a single `<canvas>` 
 
 ```sh
 node scripts/prepare-js-fixtures.cjs    # build JS fixtures once
-cd demo/website && TUR_TUNNEL=1 pnpm dev
-# → http://localhost:8080/ (must be HTTP: Playwright MCP rejects the self-signed HTTPS cert)
+cd demo/website && pnpm dev
+# → https://localhost:8080/ (self-signed cert)
 ```
+
+The dev server runs over HTTPS with a self-signed cert. Playwright MCP's default context rejects the cert — **bypass it** by opening a fresh context with `ignoreHTTPSErrors: true` via `playwright_browser_run_code_unsafe`:
+
+```js
+async (page) => {
+  const newCtx = await page.context().browser().newContext({ ignoreHTTPSErrors: true });
+  const newPage = await newCtx.newPage();
+  await newPage.goto('https://localhost:8080/', { waitUntil: 'load' });
+  // ...interact via newPage (the MCP snapshot tools won't see it — use evaluate / screenshot)
+}
+```
+
+The new context's page isn't tracked by the MCP snapshot/click tools — use `newPage.evaluate(...)`, `newPage.screenshot(...)`, `newPage.on('console' | 'pageerror', ...)` directly inside the `run_code_unsafe` callback.
 
 ### Drive the canvas
 
