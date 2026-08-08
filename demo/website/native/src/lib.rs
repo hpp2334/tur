@@ -126,11 +126,4 @@ impl TurDevTool {
     pub fn get_element(&self, id: u32) -> js_sys::Promise {
         self.app.get_element(id)
     }
-
-    /// Evaluate a JS expression on the worker and return its display form.
-    /// For debugging.
-    #[wasm_bindgen(js_name = evalJs)]
-    pub fn eval_js(&self, src: &str) -> js_sys::Promise {
-        self.app.eval_js(src)
-    }
 }
