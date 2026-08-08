@@ -348,6 +348,15 @@ impl TurApp {
             core::app::MainMsg::FocusedStateChanged { .. } => {
                 // Applied via cached_focus — embedder reads via cached_focus().
             }
+            core::app::MainMsg::EventBusToHost(bytes) => {
+                // Ship JS→host event-bus bytes to the main-side handle's
+                // registered handlers (`on_bus_event`). Mirrors the same arm
+                // in `MainBackend::apply_main_msg` — without this, the
+                // autonomous vsync-driven loop (used by threaded embedders
+                // like Android) would silently drop every reply, hanging any
+                // host↔JS RPC layered on the event bus.
+                self.backend.event_bus_handle().dispatch_to_host(bytes);
+            }
             core::app::MainMsg::Destroyed => return HandleResult::Stop,
             _ => {}
         }
