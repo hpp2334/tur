@@ -1105,20 +1105,4 @@ impl WasmApp {
         })
     }
 
-    /// Evaluate a JS expression on the worker and return its display form.
-    /// For debugging (the production code paths use structured RPCs).
-    pub fn eval_js(&self, src: &str) -> js_sys::Promise {
-        let app = {
-            let guard = self.state.borrow();
-            match guard.as_ref() {
-                Some(s) => s.app.clone(),
-                None => return js_sys::Promise::resolve(&JsValue::from_str("")),
-            }
-        };
-        let src = src.to_string();
-        wasm_bindgen_futures::future_to_promise(async move {
-            let s = app.backend().eval_js(&src).await;
-            Ok(JsValue::from_str(&s))
-        })
-    }
 }

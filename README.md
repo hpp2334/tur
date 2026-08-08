@@ -8,6 +8,3 @@
 
 MIT or Apache 2.0, at your option.
 
-## Note
-
-Vibe coding with [OpenCode](https://opencode.ai) and GLM 5.2, Mimo 2.5 (for vision).
