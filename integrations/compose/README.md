@@ -93,16 +93,16 @@ Plus a cargo-ndk task that builds your `.so` into `src/main/jniLibs/arm64-v8a/`
 The engine ships with every standard plugin available to register from your
 `.so`:
 
-| Module | Plugin | Notes |
-|---|---|---|
-| `tur:std` | `TurStdPlugin` | Column/Row/Stack, Text, Input, Image, ScrollView, … |
-| `tur:animation` | `TurAnimationPlugin` | `Opacity`, `Transform`, `AnimatedContainer`, … |
-| `tur:clipboard` | `TurClipboardPlugin` | requires the `Clipboard` capability (Android default: `AndroidClipboard` via JNI to `ClipboardManager`) |
-| `tur:net` | `TurNetPlugin` | requires the `Http` capability (default: `NativeHttp` — reqwest + rustls) |
+| Module | Plugin |
+|---|---|
+| `tur:std` | `TurStdPlugin` |
+| `tur:animation` | `TurAnimationPlugin` |
+| `tur:clipboard` | `TurClipboardPlugin` |
+| `tur:net` | `TurNetPlugin` |
 
 `tur_android::ops::create_runtime` pre-registers Android-default capabilities
 (`NoopCursor`, `AndroidClipboard`, `NativeHttp`) + native fonts and wall-clock
-— your `configure` callback only adds plugins (and may override any capability).
+— your `configure` callback only adds plugins.
 
 ## Multi-instance
 
