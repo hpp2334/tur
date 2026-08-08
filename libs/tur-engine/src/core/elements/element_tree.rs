@@ -11,7 +11,7 @@ use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Stor
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::ImageMetadataMap;
+use crate::core::image_resource::ImageManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, PaintContext};
 use crate::core::shell::PaintShell;
@@ -465,7 +465,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_metadata_map: &ImageMetadataMap,
+        image_manager: &ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -484,7 +484,7 @@ impl NodeTreeData {
             constraints,
             font_manager,
             text_layout_cx,
-            image_metadata_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -499,7 +499,7 @@ impl NodeTreeData {
         constraints: &Constraints,
         font_manager: &'a mut FontManager,
         text_layout_cx: &'a mut ParleyLayoutContext<[u8; 4]>,
-        image_metadata_map: &'a ImageMetadataMap,
+        image_manager: &'a ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -541,7 +541,7 @@ impl NodeTreeData {
             id,
             font_manager,
             text_layout_cx,
-            image_metadata_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -572,7 +572,7 @@ impl NodeTreeData {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_metadata_map: &ImageMetadataMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         let root_id = match self.root_id {
@@ -584,7 +584,7 @@ impl NodeTreeData {
             canvas,
             Affine::IDENTITY,
             focused_node_id,
-            image_metadata_map,
+            image_manager,
             shell,
         );
     }
@@ -596,7 +596,7 @@ impl NodeTreeData {
         canvas: &mut dyn Canvas,
         parent_absolute: Affine,
         focused_node_id: Option<ElementNodeId>,
-        image_metadata_map: &ImageMetadataMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         let node = match self.elements.get(&id) {
@@ -651,14 +651,8 @@ impl NodeTreeData {
 
         canvas.notify_node_entry(id, absolute, node.computed_layout.size);
 
-        let paint_ctx = PaintContext::new(
-            self,
-            focused_node_id,
-            id,
-            image_metadata_map,
-            shell,
-            absolute,
-        );
+        let paint_ctx =
+            PaintContext::new(self, focused_node_id, id, image_manager, shell, absolute);
         // Flatten: paint fragment children as direct children of this node.
         let children = self.flatten_children(&node.children);
         element.paint(canvas, &node.computed_layout, &children, &paint_ctx);
@@ -1262,7 +1256,7 @@ impl NodeTree {
         constraints: &Constraints,
         font_manager: &mut FontManager,
         text_layout_cx: &mut ParleyLayoutContext<[u8; 4]>,
-        image_metadata_map: &ImageMetadataMap,
+        image_manager: &ImageManager,
         node_tree: NodeTree,
         mutation_queue: std::rc::Rc<
             std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>,
@@ -1274,7 +1268,7 @@ impl NodeTree {
             constraints,
             font_manager,
             text_layout_cx,
-            image_metadata_map,
+            image_manager,
             node_tree,
             mutation_queue,
             dirty,
@@ -1286,12 +1280,12 @@ impl NodeTree {
         &self,
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
-        image_metadata_map: &ImageMetadataMap,
+        image_manager: &ImageManager,
         shell: PaintShell<'_>,
     ) {
         self.data
             .borrow()
-            .paint(canvas, focused_node_id, image_metadata_map, shell);
+            .paint(canvas, focused_node_id, image_manager, shell);
     }
 }
 

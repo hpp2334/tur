@@ -7,10 +7,10 @@
 //!
 //! Ownership is split across the worker/main boundary:
 //!
-//! - **Worker side** — [`ImageMetadataMap`]: only the `natural_size` per id.
-//!   Layout + paint read sizes from it; the pixel `Blob` never lives on the
-//!   worker across a frame boundary (it is staged in `pending_image_ships`
-//!   and shipped to main via `MainMsg::UploadImage`).
+//! - **Worker side** — [`ImageManager`]: only the `natural_size` per id
+//!   (plus the next-id counter). Layout + paint read sizes from it; the
+//!   pixel `Blob` never lives on the worker across a frame boundary (it is
+//!   shipped to main via `MainMsg::UploadImage`).
 //! - **Main side** — [`ImageResourceMap`]: the full `ImageResource` (with its
 //!   Arc-backed pixel `Blob`) per id, retained for context-loss re-upload.
 //!   Main inserts under the worker-assigned id via
@@ -84,7 +84,7 @@ impl ImageResource {
 /// Worker-side image metadata: just the natural size (layout + paint read
 /// the size; the pixel `Blob` lives on main). One entry per
 /// `createImageResource` / `createSvgResource` — inserted by
-/// `TurJsContext::register_image` at decode time. Wrapped in a struct (not
+/// `ImageManager::allocate` at decode time. Wrapped in a struct (not
 /// a bare `Size`) so future metadata fields can be added without rippling
 /// through every read site.
 #[derive(Debug, Clone, Copy)]
@@ -92,8 +92,64 @@ pub struct ImageMetadata {
     pub size: Size,
 }
 
-/// Worker-side image metadata map: `ImageResourceId → ImageMetadata`.
-pub type ImageMetadataMap = HashMap<ImageResourceId, ImageMetadata>;
+/// Worker-side image state: the natural-size map plus the next-id counter.
+/// Both pieces always change together (each `register_image` allocates an id
+/// and records its size), so they live behind one `Rc<RefCell<ImageManager>>`
+/// on the worker instead of two separate cells. Layout + paint borrow this
+/// immutably to read sizes; the JS bridge mutates it via [`Self::allocate`].
+pub struct ImageManager {
+    metadata: HashMap<ImageResourceId, ImageMetadata>,
+    next_id: u64,
+}
+
+impl Default for ImageManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ImageManager {
+    pub fn new() -> Self {
+        Self {
+            metadata: HashMap::new(),
+            next_id: 0,
+        }
+    }
+
+    /// Assign the next worker-side id, record the image's natural size, and
+    /// return the id. The pixel `Blob` is NOT stored here — the caller ships
+    /// it to main via `MainMsg::UploadImage` under the returned id. This is
+    /// the single mutation point: id allocation + size recording are atomic
+    /// so layout + paint can never observe a stale size for an id the bridge
+    /// already handed out.
+    pub fn allocate(&mut self, image: &ImageResource) -> ImageResourceId {
+        let id = ImageResourceId::new(self.next_id);
+        self.next_id += 1;
+        self.metadata.insert(
+            id,
+            ImageMetadata {
+                size: image.natural_size,
+            },
+        );
+        id
+    }
+
+    /// Natural-size lookup for layout (`get_image_natural_size`) + paint
+    /// (`get_image_size`). Returns the [`ImageMetadata`] so future fields
+    /// extend without touching the signature.
+    pub fn get(&self, id: ImageResourceId) -> Option<&ImageMetadata> {
+        self.metadata.get(&id)
+    }
+}
+
+impl fmt::Debug for ImageManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImageManager")
+            .field("count", &self.metadata.len())
+            .field("next_id", &self.next_id)
+            .finish()
+    }
+}
 
 #[derive(Default, Clone)]
 pub struct ImageResourceMap {

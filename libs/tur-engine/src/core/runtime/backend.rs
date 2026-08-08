@@ -446,7 +446,7 @@ pub struct MainBackend {
     /// retained) per worker-assigned id. Inserted on `MainMsg::UploadImage`
     /// (under the worker-assigned id) alongside the GPU upload; retained for
     /// context-loss re-upload. The worker only ever holds the sizes
-    /// (`ImageMetadataMap`).
+    /// (`ImageManager`).
     image_resource_map: RefCell<crate::core::image_resource::ImageResourceMap>,
 }
 

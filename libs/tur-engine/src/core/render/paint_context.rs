@@ -7,13 +7,13 @@ use crate::core::platform::Cursor;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
-use crate::core::image_resource::{ImageMetadataMap, ImageResourceId};
+use crate::core::image_resource::{ImageManager, ImageResourceId};
 use crate::core::render::Canvas;
 use crate::core::shell::PaintShell;
 
 pub struct PaintContext<'a> {
     tree: &'a NodeTreeData,
-    image_metadata_map: &'a ImageMetadataMap,
+    image_manager: &'a ImageManager,
     focused_node_id: Option<ElementNodeId>,
     current_node_id: Option<ElementNodeId>,
     /// Shell face for this paint pass: cursor claims, time, pointer position.
@@ -33,13 +33,13 @@ impl<'a> PaintContext<'a> {
         tree: &'a NodeTreeData,
         focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,
-        image_metadata_map: &'a ImageMetadataMap,
+        image_manager: &'a ImageManager,
         shell: PaintShell<'a>,
         current_transform: Affine,
     ) -> Self {
         PaintContext {
             tree,
-            image_metadata_map,
+            image_manager,
             focused_node_id,
             current_node_id: Some(current_node_id),
             shell,
@@ -56,7 +56,7 @@ impl<'a> PaintContext<'a> {
             canvas,
             self.current_transform,
             self.focused_node_id,
-            self.image_metadata_map,
+            self.image_manager,
             self.shell,
         );
     }
@@ -75,7 +75,7 @@ impl<'a> PaintContext<'a> {
     /// (BoxFit math + `Canvas::draw_image(rid, size, …)`); the pixel data
     /// lives on main, not in this map.
     pub fn get_image_size(&self, id: ImageResourceId) -> Option<Size> {
-        self.image_metadata_map.get(&id).map(|m| m.size)
+        self.image_manager.get(id).map(|m| m.size)
     }
 
     /// True if the last known pointer position (canvas-space) lies within this

@@ -123,18 +123,18 @@ impl TurAppInternal {
         use crate::core::edgy::reactive::Store;
         use crate::core::elements::NodeTree;
         use crate::core::focus::FocusManager;
-        use crate::core::image_resource::ImageMetadataMap;
+        use crate::core::image_resource::ImageManager;
 
         let mutation_queue = Rc::new(RefCell::new(PendingMutationInvocationQueue::new()));
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
-        // Worker-side image state: metadata (sizes) only — the pixel `Blob`
-        // ships to main directly from the `createImageResource` bridge via
-        // the shared `main_tx` channel (one `MainMsg::UploadImage` per
-        // decode). The worker never retains pixels across a frame boundary.
-        let image_metadata_map = Rc::new(RefCell::new(ImageMetadataMap::new()));
-        let image_next_id = Rc::new(Cell::new(0));
+        // Worker-side image state: metadata (sizes) + next-id counter,
+        // bundled in one `ImageManager`. The pixel `Blob` ships to main
+        // directly from the `createImageResource` bridge via the shared
+        // `main_tx` channel (one `MainMsg::UploadImage` per decode). The
+        // worker never retains pixels across a frame boundary.
+        let image_manager = Rc::new(RefCell::new(ImageManager::new()));
 
         // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
         // `Rc<dyn Clock>` that `Shell` expects (per-instance + worker-side
@@ -168,8 +168,7 @@ impl TurAppInternal {
             focus_manager.clone(),
             dirty,
             need_paint,
-            image_metadata_map.clone(),
-            image_next_id.clone(),
+            image_manager.clone(),
             main_tx,
             store.clone(),
             worker_sched.clone(),
@@ -188,7 +187,7 @@ impl TurAppInternal {
             element_tree,
             mutation_queue,
             focus_manager,
-            image_metadata_map,
+            image_manager,
             font_context,
             font_loader,
             worker_sched.clone(),

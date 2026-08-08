@@ -11,7 +11,7 @@
 //! part of `tur:std`.
 //!
 //! The engine retains only the paint/layout contract —
-//! `crate::core::image_resource::{ImageResourceId, ImageMetadataMap,
+//! `crate::core::image_resource::{ImageResourceId, ImageManager,
 //! ImageResource}` (pure-data struct with `pub` fields) — which
 //! `Canvas::draw_image` consumes. This plugin produces these structs from
 //! raw bytes / SVG strings via [`decode`]. Decoded images are registered via

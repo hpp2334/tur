@@ -15,7 +15,7 @@ use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
-use crate::core::image_resource::ImageMetadataMap;
+use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
 use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::scheduler::WorkerScheduler;
@@ -27,9 +27,9 @@ pub struct TurAppContext {
     pub(crate) element_tree: NodeTree,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
-    /// Worker-side image metadata (natural sizes only — the pixel `Blob`
-    /// lives on main, staged via `TurJsContext::pending_image_ships`).
-    pub(crate) image_metadata_map: Rc<RefCell<ImageMetadataMap>>,
+    /// Worker-side image state (natural-size map + next-id counter — the
+    /// pixel `Blob` lives on main, shipped via `MainMsg::UploadImage`).
+    pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
     pub(crate) screen: Screen,
@@ -69,7 +69,7 @@ impl TurAppContext {
         element_tree: NodeTree,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
-        image_metadata_map: Rc<RefCell<ImageMetadataMap>>,
+        image_manager: Rc<RefCell<ImageManager>>,
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
         worker_sched: WorkerScheduler,
@@ -83,7 +83,7 @@ impl TurAppContext {
             element_tree,
             mutation_queue,
             focus_manager,
-            image_metadata_map,
+            image_manager,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
             screen: Screen::new(store),
@@ -179,13 +179,13 @@ impl TurAppContext {
             max_height: height,
         };
 
-        let image_metadata_map = self.image_metadata_map.borrow();
+        let image_manager = self.image_manager.borrow();
         let mut tree = self.element_tree.borrow_mut();
         tree.compute_layout(
             &constraints,
             &mut self.font_manager,
             &mut self.text_layout_cx,
-            &image_metadata_map,
+            &image_manager,
             self.element_tree.clone(),
             self.mutation_queue.clone(),
             dirty,
@@ -220,7 +220,7 @@ impl TurAppContext {
             tree.paint(
                 &mut recording,
                 focused_node_id,
-                &self.image_metadata_map.borrow(),
+                &self.image_manager.borrow(),
                 shell,
             );
         }

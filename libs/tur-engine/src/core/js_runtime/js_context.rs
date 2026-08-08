@@ -12,7 +12,7 @@ use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
-use crate::core::image_resource::{ImageMetadata, ImageMetadataMap, ImageResourceId};
+use crate::core::image_resource::{ImageManager, ImageResourceId};
 use crate::core::scheduler::WorkerScheduler;
 
 #[derive(Clone, Trace, Finalize, JsData)]
@@ -43,14 +43,12 @@ pub struct TurJsContext {
     /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this same
     /// trade-off for the other fields.
     pub(crate) wake_worker: Arc<dyn Fn() + Send + Sync>,
-    /// Worker-side image metadata (natural sizes only — the pixel `Blob`
-    /// lives on main). Inserted by [`Self::register_image`] at decode time;
-    /// read by layout + paint (`get_image_natural_size` /
+    /// Worker-side image state: the natural-size map plus the next-id
+    /// counter, bundled into one [`ImageManager`] (id allocation + size
+    /// recording are atomic). Mutated by [`Self::register_image`] at decode
+    /// time; read by layout + paint (`get_image_natural_size` /
     /// `PaintContext::get_image_size`).
-    pub(crate) image_metadata_map: Rc<RefCell<ImageMetadataMap>>,
-    /// Next worker-assigned image id (worker id authority — main inserts
-    /// under these ids via `ImageResourceMap::insert_with_id`).
-    pub(crate) image_next_id: Rc<Cell<u64>>,
+    pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) store: Store,
     /// Worker→main channel sender clone. Bridges use it to ship messages
     /// directly to main without a staging vec — most notably
@@ -113,8 +111,7 @@ impl TurJsContext {
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
         need_paint: Rc<Cell<bool>>,
-        image_metadata_map: Rc<RefCell<ImageMetadataMap>>,
-        image_next_id: Rc<Cell<u64>>,
+        image_manager: Rc<RefCell<ImageManager>>,
         main_tx: MainTx,
         store: Store,
         worker_sched: WorkerScheduler,
@@ -132,8 +129,7 @@ impl TurJsContext {
             in_flush: Rc::new(Cell::new(false)),
             wake_pending: Rc::new(Cell::new(false)),
             wake_worker,
-            image_metadata_map,
-            image_next_id,
+            image_manager,
             main_tx,
             store,
             worker_sched,
@@ -241,17 +237,8 @@ impl TurJsContext {
         self.capabilities.clone()
     }
 
-    /// Worker-side image metadata map. Bridge fns (e.g. `createImageResource`)
-    /// register decoded images via [`Self::register_image`]; layout
-    /// (`get_image_natural_size`) and paint (`get_image_size`) read it during
-    /// the layout/paint passes. Contains sizes only — the pixel `Blob` is
-    /// shipped to main directly via [`Self::main_tx`] at decode time.
-    pub fn image_metadata_map(&self) -> &Rc<RefCell<ImageMetadataMap>> {
-        &self.image_metadata_map
-    }
-
-    /// Register a decoded image: assign the worker-side id, record its
-    /// natural size in [`Self::image_metadata_map`] (so layout + paint can
+    /// Register a decoded image: allocate the worker-side id + record its
+    /// natural size via [`ImageManager::allocate`] (so layout + paint can
     /// size the element this frame), and ship the pixel `Blob` to main
     /// directly via `MainMsg::UploadImage` on the shared `main_tx` channel.
     /// Stays synchronous — `unbounded_send` is non-blocking, and the FIFO
@@ -262,12 +249,7 @@ impl TurJsContext {
         &self,
         image: crate::core::image_resource::ImageResource,
     ) -> ImageResourceId {
-        let id = ImageResourceId::new(self.image_next_id.get());
-        self.image_next_id.set(id.as_u64() + 1);
-        let size = image.natural_size;
-        self.image_metadata_map
-            .borrow_mut()
-            .insert(id, ImageMetadata { size });
+        let id = self.image_manager.borrow_mut().allocate(&image);
         let _ = self
             .main_tx
             .unbounded_send(crate::core::app::MainMsg::UploadImage { id, image });
