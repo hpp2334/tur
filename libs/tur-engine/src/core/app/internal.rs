@@ -129,6 +129,14 @@ impl TurAppInternal {
         let focus_manager = Rc::new(RefCell::new(FocusManager::new()));
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
+
+        // Event bus — created early so `main_tx` can be set before any
+        // flush runs. The `HostBusSubsystem` ships JS→host bytes to main
+        // via this sender; without it, main-side `on_bus_event` handlers
+        // never fire.
+        let event_bus = Rc::new(crate::core::event_bus::EventBus::new());
+        event_bus.set_main_tx(main_tx.clone());
+
         // Worker-side image state: metadata (sizes) + next-id counter,
         // bundled in one `ImageManager`. The pixel `Blob` ships to main
         // directly from the `createImageResource` bridge via the shared
@@ -207,7 +215,7 @@ impl TurAppInternal {
             flush_task_queue,
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
-            event_bus: Rc::new(crate::core::event_bus::EventBus::new()),
+            event_bus: event_bus.clone(),
             pending_render_batch: RefCell::new(None),
         }
     }

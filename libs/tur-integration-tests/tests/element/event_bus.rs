@@ -9,8 +9,7 @@
 //! - JSON payload with developer-managed id correlation (no built-in id —
 //!   developers encode whatever structure they need inside the byte payload)
 
-use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use tur_engine::EventBus;
 use tur_integration_tests::TurTestApp;
@@ -78,7 +77,7 @@ fn host_emits_multiple_messages_js_collects_all() {
 fn js_sends_bytes_host_receives() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
-    let received: Rc<Mutex<Vec<String>>> = Rc::new(Mutex::new(Vec::new()));
+    let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let received_clone = received.clone();
 
     let bus = EventBus::of(app.app()).expect("event bus");
@@ -107,7 +106,7 @@ fn js_sends_bytes_host_receives() {
 fn js_sends_raw_uint8array() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
 
-    let received: Rc<Mutex<Vec<Vec<u8>>>> = Rc::new(Mutex::new(Vec::new()));
+    let received: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
     let received_clone = received.clone();
 
     let bus = EventBus::of(app.app()).expect("event bus");

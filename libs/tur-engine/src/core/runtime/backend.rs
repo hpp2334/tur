@@ -252,11 +252,9 @@ impl WorkerBackend {
                 let key_refs: Vec<&str> = key.iter().map(|s| s.as_str()).collect();
                 reply.send(self.query_element(&key_refs));
             }
-            WorkerMsg::EventBusToJs(_bytes) => {
-                tracing::trace!(
-                    "EventBusToJs: {} bytes (not yet wired for delivery)",
-                    _bytes.len()
-                );
+            WorkerMsg::EventBusToJs(bytes) => {
+                self.internal.event_bus.emit_to_js(bytes);
+                self.internal.js_context.wake_if_idle();
             }
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
@@ -737,9 +735,11 @@ impl MainBackend {
             }
             MainMsg::FrameOutcome(result) => Some(result.map_err(TurError::Other)),
             MainMsg::Destroyed => Some(Err(TurError::Other("worker destroyed".into()))),
-            // EventBusToHost / DevReply — pump ignores (the Reply<T> slot
-            // handles RPC replies; standalone MainMsg variants are reserved
-            // for future event-bus work).
+            MainMsg::EventBusToHost(bytes) => {
+                self.event_bus_handle.dispatch_to_host(bytes);
+                None
+            }
+            // DevReply — pump ignores (the Reply<T> slot handles RPC replies).
             _ => None,
         }
     }

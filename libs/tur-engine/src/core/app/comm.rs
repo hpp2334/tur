@@ -145,8 +145,9 @@ pub enum WorkerMsg {
         id: ElementNodeId,
         runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
     },
-    /// Event bus — host → JS bytes. Worker forwards to the JS-side
-    /// `__turEventBus.toJs` sink during the next flush.
+    /// Event bus — host → JS bytes. Worker pushes into the `EventBus`
+    /// `host_to_js` queue; `HostBusSubsystem` drains it on the next flush
+    /// and delivers to JS `eventBus.on` callbacks.
     EventBusToJs(Vec<u8>),
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
@@ -195,8 +196,9 @@ pub enum MainMsg {
         is_editable: bool,
         cursor_rect: Option<(f64, f64, f64, f64)>,
     },
-    /// Event bus — JS → host bytes. One `MainMsg` per `__turEventBus.toHost`
-    /// dispatch.
+    /// Event bus — JS → host bytes. Worker ships one `MainMsg` per
+    /// `eventBus.send` dispatch; `MainBackend` dispatches to handlers
+    /// registered on the main-side `EventBusHandle`.
     EventBusToHost(Vec<u8>),
     /// Reply to a dev-tool RPC.
     DevReply(DevReply),

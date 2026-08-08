@@ -68,8 +68,13 @@ pub struct EventBus {
     /// thread (the subsystem that invokes them runs there).
     js_handlers: RefCell<Vec<JsFunction>>,
     /// Host-side handlers registered via `on_bus_event`. Run during the
-    /// worker's `HostBusSubsystem` flush.
+    /// worker's `HostBusSubsystem` flush (inline mode only — threaded
+    /// mode ships bytes to main via `main_tx`).
     host_handlers: RefCell<Vec<HostHandler>>,
+    /// Worker → main sender. When set (threaded mode), JS→host bytes are
+    /// shipped to main via `MainMsg::EventBusToHost` so handlers registered
+    /// on the main-side `EventBusHandle` fire. `None` in inline mode.
+    main_tx: RefCell<Option<crate::core::app::MainTx>>,
 }
 
 impl EventBus {
@@ -79,6 +84,7 @@ impl EventBus {
             js_to_host: Arc::new(Mutex::new(VecDeque::new())),
             js_handlers: RefCell::new(Vec::new()),
             host_handlers: RefCell::new(Vec::new()),
+            main_tx: RefCell::new(None),
         }
     }
 
@@ -91,6 +97,7 @@ impl EventBus {
             js_to_host,
             js_handlers: RefCell::new(Vec::new()),
             host_handlers: RefCell::new(Vec::new()),
+            main_tx: RefCell::new(None),
         }
     }
 
@@ -120,6 +127,13 @@ impl EventBus {
     pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + 'static) {
         self.host_handlers.borrow_mut().push(Box::new(handler));
     }
+
+    /// Set the worker→main sender. When set, JS→host bytes are shipped to
+    /// main via `MainMsg::EventBusToHost` during `HostBusSubsystem::flush`,
+    /// so handlers registered on the main-side `EventBusHandle` fire.
+    pub fn set_main_tx(&self, tx: crate::core::app::MainTx) {
+        *self.main_tx.borrow_mut() = Some(tx);
+    }
 }
 
 impl Default for EventBus {
@@ -148,12 +162,26 @@ pub struct EventBusHandle {
     inner: EventBusHandleInner,
 }
 
+/// Host-side handler stored on the main-side `EventBusHandle` (channel mode).
+type MainHostHandler = Box<dyn FnMut(Vec<u8>) + Send>;
+
+/// Shared handler list — all clones of an `EventBusHandle` in channel mode
+/// see the same list, so a handler registered on one clone fires when
+/// `MainBackend` dispatches on its own clone.
+type SharedHostHandlers = Arc<Mutex<Vec<MainHostHandler>>>;
+
 #[derive(Clone)]
 enum EventBusHandleInner {
     /// Inline mode — shared queues with the worker's `EventBus`.
     Queues(HostToJsQueue, JsToHostQueue),
     /// Threaded mode — ship via the worker's `futures::channel` sender.
-    Channel(crate::core::app::WorkerTx),
+    /// `host_handlers` is shared across all clones (Arc<Mutex>) so a handler
+    /// registered on one clone fires when `MainBackend` dispatches a
+    /// `MainMsg::EventBusToHost` on its own clone.
+    Channel {
+        worker_tx: crate::core::app::WorkerTx,
+        host_handlers: SharedHostHandlers,
+    },
 }
 
 impl EventBusHandle {
@@ -165,7 +193,10 @@ impl EventBusHandle {
 
     pub fn from_channel(worker_tx: crate::core::app::WorkerTx) -> Self {
         Self {
-            inner: EventBusHandleInner::Channel(worker_tx),
+            inner: EventBusHandleInner::Channel {
+                worker_tx,
+                host_handlers: Arc::new(Mutex::new(Vec::new())),
+            },
         }
     }
 
@@ -173,8 +204,29 @@ impl EventBusHandle {
     pub fn emit_to_js(&self, payload: Vec<u8>) {
         match &self.inner {
             EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
-            EventBusHandleInner::Channel(tx) => {
-                let _ = tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+            EventBusHandleInner::Channel { worker_tx, .. } => {
+                let _ = worker_tx
+                    .unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+            }
+        }
+    }
+
+    /// Register a host-side handler for JS→host bytes. In channel mode the
+    /// handler is stored in a shared `Arc<Mutex>` and fires when
+    /// `MainBackend` dispatches a `MainMsg::EventBusToHost`.
+    pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + Send + 'static) {
+        if let EventBusHandleInner::Channel { host_handlers, .. } = &self.inner {
+            host_handlers.lock().unwrap().push(Box::new(handler));
+        }
+    }
+
+    /// Dispatch JS→host bytes to all registered handlers. Called by
+    /// `MainBackend` when it receives `MainMsg::EventBusToHost`.
+    pub(crate) fn dispatch_to_host(&self, bytes: Vec<u8>) {
+        if let EventBusHandleInner::Channel { host_handlers, .. } = &self.inner {
+            let mut handlers = host_handlers.lock().unwrap();
+            for handler in handlers.iter_mut() {
+                handler(bytes.clone());
             }
         }
     }
@@ -187,7 +239,7 @@ impl EventBusHandle {
                 let mut q = j.lock().unwrap();
                 q.drain(..).collect()
             }
-            EventBusHandleInner::Channel(_) => Vec::new(),
+            EventBusHandleInner::Channel { .. } => Vec::new(),
         }
     }
 }
@@ -225,6 +277,16 @@ impl Subsystem for HostBusSubsystem {
 
         let js_msgs: Vec<Vec<u8>> = inner.js_to_host.lock().unwrap().drain(..).collect();
         if !js_msgs.is_empty() {
+            // Threaded mode: ship each message to main so handlers
+            // registered on the main-side `EventBusHandle` fire.
+            if let Some(tx) = inner.main_tx.borrow().as_ref() {
+                for msg in &js_msgs {
+                    let _ = tx.unbounded_send(
+                        crate::core::app::MainMsg::EventBusToHost(msg.clone()),
+                    );
+                }
+            }
+            // Inline mode: call worker-side handlers directly.
             let mut handlers = inner.host_handlers.borrow_mut();
             for msg in js_msgs {
                 for handler in handlers.iter_mut() {
