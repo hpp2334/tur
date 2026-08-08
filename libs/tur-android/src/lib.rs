@@ -512,7 +512,7 @@ pub mod ops {
         let Some(instance) = handle_to_instance(handle) else {
             return 0;
         };
-        if futures::executor::block_on(instance.app.focused_is_editable()) {
+        if instance.app.cached_focus().is_editable {
             1
         } else {
             0

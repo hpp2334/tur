@@ -9,6 +9,17 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // external — resolved at run time by the engine's boa module loader — so the
 // bundle keeps its `import` statements. The bundle contains the Shell UI +
 // inlined case sources; it calls `render(Shell)` on evaluation.
+//
+// `TUR_PLATFORM=android` builds the Android variant. `tur-android` registers no
+// `Http` backend (so `TurNetPlugin` skips `tur:net`) and no file-picker backend
+// (so `tur:filepicker` is absent) — and rspack's resolver rejects the `tur:`
+// scheme for anything that isn't external. compile.ts therefore sources the
+// optional module namespaces (Net, FilePicker) from a scheme-free alias
+// (`@tur-pg/optional-ns`); resolve.alias points it at the real external
+// re-exports for web, or an in-bundle empty stub for Android — so the Android
+// bundle has no `tur:net` / `tur:filepicker` imports at all.
+const android = process.env.TUR_PLATFORM === "android";
+
 export default defineConfig({
     entry: {
         impl: "./src/index.ts",
@@ -52,5 +63,13 @@ export default defineConfig({
     },
     resolve: {
         extensions: [".ts", ".tsx", ".js"],
+        alias: {
+            "@tur-pg/optional-ns": resolve(
+                __dirname,
+                android
+                    ? "src/cases/optional-ns.android.ts"
+                    : "src/cases/optional-ns.web.ts",
+            ),
+        },
     },
 });

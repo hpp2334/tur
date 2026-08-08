@@ -9,7 +9,10 @@
             "@tur-ng/clipboard",
             "@tur-ng/net",
             "@tur-ng/filepicker"
-        ]
+        ],
+        "paths": {
+            "@tur-pg/optional-ns": ["./src/cases/optional-ns.web.ts"]
+        }
     },
     "include": ["src", "cases"]
 }

@@ -331,6 +331,7 @@ pub trait MainSchedulerDriver: 'static {
     /// rAF churn perf bug as a side effect).
     fn request_vsync(&self);
 
+    /// Return a `Send + Sync` callback that arms a main-thread vsync, for
     /// Spawn a future on the main thread's local executor. Returns a
     /// [`TaskHandle`] that can abort or await the task; drop it to detach.
     /// The engine core does not currently call this on the main thread

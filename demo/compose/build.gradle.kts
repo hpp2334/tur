@@ -151,6 +151,9 @@ val buildPlaygroundJs by tasks.registering(Exec::class) {
 
     workingDir = File(workspaceRoot, "js")
     commandLine("pnpm", "--filter", "@tur-ng/playground-view", "build")
+    // Android variant: alias `tur:filepicker` to an in-bundle stub (tur-android
+    // ships no file-picker backend). See rspack.config.ts.
+    environment("TUR_PLATFORM", "android")
 }
 
 val copyPlaygroundJs by tasks.registering(Copy::class) {

@@ -50,7 +50,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use futures::executor::LocalPool;
+use futures::executor::{LocalPool, LocalSpawner};
 use futures::task::LocalSpawnExt;
 use jni::objects::JObject;
 
@@ -74,25 +74,37 @@ impl FrameLoopRef {
     }
 }
 thread_local! {
-    /// Per-thread `LocalPool` for `spawn_local` + `block_on`. Set by
-    /// [`AndroidSchedulerDriver::new`] for the main thread and inside
-    /// [`AndroidSchedulerDriver::spawn_worker`] for each worker thread.
+    /// Per-thread `LocalPool` for `run_until` (drives the worker_loop).
+    /// Borrowed **mutably** for the entire duration of `run_until`.
     static CURRENT_POOL: RefCell<Option<LocalPool>> = const { RefCell::new(None) };
+    /// Per-thread `LocalSpawner` (extracted from the pool at setup time).
+    /// Stored separately so `spawn_local` can borrow it while `run_until`
+    /// holds the mutable borrow on `CURRENT_POOL` — without this, a future
+    /// polled inside `run_until` that calls `spawn_local` panics with
+    /// "RefCell already mutably borrowed".
+    static CURRENT_SPAWNER: RefCell<Option<LocalSpawner>> = const { RefCell::new(None) };
 }
 
-/// Helper: spawn a future on the current thread's LocalPool.
+/// Set up the current thread's `LocalPool` + `LocalSpawner`. Called once
+/// per thread (main thread in `AndroidSchedulerDriver::new`, worker thread
+/// in `spawn_worker`).
+fn set_up_thread_pool() {
+    CURRENT_POOL.with(|c| {
+        let pool = LocalPool::new();
+        CURRENT_SPAWNER.with(|s| *s.borrow_mut() = Some(pool.spawner()));
+        *c.borrow_mut() = Some(pool);
+    });
+}
+
+/// Helper: spawn a future on the current thread's LocalSpawner.
 fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-    CURRENT_POOL.with(|pool| {
-        // We need a `&self` reference to call `spawner()`. RefCell::borrow
-        // gives us that. The spawned future's lifecycle extends beyond
-        // the borrow, but `LocalPool::spawner` returns a clonable handle
-        // that doesn't borrow from the pool.
-        let guard = pool.borrow();
-        let pool_ref = guard
+    CURRENT_SPAWNER.with(|s| {
+        let guard = s.borrow();
+        let spawner = guard
             .as_ref()
             .expect("spawn_local called with no LocalPool set on this thread");
         track_spawn(fut, |f| {
-            let _ = pool_ref.spawner().spawn_local(f);
+            let _ = spawner.spawn_local(f);
         })
     })
 }
@@ -150,7 +162,7 @@ impl AndroidSchedulerDriver {
     /// `LocalPool` so `spawn_local` / `block_on` work on the calling
     /// (main) thread.
     pub fn new(runtime: tokio::runtime::Handle, frame_loop: Option<FrameLoopRef>) -> Rc<Self> {
-        CURRENT_POOL.with(|c| *c.borrow_mut() = Some(LocalPool::new()));
+        set_up_thread_pool();
 
         Rc::new(Self {
             inner: Arc::new(AndroidInner {
@@ -173,6 +185,32 @@ impl AndroidSchedulerDriver {
             let _ = tx.unbounded_send(());
         }
     }
+
+    /// Returns a `Send + Sync` closure that schedules a Choreographer vsync.
+    /// Used by `pump_loop`'s waker so that when the worker sends to `main_rx`
+    /// (from its own thread), the channel waker fires this closure → arms a
+    /// vsync → Choreographer fires → `pump_loop` → processes the message.
+    pub fn make_vsync_wake_fn(&self) -> Arc<dyn Fn() + Send + Sync> {
+        let Some(frame_loop) = self.frame_loop.as_ref() else {
+            return Arc::new(|| {});
+        };
+        let kotlin_loop = frame_loop.kotlin_loop.clone();
+        let inner = self.inner.clone();
+        Arc::new(move || {
+            if inner
+                .vsync_armed
+                .swap(true, std::sync::atomic::Ordering::AcqRel)
+            {
+                return;
+            }
+            let Some(vm) = crate::java_vm() else { return };
+            let Ok(mut env) = vm.attach_current_thread() else {
+                return;
+            };
+            let loop_obj = unsafe { JObject::from_raw(kotlin_loop.as_raw()) };
+            let _ = env.call_method(&loop_obj, "scheduleVsync", "()V", &[]);
+        })
+    }
 }
 
 impl MainSchedulerDriver for AndroidSchedulerDriver {
@@ -190,11 +228,12 @@ impl MainSchedulerDriver for AndroidSchedulerDriver {
         let join = std::thread::Builder::new()
             .name("tur-worker".into())
             .spawn(move || {
-                CURRENT_POOL.with(|c| *c.borrow_mut() = Some(LocalPool::new()));
+                set_up_thread_pool();
                 let worker_view = WorkerScheduler::new(Rc::new(AndroidWorkerScheduler { runtime }));
                 let loop_fut = factory(worker_view);
                 block_on_on_current_thread(loop_fut);
                 CURRENT_POOL.with(|c| *c.borrow_mut() = None);
+                CURRENT_SPAWNER.with(|s| *s.borrow_mut() = None);
             })
             .expect("failed to spawn tur worker thread");
         WorkerHandle::new(Box::new(move || {

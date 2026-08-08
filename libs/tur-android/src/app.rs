@@ -19,6 +19,18 @@ mod imp {
     use tur_engine::renderer::vello::VelloRenderer;
     use tur_engine::{CursorCap, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
 
+    /// `std::task::Wake` impl wrapping a `Send + Sync` closure that schedules
+    /// a Choreographer vsync. Used as the waker for `pump_loop` so that when
+    /// the worker sends to `main_rx`, the channel fires the waker → arms a
+    /// vsync → Choreographer → `pump_loop` → drains the message.
+    struct VsyncWaker(std::sync::Arc<dyn Fn() + Send + Sync>);
+
+    impl std::task::Wake for VsyncWaker {
+        fn wake(self: std::sync::Arc<Self>) {
+            (self.0)();
+        }
+    }
+
     use crate::scheduler::{AndroidSchedulerDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
@@ -120,6 +132,13 @@ mod imp {
         /// cannot run on a spawned thread: JNI `pump` polls it once per
         /// Choreographer tick.
         loop_task: std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
+        /// `Send + Sync` closure that schedules a Choreographer vsync. Used
+        /// as the waker for `pump_loop` so that when the worker sends to
+        /// `main_rx` (from its own thread), the channel waker fires this
+        /// closure → arms a vsync → Choreographer fires → `pump_loop` runs →
+        /// processes the message. Without this the loop used `noop_waker`
+        /// and worker messages sat unconsumed until the next input event.
+        vsync_wake_fn: std::sync::Arc<dyn Fn() + Send + Sync>,
     }
 
     impl AndroidInstance {
@@ -135,30 +154,41 @@ mod imp {
         ) -> (
             Rc<AndroidSchedulerDriver>,
             std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
+            std::sync::Arc<dyn Fn() + Send + Sync>,
         ) {
-            use tur_engine::core::scheduler::MainScheduler;
+            use tur_engine::core::scheduler::{MainScheduler, MainSchedulerDriver};
 
             let driver = AndroidSchedulerDriver::new(tokio.clone(), Some(frame_loop));
             app.set_main_scheduler(MainScheduler::new(driver.clone()));
             // Bootstrap: arm the first Choreographer callback. Subsequent
             // frames re-arm via the loop's `request_vsync` on `FrameOutcome`.
             driver.request_vsync();
+            let vsync_wake_fn = driver.make_vsync_wake_fn();
             let loop_task = std::cell::RefCell::new(Some(
                 Box::pin(app.clone().start_loop()) as Pin<Box<dyn Future<Output = ()>>>
             ));
-            (driver, loop_task)
+            (driver, loop_task, vsync_wake_fn)
         }
 
         /// Poll the autonomous loop exactly once. Called from JNI `pump`
         /// after `fire_vsync`; each poll handles at most one vsync/main-msg
         /// event, so the loop is pulled forward by the Choreographer
         /// cadence.
+        ///
+        /// Uses a **real waker** (not `noop_waker`) backed by
+        /// [`vsync_wake_fn`](Self::vsync_wake_fn): when the worker sends to
+        /// `main_rx`, the channel waker fires the closure → schedules a
+        /// Choreographer callback → this method runs again → processes the
+        /// message. Without this, worker messages (render batches, frame
+        /// outcomes) would sit unconsumed between input events.
         pub fn pump_loop(&self) {
             let mut task = self.loop_task.borrow_mut();
             let ready = task
                 .as_mut()
                 .map(|t| {
-                    let waker = futures::task::noop_waker();
+                    let waker = std::task::Waker::from(std::sync::Arc::new(VsyncWaker(
+                        self.vsync_wake_fn.clone(),
+                    )));
                     let mut cx = std::task::Context::from_waker(&waker);
                     t.as_mut().poll(&mut cx)
                 })
@@ -236,12 +266,14 @@ mod imp {
                 dpr,
             )?;
 
-            let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
+            let (scheduler, loop_task, vsync_wake_fn) =
+                Self::install_frame_loop(&app, frame_loop, tokio);
 
             Ok(Self {
                 app,
                 scheduler,
                 loop_task,
+                vsync_wake_fn,
             })
         }
 
@@ -257,12 +289,14 @@ mod imp {
                 (0.0, 0.0),
                 1.0,
             )?;
-            let (scheduler, loop_task) = Self::install_frame_loop(&app, frame_loop, tokio);
+            let (scheduler, loop_task, vsync_wake_fn) =
+                Self::install_frame_loop(&app, frame_loop, tokio);
 
             Ok(Self {
                 app,
                 scheduler,
                 loop_task,
+                vsync_wake_fn,
             })
         }
     }
