@@ -449,7 +449,7 @@ impl TurTestApp {
         let runtime = builder.build()?;
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
         let inner = runtime.create_app(renderer, (width, height), 1.0)?;
-        let _ = block_on(inner.run_frame());
+        let _ = block_on(inner.pump());
         Ok(Self {
             inner,
             clock,
@@ -528,13 +528,13 @@ impl TurTestApp {
     /// reactive updates, layout, microtasks, async polling) and render if
     /// anything changed. No time advance — the `FixedClock` is untouched.
     pub fn pump(&mut self) -> Result<FrameOutcome, TurError> {
-        block_on(self.inner.run_frame())
+        block_on(self.inner.pump())
     }
 
     /// Legacy alias for [`Self::pump`] (drops the `FrameOutcome`). Prefer
     /// `pump` in new code.
     pub fn tick(&mut self) -> Result<(), TurError> {
-        block_on(self.inner.run_frame()).map(|_| ())
+        block_on(self.inner.pump()).map(|_| ())
     }
 
     /// Pump until the engine has no more immediately-available work (nothing
@@ -543,7 +543,7 @@ impl TurTestApp {
     /// rather than spun indefinitely. Capped at 8 frames to guard cascades.
     pub fn settle(&mut self) {
         for _ in 0..8 {
-            let outcome = match block_on(self.inner.run_frame()) {
+            let outcome = match block_on(self.inner.pump()) {
                 Ok(o) => o,
                 Err(_) => return,
             };
@@ -560,7 +560,7 @@ impl TurTestApp {
     pub fn wait_frames(&mut self, frames: usize) {
         for _ in 0..frames {
             self.advance_clock(FRAME_STEP_MS);
-            let _ = block_on(self.inner.run_frame());
+            let _ = block_on(self.inner.pump());
         }
         self.settle();
     }
@@ -576,7 +576,7 @@ impl TurTestApp {
                 return;
             }
             self.advance_clock(FRAME_STEP_MS);
-            let _ = block_on(self.inner.run_frame());
+            let _ = block_on(self.inner.pump());
         }
     }
 
@@ -603,7 +603,7 @@ impl TurTestApp {
     /// a precise non-16 ms-aligned step.
     pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
         self.advance_clock(duration.as_millis() as u64);
-        block_on(self.inner.run_frame()).map(|_| ())
+        block_on(self.inner.pump()).map(|_| ())
     }
 
     /// Snapshot of the live element tree, fetched via RPC from the worker.
@@ -856,7 +856,7 @@ impl TurTestApp {
                     device: PointerDeviceKind::Touch,
                     time_ms,
                 }));
-            let _ = block_on(self.inner.run_frame());
+            let _ = block_on(self.inner.pump());
         }
         self.advance_clock(FRAME_STEP_MS);
         let time_ms = self.clock.now().millis_since_epoch();
@@ -867,7 +867,7 @@ impl TurTestApp {
                 device: PointerDeviceKind::Touch,
                 time_ms,
             }));
-        let _ = block_on(self.inner.run_frame());
+        let _ = block_on(self.inner.pump());
         self.settle();
     }
 
@@ -923,7 +923,7 @@ impl TurTestApp {
         self.settle();
     }
 
-    /// Drive `run_frame` for a few iterations to settle cascading reactive
+    /// Drive `pump` for a few iterations to settle cascading reactive
     /// updates, async completions, and PromiseJobs. Public so external tests
     /// (e.g. async bridge tests) can use the same pattern. Equivalent to
     /// [`Self::settle`]; prefer `settle` in new code.

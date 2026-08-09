@@ -89,7 +89,7 @@ fn instances_have_isolated_element_trees() {
         "#,
     ))
     .expect("load A");
-    futures::executor::block_on(app_a.run_frame()).expect("frame A");
+    futures::executor::block_on(app_a.pump()).expect("frame A");
 
     // B has no tree mounted.
     let b_tree = futures::executor::block_on(app_b.dev_tool_element_tree());
@@ -117,7 +117,7 @@ fn headless_instance_runs_js_without_rendering() {
     "#,
     ))
     .expect("load");
-    futures::executor::block_on(app.run_frame()).expect("frame");
+    futures::executor::block_on(app.pump()).expect("frame");
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "42", "headless instance ran JS");
@@ -126,7 +126,7 @@ fn headless_instance_runs_js_without_rendering() {
 /// `TurRuntime::create_headless_app` is the dedicated headless entry point
 /// (no render target). Unlike the pre-threading inline headless path, it
 /// must run the engine on a worker — i.e. JS execution round-trips through
-/// the worker pipeline (load_module / run_frame / eval_js are all RPCs that
+/// the worker pipeline (load_module / pump / eval_js are all RPCs that
 /// cross main↔worker). This test pins both the API surface and that the
 /// worker is actually driving the instance.
 #[test]
@@ -145,7 +145,7 @@ fn create_headless_app_runs_engine_on_worker() {
     "#,
     ))
     .expect("load");
-    futures::executor::block_on(app.run_frame()).expect("frame");
+    futures::executor::block_on(app.pump()).expect("frame");
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "7", "create_headless_app ran JS on the worker");
@@ -329,8 +329,8 @@ fn platform_events_route_to_the_correct_instance() {
         logical_height: 180,
         dpr: 1.0,
     });
-    futures::executor::block_on(app_a.run_frame()).expect("frame A");
-    futures::executor::block_on(app_b.run_frame()).expect("frame B");
+    futures::executor::block_on(app_a.pump()).expect("frame A");
+    futures::executor::block_on(app_b.pump()).expect("frame B");
 
     // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
     // mode (no imports), so do the import in a module eval and stash the JSON

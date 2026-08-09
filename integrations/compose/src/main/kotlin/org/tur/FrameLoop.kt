@@ -13,8 +13,8 @@ import android.view.Choreographer
  * wires to the engine's `pump`), completing the loop:
  *
  * ```
- * engine run_frame() → LoopDriver.request_next(Vsync) → FrameLoop.scheduleVsync()
- *   → Choreographer frame → FrameLoop.onWake() → nativePump() → engine run_frame() → …
+ * engine run_loop() → LoopDriver.request_next(Vsync) → FrameLoop.scheduleVsync()
+ *   → Choreographer frame → FrameLoop.onWake() → nativePump() → engine run_loop() → …
  * ```
  *
  * Lives on the main looper (where `SurfaceHolder.Callback` and input dispatch
@@ -35,14 +35,34 @@ class FrameLoop {
     var onWake: (() -> Unit)? = null
 
     /**
+     * Whether the engine's focused element is an editable text field, pushed
+     * from native via [onFocusChanged] (the engine emits a focus-change event
+     * each time the focused element / caret rect changes). Read by the Compose
+     * integration's per-frame IME sync ([onAfterPump]) to decide whether to
+     * raise the soft keyboard — without a JNI round-trip per frame.
+     */
+    var focusedIsEditable: Boolean = false
+        private set
+
+    /**
      * Optional callback fired after [onWake] in each wake-up. The Compose
      * integration sets this to sync the Android soft-keyboard / IME with the
-     * engine's focused-element state (poll `focusedIsEditable`, then
+     * engine's focused-element state (read [focusedIsEditable], then
      * `showSoftInput` / `hideSoftInput`). Runs on the main looper, same as
      * [onWake]. `null` by default so non-IME embedders (and tests) are
      * unaffected.
      */
     var onAfterPump: (() -> Unit)? = null
+
+    /**
+     * Called from native (via JNI) when the engine's focused-element state
+     * changes. Stores the editable flag so [onAfterPump]'s IME sync can read
+     * it without a JNI round-trip per frame. The engine is the source of
+     * truth — Kotlin never queries focus state, only consumes this push.
+     */
+    fun onFocusChanged(isEditable: Boolean) {
+        focusedIsEditable = isEditable
+    }
 
     /**
      * Schedule a wake on the next display frame (Android `Choreographer`).

@@ -25,7 +25,7 @@ pub enum NextFrame {
     Vsync,
 }
 
-/// Outcome of a single [`TurAppInternal::flush`] / `run_frame` call.
+/// Outcome of a single [`TurAppInternal::flush`] / `pump` call.
 #[derive(Debug, Clone, Copy)]
 pub struct FrameOutcome {
     /// Whether a new frame was actually rendered this call.

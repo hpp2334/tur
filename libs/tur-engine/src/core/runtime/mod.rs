@@ -28,6 +28,10 @@ pub use backend::MainBackend;
 // `WorkerBackend` is `pub(crate)` — internal to the engine, only
 // `MainBackend` (which owns a worker running `WorkerBackend`) is public.
 pub(crate) use backend::WorkerBackend;
+// `MsgOutcome` is `pub(crate)` — the result of the single shared message
+// handler (`MainBackend::apply_msg`), consumed by both `pump` and
+// `TurApp::run_loop` (the latter lives in `lib.rs`).
+pub(crate) use backend::MsgOutcome;
 
 /// boa's `ContextBuilder::clock<C: Clock + 'static>` is generic over a
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
@@ -217,7 +221,7 @@ impl TurRuntime {
     /// Like [`create_app`](Self::create_app), the engine runs on a worker
     /// thread (via [`MainBackend`]) — headless is **not** an inline
     /// short-circuit. JS execution, frame flushes, and every
-    /// `async` RPC (`load_module` / `eval_js` / `run_frame` / …) round-trip
+    /// `async` RPC (`load_module` / `eval_js` / `pump` / …) round-trip
     /// through the same main↔worker channel as a rendering instance; the
     /// only difference is the main-side [`Renderer`] is a
     /// [`NoopRenderer`](crate::renderer::NoopRenderer), so paint batches

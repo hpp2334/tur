@@ -125,7 +125,7 @@ impl TurVelloApp {
         // Threaded engine: worker produces command batches; `MainBackend`
         // owns the VelloRenderer on main and applies them directly.
         let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
-        let _ = futures::executor::block_on(app.run_frame());
+        let _ = futures::executor::block_on(app.pump());
 
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
@@ -155,7 +155,7 @@ impl TurVelloApp {
     }
 
     pub fn render(&self) {
-        let _ = futures::executor::block_on(self.inner.borrow().app.run_frame());
+        let _ = futures::executor::block_on(self.inner.borrow().app.pump());
     }
 
     /// Read rendered pixels back from the app-owned renderer.
