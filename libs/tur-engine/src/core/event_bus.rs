@@ -205,8 +205,8 @@ impl EventBusHandle {
         match &self.inner {
             EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
             EventBusHandleInner::Channel { worker_tx, .. } => {
-                let _ = worker_tx
-                    .unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+                let _ =
+                    worker_tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
             }
         }
     }
@@ -281,9 +281,8 @@ impl Subsystem for HostBusSubsystem {
             // registered on the main-side `EventBusHandle` fire.
             if let Some(tx) = inner.main_tx.borrow().as_ref() {
                 for msg in &js_msgs {
-                    let _ = tx.unbounded_send(
-                        crate::core::app::MainMsg::EventBusToHost(msg.clone()),
-                    );
+                    let _ =
+                        tx.unbounded_send(crate::core::app::MainMsg::EventBusToHost(msg.clone()));
                 }
             }
             // Inline mode: call worker-side handlers directly.
