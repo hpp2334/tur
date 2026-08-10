@@ -56,7 +56,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 fn right_click_inside_selection_preserves_selection() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(INPUT_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
@@ -65,20 +65,25 @@ fn right_click_inside_selection_preserves_selection() {
     // Focus and type "hello world" — wide enough to have a meaningful
     // selection range.
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Select "world" (bytes 6..11) via Home + 6 ArrowRight + 5 Shift+ArrowRight.
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..6 {
         app.send_key("ArrowRight");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     for _ in 0..5 {
         app.send_key_with_modifiers("ArrowRight", true, false);
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     assert_eq!(
@@ -95,6 +100,7 @@ fn right_click_inside_selection_preserves_selection() {
     // Right-click inside the selection. The DOM event order is
     // mousedown(button=2) → contextmenu → mouseup(button=2).
     app.right_click(inside_x, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor2, end2) = get_selection(&app, input_id);
     assert_eq!(
@@ -110,27 +116,32 @@ fn right_click_inside_selection_preserves_selection() {
 fn right_click_outside_selection_moves_caret() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(INPUT_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
     let (cx, cy) = bounds.center();
 
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Select "world" (bytes 6..11).
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..6 {
         app.send_key("ArrowRight");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     for _ in 0..5 {
         app.send_key_with_modifiers("ArrowRight", true, false);
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     assert_eq!((anchor, end), (6, 11));
@@ -138,6 +149,7 @@ fn right_click_outside_selection_moves_caret() {
     // Right-click near the start of the input — outside the selection.
     let outside_x = bounds.left + 5.0;
     app.right_click(outside_x, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor2, end2) = get_selection(&app, input_id);
     assert_eq!(
@@ -161,27 +173,32 @@ fn right_click_outside_selection_moves_caret() {
 fn left_click_inside_selection_collapses() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(INPUT_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
     let (cx, cy) = bounds.center();
 
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Select "world".
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..6 {
         app.send_key("ArrowRight");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     for _ in 0..5 {
         app.send_key_with_modifiers("ArrowRight", true, false);
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     assert_eq!((anchor, end), (6, 11));
@@ -189,6 +206,7 @@ fn left_click_inside_selection_collapses() {
     // Left-click at ~75% (inside selection).
     let inside_x = bounds.left + (bounds.right - bounds.left) * 0.75;
     app.click(inside_x, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor2, end2) = get_selection(&app, input_id);
     assert_eq!(

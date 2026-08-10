@@ -652,44 +652,21 @@ impl MainBackend {
         &self.worker_tx
     }
 
-    /// Advance one frame: send `Wake` to the worker, await the next
-    /// `MainMsg::FrameOutcome`. Any `RenderCommands`, `CursorChanged`,
-    /// `FocusedStateChanged`, `UploadImage`, or `EventBusToHost` arriving
-    /// in the meantime are dispatched (via [`Self::apply_msg`]) to the
-    /// renderer / cursor backend / focus-change handler respectively.
-    ///
-    /// Async: the embedder drives this via its platform's runtime
-    /// (`wasm_bindgen_futures::spawn_local` on wasm;
-    /// `futures::executor::block_on` on native). The wasm main thread
-    /// never blocks — the future suspends on `main_rx.next().await` and
-    /// resumes when the worker posts data.
-    /// `pump` holds a `RefCell<MainRx>::borrow_mut()` across `next().await`.
-    /// Clippy flags this as `await_holding_refcell_ref`, but it's safe:
-    /// `Rc<TurApp>` enforces single-threaded access on wasm + android, and
-    /// pump is driven sequentially (the engine-side `pump_in_progress`
-    /// guard rejects overlap on the autonomous-loop path).
+    /// Advance one frame with **immediate** rendering: send `Wake` to the
+    /// worker, await the next `MainMsg::FrameOutcome`, and render each
+    /// `RenderCommands` batch as soon as it arrives (no pipelining). This is
+    /// the single-frame primitive used by raw harnesses that need pixel
+    /// readback (e.g. `TurVelloApp`); the autonomous [`crate::TurApp::run_loop`]
+    /// is the production / general test path. Both route every message through
+    /// the shared [`Self::apply_msg`], so there is no divergent handler.
     #[allow(clippy::await_holding_refcell_ref)]
     pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
-        // Drain stale messages produced by worker self-wakes (e.g. the
-        // post-load render) that raced this pump. Process their
-        // side-effects (render batches, cursor, focus, images); their
-        // FrameOutcomes are discarded — they describe already-completed
-        // frames, not this pump's result. Without this, a self-wake's
-        // FrameOutcome would be consumed by the next pump's `rx.next()`,
-        // desynchronizing pump-based sequencing.
         use futures::future::FutureExt;
-        loop {
-            let stale = self.main_rx.borrow_mut().next().now_or_never();
-            match stale {
-                Some(Some(msg)) => {
-                    let _ = self.apply_msg_pump(msg);
-                }
-                // Queue drained (pending) or closed — either way, stop
-                // draining. A closed stream surfaces as a send error below.
-                Some(None) | None => break,
-            }
+        // Drain stale messages produced by worker self-wakes that raced this
+        // pump; their side-effects are applied, their FrameOutcomes discarded.
+        while let Some(Some(msg)) = self.main_rx.borrow_mut().next().now_or_never() {
+            drop(self.apply_msg_pump(msg));
         }
-
         self.worker_tx
             .unbounded_send(WorkerMsg::Wake)
             .map_err(|_| TurError::Other("worker gone".into()))?;
@@ -707,11 +684,9 @@ impl MainBackend {
         }
     }
 
-    /// `apply_msg` as seen by the immediate-render `pump` driver: render
-    /// batches at once, drop stale `Frame`s, and surface terminal results.
-    /// Non-terminal msgs return `None`. Both drivers share [`Self::apply_msg`]
-    /// for side-effects; this wraps its `MsgOutcome` for pump's "render now,
-    /// return on terminal" policy.
+    /// `apply_msg` wrapped for the immediate-render `pump` driver: render
+    /// batches at once and surface terminal results. Non-terminal msgs return
+    /// `None`.
     fn apply_msg_pump(&self, msg: MainMsg) -> Option<Result<FrameOutcome, TurError>> {
         match self.apply_msg(msg) {
             MsgOutcome::Render(batch) => {
@@ -725,9 +700,9 @@ impl MainBackend {
     }
 
     /// The single worker→main message handler. Pure dispatch + side-effects
-    /// for everything **except rendering**: `RenderCommands` is handed back
-    /// as [`MsgOutcome::Render`] so each driver decides *when* to render
-    /// (pump renders immediately; `run_loop` buffers for vsync-aligned
+    /// for rendering policy: `RenderCommands` is handed back as
+    /// [`MsgOutcome::Render`] so each driver decides *when* to render
+    /// (`pump` renders immediately; `run_loop` buffers for vsync-aligned
     /// pipelining). All backend mutations (`cursor_backend`,
     /// `focus_changed_handler`, image uploads, event-bus dispatch) happen
     /// here, so both drivers observe identical state — there is no second

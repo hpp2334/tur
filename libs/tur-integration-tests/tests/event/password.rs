@@ -58,6 +58,7 @@ fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
 fn focus(app: &mut TurTestApp, id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 fn get_value(app: &TurTestApp, id: ElementNodeId) -> String {
@@ -99,6 +100,7 @@ fn cursor_x(app: &TurTestApp, id: ElementNodeId, byte: usize) -> f32 {
 fn type_str(app: &mut TurTestApp, s: &str) {
     for ch in s.chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
 }
 
@@ -110,14 +112,14 @@ fn type_str(app: &mut TurTestApp, s: &str) {
 fn password_masks_typed_text_but_keeps_value() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     type_str(&mut app, "abc");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_value(&app, id),
@@ -136,16 +138,16 @@ fn password_masks_typed_text_but_keeps_value() {
 fn password_backspace_removes_a_mask_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
     type_str(&mut app, "abc");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_displayed(&app, id), "•••");
 
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_value(&app, id), "ab");
     assert_eq!(get_displayed(&app, id), "••");
@@ -155,7 +157,7 @@ fn password_backspace_removes_a_mask_char() {
 fn password_empty_value_displays_nothing() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     assert_eq!(get_value(&app, id), "");
@@ -170,17 +172,17 @@ fn password_empty_value_displays_nothing() {
 fn password_copy_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
     type_str(&mut app, "hello");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "hello");
 
     // Select all.
     app.send_key_with_modifiers_full("a", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.take_clipboard_write().is_none(),
@@ -188,6 +190,7 @@ fn password_copy_is_suppressed() {
     );
 
     app.send_key_with_modifiers_full("c", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.take_clipboard_write().is_none(),
@@ -200,17 +203,18 @@ fn password_copy_is_suppressed() {
 fn password_cut_is_suppressed() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
     type_str(&mut app, "hello");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key_with_modifiers_full("a", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key_with_modifiers_full("x", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.take_clipboard_write().is_none(),
@@ -231,12 +235,12 @@ fn password_cut_is_suppressed() {
 fn password_custom_obscuring_character() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(CUSTOM_CHAR_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
     type_str(&mut app, "abc");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_value(&app, id), "abc");
     assert_eq!(get_displayed(&app, id), "***");
@@ -250,26 +254,26 @@ fn password_custom_obscuring_character() {
 fn password_multibyte_value_masks_one_bullet_per_char() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Multi-byte text arrives via paste (single-byte keystrokes are the only
     // printable keys the keyboard path inserts; multi-byte chars come through
     // IME / paste). '猫' is 3 UTF-8 bytes; one character → one bullet.
     app.push_paste_event("猫");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "猫");
     assert_eq!(get_displayed(&app, id), "•");
     assert_eq!(get_cursor(&app, id), 3, "cursor at byte 3 (end of one 猫)");
 
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor(&app, id), 0);
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_cursor(&app, id),
         3,
@@ -278,9 +282,9 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 
     // A mixed multi-byte value still masks one char per glyph.
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.push_paste_event("a猫b");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     // value was "猫"; pasting "a猫b" at byte 0 → "a猫b猫" (4 chars).
     assert_eq!(get_value(&app, id), "a猫b猫");
     assert_eq!(get_displayed(&app, id), "••••", "4 chars → 4 bullets");
@@ -295,7 +299,7 @@ fn password_multibyte_value_masks_one_bullet_per_char() {
 fn password_click_resolves_in_value_byte_space() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
@@ -303,7 +307,7 @@ fn password_click_resolves_in_value_byte_space() {
     // must land in the [0, 6] value-byte range, not the [0, 18] display-byte
     // range.
     type_str(&mut app, "abcdef");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_displayed(&app, id), "••••••");
 
     // x of the caret between 'c' and 'd' (value byte 3) in the remapped layout.
@@ -312,12 +316,12 @@ fn password_click_resolves_in_value_byte_space() {
     let cy = (bounds.top + bounds.bottom) * 0.5;
 
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor(&app, id), 0);
 
     // Click just past the byte-3 boundary.
     app.pointer_down(bounds.left + x3 as f64 + 0.5, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let clicked = get_cursor(&app, id);
     assert!(
         clicked <= 6,
@@ -327,7 +331,7 @@ fn password_click_resolves_in_value_byte_space() {
     // Inserting at the clicked position must yield a valid char-boundary split
     // in value space — proves the remap gave a value byte, not a display byte.
     app.send_key("Z");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let text = get_value(&app, id);
     assert!(text.starts_with("abc"), "prefix preserved: {text}");
     assert!(
@@ -349,21 +353,21 @@ fn password_click_resolves_in_value_byte_space() {
 fn password_combining_mark_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // 'é' as 'e' + U+0301 combining acute: 2 code points, 1 grapheme.
     app.push_paste_event("e\u{0301}");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "e\u{0301}");
     assert_eq!(get_displayed(&app, id), "•", "one grapheme → one bullet");
 
     // Backspace deletes the whole grapheme: both code points go, display empty.
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "", "whole grapheme deleted");
     assert_eq!(get_displayed(&app, id), "");
 }
@@ -372,15 +376,15 @@ fn password_combining_mark_is_one_bullet() {
 fn password_flag_emoji_is_one_bullet() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // US flag = U+1F1FA U+1F1F8 (regional indicators): 2 code points, 1 grapheme.
     app.push_paste_event("\u{1F1FA}\u{1F1F8}");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "\u{1F1FA}\u{1F1F8}");
     assert_eq!(get_displayed(&app, id), "•", "flag emoji → one bullet");
 }
@@ -389,16 +393,16 @@ fn password_flag_emoji_is_one_bullet() {
 fn password_mixed_graphemes_mask_per_grapheme() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable(&app, &["input"]);
     focus(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // 'a' + US flag + 'b' = 3 graphemes → 3 bullets, even though it's
     // 1 + 2 + 1 = 4 code points.
     app.push_paste_event("a\u{1F1FA}\u{1F1F8}b");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_value(&app, id), "a\u{1F1FA}\u{1F1F8}b");
     assert_eq!(get_displayed(&app, id), "•••", "3 graphemes → 3 bullets");
 }

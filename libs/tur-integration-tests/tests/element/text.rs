@@ -16,7 +16,7 @@ fn text_content_and_measurement() {
         container.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let text_node = rt.get_element(text_id).unwrap();
     let layout = &text_node.computed_layout;
@@ -29,7 +29,7 @@ fn text_empty_content_zero_size() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("text-empty-content").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let text_node = rt
@@ -45,7 +45,7 @@ fn text_font_size_affects_height() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("text-font-size").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let small = rt
@@ -67,7 +67,7 @@ fn text_font_weight_affects_width() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("text-font-weight").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let normal = rt
@@ -89,7 +89,7 @@ fn text_wrapping_with_narrow_constraints() {
     let mut app = TurTestApp::new(80.0, 600.0).unwrap();
     app.load_bundle("text-wrapping").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let text_node = rt
@@ -112,7 +112,7 @@ fn text_wrapping_with_narrow_constraints() {
 fn text_wrapping_vs_no_wrapping() {
     let mut app_narrow = TurTestApp::new(60.0, 600.0).unwrap();
     app_narrow.load_bundle("text-wrapping").unwrap();
-    app_narrow.render();
+    app_narrow.wait_for_timeout(std::time::Duration::ZERO);
     let wrapped_height = {
         let rt = app_narrow.element_tree();
         let root = rt.root_element().unwrap();
@@ -125,7 +125,7 @@ fn text_wrapping_vs_no_wrapping() {
 
     let mut app_wide = TurTestApp::new(800.0, 600.0).unwrap();
     app_wide.load_bundle("text-wrapping").unwrap();
-    app_wide.render();
+    app_wide.wait_for_timeout(std::time::Duration::ZERO);
     let unwrapped_height = {
         let rt = app_wide.element_tree();
         let root = rt.root_element().unwrap();
@@ -149,7 +149,7 @@ fn text_in_column_vertical_stacking() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("text-in-column").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let col = rt
@@ -179,7 +179,7 @@ fn text_max_lines_caps_height() {
     // 80px viewport forces the long text to wrap to many lines.
     let mut app_capped = TurTestApp::new(80.0, 600.0).unwrap();
     app_capped.load_bundle("text-max-lines").unwrap();
-    app_capped.render();
+    app_capped.wait_for_timeout(std::time::Duration::ZERO);
     let capped_height = {
         let rt = app_capped.element_tree();
         let root = rt.root_element().unwrap();
@@ -192,7 +192,7 @@ fn text_max_lines_caps_height() {
 
     let mut app_full = TurTestApp::new(80.0, 600.0).unwrap();
     app_full.load_bundle("text-wrapping").unwrap();
-    app_full.render();
+    app_full.wait_for_timeout(std::time::Duration::ZERO);
     let full_height = {
         let rt = app_full.element_tree();
         let root = rt.root_element().unwrap();
@@ -229,7 +229,7 @@ fn text_overflow_visible_ignores_max_lines() {
     // + the engine's truncate flag (visible ⇒ no cap).
     let mut app = TurTestApp::new(80.0, 600.0).unwrap();
     app.load_bundle("text-wrapping").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let h = rt
@@ -249,7 +249,7 @@ fn text_overflow_visible_ignores_max_lines() {
 fn text_ellipsis_truncates_to_one_line() {
     let mut app = TurTestApp::new(80.0, 600.0).unwrap();
     app.load_bundle("text-ellipsis").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (height, width) = {
         let rt = app.element_tree();
         let root = rt.root_element().unwrap();
@@ -267,7 +267,7 @@ fn text_ellipsis_truncates_to_one_line() {
     // Reference: the clip case at the same width/maxLines.
     let mut app_clip = TurTestApp::new(80.0, 600.0).unwrap();
     app_clip.load_bundle("text-max-lines").unwrap();
-    app_clip.render();
+    app_clip.wait_for_timeout(std::time::Duration::ZERO);
     let clip_height = {
         let rt = app_clip.element_tree();
         let root = rt.root_element().unwrap();
@@ -303,7 +303,7 @@ fn text_max_lines_no_truncation_when_fits() {
     // fits on a single line. maxLines=2 + ellipsis should be a no-op.
     let mut app = TurTestApp::new(800.0, 600.0).unwrap();
     app.load_bundle("text-ellipsis").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let node = rt

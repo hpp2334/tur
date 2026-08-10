@@ -15,7 +15,7 @@ fn row_main_alignment_start() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -41,7 +41,7 @@ fn row_main_alignment_center() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -65,7 +65,7 @@ fn row_main_alignment_end() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -89,7 +89,7 @@ fn row_cross_alignment_stretch() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -115,7 +115,7 @@ fn row_with_expanded() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -143,7 +143,7 @@ fn nested_sidebar_layout() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sidebar = rt
@@ -174,7 +174,7 @@ fn todolist_sidebar_at_left() {
         (row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sidebar = rt

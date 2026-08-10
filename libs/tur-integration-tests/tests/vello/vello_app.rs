@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
+use std::time::Duration;
 
 use boa_engine::context::time::StdClock;
 use minifb::{Window, WindowOptions};
@@ -29,10 +30,12 @@ pub enum TurVelloError {
 
 /// Test harness that drives a real `VelloRenderer` on the main thread.
 ///
-/// Architecture matches production: the engine runs on a worker thread
-/// (`TurRuntime::create_app`); `MainBackend` owns the renderer on main and
-/// drives it directly (no render_sink). Pixel readback happens via
-/// `TurApp::render_to_pixels`.
+/// Uses `TurApp::pump` (immediate-render single-frame primitive) rather than
+/// `run_loop`: pixel-readback tests need the worker's `RenderCommands` applied
+/// synchronously within the frame they're produced, with no vsync pipelining
+/// (whose latest-wins buffering can leave a transient partial batch as the
+/// last render before a snapshot). Both `pump` and `run_loop` route through
+/// the shared `apply_msg`, so this is not a divergent handler.
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
@@ -125,14 +128,30 @@ impl TurVelloApp {
         // Threaded engine: worker produces command batches; `MainBackend`
         // owns the VelloRenderer on main and applies them directly.
         let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
+        // Bootstrap: drive the initial self-paint frame.
         let _ = futures::executor::block_on(app.pump());
-
         Ok(TurVelloApp {
             inner: RefCell::new(TurVelloAppInner {
                 app,
                 _window: window,
             }),
         })
+    }
+
+    /// Drive one frame (immediate render).
+    fn pump(&self) {
+        let _ = futures::executor::block_on(self.inner.borrow().app.pump());
+    }
+
+    /// Drive `n` frames (immediate render each). The pixel-readback tests need
+    /// a settled, complete render; pumping a handful of frames reaches
+    /// quiescence without run_loop's pipelining.
+    pub fn wait_for_timeout(&self, timeout: Duration) {
+        let frames = ((timeout.as_millis() as u64) + 15) / 16;
+        let iters = frames.max(1);
+        for _ in 0..iters {
+            self.pump();
+        }
     }
 
     pub fn load_bundle(&self, name: &str) -> Result<(), TurVelloError> {
@@ -146,16 +165,14 @@ impl TurVelloApp {
             .join(format!("{name}.js"));
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         futures::executor::block_on(self.inner.borrow().app.load_module(&source))?;
+        // Drive the module's initial render to quiescence.
+        self.wait_for_timeout(Duration::from_millis(64));
         Ok(())
     }
 
     /// Direct access to the underlying `TurApp`.
     pub fn app(&self) -> std::cell::Ref<'_, Rc<TurApp>> {
         std::cell::Ref::map(self.inner.borrow(), |i| &i.app)
-    }
-
-    pub fn render(&self) {
-        let _ = futures::executor::block_on(self.inner.borrow().app.pump());
     }
 
     /// Read rendered pixels back from the app-owned renderer.

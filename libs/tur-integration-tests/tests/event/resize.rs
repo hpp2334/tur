@@ -25,7 +25,7 @@ fn fill_height(app: &TurTestApp) -> f64 {
 fn resize_reflows_descendants() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.eval_module_source(RESIZE_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let h0 = fill_height(&app);
     assert!(
@@ -35,7 +35,7 @@ fn resize_reflows_descendants() {
 
     // Grow the viewport; the Expanded descendant must reflow to the new height.
     app.resize(400.0, 600.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let h1 = fill_height(&app);
     assert!(
         (h1 - 600.0).abs() < 1.0,
@@ -44,7 +44,7 @@ fn resize_reflows_descendants() {
 
     // Shrink back.
     app.resize(400.0, 200.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let h2 = fill_height(&app);
     assert!(
         (h2 - 200.0).abs() < 1.0,

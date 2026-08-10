@@ -29,6 +29,7 @@ fn click_qk(app: &mut TurTestApp, qk: &[&str]) {
     let id = ElementNodeId::new(id.as_u64());
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 fn find_input_id(app: &TurTestApp) -> ElementNodeId {
@@ -55,6 +56,7 @@ fn find_input_id(app: &TurTestApp) -> ElementNodeId {
 fn focus_input(app: &mut TurTestApp, input_id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(input_id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 fn build_countdown() -> TurTestApp {
@@ -65,8 +67,7 @@ fn build_countdown() -> TurTestApp {
 
 fn advance_seconds(app: &mut TurTestApp, secs: u32) {
     for _ in 0..secs {
-        app.advance(Duration::from_secs(1)).unwrap();
-        app.render();
+        app.wait_for_timeout(Duration::from_secs(1));
     }
 }
 
@@ -151,8 +152,10 @@ fn countdown_edit_time() {
     // The modal pre-fills the field with the current value (60); clear it
     // before typing the new value.
     app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("Backspace");
     app.send_key("3");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("0");
 
     click_qk(&mut app, &["btn-confirm"]);
@@ -174,8 +177,10 @@ fn countdown_edit_then_start() {
 
     // Clear the pre-filled "60" before typing.
     app.send_key_with_modifiers_full("a", false, true, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("Backspace");
     app.send_key("1");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("0");
 
     click_qk(&mut app, &["btn-confirm"]);

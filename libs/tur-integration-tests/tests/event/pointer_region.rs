@@ -33,7 +33,7 @@ fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
 
 fn flush(app: &mut TurTestApp) {
     for _ in 0..6 {
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
 }
 
@@ -59,7 +59,7 @@ fn pointer_enter_updates_text() {
     let text_id = build_pointer_region_text(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -69,6 +69,7 @@ fn pointer_enter_updates_text() {
 
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -84,10 +85,11 @@ fn pointer_exit_updates_text() {
     let text_id = build_pointer_region_text(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -97,6 +99,7 @@ fn pointer_exit_updates_text() {
     );
 
     app.pointer_move(999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -112,13 +115,14 @@ fn pointer_move_within_does_not_exit() {
     let text_id = build_pointer_region_text(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let bounds = app.get_element_absolute_bounds(pi_id).unwrap();
     let cx = (bounds.left + bounds.right) / 2.0;
     let cy = (bounds.top + bounds.bottom) / 2.0;
 
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -128,6 +132,7 @@ fn pointer_move_within_does_not_exit() {
     );
 
     app.pointer_move(cx + 5.0, cy + 5.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -137,6 +142,7 @@ fn pointer_move_within_does_not_exit() {
     );
 
     app.pointer_move(cx - 3.0, cy - 3.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -150,11 +156,13 @@ fn pointer_move_within_does_not_exit() {
 fn no_events_without_callbacks() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("pointer-interact-basic").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.pointer_move(50.0, 25.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     app.pointer_move(999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 }

@@ -19,7 +19,7 @@ fn row_stretch_non_expanded_with_expanded_sibling() {
         (row.children[0], row.children[1], row.children[2])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     // All three children should be 600 tall (the row's height).

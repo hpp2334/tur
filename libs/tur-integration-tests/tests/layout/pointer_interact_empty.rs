@@ -17,7 +17,7 @@ fn pointer_interact_no_child_zero_size() {
         pi.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let pi_node = rt.get_element(pi_id).unwrap();
     assert_eq!(pi_node.computed_layout.size.width, 0.0);

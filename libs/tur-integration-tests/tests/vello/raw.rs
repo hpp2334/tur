@@ -10,7 +10,7 @@ pub fn vello_counter_app() {
         futures::executor::block_on(app.app().dev_tool_element_tree()).expect("element tree");
     assert!(!root.children.is_empty());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 fn get_pixel(pixels: &[u8], phys_w: u32, px: u32, py: u32) -> (u8, u8, u8, u8) {
@@ -43,7 +43,7 @@ fn test_dpr_render(dpr: f64) {
 
     let app = TurVelloApp::new(logical_w as f64, logical_h as f64, dpr).unwrap();
     app.load_bundle("four-color-quadrants").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let pixels = app.render_to_pixels();
     assert_eq!(
@@ -90,7 +90,7 @@ pub fn vello_dpr_3_renders_colors() {
 pub fn vello_image_renders() {
     let app = TurVelloApp::new(200.0, 100.0, 1.0).unwrap();
     app.load_bundle("image-basic").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let pixels = app.render_to_pixels();
     // Sample the centre pixel.

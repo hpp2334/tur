@@ -7,7 +7,7 @@ use tur_integration_tests::TurTestApp;
 fn setup_grid(width: f64, height: f64, source: &str) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(width, height).unwrap();
     app.eval_module_source(source).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["g"]).expect("queryKey 'g' not found");
     (app, ElementNodeId::new(id.as_u64()))
 }

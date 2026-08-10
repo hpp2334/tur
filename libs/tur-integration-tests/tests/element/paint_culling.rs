@@ -56,7 +56,7 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     )
     .expect("mount");
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let tree = app.element_tree();
     let root = tree.root_element().expect("root");
@@ -137,7 +137,7 @@ fn scrolled_in_children_become_painted() {
     // Scroll to the bottom (delta clamps to max extent = 600 - 300 = 300px).
     // Pointer (200, 150) is inside the 400×300 scroll viewport.
     app.wheel(0.0, 500.0, 200.0, 150.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let painted = painted_ids(&last.borrow());
     // After scrolling 300px down: container 0 sits at y -300..-200 (above the
@@ -185,7 +185,7 @@ fn no_clip_means_no_culling() {
     "#,
     )
     .expect("mount");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let tree = app.element_tree();
     let root = tree.root_element().expect("root");

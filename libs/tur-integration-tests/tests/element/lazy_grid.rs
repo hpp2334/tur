@@ -20,7 +20,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["lg"]).expect("queryKey 'lg' not found");
     (app, ElementNodeId::new(id.as_u64()))
 }
@@ -73,7 +73,7 @@ fn lazy_grid_position_math_matches_formula() {
     let scroll = 333.0_f64;
 
     app.wheel(0.0, scroll, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let child_ids: Vec<_> = {
         let tree = app.element_tree();
@@ -112,7 +112,7 @@ fn lazy_grid_scroll_shifts_visible_window() {
     let initial_built = with_lg(&app, id, |lg| lg.built_count());
 
     app.wheel(0.0, 1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let after_built = with_lg(&app, id, |lg| lg.built_count());
     // First mounted index should be near row 10 - overscan 2 → row 8 → index 32.
@@ -135,9 +135,9 @@ fn lazy_grid_children_ordered_after_scroll() {
 
     // Scroll down then back up.
     app.wheel(0.0, 2000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wheel(0.0, -1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let child_ids: Vec<_> = {
         let tree = app.element_tree();
@@ -162,7 +162,7 @@ fn lazy_grid_scroll_clamps_at_content_end() {
     let (mut app, id) = setup_virtualized();
 
     app.wheel(0.0, 999_999.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let max_extent = (10000.0_f64 / 4.0) * 100.0 - 600.0; // 2500 rows * 100 - 600
     let scroll = with_lg(&app, id, |lg| lg.scroll_offset());
@@ -191,7 +191,7 @@ fn lazy_grid_horizontal_axis() {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["lg"]).expect("queryKey 'lg' not found");
     let id = ElementNodeId::new(id.as_u64());
 
@@ -204,7 +204,7 @@ fn lazy_grid_horizontal_axis() {
 
     // Scroll horizontally; verify a cell lands at viewport x≈0.
     app.wheel(500.0, 0.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let found = {
         let tree = app.element_tree();
@@ -232,9 +232,9 @@ fn lazy_grid_parent_children_count_matches_mounted() {
     let (mut app, id) = setup_virtualized();
     for _ in 0..3 {
         app.wheel(0.0, 1500.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         app.wheel(0.0, -800.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
 
         let parent_count = {
             let tree = app.element_tree();

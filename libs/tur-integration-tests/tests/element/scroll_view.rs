@@ -25,7 +25,7 @@ fn scroll_view_viewport_constrained() {
         (sv.id, col.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sv_node = rt.get_element(sv_id).unwrap();
@@ -50,7 +50,7 @@ fn scroll_view_child_offset_zero() {
         sv.children[0]
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
@@ -72,7 +72,7 @@ fn scroll_view_child_offset_with_prop() {
         sv.children[0]
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
@@ -90,7 +90,7 @@ fn scroll_view_content_and_viewport_size() {
         ElementNodeId::new(root.children[0].as_u64())
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -117,7 +117,7 @@ fn scroll_view_children_stacked_correctly() {
         (col.children[0], col.children[1], col.children[2])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();

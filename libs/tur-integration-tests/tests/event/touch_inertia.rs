@@ -17,7 +17,7 @@ fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
         (sv.id, sv.children[0])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     (app, sv_id, col_id)
 }
 
@@ -36,6 +36,7 @@ fn touch_drag_scrolls_content() {
 
     // Drag finger UP (y 250 -> 150): content scrolls DOWN, offset increases.
     app.touch_drag((200.0, 250.0), (200.0, 150.0), 8);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let off = scroll_offset(&app, sv_id);
     assert!(
@@ -55,7 +56,7 @@ fn touch_fling_coasts_after_release() {
     let after_release = scroll_offset(&app, sv_id);
 
     // Let the inertia simulation coast (~0.5 s of virtual time).
-    app.wait_frames(30);
+    app.wait_for_timeout(std::time::Duration::from_millis(16u64 * 30));
     let after_coast = scroll_offset(&app, sv_id);
 
     assert!(
@@ -71,12 +72,12 @@ fn touch_fling_cancels_on_touch() {
 
     app.touch_drag((200.0, 250.0), (200.0, 130.0), 10);
     // Let the coast get underway.
-    app.wait_frames(6);
+    app.wait_for_timeout(std::time::Duration::from_millis(16u64 * 6));
     let mid_coast = scroll_offset(&app, sv_id);
 
     // Finger down to grab — should kill the inertia.
     app.touch_down(200.0, 200.0);
-    app.wait_frames(20);
+    app.wait_for_timeout(std::time::Duration::from_millis(16u64 * 20));
     let after_cancel = scroll_offset(&app, sv_id);
 
     assert!(
@@ -112,11 +113,11 @@ fn touch_fling_with_batched_moves() {
 
     // Drain everything in a single frame — the FixedClock stays at 0, so a
     // drain-time-sampling implementation would see one timestamp for all.
-    let _ = app.pump();
+    app.wait_for_timeout(std::time::Duration::from_millis(16));
     let after_release = scroll_offset(&app, sv_id);
 
     // Coast on virtual time.
-    app.wait_frames(30);
+    app.wait_for_timeout(std::time::Duration::from_millis(16u64 * 30));
     let after_coast = scroll_offset(&app, sv_id);
 
     assert!(

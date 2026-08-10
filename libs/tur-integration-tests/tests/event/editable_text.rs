@@ -61,6 +61,7 @@ fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
 fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 fn get_cursor_pos(app: &TurTestApp, id: ElementNodeId) -> usize {
@@ -94,24 +95,25 @@ fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
 fn cursor_stays_in_middle_after_typing() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "ab");
     assert_eq!(get_cursor_pos(&app, input_id), 2);
 
     app.send_key("ArrowLeft");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, input_id), 1);
 
     app.send_key("X");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "aXb");
     assert_eq!(get_cursor_pos(&app, input_id), 2);
 }
@@ -120,25 +122,26 @@ fn cursor_stays_in_middle_after_typing() {
 fn cursor_preserved_after_rerender() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-cursor-mid").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
     app.send_key("c");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "abc");
     assert_eq!(get_cursor_pos(&app, input_id), 3);
 
     app.send_key("ArrowLeft");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, input_id), 2);
 
     app.eval_js("globalThis.__setCursorMidTick(1)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, input_id),
@@ -156,20 +159,21 @@ fn cursor_preserved_after_rerender() {
 fn delete_selected_first_character() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
     app.send_key("c");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "abc");
 
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_cursor_pos(&app, input_id),
         0,
@@ -177,14 +181,14 @@ fn delete_selected_first_character() {
     );
 
     app.send_key_with_modifiers("ArrowRight", true, false);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     assert_eq!(anchor, 0, "anchor at 0");
     assert_eq!(end, 1, "end at 1 (selected 'a')");
 
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, input_id),
@@ -198,7 +202,7 @@ fn delete_selected_first_character() {
 fn drag_select_release_outside_then_backspace() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
@@ -206,19 +210,22 @@ fn drag_select_release_outside_then_backspace() {
     let cy = top + (bottom - top) / 2.0;
 
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
     app.send_key("c");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("d");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "abcd");
 
     app.pointer_down(left + 1.0, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(left + 20.0, cy);
     app.pointer_up(left + 300.0, cy + 200.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!("after drag+release outside: anchor={}, end={}", anchor, end);
@@ -233,7 +240,7 @@ fn drag_select_release_outside_then_backspace() {
     );
 
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let text = get_text(&app, input_id);
     eprintln!("after backspace: text='{}'", text);
@@ -247,7 +254,7 @@ fn drag_select_release_outside_then_backspace() {
 fn click_before_first_char_then_type_and_select_delete() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
@@ -255,20 +262,22 @@ fn click_before_first_char_then_type_and_select_delete() {
     let cy = top + (bottom - top) / 2.0;
 
     app.pointer_down(left, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_up(left, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "ab");
 
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, input_id), 0);
 
     app.send_key_with_modifiers("ArrowRight", true, false);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!("selection: anchor={}, end={}", anchor, end);
@@ -276,7 +285,7 @@ fn click_before_first_char_then_type_and_select_delete() {
     assert_eq!(end, 1);
 
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let text = get_text(&app, input_id);
     eprintln!("after backspace: text='{}'", text);
@@ -287,7 +296,7 @@ fn click_before_first_char_then_type_and_select_delete() {
 fn mouse_drag_select_then_backspace() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
@@ -295,21 +304,25 @@ fn mouse_drag_select_then_backspace() {
     let cy = top + (bottom - top) / 2.0;
 
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
     app.send_key("c");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("d");
     app.send_key("e");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("f");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "abcdef");
 
     app.pointer_down(left + 1.0, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(left + 30.0, cy);
     app.pointer_up(left + 30.0, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!("after drag: anchor={}, end={}", anchor, end);
@@ -318,7 +331,7 @@ fn mouse_drag_select_then_backspace() {
     let expected_remaining = "abcdef".len() - selected_len;
 
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let text_after = get_text(&app, input_id);
     eprintln!("text after backspace: '{}'", text_after);
@@ -335,28 +348,33 @@ fn mouse_drag_select_then_backspace() {
 fn multiline_drag_select_across_lines() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-multiline").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
     let (left, top) = (bounds.left, bounds.top);
 
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Type three lines: "aaaa\nbbbb\ncccc"
     for _ in 0..4 {
         app.send_key("a");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     app.send_key("Enter");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..4 {
         app.send_key("b");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     app.send_key("Enter");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..4 {
         app.send_key("c");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
 
     // Compute y for line 0 (top) and line 2 (two lines down).
@@ -369,9 +387,10 @@ fn multiline_drag_select_across_lines() {
 
     // Drag from line 0 to line 2.
     app.pointer_down(left + 5.0, y_line0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(left + 5.0, y_line2);
     app.pointer_up(left + 5.0, y_line2);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!(
@@ -405,7 +424,7 @@ fn multiline_drag_select_across_lines() {
         out
     };
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, input_id),
         expected_remaining,
@@ -420,27 +439,32 @@ fn multiline_drag_select_batched_events() {
     // processes events that arrive between animation frames.
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-multiline").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(input_id).unwrap();
     let (left, top) = (bounds.left, bounds.top);
 
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     for _ in 0..4 {
         app.send_key("a");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     app.send_key("Enter");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..4 {
         app.send_key("b");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     app.send_key("Enter");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..4 {
         app.send_key("c");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "aaaa\nbbbb\ncccc");
 
     let line_h = 14.0 * 1.2;
@@ -450,16 +474,18 @@ fn multiline_drag_select_batched_events() {
     // Queue all drag events WITHOUT flushing between them — this mirrors how
     // the browser's frame loop sees multiple mouse events that arrive between
     // animation frames.
-    app.pointer_down_no_flush(left + 5.0, y_line0);
+    app.pointer_down(left + 5.0, y_line0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for frac in [1, 2, 3] {
         let y = y_line0 + (y_line2 - y_line0) * (frac as f64 / 4.0);
-        app.pointer_move_no_flush(left + 5.0, y);
+        app.pointer_move(left + 5.0, y);
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.pointer_move_no_flush(left + 5.0, y_line2);
-    app.pointer_up_no_flush(left + 5.0, y_line2);
+    app.pointer_move(left + 5.0, y_line2);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.pointer_up(left + 5.0, y_line2);
     // Single flush processes all events at once.
-    app.pump().unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::from_millis(16));
 
     let (anchor, end) = get_selection(&app, input_id);
     eprintln!(
@@ -505,16 +531,16 @@ render(Input({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 
 fn controller_on_key_down_fires_on_keydown() {
     let mut app = TurTestApp::new(300.0, 100.0).unwrap();
     app.eval_module_source(ONKEY_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Ctrl+S must not insert text but must still fire onKeyDown.
     assert_eq!(get_text(&app, input_id), "");
     app.send_key_with_modifiers("s", false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         app.eval_js("globalThis.__keyHit"),
         "s",
@@ -529,7 +555,7 @@ fn controller_on_key_down_fires_on_keydown() {
 
     // A plain printable key must also fire onKeyDown (and insert the char).
     app.send_key("a");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         app.eval_js("globalThis.__keyHit"),
         "a",
@@ -557,18 +583,19 @@ render(Input({
 fn set_spans_preserve_cursor_keeps_caret() {
     let mut app = TurTestApp::new(300.0, 100.0).unwrap();
     app.eval_module_source(SPANS_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Normalize the caret to a known position: Home → 0, then right twice → 2.
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("ArrowRight");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "hello");
     assert_eq!(get_cursor_pos(&app, input_id), 2);
 
@@ -579,7 +606,7 @@ fn set_spans_preserve_cursor_keeps_caret() {
             { content: "llo", color: { r: 80, g: 200, b: 120, a: 255 } },
         ]);"#,
     );
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "hello");
     assert_eq!(
         get_cursor_pos(&app, input_id),
@@ -589,7 +616,7 @@ fn set_spans_preserve_cursor_keeps_caret() {
 
     // Contrast: the legacy `setSpans` resets the caret to end-of-text (5).
     app.eval_js(r#"globalThis.__ctrl.setSpans([{ content: "hello" }]);"#);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_cursor_pos(&app, input_id),
         5,
@@ -618,7 +645,7 @@ fn caret_rect(app: &TurTestApp) -> (f64, f64, f64) {
 fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
     let (x0, _, _) = caret_rect(app);
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x1, _, _) = caret_rect(app);
     let cw = x1 - x0;
     assert!(cw > 3.0, "char width implausibly small: {cw}");
@@ -678,20 +705,20 @@ render(Input({
 fn click_places_caret_then_backspace_deletes_left_char() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
     app.eval_module_source(CLICK_SINGLE_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
     focus_editable(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, id), 0);
 
     let cw = calibrate_char_width(&mut app);
     let (_, y_top, h) = caret_rect(&app);
     // After calibration the caret sits at byte 1; recover the line-0 caret x.
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x0, _, _) = caret_rect(&app);
     eprintln!("single-line: x0={x0} cw={cw}");
 
@@ -699,7 +726,7 @@ fn click_places_caret_then_backspace_deletes_left_char() {
     let target = 3usize;
     let cy = y_top + h / 2.0;
     app.click(x0 + cw * target as f64, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let caret = get_cursor_pos(&app, id);
     eprintln!("after click for byte {target}: caret={caret}");
@@ -707,7 +734,7 @@ fn click_places_caret_then_backspace_deletes_left_char() {
 
     // Backspace deletes byte 2 (the 'l' immediately left of the caret).
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     eprintln!(
         "after backspace: text='{}' caret={}",
         get_text(&app, id),
@@ -728,7 +755,7 @@ fn click_places_caret_then_backspace_deletes_left_char() {
 fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
     let mut app = TurTestApp::new(500.0, 300.0).unwrap();
     app.eval_module_source(CLICK_MULTI_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(id).unwrap();
@@ -737,13 +764,13 @@ fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
     // field. (focus_editable clicks the element center, which on a 3-line
     // field lands on line 2 — so click explicitly.)
     app.click(bounds.left + 1.0, bounds.top + 1.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (x0, y0, h) = caret_rect(&app);
     let cw = calibrate_char_width(&mut app);
     // Caret is now at byte 1 on line 0. Move onto line 1 to read its top y.
     app.send_key("ArrowDown");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (_, y1, _) = caret_rect(&app);
     let line_h = y1 - y0;
     eprintln!("multi: x0={x0} cw={cw} y0={y0} y1={y1} line_h={line_h}");
@@ -755,7 +782,7 @@ fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
     let target = 4usize + column;
     let cy = y1 + h / 2.0;
     app.click(x0 + cw * column as f64, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let caret = get_cursor_pos(&app, id);
     eprintln!("after click line1 col{column}: caret={caret} (expected {target})");
@@ -766,7 +793,7 @@ fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
 
     // Backspace deletes byte 4 ('d'), the char immediately left of the caret.
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     eprintln!(
         "after backspace: text='{}'",
         get_text(&app, id).replace('\n', "\\n")
@@ -788,18 +815,18 @@ fn click_places_caret_on_second_line_then_backspace_deletes_left_char() {
 fn click_with_multi_color_spans_places_caret_correctly() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
     app.eval_module_source(CLICK_SPANS_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
     let bounds = app.get_element_absolute_bounds(id).unwrap();
     // Click top-left → byte 0 ("import" run start).
     app.click(bounds.left + 1.0, bounds.top + 1.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (_, y_top, h) = caret_rect(&app);
     let cw = calibrate_char_width(&mut app);
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x0, _, _) = caret_rect(&app);
     eprintln!("multi-span: x0={x0} cw={cw}");
 
@@ -807,7 +834,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
     let target = 4usize;
     let cy = y_top + h / 2.0;
     app.click(x0 + cw * target as f64, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let caret = get_cursor_pos(&app, id);
     eprintln!("after click for byte {target}: caret={caret}");
@@ -818,7 +845,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 
     // Backspace deletes byte 3 ('o') → "imprt {".
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     eprintln!(
         "after backspace: text='{}' caret={}",
         get_text(&app, id),
@@ -857,25 +884,25 @@ render(Input({
 fn click_in_later_run_places_caret_correctly() {
     let mut app = TurTestApp::new(500.0, 200.0).unwrap();
     app.eval_module_source(CLICK_FOUR_SPAN_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
     focus_editable(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_cursor_pos(&app, id), 0);
 
     let cw = calibrate_char_width(&mut app);
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x0, y_top, h) = caret_rect(&app);
     let cy = y_top + h / 2.0;
 
     // Click at each byte boundary across all 4 runs.
     for target in [0usize, 2, 4, 6, 8, 10, 12, 14, 16] {
         app.click(x0 + cw * target as f64, cy);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         let caret = get_cursor_pos(&app, id);
         eprintln!("four-span: target={target} caret={caret}");
         assert_eq!(
@@ -913,7 +940,7 @@ fn empty_colored_span_does_not_panic() {
     app.eval_module_source(EMPTY_SPAN_BUNDLE).unwrap();
     // Rendering must not panic despite the empty-color span producing an
     // empty (start == end) style range.
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_text_id(&app);
     // The empty span contributes no text; the visible content is "abcd".
@@ -953,7 +980,7 @@ render(ScrollView({
 fn click_on_scrolled_line_places_caret_on_that_line() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(CLICK_SCROLLED_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_under(&app, &["scrolled-input"]);
     let sv_id = find_ancestor_scroll_view(&app, id).expect("editable inside a ScrollView");
@@ -961,16 +988,16 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     // At scroll 0, click the top-left to focus + place caret at byte 0.
     let bounds = app.get_element_absolute_bounds(id).unwrap();
     app.click(bounds.left + 1.0, bounds.top + 1.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Calibrate char width and line height from the caret rect.
     let (x0, y0, _) = caret_rect(&app);
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x1, _, _) = caret_rect(&app);
     let cw = x1 - x0;
     app.send_key("ArrowDown");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (_, y1, _) = caret_rect(&app);
     let line_h = y1 - y0;
     eprintln!("scrolled: x0={x0} cw={cw} y0={y0} line_h={line_h}");
@@ -981,7 +1008,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     let scroll_amount = 2.0 * line_h;
     let (cx, cy) = app.get_element_absolute_bounds(sv_id).unwrap().center();
     app.wheel(0.0, scroll_amount, cx, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.with_element(sv_id, move |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
         assert!(
@@ -998,7 +1025,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
     let column = 2usize;
     let target = line2_start + column;
     app.click(x0 + cw * column as f64, y0 + line_h / 2.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let caret = get_cursor_pos(&app, id);
     eprintln!("after scrolled click: caret={caret} (expected {target})");
@@ -1010,7 +1037,7 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 
     // Backspace deletes byte 15 ('2') → "L2CCCC" becomes "LCCCC".
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     eprintln!(
         "after backspace: text='{}'",
         get_text(&app, id).replace('\n', "\\n")
@@ -1049,7 +1076,7 @@ render(Input({
 fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     let mut app = TurTestApp::new(120.0, 300.0).unwrap();
     app.eval_module_source(CLICK_SOFTWRAP_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let id = find_editable_under(&app, &["softwrap-input"]);
     let bounds = app.get_element_absolute_bounds(id).unwrap();
@@ -1057,7 +1084,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 
     // Focus + read layout state (number of visual lines + true content height).
     app.click(left + 2.0, top + 2.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x0, y0, _) = caret_rect(&app);
     let dev = app
         .dev_tool_get_element(id.into())
@@ -1085,7 +1112,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     );
     let line_h = lh / num_lines as f32;
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (x1, _, _) = caret_rect(&app);
     let cw = x1 - x0;
 
@@ -1096,7 +1123,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     for col in [0usize, 2, 4, 6, 8, 10] {
         let cx = x0 + cw * col as f64;
         app.click(cx, y0 + line_h as f64 * 0.5);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         let c = get_cursor_pos(&app, id);
         v0_bytes.push((col, c));
         assert!(
@@ -1112,7 +1139,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
     let mut prev = 0usize;
     for ln in 0..num_lines.min(5) {
         app.click(x0 + cw * 2.0, y0 + line_h as f64 * (ln as f64 + 0.5));
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         let c = get_cursor_pos(&app, id);
         eprintln!(
             "softwrap: visual line {ln} (y={:.1}) → caret {c}",
@@ -1133,13 +1160,13 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
         x0 + cw * 2.0,
         y0 + line_h as f64 * (target_line as f64 + 0.5),
     );
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let caret = get_cursor_pos(&app, id);
     let original = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega";
     let mut expected: String = original[..caret - 1].to_string();
     expected.push_str(&original[caret..]);
     app.send_key("Backspace");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     eprintln!(
         "softwrap: after backspace at caret {caret} text='{}'",
         get_text(&app, id)
@@ -1160,7 +1187,7 @@ fn click_on_soft_wrapped_line_lands_on_correct_visual_segment() {
 fn double_click_selects_word() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
@@ -1169,8 +1196,9 @@ fn double_click_selects_word() {
     // over the glyphs selects the whole word.
     for ch in "hello".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, input_id), "hello");
 
     // The focus click already bumped the synthetic time. Push past the
@@ -1185,7 +1213,7 @@ fn double_click_selects_word() {
     let click_x = (bounds.left + bounds.right) * 0.5;
     let click_y = (bounds.top + bounds.bottom) * 0.5;
     app.double_click(click_x, click_y);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (anchor, end) = get_selection(&app, input_id);
     let (lo, hi) = if anchor <= end {
@@ -1204,14 +1232,15 @@ fn double_click_selects_word() {
 fn single_click_after_double_click_collapses_selection() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("input-typing").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_text_id(&app);
     focus_editable(&mut app, input_id);
     for ch in "hello".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Push past the focus click's window so the double_click is fresh.
     for _ in 0..15 {
@@ -1223,7 +1252,7 @@ fn single_click_after_double_click_collapses_selection() {
     let click_y = (bounds.top + bounds.bottom) * 0.5;
 
     app.double_click(click_x, click_y);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     // Selection should be non-empty after double-click.
     let (a, e) = get_selection(&app, input_id);
     assert_ne!(a, e, "double-click should produce a selection");
@@ -1234,7 +1263,7 @@ fn single_click_after_double_click_collapses_selection() {
         app.bump_synthetic_time_ms_for_test(50);
     }
     app.pointer_down(click_x, click_y);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (a, e) = get_selection(&app, input_id);
     assert_eq!(
         a, e,

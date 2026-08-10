@@ -6,6 +6,7 @@
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
 
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
@@ -13,6 +14,8 @@ use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
 use tur_engine::renderer::NoopRenderer;
+use tur_integration_tests::RawAppLooper;
+use tur_integration_tests::TestSchedulerDriver;
 use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
@@ -25,16 +28,19 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String>
 }
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
-/// instances are headless).
-fn build_runtime() -> Rc<TurRuntime> {
-    TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+/// instances are headless). Returns the driver too so callers can spawn a
+/// `RawAppLooper` per instance.
+fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>) {
+    let driver = TestSchedulerDriver::new();
+    let runtime = TurRuntime::builder()
+        .scheduler(driver.clone())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .build()
-        .expect("runtime build")
+        .expect("runtime build");
+    (runtime, driver)
 }
 
 const SET_ID_JS: &str = r#"
@@ -45,7 +51,7 @@ const SET_ID_JS: &str = r#"
 
 #[test]
 fn instances_have_isolated_js_realms() {
-    let runtime = build_runtime();
+    let (runtime, _driver) = build_runtime();
     let app_a = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("app A");
@@ -73,13 +79,14 @@ fn instances_have_isolated_js_realms() {
 
 #[test]
 fn instances_have_isolated_element_trees() {
-    let runtime = build_runtime();
+    let (runtime, driver) = build_runtime();
     let app_a = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("app A");
     let app_b = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("app B");
+    let looper_a = RawAppLooper::new(app_a.clone(), driver.clone());
 
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_module(
@@ -89,7 +96,7 @@ fn instances_have_isolated_element_trees() {
         "#,
     ))
     .expect("load A");
-    futures::executor::block_on(app_a.pump()).expect("frame A");
+    looper_a.wait_for_timeout(Duration::ZERO);
 
     // B has no tree mounted.
     let b_tree = futures::executor::block_on(app_b.dev_tool_element_tree());
@@ -102,10 +109,11 @@ fn instances_have_isolated_element_trees() {
 
 #[test]
 fn headless_instance_runs_js_without_rendering() {
-    let runtime = build_runtime();
+    let (runtime, driver) = build_runtime();
     let app = runtime
         .create_app(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
         .expect("headless");
+    let looper = RawAppLooper::new(app.clone(), driver);
 
     // JS executes; a frame runs without panic even with a zero viewport.
     futures::executor::block_on(app.load_module(
@@ -117,7 +125,7 @@ fn headless_instance_runs_js_without_rendering() {
     "#,
     ))
     .expect("load");
-    futures::executor::block_on(app.pump()).expect("frame");
+    looper.wait_for_timeout(Duration::ZERO);
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "42", "headless instance ran JS");
@@ -131,10 +139,11 @@ fn headless_instance_runs_js_without_rendering() {
 /// worker is actually driving the instance.
 #[test]
 fn create_headless_app_runs_engine_on_worker() {
-    let runtime = build_runtime();
+    let (runtime, driver) = build_runtime();
     let app = runtime
         .create_headless_app((0.0, 0.0))
         .expect("headless_app");
+    let looper = RawAppLooper::new(app.clone(), driver);
 
     // JS executes via the worker RPC path.
     futures::executor::block_on(app.load_module(
@@ -145,7 +154,7 @@ fn create_headless_app_runs_engine_on_worker() {
     "#,
     ))
     .expect("load");
-    futures::executor::block_on(app.pump()).expect("frame");
+    looper.wait_for_timeout(Duration::ZERO);
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
     assert_eq!(val, "7", "create_headless_app ran JS on the worker");
@@ -155,7 +164,7 @@ fn create_headless_app_runs_engine_on_worker() {
 fn many_instances_share_one_runtime() {
     // Smoke test: spawn several instances from one runtime to confirm no
     // shared-state corruption (each gets its own boa Context + store).
-    let runtime = build_runtime();
+    let (runtime, _driver) = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
         let app = runtime
@@ -315,13 +324,15 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 
 #[test]
 fn platform_events_route_to_the_correct_instance() {
-    let runtime = build_runtime();
+    let (runtime, driver) = build_runtime();
     let app_a = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("A");
     let app_b = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("B");
+    let looper_a = RawAppLooper::new(app_a.clone(), driver.clone());
+    let looper_b = RawAppLooper::new(app_b.clone(), driver);
 
     // Push a Resize to A only.
     app_a.push_platform_event(PlatformEvent::Resize {
@@ -329,8 +340,8 @@ fn platform_events_route_to_the_correct_instance() {
         logical_height: 180,
         dpr: 1.0,
     });
-    futures::executor::block_on(app_a.pump()).expect("frame A");
-    futures::executor::block_on(app_b.pump()).expect("frame B");
+    looper_a.wait_for_timeout(Duration::ZERO);
+    looper_b.wait_for_timeout(Duration::ZERO);
 
     // Read back each instance's viewportSize$ via JS. `eval_js` runs in script
     // mode (no imports), so do the import in a module eval and stash the JSON
@@ -358,7 +369,7 @@ fn platform_events_route_to_the_correct_instance() {
 
 #[test]
 fn reactive_stores_are_isolated_per_instance() {
-    let runtime = build_runtime();
+    let (runtime, _driver) = build_runtime();
     let app_a = runtime
         .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .expect("A");

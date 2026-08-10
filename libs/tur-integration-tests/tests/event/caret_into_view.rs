@@ -35,7 +35,7 @@ fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
 fn caret_into_view_scrolls_to_caret() {
     let mut app = TurTestApp::new(300.0, 200.0).unwrap();
     app.eval_module_source(CARET_SCROLL_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
     let sv_id = ElementNodeId::new(sv_id.as_u64());
@@ -48,7 +48,7 @@ fn caret_into_view_scrolls_to_caret() {
     // Focus the editor near its top-left (the editable occupies the top of the
     // scroll content at offset 0).
     app.click(5.0, 8.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(
         app.focused_element().is_some(),
         "editor should be focused after click"
@@ -59,8 +59,9 @@ fn caret_into_view_scrolls_to_caret() {
     // once it leaves the visible region.
     for _ in 0..35 {
         app.send_key("ArrowDown");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let after_down = scroll_offset(&app, sv_id);
     assert!(
@@ -71,8 +72,9 @@ fn caret_into_view_scrolls_to_caret() {
     // Walking the caret back to the top must scroll the viewport back up.
     for _ in 0..35 {
         app.send_key("ArrowUp");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let after_up = scroll_offset(&app, sv_id);
     assert!(

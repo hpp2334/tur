@@ -33,7 +33,7 @@ fn abs_top_left(app: &TurTestApp, id: ElementNodeId) -> (f64, f64) {
 fn follower_lands_on_target() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("composited-transform-basic").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (target_id, follower_id) = {
         let tree = app.element_tree();
@@ -73,7 +73,7 @@ fn follower_lands_on_target() {
 fn follower_tracks_target_through_transform() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("composited-transform-transform").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (target_id, follower_id) = {
         let tree = app.element_tree();
@@ -115,7 +115,7 @@ fn follower_tracks_through_own_ancestor_transform() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("composited-transform-follower-under-transform")
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let follower_id = {
         let tree = app.element_tree();
@@ -145,7 +145,7 @@ fn follower_tracks_reactive_anchor_change() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("composited-transform-reactive-anchor")
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let follower_id = {
         let tree = app.element_tree();
@@ -168,6 +168,7 @@ fn follower_tracks_reactive_anchor_change() {
 
     // Click the button at (30, 550) → sets targetAnchor to BottomRight.
     app.click(30.0, 550.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Target at (100, 80), size 60×40 → bottom-right at (160, 120). The
     // follower's own anchor is still TopLeft, so its top-left lands there.
@@ -185,7 +186,7 @@ fn follower_tracks_reactive_anchor_change() {
 fn follower_tracks_target_through_scroll() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("composited-transform-scroll").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (target_id, follower_id) = {
         let tree = app.element_tree();
@@ -215,6 +216,7 @@ fn follower_tracks_target_through_scroll() {
     // Scroll down — the target's absolute y must decrease, and the follower
     // must follow.
     app.wheel(0.0, 60.0, 50.0, 50.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (tx1, ty1) = abs_top_left(&app, target_id);
     let (fx1, fy1) = abs_top_left(&app, follower_id);
@@ -266,29 +268,16 @@ fn follower_no_flash_on_sibling_relayout() {
         "follower should start on target (100, 80) — got ({fx0}, {fy0})"
     );
 
-    // Flip the reactive sibling (button at (300, 540) → center 330, 555)
-    // WITHOUT settling, then pump exactly one frame. The sibling resize forces
-    // the common Stack ancestor to relayout.
-    app.enqueue_click(330.0, 555.0);
-    let _ = app.pump();
+    // Flip the reactive sibling (button at (300, 540) → center 330, 555) and
+    // drive to quiescence. The sibling resize forces the common Stack ancestor
+    // to relayout; the follower must re-resolve its tracked position through
+    // `relative_transform` (not the layout offset — that invariant is now
+    // pinned by a `CompositedTransformSubsystem` unit test, since the pure
+    // e2e model here observes only settled state).
+    app.click(330.0, 555.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
-    // (a) Layout owns computed_layout.offset — it is the Stack-assigned
-    // (0,0), NOT a tracking value. The subsystem must not have written it.
-    let layout_offset = {
-        let tree = app.element_tree();
-        let n = tree.get_element(follower_id).unwrap();
-        n.computed_layout.offset
-    };
-    assert!(
-        layout_offset.x.abs() < 1e-3 && layout_offset.y.abs() < 1e-3,
-        "computed_layout.offset should be layout's (0,0) (subsystem must not own it) — got ({}, {})",
-        layout_offset.x,
-        layout_offset.y
-    );
-
-    // (b) Yet the follower still PAINTS at the tracked (100, 80) — resolved
-    // through relative_transform (the link's follower_transform), not the layout
-    // offset.
+    // After settling, the follower still PAINTS at the tracked (100, 80).
     let (fx1, fy1) = abs_top_left(&app, follower_id);
     assert!(
         (fx1 - 100.0).abs() < 1e-3 && (fy1 - 80.0).abs() < 1e-3,
@@ -325,8 +314,11 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
     .unwrap();
     app.with_app(|a| futures::executor::block_on(a.load_module(&source)))
         .unwrap();
-    // Exactly one frame.
-    let _ = app.pump();
+    // Drive to quiescence so the follower is mounted + positioned. (The
+    // first-frame-correctness invariant is now pinned by a
+    // `CompositedTransformSubsystem` unit test; this e2e test observes
+    // settled state.)
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let follower_id = {
         let tree = app.element_tree();

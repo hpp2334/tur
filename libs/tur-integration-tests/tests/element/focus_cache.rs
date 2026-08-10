@@ -19,6 +19,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use tur_engine::FocusedState;
 use tur_integration_tests::TurTestApp;
@@ -42,6 +43,8 @@ fn focus_changed_handler_fires_on_editable_focus() {
         "#,
     )
     .unwrap();
+    // Let the module's initial render settle before installing the handler.
+    app.wait_for_timeout(Duration::from_millis(32));
 
     // Capture the latest focus state the handler observed. `None` = not yet.
     let captured: Rc<RefCell<Option<FocusedState>>> = Rc::new(RefCell::new(None));
@@ -53,8 +56,8 @@ fn focus_changed_handler_fires_on_editable_focus() {
             })));
     }
 
-    // Nothing focused yet (the handler may have fired during the eval pump
-    // with is_editable=false; either way there's no editable focused).
+    // Nothing focused yet (the handler may have fired during the initial
+    // render with is_editable=false; either way there's no editable focused).
     assert!(
         !captured
             .borrow()
@@ -64,24 +67,28 @@ fn focus_changed_handler_fires_on_editable_focus() {
         "no editable should be focused before any tap"
     );
 
-    // Tap inside the Input → the focus manager focuses it. `click` flushes
-    // a frame, so `apply_msg` has fired the handler with the worker's
-    // `MainMsg::FocusedStateChanged` by the time it returns.
+    // Tap inside the Input → the focus manager focuses it. `click` is
+    // fire-and-forget, so wait until the handler reports an editable is
+    // focused (run_loop routes the worker's `FocusedStateChanged` through
+    // the shared `apply_msg`, firing the handler).
     app.click(10.0, 10.0);
-
-    assert!(
+    let focused = app.wait_for(|_| {
         captured
             .borrow()
             .as_ref()
             .map(|s| s.is_editable)
-            .unwrap_or(false),
+            .unwrap_or(false)
+    });
+    assert!(
+        focused,
         "focus-change handler should report an editable is focused after tapping the Input"
     );
 
-    // A subsequent pump while focus is stable must NOT re-fire the handler
-    // (the worker dedups FocusedStateChanged against the previous frame).
+    // While focus stays stable, a subsequent frame must NOT re-fire the
+    // handler (the worker dedups FocusedStateChanged against the previous
+    // frame).
     let before = captured.borrow().clone();
-    app.pump().unwrap();
+    app.wait_for_timeout(Duration::from_millis(16));
     assert_eq!(
         *captured.borrow(),
         before,

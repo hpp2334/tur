@@ -33,7 +33,7 @@ fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {
 
 fn flush(app: &mut TurTestApp) {
     for _ in 0..6 {
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
 }
 
@@ -45,7 +45,7 @@ fn drag_emits_down_move_up() {
     let pos_id = ElementNodeId::new(pos_id_raw.as_u64());
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let bounds = app.get_element_absolute_bounds(pi_id).unwrap();
     let cx = (bounds.left + bounds.right) / 2.0;
@@ -53,6 +53,7 @@ fn drag_emits_down_move_up() {
 
     // Down — phase becomes "down", position recorded at (cx, cy).
     app.pointer_down(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(span_content(&app, phase_id), "down");
     assert_eq!(
@@ -62,11 +63,13 @@ fn drag_emits_down_move_up() {
 
     // Move while dragging — phase becomes "move".
     app.pointer_move(cx + 20.0, cy + 5.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(span_content(&app, phase_id), "move");
 
     // Up — phase becomes "up".
     app.pointer_up(cx + 20.0, cy + 5.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(span_content(&app, phase_id), "up");
 }
@@ -77,7 +80,7 @@ fn hover_move_without_down_does_not_fire_move_event() {
     let phase_id = build_drag(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Initial state.
     assert_eq!(span_content(&app, phase_id), "idle");
@@ -87,6 +90,7 @@ fn hover_move_without_down_does_not_fire_move_event() {
     let cx = (bounds.left + bounds.right) / 2.0;
     let cy = (bounds.top + bounds.bottom) / 2.0;
     app.pointer_move(cx + 10.0, cy + 10.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(

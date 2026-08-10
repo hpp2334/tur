@@ -34,7 +34,7 @@ fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {
 
 fn flush(app: &mut TurTestApp) {
     for _ in 0..6 {
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
 }
 
@@ -60,13 +60,14 @@ fn hover_cursor_applies() {
     let text_id = build(&mut app);
     let region_id = find_region(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // No cursor before pointer enters.
     assert_eq!(app.take_current_cursor(), None);
 
     let (cx, cy) = app.get_element_absolute_bounds(region_id).unwrap().center();
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     // Cursor applied.
@@ -79,6 +80,7 @@ fn hover_cursor_applies() {
 
     // Move away — cursor resets to default.
     app.pointer_move(999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
 
     assert_eq!(
@@ -95,7 +97,7 @@ fn reactive_cursor_updates() {
     app.load_bundle("mouse-region-reactive-cursor").unwrap();
     let region_id = find_region(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // No cursor before pointer enters.
     assert_eq!(app.take_current_cursor(), None);
@@ -104,6 +106,7 @@ fn reactive_cursor_updates() {
 
     // Initial cursor resolves to the source's initial value ("pointer").
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(
         app.take_current_cursor(),
@@ -113,14 +116,16 @@ fn reactive_cursor_updates() {
 
     // Move away — resets to default.
     app.pointer_move(999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(app.take_current_cursor(), Some(Cursor::Default));
 
     // Flip the cursor source and re-hover — the cursor must update after a
     // relayout re-resolves the prop.
     app.eval_js("globalThis.__setCursor('ew-resize')");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(
         app.take_current_cursor(),

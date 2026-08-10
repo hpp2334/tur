@@ -20,7 +20,7 @@ fn pointer_up_outside_focusable_clears_focus_without_panic() {
 
     let editable_id = qid(&app, &["editable"]);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(
         app.focused_element().is_none(),
         "nothing should be focused before any click"
@@ -32,6 +32,7 @@ fn pointer_up_outside_focusable_clears_focus_without_panic() {
         .unwrap()
         .center();
     app.click(ex, ey);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(
         app.focused_element().is_some(),
         "Input should be focused after clicking it"
@@ -42,6 +43,7 @@ fn pointer_up_outside_focusable_clears_focus_without_panic() {
     // the exact condition that used to reach `borrow_mut()` and panic. Without
     // the fix this aborts with "RefCell already borrowed".
     app.click(200.0, 300.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.focused_element().is_none(),

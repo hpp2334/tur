@@ -62,7 +62,7 @@ pub fn reported_stretch_bug_renders_red_strip() {
 
     let app = TurVelloApp::new(logical_w as f64, logical_h as f64, 1.0).unwrap();
     app.load_bundle("column-stretch-container-text").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let pixels = app.render_to_pixels();
     assert_eq!(
@@ -98,7 +98,7 @@ pub fn container_clip_rounded_corner_clipped() {
 
     let app = TurVelloApp::new(logical_w as f64, logical_h as f64, 1.0).unwrap();
     app.load_bundle("container-clip-rounded").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let pixels = app.render_to_pixels();
     assert_eq!(

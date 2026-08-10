@@ -41,14 +41,14 @@ fn jump_to_sets_scroll_offset() {
     // no-op because the controller was never attached to its scroll-view.
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
     app.eval_module_source(SCROLLBAR_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
     let sv_id = ElementNodeId::new(sv_id.as_u64());
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     app.eval_js("globalThis.__ctrl.jumpTo(150)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(
         (scroll_offset(&app, sv_id) - 150.0).abs() < 0.5,
         "jumpTo(150) should set the scroll offset",
@@ -56,7 +56,7 @@ fn jump_to_sets_scroll_offset() {
 
     // Clamps to the max extent (content 600 - viewport 200 = 400).
     app.eval_js("globalThis.__ctrl.jumpTo(99999)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(
         (scroll_offset(&app, sv_id) - 400.0).abs() < 1.0,
         "jumpTo past the end should clamp to max extent (400)",
@@ -67,7 +67,7 @@ fn jump_to_sets_scroll_offset() {
 fn dragging_scrollbar_thumb_scrolls() {
     let mut app = TurTestApp::new(200.0, 200.0).unwrap();
     app.eval_module_source(SCROLLBAR_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
     let sv_id = ElementNodeId::new(sv_id.as_u64());
@@ -77,11 +77,11 @@ fn dragging_scrollbar_thumb_scrolls() {
 
     // The scrollbar column occupies x=[190,200]. Press in the middle of the
     // track (click-jumps toward the cursor) then drag downward.
-    app.pointer_down_no_flush(195.0, 100.0);
-    app.pointer_move_no_flush(195.0, 180.0);
-    app.pointer_up_no_flush(195.0, 180.0);
-    app.pump().unwrap();
-    app.render();
+    app.pointer_down(195.0, 100.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.pointer_move(195.0, 180.0);
+    app.pointer_up(195.0, 180.0);
+    app.wait_for_timeout(std::time::Duration::from_millis(16));
 
     // The scrollbar claimed focus on pointer-down.
     assert_eq!(

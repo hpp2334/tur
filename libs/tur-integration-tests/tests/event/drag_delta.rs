@@ -26,12 +26,13 @@ fn drag_delta_from_start_and_from_last_are_correct() {
     let target = app.query_element(&["drag-target"]).unwrap();
     let target = ElementNodeId::new(target.as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (cx, cy) = app.get_element_absolute_bounds(target).unwrap().center();
 
     // Press — no drag event yet (onPointerMove hasn't fired).
     app.pointer_down(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);
     assert_eq!(
         (dsx, dsy, dlx, dly),
@@ -41,6 +42,7 @@ fn drag_delta_from_start_and_from_last_are_correct() {
 
     // Move +10x — deltaFromStart = (10,0), deltaFromLast = (10,0).
     app.pointer_move(cx + 10.0, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);
     assert_eq!(
         (dsx, dsy, dlx, dly),
@@ -50,6 +52,7 @@ fn drag_delta_from_start_and_from_last_are_correct() {
 
     // Move +15x more (total +25x) — deltaFromStart = (25,0), deltaFromLast = (15,0).
     app.pointer_move(cx + 25.0, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);
     assert_eq!(
         (dsx, dsy, dlx, dly),
@@ -59,6 +62,7 @@ fn drag_delta_from_start_and_from_last_are_correct() {
 
     // Move +5y (total +25x,+5y) — deltaFromStart = (25,5), deltaFromLast = (0,5).
     app.pointer_move(cx + 25.0, cy + 5.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);
     assert_eq!(
         (dsx, dsy, dlx, dly),
@@ -68,8 +72,10 @@ fn drag_delta_from_start_and_from_last_are_correct() {
 
     // Release — drag cleared; a subsequent hover-move must not produce deltas.
     app.pointer_up(cx + 25.0, cy + 5.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.eval_js("globalThis.__resetDrag()");
     app.pointer_move(cx + 40.0, cy + 40.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (dsx, dsy, dlx, dly) = drag_info(&mut app);
     assert_eq!(
         (dsx, dsy, dlx, dly),

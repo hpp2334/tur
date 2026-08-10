@@ -43,7 +43,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     "#)
     .unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let w1 = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
@@ -53,7 +53,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     // Flip the flag — the inner Text's derive must recompute → width changes.
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let w2 = {
         let tree = app.element_tree();
@@ -94,7 +94,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
     "#)
     .unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let w1 = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
@@ -103,7 +103,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let w2 = {
         let tree = app.element_tree();
@@ -164,7 +164,7 @@ fn animated_container_pattern_inner_text_still_updates() {
     "#)
     .unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let w1 = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
@@ -173,10 +173,9 @@ fn animated_container_pattern_inner_text_still_updates() {
 
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     // advance past the animation duration so retarget + tick have run
-    app.advance(std::time::Duration::from_millis(300)).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::from_millis(300));
 
     let w2 = {
         let tree = app.element_tree();
@@ -235,7 +234,7 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
     "#)
     .unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.eval_module_source(
         r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
     )
@@ -244,9 +243,8 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
         .unwrap();
-    app.render();
-    app.advance(std::time::Duration::from_millis(300)).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.wait_for_timeout(std::time::Duration::from_millis(300));
 
     app.eval_module_source(
         r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
@@ -303,7 +301,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
     )
     .unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     // Find the Container id once.
     let container_id = {
         let tree = app.element_tree();
@@ -331,11 +329,10 @@ fn js_animated_container_pattern_animates_width_over_time() {
     // Flip the target -> on_updated -> retarget (begin=100, end=200) + forward.
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__target, 200);"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     // ctrl.forward() resets progress to 0 then advances; after a tiny advance
     // the width should be moving away from 100 toward 200.
-    app.advance(std::time::Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::from_millis(100));
     let mid = width_at(&app);
     assert!(
         mid > 110.0 && mid < 190.0,
@@ -343,7 +340,6 @@ fn js_animated_container_pattern_animates_width_over_time() {
     );
 
     // Past duration -> progress = 1.0 -> width = end = 200.
-    app.advance(std::time::Duration::from_millis(200)).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::from_millis(200));
     assert_eq!(width_at(&app), 200.0, "post-animation width should be 200");
 }

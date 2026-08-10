@@ -31,7 +31,7 @@ fn column_basic_vertical_stacking() {
         (col.id, sb1.id, sb2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1_node = rt.get_element(sb1_id).unwrap();
@@ -61,7 +61,7 @@ fn column_main_alignment_end() {
         (col.children[0], col.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -87,7 +87,7 @@ fn column_cross_alignment_start() {
         col.children[0]
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
@@ -116,7 +116,7 @@ fn column_nested_children_do_not_overlap() {
         )
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
@@ -159,7 +159,7 @@ fn column_overflow_children_keep_natural_height() {
         (col.id, col.children[0], col.children[1], col.children[2])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let col = rt.get_element(col_id).unwrap();

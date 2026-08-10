@@ -152,13 +152,11 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
-    /// Advance exactly one frame: send `Wake` to the worker, await the
-    /// next `MainMsg::FrameOutcome`. Any `RenderCommands` / `CursorChanged`
-    /// / `FocusedStateChanged` arriving in the meantime are applied (via
-    /// [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg)) —
-    /// rendered immediately, cursor backend updated, focus cache refreshed.
-    /// This is the single-frame primitive used by tests; platforms drive
-    /// [`Self::run_loop`] for continuous vsync-aligned rendering.
+    /// Advance one frame with **immediate** rendering (the worker's
+    /// `RenderCommands` are applied as soon as they arrive — no pipelining).
+    /// Used by raw harnesses that need pixel readback (`TurVelloApp`); the
+    /// autonomous [`Self::run_loop`] is the production / general test path.
+    /// Both share the single `apply_msg` handler.
     pub async fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
         self.backend.pump().await
     }
@@ -280,8 +278,10 @@ impl TurApp {
                     //    flushes+records N+1 while main encodes N below.
                     self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
                     // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins).
-                    if let Some(batch) = pending.take() {
+                    //    latest-wins). Skip empty batches — an empty command
+                    //    list paints a blank frame (clears the surface), which
+                    //    is never desirable.
+                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                         self.backend.render_batch(&batch);
                     }
                 }
@@ -300,13 +300,14 @@ impl TurApp {
                             }
                             if outcome.schedule == core::app::NextFrame::Vsync {
                                 self.main_sched.borrow().request_vsync();
-                            } else if let Some(batch) = pending.take() {
+                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
                                 // would stall with an un-rendered batch
                                 // (e.g. the initial frame, or a one-shot
-                                // paint request). Flush it now — the next
-                                // frame only starts on a new input event.
+                                // paint request). Flush it now (empty
+                                // batches skipped — they'd paint blank) —
+                                // the next frame only starts on a new input.
                                 self.backend.render_batch(&batch);
                             }
                             // Idle + empty pending: no-op. The loop blocks

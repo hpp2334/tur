@@ -1,6 +1,7 @@
 pub mod test_scheduler;
 pub use test_scheduler::TestSchedulerDriver;
 
+use std::cell::RefCell;
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
@@ -51,6 +52,7 @@ use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::render::Renderer;
+use tur_engine::core::scheduler::MainSchedulerDriver;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
@@ -339,6 +341,10 @@ pub struct TurTestApp {
     /// The scheduler driver's virtual clock. Advanced alongside `clock`
     /// so `sleep()` futures fire on the same virtual timeline.
     driver: Rc<TestSchedulerDriver>,
+    /// Per-frame outcomes shipped by the engine's `run_loop` via the
+    /// `after_frame` hook. `drive_one_frame` awaits one item per vsync kick;
+    /// `wait_for` / `wait_for_timeout` build on `drive_one_frame`.
+    frame_rx: RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
     cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
     clipboard: RecordingClipboard,
     http: Option<RecordingHttp>,
@@ -449,9 +455,17 @@ impl TurTestApp {
         let runtime = builder.build()?;
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
         let inner = runtime.create_app(renderer, (width, height), 1.0)?;
-        let _ = block_on(inner.pump());
-        Ok(Self {
+        // Drive the production `run_loop` (the same loop wasm/Android drive).
+        // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
+        // `drive_one_frame` pairs one `fire_vsync` with one awaited outcome.
+        let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
+        inner.set_after_frame_hook(Some(Rc::new(move |o| {
+            let _ = frame_tx.unbounded_send(o);
+        })));
+        driver.spawn_local(Box::pin(inner.clone().run_loop()));
+        let app = Self {
             inner,
+            frame_rx: RefCell::new(frame_rx),
             clock,
             driver,
             cursor_slot,
@@ -459,7 +473,12 @@ impl TurTestApp {
             http,
             filepicker,
             synthetic_time_ms: 1_700_000_000_000,
-        })
+        };
+        // Bootstrap: the worker self-paints on load (the initial resize the
+        // engine pushes in `create_app`); drive one frame so the app is
+        // mounted before the test starts.
+        let _ = app.drive_one_frame();
+        Ok(app)
     }
 
     /// Advance both the boa clock + the scheduler driver's virtual clock
@@ -507,7 +526,9 @@ impl TurTestApp {
         // Case dist files are ES modules that import `tur:std` (resolved by
         // the engine's module loader) and call `render(<case default>)`.
         block_on(self.inner.load_module(&source))?;
-        self.ensure_flushed();
+        // Drive the module's initial render to quiescence (frozen clock)
+        // before the test starts interacting.
+        self.wait_for_timeout(Duration::ZERO);
         Ok(())
     }
 
@@ -524,86 +545,89 @@ impl TurTestApp {
         &self.inner
     }
 
-    /// Run exactly one frame: advance the engine's fixed-point flush (events,
-    /// reactive updates, layout, microtasks, async polling) and render if
-    /// anything changed. No time advance — the `FixedClock` is untouched.
-    pub fn pump(&mut self) -> Result<FrameOutcome, TurError> {
-        block_on(self.inner.pump())
+    /// Drive the production `run_loop` forward by exactly one frame: fire one
+    /// vsync, then block (driving the `LocalSet` + the spawned `run_loop`)
+    /// until the `after_frame` hook reports a completed frame. The worker
+    /// pumps once per Wake; `run_loop` renders + dispatches all side-effects
+    /// (cursor / focus / images) via the shared `apply_msg`, so this path is
+    /// identical to what wasm/Android drive. The single frame primitive every
+    /// sync helper builds on.
+    fn drive_one_frame(&self) -> FrameOutcome {
+        use futures::future::FutureExt;
+        // Drain stale outcomes the worker produced between drives (it
+        // self-wakes via `wake_if_dirty` whenever flush leaves paint-worthy
+        // state). Without this drain, a stale frame would be consumed instead
+        // of the fresh one that processes currently-queued events — mirroring
+        // the old `pump`'s stale drain.
+        while let Some(Some(_stale)) = self.frame_rx.borrow_mut().next().now_or_never() {}
+        self.driver.fire_vsync();
+        self.driver
+            .block_on(self.frame_rx.borrow_mut().next())
+            .expect("worker destroyed mid-frame")
     }
 
-    /// Legacy alias for [`Self::pump`] (drops the `FrameOutcome`). Prefer
-    /// `pump` in new code.
-    pub fn tick(&mut self) -> Result<(), TurError> {
-        block_on(self.inner.pump()).map(|_| ())
+    /// The condition-wait primitive. Drives `run_loop` one frame at a time,
+    /// advancing the virtual clock by `FRAME_STEP_MS` per step, checking
+    /// `predicate` after each drive — so time-based observables (a `sleep`
+    /// resolving, an animation threshold) resolve as virtual time progresses.
+    /// Always advances at least one frame before the first check, so it is
+    /// safe right after a fire-and-forget input. Returns `true` once the
+    /// predicate holds, or `false` after the cap (~2 s virtual). For a
+    /// frozen-clock sync (no time advance), use `wait_for_timeout(ZERO)`.
+    pub fn wait_for(&self, predicate: impl Fn(&TurTestApp) -> bool) -> bool {
+        const CAP_MS: u64 = 2_000;
+        let mut elapsed_ms: u64 = 0;
+        loop {
+            self.advance_clock(FRAME_STEP_MS);
+            elapsed_ms += FRAME_STEP_MS;
+            self.drive_one_frame();
+            if predicate(self) {
+                return true;
+            }
+            if elapsed_ms >= CAP_MS {
+                return false;
+            }
+        }
     }
 
-    /// Pump until the engine has no more immediately-available work (nothing
-    /// rendered and nothing time-driven pending). Does not advance the clock,
-    /// so an active animation (which would render every frame) is left running
-    /// rather than spun indefinitely. Capped at 8 frames to guard cascades.
-    pub fn settle(&mut self) {
-        for _ in 0..8 {
-            let outcome = match block_on(self.inner.pump()) {
-                Ok(o) => o,
-                Err(_) => return,
-            };
-            if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+    /// The time-advance primitive. Advances the virtual clock by `timeout` in
+    /// `FRAME_STEP_MS` ticks, driving `run_loop` to **quiescence** at each tick
+    /// (mirroring the old `advance` + `settle` pair). `timeout == ZERO` is the
+    /// pure quiescence form: drive frames at a frozen clock until the engine
+    /// reports no immediately-available work (the old `settle`/`render`
+    /// semantics) — this is what event-syncs use, since it doesn't perturb
+    /// time-sensitive assertions. Pure e2e model: only `wait_for` (sync to an
+    /// observable, frozen clock) and `wait_for_timeout` (advance time +
+    /// quiescence) drive the loop.
+    pub fn wait_for_timeout(&self, timeout: Duration) {
+        let total_ms = timeout.as_millis() as u64;
+        let mut elapsed_ms: u64 = 0;
+        loop {
+            let step = FRAME_STEP_MS.min(total_ms.saturating_sub(elapsed_ms));
+            self.advance_clock(step);
+            elapsed_ms += step;
+            // Drive to quiescence at this clock tick (cap 8 frames per tick,
+            // matching the old `settle`).
+            for _ in 0..8 {
+                let outcome = self.drive_one_frame();
+                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                    break;
+                }
+            }
+            if elapsed_ms >= total_ms {
                 break;
             }
         }
     }
 
-    /// Advance virtual time by `frames × FRAME_STEP_MS` (60 fps), running one
-    /// frame per step, then settle. Use this instead of a wall duration to
-    /// express "wait N frames" — animation/timer tests derive elapsed time
-    /// from the frame count.
-    pub fn wait_frames(&mut self, frames: usize) {
-        for _ in 0..frames {
-            self.advance_clock(FRAME_STEP_MS);
-            let _ = block_on(self.inner.pump());
-        }
-        self.settle();
-    }
-
-    /// Pump frames (advancing the clock by `FRAME_STEP_MS` each) until
-    /// `predicate` holds, or a cap (~2 s virtual time) is hit. The predicate
-    /// is checked *before* the first advance, so an already-satisfied
-    /// condition returns immediately. Use for async/HTTP results and
-    /// animation thresholds.
-    pub fn wait_for(&mut self, predicate: impl Fn(&TurTestApp) -> bool) {
-        for _ in 0..120 {
-            if predicate(self) {
-                return;
-            }
-            self.advance_clock(FRAME_STEP_MS);
-            let _ = block_on(self.inner.pump());
-        }
-    }
-
-    /// Settle (pump to quiescence). The worker self-paints on any state
-    /// change, so an explicit paint request isn't needed — kept for tests
-    /// that previously asserted a paint after an explicit request.
-    pub fn render(&mut self) {
-        self.settle();
-    }
-
-    /// Push a viewport resize and settle, exercising the full relayout path.
+    /// Fire-and-forget: push a viewport resize. Driven by a subsequent
+    /// `wait_for` (exercising the full relayout path).
     pub fn resize(&mut self, width: f64, height: f64) {
         self.inner.push_platform_event(PlatformEvent::Resize {
             logical_width: width as u32,
             logical_height: height as u32,
             dpr: 1.0,
         });
-        self.settle();
-    }
-
-    /// Advance the deterministic clock by an exact duration and run one frame.
-    /// Prefer [`Self::wait_frames`] / [`Self::wait_for`] for new tests (which
-    /// express time as frame counts); this remains for the few cases that need
-    /// a precise non-16 ms-aligned step.
-    pub fn advance(&mut self, duration: Duration) -> Result<(), TurError> {
-        self.advance_clock(duration.as_millis() as u64);
-        block_on(self.inner.pump()).map(|_| ())
     }
 
     /// Snapshot of the live element tree, fetched via RPC from the worker.
@@ -615,6 +639,10 @@ impl TurTestApp {
         block_on(self.inner.backend().query_tree_snapshot())
     }
 
+    /// Fire-and-forget: push a pointer-down + pointer-up (a full click) onto
+    /// the platform-event queue. The gesture is recognized when a subsequent
+    /// `wait_for` / `wait_for_timeout` drives the loop. Both events carry the
+    /// same `time_ms` (bumped once) so the gesture composer classifies a tap.
     pub fn click(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
@@ -624,35 +652,6 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
-        self.ensure_flushed();
-        let time_ms = self.synthetic_time_ms;
-        self.inner
-            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
-                position: Offset::new(x, y),
-                button: MouseButton::Left,
-                device: PointerDeviceKind::Mouse,
-                time_ms,
-            }));
-        self.ensure_flushed();
-    }
-
-    /// Enqueue a full click (pointer-down + pointer-up) **without** flushing,
-    /// so the caller can observe a single intermediate frame via [`Self::pump`].
-    /// The down/up land in the same platform-event drain, which the gesture
-    /// recognizer processes sequentially (down sets composer state, up reads
-    /// it) — so a click is produced. Use this to catch transient single-frame
-    /// artifacts (e.g. a follower flashing to its layout-default offset before
-    /// a subsystem re-corrects it) that [`Self::click`] would step past.
-    pub fn enqueue_click(&mut self, x: f64, y: f64) {
-        let time_ms = self.bump_time(40);
-        self.inner
-            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
-                position: Offset::new(x, y),
-                button: MouseButton::Left,
-                time_ms,
-                device: PointerDeviceKind::Mouse,
-            }));
-        let time_ms = self.bump_time(40);
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
                 position: Offset::new(x, y),
@@ -662,6 +661,8 @@ impl TurTestApp {
             }));
     }
 
+    /// Fire-and-forget: push a key-down event. Driven by a subsequent
+    /// `wait_for` / `wait_for_timeout`.
     pub fn send_key(&mut self, key: &str) {
         self.inner.push_platform_event(PlatformEvent::Key(KeyEvent {
             key: key.to_string(),
@@ -669,12 +670,11 @@ impl TurTestApp {
             modifiers: Modifiers::default(),
             event_type: KeyEventType::Down,
         }));
-        self.ensure_flushed();
     }
 
+    /// Fire-and-forget: push an IME event. Driven by a subsequent `wait_for`.
     pub fn send_ime(&mut self, event: ImeEvent) {
         self.inner.push_platform_event(PlatformEvent::Ime(event));
-        self.ensure_flushed();
     }
 
     pub fn send_key_with_modifiers(&mut self, key: &str, shift: bool, ctrl: bool) {
@@ -682,7 +682,7 @@ impl TurTestApp {
     }
 
     /// Full-key modifier helper. `meta` covers Cmd on macOS / Win on Windows.
-    /// Use this for Cmd+C / Cmd+V / Cmd+S tests.
+    /// Use this for Cmd+C / Cmd+V / Cmd+S tests. Fire-and-forget.
     pub fn send_key_with_modifiers_full(&mut self, key: &str, shift: bool, ctrl: bool, meta: bool) {
         self.inner.push_platform_event(PlatformEvent::Key(KeyEvent {
             key: key.to_string(),
@@ -695,9 +695,10 @@ impl TurTestApp {
             },
             event_type: KeyEventType::Down,
         }));
-        self.ensure_flushed();
     }
 
+    /// Fire-and-forget: push a pointer-down (left button). Driven by a
+    /// subsequent `wait_for` / `wait_for_timeout`.
     pub fn pointer_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
@@ -707,13 +708,12 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
-        self.settle();
     }
 
     /// Simulate a double-click at `(x, y)`. Two `pointer_down`s are pushed in
     /// quick succession (40 ms apart, well inside the engine's 500 ms window)
     /// at the same position, so the gesture composer classifies the second
-    /// one as `PointerDoubleDown`.
+    /// one as `PointerDoubleDown`. Fire-and-forget.
     pub fn double_click(&mut self, x: f64, y: f64) {
         self.pointer_down(x, y);
         self.pointer_down(x, y);
@@ -721,12 +721,14 @@ impl TurTestApp {
 
     /// Simulate a triple-click at `(x, y)`. Three `pointer_down`s in quick
     /// succession — the third one is classified as `PointerTripleDown`.
+    /// Fire-and-forget.
     pub fn triple_click(&mut self, x: f64, y: f64) {
         self.pointer_down(x, y);
         self.pointer_down(x, y);
         self.pointer_down(x, y);
     }
 
+    /// Fire-and-forget: push a pointer-move. Driven by a subsequent `wait_for`.
     pub fn pointer_move(&mut self, x: f64, y: f64) {
         let time_ms = self.synthetic_time_ms;
         self.inner
@@ -735,9 +737,10 @@ impl TurTestApp {
                 device: PointerDeviceKind::Mouse,
                 time_ms,
             }));
-        self.settle();
     }
 
+    /// Fire-and-forget: push a pointer-up (left button). Driven by a
+    /// subsequent `wait_for`.
     pub fn pointer_up(&mut self, x: f64, y: f64) {
         let time_ms = self.synthetic_time_ms;
         self.inner
@@ -747,11 +750,11 @@ impl TurTestApp {
                 device: PointerDeviceKind::Mouse,
                 time_ms,
             }));
-        self.settle();
     }
 
     /// Same as `pointer_down` but with an explicit mouse button. Used to
     /// simulate right-click (button 2) without an enclosing `click` gesture.
+    /// Fire-and-forget.
     pub fn pointer_down_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.bump_time(40);
         self.inner
@@ -761,9 +764,9 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Mouse,
             }));
-        self.settle();
     }
 
+    /// Fire-and-forget: push a pointer-up with an explicit button.
     pub fn pointer_up_with_button(&mut self, x: f64, y: f64, button: MouseButton) {
         let time_ms = self.synthetic_time_ms;
         self.inner
@@ -773,67 +776,32 @@ impl TurTestApp {
                 device: PointerDeviceKind::Mouse,
                 time_ms,
             }));
-        self.settle();
     }
 
     /// Push a right-click sequence: pointer-down(button=Right) then
     /// pointer-up(button=Right). The engine's gesture arena derives the
     /// `ContextMenu` gesture from the right-button pointer-up — there is no
-    /// separate context-menu platform event anymore.
+    /// separate context-menu platform event anymore. Fire-and-forget.
     pub fn right_click(&mut self, x: f64, y: f64) {
         self.pointer_down_with_button(x, y, MouseButton::Right);
         self.pointer_up_with_button(x, y, MouseButton::Right);
     }
 
-    /// Queue a pointer-down without settling — used to simulate the browser's
-    /// batching of multiple input events between animation frames. Pair with
-    /// `pointer_move_no_flush` / `pointer_up_no_flush` and a single `pump()`.
-    pub fn pointer_down_no_flush(&mut self, x: f64, y: f64) {
-        let time_ms = self.bump_time(40);
-        self.inner
-            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
-                position: Offset::new(x, y),
-                button: MouseButton::Left,
-                time_ms,
-                device: PointerDeviceKind::Mouse,
-            }));
-    }
-
-    pub fn pointer_move_no_flush(&mut self, x: f64, y: f64) {
-        let time_ms = self.synthetic_time_ms;
-        self.inner
-            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
-                position: Offset::new(x, y),
-                device: PointerDeviceKind::Mouse,
-                time_ms,
-            }));
-    }
-
-    pub fn pointer_up_no_flush(&mut self, x: f64, y: f64) {
-        let time_ms = self.synthetic_time_ms;
-        self.inner
-            .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
-                position: Offset::new(x, y),
-                button: MouseButton::Left,
-                device: PointerDeviceKind::Mouse,
-                time_ms,
-            }));
-    }
-
+    /// Fire-and-forget: push a wheel event. Driven by a subsequent `wait_for`.
     pub fn wheel(&mut self, delta_x: f64, delta_y: f64, x: f64, y: f64) {
         self.inner.push_platform_event(PlatformEvent::Wheel {
             delta_x,
             delta_y,
             position: Offset::new(x, y),
         });
-        self.ensure_flushed();
     }
 
     /// Simulate a touch drag from `start` to `end` in `steps` moves, advancing
     /// the deterministic clock by one frame (`FRAME_STEP_MS`) before each move
-    /// is drained so every event carries a distinct, increasing `time_ms`
-    /// (matching how a real browser stamps `event.timeStamp`). Ends with a
-    /// touch-up. Use for touch-scroll / fling tests.
+    /// so every event carries a distinct, increasing `time_ms` (matching how a
+    /// real browser stamps `event.timeStamp`). Ends with a touch-up. The whole
+    /// sequence is pushed fire-and-forget; a subsequent `wait_for` /
+    /// `wait_for_timeout` drives it.
     pub fn touch_drag(&mut self, start: (f64, f64), end: (f64, f64), steps: usize) {
         let time_ms = self.clock.now().millis_since_epoch();
         self.inner
@@ -843,7 +811,6 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Touch,
             }));
-        self.settle();
         for i in 1..=steps {
             self.advance_clock(FRAME_STEP_MS);
             let t = i as f64 / steps as f64;
@@ -856,7 +823,6 @@ impl TurTestApp {
                     device: PointerDeviceKind::Touch,
                     time_ms,
                 }));
-            let _ = block_on(self.inner.pump());
         }
         self.advance_clock(FRAME_STEP_MS);
         let time_ms = self.clock.now().millis_since_epoch();
@@ -867,15 +833,13 @@ impl TurTestApp {
                 device: PointerDeviceKind::Touch,
                 time_ms,
             }));
-        let _ = block_on(self.inner.pump());
-        self.settle();
     }
 
-    /// Push a touch pointer-down with an explicit event `time_ms` without
-    /// flushing. For the batched-moves fling regression test, which pushes a
-    /// whole down→moves→up sequence carrying distinct real timestamps but
-    /// drains it in a single `pump()` (simulating a mobile browser coalescing
-    /// several touchmoves into one frame).
+    /// Push a touch pointer-down with an explicit event `time_ms`
+    /// (fire-and-forget). For the batched-moves fling regression test, which
+    /// pushes a whole down→moves→up sequence carrying distinct real timestamps
+    /// but drains it in a single `wait_for` (simulating a mobile browser
+    /// coalescing several touchmoves into one frame).
     pub fn push_touch_down(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
@@ -886,8 +850,8 @@ impl TurTestApp {
             }));
     }
 
-    /// Push a touch pointer-move with an explicit event `time_ms` without
-    /// flushing. See [`Self::push_touch_down`].
+    /// Push a touch pointer-move with an explicit event `time_ms`
+    /// (fire-and-forget). See [`Self::push_touch_down`].
     pub fn push_touch_move(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
@@ -897,8 +861,8 @@ impl TurTestApp {
             }));
     }
 
-    /// Push a touch pointer-up with an explicit event `time_ms` without
-    /// flushing. See [`Self::push_touch_down`].
+    /// Push a touch pointer-up with an explicit event `time_ms`
+    /// (fire-and-forget). See [`Self::push_touch_down`].
     pub fn push_touch_up(&mut self, x: f64, y: f64, time_ms: u64) {
         self.inner
             .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
@@ -909,8 +873,8 @@ impl TurTestApp {
             }));
     }
 
-    /// Push a touch pointer-down at `(x, y)` and settle. Pairs with
-    /// [`Self::touch_up`] for tap / cancellation tests.
+    /// Fire-and-forget: push a touch pointer-down at `(x, y)`. Driven by a
+    /// subsequent `wait_for`.
     pub fn touch_down(&mut self, x: f64, y: f64) {
         let time_ms = self.bump_time(40);
         self.inner
@@ -920,15 +884,6 @@ impl TurTestApp {
                 time_ms,
                 device: PointerDeviceKind::Touch,
             }));
-        self.settle();
-    }
-
-    /// Drive `pump` for a few iterations to settle cascading reactive
-    /// updates, async completions, and PromiseJobs. Public so external tests
-    /// (e.g. async bridge tests) can use the same pattern. Equivalent to
-    /// [`Self::settle`]; prefer `settle` in new code.
-    pub fn ensure_flushed(&mut self) {
-        self.settle();
     }
 
     pub fn has_click_handler(&self, id: ElementNodeId) -> bool {
@@ -1081,7 +1036,6 @@ impl TurTestApp {
     pub fn push_paste_event(&mut self, text: &str) {
         self.inner
             .push_platform_event(tur_engine::platform_paste(text.to_string()));
-        self.ensure_flushed();
     }
 
     pub fn eval_js(&self, source: &str) -> String {
@@ -1114,6 +1068,78 @@ impl TurTestApp {
         id: NodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
         block_on(self.inner.dev_tool_get_element(id))
+    }
+}
+
+/// Run-loop driver for tests that hold a raw `Rc<TurApp>` (multi-instance,
+/// custom runtime). Mirrors `TurTestApp`'s driving: spawns the production
+/// `run_loop` once, installs an `after_frame` hook feeding a frame channel,
+/// and exposes the same `wait_for` / `wait_for_timeout` primitives. Construct
+/// one per app instance.
+pub struct RawAppLooper {
+    app: Rc<TurApp>,
+    driver: Rc<TestSchedulerDriver>,
+    frame_rx: RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
+}
+
+impl RawAppLooper {
+    /// Spawn `run_loop` for `app` (driven by `driver`) and bootstrap one frame.
+    pub fn new(app: Rc<TurApp>, driver: Rc<TestSchedulerDriver>) -> Self {
+        let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
+        app.set_after_frame_hook(Some(Rc::new(move |o| {
+            let _ = frame_tx.unbounded_send(o);
+        })));
+        driver.spawn_local(Box::pin(app.clone().run_loop()));
+        let looper = Self {
+            app,
+            driver,
+            frame_rx: RefCell::new(frame_rx),
+        };
+        let _ = looper.drive_one_frame();
+        looper
+    }
+
+    pub fn app(&self) -> &TurApp {
+        &self.app
+    }
+
+    fn drive_one_frame(&self) -> FrameOutcome {
+        use futures::future::FutureExt;
+        while let Some(Some(_stale)) = self.frame_rx.borrow_mut().next().now_or_never() {}
+        self.driver.fire_vsync();
+        self.driver
+            .block_on(self.frame_rx.borrow_mut().next())
+            .expect("worker destroyed mid-frame")
+    }
+
+    /// Drive frames at a frozen clock until `predicate` holds (cap ~2 s). The
+    /// predicate reads observable state via its captures.
+    pub fn wait_for(&self, predicate: impl Fn() -> bool) -> bool {
+        const CAP_FRAMES: usize = 125;
+        for _ in 0..CAP_FRAMES {
+            self.drive_one_frame();
+            if predicate() {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// `wait_for_timeout`-equivalent: advance the driver's frame loop (no
+    /// virtual clock here — raw apps own their own clock). `ZERO` drives to
+    /// quiescence.
+    pub fn wait_for_timeout(&self, timeout: Duration) {
+        let frames = (timeout.as_millis() as u64).div_ceil(16);
+        let iters = frames.max(1);
+        for _ in 0..iters {
+            // drive to quiescence at this tick (cap 8).
+            for _ in 0..8 {
+                let outcome = self.drive_one_frame();
+                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                    break;
+                }
+            }
+        }
     }
 }
 

@@ -35,7 +35,7 @@ fn row_with_each_does_not_inflate() {
         (col.id, row.id, each_id, marker.id, expanded.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let row = rt.get_element(row_id).unwrap();

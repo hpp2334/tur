@@ -53,7 +53,7 @@ fn click_updates_text_content() {
     let text_id = build_clickable_text(&mut app);
     let pi_id = find_pointer_interact(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -63,6 +63,7 @@ fn click_updates_text_content() {
 
     let (click_x, click_y) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.click(click_x, click_y);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -76,11 +77,12 @@ fn click_miss_does_not_update_text() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     let text_id = build_clickable_text(&mut app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_span_content(&app, text_id), "before");
 
     app.click(999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_span_content(&app, text_id),

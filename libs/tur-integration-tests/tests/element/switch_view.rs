@@ -18,7 +18,7 @@ render(root);
 fn switch_mounts_initial_branch() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(RUNTIME).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // The "a" branch should be mounted; "b" and fallback should not.
     assert!(
@@ -39,14 +39,14 @@ fn switch_mounts_initial_branch() {
 fn switch_swaps_branch_on_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(RUNTIME).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(app.query_element(&["case_a"]).is_some());
 
     // Flip the value atom to "b".
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.query_element(&["case_a"]).is_none(),
@@ -62,12 +62,12 @@ fn switch_swaps_branch_on_value_change() {
 fn switch_uses_fallback_when_no_case_matches() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(RUNTIME).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Value with no matching case → fallback branch.
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "zzz");"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(app.query_element(&["case_a"]).is_none());
     assert!(app.query_element(&["case_b"]).is_none());
@@ -81,13 +81,13 @@ fn switch_uses_fallback_when_no_case_matches() {
 fn switch_no_rebuild_when_value_re_emits_same_key() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(RUNTIME).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "a");"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
 }
@@ -111,7 +111,7 @@ render(root);
 fn switch_swaps_branch_on_derived_value_change() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(DERIVED_RUNTIME).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.query_element(&["d_case_a"]).is_some(),
@@ -122,7 +122,7 @@ fn switch_swaps_branch_on_derived_value_change() {
     // should swap via the subscriber graph (not a full-scan try_rebuild).
     app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__key, "b");"#)
         .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.query_element(&["d_case_a"]).is_none(),

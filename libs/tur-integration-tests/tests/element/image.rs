@@ -23,7 +23,7 @@ fn image_with_explicit_size() {
         image.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let image_node = rt.get_element(image_id).unwrap();
     assert_eq!(image_node.computed_layout.size.width, 200.0);
@@ -48,7 +48,7 @@ fn image_blob_ships_to_main() {
     // Settle a few more frames — the bridge ships once per decode (no
     // staging, no re-shipping), so the count stays at 1.
     for _ in 0..3 {
-        app.pump().unwrap();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
     let count = app.with_app(|a| a.backend().image_resource_count());
     assert_eq!(count, 1, "images ship exactly once per decode");
