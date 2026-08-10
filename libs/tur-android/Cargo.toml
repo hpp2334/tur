@@ -28,7 +28,7 @@ pollster = "0.4"
 wgpu = { workspace = true }
 raw-window-handle = "0.6"
 thiserror = { workspace = true }
-# Drives the async pump/wake on the JNI thread — `TurApp::pump` /
+# Drives the async run_loop/wake on the JNI thread — `TurApp::run_loop` /
 # `TurApp::wake` are `async fn`, the engine exposes no sync wrapper, so the
 # embedder supplies the runtime. The JNI render-tick blocks on each frame's
 # future via `futures::executor::block_on`.

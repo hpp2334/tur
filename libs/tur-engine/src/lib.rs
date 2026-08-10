@@ -95,8 +95,9 @@ pub struct TurApp {
     destroyed: Cell<bool>,
 }
 
-/// Per-frame hook fired at the end of [`TurApp::wake`] (after `pump`,
-/// before rescheduling). See [`TurApp::set_after_frame_hook`].
+/// Per-frame hook fired at the end of each iteration of `TurApp::run_loop`
+/// (after the frame's render/schedule side-effects are applied). See
+/// [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
 /// Per-focus-change hook fired from [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg)
@@ -150,15 +151,6 @@ impl TurApp {
             .eval_module(source)
             .await
             .map_err(TurError::from)
-    }
-
-    /// Advance one frame with **immediate** rendering (the worker's
-    /// `RenderCommands` are applied as soon as they arrive — no pipelining).
-    /// Used by raw harnesses that need pixel readback (`TurVelloApp`); the
-    /// autonomous [`Self::run_loop`] is the production / general test path.
-    /// Both share the single `apply_msg` handler.
-    pub async fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
-        self.backend.pump().await
     }
 
     /// Read rendered pixels back from the owned renderer (screenshot
@@ -233,8 +225,7 @@ impl TurApp {
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
     ///   quiescence). Side-effects (cursor, focus-change handler, image
-    ///   uploads) are applied inside `apply_msg`, so this loop and
-    ///   [`Self::pump`] can never diverge.
+    ///   uploads) are applied inside `apply_msg`.
     ///
     /// The bootstrap is automatic: `create_app` pushes an initial resize
     /// event to the worker, the worker pumps + ships `FrameOutcome` back,
@@ -295,11 +286,15 @@ impl TurApp {
                             false
                         }
                         MsgOutcome::Frame(outcome) => {
-                            if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
-                                hook(outcome);
-                            }
-                            if outcome.schedule == core::app::NextFrame::Vsync {
+                            // Apply this frame's render/schedule side-effects
+                            // BEFORE firing the after_frame hook, so hook
+                            // observers (test harnesses reading pixels/state,
+                            // embedders syncing DOM) see the fully-applied
+                            // frame. The hook is the last thing the loop
+                            // does for this message.
+                            let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 self.main_sched.borrow().request_vsync();
+                                false
                             } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
@@ -309,10 +304,16 @@ impl TurApp {
                                 // batches skipped — they'd paint blank) —
                                 // the next frame only starts on a new input.
                                 self.backend.render_batch(&batch);
+                                false
+                            } else {
+                                // Idle + empty pending: no-op. The loop
+                                // blocks on the next event.
+                                false
+                            };
+                            if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
+                                hook(outcome);
                             }
-                            // Idle + empty pending: no-op. The loop blocks
-                            // on the next event.
-                            false
+                            stop
                         }
                         MsgOutcome::Failed(e) => {
                             tracing::error!("worker frame error: {e}");
@@ -330,8 +331,8 @@ impl TurApp {
         }
     }
 
-    /// Install a callback fired after each autonomous frame (in [`Self::wake`],
-    /// after `pump`, before rescheduling).
+    /// Install a callback fired at the end of each `run_loop` iteration,
+    /// after the frame's render/schedule side-effects are applied.
     pub fn set_after_frame_hook(&self, hook: Option<Rc<dyn Fn(FrameOutcome)>>) {
         *self.after_frame.borrow_mut() = hook;
     }
@@ -428,10 +429,9 @@ impl TurApp {
     /// demand). Pass `None` to clear.
     ///
     /// The handler runs inside [`Self::apply_msg`](core::runtime::MainBackend::apply_msg),
-    /// so it observes identical state on both the [`Self::pump`] and
-    /// [`Self::run_loop`] paths. Used by the wasm embedder (textarea
-    /// focus / caret positioning) and Android (soft-keyboard sync via a
-    /// JNI callback into the Kotlin `FrameLoop`).
+    /// so it observes identical state on the `run_loop` path. Used by the
+    /// wasm embedder (textarea focus / caret positioning) and Android
+    /// (soft-keyboard sync via a JNI callback into the Kotlin `FrameLoop`).
     pub fn set_focus_changed_handler(&self, handler: Option<FocusChangedHook>) {
         self.backend.set_focus_changed_handler(handler);
     }

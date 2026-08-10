@@ -4,9 +4,13 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use boa_engine::context::time::StdClock;
+use futures::future::FutureExt;
+use futures::stream::StreamExt;
 use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
+use tur_engine::core::app::{FrameOutcome, NextFrame};
+use tur_engine::core::scheduler::MainSchedulerDriver;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -28,29 +32,65 @@ pub enum TurVelloError {
     Handle(String),
 }
 
-/// Test harness that drives a real `VelloRenderer` on the main thread.
+/// Test harness that drives a real `VelloRenderer` on the main thread via
+/// the production `TurApp::run_loop`.
 ///
-/// Uses `TurApp::pump` (immediate-render single-frame primitive) rather than
-/// `run_loop`: pixel-readback tests need the worker's `RenderCommands` applied
-/// synchronously within the frame they're produced, with no vsync pipelining
-/// (whose latest-wins buffering can leave a transient partial batch as the
-/// last render before a snapshot). Both `pump` and `run_loop` route through
-/// the shared `apply_msg`, so this is not a divergent handler.
+/// The harness installs an `after_frame` hook feeding a frame channel,
+/// spawns `run_loop` once, and exposes `wait_for` / `wait_for_timeout`.
+/// `run_loop`'s pipelining is safe for pixel readback because each
+/// `RenderCommands` batch is a full scene rebuild (`scene.reset()`), and
+/// the loop flushes the latest batch at quiescence *before* the
+/// `after_frame` hook fires — so `render_to_pixels` taken after
+/// `wait_for_timeout(ZERO)` reads the fully-settled frame.
 pub struct TurVelloApp {
     inner: RefCell<TurVelloAppInner>,
 }
 
 struct TurVelloAppInner {
     app: Rc<TurApp>,
+    driver: Rc<tur_integration_tests::TestSchedulerDriver>,
+    frame_rx: futures::channel::mpsc::UnboundedReceiver<FrameOutcome>,
     _window: Window,
 }
 
 impl TurVelloApp {
     pub fn new(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
-        pollster::block_on(Self::init_async(width, height, dpr))
+        let (app, driver, window) = pollster::block_on(Self::init_async(width, height, dpr))?;
+
+        // Spawn the autonomous `run_loop`. The `after_frame` hook ships each
+        // `FrameOutcome` into `frame_rx`; `drive_one_frame` pairs one
+        // `fire_vsync` with one awaited outcome.
+        let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
+        app.set_after_frame_hook(Some(Rc::new(move |o| {
+            let _ = frame_tx.unbounded_send(o);
+        })));
+        driver.spawn_local(Box::pin(app.clone().run_loop()));
+
+        let harness = TurVelloApp {
+            inner: RefCell::new(TurVelloAppInner {
+                app,
+                driver,
+                frame_rx,
+                _window: window,
+            }),
+        };
+        // Bootstrap: drive the initial self-paint frame.
+        let _ = harness.drive_one_frame();
+        Ok(harness)
     }
 
-    async fn init_async(width: f64, height: f64, dpr: f64) -> Result<Self, TurVelloError> {
+    async fn init_async(
+        width: f64,
+        height: f64,
+        dpr: f64,
+    ) -> Result<
+        (
+            Rc<TurApp>,
+            Rc<tur_integration_tests::TestSchedulerDriver>,
+            Window,
+        ),
+        TurVelloError,
+    > {
         let window = Window::new(
             "tur-vello-test",
             width as usize,
@@ -117,8 +157,9 @@ impl TurVelloApp {
             dpr,
         );
 
+        let driver = tur_integration_tests::TestSchedulerDriver::new();
         let runtime = TurRuntime::builder()
-            .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+            .scheduler(driver.clone())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
             .plugin(TurStdPlugin)
@@ -126,31 +167,40 @@ impl TurVelloApp {
             .build()?;
 
         // Threaded engine: worker produces command batches; `MainBackend`
-        // owns the VelloRenderer on main and applies them directly.
+        // owns the VelloRenderer on main and applies them via `run_loop`.
         let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
-        // Bootstrap: drive the initial self-paint frame.
-        let _ = futures::executor::block_on(app.pump());
-        Ok(TurVelloApp {
-            inner: RefCell::new(TurVelloAppInner {
-                app,
-                _window: window,
-            }),
-        })
+        Ok((app, driver, window))
     }
 
-    /// Drive one frame (immediate render).
-    fn pump(&self) {
-        let _ = futures::executor::block_on(self.inner.borrow().app.pump());
+    /// Drive one frame: drain stale self-wake outcomes, kick the vsync, and
+    /// block (driving the LocalSet) until the next frame's `after_frame`.
+    fn drive_one_frame(&self) -> FrameOutcome {
+        // Clone the driver Rc out first so `block_on` (immutable driver
+        // borrow) doesn't conflict with the mutable `frame_rx` borrow below.
+        let driver = self.inner.borrow().driver.clone();
+        let mut inner = self.inner.borrow_mut();
+        while let Some(Some(_stale)) = inner.frame_rx.next().now_or_never() {}
+        driver.fire_vsync();
+        driver
+            .block_on(inner.frame_rx.next())
+            .expect("worker destroyed mid-frame")
     }
 
-    /// Drive `n` frames (immediate render each). The pixel-readback tests need
-    /// a settled, complete render; pumping a handful of frames reaches
-    /// quiescence without run_loop's pipelining.
+    /// Drive `frames`-worth of frames, each to quiescence. `ZERO` drives a
+    /// single frame to quiescence — sufficient for pixel readback because
+    /// `run_loop` flushes the latest batch before the `after_frame` hook
+    /// fires.
     pub fn wait_for_timeout(&self, timeout: Duration) {
-        let frames = ((timeout.as_millis() as u64) + 15) / 16;
+        let frames = (timeout.as_millis() as u64).div_ceil(16);
         let iters = frames.max(1);
         for _ in 0..iters {
-            self.pump();
+            // Drive to quiescence at this tick (cap 8 sub-iterations).
+            for _ in 0..8 {
+                let outcome = self.drive_one_frame();
+                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                    break;
+                }
+            }
         }
     }
 
@@ -166,7 +216,7 @@ impl TurVelloApp {
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         futures::executor::block_on(self.inner.borrow().app.load_module(&source))?;
         // Drive the module's initial render to quiescence.
-        self.wait_for_timeout(Duration::from_millis(64));
+        self.wait_for_timeout(Duration::ZERO);
         Ok(())
     }
 
@@ -175,7 +225,8 @@ impl TurVelloApp {
         std::cell::Ref::map(self.inner.borrow(), |i| &i.app)
     }
 
-    /// Read rendered pixels back from the app-owned renderer.
+    /// Read rendered pixels back from the app-owned renderer. Call after
+    /// `wait_for_timeout(ZERO)` so the latest batch is flushed.
     pub fn render_to_pixels(&self) -> Vec<u8> {
         self.inner
             .borrow()

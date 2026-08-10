@@ -21,7 +21,7 @@
 //! All channels use `futures::channel` (mpsc + oneshot). The worker thread entry-point wraps
 //! an `async fn worker_loop(...)` via `futures::executor::block_on`, so the
 //! worker awaits on `worker_rx.recv()` instead of blocking on a Mutex +
-//! Condvar. Main-thread `pump` and `rpc` are `async fn`; the embedder
+//! Condvar. Main-thread `run_loop` and `rpc` are `async fn`; the embedder
 //! supplies the runtime (`wasm_bindgen_futures::spawn_local` on wasm,
 //! `futures::executor::block_on` on native).
 
@@ -378,21 +378,20 @@ impl WorkerBackend {
 // ---------------------------------------------------------------------------
 
 /// Result of dispatching one worker→main [`MainMsg`] through
-/// [`MainBackend::apply_msg`] — the single message handler shared by both
-/// drivers (`pump` and `run_loop`).
+/// [`MainBackend::apply_msg`] — the single message handler driven by
+/// `TurApp::run_loop`.
 ///
 /// `apply_msg` performs every side-effect that is independent of *when* the
 /// batch is painted (cursor backend apply, focus-change handler, image
-/// upload, event-bus dispatch) and returns this enum so each driver can
-/// apply its own render policy:
-/// - [`MainBackend::pump`] renders [`Render`] immediately and treats
-///   [`Frame`]/[`Closed`] as terminal.
-/// - `TurApp::run_loop` buffers [`Render`] for vsync-aligned pipelining,
-///   fires `after_frame` on [`Frame`], and re-arms vsync.
+/// upload, event-bus dispatch) and returns this enum so `run_loop` can
+/// apply its vsync-aligned render policy:
+/// - [`Render`] is buffered for pipelining (latest-wins) and rendered at
+///   the next vsync, or flushed at quiescence if no vsync is armed.
+/// - [`Frame`] fires `after_frame` and re-arms vsync when scheduled.
+/// - [`Closed`] is terminal.
 ///
-/// Because both drivers route through `apply_msg`, the focus-change handler
-/// (and every other side-effect) can never drift between the two execution
-/// paths.
+/// Because there is exactly one driver, the focus-change handler (and
+/// every other side-effect) can never drift between execution paths.
 pub(crate) enum MsgOutcome {
     /// Side-effects already applied; the driver should keep draining.
     Continue,
@@ -410,7 +409,7 @@ pub(crate) enum MsgOutcome {
 /// [`WorkerBackend`], dispatches input via `futures::channel`, and receives
 /// [`MainMsg`] replies.
 ///
-/// ## Async pump / rpc
+/// ## Async rpc
 ///
 /// All public methods on `MainBackend` are `async fn`. The embedder
 /// supplies the runtime — `wasm_bindgen_futures::spawn_local` on wasm
@@ -443,7 +442,7 @@ pub struct MainBackend {
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
     /// requires `&mut self`, but `MainBackend` is held inside `Rc<TurApp>`
     /// on wasm + android (single-threaded ownership). The borrow is held
-    /// across the `next().await` in `pump` — safe because the wasm main
+    /// across the `next().await` in `run_loop` — safe because the wasm main
     /// thread is single-threaded and `Rc<TurApp>` itself enforces
     /// single-threaded access.
     pub(crate) main_rx: RefCell<MainRx>,
@@ -567,7 +566,7 @@ impl MainBackend {
     }
 
     /// Install the main-side cursor backend. Worker emits
-    /// `MainMsg::CursorChanged`; main applies here during `pump`.
+    /// `MainMsg::CursorChanged`; main applies here during `apply_msg`.
     pub fn set_cursor_backend(
         &self,
         backend: Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
@@ -607,9 +606,9 @@ impl MainBackend {
     }
 
     /// Apply a render-command batch to the owned renderer (encode +
-    /// present). Called from both `pump` (request/response path) and
-    /// `TurApp::run_loop` (vsync path) — single source of truth for
-    /// render application.
+    /// present). Called from `TurApp::run_loop` (both the vsync-aligned
+    /// pipelining path and the quiescence flush) — single source of truth
+    /// for render application.
     pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
         let mut r = self.renderer.borrow_mut();
         r.render_commands(commands);
@@ -652,61 +651,12 @@ impl MainBackend {
         &self.worker_tx
     }
 
-    /// Advance one frame with **immediate** rendering: send `Wake` to the
-    /// worker, await the next `MainMsg::FrameOutcome`, and render each
-    /// `RenderCommands` batch as soon as it arrives (no pipelining). This is
-    /// the single-frame primitive used by raw harnesses that need pixel
-    /// readback (e.g. `TurVelloApp`); the autonomous [`crate::TurApp::run_loop`]
-    /// is the production / general test path. Both route every message through
-    /// the shared [`Self::apply_msg`], so there is no divergent handler.
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
-        use futures::future::FutureExt;
-        // Drain stale messages produced by worker self-wakes that raced this
-        // pump; their side-effects are applied, their FrameOutcomes discarded.
-        while let Some(Some(msg)) = self.main_rx.borrow_mut().next().now_or_never() {
-            drop(self.apply_msg_pump(msg));
-        }
-        self.worker_tx
-            .unbounded_send(WorkerMsg::Wake)
-            .map_err(|_| TurError::Other("worker gone".into()))?;
-        self.wake_worker();
-        let mut rx = self.main_rx.borrow_mut();
-        loop {
-            match rx.next().await {
-                Some(msg) => {
-                    if let Some(outcome) = self.apply_msg_pump(msg) {
-                        return outcome;
-                    }
-                }
-                None => return Err(TurError::Other("worker gone".into())),
-            }
-        }
-    }
-
-    /// `apply_msg` wrapped for the immediate-render `pump` driver: render
-    /// batches at once and surface terminal results. Non-terminal msgs return
-    /// `None`.
-    fn apply_msg_pump(&self, msg: MainMsg) -> Option<Result<FrameOutcome, TurError>> {
-        match self.apply_msg(msg) {
-            MsgOutcome::Render(batch) => {
-                self.render_batch(&batch);
-                None
-            }
-            MsgOutcome::Frame(outcome) => Some(Ok(outcome)),
-            MsgOutcome::Closed => Some(Err(TurError::Other("worker destroyed".into()))),
-            MsgOutcome::Continue | MsgOutcome::Failed(_) => None,
-        }
-    }
-
     /// The single worker→main message handler. Pure dispatch + side-effects
     /// for rendering policy: `RenderCommands` is handed back as
-    /// [`MsgOutcome::Render`] so each driver decides *when* to render
-    /// (`pump` renders immediately; `run_loop` buffers for vsync-aligned
-    /// pipelining). All backend mutations (`cursor_backend`,
+    /// [`MsgOutcome::Render`] so `run_loop` can buffer it for vsync-aligned
+    /// pipelining. All backend mutations (`cursor_backend`,
     /// `focus_changed_handler`, image uploads, event-bus dispatch) happen
-    /// here, so both drivers observe identical state — there is no second
-    /// handler for focus to drift out of.
+    /// here.
     pub(crate) fn apply_msg(&self, msg: MainMsg) -> MsgOutcome {
         match msg {
             MainMsg::RenderCommands { commands } => MsgOutcome::Render(commands),
