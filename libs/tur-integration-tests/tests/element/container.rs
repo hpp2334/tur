@@ -25,7 +25,7 @@ fn container_with_padding() {
         container.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 132.0);
@@ -36,7 +36,7 @@ fn container_with_padding() {
 fn container_update_clears_removed_props() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("container-update-clear-prop").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let checkbox_id = {
         let tree = app.element_tree();
@@ -66,7 +66,7 @@ fn container_update_clears_removed_props() {
         .center();
     eprintln!("[test] clicking at ({}, {})", cx, cy);
     app.click(cx, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(checkbox_id, |el| {
         let c = el.cast::<ContainerElement>().unwrap();
@@ -110,7 +110,7 @@ fn container_with_border() {
         assert_eq!(c.border_position(), BorderPosition::Inside);
     });
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 200.0);
@@ -137,7 +137,7 @@ fn container_padding_offsets_child() {
         (container.id, row.id, sb.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let container = rt.get_element(container_id).unwrap();
@@ -179,7 +179,7 @@ fn container_with_explicit_size_in_flex() {
         container.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let btn = rt.get_element(btn_id).unwrap();
@@ -220,7 +220,7 @@ fn container_with_shadow() {
         assert_eq!(c.shadow_blur(), Some(12.0));
     });
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     assert_eq!(container_node.computed_layout.size.width, 200.0);

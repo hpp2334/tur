@@ -19,7 +19,7 @@ fn lazy_list_viewport_size() {
         ll.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let ll_node = rt.get_element(ll_id).unwrap();
@@ -42,7 +42,7 @@ fn lazy_list_children_positioned_by_index() {
         (ll.children[0], ll.children[1], ll.children[2])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let c0 = rt
@@ -78,7 +78,7 @@ fn lazy_list_children_tight_constraints() {
         ll.children[0]
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let c0 = rt
@@ -99,7 +99,7 @@ fn lazy_list_element_properties() {
         ElementNodeId::new(root.children[0].as_u64())
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -119,10 +119,10 @@ fn lazy_list_scroll_updates_position() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("lazy-list-scroll").unwrap();
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.wheel(0.0, 200.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let ll_id = {
         let tree = app.element_tree();
@@ -181,7 +181,7 @@ fn lazy_list_row_horizontal_layout() {
         (ll.children[0], ll.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let c0 = rt
@@ -209,10 +209,10 @@ fn lazy_list_scroll_clamps_at_content_end() {
         ElementNodeId::new(root.children[0].as_u64())
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.wheel(0.0, 50000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -254,7 +254,7 @@ fn lazy_list_virtualizes_large_item_count() {
     "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let ll_id = {
         let tree = app.element_tree();
@@ -285,7 +285,7 @@ fn lazy_list_virtualizes_large_item_count() {
     // Scroll by 5000px = 100 items. The mounted set should shift to the
     // [~100, ~112] range but still be small.
     app.wheel(0.0, 5000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(ll_id, |e| {
         let ll = e.cast::<LazyListElement>().unwrap();
@@ -329,7 +329,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["ll"]).expect("queryKey ll not found");
     (app, ElementNodeId::new(id.as_u64()))
 }
@@ -383,7 +383,7 @@ fn virtualized_unmounts_offscreen_items_after_scroll() {
     // Scroll by 1000px = ~18 item heights. The visible window shifts by
     // 18 items but the total mounted count should stay close to initial.
     app.wheel(0.0, 1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let after_built = with_ll(&app, id, |ll| ll.built_count());
     let first_idx = with_ll(&app, id, |ll| ll.first_mounted_index().unwrap());
@@ -406,7 +406,7 @@ fn virtualized_far_scroll_lands_on_correct_item() {
     let (mut app, id) = setup_virtualized();
 
     app.wheel(0.0, 5000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let first_idx = with_ll(&app, id, |ll| ll.first_mounted_index().unwrap());
 
@@ -452,9 +452,9 @@ fn virtualized_scroll_up_keeps_children_ordered() {
 
     // Scroll down a fair distance, then scroll back up.
     app.wheel(0.0, 2000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wheel(0.0, -1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Walk the parent's children vector, look up each child's logical index
     // via `visible_index_of`, and confirm the result is strictly increasing.
@@ -484,7 +484,7 @@ fn virtualized_repeated_scroll_down_keeps_order() {
 
     for _ in 0..5 {
         app.wheel(0.0, 500.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
 
         let child_ids: Vec<_> = {
             let tree = app.element_tree();
@@ -513,7 +513,7 @@ fn virtualized_position_math_matches_content_index_formula() {
     // Scroll by an odd amount so positions aren't trivially 0.
     let scroll_amount = 333.0_f64;
     app.wheel(0.0, scroll_amount, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let child_ids: Vec<_> = {
         let tree = app.element_tree();
@@ -545,7 +545,7 @@ fn virtualized_reported_range_tracks_scroll() {
     let (mut app, id) = setup_virtualized();
 
     app.wheel(0.0, 1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let first_mounted = with_ll(&app, id, |ll| ll.first_mounted_index().unwrap());
     let built = with_ll(&app, id, |ll| ll.built_count());
@@ -575,7 +575,7 @@ fn virtualized_scroll_past_end_clamps_and_no_negative_positions() {
 
     // Way past the end.
     app.wheel(0.0, 999_999.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let max_extent = 10000.0_f64 * 56.0 - 600.0;
     let scroll = with_ll(&app, id, |ll| ll.scroll_offset());
@@ -616,9 +616,9 @@ fn virtualized_scroll_back_to_zero_resets_cleanly() {
     let (mut app, id) = setup_virtualized();
 
     app.wheel(0.0, 5000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wheel(0.0, -5000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let first_idx = with_ll(&app, id, |ll| ll.first_mounted_index());
     assert_eq!(
@@ -670,9 +670,9 @@ fn virtualized_no_duplicate_children_after_scroll_up() {
     // lower indices than the existing ones, exercising the
     // `link_child_before` path.
     app.wheel(0.0, 2000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wheel(0.0, -1000.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let child_ids: Vec<_> = {
         let tree = app.element_tree();
@@ -699,9 +699,9 @@ fn virtualized_parent_children_count_matches_built_count() {
     // Multiple scroll-up / scroll-down cycles to stress the remount path.
     for _ in 0..3 {
         app.wheel(0.0, 1500.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         app.wheel(0.0, -800.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
 
         let parent_count = {
             let tree = app.element_tree();
@@ -729,9 +729,9 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
     // dereferences a stale child id.
     for i in 0..10 {
         app.wheel(0.0, 1200.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
         app.wheel(0.0, -600.0, 200.0, 300.0);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
 
         // Walk the parent's children vector and dereference each id. With
         // the duplicate-add bug, this panics on a stale node lookup.
@@ -794,7 +794,7 @@ fn scroll_does_not_remeasure_mounted_children() {
     // Scroll by an amount small enough to keep at least the first few items
     // mounted (overscan = 2 extents = 112px of leading slack).
     app.wheel(0.0, 30.0, 200.0, 300.0);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // For every child that was mounted before AND is still mounted after,
     // verify size is byte-identical (no re-measurement) and offset.y moved

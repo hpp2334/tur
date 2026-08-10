@@ -20,7 +20,7 @@ fn reactive_flex_change_relays_out_children() {
     let b_id = app.query_element(&["b"]).expect("query b");
     let b_id = ElementNodeId::new(b_id.as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Initially flex 1:1 in a 400-wide row -> 200 each.
     {
@@ -40,7 +40,7 @@ fn reactive_flex_change_relays_out_children() {
     // Flip the flex to 3:1 via a reactive source set — no gesture, so no
     // `mark_dirty` is called on any descendant. Only the Row is dirtied.
     app.eval_js("globalThis.__setFlex(3, 1)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     {
         let tree = app.element_tree();

@@ -12,7 +12,7 @@
 //! no-op if a rAF is already pending). The rAF closure is driver-owned
 //! (constructed once in [`WasmSchedulerDriver::new`]); on fire it pushes
 //! an event into the subscribed `vsync_tx` channel. The engine subscribes
-//! once at `start_loop` startup via `vsync_events()`.
+//! once at `run_loop` startup via `vsync_events()`.
 //!
 //! ## Sleep
 //!

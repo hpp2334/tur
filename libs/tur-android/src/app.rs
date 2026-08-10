@@ -12,12 +12,12 @@ mod imp {
     use std::rc::Rc;
 
     use boa_engine::context::time::StdClock;
-    use jni::objects::GlobalRef;
+    use jni::objects::{GlobalRef, JObject, JValue};
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{CursorCap, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
+    use tur_engine::{CursorCap, FocusedState, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that schedules
@@ -35,6 +35,28 @@ mod imp {
     use crate::scheduler::{AndroidSchedulerDriver, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
+
+    /// Push the engine's focused-element editable flag to Kotlin's
+    /// `FrameLoop.onFocusChanged(boolean)` via JNI. Called from the engine's
+    /// focus-change handler (installed in [`AndroidInstance::install_frame_loop`])
+    /// on the main thread, so `attach_current_thread` is a cheap no-op (the
+    /// main looper thread is already attached). Kotlin retains the value so
+    /// the per-frame `syncIme` poll reads it without a JNI round-trip.
+    fn push_focus_to_kotlin(frame_loop: &FrameLoopRef, is_editable: bool) {
+        let Some(vm) = crate::java_vm() else {
+            return;
+        };
+        let Ok(mut env) = vm.attach_current_thread() else {
+            return;
+        };
+        let loop_obj = unsafe { JObject::from_raw(frame_loop.kotlin_loop.as_raw()) };
+        let _ = env.call_method(
+            &loop_obj,
+            "onFocusChanged",
+            "(Z)V",
+            &[JValue::Bool(is_editable as jni::sys::jboolean)],
+        );
+    }
 
     #[derive(Debug, thiserror::Error)]
     pub enum TurAndroidError {
@@ -132,7 +154,7 @@ mod imp {
     pub struct AndroidInstance {
         pub app: Rc<TurApp>,
         pub scheduler: Rc<AndroidSchedulerDriver>,
-        /// The autonomous `start_loop` future. `TurApp` is `Rc`-based
+        /// The autonomous `run_loop` future. `TurApp` is `Rc`-based
         /// (!Send — the boa realm lives on the main thread), so the loop
         /// cannot run on a spawned thread: JNI `pump` polls it once per
         /// Choreographer tick.
@@ -148,8 +170,10 @@ mod imp {
 
     impl AndroidInstance {
         /// Install the per-instance scheduler (bound to this instance's
-        /// Kotlin `FrameLoop`) and stash the autonomous `start_loop` future
-        /// for poll-per-`pump` driving. Arms the first vsync so the
+        /// Kotlin `FrameLoop`), the focus-change handler (pushes focused-
+        /// element state into Kotlin so the per-frame IME sync can read it
+        /// without a JNI round-trip), and stash the autonomous `run_loop`
+        /// future for poll-per-`pump` driving. Arms the first vsync so the
         /// bootstrap `FrameOutcome` (from `create_app`'s initial resize)
         /// kicks the loop off.
         fn install_frame_loop(
@@ -163,6 +187,16 @@ mod imp {
         ) {
             use tur_engine::core::scheduler::{MainScheduler, MainSchedulerDriver};
 
+            // Clone the FrameLoopRef before it's moved into the driver —
+            // the focus handler captures one to call `FrameLoop.onFocusChanged`
+            // via JNI. The handler runs inside `apply_msg` on the main thread
+            // (the JNI thread), so `attach_current_thread` is a cheap no-op
+            // there, mirroring the scheduler's `request_vsync` path.
+            let frame_loop_for_focus = frame_loop.clone();
+            app.set_focus_changed_handler(Some(Rc::new(move |state: FocusedState| {
+                push_focus_to_kotlin(&frame_loop_for_focus, state.is_editable);
+            })));
+
             let driver = AndroidSchedulerDriver::new(tokio.clone(), Some(frame_loop));
             app.set_main_scheduler(MainScheduler::new(driver.clone()));
             // Bootstrap: arm the first Choreographer callback. Subsequent
@@ -170,7 +204,7 @@ mod imp {
             driver.request_vsync();
             let vsync_wake_fn = driver.make_vsync_wake_fn();
             let loop_task = std::cell::RefCell::new(Some(
-                Box::pin(app.clone().start_loop()) as Pin<Box<dyn Future<Output = ()>>>
+                Box::pin(app.clone().run_loop()) as Pin<Box<dyn Future<Output = ()>>>
             ));
             (driver, loop_task, vsync_wake_fn)
         }

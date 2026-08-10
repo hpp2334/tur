@@ -28,7 +28,7 @@ fn set_mutation_receives_ctx_then_args() {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.eval_module_source(
         r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
@@ -59,7 +59,7 @@ fn set_mutation_with_zero_args_passes_ctx_only() {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.eval_module_source(
         r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,

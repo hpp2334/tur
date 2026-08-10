@@ -218,8 +218,10 @@ fn init_logger_once() {
 /// - [`create_instance`] / [`create_headless_instance`] spawn an isolated
 ///   [`AndroidInstance`] from a runtime handle (rendering / headless). Returns
 ///   an instance handle.
-/// - `load_module`/`pump`/`resize`/`push_*`/`focused_is_editable`/`destroy`
-///   operate on **instance** handles.
+/// - `load_module`/`pump`/`resize`/`push_*`/`destroy`
+///   operate on **instance** handles. (Focused-element state is pushed to
+///   Kotlin via `FrameLoop.onFocusChanged` from the engine's focus-change
+///   handler — no `focused_is_editable` JNI poll.)
 /// - [`destroy_runtime`] drops the runtime.
 ///
 /// Runtime creation varies per embedder (plugin set), so [`create_runtime`]
@@ -505,20 +507,6 @@ pub mod ops {
         });
     }
 
-    /// True if the currently-focused element is an editable text field. The
-    /// embedder polls this after each pump to decide whether to raise the soft
-    /// keyboard (and `hideSoftInput` when it flips back to false).
-    pub fn focused_is_editable(handle: jlong) -> jni::sys::jboolean {
-        let Some(instance) = handle_to_instance(handle) else {
-            return 0;
-        };
-        if instance.app.cached_focus().is_editable {
-            1
-        } else {
-            0
-        }
-    }
-
     /// Escape hatch for embedders: run `f` with `&TurApp` for the given
     /// instance handle. Used from an embedder's *own* JNI trampolines (its
     /// cdylib) to reach plugin-installed per-instance data — e.g.
@@ -647,8 +635,8 @@ pub mod ops {
 /// Generate the standard engine-operation JNI entry points inside the caller's
 /// cdylib. Emits the instance/runtime-operation `Java_org_tur_TurNative_*`
 /// trampolines (`createInstance`, `createHeadlessInstance`, `loadModule`,
-/// `pump`, `resize`, `pushPointer`, `pushKey`, `focusedIsEditable`,
-/// `pushIme`, `destroy`, `destroyRuntime`) that forward to [`ops`](crate::ops).
+/// `pump`, `resize`, `pushPointer`, `pushKey`, `pushIme`, `destroy`,
+/// `destroyRuntime`) that forward to [`ops`](crate::ops).
 /// Invoking this macro is all an embedder needs to make its `.so` drivable by
 /// the Kotlin `org.tur.TurNative` bridge — **runtime creation** is NOT included
 /// (it varies per embedder; write your own `Java_<pkg>_<Class>_createRuntime`
@@ -754,15 +742,6 @@ macro_rules! standard_jni_exports {
             meta: $crate::jboolean,
         ) {
             $crate::ops::push_key(&mut env, handle, key, code, action, ctrl, shift, alt, meta)
-        }
-
-        #[unsafe(no_mangle)]
-        pub extern "system" fn Java_org_tur_TurNative_focusedIsEditable(
-            _env: $crate::JNIEnv,
-            _class: $crate::JClass,
-            handle: $crate::jlong,
-        ) -> $crate::jboolean {
-            $crate::ops::focused_is_editable(handle)
         }
 
         #[unsafe(no_mangle)]

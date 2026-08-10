@@ -22,9 +22,9 @@ fn std_module_imports_and_renders() {
         "#,
     )
     .unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..6 {
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
 
     let root = app.dev_tool_element_tree().expect("tree mounted");

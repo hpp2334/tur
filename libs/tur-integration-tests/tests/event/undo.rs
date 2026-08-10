@@ -40,6 +40,7 @@ fn get_selection(app: &TurTestApp, id: ElementNodeId) -> (usize, usize) {
 fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 /// Inline bundle that places a single Input at the top-left of the canvas,
@@ -99,20 +100,20 @@ const PLAYGROUND_BUNDLE: &str = r#"
 fn setup() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
     app.eval_module_source(UNDO_INPUT_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     (app, id)
 }
 
 fn setup_playground() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(500.0, 400.0).unwrap();
     app.eval_module_source(PLAYGROUND_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, id);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     (app, id)
 }
 
@@ -129,13 +130,14 @@ fn select_all_cut_then_undo_restores_text() {
     // Type some text.
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello world");
 
     // Cmd+A — select everything.
     app.send_key_with_modifiers_full("a", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (anchor, end) = get_selection(&app, id);
     let (lo, hi) = if anchor <= end {
         (anchor, end)
@@ -151,7 +153,7 @@ fn select_all_cut_then_undo_restores_text() {
 
     // Cmd+X — cut.
     app.send_key_with_modifiers_full("x", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let written = app.take_clipboard_write();
     assert_eq!(
         written.as_deref(),
@@ -162,7 +164,7 @@ fn select_all_cut_then_undo_restores_text() {
 
     // Cmd+Z — undo the cut. The buffer MUST be restored.
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, id),
@@ -180,12 +182,13 @@ fn undo_after_typing_deletes_last_char() {
 
     for ch in "abc".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "abc");
 
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "ab",
@@ -202,20 +205,23 @@ fn partial_cut_then_undo_restores_text() {
 
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello world");
 
     // Select "world" (bytes 6..11) via Home + 6×Right, then Shift+5×Right.
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..6 {
         app.send_key("ArrowRight");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     for _ in 0..5 {
         app.send_key_with_modifiers("ArrowRight", true, false);
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (anchor, end) = get_selection(&app, id);
     let (lo, hi) = if anchor <= end {
         (anchor, end)
@@ -225,11 +231,11 @@ fn partial_cut_then_undo_restores_text() {
     assert_eq!((lo, hi), (6, 11), "should have selected 'world'");
 
     app.send_key_with_modifiers_full("x", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello ");
 
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "hello world",
@@ -250,18 +256,19 @@ fn playground_select_all_cut_then_undo_restores_text() {
 
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello world");
 
     app.send_key_with_modifiers_full("a", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key_with_modifiers_full("x", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "");
 
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "hello world",
@@ -284,13 +291,14 @@ fn context_menu_cut_then_undo_restores_text() {
 
     for ch in "hello world".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello world");
 
     // Select-all via the controller JS bridge (mirrors the menu's Select All).
     app.eval_js("globalThis.__ctrl.setSelection(0, globalThis.__ctrl.text.length)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (anchor, end) = get_selection(&app, id);
     let (lo, hi) = if anchor <= end {
         (anchor, end)
@@ -301,7 +309,7 @@ fn context_menu_cut_then_undo_restores_text() {
 
     // Cut via the controller JS bridge (mirrors the menu's Cut action).
     app.eval_js("globalThis.__ctrl.deleteSelection()");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "",
@@ -311,7 +319,7 @@ fn context_menu_cut_then_undo_restores_text() {
     // Undo — should restore, but currently does NOT because the JS-bridge
     // mutation path bypasses the undo stack entirely.
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "hello world",
@@ -333,23 +341,25 @@ fn context_menu_paste_then_undo_restores_text() {
 
     // Start with "ab".
     app.send_key("a");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("b");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "ab");
 
     // Move cursor between 'a' and 'b' (position 1).
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Paste via the controller JS bridge (mirrors the menu's Paste action).
     app.eval_js("globalThis.__ctrl.insertText('XY')");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "aXYb", "paste should insert at cursor");
 
     // Undo — should remove the pasted text.
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "ab",
@@ -358,7 +368,7 @@ fn context_menu_paste_then_undo_restores_text() {
 
     // Redo — should re-insert.
     app.send_key_with_modifiers_full("z", true, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "aXYb",
@@ -380,18 +390,19 @@ fn programmatic_set_spans_with_new_text_is_undoable() {
 
     for ch in "hello".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello");
 
     // Programmatically replace the buffer with different text.
     app.eval_js(r#"globalThis.__ctrl.setSpans([{ content: "WORLD" }]);"#);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "WORLD");
 
     // Undo — should restore "hello".
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "hello",
@@ -406,8 +417,9 @@ fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
     // Type "hello" → 5 undo entries (one per keystroke).
     for ch in "hello".chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello");
 
     // Re-tokenize with different span colors but the SAME text — this is
@@ -419,14 +431,14 @@ fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
             { content: "llo", color: { r: 80, g: 200, b: 120, a: 255 } },
         ]);"#,
     );
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(get_text(&app, id), "hello");
 
     // Undo 5 times — should clear the buffer (the 5 typing entries). A 6th
     // undo must do nothing (no extra entry from the re-tokenize).
     for _ in 0..5 {
         app.send_key_with_modifiers_full("z", false, false, true);
-        app.render();
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     assert_eq!(
         get_text(&app, id),
@@ -435,7 +447,7 @@ fn set_spans_preserve_cursor_with_same_text_does_not_push_undo() {
     );
 
     app.send_key_with_modifiers_full("z", false, false, true);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(
         get_text(&app, id),
         "",

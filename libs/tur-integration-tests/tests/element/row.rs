@@ -30,7 +30,7 @@ fn row_basic_horizontal_stacking() {
         (row.id, sb1.id, sb2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1_node = rt.get_element(sb1_id).unwrap();
@@ -62,7 +62,7 @@ fn row_cross_center_in_tight_container() {
         (container.id, row.id, row.children[0], row.children[1])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let container = rt.get_element(container_id).unwrap();
@@ -108,7 +108,7 @@ fn row_cross_center_in_column_does_not_starve_siblings() {
         (row.id, row.children[0], row.children[1], col.children[2])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let row = rt.get_element(row_id).unwrap();

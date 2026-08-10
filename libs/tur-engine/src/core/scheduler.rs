@@ -22,7 +22,7 @@
 //!
 //! Engine → scheduler, one-way. Drivers have zero engine knowledge — they
 //! expose primitives (spawn, vsync events, sleep futures) and the engine
-//! drives itself via [`crate::TurApp::start_loop`].
+//! drives itself via [`crate::TurApp::run_loop`].
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -49,7 +49,7 @@ impl Future for Sleep {
 
 /// Stream of vsync events. Each item is one vsync tick. The driver pushes
 /// events into the underlying channel when the platform fires rAF /
-/// Choreographer; the engine reads them inside [`crate::TurApp::start_loop`].
+/// Choreographer; the engine reads them inside [`crate::TurApp::run_loop`].
 ///
 /// Events only fire when armed via [`MainScheduler::request_vsync`].
 pub struct VsyncEvents(pub futures::channel::mpsc::UnboundedReceiver<()>);
@@ -322,7 +322,7 @@ pub trait MainSchedulerDriver: 'static {
     fn spawn_worker(&self, factory: WorkerFactory) -> WorkerHandle;
 
     /// Subscribe to vsync events. Each item is one vsync tick.
-    /// Call once at engine startup (inside `TurApp::start_loop`).
+    /// Call once at engine startup (inside `TurApp::run_loop`).
     /// Events only fire when armed via [`Self::request_vsync`].
     fn vsync_events(&self) -> VsyncEvents;
 
@@ -335,7 +335,7 @@ pub trait MainSchedulerDriver: 'static {
     /// Spawn a future on the main thread's local executor. Returns a
     /// [`TaskHandle`] that can abort or await the task; drop it to detach.
     /// The engine core does not currently call this on the main thread
-    /// (the autonomous `start_loop` future is driven directly by the
+    /// (the autonomous `run_loop` future is driven directly by the
     /// embedder — `wasm_bindgen_futures::spawn_local` on wasm, JNI
     /// `nativePump` on Android, `block_on` in tests), but it is available
     /// for embedders/main-thread code that needs it.

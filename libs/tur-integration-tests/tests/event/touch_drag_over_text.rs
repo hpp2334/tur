@@ -30,14 +30,17 @@ fn down_count(app: &TurTestApp) -> u32 {
 /// the arena's claim probe — the control path).
 fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: usize) {
     app.pointer_down(start.0, start.1);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for i in 1..=steps {
         let t = i as f64 / steps as f64;
         app.pointer_move(
             start.0 + (end.0 - start.0) * t,
             start.1 + (end.1 - start.1) * t,
         );
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     app.pointer_up(end.0, end.1);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 /// Mouse drag fires onPointerDown (control — the mouse path bypasses the
@@ -46,7 +49,7 @@ fn mouse_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
 fn mouse_drag_over_text_fires_pointer_down() {
     let mut app = TurTestApp::new(400.0, 400.0).unwrap();
     app.load_bundle("drag-over-text").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = center_of(&app, &["drag-target"]);
 
     mouse_drag(&mut app, (cx, cy), (cx + 40.0, cy + 40.0), 4);
@@ -65,10 +68,11 @@ fn mouse_drag_over_text_fires_pointer_down() {
 fn touch_drag_over_text_fires_pointer_down() {
     let mut app = TurTestApp::new(400.0, 400.0).unwrap();
     app.load_bundle("drag-over-text").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = center_of(&app, &["drag-target"]);
 
     app.touch_drag((cx, cy), (cx + 40.0, cy + 40.0), 4);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         down_count(&app) >= 1,

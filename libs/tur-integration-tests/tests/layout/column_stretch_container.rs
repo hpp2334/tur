@@ -13,7 +13,7 @@ fn column_stretch_container_with_text_is_visible() {
     let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
     let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let container = rt.get_element(container_id).unwrap();
@@ -55,7 +55,7 @@ fn column_expanded_container_with_text_is_visible() {
     let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
     let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let container = rt.get_element(container_id).unwrap();
@@ -93,7 +93,7 @@ fn scroll_view_container_with_text_is_visible() {
     let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
     let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let container = rt.get_element(container_id).unwrap();

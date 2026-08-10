@@ -23,7 +23,7 @@ fn sized_box_fixed_dimensions() {
         sb.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let sb_node = rt.get_element(sb_id).unwrap();
     assert_eq!(sb_node.computed_layout.size.width, 100.0);

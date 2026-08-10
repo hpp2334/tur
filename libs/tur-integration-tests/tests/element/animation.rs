@@ -35,7 +35,7 @@ fn animation_controller_forward_with_on_tick() {
             .id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -45,8 +45,7 @@ fn animation_controller_forward_with_on_tick() {
         );
     }
 
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -57,8 +56,7 @@ fn animation_controller_forward_with_on_tick() {
         );
     }
 
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(150));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -102,8 +100,7 @@ fn animation_controller_reverse_with_on_tick() {
             .id
     };
 
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -114,8 +111,7 @@ fn animation_controller_reverse_with_on_tick() {
         );
     }
 
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(150));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -159,8 +155,7 @@ fn animation_controller_stop_freezes_value() {
             .id
     };
 
-    app.advance(Duration::from_millis(50)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(50));
     let frozen_width = {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -177,8 +172,7 @@ fn animation_controller_stop_freezes_value() {
     "#,
     );
 
-    app.advance(Duration::from_millis(200)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(200));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -223,8 +217,7 @@ fn animation_controller_repeats() {
             .id
     };
 
-    app.advance(Duration::from_millis(250)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(250));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -235,8 +228,7 @@ fn animation_controller_repeats() {
         );
     }
 
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -279,8 +271,7 @@ fn animation_controller_status_transitions() {
     assert_eq!(statuses[0], "stopped");
     assert_eq!(statuses[1], "forward");
 
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(150));
 
     let status: String = app.eval_js(
         r#"
@@ -315,8 +306,7 @@ fn animation_controller_on_end_callback() {
     )
     .unwrap();
 
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(150));
 
     let ended: String = app.eval_js(
         r#"
@@ -357,8 +347,7 @@ fn animation_controller_ease_in_curve() {
             .id
     };
 
-    app.advance(Duration::from_millis(500)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(500));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -404,8 +393,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     };
 
     // Halfway through (100ms of 200ms) → ~150, then pause.
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
     app.eval_js(r#"globalThis.__test_ctrl.pause();"#);
 
     let paused_width = {
@@ -419,8 +407,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     );
 
     // Advance 200ms while paused → no movement.
-    app.advance(Duration::from_millis(200)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(200));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -438,8 +425,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     let status: String = app.eval_js(r#"globalThis.__test_ctrl.status"#);
     assert_eq!(status, "forward", "after resume status should be 'forward'");
 
-    app.advance(Duration::from_millis(150)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(150));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -486,7 +472,7 @@ fn animation_controller_seek_jumps_value() {
 
     // Jump to 80% immediately.
     app.eval_js(r#"globalThis.__test_ctrl.seek(0.8);"#);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -499,8 +485,7 @@ fn animation_controller_seek_jumps_value() {
 
     // Continue forward from 0.8; with 200ms duration, the remaining 20% takes
     // 40ms. After 60ms the animation should have completed.
-    app.advance(Duration::from_millis(60)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(60));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -548,8 +533,7 @@ fn animation_controller_set_speed_scales_time() {
     // Double speed: 200ms duration should complete in ~100ms.
     app.eval_js(r#"globalThis.__test_ctrl.setSpeed(2.0);"#);
 
-    app.advance(Duration::from_millis(110)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(110));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -567,8 +551,7 @@ fn animation_controller_set_speed_scales_time() {
         globalThis.__test_ctrl.setSpeed(0.5);
     "#,
     );
-    app.advance(Duration::from_millis(200)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(200));
     {
         let tree = app.element_tree();
         let node = tree.get_element(container_id).unwrap();
@@ -619,7 +602,7 @@ fn controller_on_tick_can_read_status_from_forward() {
 
     // After forward() + flush, the queued onTick should have fired and read
     // ctrl.status without panicking.
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let status: String = app.eval_js(r#"globalThis.__tick_status"#);
     assert_eq!(
@@ -651,8 +634,7 @@ fn controller_on_end_can_read_status_after_complete() {
     )
     .unwrap();
 
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
 
     let status: String = app.eval_js(r#"globalThis.__end_status"#);
     assert_eq!(
@@ -689,8 +671,7 @@ fn controller_on_tick_can_read_value_during_forward() {
     )
     .unwrap();
 
-    app.advance(Duration::from_millis(100)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(100));
 
     let values: String = app.eval_js(r#"globalThis.__tick_values.join("|")"#);
     assert!(
@@ -747,8 +728,7 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
     // so the flush loop fires `onTick` each time. 5 calls of 100ms each =
     // 5 iterations worth of animation time.
     for _ in 0..5 {
-        app.advance(Duration::from_millis(100)).unwrap();
-        app.render();
+        app.wait_for_timeout(Duration::from_millis(100));
     }
 
     let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
@@ -813,8 +793,7 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
     .unwrap();
 
     // Reverse: value goes 1.0 → 0.0, then loops back to 1.0 → 0.0...
-    app.advance(Duration::from_millis(250)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(250));
 
     let values: String = app.eval_js(r#"globalThis.__tick_values.join("|")"#);
     let parsed: Vec<f64> = values
@@ -873,8 +852,7 @@ fn controller_repeat_three_then_completes() {
     .unwrap();
 
     // 3 iterations of 100ms = 300ms total. Advance just past.
-    app.advance(Duration::from_millis(320)).unwrap();
-    app.render();
+    app.wait_for_timeout(Duration::from_millis(320));
 
     let status: String = app.eval_js(r#"String(globalThis.__ctrl.status)"#);
     assert_eq!(
@@ -923,11 +901,28 @@ fn animation_started_from_handler_schedules_next_frame() {
     .unwrap();
 
     // First frame: mounts the tree -> onMounted$ -> ctrl.forward() registers
-    // the controller mid-frame. It is now active.
-    let outcome = app.pump().unwrap();
-    assert_eq!(
-        outcome.schedule,
-        tur_engine::core::app::NextFrame::Vsync,
-        "an animation started from a handler must schedule the next vsync"
+    // the controller. The observable consequence of "the animation scheduled
+    // the next vsync" is that the loop keeps advancing and the animated width
+    // progresses past its initial value — if vsync were dropped (the old bug),
+    // the animation would stall until the next platform event and the width
+    // would never advance on its own.
+    let container_id = {
+        let tree = app.element_tree();
+        let root = tree.root_element().unwrap();
+        tree.get_element(tur_engine::core::element::ElementNodeId::new(
+            root.children[0].as_u64(),
+        ))
+        .unwrap()
+        .id
+    };
+    let progressed = app.wait_for(|a| {
+        let tree = a.element_tree();
+        tree.get_element(container_id)
+            .map(|n| n.computed_layout.size.width > 100.0)
+            .unwrap_or(false)
+    });
+    assert!(
+        progressed,
+        "an animation started from a handler must schedule the next vsync (width should advance past 100)"
     );
 }

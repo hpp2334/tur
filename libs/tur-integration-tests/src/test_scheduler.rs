@@ -101,6 +101,15 @@ fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>
 }
 
 fn block_on_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+    block_on_on_current_thread_typed(fut);
+}
+
+/// Generic `block_on` that drives the current thread's `LocalSet` (and all
+/// `spawn_local`'d tasks on it — e.g. the engine's `run_loop`) until `fut`
+/// completes. Unlike `futures::executor::block_on`, this advances the
+/// `LocalSet`, which is required whenever the waited result is produced by a
+/// spawned task rather than directly by the worker thread.
+fn block_on_on_current_thread_typed<F: Future>(fut: F) -> F::Output {
     let (rt, local) = CURRENT_EXEC.with(|c| {
         let guard = c.borrow();
         let Some((rt, local)) = guard.as_ref() else {
@@ -109,7 +118,7 @@ fn block_on_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) 
         (rt.clone(), local.clone())
     });
     let rt_ref = &*rt;
-    local.block_on(rt_ref, fut);
+    local.block_on(rt_ref, fut)
 }
 
 /// Construct a Sleep future backed by the shared virtual clock.
@@ -181,6 +190,15 @@ impl TestSchedulerDriver {
     pub fn advance(&self, ms: u64) {
         self.clock.lock().unwrap().advance(ms);
     }
+
+    /// Drive the current thread's `LocalSet` (and all `spawn_local`'d tasks
+    /// on it — the engine's `run_loop`) until `fut` completes, returning its
+    /// output. Use this — not `futures::executor::block_on` — whenever the
+    /// waited result is produced by a `LocalSet` task (e.g. waiting for a
+    /// frame the `run_loop` emits via the `after_frame` hook).
+    pub fn block_on<F: Future>(&self, fut: F) -> F::Output {
+        block_on_on_current_thread_typed(fut)
+    }
 }
 
 impl MainSchedulerDriver for TestSchedulerDriver {
@@ -211,6 +229,13 @@ impl MainSchedulerDriver for TestSchedulerDriver {
 
     fn vsync_events(&self) -> VsyncEvents {
         let (tx, rx) = futures::channel::mpsc::unbounded();
+        // Unconditionally deliver one bootstrap tick to each new subscriber.
+        // `run_loop` subscribes on its first poll (which happens during the
+        // first `block_on`, AFTER any `fire_vsync`), so a fire-before-subscribe
+        // would otherwise be lost. This per-subscriber bootstrap tick makes the
+        // first frame reachable for every run_loop — including the multi-instance
+        // case where several run_loops share one driver.
+        let _ = tx.unbounded_send(());
         self.vsync_txs.lock().unwrap().push(tx);
         VsyncEvents(rx)
     }

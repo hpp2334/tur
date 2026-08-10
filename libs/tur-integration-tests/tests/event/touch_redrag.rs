@@ -21,7 +21,7 @@ fn touch_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
     app.bump_synthetic_time_ms_for_test(40);
     let mut t = app.last_synthetic_time_ms();
     app.push_touch_down(start.0, start.1, t);
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for i in 1..=steps {
         app.bump_synthetic_time_ms_for_test(16);
         t = app.last_synthetic_time_ms();
@@ -29,13 +29,12 @@ fn touch_drag(app: &mut TurTestApp, start: (f64, f64), end: (f64, f64), steps: u
         let x = start.0 + (end.0 - start.0) * frac;
         let y = start.1 + (end.1 - start.1) * frac;
         app.push_touch_move(x, y, t);
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
     app.bump_synthetic_time_ms_for_test(16);
     t = app.last_synthetic_time_ms();
     app.push_touch_up(end.0, end.1, t);
-    let _ = app.pump();
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::from_millis(16));
 }
 
 /// Baseline: two consecutive touch drags on a plain PointerInteract (no lift
@@ -46,7 +45,7 @@ fn second_touch_drag_after_release_still_registers() {
     app.load_bundle("drag-delta-tracking").unwrap();
     let target = app.query_element(&["drag-target"]).unwrap();
     let target = ElementNodeId::new(target.as_u64());
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = app.get_element_absolute_bounds(target).unwrap().center();
 
     touch_drag(&mut app, (cx, cy), (cx + 40.0, cy + 40.0), 4);
@@ -77,7 +76,7 @@ fn drag_with_lift_second_drag_after_release_registers() {
     app.load_bundle("drag-with-lift").unwrap();
     let target = app.query_element(&["lift-target"]).unwrap();
     let target = ElementNodeId::new(target.as_u64());
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = app.get_element_absolute_bounds(target).unwrap().center();
 
     // First drag — should fire down + move + up.
@@ -117,7 +116,7 @@ fn multi_tile_second_drag_on_other_tile_registers() {
 
     let id0 = app.query_element(&["tile-0"]).unwrap();
     let id1 = app.query_element(&["tile-1"]).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx0, cy0) = app
         .get_element_absolute_bounds(ElementNodeId::new(id0.as_u64()))
         .unwrap()

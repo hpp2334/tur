@@ -27,7 +27,7 @@ fn stack_children_overlap() {
         (sb1.id, sb2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let sb1_node = rt.get_element(sb1_id).unwrap();

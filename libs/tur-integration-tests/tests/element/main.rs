@@ -11,6 +11,7 @@ mod encode;
 mod event_bus;
 mod expanded;
 mod filepicker;
+mod focus_cache;
 mod grid;
 mod host_module_check;
 mod image;

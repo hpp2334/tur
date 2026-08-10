@@ -29,14 +29,14 @@ fn find_pointer_interact(app: &TurTestApp) -> (ElementNodeId, f64, f64) {
 fn counter_basic() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("counter").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_text(&app, &["count"]), "Count: 0");
 
     let (_pi_id, cx, cy) = find_pointer_interact(&app);
 
     app.click(cx, cy);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, &["count"]),

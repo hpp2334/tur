@@ -21,7 +21,7 @@
 //! All channels use `futures::channel` (mpsc + oneshot). The worker thread entry-point wraps
 //! an `async fn worker_loop(...)` via `futures::executor::block_on`, so the
 //! worker awaits on `worker_rx.recv()` instead of blocking on a Mutex +
-//! Condvar. Main-thread `pump` and `rpc` are `async fn`; the embedder
+//! Condvar. Main-thread `run_loop` and `rpc` are `async fn`; the embedder
 //! supplies the runtime (`wasm_bindgen_futures::spawn_local` on wasm,
 //! `futures::executor::block_on` on native).
 
@@ -42,7 +42,7 @@ use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::platform::CursorBackend;
-use crate::core::render::{RenderCommand, Renderer};
+use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
 use crate::core::scheduler::WorkerHandle;
 use crate::error::TurError;
 
@@ -377,11 +377,39 @@ impl WorkerBackend {
 // MainBackend — TurApp's backend. Owns the worker + RPC plumbing + renderer
 // ---------------------------------------------------------------------------
 
+/// Result of dispatching one worker→main [`MainMsg`] through
+/// [`MainBackend::apply_msg`] — the single message handler driven by
+/// `TurApp::run_loop`.
+///
+/// `apply_msg` performs every side-effect that is independent of *when* the
+/// batch is painted (cursor backend apply, focus-change handler, image
+/// upload, event-bus dispatch) and returns this enum so `run_loop` can
+/// apply its vsync-aligned render policy:
+/// - [`Render`] is buffered for pipelining (latest-wins) and rendered at
+///   the next vsync, or flushed at quiescence if no vsync is armed.
+/// - [`Frame`] fires `after_frame` and re-arms vsync when scheduled.
+/// - [`Closed`] is terminal.
+///
+/// Because there is exactly one driver, the focus-change handler (and
+/// every other side-effect) can never drift between execution paths.
+pub(crate) enum MsgOutcome {
+    /// Side-effects already applied; the driver should keep draining.
+    Continue,
+    /// A render-command batch. The driver decides when to paint it.
+    Render(RenderCommandBatch),
+    /// A completed frame. Terminal for a single-frame advance.
+    Frame(FrameOutcome),
+    /// The worker's flush errored. Terminal.
+    Failed(String),
+    /// The worker is gone. Terminal — the driver must stop.
+    Closed,
+}
+
 /// The public backend owned by `TurApp`. Spawns a worker thread running a
 /// [`WorkerBackend`], dispatches input via `futures::channel`, and receives
 /// [`MainMsg`] replies.
 ///
-/// ## Async pump / rpc
+/// ## Async rpc
 ///
 /// All public methods on `MainBackend` are `async fn`. The embedder
 /// supplies the runtime — `wasm_bindgen_futures::spawn_local` on wasm
@@ -401,19 +429,20 @@ impl WorkerBackend {
 /// / JNI), which calls [`Self::resize`] directly and forwards
 /// `PlatformEvent::Resize` to the worker for layout — no `MainMsg` round-trip.
 ///
-/// ## Cached cursor / focus state
+/// ## Focus-change handler
 ///
 /// The worker emits `MainMsg::CursorChanged` and `MainMsg::FocusedStateChanged`
-/// (deduped against the previous frame) alongside the FrameOutcome. Main
-/// caches the latest values in `cached_cursor` / `cached_focus`, available
-/// for non-blocking reads from embedder callbacks (e.g. the wasm
-/// after-frame hook reads focus state without an RPC).
+/// (deduped against the previous frame) alongside the FrameOutcome. `apply_msg`
+/// applies the cursor directly to the cursor backend and forwards focus
+/// changes to an embedder-installed handler (see [`Self::set_focus_changed_handler`]).
+/// The engine retains no focus cache — embedders read focus either from the
+/// handler (push) or via [`Self::focused_state`] (async RPC).
 pub struct MainBackend {
     worker_tx: WorkerTx,
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
     /// requires `&mut self`, but `MainBackend` is held inside `Rc<TurApp>`
     /// on wasm + android (single-threaded ownership). The borrow is held
-    /// across the `next().await` in `pump` — safe because the wasm main
+    /// across the `next().await` in `run_loop` — safe because the wasm main
     /// thread is single-threaded and `Rc<TurApp>` itself enforces
     /// single-threaded access.
     pub(crate) main_rx: RefCell<MainRx>,
@@ -424,16 +453,15 @@ pub struct MainBackend {
     /// native; `worker.postMessage(0)` on wasm.
     worker_notify: Rc<dyn Fn()>,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
-    /// cursor state change; main applies it here during `pump`. Set via
+    /// cursor state change; `apply_msg` applies it directly here. Set via
     /// `set_cursor_backend` (called by embedder after `create_app`).
     cursor_backend: RefCell<Option<Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>>>,
-    /// Latest cursor received from the worker (cached for non-blocking
-    /// reads from embedder callbacks).
-    cached_cursor: RefCell<crate::core::platform::Cursor>,
-    /// Latest focus state received from the worker (cached for
-    /// non-blocking reads — e.g. wasm's after-frame hook reads focus
-    /// without an RPC).
-    cached_focus: RefCell<FocusedState>,
+    /// Embedder-installed handler fired from `apply_msg` whenever the
+    /// worker ships a deduped `MainMsg::FocusedStateChanged`. The engine
+    /// retains no focus cache — embedders that need the value (wasm's
+    /// textarea positioning, Android's soft-keyboard sync) register a
+    /// handler here; on-demand reads use [`Self::focused_state`] (RPC).
+    focus_changed_handler: RefCell<Option<crate::FocusChangedHook>>,
     /// Cross-thread event bus handle. Routes `emit_to_js` via
     /// `WorkerMsg::EventBusToJs` (channel mode).
     event_bus_handle: crate::core::event_bus::EventBusHandle,
@@ -528,8 +556,7 @@ impl MainBackend {
             _worker_handle: worker_handle,
             worker_notify,
             cursor_backend: RefCell::new(None),
-            cached_cursor: RefCell::new(crate::core::platform::Cursor::default()),
-            cached_focus: RefCell::new(FocusedState::default()),
+            focus_changed_handler: RefCell::new(None),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
             renderer: RefCell::new(renderer),
             image_resource_map: RefCell::new(
@@ -539,12 +566,21 @@ impl MainBackend {
     }
 
     /// Install the main-side cursor backend. Worker emits
-    /// `MainMsg::CursorChanged`; main applies here during `pump`.
+    /// `MainMsg::CursorChanged`; main applies here during `apply_msg`.
     pub fn set_cursor_backend(
         &self,
         backend: Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
     ) {
         *self.cursor_backend.borrow_mut() = Some(backend);
+    }
+
+    /// Install a handler fired from [`Self::apply_msg`] whenever the worker
+    /// ships a deduped `MainMsg::FocusedStateChanged`. The engine keeps no
+    /// focus cache — embedders obtain focus state either by registering
+    /// here (push, on change) or via [`Self::focused_state`] (async RPC,
+    /// on demand). Pass `None` to clear.
+    pub fn set_focus_changed_handler(&self, handler: Option<crate::FocusChangedHook>) {
+        *self.focus_changed_handler.borrow_mut() = handler;
     }
 
     /// Cross-thread event bus handle (queues mode is unused; the worker's
@@ -570,9 +606,9 @@ impl MainBackend {
     }
 
     /// Apply a render-command batch to the owned renderer (encode +
-    /// present). Called from both `pump` (request/response path) and
-    /// `TurApp::start_loop` (vsync path) — single source of truth for
-    /// render application.
+    /// present). Called from `TurApp::run_loop` (both the vsync-aligned
+    /// pipelining path and the quiescence flush) — single source of truth
+    /// for render application.
     pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
         let mut r = self.renderer.borrow_mut();
         r.render_commands(commands);
@@ -608,31 +644,6 @@ impl MainBackend {
         self.renderer.borrow_mut().render_to_pixels()
     }
 
-    /// Update the cached cursor + apply to the cursor backend.
-    #[allow(dead_code)]
-    pub(crate) fn apply_cursor_changed(&self, cursor: crate::core::platform::Cursor) {
-        *self.cached_cursor.borrow_mut() = cursor;
-        #[allow(clippy::collapsible_if)]
-        if let Some(backend) = self.cursor_backend.borrow().as_ref() {
-            if let Ok(mut b) = backend.lock() {
-                b.set_cursor(cursor);
-            }
-        }
-    }
-
-    /// Update the cached focus state.
-    #[allow(dead_code)]
-    pub(crate) fn apply_focused_state_changed(
-        &self,
-        is_editable: bool,
-        cursor_rect: Option<(f64, f64, f64, f64)>,
-    ) {
-        *self.cached_focus.borrow_mut() = FocusedState {
-            is_editable,
-            cursor_rect,
-        };
-    }
-
     /// Borrow the worker→main channel sender. Used by call sites that
     /// build a `WorkerMsg` carrying a closure / reply slot directly (e.g.
     /// [`TurApp::with_element`](crate::TurApp::with_element)).
@@ -640,107 +651,56 @@ impl MainBackend {
         &self.worker_tx
     }
 
-    /// Advance one frame: send `Wake` to the worker, await the next
-    /// `MainMsg::FrameOutcome`. Any `RenderCommands`, `CursorChanged`,
-    /// `FocusedStateChanged`, `UploadImage`, or `Resized` arriving in the
-    /// meantime are dispatched to the renderer / cursor backend / focus
-    /// cache respectively.
-    ///
-    /// Async: the embedder drives this via its platform's runtime
-    /// (`wasm_bindgen_futures::spawn_local` on wasm;
-    /// `futures::executor::block_on` on native). The wasm main thread
-    /// never blocks — the future suspends on `main_rx.next().await` and
-    /// resumes when the worker posts data.
-    /// `pump` holds a `RefCell<MainRx>::borrow_mut()` across `next().await`.
-    /// Clippy flags this as `await_holding_refcell_ref`, but it's safe:
-    /// `Rc<TurApp>` enforces single-threaded access on wasm + android, and
-    /// pump is driven sequentially from the rAF loop (the engine-side
-    /// `pump_in_progress` guard rejects overlap).
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn pump(&self) -> Result<FrameOutcome, TurError> {
-        // Drain stale messages produced by worker self-wakes (e.g. the
-        // post-load render) that raced this pump. Process their
-        // side-effects (render batches, cursor, focus, images); their
-        // FrameOutcomes are discarded — they describe already-completed
-        // frames, not this pump's result. Without this, a self-wake's
-        // FrameOutcome would be consumed by the next pump's `rx.next()`,
-        // desynchronizing pump-based sequencing.
-        use futures::future::FutureExt;
-        loop {
-            let stale = self.main_rx.borrow_mut().next().now_or_never();
-            match stale {
-                Some(Some(msg)) => {
-                    let _ = self.apply_main_msg(msg);
-                }
-                // Queue drained (pending) or closed — either way, stop
-                // draining. A closed stream surfaces as a send error below.
-                Some(None) | None => break,
-            }
-        }
-
-        self.worker_tx
-            .unbounded_send(WorkerMsg::Wake)
-            .map_err(|_| TurError::Other("worker gone".into()))?;
-        self.wake_worker();
-        let mut rx = self.main_rx.borrow_mut();
-        loop {
-            match rx.next().await {
-                Some(msg) => {
-                    if let Some(outcome) = self.apply_main_msg(msg) {
-                        return outcome;
-                    }
-                }
-                None => return Err(TurError::Other("worker gone".into())),
-            }
-        }
-    }
-
-    /// Apply one [`MainMsg`]'s side-effects (render batch, cursor, focus,
-    /// image upload). Returns `Some(Ok(FrameOutcome))` for a `FrameOutcome`
-    /// msg (the pump's terminal result), `Some(Err)` for `Destroyed`, and
-    /// `None` for non-terminal msgs (side-effects only). Used by both
-    /// [`Self::pump`] (fresh) and its stale-drain prefix.
-    fn apply_main_msg(&self, msg: MainMsg) -> Option<Result<FrameOutcome, TurError>> {
+    /// The single worker→main message handler. Pure dispatch + side-effects
+    /// for rendering policy: `RenderCommands` is handed back as
+    /// [`MsgOutcome::Render`] so `run_loop` can buffer it for vsync-aligned
+    /// pipelining. All backend mutations (`cursor_backend`,
+    /// `focus_changed_handler`, image uploads, event-bus dispatch) happen
+    /// here.
+    pub(crate) fn apply_msg(&self, msg: MainMsg) -> MsgOutcome {
         match msg {
-            MainMsg::RenderCommands { commands } => {
-                self.render_batch(&commands);
-                None
-            }
+            MainMsg::RenderCommands { commands } => MsgOutcome::Render(commands),
             MainMsg::UploadImage { id, image } => {
                 // Retain the full resource (pixel Blob) on main for
                 // context-loss re-upload, then upload into the GPU atlas.
                 self.insert_image_resource(id, image.clone());
                 self.upload_image_resource(id, &image);
-                None
+                MsgOutcome::Continue
             }
             MainMsg::CursorChanged(cursor) => {
-                *self.cached_cursor.borrow_mut() = cursor;
                 #[allow(clippy::collapsible_if)]
                 if let Some(backend) = self.cursor_backend.borrow().as_ref() {
                     if let Ok(mut b) = backend.lock() {
                         b.set_cursor(cursor);
                     }
                 }
-                None
+                MsgOutcome::Continue
             }
             MainMsg::FocusedStateChanged {
                 is_editable,
                 cursor_rect,
             } => {
-                *self.cached_focus.borrow_mut() = FocusedState {
-                    is_editable,
-                    cursor_rect,
-                };
-                None
+                // Clone the Rc out before invoking so a handler that
+                // re-enters the backend (or calls a method borrowing the
+                // RefCell) can't panic on a double borrow.
+                let handler = self.focus_changed_handler.borrow().clone();
+                if let Some(handler) = handler {
+                    handler(FocusedState {
+                        is_editable,
+                        cursor_rect,
+                    });
+                }
+                MsgOutcome::Continue
             }
-            MainMsg::FrameOutcome(result) => Some(result.map_err(TurError::Other)),
-            MainMsg::Destroyed => Some(Err(TurError::Other("worker destroyed".into()))),
+            MainMsg::FrameOutcome(Ok(outcome)) => MsgOutcome::Frame(outcome),
+            MainMsg::FrameOutcome(Err(e)) => MsgOutcome::Failed(e),
+            MainMsg::Destroyed => MsgOutcome::Closed,
             MainMsg::EventBusToHost(bytes) => {
                 self.event_bus_handle.dispatch_to_host(bytes);
-                None
+                MsgOutcome::Continue
             }
-            // DevReply — pump ignores (the Reply<T> slot handles RPC replies).
-            _ => None,
+            // DevReply — handlers ignore (the Reply<T> slot handles RPC replies).
+            _ => MsgOutcome::Continue,
         }
     }
 
@@ -837,18 +797,6 @@ impl MainBackend {
             .await
     }
 
-    /// Read the latest cursor received from the worker (non-blocking).
-    /// Updated during `pump` when `MainMsg::CursorChanged` arrives.
-    pub fn cached_cursor(&self) -> crate::core::platform::Cursor {
-        *self.cached_cursor.borrow()
-    }
-
-    /// Read the latest focus state received from the worker (non-blocking).
-    /// Updated during `pump` when `MainMsg::FocusedStateChanged` arrives.
-    pub fn cached_focus(&self) -> FocusedState {
-        self.cached_focus.borrow().clone()
-    }
-
     /// Count of image resources retained on main (pixel `Blob`s). Test-only
     /// introspection: asserts `MainMsg::UploadImage` was received (shipped
     /// directly from the `createImageResource` bridge) and inserted into
@@ -907,8 +855,8 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, main_tx: M
                         .unbounded_send(MainMsg::CursorChanged(current_cursor.unwrap_or_default()));
                 }
                 // Ship focus-state changes (deduped against the last
-                // emitted) — main caches it for non-blocking reads from
-                // embedder callbacks (e.g. wasm's after-frame hook).
+                // emitted) — `apply_msg` forwards them to an embedder-
+                // installed handler (no engine-side cache).
                 let current_focus = backend.focused_state();
                 let focus_key = (current_focus.is_editable, current_focus.cursor_rect);
                 if Some(focus_key) != last_focus {

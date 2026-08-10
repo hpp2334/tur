@@ -616,8 +616,9 @@ impl WasmApp {
         //
         // Soft-keyboard / caret focus does NOT depend on the browser's
         // synthesized clicks: the engine's focus manager (driven by the
-        // engine-synthesized click) exposes `focused_is_editable()`,
-        // which the after-frame hook reads to call `textarea.focus()`.
+        // engine-synthesized click) emits a `FocusedStateChanged` event,
+        // which the focus-change handler (registered below) consumes to
+        // call `textarea.focus()` + position the caret.
         let touch_start_state = state_clone.clone();
         let touch_start_closure =
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |event: web_sys::TouchEvent| {
@@ -960,11 +961,12 @@ impl WasmApp {
         // Autonomous loop. The engine owns the frame logic (clock advance
         // is its own `StdClock`, no manual forwarding); this driver just
         // arms rAF / setTimeout per the engine's `NextFrame` verdict. The
-        // `after_frame` hook — fired by the engine after each wake — does
-        // the DOM side-effects that used to live in `FrameLoop::on_frame`
-        // (file-pick resolution, textarea focus / caret positioning). It
-        // holds a `Weak` into `state` so there's no reference cycle
-        // (`state` → `app` → `after_frame` → `state`).
+        // `after_frame` hook — fired by the engine after each wake — is a
+        // back-compat no-op (see below); DOM side-effects that depend on
+        // focus state (textarea focus / caret positioning) live in the
+        // `focus_changed_handler` registered below, which fires exactly
+        // when the worker ships a deduped `FocusedStateChanged` (on
+        // editable↔non-editable transitions *and* caret moves).
         //
         // Async pump: the wake trampoline the engine installs hands a
         // `Box::pin(async { wake().await })` future to the spawn closure
@@ -980,14 +982,6 @@ impl WasmApp {
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
         let after_frame: Rc<dyn Fn(tur_engine::core::app::FrameOutcome)> =
             Rc::new(move |_outcome| {
-                let Some(state) = state_weak.upgrade() else {
-                    return;
-                };
-                let mut guard = state.borrow_mut();
-                let Some(s) = guard.as_mut() else {
-                    return;
-                };
-
                 // Embedder-supplied after-frame hook (`AfterFrameHook`)
                 // required `&mut Context` access, which is incompatible with
                 // the threaded backend (the boa `Context` lives on the
@@ -997,11 +991,22 @@ impl WasmApp {
                 // via the public TurApp RPC API from the after-frame
                 // callback instead.
                 let _ = after_frame_hook.as_ref();
-
-                // Read focus state from the engine's cache (non-blocking —
-                // updated by the worker's deduped
-                // `MainMsg::FocusedStateChanged` each frame, no RPC).
-                let focus = s.app.cached_focus();
+            });
+        // Focus-change handler: positions the hidden `<textarea>` (focus it
+        // + set caret coords) whenever the focused element's editable-ness
+        // or caret rect changes. Pushed by the engine from `apply_msg`, so
+        // it's identical on both the pump and run_loop paths. Holds a
+        // `Weak` into `state` so there's no reference cycle.
+        let focus_changed: Rc<dyn Fn(tur_engine::FocusedState)> = {
+            let state_weak = state_weak.clone();
+            Rc::new(move |focus| {
+                let Some(state) = state_weak.upgrade() else {
+                    return;
+                };
+                let mut guard = state.borrow_mut();
+                let Some(s) = guard.as_mut() else {
+                    return;
+                };
                 if focus.is_editable {
                     let _ = s.textarea.focus();
                     if let Some((x, y, _w, _h)) = focus.cursor_rect {
@@ -1009,15 +1014,17 @@ impl WasmApp {
                         let _ = s.textarea.style().set_property("top", &format!("{y}px"));
                     }
                 }
-            });
+            })
+        };
         app.set_after_frame_hook(Some(after_frame));
+        app.set_focus_changed_handler(Some(focus_changed));
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
         // loop bootstraps automatically: `create_app` pushed an initial
         // resize → worker pumps → FrameOutcome arrives → main requests
         // the next vsync. No manual kick needed.
         let app_clone = app.clone();
-        wasm_bindgen_futures::spawn_local(app_clone.start_loop());
+        wasm_bindgen_futures::spawn_local(app_clone.run_loop());
 
         Ok(WasmApp { state: state_clone })
     }
@@ -1104,5 +1111,4 @@ impl WasmApp {
             Ok(JsValue::from_str(&s))
         })
     }
-
 }

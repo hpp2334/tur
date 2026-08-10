@@ -22,7 +22,7 @@ fn rich_text_single_span_equivalent_to_plain_text() {
 
     let container_id = get_container(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     let layout = &container_node.computed_layout;
@@ -37,7 +37,7 @@ fn rich_text_multi_span_concatenates() {
 
     let container_id = get_container(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     let layout = &container_node.computed_layout;
@@ -53,7 +53,7 @@ fn rich_text_multi_span_concatenates() {
 fn rich_text_bold_wider_than_normal() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("rich-text-bold").unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
@@ -71,7 +71,7 @@ fn rich_text_italic_layout_positive() {
     app.load_bundle("rich-text-italic").unwrap();
 
     let container_id = get_container(&app);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
@@ -88,7 +88,7 @@ fn rich_text_color_layout_positive() {
 
     let container_id = get_container(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     assert!(
@@ -104,7 +104,7 @@ fn rich_text_font_size_mixed_height() {
 
     let container_id = get_container(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     let height = container_node.computed_layout.size.height;
@@ -121,7 +121,7 @@ fn rich_text_empty_spans_zero_size() {
     app.load_bundle("rich-text-empty").unwrap();
 
     let container_id = get_container(&app);
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
@@ -142,7 +142,7 @@ fn rich_text_inheritance_uses_defaults() {
 
     let container_id = get_container(&app);
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let container_node = rt.get_element(container_id).unwrap();
     assert!(

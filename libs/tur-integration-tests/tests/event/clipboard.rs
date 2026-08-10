@@ -49,6 +49,7 @@ fn get_cursor(app: &TurTestApp, id: ElementNodeId) -> usize {
 fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 /// Inline bundle that places a single Input at the top-left of the
@@ -72,14 +73,15 @@ const INPUT_BUNDLE: &str = r#"
 fn setup_focused_input_with(text: &str) -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(INPUT_BUNDLE).unwrap();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let input_id = find_editable_under(&app, &["input"]);
     focus_editable(&mut app, input_id);
     for ch in text.chars() {
         app.send_key(&ch.to_string());
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     (app, input_id)
 }
 
@@ -88,21 +90,25 @@ fn setup_focused_input_with(text: &str) -> (TurTestApp, ElementNodeId) {
 fn select_range(app: &mut TurTestApp, _id: ElementNodeId, from_byte: usize, to_byte: usize) {
     // Move cursor to from_byte (assume Home then ArrowRight * from_byte).
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     for _ in 0..from_byte {
         app.send_key("ArrowRight");
+        app.wait_for_timeout(std::time::Duration::ZERO);
     }
     // Shift+ArrowRight to extend to to_byte.
     let delta = to_byte as i64 - from_byte as i64;
     if delta >= 0 {
         for _ in 0..delta {
             app.send_key_with_modifiers("ArrowRight", true, false);
+            app.wait_for_timeout(std::time::Duration::ZERO);
         }
     } else {
         for _ in 0..(-delta) {
             app.send_key_with_modifiers("ArrowLeft", true, false);
+            app.wait_for_timeout(std::time::Duration::ZERO);
         }
     }
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,6 +130,7 @@ fn cmd_c_copies_selected_text_to_clipboard_slot() {
 
     // Cmd+C copies the selected text.
     app.send_key_with_modifiers_full("c", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let written = app.take_clipboard_write();
     assert_eq!(
@@ -146,13 +153,14 @@ fn cmd_c_with_no_selection_writes_nothing() {
     let (mut app, id) = setup_focused_input_with("abc");
     // Move cursor to start (no selection).
     app.send_key("Home");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert!(!{
         let (a, b) = get_selection(&app, id);
         a != b
     });
 
     app.send_key_with_modifiers_full("c", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
         app.take_clipboard_write().is_none(),
@@ -170,6 +178,7 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
     select_range(&mut app, id, 2, 4);
 
     app.send_key_with_modifiers_full("x", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let written = app.take_clipboard_write();
     assert_eq!(
@@ -199,12 +208,14 @@ fn paste_event_inserts_at_cursor() {
     let (mut app, id) = setup_focused_input_with("abc");
     // Move cursor between 'b' and 'c' (position 2).
     app.send_key("Home");
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.send_key("ArrowRight");
     app.send_key("ArrowRight");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Simulate the embedder firing a paste event.
     app.push_paste_event("XY");
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, id),
@@ -225,6 +236,7 @@ fn paste_event_replaces_selection() {
     select_range(&mut app, id, 6, 11);
 
     app.push_paste_event("there");
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, id),
@@ -249,6 +261,7 @@ fn cut_then_paste_roundtrips_text() {
 
     // Cut the whole word.
     app.send_key_with_modifiers_full("x", false, false, true);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let cut_text = app.take_clipboard_write().expect("Cmd+X should write");
     assert_eq!(cut_text, "hello");
     assert_eq!(get_text(&app, id), "");
@@ -257,6 +270,7 @@ fn cut_then_paste_roundtrips_text() {
     // have a real system clipboard, so we push the cut text back through
     // the paste event channel.
     app.push_paste_event(&cut_text);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text(&app, id),

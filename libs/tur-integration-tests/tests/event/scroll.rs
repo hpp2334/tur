@@ -15,7 +15,7 @@ fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
         (sv.id, sv.children[0])
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     (app, sv_id, col_id)
 }
 
@@ -24,6 +24,7 @@ fn wheel_updates_scroll_offset() {
     let (mut app, sv_id, _) = setup_basic();
 
     app.wheel(0.0, 50.0, 200.0, 150.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -36,6 +37,7 @@ fn wheel_clamps_at_zero() {
     let (mut app, sv_id, _) = setup_basic();
 
     app.wheel(0.0, -50.0, 200.0, 150.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -48,6 +50,7 @@ fn wheel_clamps_at_max_scroll() {
     let (mut app, sv_id, _) = setup_basic();
 
     app.wheel(0.0, 9999.0, 200.0, 150.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -60,6 +63,7 @@ fn wheel_accumulates_offset() {
     let (mut app, sv_id, _) = setup_basic();
 
     app.wheel(0.0, 100.0, 200.0, 150.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     app.wheel(0.0, 50.0, 200.0, 150.0);
 
     app.with_element(sv_id, |e| {
@@ -73,6 +77,7 @@ fn wheel_updates_child_position() {
     let (mut app, _sv_id, col_id) = setup_basic();
 
     app.wheel(0.0, 100.0, 200.0, 150.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let rt = app.element_tree();
     let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
@@ -84,6 +89,7 @@ fn wheel_miss_does_nothing() {
     let (mut app, sv_id, _) = setup_basic();
 
     app.wheel(0.0, 50.0, 999.0, 999.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(sv_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -117,9 +123,10 @@ fn wheel_chains_to_parent_at_boundary() {
         (outer.id, inner.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.wheel(0.0, 9999.0, 300.0, 200.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(inner_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();
@@ -140,6 +147,7 @@ fn wheel_chains_to_parent_at_boundary() {
         .unwrap();
 
     app.wheel(0.0, 100.0, 300.0, 200.0);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     app.with_element(outer_id, |e| {
         let sv = e.cast::<ScrollViewElement>().unwrap();

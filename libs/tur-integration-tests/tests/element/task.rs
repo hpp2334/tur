@@ -23,7 +23,7 @@ fn sleep_resolves_after_delay() {
     .unwrap();
 
     // Not resolved synchronously / after a single frame.
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(app.eval_js("globalThis.__done"), "0");
 
     app.wait_for(|a| a.eval_js("globalThis.__done") == "1");
@@ -47,7 +47,7 @@ fn launch_runs_generator_and_resumes_after_sleep() {
     .unwrap();
 
     // The generator parks at its first `yield`; nothing has run yet.
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(app.eval_js("globalThis.__v"), "0");
 
     app.wait_for(|a| a.eval_js("globalThis.__v") == "7");
@@ -98,8 +98,7 @@ fn launch_cancel_stops_resumption() {
 
     // Advance well past the sleep deadline and settle: the in-flight sleep
     // resolves, but the driver ignores a cancelled task, so `__hit` stays 0.
-    app.advance(Duration::from_millis(200)).unwrap();
-    app.settle();
+    app.wait_for_timeout(Duration::from_millis(200));
 
     assert_eq!(app.eval_js("globalThis.__hit"), "0");
 }
@@ -161,7 +160,7 @@ fn launch_drives_non_native_iterator() {
     )
     .unwrap();
 
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     assert_eq!(app.eval_js("globalThis.__hit"), "0");
 
     app.wait_for(|a| a.eval_js("globalThis.__hit") == "1");
@@ -220,9 +219,8 @@ fn launch_uncaught_rejection_stops_without_panic() {
     .unwrap();
 
     // Pump frames so the rejection handler fires; the driver must not panic.
-    app.settle();
-    app.advance(Duration::from_millis(50)).unwrap();
-    app.settle();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.wait_for_timeout(Duration::from_millis(50));
 
     assert_eq!(app.eval_js("globalThis.__reached"), "no");
 }

@@ -183,7 +183,8 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
                 rt.createInstance(holder.surface, w, h, dprValue).also {
                     it.loadModule(js)
                     // After each frame, sync the soft keyboard with the
-                    // engine's focused-element state (polls `focusedIsEditable`).
+                    // engine's focused-element state (reads the value native
+                    // pushed into the FrameLoop via onFocusChanged).
                     it.setAfterPump { syncIme() }
                 }
             } catch (e: Throwable) {
@@ -246,8 +247,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     // without any platform IME. The missing piece is raising the soft
     // keyboard and routing its text back. We declare the surface a text editor
     // and supply a minimal `InputConnection` that turns IME commits into
-    // engine events; the per-frame `syncIme` poll (set up in `bind`) drives
-    // `showSoftInput` / `hideSoftInput` from the engine's focused-element state.
+    // engine events. The engine pushes its focused-element state into the
+    // FrameLoop (via `onFocusChanged`, from the focus-change handler installed
+    // at instance build); the per-frame `syncIme` (set up in `bind`) reads that
+    // retained value and drives `showSoftInput` / `hideSoftInput`.
 
     override fun onCheckIsTextEditor(): Boolean = true
 
@@ -292,8 +295,11 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     }
 
     /**
-     * Poll the engine's focused-element state (after each pump) and raise/lower
-     * the soft keyboard accordingly. State-gated so the IMM is only touched on
+     * Raise/lower the soft keyboard to match the engine's focused-element
+     * state. The focused editable flag is pushed from native into the
+     * [FrameLoop] ([onFocusChanged], fired by the engine's focus-change
+     * handler each time focus / caret rect changes); this reads the retained
+     * value and reconciles the IMM. State-gated so the IMM is only touched on
      * show↔hide transitions, not every frame. Suppressed until the user has
      * actually touched the surface ([userInteracted]) so a launch-time
      * programmatic focus doesn't pop the keyboard unprompted.

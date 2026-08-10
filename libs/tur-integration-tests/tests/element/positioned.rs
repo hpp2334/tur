@@ -32,7 +32,7 @@ fn positioned_with_left_top() {
         positioned.id
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let pos_node = rt.get_element(pos_id).unwrap();
     assert_eq!(pos_node.computed_layout.offset.x, 10.0);

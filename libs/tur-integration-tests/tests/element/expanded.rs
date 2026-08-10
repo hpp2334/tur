@@ -34,7 +34,7 @@ fn expanded_fills_remaining() {
         (expanded.id, inner_sb.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let expanded_node = rt.get_element(expanded_id).unwrap();
     assert_eq!(expanded_node.computed_layout.size.height, 550.0);
@@ -66,7 +66,7 @@ fn expanded_multiple_share_evenly() {
         (exp1.id, exp2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let exp1_node = rt.get_element(exp1_id).unwrap();
@@ -103,7 +103,7 @@ fn expanded_flex_weights_proportional() {
         (exp1.id, exp2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     // Two Expanded children with flex 2 and 1 should split 600px as 400 + 200.

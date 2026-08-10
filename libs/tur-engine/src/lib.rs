@@ -48,8 +48,9 @@ use error::TurError;
 use core::app::FrameOutcome;
 
 /// Snapshot of focused-element state — single struct for the two-value
-/// `focused_is_editable` + `focused_cursor_rect` pair. Used by
-/// [`TurApp::focused_state`] (RPC) and [`TurApp::cached_focus`] (cached).
+/// `focused_is_editable` + `focused_cursor_rect` pair. Delivered to
+/// embedders via [`TurApp::set_focus_changed_handler`] (push, on change)
+/// and [`TurApp::focused_state`] (async RPC, on demand).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FocusedState {
     pub is_editable: bool,
@@ -87,28 +88,22 @@ pub struct TurApp {
     /// typically used for DOM side-effects (file-pick resolution, textarea
     /// focus / caret positioning). `None` in tests.
     after_frame: RefCell<Option<AfterFrameHook>>,
-    /// Set by [`Self::start_loop`] — guards against double-spawn of the
+    /// Set by [`Self::run_loop`] — guards against double-spawn of the
     /// autonomous loop.
     loop_started: Cell<bool>,
     /// Set by [`Self::destroy`]. Subsequent wake attempts short-circuit.
     destroyed: Cell<bool>,
 }
 
-/// Result of [`TurApp::handle_main_msg`] — does the loop keep going?
-#[derive(Copy, Clone)]
-enum HandleResult {
-    Continue,
-    Stop,
-}
-impl HandleResult {
-    fn should_stop(self) -> bool {
-        matches!(self, Self::Stop)
-    }
-}
-
-/// Per-frame hook fired at the end of [`TurApp::wake`] (after `pump`,
-/// before rescheduling). See [`TurApp::set_after_frame_hook`].
+/// Per-frame hook fired at the end of each iteration of `TurApp::run_loop`
+/// (after the frame's render/schedule side-effects are applied). See
+/// [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
+
+/// Per-focus-change hook fired from [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg)
+/// when the worker ships a deduped `MainMsg::FocusedStateChanged`. See
+/// [`TurApp::set_focus_changed_handler`].
+pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
     /// Construct a `TurApp` backed by the given [`MainBackend`] + scheduler.
@@ -127,7 +122,7 @@ impl TurApp {
     /// Replace the main-thread scheduler. Used by embedders that need a
     /// per-instance scheduler (e.g. Android, where each instance has its
     /// own JNI `FrameLoop`). Call after `runtime.create_app(...)` and
-    /// before `start_loop()`.
+    /// before `run_loop()`.
     pub fn set_main_scheduler(&self, sched: core::scheduler::MainScheduler) {
         *self.main_sched.borrow_mut() = sched;
     }
@@ -158,19 +153,6 @@ impl TurApp {
             .map_err(TurError::from)
     }
 
-    /// Advance exactly one frame: send `Wake` to the worker, await the
-    /// next `MainMsg::FrameOutcome`. Any `RenderCommands` / `CursorChanged`
-    /// / `FocusedStateChanged` arriving in the meantime are dispatched to
-    /// the render sink / cursor backend / focus cache respectively.
-    pub async fn pump(&self) -> Result<core::app::FrameOutcome, TurError> {
-        self.backend.pump().await
-    }
-
-    /// Legacy alias for [`Self::pump`].
-    pub async fn run_frame(&self) -> Result<core::app::FrameOutcome, TurError> {
-        self.pump().await
-    }
-
     /// Read rendered pixels back from the owned renderer (screenshot
     /// tests). Returns `None` if the renderer doesn't support readback.
     pub fn render_to_pixels(&self) -> Option<Vec<u8>> {
@@ -185,8 +167,9 @@ impl TurApp {
     }
 
     /// Combined focused-element state — RPC variant (awaits the worker's
-    /// reply). For non-blocking reads, prefer [`Self::cached_focus`]
-    /// (updated by the worker's deduped `MainMsg::FocusedStateChanged`).
+    /// reply). For change-driven reads, register
+    /// [`Self::set_focus_changed_handler`] (push, fired on focus / caret
+    /// change).
     pub async fn focused_state(&self) -> FocusedState {
         self.backend.focused_state().await
     }
@@ -226,47 +209,45 @@ impl TurApp {
         self.request_wakeup();
     }
 
-    /// New autonomous frame loop. The embedder spawns this on its platform's
-    /// runtime; the engine owns all the logic.
+    /// The autonomous frame loop — driven by the embedder's platform loop
+    /// (Choreographer-polled on Android, `spawn_local`'d on wasm). The
+    /// engine owns all frame logic; the platform only supplies the wake-up
+    /// cadence via [`MainScheduler::vsync_events`](core::scheduler::MainScheduler::vsync_events)
+    /// + [`MainScheduler::request_vsync`](core::scheduler::MainScheduler::request_vsync).
     ///
-    /// Subscribes to vsync events from `main_sched`, merges with the
-    /// worker's MainMsg stream, dispatches events. On `Vsync` events sends
-    /// `WorkerMsg::Wake` to trigger a worker pump + renders the latest
-    /// buffered batch (vsync-aligned). On `FrameOutcome` events
-    /// fire-and-forgets `request_vsync()` if the schedule is `Vsync`.
-    ///
-    /// ## Pipelining (latest-wins, at most 1 frame ahead)
-    ///
-    /// The batch is NOT rendered when it arrives — it's buffered
-    /// (`pending`) and rendered at the next vsync. The `Wake` for the
-    /// worker is sent BEFORE rendering, so the worker computes frame N+1
-    /// while main encodes frame N (overlapping the worker's flush+record
-    /// with main's vello encode — recovering the serialization gap).
-    /// Backpressure: `Wake` is sent exactly once per vsync event, and main
-    /// renders once per vsync event, so the worker can never get more than
-    /// one frame ahead. Rendered frames are one vsync behind the worker
-    /// (latest-wins — stale batches are dropped by replacement).
+    /// Each iteration races the platform vsync stream against the worker's
+    /// `MainMsg` stream:
+    /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
+    ///   N+1 while main encodes N), then paint the latest buffered batch
+    ///   (vsync-aligned, latest-wins).
+    /// - **worker msg** — dispatch via [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg),
+    ///   the single shared handler. `RenderCommands` is buffered into
+    ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
+    ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
+    ///   quiescence). Side-effects (cursor, focus-change handler, image
+    ///   uploads) are applied inside `apply_msg`.
     ///
     /// The bootstrap is automatic: `create_app` pushes an initial resize
     /// event to the worker, the worker pumps + ships `FrameOutcome` back,
-    /// and `handle_main_msg` requests the next vsync based on the outcome.
-    /// No initial `request_vsync()` is needed.
+    /// and the loop requests the next vsync based on the outcome. No
+    /// initial `request_vsync()` is needed.
     ///
     /// Concurrency: single-loop serialized. The embedder must spawn this
     /// future exactly once per `TurApp`. Multiple concurrent calls panic.
     #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn start_loop(self: Rc<Self>) {
+    pub async fn run_loop(self: Rc<Self>) {
         assert!(
             !self.loop_started.replace(true),
-            "start_loop called twice on the same TurApp"
+            "run_loop called twice on the same TurApp"
         );
 
         let mut vsync_rx = self.main_sched.borrow().vsync_events();
         // `main_rx` is in a RefCell; borrow for the lifetime of this loop.
-        // Safe: start_loop is called exactly once per app (asserted above).
+        // Safe: run_loop is called exactly once per app (asserted above).
         #[allow(clippy::await_holding_refcell_ref)]
         let mut main_rx = self.backend.main_rx.borrow_mut();
 
+        use crate::core::runtime::MsgOutcome;
         use futures::future::{Either, select};
         use futures::stream::StreamExt;
 
@@ -288,14 +269,60 @@ impl TurApp {
                     //    flushes+records N+1 while main encodes N below.
                     self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
                     // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins).
-                    if let Some(batch) = pending.take() {
+                    //    latest-wins). Skip empty batches — an empty command
+                    //    list paints a blank frame (clears the surface), which
+                    //    is never desirable.
+                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                         self.backend.render_batch(&batch);
                     }
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
-                    if self.handle_main_msg(msg, &mut pending).should_stop() {
+                    let stop = match self.backend.apply_msg(msg) {
+                        MsgOutcome::Render(batch) => {
+                            // Pipelined: buffer (latest-wins); rendered at
+                            // the next vsync.
+                            pending = Some(batch);
+                            false
+                        }
+                        MsgOutcome::Frame(outcome) => {
+                            // Apply this frame's render/schedule side-effects
+                            // BEFORE firing the after_frame hook, so hook
+                            // observers (test harnesses reading pixels/state,
+                            // embedders syncing DOM) see the fully-applied
+                            // frame. The hook is the last thing the loop
+                            // does for this message.
+                            let stop = if outcome.schedule == core::app::NextFrame::Vsync {
+                                self.main_sched.borrow().request_vsync();
+                                false
+                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
+                                // Quiescence: no vsync is armed (nothing
+                                // time-driven pending), so the pipeline
+                                // would stall with an un-rendered batch
+                                // (e.g. the initial frame, or a one-shot
+                                // paint request). Flush it now (empty
+                                // batches skipped — they'd paint blank) —
+                                // the next frame only starts on a new input.
+                                self.backend.render_batch(&batch);
+                                false
+                            } else {
+                                // Idle + empty pending: no-op. The loop
+                                // blocks on the next event.
+                                false
+                            };
+                            if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
+                                hook(outcome);
+                            }
+                            stop
+                        }
+                        MsgOutcome::Failed(e) => {
+                            tracing::error!("worker frame error: {e}");
+                            false
+                        }
+                        MsgOutcome::Closed => true,
+                        MsgOutcome::Continue => false,
+                    };
+                    if stop {
                         break;
                     }
                 }
@@ -304,58 +331,8 @@ impl TurApp {
         }
     }
 
-    /// Dispatch one MainMsg from the worker. Returns whether the loop
-    /// should stop (e.g. on Destroyed).
-    fn handle_main_msg(
-        &self,
-        msg: core::app::MainMsg,
-        pending: &mut Option<core::render::RenderCommandBatch>,
-    ) -> HandleResult {
-        match msg {
-            core::app::MainMsg::RenderCommands { commands } => {
-                // Pipelined: buffer (latest-wins); rendered at the next vsync.
-                *pending = Some(commands);
-            }
-            core::app::MainMsg::UploadImage { id, image } => {
-                // Retain the full resource (pixel Blob) on main for
-                // context-loss re-upload, then upload into the GPU atlas.
-                self.backend.insert_image_resource(id, image.clone());
-                self.backend.upload_image_resource(id, &image);
-            }
-            core::app::MainMsg::FrameOutcome(Ok(outcome)) => {
-                if let Some(hook) = self.after_frame.borrow().as_ref().cloned() {
-                    hook(outcome);
-                }
-                if outcome.schedule == core::app::NextFrame::Vsync {
-                    self.main_sched.borrow().request_vsync();
-                } else if let Some(batch) = pending.take() {
-                    // Quiescence: no vsync is armed (nothing time-driven
-                    // pending), so the pipeline would stall with an
-                    // un-rendered batch (e.g. the initial frame, or a
-                    // one-shot paint request). Flush it now — the next
-                    // frame only starts on a new input event anyway.
-                    self.backend.render_batch(&batch);
-                }
-                // Idle + empty pending: no-op. The loop blocks on the next
-                // event.
-            }
-            core::app::MainMsg::FrameOutcome(Err(e)) => {
-                tracing::error!("worker frame error: {e}");
-            }
-            core::app::MainMsg::CursorChanged(_c) => {
-                // Applied via cached_cursor — embedder reads via cached_cursor().
-            }
-            core::app::MainMsg::FocusedStateChanged { .. } => {
-                // Applied via cached_focus — embedder reads via cached_focus().
-            }
-            core::app::MainMsg::Destroyed => return HandleResult::Stop,
-            _ => {}
-        }
-        HandleResult::Continue
-    }
-
-    /// Install a callback fired after each autonomous frame (in [`Self::wake`],
-    /// after `pump`, before rescheduling).
+    /// Install a callback fired at the end of each `run_loop` iteration,
+    /// after the frame's render/schedule side-effects are applied.
     pub fn set_after_frame_hook(&self, hook: Option<Rc<dyn Fn(FrameOutcome)>>) {
         *self.after_frame.borrow_mut() = hook;
     }
@@ -444,18 +421,19 @@ impl TurApp {
         self.backend.focused_is_editable().await
     }
 
-    /// Latest cursor received from the worker (non-blocking). Updated
-    /// during [`Self::pump`] when `MainMsg::CursorChanged` arrives.
-    pub fn cached_cursor(&self) -> core::platform::Cursor {
-        self.backend.cached_cursor()
-    }
-
-    /// Latest focus state received from the worker (non-blocking). Updated
-    /// during [`Self::pump`] when `MainMsg::FocusedStateChanged` arrives.
-    /// Useful for embedder callbacks (e.g. the wasm after-frame hook) that
-    /// need focus info without an RPC round-trip.
-    pub fn cached_focus(&self) -> FocusedState {
-        self.backend.cached_focus()
+    /// Install a handler fired whenever the worker ships a deduped
+    /// `MainMsg::FocusedStateChanged` (i.e. the focused element's
+    /// editable-ness or caret rect changes). The engine retains no focus
+    /// cache — embedders obtain focus state either by registering here
+    /// (push, on change) or via [`Self::focused_state`] (async RPC, on
+    /// demand). Pass `None` to clear.
+    ///
+    /// The handler runs inside [`Self::apply_msg`](core::runtime::MainBackend::apply_msg),
+    /// so it observes identical state on the `run_loop` path. Used by the
+    /// wasm embedder (textarea focus / caret positioning) and Android
+    /// (soft-keyboard sync via a JNI callback into the Kotlin `FrameLoop`).
+    pub fn set_focus_changed_handler(&self, handler: Option<FocusChangedHook>) {
+        self.backend.set_focus_changed_handler(handler);
     }
 
     /// Override the main-side cursor backend. The worker emits

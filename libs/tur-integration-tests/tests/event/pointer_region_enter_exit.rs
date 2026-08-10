@@ -3,7 +3,7 @@ use tur_integration_tests::TurTestApp;
 
 fn flush(app: &mut TurTestApp) {
     for _ in 0..6 {
-        let _ = app.pump();
+        app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
 }
 
@@ -28,13 +28,14 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     let b_id = app.query_element(&["b"]).expect("query b");
     let b_id = ElementNodeId::new(b_id.as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     let (ax, ay) = app.get_element_absolute_bounds(a_id).unwrap().center();
     let (bx, by) = app.get_element_absolute_bounds(b_id).unwrap().center();
 
     // Step 1: move into A to register it in the pointer-region tracker.
     app.pointer_move(ax, ay);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(
         app.eval_js("globalThis.__getHover()"),
@@ -46,6 +47,7 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     // produces exited={A}, entered={B}. With the wrong push order the shared
     // source is cleared; with exit-before-enter it ends at "B".
     app.pointer_move(bx, by);
+    app.wait_for_timeout(std::time::Duration::ZERO);
     flush(&mut app);
     assert_eq!(
         app.eval_js("globalThis.__getHover()"),

@@ -17,9 +17,8 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 // Standard engine-op JNI trampolines (createInstance / createHeadlessInstance
-// / loadModule / pump / resize / pushPointer / pushKey / focusedIsEditable
-// / pushIme / destroy / destroyRuntime). Resolved by Kotlin's
-// `org.tur.TurNative` bridge.
+// / loadModule / pump / resize / pushPointer / pushKey / pushIme / destroy
+// / destroyRuntime). Resolved by Kotlin's `org.tur.TurNative` bridge.
 #[cfg(target_os = "android")]
 tur_android::standard_jni_exports!();
 

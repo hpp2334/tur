@@ -25,7 +25,7 @@ fn pointer_interact_passes_constraints_and_size() {
         (pi.id, container.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let pi_node = rt.get_element(pi_id).unwrap();
@@ -77,7 +77,7 @@ fn pointer_interact_passes_through_in_column() {
         (pi1.id, pi2.id, sb1.id, sb2.id)
     };
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
     let pi1_node = rt.get_element(pi1_id).unwrap();

@@ -29,7 +29,7 @@ fn reactive_resize_repositions_descendant() {
     let tracker_id_raw = app.query_element(&["tracker"]).expect("query tracker");
     let tracker_id = ElementNodeId::new(tracker_id_raw.as_u64());
 
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // width$ = 100 -> tracker centered: x = (100 - 20) / 2 = 40.
     let initial = app
@@ -43,7 +43,7 @@ fn reactive_resize_repositions_descendant() {
     // Change the reactive width WITHOUT a gesture (no extra mark_dirty), then
     // re-render — exactly the divider-drag path.
     app.eval_js("globalThis.__setWidth(300)");
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     // width$ = 300:
     //   correct  -> root-centered outer (50) + End-aligned tracker (280) = 330.

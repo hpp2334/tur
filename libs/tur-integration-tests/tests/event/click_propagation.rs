@@ -63,13 +63,14 @@ fn find_inner_translucent(app: &TurTestApp) -> (ElementNodeId, ElementNodeId) {
 #[test]
 fn opaque_inner_blocks_outer_click() {
     let mut app = build_nested();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_text_content(&app, &["result-opaque"]), "opaque:0/0");
 
     let (_, inner_id) = find_inner_opaque(&app);
     let (cx, cy) = app.get_element_absolute_bounds(inner_id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(get_text_content(&app, &["result-opaque"]), "opaque:0/1");
 }
@@ -77,7 +78,7 @@ fn opaque_inner_blocks_outer_click() {
 #[test]
 fn translucent_inner_allows_outer_click() {
     let mut app = build_nested();
-    app.render();
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text_content(&app, &["result-translucent"]),
@@ -87,6 +88,7 @@ fn translucent_inner_allows_outer_click() {
     let (_, inner_id) = find_inner_translucent(&app);
     let (cx, cy) = app.get_element_absolute_bounds(inner_id).unwrap().center();
     app.click(cx, cy);
+    app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert_eq!(
         get_text_content(&app, &["result-translucent"]),
