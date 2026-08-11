@@ -31,7 +31,7 @@ use futures::stream::LocalBoxStream;
 
 use tur_engine::core::async_::CompletionHandle;
 use tur_engine::core::js_runtime::TurJsContext;
-use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
+use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 
 /// Shorthand for the boxed byte-chunk stream used by the streaming bridge.
 type ByteChunkStream = LocalBoxStream<'static, Result<Vec<u8>, String>>;
@@ -60,7 +60,7 @@ fn tur_net_request(
     args: &[JsValue],
     ctx: &mut boa_engine::Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let http = js_ctx
         .capability()
         .of::<Http>()
@@ -267,7 +267,7 @@ fn tur_net_request_stream(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let http = js_ctx
         .capability()
         .of::<Http>()

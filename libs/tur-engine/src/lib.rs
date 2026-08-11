@@ -24,12 +24,9 @@ pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
-// `runtime.app_builder().build(renderer, viewport, dpr)` spawns an isolated
-// `TurApp` instance (engine on a worker thread; `MainBackend` owns the
-// renderer on main and drives it directly — no render_sink callback). Chain
-// `.instance_data::<T>(value)` before the terminal `build` / `build_headless`
-// to stamp per-instance metadata that bridge fns read via
-// `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`.
+// `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an isolated
+// `TurApp` instance (engine on a worker thread; `MainBackend` owns the renderer
+// on main and drives it directly — no render_sink callback).
 pub use crate::core::runtime::{MainBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type

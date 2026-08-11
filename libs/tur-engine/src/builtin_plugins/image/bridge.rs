@@ -5,7 +5,7 @@ use std::rc::Rc;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::core::js_runtime::helpers::{
-    FnEntry, Ptr, extract_ctx, require_props_object, wrap_view,
+    FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
 use super::decode::{decode_image_bytes, decode_svg};
@@ -19,7 +19,7 @@ pub fn fns() -> Vec<FnEntry> {
 }
 
 fn tur_image(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
     let spec = super::ImageView::from_js(&props, context);
     Ok(wrap_view(Rc::new(spec), context))
@@ -30,7 +30,7 @@ fn tur_create_image_resource(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let buffer_obj = args.get_or_undefined(1).as_object().ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message("expected ArrayBuffer or Uint8Array"))
     })?;
@@ -73,7 +73,7 @@ fn tur_create_svg_resource(
     args: &[JsValue],
     _context: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let svg = args
         .get_or_undefined(1)
         .as_string()

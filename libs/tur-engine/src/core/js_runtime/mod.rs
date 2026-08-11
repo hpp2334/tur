@@ -11,7 +11,7 @@
 //!   (`build_native_module` / `build_fn_module` / `bound_native`).
 //! - [`opaque`] — `BoaOpaque<T>` generic `NativeObject` downcast helper.
 //! - [`helpers`] — bridge plumbing: `FnEntry` / `ConstEntry` / `Ptr` type
-//!   aliases, `extract_ctx`, `require_props_object`, `wrap_view`,
+//!   aliases, `extract_js_ctx`, `require_props_object`, `wrap_view`,
 //!   `TurNodeHandle`.
 //! - [`js_context`] — `TurJsContext` (the boa `JsData` handle passed as
 //!   `args[0]` to every ctx-first bridge fn).
@@ -27,7 +27,7 @@ pub mod js_value;
 pub mod module_loader;
 pub mod opaque;
 
-pub use helpers::TurNodeHandle;
+pub use helpers::{TurNodeHandle, extract_js_ctx};
 pub use js_context::TurJsContext;
 pub use js_props::JsProps;
 pub use module_loader::TurModuleLoader;

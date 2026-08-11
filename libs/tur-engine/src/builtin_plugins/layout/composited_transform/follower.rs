@@ -16,7 +16,7 @@ use vello_common::kurbo::{Affine, Point};
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
 use crate::core::js_runtime::JsProps;
-use crate::core::js_runtime::helpers::{Ptr, extract_ctx, require_props_object, wrap_view};
+use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Alignment, ComputedLayout, Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset,
     Size, SubscribeCx,
@@ -266,7 +266,7 @@ pub(super) fn tur_follower(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
     let spec = FollowerView::from_js(&props, context).ok_or_else(|| {
         boa_engine::JsError::from(

@@ -1,14 +1,14 @@
-//! Per-instance typed metadata slot: `TurAppBuilder::instance_data::<T>(value)`
-//! stamps typed data at instance-creation time; `TurJsContext::data::<T>()`
-//! (clone-out) and `TurJsContext::with_data::<T, _>(f)` (ref-callback) read
-//! it from bridge fns / plugin `register` / subsystem flush contexts. Each
-//! type may be stamped at most once per builder — a second
-//! `instance_data::<T>(...)` with the same `T` panics eagerly at the call
-//! site.
+//! Worker-side per-instance data slot: `TurJsContext::insert_data::<T>(value)`
+//! stamps typed state from a plugin's `register` (or any later point on the
+//! worker); `TurJsContext::data::<T>()` (clone-out) and
+//! `TurJsContext::with_data::<T, _>(f)` (ref-callback) read it from bridge fns
+//! or subsystem flush contexts. Never accessible to JS itself — carries
+//! secure, JS-unforgeable identity (e.g. a `PluginId` for the Ease Music
+//! Player plugin system, so a `storage.get(key)` bridge can resolve the
+//! calling plugin without trusting JS args).
 //!
-//! Together these let a host bind secure, JS-unforgeable identity to an
-//! instance (e.g. a `PluginId` for the Ease Music Player plugin system) —
-//! bridge fns read it from `TurJsContext`, never from JS arguments.
+//! The data map lives entirely in the worker; there is no embedder-facing
+//! API to populate it from the main thread.
 
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
@@ -24,10 +24,10 @@ use tur_native::NativeFontLoader;
 
 // ---------- Test marker types ----------------------------------------------
 //
-// `PluginId` mirrors the canonical use case (a host stamps the calling
-// plugin's identity at instance creation so bridge fns can resolve
-// per-plugin storage without trusting JS args). `ThemeOverride` is a second
-// distinct type so we can exercise multi-typed stamping in one builder.
+// `PluginId` mirrors the canonical use case (a plugin stamps its own identity
+// at register-time so bridge fns can resolve per-plugin storage without
+// trusting JS args). `ThemeOverride` is a second distinct type so we can
+// exercise multi-typed stamping in one instance.
 
 #[derive(Clone, Debug, PartialEq)]
 struct PluginId(String);
@@ -40,8 +40,8 @@ struct ThemeOverride {
 // ---------- Helpers --------------------------------------------------------
 
 /// Build a runtime carrying std + animation + the supplied extra plugin.
-/// Each test supplies a capture plugin that records what it observed on
-/// `TurJsContext` at register-time.
+/// Each test supplies a plugin that interacts with `TurJsContext` at
+/// register-time.
 fn build_runtime(extra: Box<dyn Plugin>) -> Rc<TurRuntime> {
     TurRuntime::builder()
         .scheduler(TestSchedulerDriver::new())
@@ -54,69 +54,104 @@ fn build_runtime(extra: Box<dyn Plugin>) -> Rc<TurRuntime> {
         .expect("runtime build")
 }
 
-/// Plugin that captures `TurJsContext::data::<PluginId>()` at register-time
-/// via the clone-out accessor (mirrors `Capabilities::of`).
-struct CapturePluginId {
+/// Build a headless app off the given runtime. The instance's plugins have
+/// already run their `register` by the time `build()` returns.
+fn build_headless(runtime: &Rc<TurRuntime>) -> Rc<tur_engine::TurApp> {
+    runtime
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
+        .expect("app build")
+}
+
+// ---------- Plugins that exercise the worker-side API -----------------------
+
+/// Stamps `PluginId` via `insert_data` during `register`, then reads it back
+/// via the clone-out accessor (`data::<T>()`). Captures the read-back value
+/// for the test to assert on.
+struct StampAndReadPluginId {
     seen: Arc<Mutex<Option<PluginId>>>,
 }
-impl Plugin for CapturePluginId {
+impl Plugin for StampAndReadPluginId {
+    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+        let js = ctx.js_ctx();
+        js.insert_data(PluginId("com.ease.onedrive".into()));
+        *self.seen.lock().unwrap() = js.data::<PluginId>();
+        Ok(())
+    }
+}
+
+/// Stamps `PluginId` via `insert_data`, then reads it back via the
+/// ref-callback accessor (`with_data::<T, _>(f)`). Confirms the callback
+/// path works and does not require `T: Clone` on the `TurJsContext` side.
+struct StampAndReadViaRef {
+    seen: Arc<Mutex<Option<PluginId>>>,
+}
+impl Plugin for StampAndReadViaRef {
+    fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+        let js = ctx.js_ctx();
+        js.insert_data(PluginId("com.ease.spotify".into()));
+        let captured = js.with_data::<PluginId, _>(|pid| pid.clone());
+        *self.seen.lock().unwrap() = captured;
+        Ok(())
+    }
+}
+
+/// Reads `data::<PluginId>()` without any prior `insert_data` call — must
+/// observe `None`. Bridge fns treat this as "no plugin context bound" and
+/// error accordingly.
+struct ReadOnlyPlugin {
+    seen: Arc<Mutex<Option<PluginId>>>,
+}
+impl Plugin for ReadOnlyPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         *self.seen.lock().unwrap() = ctx.js_ctx().data::<PluginId>();
         Ok(())
     }
 }
 
-/// Plugin that captures `PluginId` via the ref-callback accessor
-/// `with_data::<T, R>(f)`. The callback runs under the borrow and returns
-/// a cloned value — exercises the no-`Clone`-on-T-bound path.
-struct CapturePluginIdViaRef {
-    seen: Arc<Mutex<Option<PluginId>>>,
+/// Stamps two distinct types in one `register` (PluginId + ThemeOverride),
+/// then reads both back — confirms the map carries distinct TypeId slots.
+struct StampMultipleTypes {
+    pid: Arc<Mutex<Option<PluginId>>>,
+    theme: Arc<Mutex<Option<ThemeOverride>>>,
 }
-impl Plugin for CapturePluginIdViaRef {
+impl Plugin for StampMultipleTypes {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-        let captured = ctx.js_ctx().with_data::<PluginId, _>(|pid| pid.clone());
-        *self.seen.lock().unwrap() = captured;
+        let js = ctx.js_ctx();
+        js.insert_data(PluginId("com.ease.multi".into()));
+        js.insert_data(ThemeOverride { is_dark: true });
+        *self.pid.lock().unwrap() = js.data::<PluginId>();
+        *self.theme.lock().unwrap() = js.data::<ThemeOverride>();
         Ok(())
     }
 }
 
 // ---------- Tests ----------------------------------------------------------
 
-// Round-trip: stamp `PluginId` via the builder, observe it from a plugin's
-// `register` via the clone-out accessor.
+// Round-trip: a plugin stamps `PluginId` via `insert_data`, then reads it
+// back via the clone-out accessor — all inside `register`.
 #[test]
-fn instance_data_round_trip_via_plugin() {
+fn insert_data_round_trip_via_data_clone_out() {
     let seen = Arc::new(Mutex::new(None));
-    let runtime = build_runtime(Box::new(CapturePluginId { seen: seen.clone() }));
-
-    let _app = runtime
-        .app_builder()
-        .instance_data(PluginId("com.ease.onedrive".into()))
-        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
-        .build()
-        .expect("app build");
+    let runtime = build_runtime(Box::new(StampAndReadPluginId { seen: seen.clone() }));
+    let _app = build_headless(&runtime);
 
     assert_eq!(
         seen.lock().unwrap().clone(),
         Some(PluginId("com.ease.onedrive".into())),
-        "plugin should observe the host-stamped PluginId at register-time"
+        "plugin should observe its own insert_data stamp in the same register call"
     );
 }
 
 // Same round-trip via the ref-callback accessor (`with_data`). Confirms both
 // read shapes work and that `with_data` does not require `T: Clone` on the
-// `TurJsContext` side (the callback may clone if it wants, as here).
+// `TurJsContext` side.
 #[test]
-fn instance_data_with_data_ref_callback() {
+fn insert_data_round_trip_via_with_data_ref_callback() {
     let seen = Arc::new(Mutex::new(None));
-    let runtime = build_runtime(Box::new(CapturePluginIdViaRef { seen: seen.clone() }));
-
-    let _app = runtime
-        .app_builder()
-        .instance_data(PluginId("com.ease.spotify".into()))
-        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
-        .build()
-        .expect("app build");
+    let runtime = build_runtime(Box::new(StampAndReadViaRef { seen: seen.clone() }));
+    let _app = build_headless(&runtime);
 
     assert_eq!(
         seen.lock().unwrap().clone(),
@@ -125,32 +160,33 @@ fn instance_data_with_data_ref_callback() {
     );
 }
 
-// Two instances from one runtime, each stamped with a different `PluginId`.
-// Each instance's `register` must see ONLY its own value — per-instance
-// isolation, not a shared runtime-wide slot.
+// Two instances from one runtime, each with its own plugin that stamps a
+// distinct `PluginId`. Each instance's `register` must see ONLY its own
+// value — per-instance isolation, not a shared runtime-wide slot.
 #[test]
-fn instance_data_is_isolated_per_instance() {
-    // Per-instance capture slot keyed by an arbitrary instance index the
-    // test sets on each `instance_data` call (via distinct types — we use a
-    // small enum trick: capture into a shared map guarded by a Mutex).
+fn insert_data_is_isolated_per_instance() {
     let captured_a = Arc::new(Mutex::new(None));
     let captured_b = Arc::new(Mutex::new(None));
 
-    // Two clones of the runtime-building helper that capture into different
-    // slots. We use one runtime with a plugin that always overwrites a
-    // single shared slot — but spawn TWO instances sequentially, draining
-    // the slot between them.
-    let runtime = build_runtime(Box::new(CapturePluginId {
+    // Plugin A stamps "instance-A".
+    struct StampFixed {
+        value: PluginId,
+        seen: Arc<Mutex<Option<PluginId>>>,
+    }
+    impl Plugin for StampFixed {
+        fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+            let js = ctx.js_ctx();
+            js.insert_data(self.value.clone());
+            *self.seen.lock().unwrap() = js.data::<PluginId>();
+            Ok(())
+        }
+    }
+
+    let runtime = build_runtime(Box::new(StampFixed {
+        value: PluginId("instance-A".into()),
         seen: captured_a.clone(),
     }));
-
-    // Instance A — stamped with "A".
-    let _app_a = runtime
-        .app_builder()
-        .instance_data(PluginId("instance-A".into()))
-        .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
-        .build()
-        .expect("app A");
+    let _app_a = build_headless(&runtime);
     let a_value = captured_a.lock().unwrap().clone();
     assert_eq!(
         a_value,
@@ -158,21 +194,13 @@ fn instance_data_is_isolated_per_instance() {
         "A sees its own"
     );
 
-    // Move A's slot aside, then build instance B with a fresh slot — B must
-    // see only its own value, never A's.
-    let _prev = {
-        let mut g = captured_a.lock().unwrap();
-        g.take()
-    };
-    let runtime_b = build_runtime(Box::new(CapturePluginId {
+    // Fresh runtime + plugin B stamps "instance-B". B must see only its own
+    // value, never A's.
+    let runtime_b = build_runtime(Box::new(StampFixed {
+        value: PluginId("instance-B".into()),
         seen: captured_b.clone(),
     }));
-    let _app_b = runtime_b
-        .app_builder()
-        .instance_data(PluginId("instance-B".into()))
-        .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
-        .build()
-        .expect("app B");
+    let _app_b = build_headless(&runtime_b);
     let b_value = captured_b.lock().unwrap().clone();
     assert_eq!(
         b_value,
@@ -180,84 +208,39 @@ fn instance_data_is_isolated_per_instance() {
         "B sees its own"
     );
 
-    // Cross-check: A's captured value was "instance-A", B's is "instance-B"
-    // — they were never the same slot.
     assert_ne!(
         a_value, b_value,
         "per-instance data must be isolated across instances"
     );
 }
 
-// An instance whose builder never called `instance_data::<PluginId>(...)`
-// must report `None` from both accessors — bridge fns should treat this as
-// "no plugin context bound" and error accordingly.
+// A plugin that reads `data::<PluginId>()` without any prior `insert_data`
+// must observe `None` — bridge fns should treat this as "no plugin context
+// bound" and error accordingly.
 #[test]
-fn instance_data_missing_returns_none() {
+fn data_returns_none_when_nothing_stamped() {
     let seen = Arc::new(Mutex::new(Some(PluginId("sentinel-never-observed".into()))));
-    let runtime = build_runtime(Box::new(CapturePluginId { seen: seen.clone() }));
-
-    let _app = runtime
-        .app_builder()
-        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
-        .build()
-        .expect("app build");
+    let runtime = build_runtime(Box::new(ReadOnlyPlugin { seen: seen.clone() }));
+    let _app = build_headless(&runtime);
 
     assert!(
         seen.lock().unwrap().is_none(),
-        "no instance_data::<PluginId>() call → data::<PluginId>() must be None"
+        "no insert_data::<PluginId>() call → data::<PluginId>() must be None"
     );
 }
 
-// Same-type double-stamp must panic at the SECOND call (eager detection at
-// the call site, not deferred to `build()`). Distinct types coexist fine.
+// Confirm a plugin can stamp multiple DISTINCT types in one register — each
+// ends up in its own TypeId slot.
 #[test]
-#[should_panic(expected = "called twice on the same TurAppBuilder")]
-fn instance_data_same_type_panics_at_second_call() {
-    let runtime = build_runtime(Box::new(CapturePluginId {
-        seen: Arc::new(Mutex::new(None)),
-    }));
-
-    // First stamp of PluginId is fine; a second stamp of the SAME type must
-    // panic at the call site. A different type (ThemeOverride) would have
-    // been accepted.
-    let _ = runtime
-        .app_builder()
-        .instance_data(PluginId("first".into()))
-        .instance_data(PluginId("second".into())); // panics here
-}
-
-// Confirm a builder can carry multiple DISTINCT types in one chain — each
-// ends up in its own TypeId slot. (The panic test above covers the
-// same-type case; this covers the distinct-type case.)
-#[test]
-fn instance_data_accepts_multiple_distinct_types() {
+fn insert_data_accepts_multiple_distinct_types() {
     let seen_pid = Arc::new(Mutex::new(None));
     let seen_theme = Arc::new(Mutex::new(None));
 
-    struct CaptureBoth {
-        pid: Arc<Mutex<Option<PluginId>>>,
-        theme: Arc<Mutex<Option<ThemeOverride>>>,
-    }
-    impl Plugin for CaptureBoth {
-        fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
-            *self.pid.lock().unwrap() = ctx.js_ctx().data::<PluginId>();
-            *self.theme.lock().unwrap() = ctx.js_ctx().data::<ThemeOverride>();
-            Ok(())
-        }
-    }
-
-    let runtime = build_runtime(Box::new(CaptureBoth {
+    let runtime = build_runtime(Box::new(StampMultipleTypes {
         pid: seen_pid.clone(),
         theme: seen_theme.clone(),
     }));
-
-    let _app = runtime
-        .app_builder()
-        .instance_data(PluginId("com.ease.multi".into()))
-        .instance_data(ThemeOverride { is_dark: true })
-        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
-        .build()
-        .expect("app build");
+    let _app = build_headless(&runtime);
 
     assert_eq!(
         seen_pid.lock().unwrap().clone(),
@@ -268,5 +251,34 @@ fn instance_data_accepts_multiple_distinct_types() {
         seen_theme.lock().unwrap().clone(),
         Some(ThemeOverride { is_dark: true }),
         "ThemeOverride stamped and observed alongside PluginId"
+    );
+}
+
+// `insert_data` of the same TypeId twice silently overwrites (mirrors
+// `Capabilities::insert`). This pins the documented behaviour: no panic, last
+// write wins.
+#[test]
+fn insert_data_same_type_silently_overwrites() {
+    struct StampTwice {
+        seen: Arc<Mutex<Option<PluginId>>>,
+    }
+    impl Plugin for StampTwice {
+        fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+            let js = ctx.js_ctx();
+            js.insert_data(PluginId("first".into()));
+            js.insert_data(PluginId("second".into())); // overwrites "first"
+            *self.seen.lock().unwrap() = js.data::<PluginId>();
+            Ok(())
+        }
+    }
+
+    let seen = Arc::new(Mutex::new(None));
+    let runtime = build_runtime(Box::new(StampTwice { seen: seen.clone() }));
+    let _app = build_headless(&runtime);
+
+    assert_eq!(
+        seen.lock().unwrap().clone(),
+        Some(PluginId("second".into())),
+        "second insert_data of the same TypeId should overwrite the first"
     );
 }

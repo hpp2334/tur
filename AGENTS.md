@@ -221,18 +221,21 @@ let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
 - `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
   time (bridge fns) or event dispatch time (subsystems via
   `SubsystemFlushContext.capabilities`).
-- **Per-instance data** (`TurAppBuilder::instance_data::<T>(value)` →
-  `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`) — typed metadata the
-  host stamps at instance creation and bridge fns / `register` /
-  subsystem-flush contexts read from `TurJsContext`. Carries secure,
-  JS-unforgeable identity (e.g. a host `PluginId` so a `storage.get(key)`
-  bridge can resolve the calling plugin without trusting JS args). Mirrors
-  the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>`
-  inside `TurJsContext`, shared across every cheap clone. The builder panics
-  eagerly on same-type double-stamp; distinct types coexist. `T: Any + Send +
-  'static` (the value crosses the main→worker thread boundary once at
-  construction). `data::<T>()` returns `Option<T>` (requires `T: Clone`),
-  `with_data::<T, _>(f)` is the no-`Clone`-bound ref-callback path.
+- **Per-instance data** (`TurJsContext::insert_data::<T>(value)` →
+  `data::<T>()` / `with_data::<T, _>(f)`) — typed worker-side metadata.
+  Plugins stamp from their `register` (or any later point on the worker);
+  bridge fns / subsystem-flush contexts read via `data` / `with_data`.
+  Carries secure, JS-unforgeable identity (e.g. a host `PluginId` so a
+  `storage.get(key)` bridge can resolve the calling plugin without trusting
+  JS args). Mirrors the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId,
+  Box<dyn Any>>>>` inside `TurJsContext`, shared across every cheap clone.
+  Lives entirely in the worker — there is no embedder-facing API to populate
+  it from the main thread (the `TurAppBuilder` runs on main while this map
+  is only ever touched from the worker, where boa + plugin `register` run).
+  `insert_data` of the same `TypeId` silently overwrites (mirrors
+  `Capabilities::insert`); distinct types coexist. `data::<T>()` returns
+  `Option<T>` (requires `T: Clone`); `with_data::<T, _>(f)` is the
+  no-`Clone`-bound ref-callback path.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
   `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
@@ -268,8 +271,6 @@ validation. The renderer is **not** on the runtime builder — it's the
 mandatory argument to the builder's `build(...)` terminal (one renderer per
 surface). The cursor backend is per-instance (set via
 `TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
-Per-instance metadata is optional (chain `.instance_data::<T>(value)` before
-the terminal — see the capability-registry section above).
 
 Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
 `WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +

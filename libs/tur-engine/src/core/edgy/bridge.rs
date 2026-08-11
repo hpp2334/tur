@@ -5,7 +5,7 @@ use boa_engine::{Context, JsArgs, JsResult, JsValue};
 
 use crate::core::edgy::reactive::{AnyReadable, Derived, Mutation, Readable, Source};
 use crate::core::js_runtime::BoaOpaque;
-use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
+use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 
 /// Bridge function table entries for the reactive primitives domain.
@@ -35,34 +35,34 @@ fn require_callable(args: &[JsValue], idx: usize) -> JsResult<JsFunction> {
 }
 
 fn tur_source(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let value = args.get_or_undefined(1).clone();
     let source: Source<JsValue> = js_ctx.store.bridge().source(value);
     Ok(source.into_js(context))
 }
 
 fn tur_derive(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let closure = require_callable(args, 1)?;
     let derived: Derived<JsValue> = js_ctx.store.bridge().derive(closure);
     Ok(derived.into_js(context))
 }
 
 fn tur_mutate(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let closure = require_callable(args, 1)?;
     let mutation = js_ctx.store.bridge().mutate(closure);
     Ok(mutation.into_js(context))
 }
 
 fn tur_get(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let readable = AnyReadable::from_js(args.get_or_undefined(1))?;
     Ok(js_ctx.store.bridge().read(readable, context))
 }
 
 fn tur_set(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let bridge = js_ctx.store.bridge();
     let v = args.get_or_undefined(1);
     if let Ok(mutation) = Mutation::from_js(v) {
