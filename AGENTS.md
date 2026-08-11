@@ -193,7 +193,8 @@ let app = runtime
     // `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`. Each type may
     // be stamped at most once per builder (same-type double-stamp panics).
     //   .instance_data(PluginId("com.example.foo".into()))
-    .build(Box::new(renderer), (800.0, 600.0), 2.0)?;
+    .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
+    .build()?;
 app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
 
 // Or a headless instance (no rendering):

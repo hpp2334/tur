@@ -420,8 +420,9 @@ pub(crate) enum MsgOutcome {
 /// ## Renderer ownership
 ///
 /// `MainBackend` owns the main-side [`Renderer`] — passed to
-/// `TurRuntime::app_builder().build(Box<dyn Renderer>, …)` and stored here,
-/// exactly like `main`'s `app_builder().build(Box::new(renderer), …)`. Both
+/// `TurRuntime::app_builder().renderer(Box<dyn Renderer>, …).build()` and
+/// stored here, exactly like `main`'s
+/// `app_builder().renderer(Box::new(renderer), …).build()`. Both
 /// `MainBackend` and the renderer live on the main thread, so there is no
 /// callback indirection: each `MainMsg::RenderCommands` batch is applied
 /// directly via [`Self::render_batch`] (renderer only). Resize is

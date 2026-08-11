@@ -299,11 +299,14 @@ mod imp {
             // Engine on worker; `MainBackend` owns the wgpu renderer on
             // main and drives it directly (render batches, image uploads,
             // resize-on-event) — no render_sink callback.
-            let app = runtime.app_builder().build(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )?;
+            let app = runtime
+                .app_builder()
+                .renderer(
+                    Box::new(renderer),
+                    (logical_width as f64, logical_height as f64),
+                    dpr,
+                )
+                .build()?;
 
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);

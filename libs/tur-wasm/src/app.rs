@@ -418,11 +418,12 @@ impl WasmApp {
         let app = runtime
             .runtime
             .app_builder()
-            .build(
+            .renderer(
                 Box::new(renderer),
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         // The cursor backend is per-instance (it targets this canvas's DOM

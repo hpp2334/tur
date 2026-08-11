@@ -92,7 +92,8 @@ fn instance_data_round_trip_via_plugin() {
     let _app = runtime
         .app_builder()
         .instance_data(PluginId("com.ease.onedrive".into()))
-        .build(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app build");
 
     assert_eq!(
@@ -113,7 +114,8 @@ fn instance_data_with_data_ref_callback() {
     let _app = runtime
         .app_builder()
         .instance_data(PluginId("com.ease.spotify".into()))
-        .build(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app build");
 
     assert_eq!(
@@ -146,7 +148,8 @@ fn instance_data_is_isolated_per_instance() {
     let _app_a = runtime
         .app_builder()
         .instance_data(PluginId("instance-A".into()))
-        .build(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+        .build()
         .expect("app A");
     let a_value = captured_a.lock().unwrap().clone();
     assert_eq!(
@@ -167,7 +170,8 @@ fn instance_data_is_isolated_per_instance() {
     let _app_b = runtime_b
         .app_builder()
         .instance_data(PluginId("instance-B".into()))
-        .build(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+        .build()
         .expect("app B");
     let b_value = captured_b.lock().unwrap().clone();
     assert_eq!(
@@ -194,7 +198,8 @@ fn instance_data_missing_returns_none() {
 
     let _app = runtime
         .app_builder()
-        .build(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
         .expect("app build");
 
     assert!(
@@ -250,7 +255,8 @@ fn instance_data_accepts_multiple_distinct_types() {
         .app_builder()
         .instance_data(PluginId("com.ease.multi".into()))
         .instance_data(ThemeOverride { is_dark: true })
-        .build(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
         .expect("app build");
 
     assert_eq!(

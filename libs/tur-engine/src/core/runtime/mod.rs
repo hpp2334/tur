@@ -111,10 +111,14 @@ pub(crate) type InstanceDataInsert = Box<dyn FnOnce(&mut HashMap<TypeId, Box<dyn
 ///
 /// // Two isolated instances sharing fonts/clock/capabilities/plugins.
 /// // Each owns its renderer (created by the embedder; no render_sink):
-/// let app_a = runtime.app_builder()
-///     .build(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)?;
-/// let app_b = runtime.app_builder()
-///     .build(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)?;
+/// let app_a = runtime
+///     .app_builder()
+///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .build()?;
+/// let app_b = runtime
+///     .app_builder()
+///     .renderer(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)
+///     .build()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -187,6 +191,9 @@ impl TurRuntime {
         TurAppBuilder {
             runtime: self,
             data_inserts: Vec::new(),
+            renderer: None,
+            viewport: None,
+            dpr: None,
         }
     }
 
@@ -246,8 +253,9 @@ impl TurRuntime {
 /// per-instance metadata (typed values the host wants bridge fns /
 /// subsystems to read via [`TurJsContext::data`](crate::core::js_runtime::TurJsContext::data)
 /// / [`with_data`](crate::core::js_runtime::TurJsContext::with_data)),
-/// then terminate with [`Self::build`] (rendering) or
-/// [`Self::build_headless`] (no renderer).
+/// then configure the surface and terminate with [`Self::build`]
+/// (rendering — requires [`Self::renderer`]) or [`Self::build_headless`]
+/// (no renderer).
 ///
 /// ```no_run
 /// # use tur_engine::*;
@@ -260,10 +268,11 @@ impl TurRuntime {
 /// let app = runtime
 ///     .app_builder()
 ///     .instance_data(PluginId("com.ease.onedrive".into()))
-///     .build(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)?;
+///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .build()?;
 /// # Ok(())
 /// # }
-/// ```
+/// /// ```
 pub struct TurAppBuilder<'rt> {
     runtime: &'rt Rc<TurRuntime>,
     /// `(TypeId, replay-closure)` pairs. The `TypeId` is stored eagerly so
@@ -271,6 +280,13 @@ pub struct TurAppBuilder<'rt> {
     /// [`Self::instance_data`] call site (rather than being silently
     /// overwritten at replay time inside the worker).
     data_inserts: Vec<(TypeId, InstanceDataInsert)>,
+    /// Rendering surface: renderer + viewport + dpr grouped together (a
+    /// non-headless app supplies all three at once via [`Self::renderer`]).
+    /// `None` until [`Self::renderer`] is called; [`Self::build`] requires
+    /// `Some`.
+    renderer: Option<Box<dyn crate::core::render::Renderer>>,
+    viewport: Option<(f64, f64)>,
+    dpr: Option<f64>,
 }
 
 impl<'rt> TurAppBuilder<'rt> {
@@ -309,25 +325,49 @@ impl<'rt> TurAppBuilder<'rt> {
         self
     }
 
-    /// Terminal: build the instance with a renderer + viewport + dpr (all
-    /// three required together — a non-headless app needs all three).
-    /// `MainBackend` owns the renderer on main and drives it directly
-    /// (render batches, image uploads, resize-on-event) — no `render_sink`
-    /// callback.
+    /// Group the rendering surface — renderer, viewport, dpr — onto this
+    /// builder. A non-headless app must supply all three together; the
+    /// terminal [`Self::build`] then takes no arguments. `MainBackend`
+    /// owns the renderer on main and drives it directly (render batches,
+    /// image uploads, resize-on-event) — no `render_sink` callback.
     ///
-    /// The engine pushes the initial `PlatformEvent::Resize` into the
-    /// worker so `viewportSize$` + the main-side renderer are seeded
-    /// before frame 1.
-    pub fn build(
-        self,
+    /// `viewport` is the initial logical `(width, height)` of the render
+    /// target; `dpr` is the device pixel ratio. The engine pushes the
+    /// initial `PlatformEvent::Resize` into the worker so `viewportSize$`
+    /// + the main-side renderer are seeded before frame 1.
+    pub fn renderer(
+        mut self,
         renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
-    ) -> Result<Rc<TurApp>, TurError> {
+    ) -> Self {
+        self.renderer = Some(renderer);
+        self.viewport = Some(viewport);
+        self.dpr = Some(dpr);
+        self
+    }
+
+    /// Terminal: build the instance. Requires [`Self::renderer`] to have
+    /// been called (a non-headless app supplies renderer + viewport + dpr
+    /// together). Errors with a clear message otherwise.
+    pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
             data_inserts,
+            renderer,
+            viewport,
+            dpr,
         } = self;
+        let renderer = renderer.ok_or_else(|| {
+            TurError::Other(
+                "TurAppBuilder::build() requires `.renderer(renderer, viewport, dpr)` \
+                 to have been called; for a headless build use `.build_headless(viewport)` \
+                 instead"
+                    .to_string(),
+            )
+        })?;
+        let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
+        let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
         // Drop the TypeId keys (used only for eager dedup at the call site).
         let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
         runtime.spawn_instance(renderer, viewport, dpr, inserts)
@@ -349,6 +389,7 @@ impl<'rt> TurAppBuilder<'rt> {
         let TurAppBuilder {
             runtime,
             data_inserts,
+            ..
         } = self;
         let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
         runtime.spawn_instance(

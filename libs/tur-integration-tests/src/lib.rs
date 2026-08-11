@@ -456,7 +456,8 @@ impl TurTestApp {
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
         let inner = runtime
             .app_builder()
-            .build(renderer, (width, height), 1.0)?;
+            .renderer(renderer, (width, height), 1.0)
+            .build()?;
         // Drive the production `run_loop` (the same loop wasm/Android drive).
         // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
         // `drive_one_frame` pairs one `fire_vsync` with one awaited outcome.
