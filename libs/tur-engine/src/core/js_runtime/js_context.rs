@@ -1,4 +1,6 @@
+use std::any::{Any, TypeId};
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -97,6 +99,20 @@ pub struct TurJsContext {
     ///
     /// [`Plugin::requires`]: crate::core::plugin::Plugin::requires
     pub capabilities: Capabilities,
+    /// Embedder-provided per-instance metadata — a typed key→value map
+    /// stamped at instance creation via
+    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data)
+    /// and read by bridge fns / plugin `register` / subsystem flush contexts
+    /// via [`Self::data`] / [`Self::with_data`]. Never accessible to JS
+    /// itself, so it carries secure, JS-unforgeable identity (e.g. a host
+    /// `PluginId` for plugin systems where bridge fns must resolve the
+    /// calling plugin without trusting JS arguments).
+    ///
+    /// Mirrors the `capabilities` field's shape and soundness trade-off:
+    /// pure Rust state behind an `Rc<RefCell<…>>`, shared across every
+    /// cheap clone of `TurJsContext` (one per bridge call, per flush, etc.).
+    /// The struct-level `#[boa_gc(unsafe_empty_trace)]` already covers it.
+    pub instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>,
 }
 
 impl TurJsContext {
@@ -136,6 +152,7 @@ impl TurJsContext {
             completion_handle,
             flush_task_handle,
             capabilities,
+            instance_data: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
@@ -254,5 +271,66 @@ impl TurJsContext {
             .main_tx
             .unbounded_send(crate::core::app::MainMsg::UploadImage { id, image });
         id
+    }
+
+    /// Worker-side insert into the per-instance data map. **Not** the
+    /// embedder-facing API — embedders stamp data at instance creation via
+    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data),
+    /// which the engine replays into this map before any plugin's `register`
+    /// runs. This method exists for engine-internal mutations after
+    /// construction (rare; subsystems may stamp their own typed state on a
+    /// running instance).
+    ///
+    /// Collisions (inserting the same `TypeId` twice) silently overwrite,
+    /// mirroring [`Capabilities::insert`]. The builder's
+    /// `instance_data::<T>(...)` panics on same-type double-stamp instead —
+    /// the panic lives at the call site, not here.
+    pub fn insert_data<T: Any + 'static>(&self, value: T) {
+        self.instance_data
+            .borrow_mut()
+            .insert(TypeId::of::<T>(), Box::new(value));
+    }
+
+    /// Read a previously-stamped value out of the per-instance data map by
+    /// type. Returns a clone of the stored value (mirrors
+    /// [`Capabilities::of`]). Use [`Self::with_data`] when `T` is not
+    /// `Clone` or to avoid cloning a large value.
+    ///
+    /// Bridge fns reach this via
+    /// [`extract_ctx`](crate::core::js_runtime::helpers::extract_ctx):
+    ///
+    /// ```text
+    /// fn storage_get(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
+    ///     let js_ctx = extract_ctx(args)?;
+    ///     let plugin_id = js_ctx.data::<PluginId>()
+    ///         .ok_or_else(|| JsError::from(JsNativeError::typ()
+    ///             .with_message("ease: no plugin context bound to this instance")))?;
+    ///     // plugin_id.0 is host-guaranteed — never from JS args
+    ///     let key = args.get_or_undefined(1).as_string()...;
+    ///     ...
+    /// }
+    /// ```
+    pub fn data<T: Any + Clone + 'static>(&self) -> Option<T> {
+        self.instance_data
+            .borrow()
+            .get(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref::<T>())
+            .cloned()
+    }
+
+    /// Read a previously-stamped value via a callback that runs under the
+    /// map's borrow, returning whatever the callback produces. The callback
+    /// receives `&T`, so `T` need not be `Clone`. Returns `None` if no
+    /// value of type `T` is stamped on this instance.
+    ///
+    /// Use this over [`Self::data`] when `T` is expensive to clone or not
+    /// `Clone` at all — e.g. a large config struct or a closure-carrying
+    /// handle.
+    pub fn with_data<T: Any + 'static, R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
+        self.instance_data
+            .borrow()
+            .get(&TypeId::of::<T>())
+            .and_then(|v| v.downcast_ref::<T>())
+            .map(f)
     }
 }

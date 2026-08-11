@@ -168,7 +168,9 @@ impl TurVelloApp {
 
         // Threaded engine: worker produces command batches; `MainBackend`
         // owns the VelloRenderer on main and applies them via `run_loop`.
-        let app = runtime.create_app(Box::new(renderer), (width, height), dpr)?;
+        let app = runtime
+            .app_builder()
+            .build(Box::new(renderer), (width, height), dpr)?;
         Ok((app, driver, window))
     }
 

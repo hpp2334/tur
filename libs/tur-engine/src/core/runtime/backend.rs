@@ -13,8 +13,9 @@
 //!   thread (via [`crate::core::thread`]) running a `WorkerBackend`,
 //!   dispatches input via `futures::channel`, and receives [`MainMsg`]
 //!   replies. `MainBackend` owns the main-side [`Renderer`] (passed to
-//!   `TurRuntime::create_app`); it applies each `MainMsg::RenderCommands`
-//!   batch directly to the renderer — no `render_sink` callback.
+//!   `TurRuntime::app_builder().build(...)`); it applies each
+//!   `MainMsg::RenderCommands` batch directly to the renderer — no
+//!   `render_sink` callback.
 //!
 //! ## Async model
 //!
@@ -419,11 +420,11 @@ pub(crate) enum MsgOutcome {
 /// ## Renderer ownership
 ///
 /// `MainBackend` owns the main-side [`Renderer`] — passed to
-/// `TurRuntime::create_app(Box<dyn Renderer>, …)` and stored here, exactly
-/// like `main`'s `create_app(Box::new(renderer), …)`. Both `MainBackend`
-/// and the renderer live on the main thread, so there is no callback
-/// indirection: each `MainMsg::RenderCommands` batch is applied directly
-/// via [`Self::render_batch`] (renderer only). Resize is
+/// `TurRuntime::app_builder().build(Box<dyn Renderer>, …)` and stored here,
+/// exactly like `main`'s `app_builder().build(Box::new(renderer), …)`. Both
+/// `MainBackend` and the renderer live on the main thread, so there is no
+/// callback indirection: each `MainMsg::RenderCommands` batch is applied
+/// directly via [`Self::render_batch`] (renderer only). Resize is
 /// driven by the embedder at event-receipt time via
 /// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
 /// / JNI), which calls [`Self::resize`] directly and forwards
@@ -454,7 +455,8 @@ pub struct MainBackend {
     worker_notify: Rc<dyn Fn()>,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
     /// cursor state change; `apply_msg` applies it directly here. Set via
-    /// `set_cursor_backend` (called by embedder after `create_app`).
+    /// `set_cursor_backend` (called by embedder after
+    /// `app_builder().build(...)`).
     cursor_backend: RefCell<Option<Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>>>,
     /// Embedder-installed handler fired from `apply_msg` whenever the
     /// worker ships a deduped `MainMsg::FocusedStateChanged`. The engine
@@ -506,9 +508,9 @@ impl MainBackend {
 
         // One-shot init signal: worker fires after `backend_factory()` (which
         // runs `plugin.register` + capability replay) completes. Native main
-        // blocks on this so `create_app` returning guarantees the worker's
-        // plugin-level side effects are observable. On wasm the main thread
-        // cannot block — embedders must await an RPC instead.
+        // blocks on this so `app_builder().build(...)` returning guarantees the
+        // worker's plugin-level side effects are observable. On wasm the main
+        // thread cannot block — embedders must await an RPC instead.
         #[cfg(not(target_arch = "wasm32"))]
         let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
 

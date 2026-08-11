@@ -168,7 +168,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &AsyncPluginContext| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal main-thread channel) and receives an `AsyncPluginContext` — the engine's main-thread hop. Backends that need to run OS-API calls on main (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_main(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance (set via `TurApp::set_cursor_backend` after `create_app`, since it targets a specific surface):
+Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &AsyncPluginContext| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal main-thread channel) and receives an `AsyncPluginContext` — the engine's main-thread hop. Backends that need to run OS-API calls on main (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_main(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance (set via `TurApp::set_cursor_backend` after `app_builder().build(...)`, since it targets a specific surface):
 
 ```rust
 let runtime = TurRuntime::builder()
@@ -187,11 +187,17 @@ let runtime = TurRuntime::builder()
     .build()?;                                    // Rc<TurRuntime>
 
 // Spawn isolated instances (each its own JS realm + renderer):
-let app = runtime.create_app(Box::new(renderer), (800.0, 600.0), 2.0)?;
+let app = runtime
+    .app_builder()
+    // Optional: stamp per-instance metadata readable by bridge fns via
+    // `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`. Each type may
+    // be stamped at most once per builder (same-type double-stamp panics).
+    //   .instance_data(PluginId("com.example.foo".into()))
+    .build(Box::new(renderer), (800.0, 600.0), 2.0)?;
 app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
 
 // Or a headless instance (no rendering):
-let headless = runtime.create_headless_app((0.0, 0.0))?;
+let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
@@ -214,6 +220,18 @@ let headless = runtime.create_headless_app((0.0, 0.0))?;
 - `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
   time (bridge fns) or event dispatch time (subsystems via
   `SubsystemFlushContext.capabilities`).
+- **Per-instance data** (`TurAppBuilder::instance_data::<T>(value)` →
+  `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`) — typed metadata the
+  host stamps at instance creation and bridge fns / `register` /
+  subsystem-flush contexts read from `TurJsContext`. Carries secure,
+  JS-unforgeable identity (e.g. a host `PluginId` so a `storage.get(key)`
+  bridge can resolve the calling plugin without trusting JS args). Mirrors
+  the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>`
+  inside `TurJsContext`, shared across every cheap clone. The builder panics
+  eagerly on same-type double-stamp; distinct types coexist. `T: Any + Send +
+  'static` (the value crosses the main→worker thread boundary once at
+  construction). `data::<T>()` returns `Option<T>` (requires `T: Clone`),
+  `with_data::<T, _>(f)` is the no-`Clone`-bound ref-callback path.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
   `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
@@ -231,13 +249,13 @@ The engine has a **one runtime, many instances** architecture:
   `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
   registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
 - **`TurApp`** — an isolated instance spawned from a runtime via
-  `runtime.create_app(renderer, viewport, dpr)` (rendering, attached to a
-  surface) or `runtime.create_headless_app(viewport)` (no rendering — JS +
-  capabilities + events only, backed by `NoopRenderer`). Each instance gets its
-  own boa `Context` (JS realm), element tree, reactive store, focus manager,
-  event queues, subsystems, screen, and scheduler (per-instance vsync drivers —
-  e.g. Android instances install their own JNI `FrameLoop`-bound scheduler via
-  `TurApp::set_main_scheduler`). Plugins are re-registered
+  `runtime.app_builder().build(renderer, viewport, dpr)` (rendering, attached to
+  a surface) or `runtime.app_builder().build_headless(viewport)` (no rendering —
+  JS + capabilities + events only, backed by `NoopRenderer`). Each instance
+  gets its own boa `Context` (JS realm), element tree, reactive store, focus
+  manager, event queues, subsystems, screen, and scheduler (per-instance vsync
+  drivers — e.g. Android instances install their own JNI `FrameLoop`-bound
+  scheduler via `TurApp::set_main_scheduler`). Plugins are re-registered
   into each instance's fresh realm (the same plugin objects — `register` takes
   `&self`, so no factory needed).
 
@@ -245,9 +263,12 @@ The `Plugin` trait has two phases: `compile` (called once on the runtime —
 pre-validate/cache) and `register` (called per instance — into the fresh boa
 `Context`). boa `Module`s are realm-bound, so the actual JS parse happens per
 instance in `register`; `compile` is the seam for future caching + fail-fast
-validation. The renderer is **not** on the runtime builder — it's passed to
-`create_app` (one per surface). The cursor backend is per-instance (set via
+validation. The renderer is **not** on the runtime builder — it's the
+mandatory argument to the builder's `build(...)` terminal (one renderer per
+surface). The cursor backend is per-instance (set via
 `TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
+Per-instance metadata is optional (chain `.instance_data::<T>(value)` before
+the terminal — see the capability-registry section above).
 
 Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
 `WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +

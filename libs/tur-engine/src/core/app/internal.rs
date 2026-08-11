@@ -8,6 +8,7 @@ use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, Tur
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurJsContext;
 use crate::core::render::RenderCommand;
+use crate::core::runtime::InstanceDataInsert;
 use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
 
@@ -118,6 +119,7 @@ impl TurAppInternal {
         worker_sched: WorkerScheduler,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
         main_tx: crate::core::app::MainTx,
+        data_inserts: Vec<InstanceDataInsert>,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
@@ -185,6 +187,20 @@ impl TurAppInternal {
             wake_worker.clone(),
             capabilities,
         );
+
+        // Replay the host's per-instance `instance_data::<T>(...)` stamps
+        // into the fresh `instance_data` map BEFORE any plugin's `register`
+        // runs. Plugins and bridge fns see the stamped values from the very
+        // first call. Each `data_inserts` closure carries a `TypeId`-keyed
+        // value; the builder already panicked on same-type double-stamps,
+        // so collisions here would be a bug (silent last-wins, mirroring
+        // `Capabilities::insert`).
+        if !data_inserts.is_empty() {
+            let mut data_map = js_context.instance_data.borrow_mut();
+            for insert_fn in data_inserts {
+                insert_fn(&mut data_map);
+            }
+        }
 
         // Share the capability registry between the JS context (bridge fns)
         // and the app context (subsystems via SubsystemFlushContext). Both hold the

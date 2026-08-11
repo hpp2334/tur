@@ -454,7 +454,9 @@ impl TurTestApp {
         }
         let runtime = builder.build()?;
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
-        let inner = runtime.create_app(renderer, (width, height), 1.0)?;
+        let inner = runtime
+            .app_builder()
+            .build(renderer, (width, height), 1.0)?;
         // Drive the production `run_loop` (the same loop wasm/Android drive).
         // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
         // `drive_one_frame` pairs one `fire_vsync` with one awaited outcome.
@@ -475,8 +477,8 @@ impl TurTestApp {
             synthetic_time_ms: 1_700_000_000_000,
         };
         // Bootstrap: the worker self-paints on load (the initial resize the
-        // engine pushes in `create_app`); drive one frame so the app is
-        // mounted before the test starts.
+        // engine pushes in `app_builder().build(...)`); drive one frame so
+        // the app is mounted before the test starts.
         let _ = app.drive_one_frame();
         Ok(app)
     }

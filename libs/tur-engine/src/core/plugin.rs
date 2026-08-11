@@ -38,12 +38,13 @@ use crate::error::TurError;
 ///    caching descriptor tables, etc. Defaults to a no-op.
 ///
 /// 2. [`register`](Plugin::register) — called **once per instance** (per
-///    [`TurRuntime::create_app`](crate::TurRuntime::create_app)) into that
-///    instance's fresh boa `Context`. Because `register` takes `&self`, the
-///    **same** plugin object is reused across every instance — no factory
-///    needed. Stateful per-instance artifacts (subsystems, handles) are created
-///    fresh inside `register` and pushed into the per-instance
-///    [`PluginContext`].
+///    [`TurRuntime::app_builder`](crate::TurRuntime::app_builder) +
+///    [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build))
+///    into that instance's fresh boa `Context`. Because `register` takes
+///    `&self`, the **same** plugin object is reused across every instance —
+///    no factory needed. Stateful per-instance artifacts (subsystems,
+///    handles) are created fresh inside `register` and pushed into the
+///    per-instance [`PluginContext`].
 ///
 /// Plugins declare hard-required capabilities via
 /// [`requires`](Plugin::requires); the runtime validates every declaration
@@ -86,9 +87,9 @@ pub trait Plugin: Send + Sync {
     }
 
     /// Per-instance registration. Called once per
-    /// [`TurRuntime::create_app`](crate::TurRuntime::create_app) into a fresh
-    /// boa `Context`. Register modules, handlers, classes, globals via
-    /// `ctx.register_*()`.
+    /// [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build)
+    /// into a fresh boa `Context`. Register modules, handlers, classes,
+    /// globals via `ctx.register_*()`.
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError>;
 }
 
