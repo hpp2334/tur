@@ -129,10 +129,13 @@ fn build_app(
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)));
     let runtime = configure(builder).build()?;
-    let app = runtime.create_app(
-        Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
-        (400.0, 600.0),
-        1.0,
-    )?;
+    let app = runtime
+        .app_builder()
+        .renderer(
+            Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
+            (400.0, 600.0),
+            1.0,
+        )
+        .build()?;
     Ok(app)
 }

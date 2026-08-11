@@ -14,9 +14,9 @@ use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
 use tur_engine::renderer::NoopRenderer;
+use tur_integration_tests::MutexFixedClock;
 use tur_integration_tests::RawAppLooper;
 use tur_integration_tests::TestSchedulerDriver;
-use tur_integration_tests::MutexFixedClock;
 use tur_native::NativeFontLoader;
 
 /// Eval a JS script on a `TurApp` and return the result as a string.
@@ -53,10 +53,14 @@ const SET_ID_JS: &str = r#"
 fn instances_have_isolated_js_realms() {
     let (runtime, _driver) = build_runtime();
     let app_a = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app A");
     let app_b = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app B");
 
     // Load different state into each instance.
@@ -81,10 +85,14 @@ fn instances_have_isolated_js_realms() {
 fn instances_have_isolated_element_trees() {
     let (runtime, driver) = build_runtime();
     let app_a = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app A");
     let app_b = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("app B");
     let looper_a = RawAppLooper::new(app_a.clone(), driver.clone());
 
@@ -111,7 +119,9 @@ fn instances_have_isolated_element_trees() {
 fn headless_instance_runs_js_without_rendering() {
     let (runtime, driver) = build_runtime();
     let app = runtime
-        .create_app(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
+        .build()
         .expect("headless");
     let looper = RawAppLooper::new(app.clone(), driver);
 
@@ -131,17 +141,18 @@ fn headless_instance_runs_js_without_rendering() {
     assert_eq!(val, "42", "headless instance ran JS");
 }
 
-/// `TurRuntime::create_headless_app` is the dedicated headless entry point
+/// `TurAppBuilder::build_headless` is the dedicated headless entry point
 /// (no render target). Unlike the pre-threading inline headless path, it
 /// must run the engine on a worker — i.e. JS execution round-trips through
 /// the worker pipeline (load_module / pump / eval_js are all RPCs that
 /// cross main↔worker). This test pins both the API surface and that the
 /// worker is actually driving the instance.
 #[test]
-fn create_headless_app_runs_engine_on_worker() {
+fn build_headless_runs_engine_on_worker() {
     let (runtime, driver) = build_runtime();
     let app = runtime
-        .create_headless_app((0.0, 0.0))
+        .app_builder()
+        .build_headless((0.0, 0.0))
         .expect("headless_app");
     let looper = RawAppLooper::new(app.clone(), driver);
 
@@ -157,7 +168,7 @@ fn create_headless_app_runs_engine_on_worker() {
     looper.wait_for_timeout(Duration::ZERO);
 
     let val = eval_js(&app, "globalThis.__readBack").expect("eval");
-    assert_eq!(val, "7", "create_headless_app ran JS on the worker");
+    assert_eq!(val, "7", "build_headless ran JS on the worker");
 }
 
 #[test]
@@ -168,7 +179,9 @@ fn many_instances_share_one_runtime() {
     let mut apps = Vec::new();
     for i in 0..5 {
         let app = runtime
-            .create_app(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+            .app_builder()
+            .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
+            .build()
             .expect("app");
         futures::executor::block_on(
             app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str()),
@@ -260,7 +273,9 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     // Spawn 3 instances — register fires once each, compile stays at 1.
     for _ in 0..3 {
         runtime
-            .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+            .app_builder()
+            .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+            .build()
             .expect("app");
     }
     assert_eq!(
@@ -299,11 +314,15 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     // Each spawned instance's `register` bumps the SAME shared cap — so after
     // N instances the cap reflects N bumps, proving they all see one backend.
     runtime
-        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
         .expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
     runtime
-        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
         .expect("B");
     assert_eq!(
         cap.get(),
@@ -311,7 +330,9 @@ fn shared_capability_backend_is_visible_from_all_instances() {
         "instance B's register saw the same shared cap"
     );
     runtime
-        .create_app(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
+        .build()
         .expect("C");
     assert_eq!(
         cap.get(),
@@ -326,10 +347,14 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 fn platform_events_route_to_the_correct_instance() {
     let (runtime, driver) = build_runtime();
     let app_a = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("A");
     let app_b = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("B");
     let looper_a = RawAppLooper::new(app_a.clone(), driver.clone());
     let looper_b = RawAppLooper::new(app_b.clone(), driver);
@@ -371,10 +396,14 @@ fn platform_events_route_to_the_correct_instance() {
 fn reactive_stores_are_isolated_per_instance() {
     let (runtime, _driver) = build_runtime();
     let app_a = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("A");
     let app_b = runtime
-        .create_app(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .app_builder()
+        .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
+        .build()
         .expect("B");
 
     // Create a source in A and set a value.

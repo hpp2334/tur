@@ -15,6 +15,7 @@ mod focus_cache;
 mod grid;
 mod host_module_check;
 mod image;
+mod instance_data;
 mod lazy_grid;
 mod lazy_list;
 mod multi_instance;

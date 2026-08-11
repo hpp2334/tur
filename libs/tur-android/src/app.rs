@@ -174,8 +174,8 @@ mod imp {
         /// element state into Kotlin so the per-frame IME sync can read it
         /// without a JNI round-trip), and stash the autonomous `run_loop`
         /// future for poll-per-`pump` driving. Arms the first vsync so the
-        /// bootstrap `FrameOutcome` (from `create_app`'s initial resize)
-        /// kicks the loop off.
+        /// bootstrap `FrameOutcome` (from `app_builder().build(...)`'s
+        /// initial resize) kicks the loop off.
         fn install_frame_loop(
             app: &Rc<TurApp>,
             frame_loop: FrameLoopRef,
@@ -299,11 +299,14 @@ mod imp {
             // Engine on worker; `MainBackend` owns the wgpu renderer on
             // main and drives it directly (render batches, image uploads,
             // resize-on-event) — no render_sink callback.
-            let app = runtime.create_app(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )?;
+            let app = runtime
+                .app_builder()
+                .renderer(
+                    Box::new(renderer),
+                    (logical_width as f64, logical_height as f64),
+                    dpr,
+                )
+                .build()?;
 
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
@@ -323,7 +326,7 @@ mod imp {
             tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
         ) -> Result<Self, TurAndroidError> {
-            let app = runtime.create_app(
+            let app = runtime.app_builder().build(
                 Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
                 (0.0, 0.0),
                 1.0,

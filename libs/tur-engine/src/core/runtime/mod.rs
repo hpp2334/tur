@@ -1,3 +1,5 @@
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -53,7 +55,8 @@ impl Clock for ClockProxy {
 
 /// Deferred capability-insert closure (the per-worker replay). Built by a
 /// [`CapabilityBuilder`] (which receives the [`AsyncPluginContext`]) and
-/// stored on the runtime; each worker spawned from `create_app` replays its
+/// stored on the runtime; each worker spawned from
+/// [`app_builder`](TurRuntime::app_builder) replays its
 /// closures into its own fresh `Capabilities`. The closure is `Fn` (not
 /// `FnOnce`) + `Send + Sync` so it can be stored on the runtime and replayed
 /// into every worker. Each call inserts a clone of the captured capability
@@ -70,6 +73,14 @@ type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 type CapabilityBuilder =
     Box<dyn FnOnce(&AsyncPluginContext) -> Result<CapabilityInsert, TurError> + Send + Sync>;
 
+/// Deferred per-instance data-insert closure. Captures a value stamped on a
+/// [`TurAppBuilder`] via [`TurAppBuilder::instance_data`] and runs **once per
+/// instance** on the worker thread inside `build_worker_backend` to populate
+/// that instance's [`TurJsContext::instance_data`](crate::core::js_runtime::TurJsContext::instance_data)
+/// map — before any plugin's `register` runs. `FnOnce` + `Send` so it can
+/// cross the main→worker thread boundary once at instance construction.
+pub(crate) type InstanceDataInsert = Box<dyn FnOnce(&mut HashMap<TypeId, Box<dyn Any>>) + Send>;
+
 /// The shared engine runtime — created **once** and used to spawn any number
 /// of isolated [`TurApp`] instances.
 ///
@@ -83,9 +94,7 @@ type CapabilityBuilder =
 /// - the registered plugins (their `register` takes `&self`, so the same
 ///   plugin objects register into every instance's fresh boa `Context`).
 ///
-/// Spawn instances via [`TurRuntime::create_app`] (rendering, attached to a
-/// surface — embedders pass a `Box<dyn Renderer>`; headless instances pass
-/// `Box::new(NoopRenderer::new())`).
+/// Spawn instances via [`TurRuntime::app_builder`] (rendering or headless).
 ///
 /// ```no_run
 ///
@@ -102,8 +111,14 @@ type CapabilityBuilder =
 ///
 /// // Two isolated instances sharing fonts/clock/capabilities/plugins.
 /// // Each owns its renderer (created by the embedder; no render_sink):
-/// let app_a = runtime.create_app(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)?;
-/// let app_b = runtime.create_app(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)?;
+/// let app_a = runtime
+///     .app_builder()
+///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .build()?;
+/// let app_b = runtime
+///     .app_builder()
+///     .renderer(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)
+///     .build()?;
 /// # Ok(())
 /// # }
 /// ```
@@ -113,14 +128,15 @@ pub struct TurRuntime {
     font_loader: Arc<dyn FontLoader>,
     capabilities: Capabilities,
     /// Re-playable capability inserts. Each worker spawned from
-    /// [`Self::create_app`] replays these closures into its own fresh
-    /// `Capabilities` (the runtime's `Capabilities` uses `Rc<RefCell<…>>`
-    /// — `!Send`, can't cross threads directly; the closures capture
-    /// clonable capability newtypes and re-insert on the worker).
+    /// [`app_builder`](TurRuntime::app_builder) replays these closures into
+    /// its own fresh `Capabilities` (the runtime's `Capabilities` uses
+    /// `Rc<RefCell<…>>` — `!Send`, can't cross threads directly; the
+    /// closures capture clonable capability newtypes and re-insert on the
+    /// worker).
     capability_inserts: Arc<Vec<CapabilityInsert>>,
     /// `Arc` so a threaded factory closure can cheaply clone the plugin
     /// list and re-register every plugin on the worker thread (Phase 8
-    /// `create_app_threaded`). Each `Box<dyn Plugin>` is `Send + Sync`
+    /// threaded mode). Each `Box<dyn Plugin>` is `Send + Sync`
     /// (Phase 7 prep), and `register` takes `&self`, so the same plugin
     /// objects work for both inline and threaded instances.
     plugins: Arc<Vec<Box<dyn Plugin>>>,
@@ -146,13 +162,18 @@ impl TurRuntime {
         &self.capabilities
     }
 
-    /// Create an isolated [`TurApp`] instance. The engine runs on a
-    /// worker thread (via [`MainBackend`]); the renderer lives on the main
-    /// thread and is owned by `MainBackend` (passed in here — no
-    /// `render_sink` callback). `MainBackend` applies each
-    /// `Vec<RenderCommand>` batch directly to the renderer, uploads new
-    /// image resources incrementally, and calls `renderer.resize(...)` on
-    /// viewport-change events only.
+    /// Begin building an isolated [`TurApp`] instance. Chain
+    /// [`TurAppBuilder::instance_data`] to stamp per-instance metadata
+    /// (e.g. a host `PluginId`), then terminate with
+    /// [`TurAppBuilder::build`] (rendering) or
+    /// [`TurAppBuilder::build_headless`] (no renderer).
+    ///
+    /// The engine runs on a worker thread (via [`MainBackend`]); the
+    /// renderer lives on the main thread and is owned by `MainBackend`
+    /// (passed to `build`). `MainBackend` applies each `Vec<RenderCommand>`
+    /// batch directly to the renderer, uploads new image resources
+    /// incrementally, and calls `renderer.resize(...)` on viewport-change
+    /// events only.
     ///
     /// The instance gets its own boa `Context` (JS realm), element tree,
     /// reactive store, focus manager, event queues, subsystems, screen and
@@ -160,20 +181,32 @@ impl TurRuntime {
     /// capability backends are shared from this runtime. Plugins are
     /// re-registered into the instance's fresh realm.
     ///
-    /// `viewport` is the initial logical `(width, height)` of the render
-    /// target; `dpr` is the device pixel ratio.
-    ///
     /// **Capabilities are NOT shared with the worker** — the runtime's
     /// `Capabilities` is `Rc<RefCell<…>>` (`!Send`). The threaded factory
     /// constructs a fresh, empty `Capabilities` on the worker; embedders
     /// that need capabilities (Clipboard/Http/FilePicker/Cursor) should
     /// construct them inside a custom factory via the lower-level
     /// [`build_worker_backend`] helper.
-    pub fn create_app(
+    pub fn app_builder(self: &Rc<Self>) -> TurAppBuilder<'_> {
+        TurAppBuilder {
+            runtime: self,
+            data_inserts: Vec::new(),
+            renderer: None,
+            viewport: None,
+            dpr: None,
+        }
+    }
+
+    /// Internal: build an instance from already-resolved config. Called by
+    /// both [`TurAppBuilder::build`] (rendering) and
+    /// [`TurAppBuilder::build_headless`] (the latter passes a
+    /// [`NoopRenderer`](crate::renderer::NoopRenderer)).
+    fn spawn_instance(
         self: &Rc<Self>,
         renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
+        data_inserts: Vec<InstanceDataInsert>,
     ) -> Result<Rc<TurApp>, TurError> {
         let clock = self.clock.clone();
         let font_context = self.font_context.clone();
@@ -200,6 +233,7 @@ impl TurRuntime {
                 wake_worker,
                 main_tx,
                 main_cx.clone(),
+                data_inserts,
             )
             .expect("threaded backend factory failed")
         };
@@ -212,39 +246,165 @@ impl TurRuntime {
         app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok(app)
     }
+}
 
-    /// Create an isolated headless [`TurApp`] instance — no render target,
-    /// no rendering. The instance still runs JS, owns a reactive store,
-    /// accepts platform events if fed any, and can use capabilities (http,
-    /// clipboard, etc.).
+/// Builder for an isolated [`TurApp`] instance, started via
+/// [`TurRuntime::app_builder`]. Chain [`Self::instance_data`] to stamp
+/// per-instance metadata (typed values the host wants bridge fns /
+/// subsystems to read via [`TurJsContext::data`](crate::core::js_runtime::TurJsContext::data)
+/// / [`with_data`](crate::core::js_runtime::TurJsContext::with_data)),
+/// then configure the surface and terminate with [`Self::build`]
+/// (rendering — requires [`Self::renderer`]) or [`Self::build_headless`]
+/// (no renderer).
+///
+/// ```no_run
+/// # use tur_engine::*;
+/// # use tur_engine::renderer::noop::NoopRenderer;
+/// # use std::rc::Rc;
+/// # struct PluginId(String);
+/// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
+/// // Stamp the calling plugin's identity so bridge fns can resolve it
+/// // securely (never from JS args), then build with a real renderer:
+/// let app = runtime
+///     .app_builder()
+///     .instance_data(PluginId("com.ease.onedrive".into()))
+///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .build()?;
+/// # Ok(())
+/// # }
+/// /// ```
+pub struct TurAppBuilder<'rt> {
+    runtime: &'rt Rc<TurRuntime>,
+    /// `(TypeId, replay-closure)` pairs. The `TypeId` is stored eagerly so
+    /// duplicate stamps of the same type panic at the
+    /// [`Self::instance_data`] call site (rather than being silently
+    /// overwritten at replay time inside the worker).
+    data_inserts: Vec<(TypeId, InstanceDataInsert)>,
+    /// Rendering surface: renderer + viewport + dpr grouped together (a
+    /// non-headless app supplies all three at once via [`Self::renderer`]).
+    /// `None` until [`Self::renderer`] is called; [`Self::build`] requires
+    /// `Some`.
+    renderer: Option<Box<dyn crate::core::render::Renderer>>,
+    viewport: Option<(f64, f64)>,
+    dpr: Option<f64>,
+}
+
+impl<'rt> TurAppBuilder<'rt> {
+    /// Stamp a typed value onto this instance. Read it back from bridge fns
+    /// via
+    /// [`TurJsContext::data::<T>()`](crate::core::js_runtime::TurJsContext::data)
+    /// (clone-out) or
+    /// [`TurJsContext::with_data::<T, _>(f)`](crate::core::js_runtime::TurJsContext::with_data)
+    /// (ref-callback). Never accessible to JS.
     ///
-    /// Like [`create_app`](Self::create_app), the engine runs on a worker
-    /// thread (via [`MainBackend`]) — headless is **not** an inline
-    /// short-circuit. JS execution, frame flushes, and every
-    /// `async` RPC (`load_module` / `eval_js` / `pump` / …) round-trip
-    /// through the same main↔worker channel as a rendering instance; the
-    /// only difference is the main-side [`Renderer`] is a
-    /// [`NoopRenderer`](crate::renderer::NoopRenderer), so paint batches
-    /// are discarded.
+    /// `T` must be `Any + Send + 'static` — the value crosses the
+    /// main→worker thread boundary once at instance construction (it is
+    /// replayed into the worker's
+    /// [`TurJsContext::instance_data`](crate::core::js_runtime::TurJsContext::instance_data)
+    /// map before any plugin's `register` runs, so plugins and bridge fns
+    /// see it from the very first call).
+    ///
+    /// **Panics** if `instance_data::<T>(...)` is called twice with the
+    /// same `T` on one builder — each type may be stamped at most once per
+    /// instance. Stamp distinct types if you need to carry multiple values.
+    pub fn instance_data<T: Any + Send + 'static>(mut self, value: T) -> Self {
+        let key = TypeId::of::<T>();
+        if self.data_inserts.iter().any(|(k, _)| *k == key) {
+            panic!(
+                "instance_data::<{}>() called twice on the same TurAppBuilder; \
+                 each type may only be stamped once per instance",
+                std::any::type_name::<T>()
+            );
+        }
+        self.data_inserts.push((
+            key,
+            Box::new(move |m| {
+                m.insert(key, Box::new(value));
+            }),
+        ));
+        self
+    }
+
+    /// Group the rendering surface — renderer, viewport, dpr — onto this
+    /// builder. A non-headless app must supply all three together; the
+    /// terminal [`Self::build`] then takes no arguments. `MainBackend`
+    /// owns the renderer on main and drives it directly (render batches,
+    /// image uploads, resize-on-event) — no `render_sink` callback.
+    ///
+    /// `viewport` is the initial logical `(width, height)` of the render
+    /// target; `dpr` is the device pixel ratio. The engine pushes the
+    /// initial `PlatformEvent::Resize` into the worker so `viewportSize$`
+    /// + the main-side renderer are seeded before frame 1.
+    pub fn renderer(
+        mut self,
+        renderer: Box<dyn crate::core::render::Renderer>,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Self {
+        self.renderer = Some(renderer);
+        self.viewport = Some(viewport);
+        self.dpr = Some(dpr);
+        self
+    }
+
+    /// Terminal: build the instance. Requires [`Self::renderer`] to have
+    /// been called (a non-headless app supplies renderer + viewport + dpr
+    /// together). Errors with a clear message otherwise.
+    pub fn build(self) -> Result<Rc<TurApp>, TurError> {
+        let TurAppBuilder {
+            runtime,
+            data_inserts,
+            renderer,
+            viewport,
+            dpr,
+        } = self;
+        let renderer = renderer.ok_or_else(|| {
+            TurError::Other(
+                "TurAppBuilder::build() requires `.renderer(renderer, viewport, dpr)` \
+                 to have been called; for a headless build use `.build_headless(viewport)` \
+                 instead"
+                    .to_string(),
+            )
+        })?;
+        let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
+        let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
+        // Drop the TypeId keys (used only for eager dedup at the call site).
+        let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
+        runtime.spawn_instance(renderer, viewport, dpr, inserts)
+    }
+
+    /// Terminal: build a headless instance (no renderer, no rendering).
+    /// The instance still runs JS, owns a reactive store, accepts platform
+    /// events if fed any, and can use capabilities (http, clipboard, etc.).
+    /// The engine runs on a worker thread (via [`MainBackend`]) — JS
+    /// execution, frame flushes, and every `async` RPC round-trip through
+    /// the same main↔worker channel as a rendering instance; the only
+    /// difference is the main-side [`Renderer`](crate::core::render::Renderer)
+    /// is a [`NoopRenderer`](crate::renderer::NoopRenderer), so paint
+    /// batches are discarded.
     ///
     /// `viewport` sets the initial `viewportSize$` (read by JS layout);
     /// pass `(0.0, 0.0)` if layout is irrelevant.
-    pub fn create_headless_app(
-        self: &Rc<Self>,
-        viewport: (f64, f64),
-    ) -> Result<Rc<TurApp>, TurError> {
-        self.create_app(
+    pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
+        let TurAppBuilder {
+            runtime,
+            data_inserts,
+            ..
+        } = self;
+        let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
+        runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
             viewport,
             1.0,
+            inserts,
         )
     }
 }
 
 /// Construct a [`WorkerBackend`] from individual engine pieces. Used by
-/// [`TurRuntime::create_app`] (via a factory closure that runs on the
-/// worker thread) and by embedders that need to construct the worker
-/// backend with a custom pre-populated `Capabilities` (e.g. for
+/// [`TurAppBuilder::build`] (via a factory closure that runs on the worker
+/// thread) and by embedders that need to construct the worker backend with
+/// a custom pre-populated `Capabilities` (e.g. for
 /// Clipboard/Http/FilePicker).
 ///
 /// The function itself is callable from any thread — the caller is
@@ -263,6 +423,7 @@ pub(crate) fn build_worker_backend(
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
     async_cx: AsyncPluginContext,
+    data_inserts: Vec<InstanceDataInsert>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -282,6 +443,7 @@ pub(crate) fn build_worker_backend(
         worker_sched,
         wake_worker,
         main_tx,
+        data_inserts,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
@@ -434,7 +596,9 @@ impl TurRuntimeBuilder {
     /// to every instance spawned from this runtime. Capabilities are
     /// constructed once in [`build`](Self::build) (after the engine creates
     /// its main-thread channel) and replayed into each worker's fresh
-    /// `Capabilities` during [`create_app`](TurRuntime::create_app).
+    /// `Capabilities` during
+    /// [`app_builder`](TurRuntime::app_builder) →
+    /// [`TurAppBuilder::build`](TurAppBuilder::build).
     ///
     /// The closure receives an [`AsyncPluginContext`] clone — the engine's
     /// main-thread hop. Backends that need to run OS-API calls on the main
@@ -538,7 +702,7 @@ impl TurRuntimeBuilder {
         // run cleanly + populates the runtime's Capabilities for
         // compile-time `requires` validation). The closures are retained
         // on the runtime (`capability_inserts`) and replayed again into
-        // every worker's fresh `Capabilities` from `create_app`.
+        // every worker's fresh `Capabilities` from `app_builder().build(...)`.
         for insert_fn in &capability_inserts {
             insert_fn(&capabilities);
         }

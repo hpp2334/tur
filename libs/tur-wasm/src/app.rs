@@ -105,7 +105,8 @@ pub struct WasmRuntimeConfig {
 /// The shared wasm runtime — created once via [`WasmRuntime::create`]. Owns the
 /// [`tur_engine::TurRuntime`] (fonts, clock, capabilities, plugins). Spawn
 /// isolated instances (each with its own canvas/DOM or headless) via
-/// [`WasmRuntime::create_app`] / [`WasmRuntime::create_headless_app`].
+/// [`WasmApp::create`] (which internally calls
+/// [`TurRuntime::app_builder`](tur_engine::TurRuntime::app_builder)).
 pub struct WasmRuntime {
     runtime: Rc<tur_engine::TurRuntime>,
 }
@@ -214,7 +215,7 @@ fn normalize_mouse_button(
 impl WasmApp {
     /// Build a DOM-wired wasm tur app instance from a [`WasmRuntime`]: create
     /// the canvas (+ wrapper / hidden textarea), wire all DOM event listeners,
-    /// spawn an isolated instance via `runtime.create_app(renderer, …)`,
+    /// spawn an isolated instance via `runtime.app_builder().build(renderer, …)`,
     /// register the after-frame hook, and start the autonomous rAF loop.
     /// Resolves to the owning handle.
     pub async fn create(runtime: &WasmRuntime, cfg: WasmAppConfig) -> Result<Self, JsValue> {
@@ -412,15 +413,17 @@ impl WasmApp {
         // Spawn an isolated engine instance. The engine runs on a worker
         // thread; `MainBackend` owns the WebGL renderer on main and drives
         // it directly (render batches, image uploads, resize-on-event) —
-        // no render_sink callback. `create_app` pushes the initial Resize
+        // no render_sink callback. `build` pushes the initial Resize
         // internally.
         let app = runtime
             .runtime
-            .create_app(
+            .app_builder()
+            .renderer(
                 Box::new(renderer),
                 (logical_width as f64, logical_height as f64),
                 dpr,
             )
+            .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
         // The cursor backend is per-instance (it targets this canvas's DOM
@@ -1020,8 +1023,8 @@ impl WasmApp {
         app.set_focus_changed_handler(Some(focus_changed));
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
-        // loop bootstraps automatically: `create_app` pushed an initial
-        // resize → worker pumps → FrameOutcome arrives → main requests
+        // loop bootstraps automatically: `app_builder().build(...)` pushed
+        // an initial resize → worker pumps → FrameOutcome arrives → main requests
         // the next vsync. No manual kick needed.
         let app_clone = app.clone();
         wasm_bindgen_futures::spawn_local(app_clone.run_loop());

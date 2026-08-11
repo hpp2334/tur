@@ -24,10 +24,13 @@ pub use crate::builtin_plugins::TurStdPlugin;
 pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
-// `runtime.create_app(Box<dyn Renderer>, viewport, dpr)` spawns an isolated
+// `runtime.app_builder().build(renderer, viewport, dpr)` spawns an isolated
 // `TurApp` instance (engine on a worker thread; `MainBackend` owns the
-// renderer on main and drives it directly — no render_sink callback).
-pub use crate::core::runtime::{MainBackend, TurRuntime, TurRuntimeBuilder};
+// renderer on main and drives it directly — no render_sink callback). Chain
+// `.instance_data::<T>(value)` before the terminal `build` / `build_headless`
+// to stamp per-instance metadata that bridge fns read via
+// `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`.
+pub use crate::core::runtime::{MainBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type
 // without reaching into `core::plugin`. OS-API backends receive an
@@ -63,12 +66,13 @@ pub struct FocusedState {
 ///
 /// Wraps a [`MainBackend`] that owns a worker thread (running a
 /// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the main-side
-/// renderer (passed to `TurRuntime::create_app`). Main drives the renderer
-/// directly from [`MainBackend`] — no `render_sink` callback. Everything
-/// else (boa `Context`, element tree, reactive store, layout, subsystems)
-/// lives on the worker.
+/// renderer (passed to `TurRuntime::app_builder().build(...)`). Main drives
+/// the renderer directly from [`MainBackend`] — no `render_sink` callback.
+/// Everything else (boa `Context`, element tree, reactive store, layout,
+/// subsystems) lives on the worker.
 ///
-/// Construct via [`TurRuntime::create_app`].
+/// Construct via [`TurRuntime::app_builder`] then
+/// [`TurAppBuilder::build`](core::runtime::TurAppBuilder::build).
 ///
 /// ## Async API
 ///
@@ -107,8 +111,10 @@ pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
     /// Construct a `TurApp` backed by the given [`MainBackend`] + scheduler.
-    /// The runtime calls this from [`TurRuntime::create_app`]; embedders
-    /// normally don't call it directly.
+    /// The runtime calls this from
+    /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
+    /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
+    /// embedders normally don't call it directly.
     pub fn new(backend: MainBackend, main_sched: core::scheduler::MainScheduler) -> Self {
         Self {
             backend,
@@ -121,8 +127,8 @@ impl TurApp {
 
     /// Replace the main-thread scheduler. Used by embedders that need a
     /// per-instance scheduler (e.g. Android, where each instance has its
-    /// own JNI `FrameLoop`). Call after `runtime.create_app(...)` and
-    /// before `run_loop()`.
+    /// own JNI `FrameLoop`). Call after `runtime.app_builder().build(...)`
+    /// and before `run_loop()`.
     pub fn set_main_scheduler(&self, sched: core::scheduler::MainScheduler) {
         *self.main_sched.borrow_mut() = sched;
     }
@@ -227,10 +233,10 @@ impl TurApp {
     ///   quiescence). Side-effects (cursor, focus-change handler, image
     ///   uploads) are applied inside `apply_msg`.
     ///
-    /// The bootstrap is automatic: `create_app` pushes an initial resize
-    /// event to the worker, the worker pumps + ships `FrameOutcome` back,
-    /// and the loop requests the next vsync based on the outcome. No
-    /// initial `request_vsync()` is needed.
+    /// The bootstrap is automatic: `app_builder().build(...)` pushes an
+    /// initial resize event to the worker, the worker pumps + ships
+    /// `FrameOutcome` back, and the loop requests the next vsync based on
+    /// the outcome. No initial `request_vsync()` is needed.
     ///
     /// Concurrency: single-loop serialized. The embedder must spawn this
     /// future exactly once per `TurApp`. Multiple concurrent calls panic.
