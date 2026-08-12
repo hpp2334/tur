@@ -2,7 +2,7 @@
 //! `saveFile` methods, each returning a `Promise`.
 //!
 //! The bridge fns are ctx-bound `Ptr`s that look up the
-//! [`FilePicker`](crate::FilePicker) capability from `TurJsContext`'s
+//! [`FilePicker`](crate::FilePicker) capability from `TurInstanceContext`'s
 //! capability registry (populated by the embedder via
 //! `TurRuntimeBuilder::capability(FilePicker::new(...))`).
 //!

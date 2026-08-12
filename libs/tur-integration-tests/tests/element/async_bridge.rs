@@ -17,7 +17,7 @@
 //! 6. Test asserts the source atom updated.
 //!
 //! Capability lookup: both bridge fns read their `Rc<dyn Clipboard>` /
-//! `Rc<dyn Http>` / `Rc<AsyncExecutor>` from `TurJsContext`'s capability
+//! `Rc<dyn Http>` / `Rc<AsyncExecutor>` from `TurInstanceContext`'s capability
 //! registry (populated by the plugins during `register`). No `unsafe`
 //! closures are involved.
 

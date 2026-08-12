@@ -1,7 +1,7 @@
-//! Worker-side per-instance data slot: `TurJsContext::insert_data::<T>(value)`
+//! Worker-side per-instance data slot: `TurInstanceContext::insert_data::<T>(value)`
 //! stamps typed state from a plugin's `register` (or any later point on the
-//! worker); `TurJsContext::data::<T>()` (clone-out) and
-//! `TurJsContext::with_data::<T, _>(f)` (ref-callback) read it from bridge fns
+//! worker); `TurInstanceContext::data::<T>()` (clone-out) and
+//! `TurInstanceContext::with_data::<T, _>(f)` (ref-callback) read it from bridge fns
 //! or subsystem flush contexts. Never accessible to JS itself — carries
 //! secure, JS-unforgeable identity (e.g. a `PluginId` for the Ease Music
 //! Player plugin system, so a `storage.get(key)` bridge can resolve the
@@ -40,7 +40,7 @@ struct ThemeOverride {
 // ---------- Helpers --------------------------------------------------------
 
 /// Build a runtime carrying std + animation + the supplied extra plugin.
-/// Each test supplies a plugin that interacts with `TurJsContext` at
+/// Each test supplies a plugin that interacts with `TurInstanceContext` at
 /// register-time.
 fn build_runtime(extra: Box<dyn Plugin>) -> Rc<TurRuntime> {
     TurRuntime::builder()
@@ -83,7 +83,7 @@ impl Plugin for StampAndReadPluginId {
 
 /// Stamps `PluginId` via `insert_data`, then reads it back via the
 /// ref-callback accessor (`with_data::<T, _>(f)`). Confirms the callback
-/// path works and does not require `T: Clone` on the `TurJsContext` side.
+/// path works and does not require `T: Clone` on the `TurInstanceContext` side.
 struct StampAndReadViaRef {
     seen: Arc<Mutex<Option<PluginId>>>,
 }
@@ -146,7 +146,7 @@ fn insert_data_round_trip_via_data_clone_out() {
 
 // Same round-trip via the ref-callback accessor (`with_data`). Confirms both
 // read shapes work and that `with_data` does not require `T: Clone` on the
-// `TurJsContext` side.
+// `TurInstanceContext` side.
 #[test]
 fn insert_data_round_trip_via_with_data_ref_callback() {
     let seen = Arc::new(Mutex::new(None));

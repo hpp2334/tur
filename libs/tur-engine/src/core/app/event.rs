@@ -8,7 +8,7 @@
 //!
 //! Paint requests do **not** live here — they set the `need_paint` flag
 //! directly (see
-//! [`TurJsContext::need_paint`](crate::core::js_runtime::TurJsContext)).
+//! [`TurInstanceContext::need_paint`](crate::core::js_runtime::TurInstanceContext)).
 //!
 //! This is also where **derived** scrolling lives: when the gesture arena
 //! resolves a touch drag to scroll it emits [`AppEvent::Scroll`] here (rather

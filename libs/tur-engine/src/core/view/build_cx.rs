@@ -7,7 +7,7 @@ use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::{ReactiveReadStore, Readable};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, FragmentHost, NodeTree};
-use crate::core::js_runtime::TurJsContext;
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::{FromJs, Val};
 
@@ -117,9 +117,9 @@ pub fn read_atom_raw<T>(cx: &dyn ViewCx, readable: Readable<T>, boa: &mut Contex
     cx.store_read_only().read(readable, boa)
 }
 
-/// Borrow the shared handles a controller needs, from a `TurJsContext`.
+/// Borrow the shared handles a controller needs, from a `TurInstanceContext`.
 pub fn controller_handles(
-    js_ctx: &TurJsContext,
+    js_ctx: &TurInstanceContext,
 ) -> (
     NodeTree,
     Rc<RefCell<PendingMutationInvocationQueue>>,

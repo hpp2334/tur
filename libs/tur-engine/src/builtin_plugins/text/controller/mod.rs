@@ -21,7 +21,7 @@ use boa_gc::{Finalize, Trace};
 use crate::core::edgy::mutation::{MutationHandle, extract_mutation_from_opts};
 use crate::core::focus::{BlurEvent, FocusEvent};
 use crate::core::js_runtime::BoaOpaque;
-use crate::core::js_runtime::TurJsContext;
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::js_runtime::TurNodeHandle;
 use crate::core::platform::key_event::{KeydownEvent, KeyupEvent};
 
@@ -714,7 +714,7 @@ impl Class for TextEditingController {
                     .get_or_undefined(0)
                     .as_object()
                     .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
-                let js_ctx = BoaOpaque::<TurJsContext>::wrap(&js_ctx_obj)
+                let js_ctx = BoaOpaque::<TurInstanceContext>::wrap(&js_ctx_obj)
                     .ok_or_else(|| JsNativeError::typ().with_message("expected __ctx"))?;
                 let mut focus = js_ctx.focus_manager.borrow_mut();
                 focus.set_focus(node_id);

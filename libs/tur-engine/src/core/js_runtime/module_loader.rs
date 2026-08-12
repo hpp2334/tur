@@ -94,7 +94,7 @@ impl ModuleLoader for TurModuleLoader {
 ///
 /// Each `(name, length, nf)` in `closures` becomes a *free-form* export: the
 /// `NativeFunction` is registered as-is, with no ctx prepending. Used for
-/// bridge fns that need to capture state that can't live on `TurJsContext`
+/// bridge fns that need to capture state that can't live on `TurInstanceContext`
 /// (e.g. clipboard/http impls from outside tur-engine).
 ///
 /// Each `(name, val)` in `consts` becomes a constant export.

@@ -13,22 +13,22 @@
 //! - [`helpers`] — bridge plumbing: `FnEntry` / `ConstEntry` / `Ptr` type
 //!   aliases, `extract_js_ctx`, `require_props_object`, `wrap_view`,
 //!   `TurNodeHandle`.
-//! - [`js_context`] — `TurJsContext` (the boa `JsData` handle passed as
-//!   `args[0]` to every ctx-first bridge fn).
+//! - [`instance_context`] — `TurInstanceContext` (the boa `JsData` handle
+//!   passed as `args[0]` to every ctx-first bridge fn).
 //! - [`js_props`] — `JsProps` (the prop-reader every element's `from_js` uses).
 //! - [`js_value`] — `FromJs` / `IntoJs` unified value-conversion traits.
 
 pub use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 
 pub mod helpers;
-pub mod js_context;
+pub mod instance_context;
 pub mod js_props;
 pub mod js_value;
 pub mod module_loader;
 pub mod opaque;
 
 pub use helpers::{TurNodeHandle, extract_js_ctx};
-pub use js_context::TurJsContext;
+pub use instance_context::TurInstanceContext;
 pub use js_props::JsProps;
 pub use module_loader::TurModuleLoader;
 pub use opaque::BoaOpaque;

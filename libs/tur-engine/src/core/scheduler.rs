@@ -243,7 +243,7 @@ pub trait WorkerSchedulerDriver: 'static {
 
 /// Worker-thread scheduling view. Concrete struct wrapping a
 /// [`WorkerSchedulerDriver`]. Cheap to clone (inner `Rc`); held by
-/// `TurJsContext`, `SubsystemFlushContext`, `TurAppInternal`, and passed
+/// `TurInstanceContext`, `SubsystemFlushContext`, `TurAppInternal`, and passed
 /// to bridges.
 ///
 /// There is deliberately **no `block_on`**: blocking the calling thread on

@@ -15,7 +15,7 @@
 //! ImageResource}` (pure-data struct with `pub` fields) — which
 //! `Canvas::draw_image` consumes. This plugin produces these structs from
 //! raw bytes / SVG strings via [`decode`]. Decoded images are registered via
-//! `TurJsContext::register_image` (worker keeps sizes only; the pixel `Blob`
+//! `TurInstanceContext::register_image` (worker keeps sizes only; the pixel `Blob`
 //! ships to main via `MainMsg::UploadImage`).
 
 pub mod bridge;

@@ -367,7 +367,7 @@ impl std::fmt::Debug for ReactiveCore {
 }
 
 // ---------------------------------------------------------------------------
-// Store — the composite owner `{ core, graph }`.  Held by `TurJsContext` /
+// Store — the composite owner `{ core, graph }`.  Held by `TurInstanceContext` /
 // `ElementTree` and used by the layout driver for orchestration (invoking
 // pending mutations, building the JS-context object) and for handing out
 // capability faces.  Atom creation is NOT on `Store` — it lives on the

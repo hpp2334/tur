@@ -3,7 +3,7 @@ use boa_engine::{Context, JsValue};
 use crate::core::edgy::reactive::{ReactiveReadStore, Readable, SubscriberId};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, NodeTree};
-use crate::core::js_runtime::TurJsContext;
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::layout::SubscribeCx;
 use crate::core::view::build_cx::controller_handles;
 use crate::core::view::{View, ViewCx};
@@ -14,15 +14,15 @@ use crate::core::view::{View, ViewCx};
 /// The boa `Context` is passed alongside (not stored) so callers can reborrow
 /// freely while holding `&mut SharedViewCx`.
 pub struct SharedViewCx {
-    js_ctx: TurJsContext,
+    js_ctx: TurInstanceContext,
 }
 
 impl SharedViewCx {
-    pub fn new(js_ctx: TurJsContext) -> Self {
+    pub fn new(js_ctx: TurInstanceContext) -> Self {
         SharedViewCx { js_ctx }
     }
 
-    pub fn js_ctx(&self) -> &TurJsContext {
+    pub fn js_ctx(&self) -> &TurInstanceContext {
         &self.js_ctx
     }
 

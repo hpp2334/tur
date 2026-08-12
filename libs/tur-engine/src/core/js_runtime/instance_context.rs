@@ -19,7 +19,7 @@ use crate::core::scheduler::WorkerScheduler;
 
 #[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
-pub struct TurJsContext {
+pub struct TurInstanceContext {
     pub element_tree: NodeTree,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub focus_manager: Rc<RefCell<FocusManager>>,
@@ -89,7 +89,7 @@ pub struct TurJsContext {
     /// declare their hard dependencies via [`Plugin::requires`] so the engine
     /// builder can validate them at `build()` time before any plugin's
     /// `register` runs; lookups are deferred to call/dispatch time via
-    /// [`TurJsContext::capability`].
+    /// [`TurInstanceContext::capability`].
     ///
     /// Sound to keep out of boa's GC trace: the registry is pure Rust state
     /// (a `HashMap<TypeId, Box<dyn Any>>` behind an `Rc<RefCell<…>>`), no
@@ -115,12 +115,12 @@ pub struct TurJsContext {
     ///
     /// Mirrors the `capabilities` field's shape and soundness trade-off:
     /// pure Rust state behind an `Rc<RefCell<…>>`, shared across every
-    /// cheap clone of `TurJsContext` (one per bridge call, per flush, etc.).
+    /// cheap clone of `TurInstanceContext` (one per bridge call, per flush, etc.).
     /// The struct-level `#[boa_gc(unsafe_empty_trace)]` already covers it.
     pub instance_data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>,
 }
 
-impl TurJsContext {
+impl TurInstanceContext {
     #[allow(clippy::too_many_arguments)]
     /// `capabilities` is the shared registry owned by the
     /// [`TurRuntime`](crate::TurRuntime) — every instance spawned from one

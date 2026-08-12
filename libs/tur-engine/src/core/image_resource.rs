@@ -166,7 +166,7 @@ impl fmt::Debug for ImageResourceMap {
 
 impl ImageResourceMap {
     /// Insert an image under the worker-assigned id. Ids are the worker's
-    /// authority (`TurJsContext::register_image` assigns them); main only
+    /// authority (`TurInstanceContext::register_image` assigns them); main only
     /// stores what the worker ships via `MainMsg::UploadImage`.
     pub fn insert_with_id(&mut self, id: ImageResourceId, image: ImageResource) {
         self.resources.insert(id, image);

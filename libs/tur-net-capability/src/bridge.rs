@@ -2,7 +2,7 @@
 //!
 //! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
 //! pointer** (no captures) that reads its `Rc<dyn Http>` + scheduler
-//! primitives from `TurJsContext`. The fn creates a pending `JsPromise`,
+//! primitives from `TurInstanceContext`. The fn creates a pending `JsPromise`,
 //! spawns a future via [`WorkerScheduler::spawn_local`] that calls
 //! `Http::request(opts).await`, and pushes a completion closure that
 //! builds the JS response object and resolves/rejects the promise under
@@ -30,7 +30,7 @@ use futures::StreamExt;
 use futures::stream::LocalBoxStream;
 
 use tur_engine::core::async_::CompletionHandle;
-use tur_engine::core::js_runtime::TurJsContext;
+use tur_engine::core::js_runtime::TurInstanceContext;
 use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 
 /// Shorthand for the boxed byte-chunk stream used by the streaming bridge.
@@ -44,7 +44,7 @@ use crate::{Http, HttpBody, HttpOutcome, RequestOpts, ResponseType};
 /// Bridge function tables entries for `tur:net`.
 ///
 /// Returns `("request", 1, tur_net_request as Ptr)` — a ctx-bound fn pointer
-/// that reads its `Http` + scheduler from `TurJsContext`.
+/// that reads its `Http` + scheduler from `TurInstanceContext`.
 pub fn fns() -> Vec<FnEntry> {
     vec![
         ("request", 1, tur_net_request as Ptr),
@@ -255,7 +255,7 @@ fn resolve_outcome(
 #[boa_gc(unsafe_empty_trace)]
 struct StreamHandle {
     stream: SharedStream,
-    js_ctx: TurJsContext,
+    js_ctx: TurInstanceContext,
     completion_handle: CompletionHandle,
 }
 
@@ -350,7 +350,7 @@ fn build_stream_response(
     status_text: &str,
     headers: &[(String, String)],
     stream: SharedStream,
-    js_ctx: TurJsContext,
+    js_ctx: TurInstanceContext,
     completion_handle: CompletionHandle,
     resolvers: &boa_engine::builtins::promise::ResolvingFunctions,
     ctx: &mut Context,

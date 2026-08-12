@@ -4,7 +4,7 @@
 //! A [`Capability`] is a marker trait implemented by cheaply-clonable newtype
 //! wrappers around `Rc<dyn BackendTrait>` (e.g. `Clipboard(Rc<dyn ClipboardBackend>)`).
 //! Each capability type is stored under its `TypeId` in a shared map held by
-//! [`crate::core::js_runtime::TurJsContext`], and looked up by:
+//! [`crate::core::js_runtime::TurInstanceContext`], and looked up by:
 //!
 //! - **Bridge fns** via `js_ctx.capability().of::<C>()` (at JS call time).
 //! - **Handlers** via `cx.capabilities.of::<C>()` (at event dispatch time).
@@ -42,7 +42,7 @@ pub trait Capability: Any + Clone + 'static {}
 /// Cheaply-cloned view over the type-erased capability registry.
 ///
 /// Cloning a `Capabilities` clones only the inner `Rc` — all clones share the
-/// same backing map. Returned by [`crate::core::js_runtime::TurJsContext::capability`]
+/// same backing map. Returned by [`crate::core::js_runtime::TurInstanceContext::capability`]
 /// and [`crate::core::plugin::PluginContext::capability`]; also held by
 /// [`crate::core::handler::HandlerContext`] so event handlers can look up
 /// capabilities at dispatch time.

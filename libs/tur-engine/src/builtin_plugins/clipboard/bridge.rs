@@ -2,7 +2,7 @@
 //! `writeText` methods, each returning a `Promise`.
 //!
 //! The bridge fns are ctx-bound `Ptr`s that look up the
-//! [`Clipboard`](super::capability::Clipboard) capability from `TurJsContext`'s
+//! [`Clipboard`](super::capability::Clipboard) capability from `TurInstanceContext`'s
 //! capability registry (populated by the embedder via
 //! `TurRuntimeBuilder::capability(Clipboard::new(...))`).
 //!

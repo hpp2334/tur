@@ -6,7 +6,7 @@ use boa_engine::context::time::Clock;
 use crate::core::app::TurAppContext;
 use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
-use crate::core::js_runtime::TurJsContext;
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerScheduler;
 use crate::core::subsystem::Subsystem;
@@ -35,7 +35,7 @@ pub struct FrameOutcome {
 }
 
 pub struct TurAppInternal {
-    pub(crate) js_context: TurJsContext,
+    pub(crate) js_context: TurInstanceContext,
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// Worker-thread scheduler. Bridges grab it via
@@ -170,7 +170,7 @@ impl TurAppInternal {
         let store = Store::new(dirty.clone());
         let element_tree = NodeTree::new(store.clone());
 
-        let js_context = TurJsContext::new(
+        let js_context = TurInstanceContext::new(
             element_tree.clone(),
             mutation_queue.clone(),
             focus_manager.clone(),
@@ -225,7 +225,7 @@ impl TurAppInternal {
         // raised by `request_paint` / `set_dirty` during this flush don't
         // emit redundant `Wake`s) and re-arm the wake coalescing gate for
         // any paint request raised mid-flush (it must emit a fresh wake for
-        // the *next* pump). See `TurJsContext::begin_flush` / `end_flush`.
+        // the *next* pump). See `TurInstanceContext::begin_flush` / `end_flush`.
         self.js_context.begin_flush();
         let _flush_guard = FlushGuard(self);
         let mut needs_render = false;

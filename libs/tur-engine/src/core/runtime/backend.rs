@@ -284,7 +284,7 @@ impl WorkerBackend {
 
     /// After a module/script eval, re-arm an idle worker if the eval left
     /// paint-worthy state (dirty tree / `need_paint`). Coalesced + in-flush
-    /// gated by `TurJsContext::wake_if_idle`. Lets the worker self-paint on
+    /// gated by `TurInstanceContext::wake_if_idle`. Lets the worker self-paint on
     /// load with no embedder paint request.
     fn wake_if_dirty(&self) {
         let js = &self.internal.js_context;
@@ -822,7 +822,7 @@ impl MainBackend {
 ///
 /// `MainMsg::UploadImage` is **not** shipped here — decoded images are
 /// shipped directly from the `createImageResource` bridge via the shared
-/// `main_tx` clone held in `TurJsContext` (one ship per decode, FIFO).
+/// `main_tx` clone held in `TurInstanceContext` (one ship per decode, FIFO).
 /// `MainMsg::Resized` is also not shipped — the embedder resizes the
 /// main-side renderer directly at event-receipt time and forwards
 /// `PlatformEvent::Resize` here for layout.
