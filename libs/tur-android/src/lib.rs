@@ -238,7 +238,7 @@ pub mod ops {
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
     use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
-    use tur_engine::{TurApp, TurRuntimeBuilder};
+    use tur_engine::{TurApp, TurAppBuilder, TurRuntimeBuilder};
 
     use crate::app::{AndroidInstance, AndroidRuntime};
 
@@ -272,6 +272,16 @@ pub mod ops {
     /// Spawns an isolated rendering instance attached to the given Android
     /// `Surface`, sharing the runtime's fonts/clock/capabilities/wgpu-instance.
     /// Returns an instance handle (boxed `AndroidInstance`).
+    ///
+    /// `configure_instance` receives the [`TurAppBuilder`] before the
+    /// surface-backed renderer is attached — chain
+    /// [`TurAppBuilder::instance_data`] on it and return it to stamp
+    /// per-instance data at build time. The standard
+    /// [`standard_jni_exports!`](crate::standard_jni_exports!) trampoline
+    /// passes `|b| b` (no-op); embedders that need build-time data write
+    /// their own `Java_<pkg>_<Class>_createInstance` (mirroring
+    /// `createRuntime` — see the compose demo).
+    #[allow(clippy::too_many_arguments)]
     pub fn create_instance(
         env: &mut JNIEnv,
         runtime_handle: jlong,
@@ -280,6 +290,7 @@ pub mod ops {
         height: jint,
         dpr: jdouble,
         frame_loop: JObject,
+        configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a> + 'static,
     ) -> jlong {
         catch_into_zero(env, "createInstance", |env| {
             let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
@@ -314,6 +325,7 @@ pub mod ops {
                 height.max(1) as u32,
                 dpr.max(1.0),
                 frame_loop_handle,
+                configure_instance,
             ))?;
             log::info!("createInstance: instance built OK");
             let boxed = Box::new(instance);
@@ -325,10 +337,14 @@ pub mod ops {
     ///
     /// Spawns an isolated headless instance (no surface, no rendering) from
     /// the runtime. Returns an instance handle.
+    ///
+    /// `configure_instance` mirrors [`create_instance`]'s hook — chain
+    /// [`TurAppBuilder::instance_data`] on the builder and return it.
     pub fn create_headless_instance(
         env: &mut JNIEnv,
         runtime_handle: jlong,
         frame_loop: JObject,
+        configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a> + 'static,
     ) -> jlong {
         catch_into_zero(env, "createHeadlessInstance", |env| {
             let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
@@ -339,6 +355,7 @@ pub mod ops {
                 &runtime.runtime,
                 &runtime.tokio_handle(),
                 frame_loop_handle,
+                configure_instance,
             )?;
             log::info!("createHeadlessInstance: instance built OK");
             let boxed = Box::new(instance);
@@ -640,7 +657,11 @@ pub mod ops {
 /// Invoking this macro is all an embedder needs to make its `.so` drivable by
 /// the Kotlin `org.tur.TurNative` bridge — **runtime creation** is NOT included
 /// (it varies per embedder; write your own `Java_<pkg>_<Class>_createRuntime`
-/// that calls [`ops::create_runtime`](crate::ops::create_runtime)).
+/// that calls [`ops::create_runtime`](crate::ops::create_runtime)). The
+/// `createInstance` / `createHeadlessInstance` trampolines generated here pass
+/// `|b| b` as the `configure_instance` hook — embedders that need build-time
+/// per-instance data (via [`TurAppBuilder::instance_data`]) write their own
+/// `Java_<pkg>_<Class>_createInstance` instead, mirroring `createRuntime`.
 ///
 /// Invoke under `#[cfg(target_os = "android")]` (the trampolines reference
 /// android-only impls):
@@ -671,6 +692,7 @@ macro_rules! standard_jni_exports {
                 height,
                 dpr,
                 frame_loop,
+                |b| b,
             )
         }
 
@@ -681,7 +703,7 @@ macro_rules! standard_jni_exports {
             runtime_handle: $crate::jlong,
             frame_loop: $crate::JObject,
         ) -> $crate::jlong {
-            $crate::ops::create_headless_instance(&mut env, runtime_handle, frame_loop)
+            $crate::ops::create_headless_instance(&mut env, runtime_handle, frame_loop, |b| b)
         }
 
         #[unsafe(no_mangle)]

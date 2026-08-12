@@ -17,7 +17,9 @@ mod imp {
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{CursorCap, FocusedState, NoopCursor, TurApp, TurRuntime, TurRuntimeBuilder};
+    use tur_engine::{
+        CursorCap, FocusedState, NoopCursor, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder,
+    };
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that schedules
@@ -241,6 +243,13 @@ mod imp {
         /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
         /// cadence.
         ///
+        /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
+        /// `.renderer(…)` is applied — chain
+        /// [`TurAppBuilder::instance_data`] (or any other pre-build hook)
+        /// on it and return it. The surface-backed renderer is set up by
+        /// this function after the closure returns, so the embedder cannot
+        /// accidentally override it. Pass `|b| b` for the no-op default.
+        ///
         /// Architecture: the engine runs on a worker thread; `MainBackend`
         /// owns the wgpu `VelloRenderer` on the caller thread (main) and
         /// drives it directly — command batches, incremental image uploads,
@@ -255,6 +264,7 @@ mod imp {
             logical_height: u32,
             dpr: f64,
             frame_loop: FrameLoopRef,
+            configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             let raw_display = window_handle
                 .display_handle()
@@ -296,11 +306,13 @@ mod imp {
                 dpr,
             );
 
-            // Engine on worker; `MainBackend` owns the wgpu renderer on
-            // main and drives it directly (render batches, image uploads,
-            // resize-on-event) — no render_sink callback.
-            let app = runtime
-                .app_builder()
+            // Apply the embedder's pre-build customization (e.g.
+            // `.instance_data(...)`), then attach the surface-backed
+            // renderer and build. The engine runs on a worker thread;
+            // `MainBackend` owns the wgpu renderer on main and drives it
+            // directly (render batches, image uploads, resize-on-event) —
+            // no render_sink callback.
+            let app = configure_instance(runtime.app_builder())
                 .renderer(
                     Box::new(renderer),
                     (logical_width as f64, logical_height as f64),
@@ -321,16 +333,18 @@ mod imp {
 
         /// Build a headless instance (no surface, no rendering) from the
         /// runtime. Runs JS + capabilities + events only.
+        ///
+        /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
+        /// `.build_headless(…)` is applied — chain
+        /// [`TurAppBuilder::instance_data`] on it and return it. Pass
+        /// `|b| b` for the no-op default.
         pub fn build_headless(
             runtime: &Rc<TurRuntime>,
             tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
+            configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
-            let app = runtime.app_builder().build(
-                Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
-                (0.0, 0.0),
-                1.0,
-            )?;
+            let app = configure_instance(runtime.app_builder()).build_headless((0.0, 0.0))?;
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
 
@@ -353,7 +367,7 @@ mod imp {
     use crate::scheduler::FrameLoopRef;
     use crate::surface::AndroidWindowHandle;
     use jni::objects::GlobalRef;
-    use tur_engine::TurRuntimeBuilder;
+    use tur_engine::{TurAppBuilder, TurRuntimeBuilder};
 
     // Stub so the crate type-checks on desktop. Never constructed at runtime.
     #[derive(Debug, thiserror::Error)]
@@ -386,6 +400,7 @@ mod imp {
             _logical_height: u32,
             _dpr: f64,
             _frame_loop: FrameLoopRef,
+            _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
         }
@@ -394,6 +409,7 @@ mod imp {
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
             _tokio: &tokio::runtime::Handle,
             _frame_loop: FrameLoopRef,
+            _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
             Err(TurAndroidError::AndroidOnly)
         }
