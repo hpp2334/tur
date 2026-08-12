@@ -1,5 +1,3 @@
-use std::any::{Any, TypeId};
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -72,14 +70,6 @@ type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 /// Sync` so it can be stored on the builder and consumed in `build()`.
 type CapabilityBuilder =
     Box<dyn FnOnce(&AsyncPluginContext) -> Result<CapabilityInsert, TurError> + Send + Sync>;
-
-/// Deferred per-instance data-insert closure. Captures a value stamped on a
-/// [`TurAppBuilder`] via [`TurAppBuilder::instance_data`] and runs **once per
-/// instance** on the worker thread inside `build_worker_backend` to populate
-/// that instance's [`TurJsContext::instance_data`](crate::core::js_runtime::TurJsContext::instance_data)
-/// map — before any plugin's `register` runs. `FnOnce` + `Send` so it can
-/// cross the main→worker thread boundary once at instance construction.
-pub(crate) type InstanceDataInsert = Box<dyn FnOnce(&mut HashMap<TypeId, Box<dyn Any>>) + Send>;
 
 /// The shared engine runtime — created **once** and used to spawn any number
 /// of isolated [`TurApp`] instances.
@@ -162,9 +152,8 @@ impl TurRuntime {
         &self.capabilities
     }
 
-    /// Begin building an isolated [`TurApp`] instance. Chain
-    /// [`TurAppBuilder::instance_data`] to stamp per-instance metadata
-    /// (e.g. a host `PluginId`), then terminate with
+    /// Begin building an isolated [`TurApp`] instance. Configure the
+    /// surface with [`TurAppBuilder::renderer`], then terminate with
     /// [`TurAppBuilder::build`] (rendering) or
     /// [`TurAppBuilder::build_headless`] (no renderer).
     ///
@@ -190,7 +179,6 @@ impl TurRuntime {
     pub fn app_builder(self: &Rc<Self>) -> TurAppBuilder<'_> {
         TurAppBuilder {
             runtime: self,
-            data_inserts: Vec::new(),
             renderer: None,
             viewport: None,
             dpr: None,
@@ -206,7 +194,6 @@ impl TurRuntime {
         renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
-        data_inserts: Vec<InstanceDataInsert>,
     ) -> Result<Rc<TurApp>, TurError> {
         let clock = self.clock.clone();
         let font_context = self.font_context.clone();
@@ -233,7 +220,6 @@ impl TurRuntime {
                 wake_worker,
                 main_tx,
                 main_cx.clone(),
-                data_inserts,
             )
             .expect("threaded backend factory failed")
         };
@@ -249,25 +235,17 @@ impl TurRuntime {
 }
 
 /// Builder for an isolated [`TurApp`] instance, started via
-/// [`TurRuntime::app_builder`]. Chain [`Self::instance_data`] to stamp
-/// per-instance metadata (typed values the host wants bridge fns /
-/// subsystems to read via [`TurJsContext::data`](crate::core::js_runtime::TurJsContext::data)
-/// / [`with_data`](crate::core::js_runtime::TurJsContext::with_data)),
-/// then configure the surface and terminate with [`Self::build`]
-/// (rendering — requires [`Self::renderer`]) or [`Self::build_headless`]
-/// (no renderer).
+/// [`TurRuntime::app_builder`]. Configure the surface with
+/// [`Self::renderer`], then terminate with [`Self::build`] (rendering —
+/// requires [`Self::renderer`]) or [`Self::build_headless`] (no renderer).
 ///
 /// ```no_run
 /// # use tur_engine::*;
 /// # use tur_engine::renderer::noop::NoopRenderer;
 /// # use std::rc::Rc;
-/// # struct PluginId(String);
 /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
-/// // Stamp the calling plugin's identity so bridge fns can resolve it
-/// // securely (never from JS args), then build with a real renderer:
 /// let app = runtime
 ///     .app_builder()
-///     .instance_data(PluginId("com.ease.onedrive".into()))
 ///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
 ///     .build()?;
 /// # Ok(())
@@ -275,11 +253,6 @@ impl TurRuntime {
 /// /// ```
 pub struct TurAppBuilder<'rt> {
     runtime: &'rt Rc<TurRuntime>,
-    /// `(TypeId, replay-closure)` pairs. The `TypeId` is stored eagerly so
-    /// duplicate stamps of the same type panic at the
-    /// [`Self::instance_data`] call site (rather than being silently
-    /// overwritten at replay time inside the worker).
-    data_inserts: Vec<(TypeId, InstanceDataInsert)>,
     /// Rendering surface: renderer + viewport + dpr grouped together (a
     /// non-headless app supplies all three at once via [`Self::renderer`]).
     /// `None` until [`Self::renderer`] is called; [`Self::build`] requires
@@ -290,41 +263,6 @@ pub struct TurAppBuilder<'rt> {
 }
 
 impl<'rt> TurAppBuilder<'rt> {
-    /// Stamp a typed value onto this instance. Read it back from bridge fns
-    /// via
-    /// [`TurJsContext::data::<T>()`](crate::core::js_runtime::TurJsContext::data)
-    /// (clone-out) or
-    /// [`TurJsContext::with_data::<T, _>(f)`](crate::core::js_runtime::TurJsContext::with_data)
-    /// (ref-callback). Never accessible to JS.
-    ///
-    /// `T` must be `Any + Send + 'static` — the value crosses the
-    /// main→worker thread boundary once at instance construction (it is
-    /// replayed into the worker's
-    /// [`TurJsContext::instance_data`](crate::core::js_runtime::TurJsContext::instance_data)
-    /// map before any plugin's `register` runs, so plugins and bridge fns
-    /// see it from the very first call).
-    ///
-    /// **Panics** if `instance_data::<T>(...)` is called twice with the
-    /// same `T` on one builder — each type may be stamped at most once per
-    /// instance. Stamp distinct types if you need to carry multiple values.
-    pub fn instance_data<T: Any + Send + 'static>(mut self, value: T) -> Self {
-        let key = TypeId::of::<T>();
-        if self.data_inserts.iter().any(|(k, _)| *k == key) {
-            panic!(
-                "instance_data::<{}>() called twice on the same TurAppBuilder; \
-                 each type may only be stamped once per instance",
-                std::any::type_name::<T>()
-            );
-        }
-        self.data_inserts.push((
-            key,
-            Box::new(move |m| {
-                m.insert(key, Box::new(value));
-            }),
-        ));
-        self
-    }
-
     /// Group the rendering surface — renderer, viewport, dpr — onto this
     /// builder. A non-headless app must supply all three together; the
     /// terminal [`Self::build`] then takes no arguments. `MainBackend`
@@ -353,7 +291,6 @@ impl<'rt> TurAppBuilder<'rt> {
     pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
-            data_inserts,
             renderer,
             viewport,
             dpr,
@@ -368,9 +305,7 @@ impl<'rt> TurAppBuilder<'rt> {
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        // Drop the TypeId keys (used only for eager dedup at the call site).
-        let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
-        runtime.spawn_instance(renderer, viewport, dpr, inserts)
+        runtime.spawn_instance(renderer, viewport, dpr)
     }
 
     /// Terminal: build a headless instance (no renderer, no rendering).
@@ -386,17 +321,11 @@ impl<'rt> TurAppBuilder<'rt> {
     /// `viewport` sets the initial `viewportSize$` (read by JS layout);
     /// pass `(0.0, 0.0)` if layout is irrelevant.
     pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
-        let TurAppBuilder {
-            runtime,
-            data_inserts,
-            ..
-        } = self;
-        let inserts: Vec<InstanceDataInsert> = data_inserts.into_iter().map(|(_, f)| f).collect();
+        let TurAppBuilder { runtime, .. } = self;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
             viewport,
             1.0,
-            inserts,
         )
     }
 }
@@ -423,7 +352,6 @@ pub(crate) fn build_worker_backend(
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
     async_cx: AsyncPluginContext,
-    data_inserts: Vec<InstanceDataInsert>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -443,7 +371,6 @@ pub(crate) fn build_worker_backend(
         worker_sched,
         wake_worker,
         main_tx,
-        data_inserts,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);

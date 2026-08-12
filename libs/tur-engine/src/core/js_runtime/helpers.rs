@@ -30,7 +30,7 @@ pub struct TurNodeHandle {
 }
 
 /// Decode the bound bridge ctx (prepended by `bound_native`) from `args[0]`.
-pub fn extract_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
+pub fn extract_js_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
     let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message("expected TurJsContext as first argument"))
     })?;

@@ -9,7 +9,7 @@ use boa_engine::{Context, JsResult, JsValue};
 
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementTrace};
-use crate::core::js_runtime::helpers::{Ptr, extract_ctx, require_props_object, wrap_view};
+use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx, require_props_object, wrap_view};
 use crate::core::layout::{
     Constraints, ElementLayout, ElementSubscribe, LayoutContext, Offset, Size,
 };
@@ -103,7 +103,7 @@ pub(super) fn tur_target(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
     let spec = TargetView::from_js(&props, context).ok_or_else(|| {
         boa_engine::JsError::from(

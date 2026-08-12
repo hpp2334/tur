@@ -99,14 +99,19 @@ pub struct TurJsContext {
     ///
     /// [`Plugin::requires`]: crate::core::plugin::Plugin::requires
     pub capabilities: Capabilities,
-    /// Embedder-provided per-instance metadata — a typed key→value map
-    /// stamped at instance creation via
-    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data)
-    /// and read by bridge fns / plugin `register` / subsystem flush contexts
-    /// via [`Self::data`] / [`Self::with_data`]. Never accessible to JS
-    /// itself, so it carries secure, JS-unforgeable identity (e.g. a host
-    /// `PluginId` for plugin systems where bridge fns must resolve the
-    /// calling plugin without trusting JS arguments).
+    /// Worker-side per-instance metadata — a typed key→value map that
+    /// plugins populate from their `register` (or any time after, via
+    /// [`Self::insert_data`]) and bridge fns / subsystem-flush contexts
+    /// read via [`Self::data`] / [`Self::with_data`]. Never accessible to
+    /// JS itself, so it carries secure, JS-unforgeable identity (e.g. a
+    /// host `PluginId` for plugin systems where bridge fns must resolve
+    /// the calling plugin without trusting JS arguments).
+    ///
+    /// Lives entirely in the worker — it is not exposed on the embedder-
+    /// facing [`TurApp`](crate::TurApp) or
+    /// [`TurAppBuilder`](crate::core::runtime::TurAppBuilder), since the
+    /// builder runs on the main thread while this map is only ever
+    /// touched from the worker (where boa + plugin `register` run).
     ///
     /// Mirrors the `capabilities` field's shape and soundness trade-off:
     /// pure Rust state behind an `Rc<RefCell<…>>`, shared across every
@@ -234,21 +239,21 @@ impl TurJsContext {
     }
 
     /// Cheap-cloned completion handle. Bridge fns extract this via
-    /// `extract_ctx` and call `push(closure)` from inside spawned futures
+    /// `extract_js_ctx` and call `push(closure)` from inside spawned futures
     /// to settle JsPromises under `&mut Context` on the next flush.
     pub fn completion_handle(&self) -> CompletionHandle {
         self.completion_handle.clone()
     }
 
     /// Cheap-cloned flush-task handle. `sleep` + `launch` extract this via
-    /// `extract_ctx` and call `spawn(fut)` to push engine-internal driver
+    /// `extract_js_ctx` and call `spawn(fut)` to push engine-internal driver
     /// futures onto the flush-driven queue.
     pub fn flush_task_handle(&self) -> crate::core::async_::FlushTaskHandle {
         self.flush_task_handle.clone()
     }
 
     /// Cheaply-cloned view over the capability registry. Bridge fns extract
-    /// this via [`crate::core::js_runtime::helpers::extract_ctx`] and call
+    /// this via [`crate::core::js_runtime::helpers::extract_js_ctx`] and call
     /// `of::<C>()` / `require::<C>()` to look up backends at JS call time.
     pub fn capability(&self) -> Capabilities {
         self.capabilities.clone()
@@ -273,18 +278,15 @@ impl TurJsContext {
         id
     }
 
-    /// Worker-side insert into the per-instance data map. **Not** the
-    /// embedder-facing API — embedders stamp data at instance creation via
-    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data),
-    /// which the engine replays into this map before any plugin's `register`
-    /// runs. This method exists for engine-internal mutations after
-    /// construction (rare; subsystems may stamp their own typed state on a
-    /// running instance).
+    /// Worker-side insert into the per-instance data map. The primary entry
+    /// point: plugins call this from `register` (or any later point on the
+    /// worker thread) to stamp typed state that their own bridge fns /
+    /// subsystems will read back via [`Self::data`] / [`Self::with_data`].
+    /// The value lives entirely in the worker; there is no embedder-side
+    /// API to populate it from the main thread.
     ///
     /// Collisions (inserting the same `TypeId` twice) silently overwrite,
-    /// mirroring [`Capabilities::insert`]. The builder's
-    /// `instance_data::<T>(...)` panics on same-type double-stamp instead —
-    /// the panic lives at the call site, not here.
+    /// mirroring [`Capabilities::insert`].
     pub fn insert_data<T: Any + 'static>(&self, value: T) {
         self.instance_data
             .borrow_mut()
@@ -297,11 +299,11 @@ impl TurJsContext {
     /// `Clone` or to avoid cloning a large value.
     ///
     /// Bridge fns reach this via
-    /// [`extract_ctx`](crate::core::js_runtime::helpers::extract_ctx):
+    /// [`extract_js_ctx`](crate::core::js_runtime::helpers::extract_js_ctx):
     ///
     /// ```text
     /// fn storage_get(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    ///     let js_ctx = extract_ctx(args)?;
+    ///     let js_ctx = extract_js_ctx(args)?;
     ///     let plugin_id = js_ctx.data::<PluginId>()
     ///         .ok_or_else(|| JsError::from(JsNativeError::typ()
     ///             .with_message("ease: no plugin context bound to this instance")))?;

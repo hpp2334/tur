@@ -13,7 +13,7 @@ use boa_engine::object::builtins::JsArray;
 use boa_engine::{Context, JsArgs, JsResult, JsValue, js_string};
 
 use crate::core::elements::{DevNodeData, TraceValue};
-use crate::core::js_runtime::helpers::extract_ctx;
+use crate::core::js_runtime::helpers::extract_js_ctx;
 
 fn trace_value_to_js(v: &TraceValue) -> JsValue {
     match v {
@@ -110,7 +110,7 @@ pub fn tur_dev_tool_element_tree(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let tree = js_ctx.element_tree.borrow();
     let Some(root_id) = tree.root_element_id() else {
         return Ok(JsValue::null());
@@ -126,7 +126,7 @@ pub fn tur_dev_tool_get_element(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let raw = args.get_or_undefined(1);
     let id = raw
         .as_number()

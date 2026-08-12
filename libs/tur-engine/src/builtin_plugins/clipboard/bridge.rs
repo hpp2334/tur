@@ -25,7 +25,7 @@ use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsPromise;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{Ptr, extract_ctx};
+use crate::core::js_runtime::helpers::{Ptr, extract_js_ctx};
 use crate::core::js_runtime::module_loader::bound_native;
 
 use super::capability::Clipboard;
@@ -41,7 +41,7 @@ pub(in crate::builtin_plugins) fn fns() -> Vec<crate::core::js_runtime::helpers:
 
 /// Build the `clipboard` JS object: `{ readText(): Promise<string>,
 /// writeText(text: string): Promise<void> }`. Each method is a ctx-bound
-/// native fn (via [`bound_native`]) so it can `extract_ctx(args)` and look
+/// native fn (via [`bound_native`]) so it can `extract_js_ctx(args)` and look
 /// up its capability slot.
 pub(in crate::builtin_plugins) fn build_clipboard_object(
     context: &mut Context,
@@ -74,7 +74,7 @@ fn tur_clipboard_read_text(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let clipboard = js_ctx
         .capability()
         .of::<Clipboard>()
@@ -106,7 +106,7 @@ fn tur_clipboard_write_text(
     args: &[JsValue],
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let clipboard = js_ctx
         .capability()
         .of::<Clipboard>()

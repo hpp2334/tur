@@ -6,7 +6,7 @@ use boa_engine::class::Class;
 use boa_engine::{Context, JsError, JsNativeError, JsResult, JsValue};
 
 use crate::core::js_runtime::helpers::{
-    FnEntry, Ptr, extract_ctx, require_props_object, wrap_view,
+    FnEntry, Ptr, extract_js_ctx, require_props_object, wrap_view,
 };
 
 pub fn fns() -> Vec<FnEntry> {
@@ -21,7 +21,7 @@ pub fn fns() -> Vec<FnEntry> {
 }
 
 fn tur_lazy_grid(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let props = require_props_object(args, 1, context)?;
     let spec = super::LazyGridView::from_js(&props, context).ok_or_else(|| {
         JsError::from(JsNativeError::typ().with_message(
@@ -36,7 +36,7 @@ fn tur_create_lazy_grid_controller(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let data =
         super::LazyGridController::data_constructor(&JsValue::undefined(), &args[1..], context)?;
     Ok(super::LazyGridController::from_data(data, context)?

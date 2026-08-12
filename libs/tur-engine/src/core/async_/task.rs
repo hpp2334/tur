@@ -56,7 +56,7 @@ use boa_engine::object::builtins::JsPromise;
 use boa_engine::object::{FunctionObjectBuilder, JsObject};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{FnEntry, extract_ctx};
+use crate::core::js_runtime::helpers::{FnEntry, extract_js_ctx};
 use crate::core::scheduler::TaskHandle;
 
 /// Bridge function table entries for `tur:std`: `sleep` + `launch`.
@@ -68,7 +68,7 @@ pub fn fns() -> Vec<FnEntry> {
 /// time). Backed by [`crate::core::scheduler::WorkerScheduler::sleep`]; the
 /// completion self-sends `WorkerMsg::Wake` so the worker flushes promptly.
 fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let worker_sched = js_ctx.worker_sched().clone();
     let completion_handle = js_ctx.completion_handle();
     let flush_tasks = js_ctx.flush_task_handle();
@@ -104,7 +104,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
 /// `launch(gen): Task` — runs a zero-arg generator function as a cancellable
 /// coroutine. See the module docs for the full model.
 fn tur_launch(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let completion_handle = js_ctx.completion_handle();
     let flush_tasks = js_ctx.flush_task_handle();
 

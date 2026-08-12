@@ -5,7 +5,7 @@ use std::rc::Rc;
 use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx, wrap_view};
+use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx, wrap_view};
 use crate::core::view::View;
 
 pub fn fns() -> Vec<FnEntry> {
@@ -20,7 +20,7 @@ fn tur_lifecycle_view(
     args: &[JsValue],
     context: &mut Context,
 ) -> JsResult<JsValue> {
-    let _ = extract_ctx(args)?;
+    let _ = extract_js_ctx(args)?;
     let v = args.get_or_undefined(1);
     let obj = v
         .as_object()

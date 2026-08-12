@@ -21,7 +21,7 @@ use boa_engine::object::JsObject;
 use boa_engine::object::builtins::{JsArray, JsArrayBuffer, JsPromise};
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
-use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_ctx};
+use tur_engine::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 use tur_engine::core::js_runtime::module_loader::bound_native;
 
 use crate::{FilePicker, PickOptions, PickedFile, SaveOptions};
@@ -37,7 +37,7 @@ pub fn fns() -> Vec<FnEntry> {
 /// Build the `filePicker` JS object:
 /// `{ pick(opts?): Promise<PickedFile[]>, saveFile(name, bytes, opts?): Promise<void> }`.
 /// Each method is a ctx-bound native fn (via [`bound_native`]) so it can
-/// `extract_ctx(args)` and look up its capability slot.
+/// `extract_js_ctx(args)` and look up its capability slot.
 pub fn build_filepicker_object(context: &mut Context, ctx_value: JsValue) -> JsValue {
     let pick = bound_native(
         context,
@@ -62,7 +62,7 @@ pub fn build_filepicker_object(context: &mut Context, ctx_value: JsValue) -> JsV
 /// `filePicker.pick(opts?): Promise<PickedFile[]>` — opens the platform file
 /// picker. Resolves with the picked files (empty array if cancelled/denied).
 fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let picker = js_ctx
         .capability()
         .of::<FilePicker>()
@@ -95,7 +95,7 @@ fn tur_filepicker_pick(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> 
 /// `filePicker.saveFile(name, bytes, opts?): Promise<void>` — persists
 /// `bytes` under file name `name` via the platform save dialog / download.
 fn tur_filepicker_save(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
-    let js_ctx = extract_ctx(args)?;
+    let js_ctx = extract_js_ctx(args)?;
     let picker = js_ctx
         .capability()
         .of::<FilePicker>()
