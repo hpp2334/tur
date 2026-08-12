@@ -99,19 +99,23 @@ pub struct TurInstanceContext {
     ///
     /// [`Plugin::requires`]: crate::core::plugin::Plugin::requires
     pub capabilities: Capabilities,
-    /// Worker-side per-instance metadata — a typed key→value map that
-    /// plugins populate from their `register` (or any time after, via
-    /// [`Self::insert_data`]) and bridge fns / subsystem-flush contexts
-    /// read via [`Self::data`] / [`Self::with_data`]. Never accessible to
-    /// JS itself, so it carries secure, JS-unforgeable identity (e.g. a
-    /// host `PluginId` for plugin systems where bridge fns must resolve
-    /// the calling plugin without trusting JS arguments).
+    /// Worker-side per-instance metadata — a typed key→value map seeded
+    /// at **build time** (via
+    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data),
+    /// whose closure runs on the worker right before plugin `register`)
+    /// and **read / updated** at runtime via [`Self::data`] /
+    /// [`Self::with_data`] / [`Self::update`]. Never accessible to JS
+    /// itself, so it carries secure, JS-unforgeable identity (e.g. a host
+    /// `PluginId` for plugin systems where bridge fns must resolve the
+    /// calling plugin without trusting JS arguments).
     ///
-    /// Lives entirely in the worker — it is not exposed on the embedder-
-    /// facing [`TurApp`](crate::TurApp) or
-    /// [`TurAppBuilder`](crate::core::runtime::TurAppBuilder), since the
-    /// builder runs on the main thread while this map is only ever
-    /// touched from the worker (where boa + plugin `register` run).
+    /// Define-vs-update split (strict, fail-fast):
+    /// - **Build time** ([`InstanceDataCx::define`]): initial definition
+    ///   per `TypeId`; panics on duplicate.
+    /// - **Runtime** ([`Self::update`]): replace an existing value;
+    ///   panics if the `TypeId` was not defined at build time.
+    /// - **Runtime read** ([`Self::data`] / [`Self::with_data`]):
+    ///   unchanged; return `None` for unstamped types.
     ///
     /// Mirrors the `capabilities` field's shape and soundness trade-off:
     /// pure Rust state behind an `Rc<RefCell<…>>`, shared across every
@@ -278,19 +282,27 @@ impl TurInstanceContext {
         id
     }
 
-    /// Worker-side insert into the per-instance data map. The primary entry
-    /// point: plugins call this from `register` (or any later point on the
-    /// worker thread) to stamp typed state that their own bridge fns /
-    /// subsystems will read back via [`Self::data`] / [`Self::with_data`].
-    /// The value lives entirely in the worker; there is no embedder-side
-    /// API to populate it from the main thread.
+    /// Runtime **update** of an existing per-instance data slot. The slot
+    /// must have been defined at build time via
+    /// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data);
+    /// calling `update` for a `TypeId` that was never defined panics
+    /// (fail-fast — catches missing build-time `define` immediately).
     ///
-    /// Collisions (inserting the same `TypeId` twice) silently overwrite,
-    /// mirroring [`Capabilities::insert`].
-    pub fn insert_data<T: Any + 'static>(&self, value: T) {
-        self.instance_data
-            .borrow_mut()
-            .insert(TypeId::of::<T>(), Box::new(value));
+    /// Plugins reach this via `ctx.js_ctx()` from `register`, bridge fns
+    /// via [`extract_js_ctx`](crate::core::js_runtime::helpers::extract_js_ctx).
+    /// Use [`InstanceDataCx::define`] at build time for the initial value.
+    pub fn update<T: Any + 'static>(&self, value: T) {
+        let mut map = self.instance_data.borrow_mut();
+        let id = TypeId::of::<T>();
+        if !map.contains_key(&id) {
+            panic!(
+                "instance_data: `{}` was not defined at build time — \
+                 add `.instance_data(|cx| cx.define::<{}>(...))` on the TurAppBuilder",
+                std::any::type_name::<T>(),
+                std::any::type_name::<T>()
+            );
+        }
+        map.insert(id, Box::new(value));
     }
 
     /// Read a previously-stamped value out of the per-instance data map by
@@ -334,5 +346,51 @@ impl TurInstanceContext {
             .get(&TypeId::of::<T>())
             .and_then(|v| v.downcast_ref::<T>())
             .map(f)
+    }
+}
+
+/// Build-time context handed to the closure passed to
+/// [`TurAppBuilder::instance_data`](crate::core::runtime::TurAppBuilder::instance_data).
+/// It exposes **only** [`Self::define`] — the initial value for each typed
+/// slot. The closure runs on the worker (right after `TurInstanceContext`
+/// is constructed, before any plugin `register`), so values built fresh
+/// inside the closure body never cross the main↔worker boundary; only
+/// values captured by the closure need to be `Send`.
+///
+/// This is the **only** way to introduce a new `TypeId` into the per-instance
+/// data map. Runtime code (plugins, bridge fns, subsystem flushes) can only
+/// [`TurInstanceContext::update`] (replace an existing value) or
+/// [`TurInstanceContext::data`] / [`TurInstanceContext::with_data`] (read) —
+/// they cannot introduce new types.
+///
+/// `define` is strict: defining the same `TypeId` twice panics (fail-fast).
+pub struct InstanceDataCx {
+    data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>,
+}
+
+impl InstanceDataCx {
+    /// Construct from a clone of the context's `instance_data` handle.
+    /// Engine-internal — only `build_worker_backend` calls this when it
+    /// replays the definer closure captured by `TurAppBuilder`.
+    pub(crate) fn from_map(data: Rc<RefCell<HashMap<TypeId, Box<dyn Any>>>>) -> Self {
+        Self { data }
+    }
+
+    /// Define (initial value for) a typed slot. Panics if `T` was already
+    /// defined — each type may be defined exactly once per instance.
+    /// Mirrors the build-time-only contract: runtime code must use
+    /// [`TurInstanceContext::update`] (which in turn requires the slot to
+    /// have been defined here first).
+    pub fn define<T: Any + 'static>(&self, value: T) {
+        let mut map = self.data.borrow_mut();
+        let id = TypeId::of::<T>();
+        if map.contains_key(&id) {
+            panic!(
+                "instance_data: `{}` already defined — each type may be defined only once \
+                 (duplicate `define` in TurAppBuilder::instance_data closure)",
+                std::any::type_name::<T>()
+            );
+        }
+        map.insert(id, Box::new(value));
     }
 }

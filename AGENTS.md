@@ -189,10 +189,16 @@ let runtime = TurRuntime::builder()
 // Spawn isolated instances (each its own JS realm + renderer):
 let app = runtime
     .app_builder()
-    // Optional: stamp per-instance metadata readable by bridge fns via
-    // `TurInstanceContext::data::<T>()` / `with_data::<T, _>(f)`. Each type may
-    // be stamped at most once per builder (same-type double-stamp panics).
-    //   .instance_data(PluginId("com.example.foo".into()))
+    // Optional: define build-time per-instance data readable/updateable by
+    // plugins/bridge fns via `TurInstanceContext::data::<T>()` /
+    // `with_data::<T, _>(f)` / `update::<T>(v)`. Each type may be defined
+    // exactly once (duplicate `define` panics). The closure RUNS ON THE
+    // WORKER (right after the instance is constructed, before any plugin
+    // `register`), so values built fresh in the body never cross the
+    // main↔worker boundary.
+    //   .instance_data(|cx| {
+    //       cx.define::<PluginId>(PluginId("com.example.foo".into()));
+    //   })
     .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
     .build()?;
 app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
@@ -221,21 +227,28 @@ let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
 - `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
   time (bridge fns) or event dispatch time (subsystems via
   `SubsystemFlushContext.capabilities`).
-- **Per-instance data** (`TurInstanceContext::insert_data::<T>(value)` →
-  `data::<T>()` / `with_data::<T, _>(f)`) — typed worker-side metadata.
-  Plugins stamp from their `register` (or any later point on the worker);
-  bridge fns / subsystem-flush contexts read via `data` / `with_data`.
+- **Per-instance data** (build-time `InstanceDataCx::define::<T>(value)` →
+  runtime `TurInstanceContext::update::<T>(value)` /
+  `data::<T>()` / `with_data::<T, _>(f)`) — typed worker-side metadata with
+  a strict **build-time define / runtime update+read** split:
+  - **Build time** (`TurAppBuilder::instance_data(|cx| cx.define::<T>(v))`):
+    the ONLY way to introduce a new `TypeId` into the map. The closure runs
+    on the worker (right after `TurInstanceContext` is constructed, before
+    any plugin `register`), so values built fresh in the body never cross
+    the main↔worker boundary; only captured values need `Send`. Each type
+    may be defined exactly once per instance — duplicate `define` panics
+    (fail-fast). Plugins see all defined slots as already-present at
+    `register` time.
+  - **Runtime** (`TurInstanceContext::update::<T>(v)`): replace an existing
+    value; panics if the `TypeId` was NOT defined at build time (catches
+    missing `define` immediately).
+  - **Runtime read** (`data::<T>()` returns `Option<T>` (requires `T: Clone`);
+    `with_data::<T, _>(f)` is the no-`Clone`-bound ref-callback path).
   Carries secure, JS-unforgeable identity (e.g. a host `PluginId` so a
   `storage.get(key)` bridge can resolve the calling plugin without trusting
   JS args). Mirrors the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId,
   Box<dyn Any>>>>` inside `TurInstanceContext`, shared across every cheap clone.
-  Lives entirely in the worker — there is no embedder-facing API to populate
-  it from the main thread (the `TurAppBuilder` runs on main while this map
-  is only ever touched from the worker, where boa + plugin `register` run).
-  `insert_data` of the same `TypeId` silently overwrites (mirrors
-  `Capabilities::insert`); distinct types coexist. `data::<T>()` returns
-  `Option<T>` (requires `T: Clone`); `with_data::<T, _>(f)` is the
-  no-`Clone`-bound ref-callback path.
+  Lives entirely in the worker.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
   `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
