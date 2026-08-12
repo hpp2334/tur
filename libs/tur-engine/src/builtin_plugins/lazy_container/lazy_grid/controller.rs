@@ -15,7 +15,7 @@ use crate::core::edgy::mutation::{
     MutationHandle, PendingMutationInvocationQueue, extract_mutation_from_opts,
 };
 use crate::core::element::ElementNodeId;
-use crate::core::js_runtime::{BoaOpaque, TurJsContext, TurNodeHandle};
+use crate::core::js_runtime::{BoaOpaque, TurInstanceContext, TurNodeHandle};
 
 #[derive(Trace, Finalize, boa_engine::JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -222,7 +222,7 @@ impl Class for LazyGridController {
                 }
 
                 if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
-                    && let Some(js_ctx) = BoaOpaque::<TurJsContext>::wrap(&ctx_obj)
+                    && let Some(js_ctx) = BoaOpaque::<TurInstanceContext>::wrap(&ctx_obj)
                 {
                     ctrl.element_tree = Some(js_ctx.element_tree.clone());
                     ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());

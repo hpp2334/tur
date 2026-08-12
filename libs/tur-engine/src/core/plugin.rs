@@ -22,7 +22,7 @@ use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::fonts::FontContext;
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::js_runtime::module_loader::{build_fn_module, build_native_module};
-use crate::core::js_runtime::{TurJsContext, TurModuleLoader};
+use crate::core::js_runtime::{TurInstanceContext, TurModuleLoader};
 use crate::core::subsystem::Subsystem;
 use crate::error::TurError;
 /// A plugin that extends the engine with elements, bridge modules, subsystems,
@@ -112,7 +112,7 @@ pub struct PluginContext<'a> {
     pub(crate) boa: &'a mut Context,
     pub(crate) loader: Rc<TurModuleLoader>,
     pub js_ctx_value: JsValue,
-    pub(crate) js_ctx: TurJsContext,
+    pub(crate) js_ctx: TurInstanceContext,
     pub(crate) app: Rc<RefCell<TurAppContext>>,
     /// Plugin-registered flush subsystems. Shared with
     /// [`TurAppInternal::subsystems`](crate::core::app::TurAppInternal) —
@@ -144,12 +144,12 @@ pub struct PluginContext<'a> {
 }
 
 impl<'a> PluginContext<'a> {
-    /// Register a ctx-bound native module (bridge fns that receive `TurJsContext`
+    /// Register a ctx-bound native module (bridge fns that receive `TurInstanceContext`
     /// as their first argument) plus optional free-form closure exports. Used
     /// for `tur:std` and similar.
     ///
     /// `closures` is for bridge fns that capture state which can't live on
-    /// `TurJsContext` (e.g. a `Clipboard` impl provided by a plugin). Each
+    /// `TurInstanceContext` (e.g. a `Clipboard` impl provided by a plugin). Each
     /// closure is registered as-is, with no ctx binding.
     pub fn register_module(
         &mut self,
@@ -174,7 +174,7 @@ impl<'a> PluginContext<'a> {
         );
     }
 
-    /// Register a ctx-free native module (host fns that don't need `TurJsContext`).
+    /// Register a ctx-free native module (host fns that don't need `TurInstanceContext`).
     /// Used for `tur:net`, `tur-ext/demo-helper`, etc.
     pub fn register_host_module(
         &mut self,
@@ -206,7 +206,7 @@ impl<'a> PluginContext<'a> {
     }
 
     /// Access the shared JS context (reactive store, node tree, etc.).
-    pub fn js_ctx(&self) -> &TurJsContext {
+    pub fn js_ctx(&self) -> &TurInstanceContext {
         &self.js_ctx
     }
 
@@ -227,7 +227,7 @@ impl<'a> PluginContext<'a> {
     /// [`AsyncWorkerContext`](crate::core::async_::AsyncWorkerContext) for
     /// timers / nested spawns / paint signals. Plugins' bridge fns use this
     /// instead of the raw scheduler. See
-    /// [`TurJsContext::spawn_local`](crate::core::js_runtime::TurJsContext::spawn_local).
+    /// [`TurInstanceContext::spawn_local`](crate::core::js_runtime::TurInstanceContext::spawn_local).
     pub fn spawn_local<F, Fut>(&self, f: F) -> crate::core::scheduler::TaskHandle
     where
         F: FnOnce(crate::core::async_::AsyncWorkerContext) -> Fut,

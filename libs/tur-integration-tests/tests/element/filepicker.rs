@@ -16,7 +16,7 @@
 //! 5. boa's `executor.drain` runs the PromiseJob → fires the `.then` body.
 //!
 //! Capability lookup: the bridge fns read their `Rc<dyn FilePickerBackend>`
-//! from `TurJsContext`'s capability registry (populated by `TurFilePickerPlugin`
+//! from `TurInstanceContext`'s capability registry (populated by `TurFilePickerPlugin`
 //! during `register`).
 
 use tur_filepicker_capability::PickedFile;

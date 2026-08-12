@@ -2,7 +2,7 @@
 //! tasks.
 //!
 //! The worker does not expose its raw [`WorkerScheduler`](crate::core::scheduler::WorkerScheduler)
-//! to spawn sites. Instead [`TurJsContext::spawn_local`](crate::core::js_runtime::TurJsContext::spawn_local)
+//! to spawn sites. Instead [`TurInstanceContext::spawn_local`](crate::core::js_runtime::TurInstanceContext::spawn_local)
 //! passes an `AsyncWorkerContext` into the task closure, providing:
 //! - [`AsyncWorkerContext::sleep`] — platform timer,
 //! - [`AsyncWorkerContext::spawn_local`] — nested spawn,
@@ -18,7 +18,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use crate::core::js_runtime::TurJsContext;
+use crate::core::js_runtime::TurInstanceContext;
 use crate::core::scheduler::{Sleep, TaskHandle};
 
 type BoxFuture = Pin<Box<dyn Future<Output = ()> + 'static>>;
@@ -29,11 +29,11 @@ type BoxFuture = Pin<Box<dyn Future<Output = ()> + 'static>>;
 /// scheduler or the `need_paint` flag directly.
 #[derive(Clone)]
 pub struct AsyncWorkerContext {
-    pub(crate) js_ctx: TurJsContext,
+    pub(crate) js_ctx: TurInstanceContext,
 }
 
 impl AsyncWorkerContext {
-    pub(crate) fn new(js_ctx: TurJsContext) -> Self {
+    pub(crate) fn new(js_ctx: TurInstanceContext) -> Self {
         Self { js_ctx }
     }
 

@@ -44,7 +44,7 @@ pub struct TurAppContext {
     /// spawned futures can push promise-settle closures for `flush()` to
     /// drain under `&mut Context`.
     pub(crate) completion_handle: CompletionHandle,
-    /// Capability registry view, shared with `TurJsContext.capabilities`.
+    /// Capability registry view, shared with `TurInstanceContext.capabilities`.
     /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
     /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
     /// time.

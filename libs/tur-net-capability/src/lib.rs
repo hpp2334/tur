@@ -184,7 +184,7 @@ impl tur_engine::core::capability::Capability for Http {}
 /// (or be marked playground-only, like github-viewer).
 ///
 /// The bridge fn (`request`) is a ctx-bound `Ptr` that reads its [`Http`]
-/// capability from `TurJsContext`'s capability registry at call time. This
+/// capability from `TurInstanceContext`'s capability registry at call time. This
 /// avoids `unsafe NativeFunction::from_closure` — see [`bridge`].
 pub struct TurNetPlugin;
 

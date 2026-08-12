@@ -132,7 +132,7 @@ impl tur_engine::core::capability::Capability for FilePicker {}
 /// forgot to register a backend via `.capability(FilePicker::new(...))`.
 ///
 /// The bridge fns are ctx-bound `Ptr`s that read their `FilePicker` +
-/// `AsyncExecutor` from `TurJsContext`'s capability registry at call time — no
+/// `AsyncExecutor` from `TurInstanceContext`'s capability registry at call time — no
 /// `unsafe NativeFunction::from_closure` (see [`bridge`]).
 pub struct TurFilePickerPlugin;
 

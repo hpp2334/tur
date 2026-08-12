@@ -40,7 +40,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   ├── capability/ (Capability trait, Capabilities,  │
 │  │   │             CapabilityDecls — type-keyed        │
 │  │   │             service registry)                   │
-│  │   ├── js_runtime/ (boa plumbing: TurJsContext,      │
+│  │   ├── js_runtime/ (boa plumbing: TurInstanceContext,      │
 │  │   │             JsProps, FnEntry, module_loader,    │
 │  │   │             opaque, js_value)                   │
 │  │   ├── dev/      (turDevTool bridge)                 │
@@ -190,7 +190,7 @@ let runtime = TurRuntime::builder()
 let app = runtime
     .app_builder()
     // Optional: stamp per-instance metadata readable by bridge fns via
-    // `TurJsContext::data::<T>()` / `with_data::<T, _>(f)`. Each type may
+    // `TurInstanceContext::data::<T>()` / `with_data::<T, _>(f)`. Each type may
     // be stamped at most once per builder (same-type double-stamp panics).
     //   .instance_data(PluginId("com.example.foo".into()))
     .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
@@ -221,14 +221,14 @@ let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
 - `Capabilities::of::<C>()` / `require::<C>()` — deferred lookup at JS call
   time (bridge fns) or event dispatch time (subsystems via
   `SubsystemFlushContext.capabilities`).
-- **Per-instance data** (`TurJsContext::insert_data::<T>(value)` →
+- **Per-instance data** (`TurInstanceContext::insert_data::<T>(value)` →
   `data::<T>()` / `with_data::<T, _>(f)`) — typed worker-side metadata.
   Plugins stamp from their `register` (or any later point on the worker);
   bridge fns / subsystem-flush contexts read via `data` / `with_data`.
   Carries secure, JS-unforgeable identity (e.g. a host `PluginId` so a
   `storage.get(key)` bridge can resolve the calling plugin without trusting
   JS args). Mirrors the `Capabilities` shape: `Rc<RefCell<HashMap<TypeId,
-  Box<dyn Any>>>>` inside `TurJsContext`, shared across every cheap clone.
+  Box<dyn Any>>>>` inside `TurInstanceContext`, shared across every cheap clone.
   Lives entirely in the worker — there is no embedder-facing API to populate
   it from the main thread (the `TurAppBuilder` runs on main while this map
   is only ever touched from the worker, where boa + plugin `register` run).
@@ -323,7 +323,7 @@ Image logic lives in `tur-engine::builtin_plugins::image` (inlined from the form
 - **Engine contract types** (kept in `tur-engine::core::image_resource`): `ImageResourceId`, `ImageResourceMap`, `ImageResource`. The struct's `peniko_image` / `natural_size` fields are `pub` (matching `TextLayoutData`). `Canvas::draw_image(ImageResourceId, natural_size, transform)` does the actual drawing; the image plugin only produces these structs.
 - **Engine retains `from_rgba(raw, w, h) -> ImageResource`** as the constructor for raw RGBA pixels — pure data, no format-decoder deps.
 - **Decoders** (`builtin_plugins/image/decode`): `decode_image_bytes(&[u8])` (PNG/JPEG via the `image` crate) and `decode_svg(&str)` (rasterised via `usvg` + `resvg`). The `image` / `resvg` / `usvg` deps live in `tur-engine`'s Cargo.toml.
-- **Element** (`builtin_plugins/image/element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurJsContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
+- **Element** (`builtin_plugins/image/element`): `ImageElement` + `ImageView` + layout (`ElementLayout`) + paint (`ElementRender`) including `BoxFit` math. The engine's `PaintContext::get_image_resource(ImageResourceId)` and `LayoutContext::get_image_natural_size(ImageResourceId)` are the lookup hooks; `TurInstanceContext::image_resource_map()` is the public accessor the JS bridge uses to call `insert_image`.
 - **Resource storage is image-only**: `ImageResourceMap` is a flat `HashMap<ImageResourceId, ImageResource>` — there is no `Resource` enum wrapper because images are the only resource kind.
 
 JS surface is unchanged — `tur:std` still exports Image/createImageResource/createSvgResource. No `.d.ts` split, no new JS package.
@@ -392,7 +392,7 @@ libs/
         hit_test/            # hit-test primitives
         image_resource.rs    # ImageResourceId / ImageResourceMap /
                              #   ImageResource (paint/layout contract)
-        js_runtime/          # boa runtime plumbing: TurJsContext, JsProps,
+        js_runtime/          # boa runtime plumbing: TurInstanceContext, JsProps,
                              #   FnEntry/ConstEntry, module_loader
                              #   (build_native_module/bound_native),
                              #   opaque (BoaOpaque),

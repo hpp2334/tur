@@ -8,7 +8,7 @@ use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 use boa_gc::{Finalize, Trace};
 
 use crate::core::element::ElementNodeId;
-use crate::core::js_runtime::{BoaOpaque, TurJsContext};
+use crate::core::js_runtime::{BoaOpaque, TurInstanceContext};
 use crate::core::view::{View, ViewHandle};
 
 /// Native function pointer type used by the bridge table.
@@ -30,12 +30,16 @@ pub struct TurNodeHandle {
 }
 
 /// Decode the bound bridge ctx (prepended by `bound_native`) from `args[0]`.
-pub fn extract_js_ctx(args: &[JsValue]) -> JsResult<TurJsContext> {
+pub fn extract_js_ctx(args: &[JsValue]) -> JsResult<TurInstanceContext> {
     let obj = args.get_or_undefined(0).as_object().ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("expected TurJsContext as first argument"))
+        JsError::from(
+            JsNativeError::typ().with_message("expected TurInstanceContext as first argument"),
+        )
     })?;
-    let ctx_ref = BoaOpaque::<TurJsContext>::wrap(&obj).ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("expected TurJsContext as first argument"))
+    let ctx_ref = BoaOpaque::<TurInstanceContext>::wrap(&obj).ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ().with_message("expected TurInstanceContext as first argument"),
+        )
     })?;
     Ok(ctx_ref.clone())
 }

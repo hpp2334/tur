@@ -42,7 +42,7 @@
 //! code (e.g. the rspack-built playground `impl.js`) produces.
 //!
 //! Both fns are ctx-bound `Ptr`s (see `bound_native`): `args[0]` is the
-//! `TurJsContext`, user args start at `args[1]`.
+//! `TurInstanceContext`, user args start at `args[1]`.
 
 use std::cell::RefCell;
 use std::future::Future;
