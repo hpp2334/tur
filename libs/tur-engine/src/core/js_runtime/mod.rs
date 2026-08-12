@@ -28,7 +28,7 @@ pub mod module_loader;
 pub mod opaque;
 
 pub use helpers::{TurNodeHandle, extract_js_ctx};
-pub use instance_context::TurInstanceContext;
+pub use instance_context::{InstanceDataCx, TurInstanceContext};
 pub use js_props::JsProps;
 pub use module_loader::TurModuleLoader;
 pub use opaque::BoaOpaque;

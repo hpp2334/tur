@@ -16,6 +16,7 @@ use crate::core::dev::dev_tool;
 use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
 use crate::core::js_runtime::helpers::FnEntry;
+use crate::core::js_runtime::instance_context::InstanceDataCx;
 use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
@@ -70,6 +71,22 @@ type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 /// Sync` so it can be stored on the builder and consumed in `build()`.
 type CapabilityBuilder =
     Box<dyn FnOnce(&AsyncPluginContext) -> Result<CapabilityInsert, TurError> + Send + Sync>;
+
+/// Deferred per-instance data definer closure. Captured on the
+/// `TurAppBuilder` (main thread) and replayed once on the worker inside
+/// [`build_worker_backend`] — right after `TurInstanceContext` is
+/// constructed, before any plugin `register`. The closure receives an
+/// [`InstanceDataCx`] exposing **only** [`InstanceDataCx::define`] (the
+/// build-time-only initial value for each typed slot).
+///
+/// Because the closure **runs on the worker**, values built fresh in its
+/// body never cross the main↔worker boundary; only values captured by the
+/// closure need to be `Send` (hence the `Send + 'static` bound). This is
+/// the per-instance counterpart to the per-runtime `CapabilityBuilder` —
+/// but simpler: no `AsyncPluginContext` parameter (the definer is pure
+/// data, no OS-API hop needed at definition time) and `FnOnce` (one
+/// instance per closure).
+type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>;
 
 /// The shared engine runtime — created **once** and used to spawn any number
 /// of isolated [`TurApp`] instances.
@@ -182,6 +199,7 @@ impl TurRuntime {
             renderer: None,
             viewport: None,
             dpr: None,
+            instance_data_definer: None,
         }
     }
 
@@ -194,6 +212,7 @@ impl TurRuntime {
         renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
+        instance_data_definer: Option<InstanceDataDefiner>,
     ) -> Result<Rc<TurApp>, TurError> {
         let clock = self.clock.clone();
         let font_context = self.font_context.clone();
@@ -220,6 +239,7 @@ impl TurRuntime {
                 wake_worker,
                 main_tx,
                 main_cx.clone(),
+                instance_data_definer,
             )
             .expect("threaded backend factory failed")
         };
@@ -260,6 +280,10 @@ pub struct TurAppBuilder<'rt> {
     renderer: Option<Box<dyn crate::core::render::Renderer>>,
     viewport: Option<(f64, f64)>,
     dpr: Option<f64>,
+    /// Optional build-time definer for per-instance data. See
+    /// [`Self::instance_data`]. Replayed once on the worker inside
+    /// `build_worker_backend` before any plugin `register`.
+    instance_data_definer: Option<InstanceDataDefiner>,
 }
 
 impl<'rt> TurAppBuilder<'rt> {
@@ -285,6 +309,48 @@ impl<'rt> TurAppBuilder<'rt> {
         self
     }
 
+    /// Define build-time per-instance data. The closure receives an
+    /// [`InstanceDataCx`] exposing **only** [`InstanceDataCx::define`]
+    /// — the initial value for each typed slot. Call `define::<T>(value)`
+    /// once per type; defining the same type twice panics (fail-fast).
+    ///
+    /// The closure **runs on the worker**, right after the instance's
+    /// `TurInstanceContext` is constructed and **before** any plugin
+    /// `register`. This means:
+    /// - Values built fresh inside the closure body never cross the
+    ///   main↔worker boundary (only captured values need `Send`).
+    /// - Plugins see all defined slots as already-present at `register`
+    ///   time, so they can only [`TurInstanceContext::update`] (replace)
+    ///   or [`TurInstanceContext::data`] / [`TurInstanceContext::with_data`]
+    ///   (read) — they cannot introduce new types.
+    ///
+    /// Per-instance by design: call this on each `app_builder()` if you
+    /// want the same data on every instance.
+    ///
+    /// ```no_run
+    /// # use tur_engine::*;
+    /// # use std::rc::Rc;
+    /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
+    /// # struct PluginId(String);
+    /// # struct ThemeConfig { dark: bool }
+    /// let app = runtime
+    ///     .app_builder()
+    ///     .instance_data(|cx| {
+    ///         cx.define::<PluginId>(PluginId("com.example.foo".into()));
+    ///         cx.define::<ThemeConfig>(ThemeConfig { dark: true });
+    ///     })
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn instance_data<F>(mut self, define: F) -> Self
+    where
+        F: FnOnce(&mut InstanceDataCx) + Send + 'static,
+    {
+        self.instance_data_definer = Some(Box::new(define));
+        self
+    }
+
     /// Terminal: build the instance. Requires [`Self::renderer`] to have
     /// been called (a non-headless app supplies renderer + viewport + dpr
     /// together). Errors with a clear message otherwise.
@@ -294,6 +360,7 @@ impl<'rt> TurAppBuilder<'rt> {
             renderer,
             viewport,
             dpr,
+            instance_data_definer,
         } = self;
         let renderer = renderer.ok_or_else(|| {
             TurError::Other(
@@ -305,7 +372,7 @@ impl<'rt> TurAppBuilder<'rt> {
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        runtime.spawn_instance(renderer, viewport, dpr)
+        runtime.spawn_instance(renderer, viewport, dpr, instance_data_definer)
     }
 
     /// Terminal: build a headless instance (no renderer, no rendering).
@@ -321,11 +388,16 @@ impl<'rt> TurAppBuilder<'rt> {
     /// `viewport` sets the initial `viewportSize$` (read by JS layout);
     /// pass `(0.0, 0.0)` if layout is irrelevant.
     pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
-        let TurAppBuilder { runtime, .. } = self;
+        let TurAppBuilder {
+            runtime,
+            instance_data_definer,
+            ..
+        } = self;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
             viewport,
             1.0,
+            instance_data_definer,
         )
     }
 }
@@ -352,6 +424,7 @@ pub(crate) fn build_worker_backend(
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
     async_cx: AsyncPluginContext,
+    instance_data_definer: Option<InstanceDataDefiner>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
     let module_loader = TurModuleLoader::new();
@@ -424,6 +497,15 @@ pub(crate) fn build_worker_backend(
     );
     let _ =
         boa_context.register_global_property(js_string!("turDevTool"), dt_obj, Attribute::all());
+
+    // Replay the build-time `instance_data` definer (from
+    // `TurAppBuilder::instance_data`) — runs on the worker, before any
+    // plugin `register`, so plugins see all defined slots as already
+    // present (they can `update` / `data` / `with_data` but not define).
+    if let Some(definer) = instance_data_definer {
+        let mut data_cx = InstanceDataCx::from_map(internal.js_context.instance_data.clone());
+        definer(&mut data_cx);
+    }
 
     for plugin in plugins {
         let mut plugin_ctx = PluginContext {
