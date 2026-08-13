@@ -649,24 +649,18 @@ impl TurAppInternal {
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the
-    /// reactive store, prepending the `{get, set}` context object. No element
-    /// tree access is needed: every entry is a self-contained `(Mutation, args)`.
+    /// reactive store. The per-store `{get, set}` JsObject is built inside
+    /// [`ReactiveCore::invoke_mutation`] only for `Js`-variant closures, so
+    /// here we pass only the user args. No element tree access is needed:
+    /// every entry is a self-contained `(Mutation, args)`.
     fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let invs = self.js_context.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {
             return false;
         }
         let store = self.js_context.store.clone();
-        let ctx_obj = store
-            .ctx_object(boa_context)
-            .ok()
-            .map(boa_engine::JsValue::from);
         for inv in invs {
-            let mut args: Vec<boa_engine::JsValue> = Vec::new();
-            if let Some(o) = &ctx_obj {
-                args.push(o.clone());
-            }
-            args.extend(inv.args.to_js_args(boa_context));
+            let args = inv.args.to_js_args(boa_context);
             let _ = store.invoke_mutation(inv.mutation, &args, boa_context);
         }
         true

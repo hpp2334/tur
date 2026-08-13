@@ -66,13 +66,10 @@ fn tur_set(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult
     let bridge = js_ctx.store.bridge();
     let v = args.get_or_undefined(1);
     if let Ok(mutation) = Mutation::from_js(v) {
-        let ctx_obj = bridge.ctx_object(context)?;
-        let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
-        invoke_args.push(ctx_obj.into());
-        if let Some(extra) = args.get(2..) {
-            invoke_args.extend_from_slice(extra);
-        }
-        return bridge.invoke_mutation(mutation, &invoke_args, context);
+        // `invoke_mutation` builds the `{get,set}` JsObject internally and
+        // prepends it for `Js`-variant closures; pass only the user args.
+        let user_args = args.get(2..).unwrap_or(&[]);
+        return bridge.invoke_mutation(mutation, user_args, context);
     }
     if let Ok(readable) = AnyReadable::from_js(v) {
         return match readable {

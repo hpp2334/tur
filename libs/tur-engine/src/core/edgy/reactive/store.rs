@@ -24,7 +24,7 @@ use super::{AnyReadable, AtomId, Derived, Mutation, Readable, Source, Subscriber
 /// Atom identity + value/closure storage.
 struct AtomRegistry {
     values: RefCell<HashMap<AtomId, JsValue>>,
-    closures: RefCell<HashMap<AtomId, JsFunction>>,
+    closures: RefCell<HashMap<AtomId, Closure>>,
     next_id: Cell<u32>,
 }
 
@@ -43,6 +43,40 @@ impl AtomRegistry {
         id
     }
 }
+
+/// Per-atom closure payload — backs both `derive` and `mutate` atoms.
+///
+/// `Js` is the JS-engine path: a boa `JsFunction` invoked with the per-store
+/// `{get, set}` JsObject as its first argument (the legacy / JS-bridge
+/// surface that every `tur:core` `derive(fn)` / `mutate(fn)` call mints).
+///
+/// `DeriveRust` / `MutateRust` are the Rust-native paths exposed to plugins
+/// via [`ReactiveBridgeStore::build_derive`] / [`ReactiveBridgeStore::build_mutate`]:
+/// they receive a typed capability face (`&ReactiveReadStore` for derive,
+/// `&ReactiveBridgeStore` for mutate) directly, skipping the JsObject
+/// round-trip entirely. Reads still flow through `ReactiveCore::read`, so
+/// the auto-dependency tracker works for free.
+///
+/// The kind is encoded in the variant — a `DeriveRust` closure is never
+/// dispatched via `invoke_mutation` (and vice versa). The handle types
+/// (`Derived<T>` vs `Mutation`) make cross-kind dispatch unreachable via
+/// the public API; the panics in `ensure_computed` / `invoke_mutation` are
+/// defensive guards against an engine-internal invariant violation.
+#[derive(Clone)]
+enum Closure {
+    Js(JsFunction),
+    DeriveRust(Rc<DeriveRustFn>),
+    MutateRust(Rc<MutateRustFn>),
+}
+
+/// Rust-native derive closure signature: receives a read-only face (gets
+/// only) and the JS engine. Returns the recomputed value.
+type DeriveRustFn = dyn Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue>;
+
+/// Rust-native mutate closure signature: receives the read+write bridge
+/// face, the user-supplied args (no `{get,set}` JsObject prepended), and
+/// the JS engine. Returns whatever the closure chooses to hand back to JS.
+type MutateRustFn = dyn Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue>;
 
 /// Derived-recomputation graph: per-derived dependency sets, the reverse
 /// `dependents` edges, the stale-derived set, and the reentrancy tracker
@@ -203,14 +237,46 @@ impl ReactiveCore {
 
     pub fn derive<T>(&self, closure: JsFunction) -> Derived<T> {
         let id = self.atoms.alloc_id();
-        self.atoms.closures.borrow_mut().insert(id, closure);
+        self.atoms
+            .closures
+            .borrow_mut()
+            .insert(id, Closure::Js(closure));
         self.graph.stale_deriveds.borrow_mut().insert(id);
         Derived(id, PhantomData)
     }
 
     pub fn mutate(&self, closure: JsFunction) -> Mutation {
         let id = self.atoms.alloc_id();
-        self.atoms.closures.borrow_mut().insert(id, closure);
+        self.atoms
+            .closures
+            .borrow_mut()
+            .insert(id, Closure::Js(closure));
+        Mutation(id)
+    }
+
+    /// Rust-native derive: the closure receives `&ReactiveReadStore` (read-only
+    /// face) at recompute time, with no `{get,set}` JsObject round-trip. Reads
+    /// inside the closure still flow through [`Self::read`], so the
+    /// auto-dependency tracker records them as it would for a JS closure.
+    pub fn build_derive<T>(&self, closure: Rc<DeriveRustFn>) -> Derived<T> {
+        let id = self.atoms.alloc_id();
+        self.atoms
+            .closures
+            .borrow_mut()
+            .insert(id, Closure::DeriveRust(closure));
+        self.graph.stale_deriveds.borrow_mut().insert(id);
+        Derived(id, PhantomData)
+    }
+
+    /// Rust-native mutate: the closure receives `&ReactiveBridgeStore`
+    /// (read+write face) plus the user-supplied args at invocation time,
+    /// with no `{get,set}` JsObject round-trip.
+    pub fn build_mutate(&self, closure: Rc<MutateRustFn>) -> Mutation {
+        let id = self.atoms.alloc_id();
+        self.atoms
+            .closures
+            .borrow_mut()
+            .insert(id, Closure::MutateRust(closure));
         Mutation(id)
     }
 
@@ -244,15 +310,39 @@ impl ReactiveCore {
 
         self.graph.tracker_stack.borrow_mut().push(HashSet::new());
 
-        let store_ctx_obj = self.build_store_ctx_obj(ctx);
-
-        let result = closure
-            .call(
-                &JsValue::undefined(),
-                std::slice::from_ref(&store_ctx_obj),
-                ctx,
-            )
-            .unwrap_or_else(|_| JsValue::undefined());
+        // Dispatch on the closure kind. The Js branch builds the per-store
+        // `{get, set}` JsObject and calls the JS closure with it; the
+        // DeriveRust branch hands the closure a typed `&ReactiveReadStore`
+        // face constructed from `weak_self` (no JsObject round-trip). The
+        // MutateRust branch is unreachable here — derive handles never
+        // carry a MutateRust closure (the handle type encodes the kind).
+        let result = match closure {
+            Closure::Js(f) => {
+                let store_ctx_obj = self.build_store_ctx_obj(ctx);
+                f.call(
+                    &JsValue::undefined(),
+                    std::slice::from_ref(&store_ctx_obj),
+                    ctx,
+                )
+                .unwrap_or_else(|_| JsValue::undefined())
+            }
+            Closure::DeriveRust(f) => {
+                let core = self
+                    .weak_self
+                    .borrow()
+                    .upgrade()
+                    .expect("store must be alive during recompute");
+                let read_store = ReactiveReadStore { core };
+                f(&read_store, ctx).unwrap_or_else(|_| JsValue::undefined())
+            }
+            Closure::MutateRust(_) => {
+                panic!(
+                    "ensure_computed called on a MutateRust closure (atom id {:?}) — \
+                     derive handles must be paired with Js or DeriveRust closures",
+                    id
+                );
+            }
+        };
 
         let new_deps = self.graph.tracker_stack.borrow_mut().pop().unwrap();
 
@@ -321,6 +411,11 @@ impl ReactiveCore {
         self.flush.host_dirty.set(true);
     }
 
+    /// Invoke a mutation atom. `args` are the **user-supplied** args only
+    /// (no leading `{get,set}` JsObject) — the JsObject is constructed
+    /// internally and prepended **only** for `Js`-variant closures. The
+    /// `MutateRust` variant receives the user args verbatim alongside a
+    /// typed `&ReactiveBridgeStore` face.
     pub fn invoke_mutation(
         &self,
         mutation: Mutation,
@@ -331,7 +426,42 @@ impl ReactiveCore {
         let Some(closure) = closure else {
             return Ok(JsValue::undefined());
         };
-        closure.call(&JsValue::undefined(), args, ctx)
+        match closure {
+            Closure::Js(f) => {
+                // Build the per-store `{get, set}` JsObject and prepend it
+                // before invoking — JS closures expect `(ctx, ...args)`.
+                let core = self
+                    .weak_self
+                    .borrow()
+                    .upgrade()
+                    .expect("store must be alive during mutation invoke");
+                let ctx_obj = super::build_store_context_object(ctx, core)
+                    .map(JsValue::from)
+                    .unwrap_or(JsValue::undefined());
+                let mut full: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
+                full.push(ctx_obj);
+                full.extend_from_slice(args);
+                f.call(&JsValue::undefined(), &full, ctx)
+            }
+            Closure::MutateRust(f) => {
+                // Skip the JsObject entirely; hand the closure the bridge
+                // face plus the user args verbatim.
+                let core = self
+                    .weak_self
+                    .borrow()
+                    .upgrade()
+                    .expect("store must be alive during mutation invoke");
+                let bridge = ReactiveBridgeStore { core };
+                f(&bridge, args, ctx)
+            }
+            Closure::DeriveRust(_) => {
+                panic!(
+                    "invoke_mutation called on a DeriveRust closure (atom id {:?}) — \
+                     mutation handles must be paired with Js or MutateRust closures",
+                    mutation.0
+                );
+            }
+        }
     }
 
     fn flush(&self) -> HashSet<AtomId> {
@@ -389,6 +519,10 @@ impl Store {
         Store { core, graph }
     }
 
+    /// Invoke a mutation atom. `args` are the **user-supplied** args only
+    /// (no leading `{get,set}` JsObject) — see
+    /// [`ReactiveCore::invoke_mutation`] for the dispatch details. Used by
+    /// the engine's `flush_pending_mutations` loop.
     pub fn invoke_mutation(
         &self,
         mutation: Mutation,
@@ -588,6 +722,42 @@ impl ReactiveBridgeStore {
         self.core.borrow().mutate(closure)
     }
 
+    /// Mint a derived atom whose value is computed by a **Rust closure**.
+    /// The closure receives a read-only reactive face (`&ReactiveReadStore`)
+    /// at recompute time, with no `{get, set}` JsObject round-trip. Reads
+    /// inside the closure still flow through the same machinery the JS
+    /// `derive(fn)` path uses, so automatic dependency tracking works
+    /// identically (and nested `ensure_computed` for deriveds read by this
+    /// closure is safe — all reactive methods are `&self`).
+    ///
+    /// Plugins reach this via
+    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive)
+    /// and typically expose the returned handle to JS via
+    /// [`PluginContext::register_global`] or as a bridge-fn return value;
+    /// JS then reads it through the unchanged `get(derived)` bridge.
+    pub fn build_derive<F>(&self, closure: F) -> Derived<JsValue>
+    where
+        F: Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue> + 'static,
+    {
+        self.core.borrow().build_derive(Rc::new(closure))
+    }
+
+    /// Mint a mutation atom whose logic is a **Rust closure**. The closure
+    /// receives this same `&ReactiveBridgeStore` face (so it can read and
+    /// write atoms directly) plus the user-supplied args at invocation time,
+    /// with no `{get, set}` JsObject round-trip.
+    ///
+    /// Plugins reach this via
+    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive);
+    /// JS invokes the mutation through the unchanged `set(mutation, ...args)`
+    /// bridge, which routes the user args here verbatim.
+    pub fn build_mutate<F>(&self, closure: F) -> Mutation
+    where
+        F: Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue> + 'static,
+    {
+        self.core.borrow().build_mutate(Rc::new(closure))
+    }
+
     pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
         self.core.borrow().read(readable, ctx)
     }
@@ -596,6 +766,11 @@ impl ReactiveBridgeStore {
         self.core.borrow().set_source(source, value);
     }
 
+    /// Invoke a mutation atom. `args` are the **user-supplied** args only
+    /// — for `Js`-variant mutations the per-store `{get, set}` JsObject is
+    /// constructed and prepended internally (so callers must NOT prepend it
+    /// themselves); for `MutateRust`-variant mutations the args are passed
+    /// verbatim alongside the bridge face.
     pub fn invoke_mutation(
         &self,
         mutation: Mutation,
@@ -606,8 +781,9 @@ impl ReactiveBridgeStore {
     }
 
     /// Build the per-store `{get,set}` JS-context object (wraps
-    /// [`super::build_store_context_object`]). The bridge uses this when
-    /// invoking a mutation.
+    /// [`super::build_store_context_object`]). Exposed for the rare host
+    /// bridge that needs to mint a ctx object directly; ordinary mutation
+    /// invocation constructs it internally.
     pub fn ctx_object(&self, ctx: &mut Context) -> JsResult<JsObject> {
         super::build_store_context_object(ctx, self.core.clone())
     }

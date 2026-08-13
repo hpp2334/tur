@@ -263,6 +263,16 @@ impl TurInstanceContext {
         self.capabilities.clone()
     }
 
+    /// The reactive atom minter + writer face. Bridge fns that need to
+    /// mint atoms mid-call (e.g. a hypothetical `useResource()` factory
+    /// returning a fresh source) reach this via
+    /// [`extract_js_ctx`](crate::core::js_runtime::helpers::extract_js_ctx).
+    /// Plugins reach the same face at registration time via
+    /// [`PluginContext::reactive`](crate::core::plugin::PluginContext::reactive).
+    pub fn reactive(&self) -> crate::core::edgy::reactive::ReactiveBridgeStore {
+        self.store.bridge()
+    }
+
     /// Register a decoded image: allocate the worker-side id + record its
     /// natural size via [`ImageManager::allocate`] (so layout + paint can
     /// size the element this frame), and ship the pixel `Blob` to main
