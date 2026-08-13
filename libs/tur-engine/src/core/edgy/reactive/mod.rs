@@ -13,7 +13,10 @@ use crate::core::js_runtime::js_value::{FromJs, IntoJs};
 mod store;
 
 pub use store::Store;
-pub use store::{ReactiveCore, ReactiveReadJsContext, ReactiveReadStore, SubscriberIndexStore};
+pub use store::{
+    FlushEngineStore, ReactiveBridgeStore, ReactiveCore, ReactiveReadJsContext, ReactiveReadStore,
+    SubscriberIndexStore,
+};
 
 /// Unique identifier for a reactive atom. Private to the reactive module —
 /// all biz code addresses atoms via the typed handles (`Source<T>`,
@@ -377,15 +380,13 @@ pub fn build_store_context_object(
         boa_engine::native_function::NativeFunction::from_closure(move |_this, args, ctx| {
             let v = args.get_or_undefined(0);
             if let Ok(mutation) = Mutation::from_js(v) {
-                let ctx_obj = build_store_context_object(ctx, core_for_set.clone())?;
-                let mut invoke_args: Vec<JsValue> = Vec::with_capacity(args.len() + 1);
-                invoke_args.push(ctx_obj.into());
-                if let Some(extra) = args.get(1..) {
-                    invoke_args.extend_from_slice(extra);
-                }
+                // `invoke_mutation` builds the `{get,set}` JsObject internally
+                // and prepends it for `Js`-variant closures; pass only the
+                // user args (no recursive ctx_obj construction here).
+                let user_args = args.get(1..).unwrap_or(&[]);
                 return core_for_set
                     .borrow()
-                    .invoke_mutation(mutation, &invoke_args, ctx);
+                    .invoke_mutation(mutation, user_args, ctx);
             }
             if let Ok(readable) = AnyReadable::from_js(v) {
                 return match readable {

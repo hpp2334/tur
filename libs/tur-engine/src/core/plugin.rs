@@ -271,6 +271,30 @@ impl<'a> PluginContext<'a> {
         self.js_ctx.mutation_queue.clone()
     }
 
+    /// The reactive atom minter + writer face. Plugins can create
+    /// sources/derives/mutations from Rust via this face, then expose them
+    /// to JS as bridge-fn return values, global properties, or module
+    /// consts. JS reads/writes the atoms through the unchanged `tur:core`
+    /// bridge (`get` / `set`), so the JS side cannot tell whether an atom
+    /// was minted by Rust or JS.
+    ///
+    /// For Rust-native derive / mutate closures that skip the `{get, set}`
+    /// JsObject round-trip, use
+    /// [`build_derive`](crate::core::edgy::reactive::ReactiveBridgeStore::build_derive)
+    /// /
+    /// [`build_mutate`](crate::core::edgy::reactive::ReactiveBridgeStore::build_mutate).
+    /// The plain
+    /// [`derive`](crate::core::edgy::reactive::ReactiveBridgeStore::derive)
+    /// /
+    /// [`mutate`](crate::core::edgy::reactive::ReactiveBridgeStore::mutate)
+    /// accept a boa `JsFunction` (the JS-bridge path).
+    ///
+    /// Mirrors the engine-internal `viewportSize$` pattern (`source` minted
+    /// in the runtime builder, updated each frame by a subsystem).
+    pub fn reactive(&self) -> crate::core::edgy::reactive::ReactiveBridgeStore {
+        self.js_ctx.reactive()
+    }
+
     /// The engine's shared clock (set via
     /// [`TurRuntimeBuilder::clock`](crate::TurRuntimeBuilder::clock)). Plugins
     /// that own time-driven subsystems (animation, audio, etc.) stash this

@@ -255,6 +255,80 @@ let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
   exception because `core::platform::Cursor` already names the cursor-kind enum.
 
 
+### Reactive substrate (plugin-facing atom minting)
+
+The reactive substrate (`core::edgy`) is engine-owned per-instance infrastructure
+(like `mutation_queue` / `clock` / `event_bus`), NOT a swappable cross-cutting
+backend. Plugins mint reactive atoms from Rust via the narrow
+`ReactiveBridgeStore` face returned by `PluginContext::reactive()` (or
+`TurInstanceContext::reactive()` from inside a bridge fn):
+
+```rust
+fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
+    let bridge = ctx.reactive();
+
+    // Mint a source. Initial value is a JsValue (the store is type-erased to
+    // JsValue at runtime; Source<T>'s T is a type-level marker only).
+    let clock: Source<JsValue> = bridge.source(JsValue::new(0.0));
+
+    // Expose to JS — handles cross the boundary via IntoJs (opaque JsObject).
+    // JS reads via the unchanged `get(mySource)` from `tur:core` / `tur:std`.
+    let js_handle = clock.into_js(ctx.boa_mut());
+    ctx.register_global("clock$", js_handle);
+
+    // A subsystem can write to the source from Rust each frame — mirrors the
+    // engine-internal `viewportSize$` pattern (Screen::sync_source on resize).
+    ctx.register_subsystem(Box::new(ClockSubsystem { source: clock, bridge }));
+    Ok(())
+}
+```
+
+The JS side is unchanged — atoms minted by Rust are indistinguishable from
+atoms minted by JS. JS reads/writes via `get(atom)` / `set(source, v)` /
+`set(mutation, ...args)` / `ReadableSubscribe(...)`.
+
+**Rust-native closures** (`build_derive` / `build_mutate`) skip the `{get, set}`
+JsObject round-trip that JS `derive(fn)` / `mutate(fn)` closures pay. The
+closure receives a typed capability face directly:
+
+- `bridge.build_derive(F)` where `F: Fn(&ReactiveReadStore, &mut Context) -> JsResult<JsValue>`
+  — read-only face; reads inside the closure flow through `ReactiveCore::read`,
+  so the auto-dependency tracker (`tracker_stack`) records them as it would for
+  a JS closure. No manual dep declaration.
+- `bridge.build_mutate(F)` where `F: Fn(&ReactiveBridgeStore, &[JsValue], &mut Context) -> JsResult<JsValue>`
+  — read+write face + the user-supplied args verbatim (no JsObject prepended).
+
+```rust
+let flag: Source<JsValue> = bridge.source(JsValue::new(false));
+let flag_for_closure = flag;
+let bridge_for_closure = bridge.clone();
+let toggle = bridge.build_mutate(move |b, _args, boa| {
+    let current = b.read(Readable::from(flag_for_closure), boa).as_boolean().unwrap_or(false);
+    bridge_for_closure.set_source(flag_for_closure, JsValue::new(!current));
+    Ok(JsValue::undefined())
+});
+// JS invokes via `set(globalThis.toggle)` — invoke_mutation detects the
+// MutateRust variant and hands the closure the bridge face + user args.
+```
+
+Implementation notes:
+- The `Js` and Rust closure variants share `ReactiveCore` storage as a
+  `Closure` enum (`Js(JsFunction)` / `DeriveRust(Rc<dyn Fn>)` /
+  `MutateRust(Rc<dyn Fn>)`); the kind is encoded in the variant so cross-kind
+  dispatch is unreachable via the public API (handle types `Derived<T>` vs
+  `Mutation` make it impossible to mismatch; defensive panics guard engine
+  bugs).
+- `invoke_mutation` builds the per-store `{get, set}` JsObject **internally**
+  only for `Js`-variant closures. Callers pass user args verbatim (no
+  prepend) — see `core::edgy/reactive/store.rs::ReactiveCore::invoke_mutation`.
+- Rust closures are `Rc<dyn Fn>` (not `Box<dyn Fn>`) so the existing
+  clone-out-before-call discipline (matching `JsFunction::clone()`) is
+  preserved — this is what makes nested `ensure_computed` (a derive closure
+  reading another derived) safe under RefCell.
+- Closures are `!Send` (`Rc`-captured); they live entirely on the worker
+  thread. Matches the `Rc<RefCell<...>>` discipline throughout the substrate
+  and the `!Send` `JsFunction` path.
+
 ### Multi-instance model (TurRuntime + TurApp)
 
 The engine has a **one runtime, many instances** architecture:
