@@ -145,10 +145,11 @@ pub enum WorkerMsg {
         id: ElementNodeId,
         runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
     },
-    /// Event bus — host → JS bytes. Worker pushes into the `EventBus`
-    /// `host_to_js` queue; `HostBusSubsystem` drains it on the next flush
-    /// and delivers to JS `eventBus.on` callbacks.
-    EventBusToJs(Vec<u8>),
+    /// Event bus — host → JS bytes on `channel_id`. Worker pushes into the
+    /// `EventBus` `host_to_js` queue; `HostBusSubsystem` drains it on the
+    /// next flush and delivers to JS `eventBus.on` callbacks registered on
+    /// `channel_id`.
+    EventBusToJs { channel_id: u64, payload: Vec<u8> },
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
@@ -196,10 +197,11 @@ pub enum MainMsg {
         is_editable: bool,
         cursor_rect: Option<(f64, f64, f64, f64)>,
     },
-    /// Event bus — JS → host bytes. Worker ships one `MainMsg` per
-    /// `eventBus.send` dispatch; `MainBackend` dispatches to handlers
-    /// registered on the main-side `EventBusHandle`.
-    EventBusToHost(Vec<u8>),
+    /// Event bus — JS → host bytes on `channel_id`. Worker ships one
+    /// `MainMsg` per `eventBus.send` dispatch; `MainBackend` dispatches to
+    /// handlers registered on `channel_id` on the main-side
+    /// `EventBusHandle`.
+    EventBusToHost { channel_id: u64, payload: Vec<u8> },
     /// Reply to a dev-tool RPC.
     DevReply(DevReply),
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
@@ -300,7 +302,14 @@ impl fmt::Debug for WorkerMsg {
             Self::QueryElement { key, .. } => {
                 f.debug_struct("QueryElement").field("key", &key).finish()
             }
-            Self::EventBusToJs(bytes) => f.debug_tuple("EventBusToJs").field(&bytes.len()).finish(),
+            Self::EventBusToJs {
+                channel_id,
+                payload,
+            } => f
+                .debug_struct("EventBusToJs")
+                .field("channel_id", channel_id)
+                .field("len", &payload.len())
+                .finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
             Self::Destroy { .. } => write!(f, "Destroy"),
         }
@@ -325,9 +334,14 @@ impl fmt::Debug for MainMsg {
                 .field("is_editable", is_editable)
                 .field("cursor_rect", cursor_rect)
                 .finish(),
-            Self::EventBusToHost(bytes) => {
-                f.debug_tuple("EventBusToHost").field(&bytes.len()).finish()
-            }
+            Self::EventBusToHost {
+                channel_id,
+                payload,
+            } => f
+                .debug_struct("EventBusToHost")
+                .field("channel_id", channel_id)
+                .field("len", &payload.len())
+                .finish(),
             Self::DevReply(_) => f.debug_tuple("DevReply").finish_non_exhaustive(),
             Self::Destroyed => write!(f, "Destroyed"),
         }
