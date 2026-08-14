@@ -1,22 +1,28 @@
-//! Event bus — bidirectional byte-channel between the Rust host and the JS
-//! realm.
+//! Event bus — bidirectional multiplexed byte-channel between the Rust host
+//! and the JS realm, keyed by `channel_id: u64`.
 //!
 //! The bus is engine infrastructure (always installed by `TurStdPlugin`),
 //! so the type lives in `core` rather than `builtin_plugins`. The
 //! registration code (`install_event_bus`) and the JS bridge closures live
 //! here too; `TurStdPlugin::register` just calls `install_event_bus`.
 //!
+//! Every message carries a `channel_id`. A handler registered on channel `N`
+//! only receives messages sent/emitted on channel `N` — there is no
+//! broadcast: messages target exactly one channel, and a message to a
+//! channel with no handlers is silently dropped (standard pub/sub).
+//!
 //! The JS-side `eventBus` object exposes:
-//! - `on(callback)` — register a callback invoked with a `Uint8Array` for each
-//!   host→JS message.
-//! - `send(Uint8Array)` — push a byte payload to the host-side handlers.
+//! - `on(channelId, callback)` — register a callback invoked with a
+//!   `Uint8Array` for each host→JS message on `channelId`.
+//! - `send(channelId, Uint8Array)` — push a byte payload to the host-side
+//!   handlers registered on `channelId`.
 //!
 //! The host-side [`EventBus`] wrapper (retrieved via
 //! [`TurApp::event_bus`](crate::TurApp::event_bus)) exposes:
-//! - [`EventBus::emit_to_js`] — push bytes to be delivered to JS `on`
-//!   callbacks on the next flush.
+//! - [`EventBus::emit_to_js`] — push bytes on a channel to be delivered to
+//!   JS `on` callbacks (registered on that channel) on the next flush.
 //! - [`EventBus::on_bus_event`] — register a Rust handler invoked with
-//!   `Vec<u8>` for each JS→host message.
+//!   `Vec<u8>` for each JS→host message on a channel.
 //!
 //! Shared state lives directly on [`EventBus`] (no separate "inner" type);
 //! all sides (host handle, JS bridge closures, the
@@ -25,7 +31,7 @@
 //! does not cause double-borrow panics.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
@@ -45,14 +51,15 @@ use crate::error::TurError;
 // Cross-thread queue types
 // ---------------------------------------------------------------------------
 
-/// Cross-thread host→JS byte queue. Host pushes (from any thread); the
-/// worker's `HostBusSubsystem` drains during flush.
-pub type HostToJsQueue = Arc<Mutex<VecDeque<Vec<u8>>>>;
+/// Cross-thread host→JS byte queue. Host pushes `(channel_id, bytes)` (from
+/// any thread); the worker's `HostBusSubsystem` drains during flush and
+/// routes each message to the JS handlers registered on `channel_id`.
+pub type HostToJsQueue = Arc<Mutex<VecDeque<(u64, Vec<u8>)>>>;
 
-/// Cross-thread JS→host byte queue. JS pushes (via `eventBus.send`); the
-/// worker's `HostBusSubsystem` drains during flush and invokes host
-/// handlers.
-pub type JsToHostQueue = Arc<Mutex<VecDeque<Vec<u8>>>>;
+/// Cross-thread JS→host byte queue. JS pushes `(channel_id, bytes)` (via
+/// `eventBus.send`); the worker's `HostBusSubsystem` drains during flush and
+/// invokes host handlers registered on `channel_id`.
+pub type JsToHostQueue = Arc<Mutex<VecDeque<(u64, Vec<u8>)>>>;
 
 // ---------------------------------------------------------------------------
 // Shared state (was `EventBusInner`)
@@ -63,14 +70,14 @@ type HostHandler = Box<dyn FnMut(Vec<u8>)>;
 pub struct EventBus {
     host_to_js: HostToJsQueue,
     js_to_host: JsToHostQueue,
-    /// JS-side handlers registered via `eventBus.on`. `RefCell` because
-    /// boa's `JsFunction` is `!Send`/`!Sync` — these stay on the worker
-    /// thread (the subsystem that invokes them runs there).
-    js_handlers: RefCell<Vec<JsFunction>>,
-    /// Host-side handlers registered via `on_bus_event`. Run during the
-    /// worker's `HostBusSubsystem` flush (inline mode only — threaded
-    /// mode ships bytes to main via `main_tx`).
-    host_handlers: RefCell<Vec<HostHandler>>,
+    /// JS-side handlers registered via `eventBus.on`, keyed by `channel_id`.
+    /// `RefCell` because boa's `JsFunction` is `!Send`/`!Sync` — these stay
+    /// on the worker thread (the subsystem that invokes them runs there).
+    js_handlers: RefCell<HashMap<u64, Vec<JsFunction>>>,
+    /// Host-side handlers registered via `on_bus_event`, keyed by
+    /// `channel_id`. Run during the worker's `HostBusSubsystem` flush
+    /// (inline mode only — threaded mode ships bytes to main via `main_tx`).
+    host_handlers: RefCell<HashMap<u64, Vec<HostHandler>>>,
     /// Worker → main sender. When set (threaded mode), JS→host bytes are
     /// shipped to main via `MainMsg::EventBusToHost` so handlers registered
     /// on the main-side `EventBusHandle` fire. `None` in inline mode.
@@ -82,8 +89,8 @@ impl EventBus {
         Self {
             host_to_js: Arc::new(Mutex::new(VecDeque::new())),
             js_to_host: Arc::new(Mutex::new(VecDeque::new())),
-            js_handlers: RefCell::new(Vec::new()),
-            host_handlers: RefCell::new(Vec::new()),
+            js_handlers: RefCell::new(HashMap::new()),
+            host_handlers: RefCell::new(HashMap::new()),
             main_tx: RefCell::new(None),
         }
     }
@@ -95,8 +102,8 @@ impl EventBus {
         Self {
             host_to_js,
             js_to_host,
-            js_handlers: RefCell::new(Vec::new()),
-            host_handlers: RefCell::new(Vec::new()),
+            js_handlers: RefCell::new(HashMap::new()),
+            host_handlers: RefCell::new(HashMap::new()),
             main_tx: RefCell::new(None),
         }
     }
@@ -120,12 +127,23 @@ impl EventBus {
         Some(app.event_bus_handle())
     }
 
-    pub fn emit_to_js(&self, payload: Vec<u8>) {
-        self.host_to_js.lock().unwrap().push_back(payload);
+    /// Push bytes on `channel_id` to be delivered to JS `on` callbacks
+    /// registered on `channel_id` on the next flush. Messages to a channel
+    /// with no JS handlers are silently dropped.
+    pub fn emit_to_js(&self, channel_id: u64, payload: Vec<u8>) {
+        self.host_to_js
+            .lock()
+            .unwrap()
+            .push_back((channel_id, payload));
     }
 
-    pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + 'static) {
-        self.host_handlers.borrow_mut().push(Box::new(handler));
+    /// Register a host-side handler for JS→host messages on `channel_id`.
+    pub fn on_bus_event(&self, channel_id: u64, handler: impl FnMut(Vec<u8>) + 'static) {
+        self.host_handlers
+            .borrow_mut()
+            .entry(channel_id)
+            .or_default()
+            .push(Box::new(handler));
     }
 
     /// Set the worker→main sender. When set, JS→host bytes are shipped to
@@ -165,10 +183,11 @@ pub struct EventBusHandle {
 /// Host-side handler stored on the main-side `EventBusHandle` (channel mode).
 type MainHostHandler = Box<dyn FnMut(Vec<u8>) + Send>;
 
-/// Shared handler list — all clones of an `EventBusHandle` in channel mode
-/// see the same list, so a handler registered on one clone fires when
-/// `MainBackend` dispatches on its own clone.
-type SharedHostHandlers = Arc<Mutex<Vec<MainHostHandler>>>;
+/// Shared handler list keyed by `channel_id` — all clones of an
+/// `EventBusHandle` in channel mode see the same map, so a handler
+/// registered on one clone fires when `MainBackend` dispatches on its own
+/// clone for the matching `channel_id`.
+type SharedHostHandlers = Arc<Mutex<HashMap<u64, Vec<MainHostHandler>>>>;
 
 #[derive(Clone)]
 enum EventBusHandleInner {
@@ -195,45 +214,57 @@ impl EventBusHandle {
         Self {
             inner: EventBusHandleInner::Channel {
                 worker_tx,
-                host_handlers: Arc::new(Mutex::new(Vec::new())),
+                host_handlers: Arc::new(Mutex::new(HashMap::new())),
             },
         }
     }
 
-    /// Push bytes to be delivered to JS `on` callbacks on the next flush.
-    pub fn emit_to_js(&self, payload: Vec<u8>) {
+    /// Push bytes on `channel_id` to be delivered to JS `on` callbacks
+    /// registered on `channel_id` on the next flush.
+    pub fn emit_to_js(&self, channel_id: u64, payload: Vec<u8>) {
         match &self.inner {
-            EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back(payload),
+            EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back((channel_id, payload)),
             EventBusHandleInner::Channel { worker_tx, .. } => {
-                let _ =
-                    worker_tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs(payload));
+                let _ = worker_tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs {
+                    channel_id,
+                    payload,
+                });
             }
         }
     }
 
-    /// Register a host-side handler for JS→host bytes. In channel mode the
-    /// handler is stored in a shared `Arc<Mutex>` and fires when
-    /// `MainBackend` dispatches a `MainMsg::EventBusToHost`.
-    pub fn on_bus_event(&self, handler: impl FnMut(Vec<u8>) + Send + 'static) {
+    /// Register a host-side handler for JS→host messages on `channel_id`.
+    /// In channel mode the handler is stored in a shared `Arc<Mutex>` and
+    /// fires when `MainBackend` dispatches a `MainMsg::EventBusToHost` for
+    /// `channel_id`.
+    pub fn on_bus_event(&self, channel_id: u64, handler: impl FnMut(Vec<u8>) + Send + 'static) {
         if let EventBusHandleInner::Channel { host_handlers, .. } = &self.inner {
-            host_handlers.lock().unwrap().push(Box::new(handler));
+            host_handlers
+                .lock()
+                .unwrap()
+                .entry(channel_id)
+                .or_default()
+                .push(Box::new(handler));
         }
     }
 
-    /// Dispatch JS→host bytes to all registered handlers. Called by
-    /// `MainBackend` when it receives `MainMsg::EventBusToHost`.
-    pub(crate) fn dispatch_to_host(&self, bytes: Vec<u8>) {
+    /// Dispatch JS→host bytes on `channel_id` to handlers registered on
+    /// `channel_id`. Called by `MainBackend` when it receives
+    /// `MainMsg::EventBusToHost`.
+    pub(crate) fn dispatch_to_host(&self, channel_id: u64, bytes: Vec<u8>) {
         if let EventBusHandleInner::Channel { host_handlers, .. } = &self.inner {
             let mut handlers = host_handlers.lock().unwrap();
-            for handler in handlers.iter_mut() {
-                handler(bytes.clone());
+            if let Some(channel_handlers) = handlers.get_mut(&channel_id) {
+                for handler in channel_handlers.iter_mut() {
+                    handler(bytes.clone());
+                }
             }
         }
     }
 
-    /// Drain pending JS→host messages. Returns empty in channel mode
-    /// (handlers run on the worker).
-    pub fn drain_js_to_host(&self) -> Vec<Vec<u8>> {
+    /// Drain pending JS→host messages (as `(channel_id, bytes)`). Returns
+    /// empty in channel mode (handlers run on the worker).
+    pub fn drain_js_to_host(&self) -> Vec<(u64, Vec<u8>)> {
         match &self.inner {
             EventBusHandleInner::Queues(_, j) => {
                 let mut q = j.lock().unwrap();
@@ -254,10 +285,15 @@ impl Subsystem for HostBusSubsystem {
     fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext) {
         let inner = self.0.clone();
 
-        let host_msgs: Vec<Vec<u8>> = inner.host_to_js.lock().unwrap().drain(..).collect();
+        let host_msgs: Vec<(u64, Vec<u8>)> = inner.host_to_js.lock().unwrap().drain(..).collect();
         if !host_msgs.is_empty() {
-            let handlers = inner.js_handlers.borrow().clone();
-            for msg in host_msgs {
+            // Snapshot the handler map so JS callbacks calling `on`/`send`
+            // during dispatch don't cause a double-borrow of the RefCell.
+            let handlers_snapshot = inner.js_handlers.borrow().clone();
+            for (channel_id, msg) in host_msgs {
+                let Some(channel_handlers) = handlers_snapshot.get(&channel_id) else {
+                    continue;
+                };
                 let u8a = match JsUint8Array::from_iter(msg, cx.boa) {
                     Ok(a) => JsValue::from(a),
                     Err(e) => {
@@ -265,7 +301,7 @@ impl Subsystem for HostBusSubsystem {
                         continue;
                     }
                 };
-                for handler in &handlers {
+                for handler in channel_handlers {
                     let args: [JsValue; 1] = [u8a.clone()];
                     if let Err(e) = handler.call(&JsValue::undefined(), &args, cx.boa) {
                         tracing::error!("HostBus: JS handler error: {e}");
@@ -275,20 +311,26 @@ impl Subsystem for HostBusSubsystem {
             cx.mark_dirty();
         }
 
-        let js_msgs: Vec<Vec<u8>> = inner.js_to_host.lock().unwrap().drain(..).collect();
+        let js_msgs: Vec<(u64, Vec<u8>)> = inner.js_to_host.lock().unwrap().drain(..).collect();
         if !js_msgs.is_empty() {
             // Threaded mode: ship each message to main so handlers
             // registered on the main-side `EventBusHandle` fire.
             if let Some(tx) = inner.main_tx.borrow().as_ref() {
-                for msg in &js_msgs {
-                    let _ =
-                        tx.unbounded_send(crate::core::app::MainMsg::EventBusToHost(msg.clone()));
+                for (channel_id, msg) in &js_msgs {
+                    let _ = tx.unbounded_send(crate::core::app::MainMsg::EventBusToHost {
+                        channel_id: *channel_id,
+                        payload: msg.clone(),
+                    });
                 }
             }
-            // Inline mode: call worker-side handlers directly.
+            // Inline mode: call worker-side handlers directly, filtered by
+            // channel_id.
             let mut handlers = inner.host_handlers.borrow_mut();
-            for msg in js_msgs {
-                for handler in handlers.iter_mut() {
+            for (channel_id, msg) in js_msgs {
+                let Some(channel_handlers) = handlers.get_mut(&channel_id) else {
+                    continue;
+                };
+                for handler in channel_handlers.iter_mut() {
                     handler(msg.clone());
                 }
             }
@@ -316,13 +358,30 @@ fn tur_event_bus_on(
     caps: &EventBusCaptures,
     _ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let cb = args.get_or_undefined(0).as_object().ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("eventBus.on: expected a function"))
+    let channel_id = args.get_or_undefined(0).as_number().ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("eventBus.on: expected a channel_id (number) as the first argument"),
+        )
+    })? as u64;
+    let cb = args.get_or_undefined(1).as_object().ok_or_else(|| {
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("eventBus.on: expected a function as the second argument"),
+        )
     })?;
     let func = JsFunction::from_object(cb.clone()).ok_or_else(|| {
-        JsError::from(JsNativeError::typ().with_message("eventBus.on: expected a function"))
+        JsError::from(
+            JsNativeError::typ()
+                .with_message("eventBus.on: expected a function as the second argument"),
+        )
     })?;
-    caps.inner.js_handlers.borrow_mut().push(func);
+    caps.inner
+        .js_handlers
+        .borrow_mut()
+        .entry(channel_id)
+        .or_default()
+        .push(func);
     Ok(JsValue::undefined())
 }
 
@@ -332,9 +391,18 @@ fn tur_event_bus_send(
     caps: &EventBusCaptures,
     ctx: &mut Context,
 ) -> JsResult<JsValue> {
-    let v = args.get_or_undefined(0);
-    let bytes = extract_bytes_from_value(v, ctx)?;
-    caps.inner.js_to_host.lock().unwrap().push_back(bytes);
+    let channel_id =
+        args.get_or_undefined(0).as_number().ok_or_else(|| {
+            JsError::from(JsNativeError::typ().with_message(
+                "eventBus.send: expected a channel_id (number) as the first argument",
+            ))
+        })? as u64;
+    let bytes = extract_bytes_from_value(args.get_or_undefined(1), ctx)?;
+    caps.inner
+        .js_to_host
+        .lock()
+        .unwrap()
+        .push_back((channel_id, bytes));
     Ok(JsValue::undefined())
 }
 
@@ -383,13 +451,13 @@ pub fn install_event_bus(ctx: &mut PluginContext) -> Result<Vec<ConstEntry>, Tur
 
     let on_fn = NativeFunction::from_copy_closure_with_captures(tur_event_bus_on, caps.clone());
     let on_obj = FunctionObjectBuilder::new(ctx.boa_mut().realm(), on_fn)
-        .length(1)
+        .length(2)
         .name(js_string!("on"))
         .build();
 
     let send_fn = NativeFunction::from_copy_closure_with_captures(tur_event_bus_send, caps);
     let send_obj = FunctionObjectBuilder::new(ctx.boa_mut().realm(), send_fn)
-        .length(1)
+        .length(2)
         .name(js_string!("send"))
         .build();
 

@@ -790,8 +790,8 @@ declare module "tur:std" {
     export function requestFocus(target: TextController | Element): void;
 
     export interface EventBus {
-        on(callback: (payload: Uint8Array) => void): void;
-        send(payload: Uint8Array): void;
+        on(channelId: number, callback: (payload: Uint8Array) => void): void;
+        send(channelId: number, payload: Uint8Array): void;
     }
     export const eventBus: EventBus;
 

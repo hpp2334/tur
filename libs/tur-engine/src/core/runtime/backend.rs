@@ -253,8 +253,11 @@ impl WorkerBackend {
                 let key_refs: Vec<&str> = key.iter().map(|s| s.as_str()).collect();
                 reply.send(self.query_element(&key_refs));
             }
-            WorkerMsg::EventBusToJs(bytes) => {
-                self.internal.event_bus.emit_to_js(bytes);
+            WorkerMsg::EventBusToJs {
+                channel_id,
+                payload,
+            } => {
+                self.internal.event_bus.emit_to_js(channel_id, payload);
                 self.internal.js_context.wake_if_idle();
             }
             WorkerMsg::AppEvent(event) => {
@@ -698,8 +701,11 @@ impl MainBackend {
             MainMsg::FrameOutcome(Ok(outcome)) => MsgOutcome::Frame(outcome),
             MainMsg::FrameOutcome(Err(e)) => MsgOutcome::Failed(e),
             MainMsg::Destroyed => MsgOutcome::Closed,
-            MainMsg::EventBusToHost(bytes) => {
-                self.event_bus_handle.dispatch_to_host(bytes);
+            MainMsg::EventBusToHost {
+                channel_id,
+                payload,
+            } => {
+                self.event_bus_handle.dispatch_to_host(channel_id, payload);
                 MsgOutcome::Continue
             }
             // DevReply — handlers ignore (the Reply<T> slot handles RPC replies).
