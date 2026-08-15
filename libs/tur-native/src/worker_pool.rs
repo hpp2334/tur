@@ -8,6 +8,7 @@
 //!
 //! ```no_run
 //! # use std::rc::Rc;
+//! # use std::sync::Arc;
 //! # use std::time::Duration;
 //! # use tur_engine::core::scheduler::{Sleep, WorkerHost};
 //! # use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
@@ -15,8 +16,9 @@
 //! # impl LaneTimer for MyTimer {
 //! #     fn sleep(&self, _: Duration) -> Sleep { Sleep(Box::pin(std::future::pending())) }
 //! # }
-//! let timer = Rc::new(MyTimer);
-//! let pools = Rc::new(NativeWorkerPools::with_timer(move || timer.clone()));
+//! // The factory must be Send + Sync (it crosses into lane threads); each
+//! // call mints a fresh per-lane timer.
+//! let pools = Rc::new(NativeWorkerPools::with_timer(Arc::new(|| Rc::new(MyTimer) as _)));
 //! // TurRuntime::builder().worker_host(pools)…
 //! # let _pools: Rc<NativeWorkerPools> = pools;
 //! ```
@@ -250,11 +252,21 @@ impl LaneHandle {
 
     fn spawn_app(&self, entry: WorkerEntry) -> WorkerTicket {
         let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        // Count the app BEFORE delivery: the lane thread adopts the entry
+        // asynchronously, so a lane-side increment would leave a window
+        // where `live == 0` for a lane with an in-flight spawn — and the
+        // registry's reap-on-assign would discard it and grow past the
+        // pool's cap. Main-side counting makes the invariant
+        // timing-independent; the lane fires the matching decrement on
+        // entry panic or loop completion.
+        self.live.fetch_add(1, Ordering::AcqRel);
         if let Err(e) = self.tx.send(LaneMsg::SpawnApp { entry, done_tx }) {
             // Unreachable in practice: a lane in the registry always has a
             // live receiver (exit requires the registry handle to have been
-            // dropped first). Kept as a defensive error path.
+            // dropped first). Kept as a defensive error path — undo the
+            // count so `live` stays balanced.
             tracing::error!("tur lane: app spawn delivery failed: {e:?}");
+            self.live.fetch_sub(1, Ordering::AcqRel);
         }
         // Kick the lane so a parked thread drains the inbox promptly.
         self.shared.push(SENTINEL);
@@ -366,7 +378,10 @@ impl LaneState {
         }));
         match catch_unwind(AssertUnwindSafe(|| entry(view))) {
             Ok(fut) => {
-                self.live.fetch_add(1, Ordering::AcqRel);
+                // `live` was already incremented on the main side at
+                // delivery (see `LaneHandle::spawn_app`); this task's
+                // completion fires the matching decrement in
+                // `finish_task`.
                 self.insert_task(
                     self.alloc_key(),
                     TaskEntry {
@@ -377,6 +392,9 @@ impl LaneState {
             }
             Err(panic) => {
                 tracing::error!("tur lane: app entry panicked: {panic:?}");
+                // The entry never became a task, so `finish_task` will not
+                // run: undo the main-side delivery count here.
+                self.live.fetch_sub(1, Ordering::AcqRel);
                 let _ = done_tx.send(());
             }
         }

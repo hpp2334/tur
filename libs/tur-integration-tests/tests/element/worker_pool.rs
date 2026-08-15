@@ -224,6 +224,28 @@ fn capped_pool_never_exceeds_max_threads() {
     }
 }
 
+#[test]
+fn capped_pool_holds_cap_while_lane_adoption_lags() {
+    // Regression: the registry used to reap lanes whose `live` count was
+    // still 0 because the lane thread hadn't adopted the in-flight app
+    // entry yet — under load (CI containers) a back-to-back second spawn
+    // then grew a NEW lane and blew past the cap. The count is now taken
+    // at delivery time on the main side, so hammering back-to-back spawns
+    // must hold the cap no matter how slowly the lane thread adopts.
+    let pool = WorkerPoolHandle::new("hammer", 1);
+    let (runtime, _driver) = build_runtime(vec![pool.clone()]);
+    for round in 0..12 {
+        let a = spawn_headless(&runtime, &pool);
+        // No wait between the two builds — this is the race window.
+        let b = spawn_headless(&runtime, &pool);
+        assert_eq!(
+            tid_of(&a),
+            tid_of(&b),
+            "round {round}: back-to-back spawns must share the one lane"
+        );
+    }
+}
+
 // ---------- Cross-pool isolation (the motivation) ---------------------------
 
 #[test]
