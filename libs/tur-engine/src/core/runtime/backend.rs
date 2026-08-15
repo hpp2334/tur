@@ -483,9 +483,11 @@ pub struct MainBackend {
 }
 
 impl MainBackend {
-    /// Spawn a worker via [`MainScheduler::spawn_worker`]. The factory runs
-    /// on the worker thread and constructs the [`WorkerBackend`] (so it can
-    /// build `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
+    /// Spawn a worker into `worker_pool` via
+    /// [`MainScheduler::spawn_worker_in`]. The factory runs on the chosen
+    /// worker (lane thread / Web Worker — platform-defined) and constructs
+    /// the [`WorkerBackend`] (so it can build `!Send` types like
+    /// `Rc<dyn Clock>` and `boa::Context`).
     ///
     /// The driver's `spawn_worker` impl sets up thread-locals on the worker
     /// thread, constructs a `WorkerScheduler` for it, passes that to the
@@ -499,6 +501,7 @@ impl MainBackend {
     pub(crate) fn new(
         main_sched: crate::core::scheduler::MainScheduler,
         renderer: Box<dyn Renderer>,
+        worker_pool: crate::core::scheduler::WorkerPoolHandle,
         backend_factory: impl FnOnce(
             crate::core::scheduler::WorkerScheduler,
             std::sync::Arc<dyn Fn() + Send + Sync>,
@@ -526,23 +529,27 @@ impl MainBackend {
         let main_tx_for_backend = main_tx.clone();
         #[cfg(not(target_arch = "wasm32"))]
         let init_tx = init_tx;
-        let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
-            let worker_tx_for_on_push = worker_tx_for_on_push.clone();
-            // `Send + Sync` so the flush-driven task waker (which sleep
-            // futures register with the test `VirtualClock`, fired
-            // cross-thread) can hold an `Arc` clone.
-            let wake_worker: std::sync::Arc<dyn Fn() + Send + Sync> =
-                std::sync::Arc::new(move || {
-                    let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
-                });
-            let backend = backend_factory(worker_sched.clone(), wake_worker, main_tx_for_backend);
-            #[cfg(not(target_arch = "wasm32"))]
-            let _ = init_tx.send(());
-            // Return the worker's main future; the driver drives it
-            // (native blocks on LocalPool; wasm runs the cooperative
-            // mini-executor + cross-thread postMessage wake).
-            Box::pin(worker_loop(backend, worker_rx, main_tx))
-        }));
+        let worker_handle = main_sched.spawn_worker_in(
+            &worker_pool,
+            Box::new(move |worker_sched| {
+                let worker_tx_for_on_push = worker_tx_for_on_push.clone();
+                // `Send + Sync` so the flush-driven task waker (which sleep
+                // futures register with the test `VirtualClock`, fired
+                // cross-thread) can hold an `Arc` clone.
+                let wake_worker: std::sync::Arc<dyn Fn() + Send + Sync> =
+                    std::sync::Arc::new(move || {
+                        let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
+                    });
+                let backend =
+                    backend_factory(worker_sched.clone(), wake_worker, main_tx_for_backend);
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = init_tx.send(());
+                // Return the worker's main future; the driver drives it
+                // (native blocks on LocalPool; wasm runs the cooperative
+                // mini-executor + cross-thread postMessage wake).
+                Box::pin(worker_loop(backend, worker_rx, main_tx))
+            }),
+        );
 
         // Cross-thread wake callback. No-op on native (mpsc waker unparks
         // the OS thread); `worker.postMessage(0)` on wasm (the only way to

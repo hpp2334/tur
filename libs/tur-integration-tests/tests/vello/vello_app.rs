@@ -158,10 +158,12 @@ impl TurVelloApp {
         );
 
         let driver = tur_integration_tests::TestSchedulerDriver::new();
+        let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);
         let runtime = TurRuntime::builder()
             .scheduler(driver.clone())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
+            .worker_pool(pool.clone())
             .plugin(TurStdPlugin)
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
@@ -170,6 +172,7 @@ impl TurVelloApp {
         // owns the VelloRenderer on main and applies them via `run_loop`.
         let app = runtime
             .app_builder()
+            .worker_pool(pool)
             .renderer(Box::new(renderer), (width, height), dpr)
             .build()?;
         Ok((app, driver, window))

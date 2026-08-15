@@ -53,6 +53,7 @@ use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, Poi
 use tur_engine::core::plugin::{Plugin, PluginContext};
 use tur_engine::core::render::Renderer;
 use tur_engine::core::scheduler::MainSchedulerDriver;
+use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
@@ -424,10 +425,14 @@ impl TurTestApp {
         let clipboard = RecordingClipboard::new();
         let clock = std::sync::Arc::new(MutexFixedClock::new(0));
         let driver = TestSchedulerDriver::new();
+        // Default pool: effectively uncapped → every harness app gets its
+        // own dedicated lane thread (the historical threading).
+        let worker_pool = WorkerPoolHandle::new("test", usize::MAX);
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
             .scheduler(driver.clone())
+            .worker_pool(worker_pool.clone())
             .capability({
                 let last = cursor_slot.clone();
                 move |_| Ok(CursorCap::new(RecordingCursor { last }))
@@ -456,6 +461,7 @@ impl TurTestApp {
         let renderer: Box<dyn Renderer> = renderer.unwrap_or_else(|| Box::new(NoopRenderer::new()));
         let inner = runtime
             .app_builder()
+            .worker_pool(worker_pool)
             .renderer(renderer, (width, height), 1.0)
             .build()?;
         // Drive the production `run_loop` (the same loop wasm/Android drive).

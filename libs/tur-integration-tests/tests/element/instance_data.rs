@@ -21,6 +21,7 @@ use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::js_runtime::InstanceDataCx;
 use tur_engine::core::plugin::{Plugin, PluginContext};
+use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::renderer::NoopRenderer;
 use tur_integration_tests::MutexFixedClock;
@@ -44,40 +45,52 @@ struct ThemeOverride {
 
 // ---------- Helpers --------------------------------------------------------
 
-/// Build a runtime carrying std + animation (no extra plugin).
-fn build_runtime() -> Rc<TurRuntime> {
-    TurRuntime::builder()
+/// Build a runtime carrying std + animation (no extra plugin), plus the
+/// (effectively uncapped) default worker pool its instances assign.
+fn build_runtime() -> (Rc<TurRuntime>, WorkerPoolHandle) {
+    let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let runtime = TurRuntime::builder()
         .scheduler(TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .build()
-        .expect("runtime build")
+        .expect("runtime build");
+    (runtime, pool)
 }
 
 /// Build a runtime carrying std + animation + the supplied extra plugin.
-fn build_runtime_with(extra: Box<dyn Plugin>) -> Rc<TurRuntime> {
-    TurRuntime::builder()
+fn build_runtime_with(extra: Box<dyn Plugin>) -> (Rc<TurRuntime>, WorkerPoolHandle) {
+    let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let runtime = TurRuntime::builder()
         .scheduler(TestSchedulerDriver::new())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .plugin_boxed(extra)
         .build()
-        .expect("runtime build")
+        .expect("runtime build");
+    (runtime, pool)
 }
 
 /// Build a headless app off the given runtime, with a build-time
 /// `instance_data` definer closure. The closure runs on the worker before
 /// any plugin `register`; plugins see all defined slots as already present.
-fn build_headless_with_data<F>(runtime: &Rc<TurRuntime>, definer: F) -> Rc<tur_engine::TurApp>
+fn build_headless_with_data<F>(
+    runtime: &Rc<TurRuntime>,
+    pool: &WorkerPoolHandle,
+    definer: F,
+) -> Rc<tur_engine::TurApp>
 where
     F: FnOnce(&mut InstanceDataCx) + Send + 'static,
 {
     runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .instance_data(definer)
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
@@ -86,9 +99,10 @@ where
 
 /// Build a headless app off the given runtime, with no build-time data
 /// defined.
-fn build_headless(runtime: &Rc<TurRuntime>) -> Rc<tur_engine::TurApp> {
+fn build_headless(runtime: &Rc<TurRuntime>, pool: &WorkerPoolHandle) -> Rc<tur_engine::TurApp> {
     runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
         .expect("app build")
@@ -167,8 +181,8 @@ impl Plugin for UpdateUndefinedPluginId {
 #[test]
 fn define_then_read_via_data_clone_out() {
     let seen = Arc::new(Mutex::new(None));
-    let runtime = build_runtime_with(Box::new(ReadPluginId { seen: seen.clone() }));
-    let _app = build_headless_with_data(&runtime, |cx| {
+    let (runtime, pool) = build_runtime_with(Box::new(ReadPluginId { seen: seen.clone() }));
+    let _app = build_headless_with_data(&runtime, &pool, |cx| {
         cx.define::<PluginId>(PluginId("com.ease.onedrive".into()));
     });
 
@@ -185,8 +199,8 @@ fn define_then_read_via_data_clone_out() {
 #[test]
 fn define_then_read_via_with_data_ref_callback() {
     let seen = Arc::new(Mutex::new(None));
-    let runtime = build_runtime_with(Box::new(ReadPluginIdViaRef { seen: seen.clone() }));
-    let _app = build_headless_with_data(&runtime, |cx| {
+    let (runtime, pool) = build_runtime_with(Box::new(ReadPluginIdViaRef { seen: seen.clone() }));
+    let _app = build_headless_with_data(&runtime, &pool, |cx| {
         cx.define::<PluginId>(PluginId("com.ease.spotify".into()));
     });
 
@@ -205,10 +219,10 @@ fn define_is_isolated_per_instance() {
     let captured_a = Arc::new(Mutex::new(None));
     let captured_b = Arc::new(Mutex::new(None));
 
-    let runtime_a = build_runtime_with(Box::new(ReadPluginId {
+    let (runtime_a, pool_a) = build_runtime_with(Box::new(ReadPluginId {
         seen: captured_a.clone(),
     }));
-    let _app_a = build_headless_with_data(&runtime_a, |cx| {
+    let _app_a = build_headless_with_data(&runtime_a, &pool_a, |cx| {
         cx.define::<PluginId>(PluginId("instance-A".into()));
     });
     let a_value = captured_a.lock().unwrap().clone();
@@ -218,10 +232,10 @@ fn define_is_isolated_per_instance() {
         "A sees its own"
     );
 
-    let runtime_b = build_runtime_with(Box::new(ReadPluginId {
+    let (runtime_b, pool_b) = build_runtime_with(Box::new(ReadPluginId {
         seen: captured_b.clone(),
     }));
-    let _app_b = build_headless_with_data(&runtime_b, |cx| {
+    let _app_b = build_headless_with_data(&runtime_b, &pool_b, |cx| {
         cx.define::<PluginId>(PluginId("instance-B".into()));
     });
     let b_value = captured_b.lock().unwrap().clone();
@@ -243,8 +257,8 @@ fn define_is_isolated_per_instance() {
 #[test]
 fn data_returns_none_when_nothing_defined() {
     let seen = Arc::new(Mutex::new(Some(PluginId("sentinel-never-observed".into()))));
-    let runtime = build_runtime_with(Box::new(ReadPluginId { seen: seen.clone() }));
-    let _app = build_headless(&runtime);
+    let (runtime, pool) = build_runtime_with(Box::new(ReadPluginId { seen: seen.clone() }));
+    let _app = build_headless(&runtime, &pool);
 
     assert!(
         seen.lock().unwrap().is_none(),
@@ -259,11 +273,11 @@ fn define_accepts_multiple_distinct_types() {
     let seen_pid = Arc::new(Mutex::new(None));
     let seen_theme = Arc::new(Mutex::new(None));
 
-    let runtime = build_runtime_with(Box::new(ReadMultipleTypes {
+    let (runtime, pool) = build_runtime_with(Box::new(ReadMultipleTypes {
         pid: seen_pid.clone(),
         theme: seen_theme.clone(),
     }));
-    let _app = build_headless_with_data(&runtime, |cx| {
+    let _app = build_headless_with_data(&runtime, &pool, |cx| {
         cx.define::<PluginId>(PluginId("com.ease.multi".into()));
         cx.define::<ThemeOverride>(ThemeOverride { is_dark: true });
     });
@@ -287,8 +301,8 @@ fn define_accepts_multiple_distinct_types() {
 #[test]
 fn update_replaces_existing_value() {
     let seen = Arc::new(Mutex::new(None));
-    let runtime = build_runtime_with(Box::new(UpdatePluginId { seen: seen.clone() }));
-    let _app = build_headless_with_data(&runtime, |cx| {
+    let (runtime, pool) = build_runtime_with(Box::new(UpdatePluginId { seen: seen.clone() }));
+    let _app = build_headless_with_data(&runtime, &pool, |cx| {
         cx.define::<PluginId>(PluginId("original".into()));
     });
 
@@ -304,9 +318,9 @@ fn update_replaces_existing_value() {
 #[test]
 #[should_panic]
 fn update_undefined_type_panics() {
-    let runtime = build_runtime_with(Box::new(UpdateUndefinedPluginId));
+    let (runtime, pool) = build_runtime_with(Box::new(UpdateUndefinedPluginId));
     // No .instance_data(...) → PluginId was never defined → update panics.
-    let _app = build_headless(&runtime);
+    let _app = build_headless(&runtime, &pool);
 }
 
 // ---------- Tests: strict define (duplicate panics) ------------------------
@@ -316,8 +330,8 @@ fn update_undefined_type_panics() {
 #[test]
 #[should_panic]
 fn define_same_type_panics() {
-    let runtime = build_runtime();
-    let _app = build_headless_with_data(&runtime, |cx| {
+    let (runtime, pool) = build_runtime();
+    let _app = build_headless_with_data(&runtime, &pool, |cx| {
         cx.define::<PluginId>(PluginId("first".into()));
         cx.define::<PluginId>(PluginId("second".into())); // panics
     });

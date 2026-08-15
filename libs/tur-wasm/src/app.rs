@@ -7,6 +7,7 @@ use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
+use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::renderer::vello::WebGlVelloRenderer;
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
@@ -100,6 +101,12 @@ pub struct WasmRuntimeConfig {
     /// `tur-wasm` has already registered the standard plugin set + clipboard /
     /// http / filepicker / cursor backends before invoking this.
     pub configure: Box<dyn FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder>,
+    /// Extra worker pools to register (in addition to the built-in
+    /// effectively-uncapped `default` pool every app falls back to).
+    /// Declare a capped pool here (e.g. `WorkerPoolHandle::new("daemon", 2)`)
+    /// and assign it per-app via [`WasmAppConfig::pool`] so heavy background
+    /// apps share workers without stalling the UI pool.
+    pub pools: Vec<WorkerPoolHandle>,
 }
 
 /// The shared wasm runtime — created once via [`WasmRuntime::create`]. Owns the
@@ -109,6 +116,10 @@ pub struct WasmRuntimeConfig {
 /// [`TurRuntime::app_builder`](tur_engine::TurRuntime::app_builder)).
 pub struct WasmRuntime {
     runtime: Rc<tur_engine::TurRuntime>,
+    /// The built-in effectively-uncapped pool assigned to apps that don't
+    /// pick one explicitly via [`WasmAppConfig::pool`]. Registered on the
+    /// engine runtime alongside `WasmRuntimeConfig::pools`.
+    default_pool: WorkerPoolHandle,
 }
 
 impl WasmRuntime {
@@ -137,10 +148,15 @@ impl WasmRuntime {
         // `MainBackend::new`).
 
         let driver = crate::scheduler::WasmSchedulerDriver::new();
+        // Built-in default pool: effectively uncapped → one dedicated Web
+        // Worker per app (the historical behavior) unless the embedder
+        // assigns a capped pool per-app via `WasmAppConfig::pool`.
+        let default_pool = WorkerPoolHandle::new("default", usize::MAX);
         let builder = tur_engine::TurRuntime::builder()
             .scheduler(driver)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
+            .worker_pool(default_pool.clone())
             .capability(|_| Ok(Clipboard::new(WasmClipboard)))
             .capability(|_| Ok(Http::new(WasmHttp)))
             .capability(|_| Ok(FilePicker::new(WasmFilePicker)))
@@ -150,16 +166,31 @@ impl WasmRuntime {
             .plugin(TurNetPlugin)
             .plugin(TurFilePickerPlugin);
         // Let the embedder add its own plugins / override capabilities.
-        let runtime = (cfg.configure)(builder)
+        let mut builder = (cfg.configure)(builder);
+        for pool in cfg.pools {
+            builder = builder.worker_pool(pool);
+        }
+        let runtime = builder
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        Ok(Self { runtime })
+        Ok(Self {
+            runtime,
+            default_pool,
+        })
     }
 
     /// Access the underlying [`tur_engine::TurRuntime`] (for spawning raw
     /// instances outside the wasm DOM-wired helpers).
     pub fn runtime(&self) -> &Rc<tur_engine::TurRuntime> {
         &self.runtime
+    }
+
+    /// The built-in effectively-uncapped pool assigned to apps that don't
+    /// pick one explicitly. Embedders building raw instances via
+    /// [`Self::runtime`] can assign it (or a pool from
+    /// [`WasmRuntimeConfig::pools`]) via `TurAppBuilder::worker_pool`.
+    pub fn default_pool(&self) -> &WorkerPoolHandle {
+        &self.default_pool
     }
 }
 
@@ -173,6 +204,12 @@ pub struct WasmAppConfig {
     /// a `&mut boa Context` is available). `None` for embedders with no such
     /// work.
     pub after_frame: Option<AfterFrameHook>,
+    /// The worker pool this app's engine worker is spawned into. `None` ⇒
+    /// the runtime's built-in effectively-uncapped `default` pool (one
+    /// dedicated Web Worker per app). Assign a capped pool registered via
+    /// [`WasmRuntimeConfig::pools`] to share workers between apps of the
+    /// same group.
+    pub pool: Option<WorkerPoolHandle>,
 }
 
 /// Owning handle to a running wasm tur app instance. Built via
@@ -222,7 +259,11 @@ impl WasmApp {
         let WasmAppConfig {
             container_id,
             after_frame: after_frame_hook,
+            pool,
         } = cfg;
+        // Resolve the worker pool: the app's explicit choice, or the
+        // runtime's built-in effectively-uncapped default.
+        let pool = pool.unwrap_or_else(|| runtime.default_pool.clone());
         let state: Rc<RefCell<Option<WasmState>>> = Rc::new(RefCell::new(None));
         let state_clone = state.clone();
 
@@ -418,6 +459,7 @@ impl WasmApp {
         let app = runtime
             .runtime
             .app_builder()
+            .worker_pool(pool)
             .renderer(
                 Box::new(renderer),
                 (logical_width as f64, logical_height as f64),

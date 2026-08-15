@@ -39,6 +39,10 @@ pub use crate::core::runtime::{MainBackend, TurAppBuilder, TurRuntime, TurRuntim
 // `build()`, so no embedder wiring is required.
 pub use crate::core::plugin::{AsyncPluginContext, MainRunFuture};
 pub use crate::core::scheduler::SpawnError;
+// Re-export the worker-pool declaration type so embedders can write
+// `tur_engine::WorkerPoolHandle` (registered via
+// `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
+pub use crate::core::scheduler::WorkerPoolHandle;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

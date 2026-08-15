@@ -36,3 +36,4 @@ mod switch_view;
 mod task;
 mod text;
 mod transform;
+mod worker_pool;

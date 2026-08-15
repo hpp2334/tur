@@ -1,6 +1,6 @@
 [package]
 name = "tur-native"
-description = "Native platform integrations for tur (system font loader)"
+description = "Native platform integrations for tur (system font loader, worker pool executor)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,15 +8,10 @@ license.workspace = true
 
 [dependencies]
 tur-engine = { workspace = true }
+tracing = { workspace = true }
 
 # parley's `system` feature pulls in the platform font backends
 # (CoreText on macOS, DirectWrite on Windows, fontconfig on Linux), which
 # auto-discover installed fonts AND populate the generic family map
-# (SansSerif/Serif/Monospace) from the OS. It is target-gated to non-wasm
-# so the wasm32 workspace clippy build stays free of native deps; on wasm
-# the loader is a no-op (tur-wasm ships its own bundled-font loader instead).
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
+# (SansSerif/Serif/Monospace) from the OS.
 parley = { workspace = true, features = ["system"] }
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-parley = { workspace = true }

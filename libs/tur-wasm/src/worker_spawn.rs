@@ -12,7 +12,7 @@
 //!   return (after installing wake handlers) and the worker must NOT be
 //!   closed — impossible with `wasm_thread`'s `close()`-on-return.
 //! - To wake an idle Web Worker's JS event loop cross-thread without a
-//!   sync `Atomics.wait` (which freezes the loop), main must
+//!   sync `Atomics.wait` (which would freeze the loop), main must
 //!   `worker.postMessage(0)` — needing the `Worker` handle.
 //!
 //! So we spawn the worker ourselves: same shared-memory wasm module/memory
@@ -20,17 +20,27 @@
 //! cross-thread), a custom bootstrap script that does NOT call `close()`,
 //! and the `Worker` handle is kept by the scheduler for `postMessage` wake.
 //!
+//! ## Multi-tenant workers (pools)
+//!
+//! A worker hosts **multiple app loops**: the first factory travels in the
+//! init payload (`[module, memory, ptr]`, consumed by the bootstrap
+//! script); additional factories arrive later as tagged messages
+//! (`{ t: "tur-factory", ptr }`, dispatched by the Rust `onmessage`
+//! handler installed in [`run_loop`]). All loops share the worker's JS
+//! event loop and are polled cooperatively — one `poll_once` pass polls
+//! every live task (round-robin). Apps keep isolated state (each loop owns
+//! its boa `Context` + channels); they only share the thread.
+//!
 //! ## Mini-executor
 //!
-//! `loop_fut` is polled cooperatively. `schedule_repoll()` arms a
-//! `setTimeout(0)` that polls once; it is triggered by:
+//! Tasks are polled cooperatively. `schedule_repoll()` arms a
+//! `setTimeout(0)` that polls all tasks once; it is triggered by:
 //! - **Cross-thread wake** — main posts `0`; the worker's `onmessage`
 //!   handler calls `schedule_repoll()`.
-//! - **Same-thread wake** — the waker registered by `loop_fut`'s internal
-//!   `worker_rx.next().await` (or any sub-future). The waker is a
-//!   `NoopWaker` that only acts when fired *on the worker thread*; a
-//!   cross-thread fire (mpsc send from main) is a no-op (postMessage
-//!   handles it).
+//! - **Same-thread wake** — the waker registered by a task's internal
+//!   awaits (or any sub-future). The waker is a `NoopWaker` that only acts
+//!   when fired *on the worker thread*; a cross-thread fire (mpsc send
+//!   from main) is a no-op (postMessage handles it).
 //!
 //! This never calls `Atomics.wait`, so the worker's JS event loop is never
 //! frozen: `setTimeout` timers (e.g. `sleep`), promise reactions, and
@@ -44,7 +54,7 @@ use std::sync::Arc;
 use std::task::{Context, Wake, Waker};
 use std::thread::ThreadId;
 
-use js_sys::Reflect;
+use js_sys::{Object, Reflect};
 use wasm_bindgen::{JsCast, JsValue, prelude::*};
 use web_sys::MessageEvent;
 
@@ -59,27 +69,28 @@ use crate::scheduler::WasmWorkerScheduler;
 /// the wasm linear memory is shared across threads).
 ///
 /// This is a re-export of the engine's [`WorkerFactory`] type alias so the
-/// wasm driver's `spawn_worker` impl and `tur_worker_main` agree on the
+/// wasm driver's `spawn_worker_in` impl and `tur_worker_main` agree on the
 /// exact factory shape.
 pub(crate) type LoopFactory = WorkerFactory;
 
 /// Wrapper around [`LoopFactory`] so it can be boxed + passed as a raw
-/// pointer (the engine hands us an already-boxed `dyn FnOnce`).
-struct WorkerEntry(LoopFactory);
+/// pointer (the engine hands us an already-boxed `dyn FnOnce`). Shared by
+/// the init payload (first factory) and the tagged `tur-factory` messages
+/// delivered into an already-running worker (additional factories).
+pub(crate) struct WorkerEntry(pub(crate) LoopFactory);
 
 /// Per-worker executor state. Held in a `thread_local` (`Rc`-shared between
 /// the poll closure, the wake handler, and the waker). `!Send` — lives only
-/// on the worker thread.
+/// on the worker thread. Multi-tenant: `tasks` holds every app loop hosted
+/// on this worker; completed tasks are removed, new factories push more.
 struct ExecutorState {
-    /// The `loop_fut`. `None` once it has completed (the worker then idles
-    /// until `close()`, which never comes — the worker outlives the loop).
-    task: RefCell<Option<Pin<Box<dyn Future<Output = ()> + 'static>>>>,
+    /// All live app-loop futures. `None` entries never occur — completed
+    /// tasks are removed from the vec.
+    tasks: RefCell<Vec<Pin<Box<dyn Future<Output = ()> + 'static>>>>,
     /// `setTimeout(0)` repoll guard — at most one repoll is armed at a time.
     scheduled: Cell<bool>,
     /// The reused `setTimeout` poll callback (a leaked `Closure`'s JS ref).
     poll_fn: RefCell<Option<js_sys::Function>>,
-    /// Set when `loop_fut` returned `Ready` — stops further polls.
-    done: Cell<bool>,
 }
 
 thread_local! {
@@ -219,10 +230,9 @@ impl Wake for NoopWaker {
 /// Install `loop_fut` + the wake handlers, then kick off the first poll.
 pub(super) fn run_loop(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     let state = Rc::new(ExecutorState {
-        task: RefCell::new(Some(loop_fut)),
+        tasks: RefCell::new(vec![loop_fut]),
         scheduled: Cell::new(false),
         poll_fn: RefCell::new(None),
-        done: Cell::new(false),
     });
     EXEC.with(|e| *e.borrow_mut() = Some(state.clone()));
     WORKER_TID.with(|t| t.set(Some(std::thread::current().id())));
@@ -236,9 +246,21 @@ pub(super) fn run_loop(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     poll_closure.forget();
     *state.poll_fn.borrow_mut() = Some(poll_fn);
 
-    // Install the cross-thread wake handler on the worker global scope.
-    // Main's `worker.postMessage(0)` fires this → `schedule_repoll`.
-    let onmsg_closure = Closure::<dyn FnMut(MessageEvent)>::new(|_ev| schedule_repoll());
+    // Install the message handler on the worker global scope. Main posts:
+    // - `0` (number) — cross-thread wake (from `WorkerHandle::notify`).
+    // - `{ t: "tur-factory", ptr }` (object) — an additional app factory
+    //   to host on this worker (from the pool registry).
+    let onmsg_closure = Closure::<dyn FnMut(MessageEvent)>::new(|ev: MessageEvent| {
+        if let Some(obj) = ev.data().dyn_ref::<Object>()
+            && Reflect::get(obj, &JsValue::from_str("t"))
+                .map(|t| t == JsValue::from_str("tur-factory"))
+                .unwrap_or(false)
+        {
+            deliver_factory(obj);
+        } else {
+            schedule_repoll();
+        }
+    });
     let scope_ok = js_sys::global()
         .dyn_ref::<web_sys::DedicatedWorkerGlobalScope>()
         .map(|scope| {
@@ -257,18 +279,45 @@ pub(super) fn run_loop(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     schedule_repoll();
 }
 
+/// Host an additional app factory delivered via a tagged `tur-factory`
+/// message: reconstitute the boxed factory, build the worker view (on this
+/// thread), run the factory, and push the returned loop as a new task.
+fn deliver_factory(obj: &Object) {
+    let ptr = Reflect::get(obj, &JsValue::from_str("ptr"))
+        .ok()
+        .and_then(|v| v.as_f64());
+    let Some(ptr) = ptr else {
+        tracing::error!("tur worker: factory message missing `ptr`");
+        return;
+    };
+    // SAFETY: `ptr` was produced by `Box::into_raw` on the main thread;
+    // the wasm linear memory is shared, so the pointer is valid here.
+    let entry = unsafe { Box::from_raw(ptr as u32 as *mut WorkerEntry) };
+    let factory = entry.0;
+    let worker_sched = WorkerScheduler::new(Rc::new(WasmWorkerScheduler));
+    let fut = factory(worker_sched);
+    let pushed = EXEC.with(|e| {
+        let guard = e.borrow();
+        if let Some(state) = guard.as_ref() {
+            state.tasks.borrow_mut().push(fut);
+            true
+        } else {
+            false
+        }
+    });
+    if !pushed {
+        tracing::error!("tur worker: factory delivered before executor init");
+    }
+}
+
 /// Arm a `setTimeout(0)` repoll (idempotent — no-op if one is already
-/// armed or the executor is done). Called by the wake handler, the waker,
-/// and the initial kick.
+/// armed). Called by the wake handler, the waker, and the initial kick.
 fn schedule_repoll() {
     EXEC.with(|e| {
         let guard = e.borrow();
         let Some(state) = guard.as_ref() else {
             return;
         };
-        if state.done.get() {
-            return;
-        }
         if state.scheduled.replace(true) {
             return; // already armed
         }
@@ -281,27 +330,28 @@ fn schedule_repoll() {
     });
 }
 
-/// Poll `loop_fut` once with a `NoopWaker`. The `setTimeout` callback body.
+/// Poll every live task once with a `NoopWaker` (one cooperative
+/// round-robin pass). The `setTimeout` callback body. Completed tasks are
+/// removed; co-tenants keep running.
 fn poll_once() {
     let state = match EXEC.with(|e| e.borrow().as_ref().cloned()) {
         Some(s) => s,
         None => return,
     };
     state.scheduled.set(false);
-    if state.done.get() {
-        return;
-    }
     let worker_tid = WORKER_TID
         .with(|t| t.get())
         .expect("worker tid set during run_loop");
     let waker = Waker::from(Arc::new(NoopWaker { worker_tid }));
     let mut cx = Context::from_waker(&waker);
-    let mut task_guard = state.task.borrow_mut();
-    if let Some(fut) = task_guard.as_mut()
-        && fut.as_mut().poll(&mut cx).is_ready()
-    {
-        state.done.set(true);
-        *task_guard = None; // drop the completed future
+    let mut tasks = state.tasks.borrow_mut();
+    let mut i = 0;
+    while i < tasks.len() {
+        if tasks[i].as_mut().poll(&mut cx).is_ready() {
+            drop(tasks.remove(i)); // drop the completed future
+        } else {
+            i += 1;
+        }
     }
 }
 

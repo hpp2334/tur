@@ -15,6 +15,7 @@ mod imp {
     use jni::objects::{GlobalRef, JObject, JValue};
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
+    use tur_engine::core::scheduler::WorkerPoolHandle;
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
     use tur_engine::{
@@ -84,6 +85,13 @@ mod imp {
         /// Tokio runtime — `sleep` timers (via
         /// [`AndroidSchedulerDriver`]) + optionally `NativeHttp`/reqwest.
         pub tokio: tokio::runtime::Runtime,
+        /// The default worker pool every instance is assigned to unless the
+        /// embedder overrides via `configure`. Effectively uncapped → each
+        /// instance gets its own dedicated lane thread (the historical
+        /// threading). Register additional capped pools on the builder
+        /// (e.g. a small `daemon` pool for headless background instances)
+        /// and assign them via `configure_instance`.
+        pub default_worker_pool: WorkerPoolHandle,
     }
 
     impl AndroidRuntime {
@@ -113,10 +121,15 @@ mod imp {
             // instance installs its own via `TurApp::set_main_scheduler`).
             let driver = AndroidSchedulerDriver::new(tokio.handle().clone(), None);
 
+            // Default (effectively uncapped) worker pool — one dedicated
+            // lane thread per instance unless the embedder registers more.
+            let default_worker_pool = WorkerPoolHandle::new("default", usize::MAX);
+
             let mut builder = TurRuntime::builder()
                 .scheduler(driver)
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
                 .clock(std::sync::Arc::new(StdClock::new()))
+                .worker_pool(default_worker_pool.clone())
                 .capability(|_| Ok(CursorCap::new(NoopCursor)))
                 .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))))
                 .capability({
@@ -138,6 +151,7 @@ mod imp {
                 runtime,
                 wgpu_instance,
                 tokio,
+                default_worker_pool,
             })
         }
 
@@ -257,6 +271,7 @@ mod imp {
         #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             runtime: &Rc<TurRuntime>,
+            default_worker_pool: WorkerPoolHandle,
             tokio: &tokio::runtime::Handle,
             wgpu_instance: &wgpu::Instance,
             window_handle: AndroidWindowHandle,
@@ -307,18 +322,22 @@ mod imp {
             );
 
             // Apply the embedder's pre-build customization (e.g.
-            // `.instance_data(...)`), then attach the surface-backed
-            // renderer and build. The engine runs on a worker thread;
-            // `MainBackend` owns the wgpu renderer on main and drives it
-            // directly (render batches, image uploads, resize-on-event) —
-            // no render_sink callback.
-            let app = configure_instance(runtime.app_builder())
-                .renderer(
-                    Box::new(renderer),
-                    (logical_width as f64, logical_height as f64),
-                    dpr,
-                )
-                .build()?;
+            // `.instance_data(...)`, `.worker_pool(...)`), then attach the
+            // surface-backed renderer and build. The engine runs on a
+            // worker; `MainBackend` owns the wgpu renderer on main and
+            // drives it directly (render batches, image uploads,
+            // resize-on-event) — no render_sink callback.
+            let app = configure_instance(
+                runtime
+                    .app_builder()
+                    .worker_pool(default_worker_pool.clone()),
+            )
+            .renderer(
+                Box::new(renderer),
+                (logical_width as f64, logical_height as f64),
+                dpr,
+            )
+            .build()?;
 
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
@@ -340,11 +359,17 @@ mod imp {
         /// `|b| b` for the no-op default.
         pub fn build_headless(
             runtime: &Rc<TurRuntime>,
+            default_worker_pool: WorkerPoolHandle,
             tokio: &tokio::runtime::Handle,
             frame_loop: FrameLoopRef,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
-            let app = configure_instance(runtime.app_builder()).build_headless((0.0, 0.0))?;
+            let app = configure_instance(
+                runtime
+                    .app_builder()
+                    .worker_pool(default_worker_pool.clone()),
+            )
+            .build_headless((0.0, 0.0))?;
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
 
@@ -393,6 +418,7 @@ mod imp {
         #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
+            _default_worker_pool: tur_engine::WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
             _wgpu_instance: &wgpu::Instance,
             _window_handle: AndroidWindowHandle,
@@ -407,6 +433,7 @@ mod imp {
 
         pub fn build_headless(
             _runtime: &std::rc::Rc<tur_engine::TurRuntime>,
+            _default_worker_pool: tur_engine::WorkerPoolHandle,
             _tokio: &tokio::runtime::Handle,
             _frame_loop: FrameLoopRef,
             _configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,

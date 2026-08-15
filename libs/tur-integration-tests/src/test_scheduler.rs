@@ -1,16 +1,18 @@
 //! Test scheduler driver.
 //!
-//! Implements [`MainSchedulerDriver`] (main thread) and
-//! [`WorkerSchedulerDriver`] (worker thread, via [`TestWorkerScheduler`])
-//! for the integration test harness. Uses real `std::thread::spawn` per
-//! worker (faithful to production threading) + a per-thread
-//! `tokio::task::LocalSet` for `spawn_local` / `block_on`.
+//! Implements [`MainSchedulerDriver`] (main thread) for the integration
+//! test harness. Worker spawning goes through
+//! [`tur_native::worker_pool::NativeWorkerPools`] (the shared native lane
+//! executor): pools registered on the runtime are hosted on "tur-lane"
+//! threads, cooperatively scheduled when a pool's cap forces sharing.
 //!
 //! **Virtual clock**: sleep futures register deadlines against a shared
 //! virtual clock ([`VirtualClock`]). The test harness calls
 //! [`TestSchedulerDriver::advance`] alongside `self.clock.forward()` to
 //! advance both the boa clock + the scheduler's virtual clock. Sleep
-//! wakers fire when the virtual clock reaches their deadline.
+//! wakers fire when the virtual clock reaches their deadline; on a lane
+//! thread the waker lands in the lane's ready queue (see
+//! `tur_native::worker_pool`).
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -23,10 +25,11 @@ use std::time::Duration;
 
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
+use tur_native::worker_pool::NativeWorkerPools;
 
 use tur_engine::core::scheduler::{
-    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler,
-    WorkerSchedulerDriver, track_spawn,
+    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerFactory, WorkerHandle,
+    WorkerPoolHandle, WorkerSchedulerDriver,
 };
 
 /// Shared virtual clock state. The test harness holds a clone + advances
@@ -95,13 +98,9 @@ fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>
             .map(|(_, local)| local.clone())
             .expect("spawn_local called with no LocalSet on current thread")
     });
-    track_spawn(fut, |f| {
+    tur_engine::core::scheduler::track_spawn(fut, |f| {
         local.spawn_local(f);
     })
-}
-
-fn block_on_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
-    block_on_on_current_thread_typed(fut);
 }
 
 /// Generic `block_on` that drives the current thread's `LocalSet` (and all
@@ -166,6 +165,9 @@ impl Future for VirtualSleepFuture {
 pub struct TestSchedulerDriver {
     vsync_txs: Mutex<Vec<futures::channel::mpsc::UnboundedSender<()>>>,
     clock: Arc<Mutex<VirtualClock>>,
+    /// Native lane-pool registry backing `spawn_worker_in` (main-thread
+    /// only — spawns happen from `app_builder().build()` on main).
+    pools: Rc<NativeWorkerPools>,
 }
 
 impl TestSchedulerDriver {
@@ -175,6 +177,7 @@ impl TestSchedulerDriver {
         Rc::new(Self {
             vsync_txs: Mutex::new(Vec::new()),
             clock,
+            pools: Rc::new(NativeWorkerPools::new()),
         })
     }
 
@@ -202,25 +205,20 @@ impl TestSchedulerDriver {
 }
 
 impl MainSchedulerDriver for TestSchedulerDriver {
-    fn spawn_worker(&self, factory: tur_engine::core::scheduler::WorkerFactory) -> WorkerHandle {
+    fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
+        // Host the app on a tur-native lane thread (dedicated while the
+        // pool is under its cap, shared cooperatively beyond it). The lane
+        // driver publishes the shared virtual clock on the lane thread so
+        // `sleep` futures register against the clock the harness advances.
         let clock = self.clock.clone();
-        let join = std::thread::Builder::new()
-            .name("tur-test-worker".into())
-            .spawn(move || {
-                init_thread_exec(clock);
-                let worker_view = WorkerScheduler::new(Rc::new(TestWorkerScheduler));
-                let loop_fut = factory(worker_view);
-                // Drive the worker's main future to completion on the test
-                // executor — an infinite loop, so the thread blocks forever,
-                // polling the loop + all spawn_local'd side tasks.
-                block_on_on_current_thread(loop_fut);
-                CURRENT_EXEC.with(|c| *c.borrow_mut() = None);
-                CURRENT_CLOCK.with(|c| *c.borrow_mut() = None);
-            })
-            .expect("failed to spawn tur test worker thread");
-        WorkerHandle::new(Box::new(move || {
-            let _ = join.join();
-        }))
+        self.pools.spawn(
+            pool,
+            factory,
+            Arc::new(move || {
+                CURRENT_CLOCK.with(|c| *c.borrow_mut() = Some(clock.clone()));
+                Rc::new(TestWorkerScheduler)
+            }),
+        )
     }
 
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
@@ -247,11 +245,17 @@ impl MainSchedulerDriver for TestSchedulerDriver {
     }
 }
 
+/// Lane-thread scheduling driver: serves `sleep` against the shared
+/// virtual clock (the lane executor provides `spawn_local` itself, so the
+/// impl here is unreachable through the engine).
 struct TestWorkerScheduler;
 
 impl WorkerSchedulerDriver for TestWorkerScheduler {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        spawn_local_on_current_thread(fut)
+    fn spawn_local(&self, _fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        unimplemented!(
+            "lane spawn_local is provided by tur_native's lane executor; \
+             TestWorkerScheduler only serves `sleep`"
+        )
     }
     fn sleep(&self, d: Duration) -> Sleep {
         virtual_sleep(d)

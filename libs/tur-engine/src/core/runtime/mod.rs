@@ -21,6 +21,7 @@ use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
 use crate::core::plugin::{AsyncPluginContext, CompileContext, Plugin, PluginContext};
+use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::screen::Screen;
 use crate::error::TurError;
 
@@ -107,12 +108,14 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 ///
 /// # use tur_engine::*;
 /// # use tur_engine::core::fonts::FontLoader;
-/// # use tur_engine::core::render::Renderer;
+/// # use tur_engine::core::scheduler::WorkerPoolHandle;
 /// # use tur_engine::renderer::noop::NoopRenderer;
 /// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>) -> Result<(), tur_engine::error::TurError> {
+/// let ui = WorkerPoolHandle::new("ui", 4);
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
 ///     .clock(std::sync::Arc::new(boa_engine::context::time::StdClock::new()))
+///     .worker_pool(ui.clone())
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
 ///
@@ -120,10 +123,12 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// // Each owns its renderer (created by the embedder; no render_sink):
 /// let app_a = runtime
 ///     .app_builder()
+///     .worker_pool(ui.clone())
 ///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
 ///     .build()?;
 /// let app_b = runtime
 ///     .app_builder()
+///     .worker_pool(ui)
 ///     .renderer(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)
 ///     .build()?;
 /// # Ok(())
@@ -150,6 +155,11 @@ pub struct TurRuntime {
     /// Main-thread scheduling view. Built once from the driver supplied to
     /// the runtime builder; cloned into each `TurApp` + `MainBackend`.
     main_scheduler: crate::core::scheduler::MainScheduler,
+    /// Worker pools registered via
+    /// [`TurRuntimeBuilder::worker_pool`]. Each app builder must assign one
+    /// of these (see [`TurAppBuilder::worker_pool`]); validated by identity
+    /// (`WorkerPoolHandle::ptr_eq`).
+    worker_pools: Vec<WorkerPoolHandle>,
     /// The engine's main-thread hop context. Created internally in `build()`
     /// (the channel + drain are engine-internal — embedders never wire them).
     /// Cloned into each worker's [`PluginContext`] (so plugins reach main via
@@ -199,6 +209,7 @@ impl TurRuntime {
             renderer: None,
             viewport: None,
             dpr: None,
+            worker_pool: None,
             instance_data_definer: None,
         }
     }
@@ -212,6 +223,7 @@ impl TurRuntime {
         renderer: Box<dyn crate::core::render::Renderer>,
         viewport: (f64, f64),
         dpr: f64,
+        worker_pool: WorkerPoolHandle,
         instance_data_definer: Option<InstanceDataDefiner>,
     ) -> Result<Rc<TurApp>, TurError> {
         let clock = self.clock.clone();
@@ -243,7 +255,12 @@ impl TurRuntime {
             )
             .expect("threaded backend factory failed")
         };
-        let backend = MainBackend::new(self.main_scheduler.clone(), renderer, backend_factory);
+        let backend = MainBackend::new(
+            self.main_scheduler.clone(),
+            renderer,
+            worker_pool,
+            backend_factory,
+        );
         let app = Rc::new(TurApp::new(backend, self.main_scheduler.clone()));
         // Bootstrap the viewport: resize the main-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
@@ -261,11 +278,14 @@ impl TurRuntime {
 ///
 /// ```no_run
 /// # use tur_engine::*;
+/// # use tur_engine::core::scheduler::WorkerPoolHandle;
 /// # use tur_engine::renderer::noop::NoopRenderer;
 /// # use std::rc::Rc;
 /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
+/// let pool = WorkerPoolHandle::new("main", usize::MAX);
 /// let app = runtime
 ///     .app_builder()
+///     .worker_pool(pool)
 ///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
 ///     .build()?;
 /// # Ok(())
@@ -280,6 +300,9 @@ pub struct TurAppBuilder<'rt> {
     renderer: Option<Box<dyn crate::core::render::Renderer>>,
     viewport: Option<(f64, f64)>,
     dpr: Option<f64>,
+    /// The worker pool this app's engine worker is spawned into. **Required**
+    /// (see [`Self::worker_pool`]); `build` / `build_headless` error without it.
+    worker_pool: Option<WorkerPoolHandle>,
     /// Optional build-time definer for per-instance data. See
     /// [`Self::instance_data`]. Replayed once on the worker inside
     /// `build_worker_backend` before any plugin `register`.
@@ -351,28 +374,63 @@ impl<'rt> TurAppBuilder<'rt> {
         self
     }
 
+    /// Assign this app to a worker pool. **Required** — `build` /
+    /// `build_headless` return an error without it. The handle must be one
+    /// registered on this runtime via
+    /// [`TurRuntimeBuilder::worker_pool`](crate::TurRuntimeBuilder::worker_pool)
+    /// (identity-checked, not name-checked).
+    ///
+    /// All apps assigned to the same pool share at most
+    /// [`WorkerPoolHandle::max_threads`] worker threads; apps in different
+    /// pools never share threads. A cap ≥ the app count gives each app its
+    /// own worker (the historical default).
+    ///
+    /// ```no_run
+    /// # use tur_engine::*;
+    /// # use tur_engine::core::scheduler::WorkerPoolHandle;
+    /// # use std::rc::Rc;
+    /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
+    /// let ui = WorkerPoolHandle::new("ui", 4);
+    /// let app = runtime
+    ///     .app_builder()
+    ///     .worker_pool(ui)
+    ///     .instance_data(|cx| {
+    ///         cx.define::<u32>(7);
+    ///     })
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn worker_pool(mut self, pool: WorkerPoolHandle) -> Self {
+        self.worker_pool = Some(pool);
+        self
+    }
+
     /// Terminal: build the instance. Requires [`Self::renderer`] to have
     /// been called (a non-headless app supplies renderer + viewport + dpr
-    /// together). Errors with a clear message otherwise.
+    /// together) and [`Self::worker_pool`]. Errors with a clear message
+    /// otherwise.
     pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
             renderer,
             viewport,
             dpr,
+            worker_pool,
             instance_data_definer,
         } = self;
         let renderer = renderer.ok_or_else(|| {
             TurError::Other(
                 "TurAppBuilder::build() requires `.renderer(renderer, viewport, dpr)` \
-                 to have been called; for a headless build use `.build_headless(viewport)` \
-                 instead"
+                  to have been called; for a headless build use `.build_headless(viewport)` \
+                  instead"
                     .to_string(),
             )
         })?;
         let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
         let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        runtime.spawn_instance(renderer, viewport, dpr, instance_data_definer)
+        let pool = Self::resolve_pool(runtime, worker_pool)?;
+        runtime.spawn_instance(renderer, viewport, dpr, pool, instance_data_definer)
     }
 
     /// Terminal: build a headless instance (no renderer, no rendering).
@@ -390,15 +448,42 @@ impl<'rt> TurAppBuilder<'rt> {
     pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
+            worker_pool,
             instance_data_definer,
             ..
         } = self;
+        let pool = Self::resolve_pool(runtime, worker_pool)?;
         runtime.spawn_instance(
             Box::new(crate::renderer::NoopRenderer::new()),
             viewport,
             1.0,
+            pool,
             instance_data_definer,
         )
+    }
+
+    /// Resolve the required pool assignment: present + registered on this
+    /// runtime (identity check via `WorkerPoolHandle::ptr_eq`).
+    fn resolve_pool(
+        runtime: &Rc<TurRuntime>,
+        pool: Option<WorkerPoolHandle>,
+    ) -> Result<WorkerPoolHandle, TurError> {
+        let pool = pool.ok_or_else(|| {
+            TurError::Other(
+                "TurAppBuilder requires `.worker_pool(handle)`; declare one via \
+                  WorkerPoolHandle::new(name, max_threads) and register it with \
+                  TurRuntimeBuilder::worker_pool(...)"
+                    .to_string(),
+            )
+        })?;
+        if !runtime.worker_pools.iter().any(|p| p.ptr_eq(&pool)) {
+            return Err(TurError::Other(format!(
+                "worker pool `{}` is not registered on this runtime; register it via \
+                  TurRuntimeBuilder::worker_pool(...) before assigning it to an app",
+                pool.name()
+            )));
+        }
+        Ok(pool)
     }
 }
 
@@ -548,6 +633,7 @@ pub struct TurRuntimeBuilder {
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
     scheduler: Option<Rc<dyn crate::core::scheduler::MainSchedulerDriver>>,
+    worker_pools: Vec<WorkerPoolHandle>,
 }
 
 impl Default for TurRuntimeBuilder {
@@ -564,6 +650,7 @@ impl TurRuntimeBuilder {
             plugins: Vec::new(),
             capability_builders: Vec::new(),
             scheduler: None,
+            worker_pools: Vec::new(),
         }
     }
 
@@ -671,6 +758,38 @@ impl TurRuntimeBuilder {
         self
     }
 
+    /// Register a worker pool. Every [`TurAppBuilder`] spawned from this
+    /// runtime must assign one of the registered pools via
+    /// [`TurAppBuilder::worker_pool`] (identity-checked). Apps assigned to
+    /// the same pool share at most [`WorkerPoolHandle::max_threads`]
+    /// worker threads; apps in different pools never share threads — so,
+    /// e.g., heavy daemon workloads cannot stall UI rendering.
+    ///
+    /// Pooling itself is platform-implemented: the driver supplied to
+    /// [`Self::scheduler`] must implement
+    /// [`MainSchedulerDriver::spawn_worker_in`](crate::core::scheduler::MainSchedulerDriver::spawn_worker_in)
+    /// (native drivers compose `tur_native::NativeWorkerPools`;
+    /// `WasmSchedulerDriver` has it built in).
+    ///
+    /// Fails at [`build`](Self::build) on `max_threads == 0` or a duplicate
+    /// pool name.
+    ///
+    /// ```no_run
+    /// # use tur_engine::*;
+    /// # use tur_engine::core::scheduler::WorkerPoolHandle;
+    /// # use std::rc::Rc;
+    /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
+    /// let ui = WorkerPoolHandle::new("ui", 4);
+    /// let daemon = WorkerPoolHandle::new("daemon", 2);
+    /// let _ui_app = runtime.app_builder().worker_pool(ui).build_headless((0.0, 0.0))?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn worker_pool(mut self, pool: WorkerPoolHandle) -> Self {
+        self.worker_pools.push(pool);
+        self
+    }
+
     pub fn build(self) -> Result<Rc<TurRuntime>, TurError> {
         let font_loader = self
             .font_loader
@@ -681,6 +800,27 @@ impl TurRuntimeBuilder {
         let scheduler = self
             .scheduler
             .expect("scheduler must be set (use TurRuntimeBuilder::scheduler)");
+
+        // Validate worker pools: non-zero caps + unique names (identity is
+        // the Arc, but names stay unique so diagnostics are unambiguous).
+        for pool in &self.worker_pools {
+            if pool.max_threads() == 0 {
+                return Err(TurError::Other(format!(
+                    "worker pool `{}` must declare max_threads >= 1",
+                    pool.name()
+                )));
+            }
+            if self
+                .worker_pools
+                .iter()
+                .any(|other| !other.ptr_eq(pool) && other.name() == pool.name())
+            {
+                return Err(TurError::Other(format!(
+                    "worker pool name `{}` registered twice; pool names must be unique",
+                    pool.name()
+                )));
+            }
+        }
 
         // Build the one shared FontContext — system-font discovery + preset
         // loading happen exactly once here. Instances clone it cheaply.
@@ -755,6 +895,7 @@ impl TurRuntimeBuilder {
             capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),
             main_scheduler,
+            worker_pools: self.worker_pools,
             main_cx,
         }))
     }

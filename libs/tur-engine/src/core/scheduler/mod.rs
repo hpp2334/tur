@@ -3,7 +3,7 @@
 //! Two driver traits split by thread context, each wrapped in a concrete
 //! view struct that the engine holds:
 //! - [`MainSchedulerDriver`] / [`MainScheduler`] — main-thread surface
-//!   (`spawn_worker`, `vsync_events`, `request_vsync`, `spawn_local`,
+//!   (`spawn_worker_in`, `vsync_events`, `request_vsync`, `spawn_local`,
 //!   `sleep`).
 //! - [`WorkerSchedulerDriver`] / [`WorkerScheduler`] — worker-thread
 //!   surface (`spawn_local`, `sleep`).
@@ -13,16 +13,41 @@
 //! platform-specific: a main driver (`WasmSchedulerDriver` /
 //! `AndroidSchedulerDriver` / `TestSchedulerDriver`) impls
 //! `MainSchedulerDriver`, and a separate per-worker driver
-//! (`WasmWorkerScheduler` etc., constructed inside `spawn_worker` on the
+//! (`WasmWorkerScheduler` etc., constructed inside `spawn_worker_in` on the
 //! worker thread) impls `WorkerSchedulerDriver`. They are genuinely
 //! different objects — the main driver is `!Send` (stays on main); the
 //! worker driver is built fresh on each worker thread.
+//!
+//! ## Worker pools
+//!
+//! Workers are spawned *into* a named pool ([`WorkerPoolHandle`]) via
+//! [`MainSchedulerDriver::spawn_worker_in`]; the engine calls it once per
+//! app from `TurRuntime::app_builder().worker_pool(pool)…build()` with the
+//! embedder-assigned pool. Pooling itself is platform-implemented — the
+//! engine only defines the contract:
+//!
+//! - **Native** (`tur-native::NativeWorkerPools`): at most
+//!   `max_threads` OS "lane" threads per pool; each app's `worker_loop`
+//!   future is pinned to one lane for its lifetime (`!Send` state: boa
+//!   `Context`, `Rc`s) and lanes run multiple app loops cooperatively.
+//! - **Wasm** (`tur-wasm`): at most `max_threads` Web Workers per pool,
+//!   each hosting multiple app loops on one JS event loop
+//!   (multi-tenant workers, factory delivery via `postMessage`).
+//!
+//! A cap ≥ the app count degenerates to one-worker-per-app (the historical
+//! default). Apps in different pools never share threads — that isolation
+//! is the point: heavy daemon JS in a `daemon` pool cannot stall UI
+//! rendering in a `ui` pool.
 //!
 //! ## Dependency direction
 //!
 //! Engine → scheduler, one-way. Drivers have zero engine knowledge — they
 //! expose primitives (spawn, vsync events, sleep futures) and the engine
 //! drives itself via [`crate::TurApp::run_loop`].
+
+pub mod pool;
+
+pub use pool::WorkerPoolHandle;
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -64,7 +89,7 @@ impl Stream for VsyncEvents {
     }
 }
 
-/// Returned by [`MainScheduler::spawn_worker`]. Held for the worker's
+/// Returned by [`MainScheduler::spawn_worker_in`]. Held for the worker's
 /// lifetime; `join()` blocks the caller until the worker exits.
 ///
 /// `notify` is a cross-thread wake callback the embedder calls after every
@@ -223,7 +248,7 @@ pub fn track_spawn<T: Send + 'static>(
 /// Worker-thread driver trait. Impl'd by the per-worker driver structs
 /// (`WasmWorkerScheduler`, `AndroidWorkerScheduler`,
 /// `TestWorkerScheduler`) constructed inside
-/// [`MainSchedulerDriver::spawn_worker`] on the worker thread. These are
+/// [`MainSchedulerDriver::spawn_worker_in`] on the worker thread. These are
 /// the only scheduling primitives valid on a worker thread.
 ///
 /// `spawn_local`/`sleep` have identical signatures to the ones on
@@ -249,7 +274,7 @@ pub trait WorkerSchedulerDriver: 'static {
 /// There is deliberately **no `block_on`**: blocking the calling thread on
 /// a future cannot be implemented honestly on wasm (you cannot block; the
 /// idiomatic pattern is `spawn_local` + event-loop driving). The engine's
-/// worker loop is driven by [`MainSchedulerDriver::spawn_worker`], which
+/// worker loop is driven by [`MainSchedulerDriver::spawn_worker_in`], which
 /// moves the per-platform "how to keep the worker alive" decision into the
 /// main driver.
 #[derive(Clone)]
@@ -258,7 +283,7 @@ pub struct WorkerScheduler {
 }
 
 impl WorkerScheduler {
-    /// Wrap a worker driver. Called by the main driver's `spawn_worker`
+    /// Wrap a worker driver. Called by the main driver's `spawn_worker_in`
     /// impl (in each platform crate) to hand the engine its per-thread
     /// scheduling handle.
     pub fn new(driver: Rc<dyn WorkerSchedulerDriver>) -> Self {
@@ -296,10 +321,10 @@ pub type WorkerFactory = Box<
 /// on main for the app's lifetime; per-instance replacement (Android's
 /// per-`FrameLoop` driver) goes through [`crate::TurApp::set_main_scheduler`].
 pub trait MainSchedulerDriver: 'static {
-    /// Spawn a worker. The factory runs on a new worker thread
-    /// (`std::thread` on native, Web Worker via the in-tree spawner on
-    /// wasm) and **returns the worker's main future** (the engine's
-    /// `worker_loop`). The driver sets up thread-locals (e.g. the
+    /// Spawn a worker into `pool`. The factory runs on the chosen worker
+    /// thread (`std::thread` lane on native, Web Worker via the in-tree
+    /// spawner on wasm) and **returns the worker's main future** (the
+    /// engine's `worker_loop`). The driver sets up thread-locals (e.g. the
     /// LocalPool) on the worker thread *before* invoking the factory,
     /// then constructs a [`WorkerScheduler`] for that thread (wrapping a
     /// fresh per-worker driver) and passes it to the factory, and finally
@@ -315,11 +340,37 @@ pub trait MainSchedulerDriver: 'static {
     ///   `worker.postMessage(0)` (the returned [`WorkerHandle`]'s `notify`
     ///   callback); same-thread wake is a `setTimeout(0)` repoll.
     ///
+    /// ## Pool semantics
+    ///
+    /// The worker the factory lands on is pinned to `pool`:
+    /// - If the pool has fewer live workers than `pool.max_threads()`, the
+    ///   driver may create a fresh one (grow-to-cap).
+    /// - Otherwise the driver must host the new app's loop on an existing
+    ///   worker of that pool (least-loaded), scheduled cooperatively with
+    ///   the apps already there.
+    ///
+    /// Apps in *different* pools never share workers. Since app state
+    /// (`boa::Context`, `Rc`s) is `!Send`, each app's loop runs on exactly
+    /// one worker thread for its entire lifetime.
+    ///
     /// The returned future runs on the worker thread only (never crosses
     /// threads), so it is `+ 'static` but not `Send`; the factory closure
     /// itself must be `Send + 'static` (it crosses main → worker and may
     /// capture only `Send + Sync` config).
-    fn spawn_worker(&self, factory: WorkerFactory) -> WorkerHandle;
+    ///
+    /// The default impl panics: drivers that never opted into worker pools
+    /// (e.g. Android's per-instance vsync-only replacement drivers) don't
+    /// spawn workers themselves. The platform embedder's runtime-level
+    /// driver is expected to implement it (native: compose
+    /// `tur_native::NativeWorkerPools`; wasm: built into
+    /// `WasmSchedulerDriver`).
+    fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
+        let _ = (pool, factory);
+        panic!(
+            "this MainSchedulerDriver does not implement worker pools; \
+             implement spawn_worker_in or compose tur_native::NativeWorkerPools"
+        );
+    }
 
     /// Subscribe to vsync events. Each item is one vsync tick.
     /// Call once at engine startup (inside `TurApp::run_loop`).
@@ -364,9 +415,10 @@ impl MainScheduler {
         Self { driver }
     }
 
-    /// Spawn a worker. See [`MainSchedulerDriver::spawn_worker`].
-    pub fn spawn_worker(&self, factory: WorkerFactory) -> WorkerHandle {
-        self.driver.spawn_worker(factory)
+    /// Spawn a worker into `pool`. See
+    /// [`MainSchedulerDriver::spawn_worker_in`].
+    pub fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
+        self.driver.spawn_worker_in(pool, factory)
     }
 
     /// Subscribe to vsync events. Each item is one vsync tick.

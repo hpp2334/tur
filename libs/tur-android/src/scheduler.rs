@@ -1,8 +1,10 @@
 //! Android scheduler driver (JNI-backed).
 //!
-//! Implements [`MainSchedulerDriver`] (main thread) and
-//! [`WorkerSchedulerDriver`] (worker thread, via [`AndroidWorkerScheduler`])
-//! for Android.
+//! Implements [`MainSchedulerDriver`] for Android. Worker spawning goes
+//! through [`tur_native::worker_pool::NativeWorkerPools`] (the shared
+//! native lane executor): pools registered on the runtime are hosted on
+//! "tur-lane" threads, cooperatively scheduled when a pool's cap forces
+//! sharing. The lane driver provides `sleep` via the shared tokio runtime.
 //!
 //! ## Vsync events
 //!
@@ -26,21 +28,6 @@
 //! `sleep(d)` returns a `Sleep(BoxFuture)` backed by `tokio::time::sleep`
 //! via a oneshot channel. The driver holds a `tokio::runtime::Handle`
 //! (shared with `HttpBackend`) for **timers only**.
-//!
-//! ## Spawn primitives
-//!
-//! `spawn_local` uses thread-local `futures::executor::LocalPool` per
-//! thread (main + each worker). There is no trait-level `block_on`; the
-//! worker's main future is driven by `spawn_worker` via the pool's
-//! `run_until` (an infinite loop → the thread blocks forever, polling the
-//! loop + all `spawn_local`'d side tasks).
-//!
-//! ## Worker spawn
-//!
-//! `spawn_worker` uses `std::thread::spawn` (dedicated OS thread,
-//! guarantees main ≠ worker). The driver sets up the thread-local
-//! LocalPool on the worker thread before invoking the factory, which
-//! returns the worker's main future (the engine's `worker_loop`).
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -53,10 +40,11 @@ use std::time::Duration;
 use futures::executor::{LocalPool, LocalSpawner};
 use futures::task::LocalSpawnExt;
 use jni::objects::JObject;
+use tur_native::worker_pool::NativeWorkerPools;
 
 use tur_engine::core::scheduler::{
-    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerHandle, WorkerScheduler,
-    WorkerSchedulerDriver, track_spawn,
+    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerFactory, WorkerHandle,
+    WorkerPoolHandle, WorkerSchedulerDriver, track_spawn,
 };
 
 /// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so
@@ -143,6 +131,9 @@ pub struct AndroidSchedulerDriver {
     /// `scheduleVsync()` on this object. `None` for the runtime base
     /// driver (no frame loop at runtime-build time; instances replace it).
     frame_loop: Option<FrameLoopRef>,
+    /// Native lane-pool registry backing `spawn_worker_in` (main-thread
+    /// only — spawns happen from `app_builder().build()` on main).
+    pools: Rc<NativeWorkerPools>,
 }
 
 struct AndroidInner {
@@ -171,6 +162,7 @@ impl AndroidSchedulerDriver {
             }),
             runtime: Arc::new(runtime),
             frame_loop,
+            pools: Rc::new(NativeWorkerPools::new()),
         })
     }
 
@@ -214,31 +206,20 @@ impl AndroidSchedulerDriver {
 }
 
 impl MainSchedulerDriver for AndroidSchedulerDriver {
-    fn spawn_worker(&self, factory: tur_engine::core::scheduler::WorkerFactory) -> WorkerHandle {
-        // Dedicated OS thread — guarantees main ≠ worker. The driver sets
-        // up the thread-local LocalPool on the worker thread before
-        // invoking the factory; the worker view wraps a fresh per-worker
-        // driver holding the same tokio Handle (cloned, Send + Sync) but
-        // no JNI state (workers don't need vsync). The factory returns the
-        // worker's main future (the engine's `worker_loop`), which the
-        // driver drives to completion on the pool — an infinite loop, so
-        // the thread blocks forever, polling the loop + all
-        // `spawn_local`'d side tasks.
+    fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
+        // Host the app on a tur-native lane thread (dedicated while the
+        // pool is under its cap, shared cooperatively beyond it). The lane
+        // driver serves `sleep` via the shared tokio runtime handle.
         let runtime = self.runtime.clone();
-        let join = std::thread::Builder::new()
-            .name("tur-worker".into())
-            .spawn(move || {
-                set_up_thread_pool();
-                let worker_view = WorkerScheduler::new(Rc::new(AndroidWorkerScheduler { runtime }));
-                let loop_fut = factory(worker_view);
-                block_on_on_current_thread(loop_fut);
-                CURRENT_POOL.with(|c| *c.borrow_mut() = None);
-                CURRENT_SPAWNER.with(|s| *s.borrow_mut() = None);
-            })
-            .expect("failed to spawn tur worker thread");
-        WorkerHandle::new(Box::new(move || {
-            let _ = join.join();
-        }))
+        self.pools.spawn(
+            pool,
+            factory,
+            Arc::new(move || {
+                Rc::new(AndroidWorkerScheduler {
+                    runtime: runtime.clone(),
+                })
+            }),
+        )
     }
 
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
@@ -284,16 +265,19 @@ impl MainSchedulerDriver for AndroidSchedulerDriver {
     }
 }
 
-/// Worker-side scheduler driver. Constructed on each worker thread inside
-/// `spawn_worker` (wrapped in a [`WorkerScheduler`] view). Holds the shared
-/// tokio Handle for `sleep` but no JNI state (workers don't call vsync APIs).
+/// Lane-thread scheduling driver: serves `sleep` via the shared tokio
+/// runtime (the lane executor provides `spawn_local` itself, so the impl
+/// here is unreachable through the engine).
 struct AndroidWorkerScheduler {
     runtime: Arc<tokio::runtime::Handle>,
 }
 
 impl WorkerSchedulerDriver for AndroidWorkerScheduler {
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        spawn_local_on_current_thread(fut)
+    fn spawn_local(&self, _fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        unimplemented!(
+            "lane spawn_local is provided by tur_native's lane executor; \
+             AndroidWorkerScheduler only serves `sleep`"
+        )
     }
 
     fn sleep(&self, d: Duration) -> Sleep {

@@ -318,6 +318,7 @@ pub mod ops {
             );
             let instance = pollster::block_on(AndroidInstance::build_with_surface(
                 &runtime.runtime,
+                runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 &runtime.wgpu_instance,
                 window_handle,
@@ -353,6 +354,7 @@ pub mod ops {
             log::info!("createHeadlessInstance: building headless instance");
             let instance = AndroidInstance::build_headless(
                 &runtime.runtime,
+                runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 frame_loop_handle,
                 configure_instance,

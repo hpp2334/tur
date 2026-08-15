@@ -4510,6 +4510,7 @@ name = "tur-native"
 version = "0.1.0"
 dependencies = [
  "parley",
+ "tracing",
  "tur-engine",
 ]
 
