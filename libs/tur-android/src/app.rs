@@ -23,10 +23,12 @@ mod imp {
     };
     use tur_net_native::{Http, NativeHttp};
 
-    /// `std::task::Wake` impl wrapping a `Send + Sync` closure that schedules
-    /// a Choreographer vsync. Used as the waker for `pump_loop` so that when
-    /// the worker sends to `main_rx`, the channel fires the waker → arms a
-    /// vsync → Choreographer → `pump_loop` → drains the message.
+    /// `std::task::Wake` impl wrapping a `Send + Sync` closure that
+    /// requests a main-loop poll. Used as the waker for `pump_loop` so that
+    /// when the worker sends to `main_rx`, the channel fires the waker →
+    /// coalesced Handler post on the main thread → `pump_loop` → drains
+    /// the message. (Deliberately NOT a Choreographer arm — see
+    /// [`AndroidVsyncSource::make_vsync_wake_fn`].)
     struct VsyncWaker(std::sync::Arc<dyn Fn() + Send + Sync>);
 
     impl std::task::Wake for VsyncWaker {
@@ -191,12 +193,12 @@ mod imp {
         /// cannot run on a spawned thread: JNI `pump` polls it once per
         /// Choreographer tick.
         loop_task: std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
-        /// `Send + Sync` closure that schedules a Choreographer vsync. Used
+        /// `Send + Sync` closure that requests a main-loop pump. Used
         /// as the waker for `pump_loop` so that when the worker sends to
         /// `main_rx` (from its own thread), the channel waker fires this
-        /// closure → arms a vsync → Choreographer fires → `pump_loop` runs →
-        /// processes the message. Without this the loop used `noop_waker`
-        /// and worker messages sat unconsumed until the next input event.
+        /// closure → coalesced Handler post → `pump_loop` runs → processes
+        /// the message. Without this the loop used `noop_waker` and worker
+        /// messages sat unconsumed until the next input event.
         vsync_wake_fn: std::sync::Arc<dyn Fn() + Send + Sync>,
     }
 
@@ -207,9 +209,9 @@ mod imp {
         /// without a JNI round-trip), and stash the autonomous `run_loop`
         /// future for poll-per-`pump` driving. Arms the first vsync so the
         /// bootstrap `FrameOutcome` (from `app_builder().build(...)`'s
-        /// initial resize) kicks the loop off. Also registers the vsync
+        /// initial resize) kicks the loop off. Also registers the message
         /// wake fn with the runtime's main loop so pending main-thread
-        /// tasks (the engine's drain) schedule a Choreographer tick.
+        /// tasks (the engine's drain) get a prompt pump.
         fn install_frame_loop(
             app: &Rc<TurApp>,
             frame_loop: FrameLoopRef,
@@ -232,11 +234,12 @@ mod imp {
             let vsync = AndroidVsyncSource::new(Some(frame_loop));
             app.set_vsync_source(vsync.clone());
             // Bootstrap: arm the first Choreographer callback. Subsequent
-            // frames re-arm via the loop's `request_frame` on `FrameOutcome`.
+            // frames re-arm via the engine's `request_frame` on a
+            // `FrameOutcome { schedule: Vsync }`.
             vsync.request_frame();
             let vsync_wake_fn = vsync.make_vsync_wake_fn();
-            // Pending main-loop tasks (the engine's drain) arm a vsync on
-            // this instance → the next `pump` polls them.
+            // Pending main-loop tasks (the engine's drain) request a pump on
+            // this instance → the next `pump_loop` polls them.
             main_loop.add_wake_fn(vsync_wake_fn.clone());
             let loop_task = std::cell::RefCell::new(Some(
                 Box::pin(app.clone().run_loop()) as Pin<Box<dyn Future<Output = ()>>>
@@ -245,16 +248,18 @@ mod imp {
         }
 
         /// Poll the autonomous loop exactly once. Called from JNI `pump`
-        /// after `fire_vsync`; each poll handles at most one vsync/main-msg
-        /// event, so the loop is pulled forward by the Choreographer
-        /// cadence.
+        /// (Choreographer-fired: vsync + poll) and `pumpMessages`
+        /// (message-pump: poll only). Each poll handles at most one
+        /// vsync/main-msg event, so the loop is pulled forward by whichever
+        /// cadence is active — display frames while animating, one Handler
+        /// post per message batch while idle.
         ///
         /// Uses a **real waker** (not `noop_waker`) backed by
         /// [`vsync_wake_fn`](Self::vsync_wake_fn): when the worker sends to
-        /// `main_rx`, the channel waker fires the closure → schedules a
-        /// Choreographer callback → this method runs again → processes the
-        /// message. Without this, worker messages (render batches, frame
-        /// outcomes) would sit unconsumed between input events.
+        /// `main_rx`, the channel waker fires the closure → coalesced
+        /// Handler post → this method runs again → processes the message.
+        /// Without this, worker messages (render batches, frame outcomes)
+        /// would sit unconsumed between input events.
         pub fn pump_loop(&self) {
             {
                 let mut task = self.loop_task.borrow_mut();

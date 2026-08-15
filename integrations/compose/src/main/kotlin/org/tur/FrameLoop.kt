@@ -7,32 +7,47 @@ import android.view.Choreographer
 /**
  * Frame scheduler the native `LoopDriver` drives.
  *
- * The engine decides when it wants the next wake-up ([NextFrame] verdict) and
- * calls one of `scheduleVsync` / `scheduleDelayed` / `cancel` back through JNI.
- * When the wake-up fires, [FrameLoop] invokes [onWake] (which [TurInstance]
- * wires to the engine's `pump`), completing the loop:
+ * The engine decides when it wants the next display frame and calls
+ * `scheduleVsync` back through JNI (Choreographer-backed). When the wake-up
+ * fires, [FrameLoop] invokes [onVsync] (which [TurInstance] wires to the
+ * engine's `pump`), completing the loop:
  *
  * ```
- * engine run_loop() → LoopDriver.request_next(Vsync) → FrameLoop.scheduleVsync()
- *   → Choreographer frame → FrameLoop.onWake() → nativePump() → engine run_loop() → …
+ * engine run_loop() → schedule == Vsync → FrameLoop.scheduleVsync()
+ *   → Choreographer frame → FrameLoop.onVsync() → nativePump() → engine run_loop() → …
  * ```
+ *
+ * Separately, worker→main messages and main-loop tasks that merely need the
+ * main loop *polled* (no display frame) go through [requestPump] — a
+ * coalesced main-Handler post that invokes [onPump] (the engine's
+ * `pumpMessages`: poll the loop, do NOT fire a vsync). This split is what
+ * lets an idle instance park at 0% CPU: without it, every `FrameOutcome`
+ * (shipped after each engine pump) would re-arm the Choreographer and
+ * ping-pong the whole engine (a full flush per pump) at display refresh
+ * rate forever — even fully idle.
  *
  * Lives on the main looper (where `SurfaceHolder.Callback` and input dispatch
  * arrive), matching the single-threaded assumption the native side relies on.
  *
- * [onWake] / [onAfterPump] are settable (default `null`) so a [FrameLoop] can be
- * constructed before the instance handle exists and wired up by [TurInstance]
- * afterwards — the runtime needs a `FrameLoop` to hand to native
- * `createInstance`, but the `pump` target only exists once `createInstance`
- * returns.
+ * [onVsync] / [onPump] / [onAfterPump] are settable (default `null`) so a
+ * [FrameLoop] can be constructed before the instance handle exists and wired
+ * up by [TurInstance] afterwards — the runtime needs a `FrameLoop` to hand
+ * to native `createInstance`, but the `pump` target only exists once
+ * `createInstance` returns.
  */
 class FrameLoop {
     private val handler = Handler(Looper.getMainLooper())
     private var frameCallback: Choreographer.FrameCallback? = null
-    private var delayedToken: Runnable? = null
+    private var pumpPosted = false
 
-    /** Fired when a scheduled wake-up is due. [TurInstance] sets this to `pump`. */
-    var onWake: (() -> Unit)? = null
+    /** Fired when a scheduled display frame is due (Choreographer). */
+    var onVsync: (() -> Unit)? = null
+
+    /**
+     * Fired when the main loop needs polling without a display frame —
+     * a coalesced Handler post requested by native (`requestPump`).
+     */
+    var onPump: (() -> Unit)? = null
 
     /**
      * Whether the engine's focused element is an editable text field, pushed
@@ -45,12 +60,12 @@ class FrameLoop {
         private set
 
     /**
-     * Optional callback fired after [onWake] in each wake-up. The Compose
-     * integration sets this to sync the Android soft-keyboard / IME with the
-     * engine's focused-element state (read [focusedIsEditable], then
+     * Optional callback fired after [onVsync] / [onPump] in each wake-up. The
+     * Compose integration sets this to sync the Android soft-keyboard / IME
+     * with the engine's focused-element state (read [focusedIsEditable], then
      * `showSoftInput` / `hideSoftInput`). Runs on the main looper, same as
-     * [onWake]. `null` by default so non-IME embedders (and tests) are
-     * unaffected.
+     * the wake callbacks. `null` by default so non-IME embedders (and tests)
+     * are unaffected.
      */
     var onAfterPump: (() -> Unit)? = null
 
@@ -82,7 +97,7 @@ class FrameLoop {
         val cb = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 frameCallback = null
-                onWake?.invoke()
+                onVsync?.invoke()
                 onAfterPump?.invoke()
             }
         }
@@ -90,15 +105,34 @@ class FrameLoop {
         Choreographer.getInstance().postFrameCallback(cb)
     }
 
-    /** Schedule a wake [delayMs] milliseconds from now. */
-    fun scheduleDelayed(delayMs: Long) {
-        if (delayedToken != null) return // already armed (coalesce)
-        val r = Runnable {
-            delayedToken = null
-            onWake?.invoke()
+    /**
+     * Request a main-loop poll WITHOUT a display frame: a coalesced
+     * main-Handler post that invokes [onPump]. Called from native when
+     * worker→main messages or main-loop tasks need processing while the
+     * engine is otherwise idle (`schedule == Idle`) — polling must not arm
+     * the Choreographer, or the engine would burn a full frame per message
+     * at display refresh rate.
+     */
+    fun requestPump() {
+        // May be called from any thread (the engine worker via JNI); the
+        // handler queue's happens-before edge covers the flag hand-off.
+        synchronized(this) {
+            if (pumpPosted) return // already posted (coalesce)
+            pumpPosted = true
+        }
+        handler.post {
+            synchronized(this) { pumpPosted = false }
+            onPump?.invoke()
             onAfterPump?.invoke()
         }
-        delayedToken = r
+    }
+
+    /** Schedule a wake [delayMs] milliseconds from now. */
+    fun scheduleDelayed(delayMs: Long) {
+        val r = Runnable {
+            onPump?.invoke()
+            onAfterPump?.invoke()
+        }
         handler.postDelayed(r, delayMs.coerceAtLeast(1))
     }
 
@@ -106,7 +140,7 @@ class FrameLoop {
     fun cancel() {
         frameCallback?.let { Choreographer.getInstance().removeFrameCallback(it) }
         frameCallback = null
-        delayedToken?.let { handler.removeCallbacks(it) }
-        delayedToken = null
+        synchronized(this) { pumpPosted = false }
+        handler.removeCallbacksAndMessages(null)
     }
 }

@@ -430,6 +430,35 @@ pub mod ops {
         }
     }
 
+    /// `pumpMessages(env omitted, handle): int` — poll the main loop
+    /// WITHOUT firing a vsync. The Kotlin `FrameLoop.requestPump()` (a
+    /// coalesced main-Handler post) calls this when the engine's
+    /// worker→main messages or main-loop tasks need processing but no
+    /// display frame was requested (`FrameOutcome.schedule == Idle`).
+    /// Keeping this separate from [`pump`] (which fires a vsync) is what
+    /// lets an idle instance park at 0% CPU instead of ping-ponging at
+    /// display refresh rate.
+    pub fn pump_messages(handle: jlong) -> jint {
+        let Some(instance) = handle_to_instance(handle) else {
+            return 0;
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            instance.pump_loop();
+        }));
+        match result {
+            Ok(()) => 1,
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic payload>".into());
+                log::error!("pumpMessages: panic caught at JNI boundary, aborting: {msg}");
+                std::process::abort();
+            }
+        }
+    }
+
     /// Resize the surface. Resizes the main-side renderer directly AND
     /// forwards `PlatformEvent::Resize` to the worker for layout (single
     /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
@@ -725,6 +754,15 @@ macro_rules! standard_jni_exports {
             handle: $crate::jlong,
         ) -> $crate::jint {
             $crate::ops::pump(handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pumpMessages(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) -> $crate::jint {
+            $crate::ops::pump_messages(handle)
         }
 
         #[unsafe(no_mangle)]

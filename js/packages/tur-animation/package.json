@@ -1,6 +1,6 @@
 {
     "name": "@tur-ng/animation",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "type": "module",
     "types": "src/index.d.ts",
     "files": [
@@ -20,5 +20,10 @@
     "dependencies": {
         "@tur-ng/core": "workspace:*",
         "@tur-ng/std": "workspace:*"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/hpp2334/tur.git",
+        "directory": "js/packages/tur-animation"
     }
 }

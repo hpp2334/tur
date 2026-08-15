@@ -444,10 +444,17 @@ data; the engine only validates registration + assignment:
   `WasmWorkerExecutor` (setTimeout sleep; default spawn_blocking) fill the
   other three roles.
 - Android main-thread tasks: `AndroidMainLoop` holds a task list polled
-  from each instance's `pump_loop` (Choreographer cadence); task wakers arm
-  a vsync on a live instance so pending tasks get their next pump. This
-  roots the engine's main-thread drain, which previously sat on an unpumped
-  `LocalPool` and could never advance.
+  from each instance's `pump_loop`; task wakers request a **message pump**
+  (coalesced main-Handler post via Kotlin `FrameLoop.requestPump()` → JNI
+  `pumpMessages`, which polls the loop WITHOUT firing a vsync) so pending
+  tasks get their next poll. This roots the engine's main-thread drain,
+  which previously sat on an unpumped `LocalPool` and could never advance.
+  The Choreographer is armed ONLY by `AndroidVsyncSource::request_frame`
+  (the engine's `FrameOutcome.schedule == Vsync` decision) — never by
+  message wakes. Arming on messages would ping-pong worker↔main at display
+  refresh rate forever (each pump ships a `FrameOutcome`, whose channel
+  wake would re-arm the next frame), burning a full engine flush per
+  display frame even fully idle.
 - `tur-native` is **native-only** (root `compile_error!` on wasm32);
   `WasmRuntimeConfig::pools` / `WasmAppConfig::pool` + `WasmRuntime::default_pool`
   expose pools to wasm hosts; `AndroidRuntime::default_worker_pool` + the

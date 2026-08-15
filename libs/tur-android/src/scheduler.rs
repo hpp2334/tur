@@ -6,8 +6,8 @@
 //!   `nativePump` which invokes [`AndroidVsyncSource::fire_vsync`],
 //!   pushing an event into every subscribed channel.
 //! - [`AndroidMainLoop`] — main-thread task spawner: tasks are held in a
-//!   list polled from `AndroidInstance::pump_loop` (each Choreographer
-//!   tick), with wakers that arm a vsync so pending tasks get their next
+//!   list polled from `AndroidInstance::pump_loop` (each wake-up), with
+//!   wakers that request a prompt pump so pending tasks get their next
 //!   poll. Roots the engine's main-thread drain (the
 //!   `AsyncPluginContext` hop) + any embedder main-thread tasks.
 //! - Worker hosting comes from
@@ -146,30 +146,31 @@ impl AndroidVsyncSource {
         }
     }
 
-    /// Returns a `Send + Sync` closure that schedules a Choreographer
+    /// Returns a `Send + Sync` closure that requests a **message pump** —
+    /// a coalesced main-Handler post that polls the loop WITHOUT firing a
     /// vsync. Used as the waker for `pump_loop` so that when the worker
     /// sends to `main_rx` (from its own thread), the channel waker fires
-    /// this closure → arms a vsync → Choreographer fires → `pump_loop` →
-    /// processes the message.
+    /// this closure → the main thread polls the loop promptly.
+    ///
+    /// Deliberately does NOT arm the Choreographer: arming a vsync here
+    /// would make every worker→main message (each pump ships a
+    /// `FrameOutcome`) re-arm the next display frame, ping-ponging the
+    /// whole engine (flush per pump) at display refresh rate forever —
+    /// even fully idle. The Choreographer is armed ONLY by
+    /// [`VsyncSource::request_frame`](Self::request_frame), i.e. by the
+    /// engine's `FrameOutcome.schedule == Vsync` decision.
     pub fn make_vsync_wake_fn(&self) -> Arc<dyn Fn() + Send + Sync> {
         let Some(frame_loop) = self.frame_loop.as_ref() else {
             return Arc::new(|| {});
         };
         let kotlin_loop = frame_loop.kotlin_loop.clone();
-        let inner = self.inner.clone();
         Arc::new(move || {
-            if inner
-                .vsync_armed
-                .swap(true, std::sync::atomic::Ordering::AcqRel)
-            {
-                return;
-            }
             let Some(vm) = crate::java_vm() else { return };
             let Ok(mut env) = vm.attach_current_thread() else {
                 return;
             };
             let loop_obj = unsafe { JObject::from_raw(kotlin_loop.as_raw()) };
-            let _ = env.call_method(&loop_obj, "scheduleVsync", "()V", &[]);
+            let _ = env.call_method(&loop_obj, "requestPump", "()V", &[]);
         })
     }
 }
@@ -211,9 +212,9 @@ impl VsyncSource for AndroidVsyncSource {
 /// A wake closure: arms a Choreographer vsync on a live instance.
 pub type WakeFn = Arc<dyn Fn() + Send + Sync>;
 
-/// Waker that fires the main loop's registered wake closures (arming a
-/// Choreographer vsync on every live instance) so pending main-loop tasks
-/// get polled on the next `pump_loop`.
+/// Waker that fires the main loop's registered wake closures (requesting a
+/// prompt pump on every live instance) so pending main-loop tasks get
+/// polled on the next `pump_loop`.
 struct MainLoopWaker(Arc<Mutex<Vec<WakeFn>>>);
 
 impl std::task::Wake for MainLoopWaker {
@@ -229,10 +230,9 @@ impl std::task::Wake for MainLoopWaker {
 }
 
 /// Main-thread task spawner for Android: tasks are held in a list and
-/// polled cooperatively from `AndroidInstance::pump_loop` (once per
-/// Choreographer tick). Task wakers arm a vsync (via the wake closures
-/// registered by live instances) so a task that becomes ready between
-/// pumps gets polled on the next tick.
+/// polled cooperatively from `AndroidInstance::pump_loop`. Task wakers
+/// request a pump (via the wake closures registered by live instances) so
+/// a task that becomes ready between pumps gets polled promptly.
 ///
 /// This roots the engine's main-thread drain (the `AsyncPluginContext`
 /// hop — clipboard `run_on_main` etc.), which historically sat on an
@@ -250,10 +250,10 @@ impl AndroidMainLoop {
         })
     }
 
-    /// Register a wake closure — typically each instance's vsync-arm
-    /// function (`AndroidVsyncSource::make_vsync_wake_fn`), so any pending
-    /// main-loop task schedules a Choreographer tick on a live instance
-    /// and thereby gets polled.
+    /// Register a wake closure — typically each instance's message-pump
+    /// request fn (`AndroidVsyncSource::make_vsync_wake_fn`), so any
+    /// pending main-loop task schedules a pump on a live instance and
+    /// thereby gets polled.
     pub fn add_wake_fn(&self, f: WakeFn) {
         self.wake_fns.lock().unwrap().push(f);
     }
@@ -267,7 +267,7 @@ impl AndroidMainLoop {
     /// Poll every live task once (one cooperative pass). Called from
     /// `AndroidInstance::pump_loop` after the frame loop's own poll.
     /// Completed tasks are removed; pending tasks re-arm via their waker
-    /// (which schedules the next vsync).
+    /// (which requests the next pump).
     pub fn poll(&self) {
         let waker = std::task::Waker::from(Arc::new(MainLoopWaker(self.wake_fns.clone())));
         let mut cx = std::task::Context::from_waker(&waker);
@@ -288,7 +288,7 @@ impl MainLoop for AndroidMainLoop {
         let handle = track_spawn(fut, |tracked| {
             self.tasks.borrow_mut().push(tracked);
         });
-        // Arm a pump so the task gets its first poll promptly.
+        // Request a pump so the task gets its first poll promptly.
         self.fire_wakes();
         handle
     }
