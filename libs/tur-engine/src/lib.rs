@@ -84,11 +84,11 @@ pub struct FocusedState {
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
     backend: MainBackend,
-    /// Platform main-thread scheduler (vsync events, request_vsync,
-    /// spawn_local). Cloned from the runtime at construction; embedders
-    /// with per-instance scheduling (Android) replace it via
-    /// [`Self::set_main_scheduler`].
-    main_sched: RefCell<core::scheduler::MainScheduler>,
+    /// Per-instance frame cadence. Cloned from the runtime at
+    /// construction; embedders with per-instance cadence (Android's
+    /// per-`FrameLoop` sources) replace it via [`Self::set_vsync_source`]
+    /// before `run_loop` starts.
+    vsync: RefCell<Rc<dyn core::scheduler::VsyncSource>>,
     /// Embedder-installed callback fired after each autonomous frame —
     /// typically used for DOM side-effects (file-pick resolution, textarea
     /// focus / caret positioning). `None` in tests.
@@ -111,27 +111,28 @@ pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`MainBackend`] + scheduler.
-    /// The runtime calls this from
+    /// Construct a `TurApp` backed by the given [`MainBackend`] + vsync
+    /// source. The runtime calls this from
     /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
     /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
     /// embedders normally don't call it directly.
-    pub fn new(backend: MainBackend, main_sched: core::scheduler::MainScheduler) -> Self {
+    pub fn new(backend: MainBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
         Self {
             backend,
-            main_sched: RefCell::new(main_sched),
+            vsync: RefCell::new(vsync),
             after_frame: RefCell::new(None),
             loop_started: Cell::new(false),
             destroyed: Cell::new(false),
         }
     }
 
-    /// Replace the main-thread scheduler. Used by embedders that need a
-    /// per-instance scheduler (e.g. Android, where each instance has its
-    /// own JNI `FrameLoop`). Call after `runtime.app_builder().build(...)`
-    /// and before `run_loop()`.
-    pub fn set_main_scheduler(&self, sched: core::scheduler::MainScheduler) {
-        *self.main_sched.borrow_mut() = sched;
+    /// Replace the per-instance vsync source. Used by embedders that need
+    /// per-instance frame cadence (e.g. Android, where each instance has
+    /// its own JNI `FrameLoop`). Call after
+    /// `runtime.app_builder().build(...)` and **before** `run_loop()` —
+    /// the loop subscribes to the installed source once at startup.
+    pub fn set_vsync_source(&self, source: Rc<dyn core::scheduler::VsyncSource>) {
+        *self.vsync.borrow_mut() = source;
     }
 
     /// Direct accessor on the underlying [`MainBackend`]. Embedders use it
@@ -219,8 +220,8 @@ impl TurApp {
     /// The autonomous frame loop — driven by the embedder's platform loop
     /// (Choreographer-polled on Android, `spawn_local`'d on wasm). The
     /// engine owns all frame logic; the platform only supplies the wake-up
-    /// cadence via [`MainScheduler::vsync_events`](core::scheduler::MainScheduler::vsync_events)
-    /// + [`MainScheduler::request_vsync`](core::scheduler::MainScheduler::request_vsync).
+    /// cadence via [`VsyncSource::subscribe`](core::scheduler::VsyncSource::subscribe)
+    /// + [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
     ///
     /// Each iteration races the platform vsync stream against the worker's
     /// `MainMsg` stream:
@@ -237,7 +238,7 @@ impl TurApp {
     /// The bootstrap is automatic: `app_builder().build(...)` pushes an
     /// initial resize event to the worker, the worker pumps + ships
     /// `FrameOutcome` back, and the loop requests the next vsync based on
-    /// the outcome. No initial `request_vsync()` is needed.
+    /// the outcome. No initial `request_frame()` is needed.
     ///
     /// Concurrency: single-loop serialized. The embedder must spawn this
     /// future exactly once per `TurApp`. Multiple concurrent calls panic.
@@ -248,7 +249,7 @@ impl TurApp {
             "run_loop called twice on the same TurApp"
         );
 
-        let mut vsync_rx = self.main_sched.borrow().vsync_events();
+        let mut vsync_rx = self.vsync.borrow().subscribe();
         // `main_rx` is in a RefCell; borrow for the lifetime of this loop.
         // Safe: run_loop is called exactly once per app (asserted above).
         #[allow(clippy::await_holding_refcell_ref)]
@@ -300,7 +301,7 @@ impl TurApp {
                             // frame. The hook is the last thing the loop
                             // does for this message.
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
-                                self.main_sched.borrow().request_vsync();
+                                self.vsync.borrow().request_frame();
                                 false
                             } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
                                 // Quiescence: no vsync is armed (nothing
@@ -355,10 +356,10 @@ impl TurApp {
             .send_worker_msg(core::app::WorkerMsg::Destroy { reply: tx });
     }
 
-    /// Re-arm an idle autonomous loop: ask the scheduler for one wake-up
-    /// on the next frame. Idempotent at the driver (armed flag).
+    /// Re-arm an idle autonomous loop: ask the vsync source for one
+    /// wake-up on the next frame. Idempotent at the source (armed flag).
     fn request_wakeup(&self) {
-        self.main_sched.borrow().request_vsync();
+        self.vsync.borrow().request_frame();
     }
 
     pub async fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {

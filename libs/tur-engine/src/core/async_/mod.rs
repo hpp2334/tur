@@ -3,7 +3,7 @@
 //! The old `AsyncExecutor` (a future poller + completion queue combined)
 //! has been replaced by two focused types:
 //! - [`CompletionQueue`] / [`CompletionHandle`] — closures pushed by spawned
-//!   futures (which now run on a [`WorkerScheduler`]) to settle JsPromises
+//!   futures (which now run on a [`WorkerContext`]) to settle JsPromises
 //!   under `&mut Context` on the next flush.
 //! - [`TurJobExecutor`] — boa's `JobExecutor` impl that drains PromiseJobs /
 //!   GenericJobs / AsyncJobs.

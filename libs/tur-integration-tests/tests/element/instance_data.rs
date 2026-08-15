@@ -49,8 +49,11 @@ struct ThemeOverride {
 /// (effectively uncapped) default worker pool its instances assign.
 fn build_runtime() -> (Rc<TurRuntime>, WorkerPoolHandle) {
     let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())
@@ -64,8 +67,11 @@ fn build_runtime() -> (Rc<TurRuntime>, WorkerPoolHandle) {
 /// Build a runtime carrying std + animation + the supplied extra plugin.
 fn build_runtime_with(extra: Box<dyn Plugin>) -> (Rc<TurRuntime>, WorkerPoolHandle) {
     let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())

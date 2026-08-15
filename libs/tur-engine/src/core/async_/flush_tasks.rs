@@ -1,7 +1,7 @@
 //! Flush-driven task queue for engine-internal async (`sleep`, `launch`).
 //!
 //! `spawn_local`'d futures normally run on the platform executor
-//! ([`WorkerScheduler::spawn_local`](crate::core::scheduler::WorkerScheduler) →
+//! ([`WorkerContext::spawn_local`](crate::core::scheduler::WorkerContext) →
 //! tokio `LocalSet` on native / `wasm_bindgen_futures::spawn_local` on wasm),
 //! which polls them *between* frames — never inside `flush()`. For pure
 //! engine-internal async (the `sleep(ms)` promise driver and the `launch`
@@ -13,7 +13,7 @@
 //! the tick.
 //!
 //! This queue closes that gap. `sleep` + `launch` push their driver future
-//! here instead of `worker_sched.spawn_local`, and `flush()` polls every
+//! here instead of `worker_ctx.spawn_local`, and `flush()` polls every
 //! queued task once per fixed-point iteration — so a sleep that becomes
 //! due resolves *inside* the same flush, pushes its completion, which the
 //! same flush drains (settling the promise + firing `.then`, which wakes
@@ -21,7 +21,7 @@
 //! all within one frame.
 //!
 //! Real platform async (HTTP, clipboard, file-picker) still uses
-//! `worker_sched.spawn_local`: those futures need the platform's I/O
+//! `worker_ctx.spawn_local`: those futures need the platform's I/O
 //! driver (reqwest polling, web-sys promises) to make progress, and their
 //! completions are already drained by `flush()` (the `Wake` they
 //! self-send on completion re-arms the worker).
@@ -160,7 +160,7 @@ impl FlushTaskHandle {
         let tasks = self.tasks.clone();
         // `track_spawn` wraps `fut` in an `Abortable` + oneshot (so
         // `TaskHandle::abort`/`join` work identically to
-        // `worker_sched.spawn_local`) and hands the wrapped future to our
+        // `worker_ctx.spawn_local`) and hands the wrapped future to our
         // closure, which pushes it onto the flush-driven queue.
         track_spawn(fut, move |tracked| {
             tasks.borrow_mut().push(Rc::new(FlushTask {

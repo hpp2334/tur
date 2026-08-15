@@ -147,13 +147,17 @@ impl WasmRuntime {
         // demand from Rust via `wasm_thread::spawn` (driven by
         // `MainBackend::new`).
 
-        let driver = crate::scheduler::WasmSchedulerDriver::new();
+        let worker_host = crate::scheduler::WasmWorkerHost::new();
+        let vsync_source = crate::scheduler::WasmVsyncSource::new();
+        let main_loop = Rc::new(crate::scheduler::WasmMainLoop);
         // Built-in default pool: effectively uncapped → one dedicated Web
         // Worker per app (the historical behavior) unless the embedder
         // assigns a capped pool per-app via `WasmAppConfig::pool`.
         let default_pool = WorkerPoolHandle::new("default", usize::MAX);
         let builder = tur_engine::TurRuntime::builder()
-            .scheduler(driver)
+            .worker_host(worker_host)
+            .vsync_source(vsync_source)
+            .main_loop(main_loop)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
             .worker_pool(default_pool.clone())

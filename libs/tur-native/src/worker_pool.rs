@@ -1,11 +1,25 @@
 //! Native worker-pool executor: capped shared "lane" threads.
 //!
 //! Implements the pool side of
-//! [`MainSchedulerDriver::spawn_worker_in`](tur_engine::core::scheduler::MainSchedulerDriver::spawn_worker_in)
-//! for native platforms. Embedder drivers (Android's JNI driver, the
-//! integration-test driver, third-party drivers via
-//! [`PooledSchedulerDriver`]) compose a [`NativeWorkerPools`] and delegate
-//! `spawn_worker_in` to [`NativeWorkerPools::spawn`].
+//! [`WorkerHost`](tur_engine::core::scheduler::WorkerHost) for native
+//! platforms. Embedders construct one [`NativeWorkerPools`] with their
+//! platform's timer ([`LaneTimer`]) and pass it to the runtime builder as
+//! the worker host:
+//!
+//! ```no_run
+//! # use std::rc::Rc;
+//! # use std::time::Duration;
+//! # use tur_engine::core::scheduler::{Sleep, WorkerHost};
+//! # use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
+//! # struct MyTimer;
+//! # impl LaneTimer for MyTimer {
+//! #     fn sleep(&self, _: Duration) -> Sleep { Sleep(Box::pin(std::future::pending())) }
+//! # }
+//! let timer = Rc::new(MyTimer);
+//! let pools = Rc::new(NativeWorkerPools::with_timer(move || timer.clone()));
+//! // TurRuntime::builder().worker_host(pools)…
+//! # let _pools: Rc<NativeWorkerPools> = pools;
+//! ```
 //!
 //! ## Model
 //!
@@ -13,8 +27,8 @@
 //! App assignment is grow-to-cap-then-least-loaded: the first
 //! `max_threads` apps each get a fresh lane; later apps share the
 //! least-loaded existing lane. Because engine app state (`boa::Context`,
-//! `Rc`s) is `!Send`, each app's `worker_loop` future is pinned to exactly
-//! one lane for its entire lifetime — "sharing" means multiple app loops
+//! `Rc`s) is `!Send`, each app's loop future is pinned to exactly one lane
+//! for its entire lifetime — "sharing" means multiple app loops
 //! cooperatively scheduled on one thread, never migrated.
 //!
 //! ## Lane executor
@@ -27,16 +41,20 @@
 //!   a poll that calls `spawn_local` can't hit a double borrow.
 //! - Ready queue: `Arc<Mutex<VecDeque<u64>>>` + `Condvar`. Wakers push
 //!   plain `u64` keys — never `Rc`s — so cross-thread wakes (futures-mpsc
-//!   senders on other threads, timer threads) are sound. This mirrors the
-//!   wasm driver's `NoopWaker` thread-id discipline.
+//!   senders on other threads, `spawn_blocking` completion threads,
+//!   timer threads) are sound. This mirrors the wasm executor's
+//!   `NoopWaker` thread-id discipline.
 //! - Idle: the lane parks on the condvar when the queue is empty; every
 //!   wake-up path (task waker, spawn delivery, lane-handle drop) pushes a
 //!   sentinel key + `notify_all`.
-//! - `Sleep` is **not** reimplemented: it delegates to the platform's
-//!   per-lane driver (`LaneDriverFactory`), whose impls are self-timing
-//!   (tokio timers, virtual test clock) and wake the task via its `Waker`
-//!   — which lands back in the ready queue.
-//! - Panic containment: the app factory call and every task poll run under
+//! - `sleep` is **not** reimplemented: it delegates to the platform's
+//!   [`LaneTimer`] (self-timing: tokio timers, virtual test clock) whose
+//!   completions wake the task via its `Waker` — which lands back in the
+//!   ready queue.
+//! - `spawn_blocking` runs the work on a dedicated short-lived OS thread;
+//!   its completion fires a oneshot whose receiver waker re-queues the
+//!   awaiting task (native's honest off-loop offload).
+//! - Panic containment: the app entry call and every task poll run under
 //!   `catch_unwind`; a panicking app is removed (its `done` signal fires)
 //!   while co-tenant apps on the same lane keep running.
 //!
@@ -44,11 +62,11 @@
 //!
 //! A lane exits when its spawn inbox is disconnected (all senders dropped
 //! — the registry reaps dead lanes lazily at the next assignment) **and**
-//! its task table is empty. `WorkerHandle::join` blocks on that app's own
-//! loop completion (not the lane thread), so several apps on one lane can
-//! be joined independently. [`NativeWorkerPools`] itself is main-thread
-//! only (`RefCell` registry) — `spawn_worker_in` is only ever called from
-//! `app_builder().build(...)` on the main thread.
+//! its task table is empty. [`WorkerTicket::join`] blocks on that app's
+//! own loop completion (not the lane thread), so several apps on one lane
+//! can be joined independently. [`NativeWorkerPools`] itself is
+//! main-thread only (`RefCell` registry) — `spawn_worker` is only ever
+//! called from `app_builder().build(...)` on the main thread.
 //!
 //! ## Fairness tradeoff
 //!
@@ -56,7 +74,9 @@
 //! one app stalls its lane-mates until it yields (awaits the next worker
 //! message). That intra-lane coupling is the accepted boundary — the
 //! guarantee pools provide is *between* pools (a busy `daemon` pool never
-//! stalls a `ui` pool).
+//! stalls a `ui` pool). CPU-heavy work should use
+//! [`WorkerExecutor::spawn_blocking`](tur_engine::core::scheduler::WorkerExecutor::spawn_blocking)
+//! to get off the lane entirely.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -72,18 +92,23 @@ use std::task::{Context as TaskContext, Poll, Wake, Waker};
 use std::time::Duration;
 
 use tur_engine::core::scheduler::{
-    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerFactory, WorkerHandle,
-    WorkerPoolHandle, WorkerScheduler, WorkerSchedulerDriver, track_spawn,
+    BlockingSpawn, BlockingWork, Sleep, TaskHandle, WorkerContext, WorkerEntry, WorkerExecutor,
+    WorkerHost, WorkerPoolHandle, WorkerTicket, track_spawn,
 };
 
-/// Builds the per-lane [`WorkerSchedulerDriver`] — the platform's `sleep`
-/// backend + any thread-locals. The closure **runs on the fresh lane
-/// thread** (never on main), so it may only capture `Send + Sync` state
-/// (e.g. an `Arc<tokio Handle>` or the shared virtual-test-clock).
-///
-/// Example: the Android driver hands
-/// `Arc::new(move || Rc::new(AndroidWorkerScheduler { runtime: handle.clone() }))`.
-pub type LaneDriverFactory = Arc<dyn Fn() -> Rc<dyn WorkerSchedulerDriver> + Send + Sync>;
+/// The platform's per-lane timer backend — the only platform seam a lane
+/// needs besides hosting itself. Sleep-only by design: everything else on
+/// a lane (task spawning, blocking offload) is provided by the lane
+/// executor itself, so platforms implement exactly the piece they own
+/// (tokio timers on Android, the virtual clock in tests).
+pub trait LaneTimer: 'static {
+    fn sleep(&self, d: Duration) -> Sleep;
+}
+
+/// Builds the per-lane [`LaneTimer`]. The closure **runs on the fresh
+/// lane thread** (never on main), so it may only capture `Send + Sync`
+/// state (e.g. an `Arc<tokio Handle>` or the shared virtual-test-clock).
+pub type LaneTimerFactory = Arc<dyn Fn() -> Rc<dyn LaneTimer> + Send + Sync>;
 
 /// Sentinel ready-queue key: a "something happened" kick (spawn delivered,
 /// lane handle dropped). Never a real task key — allocation skips it.
@@ -95,46 +120,17 @@ const SENTINEL: u64 = u64::MAX;
 const PASS_BUDGET: u32 = 128;
 
 // ---------------------------------------------------------------------------
-// Registry — main-thread object composed into a platform driver
+// Registry — main-thread object used as the runtime's WorkerHost
 // ---------------------------------------------------------------------------
 
-/// Registry of worker pools → lane threads. Main-thread only (the registry
-/// is a `RefCell`; `spawn` is called exclusively from
-/// `MainSchedulerDriver::spawn_worker_in`, which the engine invokes on the
-/// main thread during `app_builder().build(...)`).
-///
-/// Compose into a platform driver:
-///
-/// ```no_run
-/// # use std::future::Future;
-/// # use std::pin::Pin;
-/// # use std::rc::Rc;
-/// # use std::time::Duration;
-/// # use tur_native::worker_pool::{LaneDriverFactory, NativeWorkerPools};
-/// # use tur_engine::core::scheduler::{
-/// #     MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents,
-/// #     WorkerFactory, WorkerHandle, WorkerPoolHandle,
-/// # };
-/// # struct MyDriver { pools: Rc<NativeWorkerPools>, /* … */ }
-/// impl MainSchedulerDriver for MyDriver {
-///     fn spawn_worker_in(
-///         &self,
-///         pool: &WorkerPoolHandle,
-///         factory: WorkerFactory,
-///     ) -> WorkerHandle {
-///         # let make_lane_driver: LaneDriverFactory = unreachable!();
-///         self.pools.spawn(pool, factory, make_lane_driver)
-///     }
-///     # fn vsync_events(&self) -> VsyncEvents { unreachable!() }
-///     # fn request_vsync(&self) {}
-///     # fn spawn_local(&self, _: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle { unreachable!() }
-///     # fn sleep(&self, _: Duration) -> Sleep { unreachable!() }
-/// }
-/// ```
-///
-/// Or wrap any native driver wholesale with [`PooledSchedulerDriver`].
+/// Registry of worker pools → lane threads, implementing
+/// [`WorkerHost`] for native platforms. Main-thread only (the registry
+/// is a `RefCell`; `spawn_worker` is called exclusively from
+/// `app_builder().build(...)`, which the engine invokes on the main
+/// thread).
 pub struct NativeWorkerPools {
     pools: RefCell<Vec<PoolEntry>>,
+    timer_factory: LaneTimerFactory,
 }
 
 struct PoolEntry {
@@ -142,35 +138,26 @@ struct PoolEntry {
     lanes: Vec<LaneHandle>,
 }
 
-impl Default for NativeWorkerPools {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl NativeWorkerPools {
-    pub fn new() -> Self {
+    /// Construct with the platform's per-lane timer factory.
+    pub fn with_timer(timer_factory: LaneTimerFactory) -> Self {
         Self {
             pools: RefCell::new(Vec::new()),
+            timer_factory,
         }
     }
 
-    /// Spawn an app worker into `pool`: pick the least-loaded live lane, or
-    /// grow a fresh one while the pool is under its `max_threads` cap. The
-    /// factory runs on the lane thread and returns the app's
-    /// `worker_loop` future; the returned [`WorkerHandle`] joins **that
-    /// app's loop** (not the lane thread).
+    /// Host one app loop in `pool`: pick the least-loaded live lane, or
+    /// grow a fresh one while the pool is under its `max_threads` cap.
+    /// The entry runs on the lane thread and returns the app's loop
+    /// future; the returned [`WorkerTicket`] joins **that app's loop**
+    /// (not the lane thread).
     ///
     /// A pool unseen by this registry is hosted on demand (fresh entry,
     /// zero lanes) — pool registration/identity was already validated by
     /// the engine (`TurAppBuilder` rejects unregistered handles), so this
     /// registry is purely a hosting detail.
-    pub fn spawn(
-        &self,
-        pool: &WorkerPoolHandle,
-        factory: WorkerFactory,
-        lane_driver: LaneDriverFactory,
-    ) -> WorkerHandle {
+    fn spawn(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket {
         let lane = {
             let mut pools = self.pools.borrow_mut();
             let entry = match pools.iter_mut().find(|e| e.handle.ptr_eq(pool)) {
@@ -190,7 +177,7 @@ impl NativeWorkerPools {
             entry.lanes.retain(|l| l.live.load(Ordering::Acquire) > 0);
             if entry.lanes.len() < pool.max_threads() {
                 // Grow: first apps each get a fresh lane (max parallelism).
-                let lane = LaneHandle::spawn(lane_driver);
+                let lane = LaneHandle::spawn(self.timer_factory.clone());
                 entry.lanes.push(lane.clone());
                 lane
             } else {
@@ -203,7 +190,13 @@ impl NativeWorkerPools {
                     .clone()
             }
         };
-        lane.spawn_app(factory)
+        lane.spawn_app(entry)
+    }
+}
+
+impl WorkerHost for NativeWorkerPools {
+    fn spawn_worker(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket {
+        self.spawn(pool, entry)
     }
 }
 
@@ -212,10 +205,10 @@ impl NativeWorkerPools {
 // ---------------------------------------------------------------------------
 
 enum LaneMsg {
-    /// Deliver an app's worker factory; `done_tx` fires when that app's
-    /// loop future completes (or the factory itself panics).
+    /// Deliver an app's worker entry; `done_tx` fires when that app's
+    /// loop future completes (or the entry itself panics).
     SpawnApp {
-        factory: WorkerFactory,
+        entry: WorkerEntry,
         done_tx: StdSender<()>,
     },
 }
@@ -237,7 +230,7 @@ impl Drop for LaneHandle {
 }
 
 impl LaneHandle {
-    fn spawn(lane_driver: LaneDriverFactory) -> Self {
+    fn spawn(timer_factory: LaneTimerFactory) -> Self {
         let (tx, rx) = std::sync::mpsc::channel::<LaneMsg>();
         let shared = LaneShared {
             ready: Arc::new(Mutex::new(VecDeque::new())),
@@ -249,15 +242,15 @@ impl LaneHandle {
         std::thread::Builder::new()
             .name("tur-lane".into())
             .spawn(move || {
-                lane_main(lane_driver, rx, thread_shared, thread_live);
+                lane_main(timer_factory, rx, thread_shared, thread_live);
             })
             .expect("failed to spawn tur lane thread");
         Self { tx, shared, live }
     }
 
-    fn spawn_app(&self, factory: WorkerFactory) -> WorkerHandle {
+    fn spawn_app(&self, entry: WorkerEntry) -> WorkerTicket {
         let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
-        if let Err(e) = self.tx.send(LaneMsg::SpawnApp { factory, done_tx }) {
+        if let Err(e) = self.tx.send(LaneMsg::SpawnApp { entry, done_tx }) {
             // Unreachable in practice: a lane in the registry always has a
             // live receiver (exit requires the registry handle to have been
             // dropped first). Kept as a defensive error path.
@@ -265,7 +258,7 @@ impl LaneHandle {
         }
         // Kick the lane so a parked thread drains the inbox promptly.
         self.shared.push(SENTINEL);
-        WorkerHandle::new(Box::new(move || {
+        WorkerTicket::new(Box::new(move || {
             // Join = this app's loop completion, NOT the lane thread
             // (co-tenants keep it alive).
             let _ = done_rx.recv();
@@ -360,18 +353,18 @@ impl LaneState {
         self.shared.push(key);
     }
 
-    /// Deliver one app factory: build the worker view, run the factory on
-    /// this thread, spawn the returned loop as a task. A panicking factory
+    /// Deliver one app entry: build the worker view, run the entry on
+    /// this thread, spawn the returned loop as a task. A panicking entry
     /// is contained (logged + `done` fired); co-tenants are unaffected.
-    fn handle_spawn(self: &Rc<Self>, msg: LaneMsg, platform: &Rc<dyn WorkerSchedulerDriver>) {
-        let LaneMsg::SpawnApp { factory, done_tx } = msg;
-        // The worker view shares THIS lane's state — `spawn_local` from any
-        // co-tenant app lands on the same task table + ready queue.
-        let view = WorkerScheduler::new(Rc::new(LaneWorkerDriver {
+    fn handle_spawn(self: &Rc<Self>, msg: LaneMsg, timer: &Rc<dyn LaneTimer>) {
+        let LaneMsg::SpawnApp { entry, done_tx } = msg;
+        // The worker view shares THIS lane's state — `spawn_local` from
+        // any co-tenant app lands on the same task table + ready queue.
+        let view = WorkerContext::new(Rc::new(LaneWorkerExecutor {
             state: self.clone(),
-            platform: platform.clone(),
+            timer: timer.clone(),
         }));
-        match catch_unwind(AssertUnwindSafe(|| factory(view))) {
+        match catch_unwind(AssertUnwindSafe(|| entry(view))) {
             Ok(fut) => {
                 self.live.fetch_add(1, Ordering::AcqRel);
                 self.insert_task(
@@ -383,7 +376,7 @@ impl LaneState {
                 );
             }
             Err(panic) => {
-                tracing::error!("tur lane: app factory panicked: {panic:?}");
+                tracing::error!("tur lane: app entry panicked: {panic:?}");
                 let _ = done_tx.send(());
             }
         }
@@ -409,14 +402,12 @@ impl LaneState {
             }
             Ok(Poll::Ready(())) => self.finish_task(entry),
             Err(panic) => {
-                tracing::error!("tur lane: task {key} panicked: {panic:?}");
+                tracing::error!("tur lane: task panicked: {panic:?}");
                 self.finish_task(entry);
             }
         }
     }
 
-    /// Complete a finished (or panicked) task: fire its `done` signal and
-    /// drop it from the table.
     fn finish_task(&self, mut entry: TaskEntry) {
         if entry.done_tx.take().is_some() {
             // App-loop task finished → one fewer live app on this lane.
@@ -425,15 +416,16 @@ impl LaneState {
     }
 }
 
-/// The worker-thread scheduling driver for lane-hosted apps. `spawn_local`
-/// lands on the lane's task table; `sleep` delegates to the platform's
-/// per-lane driver (self-timing timers that wake via the task `Waker`).
-struct LaneWorkerDriver {
+/// The lane's [`WorkerExecutor`]: `spawn_local` lands on the lane's task
+/// table; `sleep` delegates to the platform's [`LaneTimer`] (self-timing,
+/// wakes via the task `Waker`); `spawn_blocking` offloads to a dedicated
+/// OS thread whose completion re-queues the awaiting task.
+struct LaneWorkerExecutor {
     state: Rc<LaneState>,
-    platform: Rc<dyn WorkerSchedulerDriver>,
+    timer: Rc<dyn LaneTimer>,
 }
 
-impl WorkerSchedulerDriver for LaneWorkerDriver {
+impl WorkerExecutor for LaneWorkerExecutor {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         track_spawn(fut, |tracked| {
             let key = self.state.alloc_key();
@@ -447,23 +439,69 @@ impl WorkerSchedulerDriver for LaneWorkerDriver {
         })
     }
 
+    fn spawn_blocking(&self, work: BlockingWork) -> BlockingSpawn {
+        let (tx, rx) = futures::channel::oneshot::channel::<()>();
+        // Stash the work in a shared slot so a failed thread spawn can
+        // recover it (the closure is dropped unrun on `Err` — with the
+        // Box captured by move, the value would be lost otherwise).
+        let slot = Arc::new(Mutex::new(Some(work)));
+        let slot_for_thread = slot.clone();
+        let spawned = std::thread::Builder::new()
+            .name("tur-blocking".into())
+            .spawn(move || {
+                let work = slot_for_thread.lock().unwrap().take();
+                // Contain a panicking closure: log + drop `tx` so the
+                // awaiting task's `rx` cancels (its panic message
+                // surfaces there, contained to that task).
+                let panicked = catch_unwind(AssertUnwindSafe(|| {
+                    if let Some(work) = work {
+                        work();
+                    }
+                }))
+                .is_err();
+                if panicked {
+                    tracing::error!("tur blocking task panicked");
+                } else {
+                    let _ = tx.send(());
+                }
+            });
+        match spawned {
+            Ok(_join) => BlockingSpawn(Box::pin(async move {
+                if rx.await.is_err() {
+                    panic!("spawn_blocking work panicked or was dropped");
+                }
+            })),
+            Err(e) => {
+                // Thread spawn failed (resource exhaustion): fall back to
+                // running inline on this lane — degraded but correct.
+                tracing::error!("tur blocking thread spawn failed ({e}); running inline");
+                let work = slot.lock().unwrap().take();
+                BlockingSpawn(Box::pin(async move {
+                    if let Some(work) = work {
+                        work();
+                    }
+                }))
+            }
+        }
+    }
+
     fn sleep(&self, d: Duration) -> Sleep {
-        self.platform.sleep(d)
+        self.timer.sleep(d)
     }
 }
 
-/// Lane thread entry: build the platform driver, then run the scheduling
+/// Lane thread entry: build the platform timer, then run the scheduling
 /// loop — drain spawn inbox → poll ready tasks (bounded pass) → exit if
 /// dead → park on the condvar.
 fn lane_main(
-    lane_driver: LaneDriverFactory,
+    timer_factory: LaneTimerFactory,
     rx: StdReceiver<LaneMsg>,
     shared: LaneShared,
     live: Arc<AtomicUsize>,
 ) {
-    // The platform driver is built ON the lane thread (thread-locals,
+    // The platform timer is built ON the lane thread (thread-locals,
     // per-thread state).
-    let platform = lane_driver();
+    let timer = timer_factory();
     let state = Rc::new(LaneState {
         shared,
         next_key: Cell::new(0),
@@ -478,7 +516,7 @@ fn lane_main(
         if !disconnected {
             loop {
                 match rx.try_recv() {
-                    Ok(msg) => state.handle_spawn(msg, &platform),
+                    Ok(msg) => state.handle_spawn(msg, &timer),
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         disconnected = true;
@@ -513,53 +551,5 @@ fn lane_main(
         }
         // 4. Park until a wake arrives.
         state.shared.wait_nonempty();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Wrapper driver — wrap any native driver wholesale
-// ---------------------------------------------------------------------------
-
-/// Convenience wrapper giving any native driver pooled
-/// `spawn_worker_in`: every other method delegates to the inner driver
-/// (vsync, main-thread `spawn_local`, `sleep`). Third-party embedders that
-/// don't need to touch their driver's internals use this; platform crates
-/// with their own driver (`tur-android`, the test harness) compose
-/// [`NativeWorkerPools`] directly instead.
-pub struct PooledSchedulerDriver<D: MainSchedulerDriver + 'static> {
-    inner: Rc<D>,
-    pools: Rc<NativeWorkerPools>,
-    lane_driver: LaneDriverFactory,
-}
-
-impl<D: MainSchedulerDriver + 'static> PooledSchedulerDriver<D> {
-    pub fn new(inner: Rc<D>, lane_driver: LaneDriverFactory) -> Rc<Self> {
-        Rc::new(Self {
-            inner,
-            pools: Rc::new(NativeWorkerPools::new()),
-            lane_driver,
-        })
-    }
-}
-
-impl<D: MainSchedulerDriver + 'static> MainSchedulerDriver for PooledSchedulerDriver<D> {
-    fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
-        self.pools.spawn(pool, factory, self.lane_driver.clone())
-    }
-
-    fn vsync_events(&self) -> VsyncEvents {
-        self.inner.vsync_events()
-    }
-
-    fn request_vsync(&self) {
-        self.inner.request_vsync();
-    }
-
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        self.inner.spawn_local(fut)
-    }
-
-    fn sleep(&self, d: Duration) -> Sleep {
-        self.inner.sleep(d)
     }
 }

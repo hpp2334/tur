@@ -125,8 +125,11 @@ fn build_app(
     configure: impl FnOnce(tur_engine::TurRuntimeBuilder) -> tur_engine::TurRuntimeBuilder,
 ) -> Result<Rc<tur_engine::TurApp>, TurError> {
     let pool = tur_engine::WorkerPoolHandle::new("test", usize::MAX);
+    let driver = tur_integration_tests::TestSchedulerDriver::new();
     let builder = TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone());

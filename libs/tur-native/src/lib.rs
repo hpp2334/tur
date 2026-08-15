@@ -8,8 +8,10 @@
 //!   system fonts via fontique's platform backends (CoreText,
 //!   DirectWrite, fontconfig).
 //! - [`worker_pool`] — the native worker-pool executor
-//!   ([`NativeWorkerPools`]) backing
-//!   `MainSchedulerDriver::spawn_worker_in` for native embedders.
+//!   ([`NativeWorkerPools`], implementing
+//!   [`WorkerHost`](tur_engine::core::scheduler::WorkerHost)) hosting
+//!   app loops on capped shared "lane" threads, with dedicated-thread
+//!   `spawn_blocking` offload.
 //!
 //! [`FontLoader`]: tur_engine::core::fonts::FontLoader
 

@@ -15,7 +15,6 @@ use boa_engine::js_string;
 use tur_engine::TurRuntime;
 use tur_engine::TurStdPlugin;
 use tur_engine::core::plugin::{Plugin, PluginContext};
-use tur_engine::core::scheduler::MainSchedulerDriver;
 use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_integration_tests::{MutexFixedClock, TestSchedulerDriver};
@@ -44,7 +43,9 @@ impl Plugin for TidProbePlugin {
 fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>) {
     let driver = TestSchedulerDriver::new();
     let mut builder = TurRuntime::builder()
-        .scheduler(driver.clone())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -120,7 +121,9 @@ fn zero_max_threads_errors_at_runtime_build() {
     let driver = TestSchedulerDriver::new();
     let msg = expect_err_msg(
         TurRuntime::builder()
-            .scheduler(driver.clone())
+            .worker_host(driver.worker_host())
+            .vsync_source(driver.vsync_source())
+            .main_loop(driver.main_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
             .worker_pool(WorkerPoolHandle::new("bad", 0))
@@ -138,7 +141,9 @@ fn duplicate_pool_name_errors_at_runtime_build() {
     let driver = TestSchedulerDriver::new();
     let msg = expect_err_msg(
         TurRuntime::builder()
-            .scheduler(driver.clone())
+            .worker_host(driver.worker_host())
+            .vsync_source(driver.vsync_source())
+            .main_loop(driver.main_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
             .worker_pool(WorkerPoolHandle::new("dup", 1))

@@ -9,7 +9,7 @@
 //! Promise settlement flow:
 //!
 //! 1. Bridge fn creates a pending `JsPromise` synchronously and returns it.
-//! 2. Spawns a future via [`WorkerScheduler::spawn_local`] that calls
+//! 2. Spawns a future via [`WorkerContext::spawn_local`] that calls
 //!    `clipboard.read_text()` (or `write_text`) — this is the only async
 //!    part.
 //! 3. On completion, the future pushes a `Completion` closure into the

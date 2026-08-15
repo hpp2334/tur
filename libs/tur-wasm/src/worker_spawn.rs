@@ -58,26 +58,23 @@ use js_sys::{Object, Reflect};
 use wasm_bindgen::{JsCast, JsValue, prelude::*};
 use web_sys::MessageEvent;
 
-use tur_engine::core::scheduler::{WorkerFactory, WorkerScheduler};
+use tur_engine::core::scheduler::{WorkerContext, WorkerEntry};
 
-use crate::scheduler::WasmWorkerScheduler;
+use crate::scheduler::WasmWorkerExecutor;
 
-/// The engine's `worker_loop` factory: runs on the worker thread,
-/// constructs the backend (`!Send` types built there), returns the
-/// worker's main future. `Send + 'static` so it can be boxed on main,
-/// posted as a raw pointer, and reconstituted on the worker (valid because
-/// the wasm linear memory is shared across threads).
-///
-/// This is a re-export of the engine's [`WorkerFactory`] type alias so the
-/// wasm driver's `spawn_worker_in` impl and `tur_worker_main` agree on the
-/// exact factory shape.
-pub(crate) type LoopFactory = WorkerFactory;
+/// The engine's per-app worker entry (`WorkerEntry` in
+/// `tur_engine::core::scheduler`): runs on the worker thread, constructs
+/// the backend (`!Send` types built there), returns the worker's main
+/// future. `Send + 'static` so it can be boxed on main, posted as a raw
+/// pointer, and reconstituted on the worker (valid because the wasm
+/// linear memory is shared across threads).
+pub(crate) type LoopFactory = WorkerEntry;
 
 /// Wrapper around [`LoopFactory`] so it can be boxed + passed as a raw
 /// pointer (the engine hands us an already-boxed `dyn FnOnce`). Shared by
 /// the init payload (first factory) and the tagged `tur-factory` messages
 /// delivered into an already-running worker (additional factories).
-pub(crate) struct WorkerEntry(pub(crate) LoopFactory);
+pub(crate) struct FactoryPayload(pub(crate) LoopFactory);
 
 /// Per-worker executor state. Held in a `thread_local` (`Rc`-shared between
 /// the poll closure, the wake handler, and the waker). `!Send` — lives only
@@ -163,7 +160,7 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
 
     // Box the factory + post `[module, memory, ptr]`. The pointer is valid
     // across threads (shared linear memory); the worker reconstitutes it.
-    let entry = Box::new(WorkerEntry(factory));
+    let entry = Box::new(FactoryPayload(factory));
     let ptr = Box::into_raw(entry) as u32;
     let init = js_sys::Array::new();
     init.push(&wasm_bindgen::module());
@@ -190,10 +187,10 @@ pub(crate) fn spawn(factory: LoopFactory) -> web_sys::Worker {
 pub fn tur_worker_main(ptr: f64) {
     // SAFETY: `ptr` was produced by `Box::into_raw` on the main thread;
     // the wasm linear memory is shared, so the pointer is valid here.
-    let entry = unsafe { Box::from_raw(ptr as u32 as *mut WorkerEntry) };
+    let entry = unsafe { Box::from_raw(ptr as u32 as *mut FactoryPayload) };
     let factory = entry.0;
-    let worker_sched = WorkerScheduler::new(Rc::new(WasmWorkerScheduler));
-    let loop_fut = factory(worker_sched);
+    let worker_ctx = WorkerContext::new(Rc::new(WasmWorkerExecutor));
+    let loop_fut = factory(worker_ctx);
     run_loop(loop_fut);
 }
 
@@ -247,7 +244,7 @@ pub(super) fn run_loop(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     *state.poll_fn.borrow_mut() = Some(poll_fn);
 
     // Install the message handler on the worker global scope. Main posts:
-    // - `0` (number) — cross-thread wake (from `WorkerHandle::notify`).
+    // - `0` (number) — cross-thread wake (from `WorkerTicket::wake`).
     // - `{ t: "tur-factory", ptr }` (object) — an additional app factory
     //   to host on this worker (from the pool registry).
     let onmsg_closure = Closure::<dyn FnMut(MessageEvent)>::new(|ev: MessageEvent| {
@@ -292,10 +289,10 @@ fn deliver_factory(obj: &Object) {
     };
     // SAFETY: `ptr` was produced by `Box::into_raw` on the main thread;
     // the wasm linear memory is shared, so the pointer is valid here.
-    let entry = unsafe { Box::from_raw(ptr as u32 as *mut WorkerEntry) };
+    let entry = unsafe { Box::from_raw(ptr as u32 as *mut FactoryPayload) };
     let factory = entry.0;
-    let worker_sched = WorkerScheduler::new(Rc::new(WasmWorkerScheduler));
-    let fut = factory(worker_sched);
+    let worker_ctx = WorkerContext::new(Rc::new(WasmWorkerExecutor));
+    let fut = factory(worker_ctx);
     let pushed = EXEC.with(|e| {
         let guard = e.borrow();
         if let Some(state) = guard.as_ref() {

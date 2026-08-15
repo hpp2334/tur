@@ -1,13 +1,25 @@
-//! Test scheduler driver.
+//! Test-harness scheduling objects.
 //!
-//! Implements [`MainSchedulerDriver`] (main thread) for the integration
-//! test harness. Worker spawning goes through
-//! [`tur_native::worker_pool::NativeWorkerPools`] (the shared native lane
-//! executor): pools registered on the runtime are hosted on "tur-lane"
-//! threads, cooperatively scheduled when a pool's cap forces sharing.
+//! Three single-role implementations for the integration tests:
+//! - [`TestVsyncSource`] — manual vsync channel
+//!   ([`TurApp::set_vsync_source`](tur_engine::TurApp::set_vsync_source)
+//!   accepts one; the harness fires it per driven frame).
+//! - [`TestMainLoop`] — main-thread task spawner backed by a thread-local
+//!   tokio `LocalSet` (drives the engine's `run_loop` + the engine's
+//!   main-thread drain).
+//! - Worker hosting comes from
+//!   [`tur_native::worker_pool::NativeWorkerPools`] (the shared native
+//!   lane executor) with the virtual clock as its [`LaneTimer`] — pools
+//!   registered on the runtime are hosted on "tur-lane" threads,
+//!   cooperatively scheduled when a pool's cap forces sharing, with
+//!   dedicated-thread `spawn_blocking` offload.
+//!
+//! [`TestSchedulerDriver`] bundles the three (+ the shared virtual clock)
+//! as plain fields — harness ergonomics only; the engine always sees the
+//! single-role objects.
 //!
 //! **Virtual clock**: sleep futures register deadlines against a shared
-//! virtual clock ([`VirtualClock`]). The test harness calls
+//! virtual clock. The test harness calls
 //! [`TestSchedulerDriver::advance`] alongside `self.clock.forward()` to
 //! advance both the boa clock + the scheduler's virtual clock. Sleep
 //! wakers fire when the virtual clock reaches their deadline; on a lane
@@ -25,12 +37,9 @@ use std::time::Duration;
 
 use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
-use tur_native::worker_pool::NativeWorkerPools;
+use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
 
-use tur_engine::core::scheduler::{
-    MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents, WorkerFactory, WorkerHandle,
-    WorkerPoolHandle, WorkerSchedulerDriver,
-};
+use tur_engine::core::scheduler::{MainLoop, Sleep, TaskHandle, VsyncEvents, VsyncSource};
 
 /// Shared virtual clock state. The test harness holds a clone + advances
 /// it via [`VirtualClock::advance`]; sleep futures register deadlines +
@@ -91,24 +100,12 @@ fn init_thread_exec(clock: Arc<Mutex<VirtualClock>>) {
     CURRENT_CLOCK.with(|c| *c.borrow_mut() = Some(clock));
 }
 
-fn spawn_local_on_current_thread(fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-    let local = CURRENT_EXEC.with(|c| {
-        c.borrow()
-            .as_ref()
-            .map(|(_, local)| local.clone())
-            .expect("spawn_local called with no LocalSet on current thread")
-    });
-    tur_engine::core::scheduler::track_spawn(fut, |f| {
-        local.spawn_local(f);
-    })
-}
-
 /// Generic `block_on` that drives the current thread's `LocalSet` (and all
 /// `spawn_local`'d tasks on it — e.g. the engine's `run_loop`) until `fut`
 /// completes. Unlike `futures::executor::block_on`, this advances the
 /// `LocalSet`, which is required whenever the waited result is produced by a
 /// spawned task rather than directly by the worker thread.
-fn block_on_on_current_thread_typed<F: Future>(fut: F) -> F::Output {
+pub(crate) fn block_on_on_current_thread_typed<F: Future>(fut: F) -> F::Output {
     let (rt, local) = CURRENT_EXEC.with(|c| {
         let guard = c.borrow();
         let Some((rt, local)) = guard.as_ref() else {
@@ -161,11 +158,101 @@ impl Future for VirtualSleepFuture {
     }
 }
 
-/// Test scheduler driver.
-pub struct TestSchedulerDriver {
+/// Lane timer backed by the shared virtual clock. Published on each lane
+/// thread by the timer factory below, so worker-side `sleep` futures
+/// register against the clock the harness advances.
+struct VirtualClockTimer;
+
+impl LaneTimer for VirtualClockTimer {
+    fn sleep(&self, d: Duration) -> Sleep {
+        virtual_sleep(d)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Single-role implementations
+// ---------------------------------------------------------------------------
+
+/// Manual vsync source: [`TestVsyncSource::fire_vsync`] pushes one tick
+/// into every subscribed channel. The harness (or a test) fires it once
+/// per driven frame.
+pub struct TestVsyncSource {
     vsync_txs: Mutex<Vec<futures::channel::mpsc::UnboundedSender<()>>>,
+}
+
+impl TestVsyncSource {
+    pub fn new() -> Rc<Self> {
+        Rc::new(Self {
+            vsync_txs: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Push one vsync tick into every subscriber.
+    pub fn fire_vsync(&self) {
+        for tx in self.vsync_txs.lock().unwrap().iter() {
+            let _ = tx.unbounded_send(());
+        }
+    }
+}
+
+impl VsyncSource for TestVsyncSource {
+    fn subscribe(&self) -> VsyncEvents {
+        let (tx, rx) = futures::channel::mpsc::unbounded();
+        // Unconditionally deliver one bootstrap tick to each new
+        // subscriber. `run_loop` subscribes on its first poll (which
+        // happens during the first `block_on`, AFTER any `fire_vsync`),
+        // so a fire-before-subscribe would otherwise be lost. This
+        // per-subscriber bootstrap tick makes the first frame reachable
+        // for every run_loop — including the multi-instance case where
+        // several run_loops share one source.
+        let _ = tx.unbounded_send(());
+        self.vsync_txs.lock().unwrap().push(tx);
+        VsyncEvents(rx)
+    }
+
+    fn request_frame(&self) {
+        // Manual cadence: frames advance only when the harness fires.
+    }
+}
+
+/// Main-thread task spawner backed by the current thread's `LocalSet`
+/// (created by [`TestSchedulerDriver::new`]). Drives the engine's
+/// `run_loop` futures + the engine's main-thread drain.
+pub struct TestMainLoop;
+
+impl MainLoop for TestMainLoop {
+    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        let local = CURRENT_EXEC.with(|c| {
+            c.borrow()
+                .as_ref()
+                .map(|(_, local)| local.clone())
+                .expect("spawn_local called with no LocalSet on current thread")
+        });
+        tur_engine::core::scheduler::track_spawn(fut, |f| {
+            local.spawn_local(f);
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Facade — harness ergonomics
+// ---------------------------------------------------------------------------
+
+/// Bundles the harness's three scheduling objects + the shared virtual
+/// clock. Hand the single-role pieces to the runtime builder:
+///
+/// ```text
+/// let driver = TestSchedulerDriver::new();
+/// TurRuntime::builder()
+///     .worker_host(driver.worker_host())
+///     .vsync_source(driver.vsync_source())
+///     .main_loop(driver.main_loop())
+///     …
+/// ```
+pub struct TestSchedulerDriver {
+    vsync: Rc<TestVsyncSource>,
     clock: Arc<Mutex<VirtualClock>>,
-    /// Native lane-pool registry backing `spawn_worker_in` (main-thread
+    /// Native lane-pool registry backing worker hosting (main-thread
     /// only — spawns happen from `app_builder().build()` on main).
     pools: Rc<NativeWorkerPools>,
 }
@@ -174,17 +261,40 @@ impl TestSchedulerDriver {
     pub fn new() -> Rc<Self> {
         let clock = Arc::new(Mutex::new(VirtualClock::default()));
         init_thread_exec(clock.clone());
+        // Publish the shared virtual clock on every lane thread (so
+        // worker-side sleeps register against it) + serve `sleep` from it.
+        let clock_for_factory = clock.clone();
+        let pools = Rc::new(NativeWorkerPools::with_timer(Arc::new(move || {
+            CURRENT_CLOCK.with(|c| *c.borrow_mut() = Some(clock_for_factory.clone()));
+            Rc::new(VirtualClockTimer)
+        })));
         Rc::new(Self {
-            vsync_txs: Mutex::new(Vec::new()),
+            vsync: TestVsyncSource::new(),
             clock,
-            pools: Rc::new(NativeWorkerPools::new()),
+            pools,
         })
     }
 
+    /// The native worker host (capped shared lane threads + virtual-clock
+    /// timers + dedicated-thread `spawn_blocking`).
+    pub fn worker_host(&self) -> Rc<NativeWorkerPools> {
+        self.pools.clone()
+    }
+
+    /// The manual vsync source.
+    pub fn vsync_source(&self) -> Rc<TestVsyncSource> {
+        self.vsync.clone()
+    }
+
+    /// The main-thread task spawner.
+    pub fn main_loop(&self) -> Rc<TestMainLoop> {
+        Rc::new(TestMainLoop)
+    }
+
+    /// Push one vsync tick (convenience — same as
+    /// `self.vsync_source().fire_vsync()`).
     pub fn fire_vsync(&self) {
-        for tx in self.vsync_txs.lock().unwrap().iter() {
-            let _ = tx.unbounded_send(());
-        }
+        self.vsync.fire_vsync();
     }
 
     /// Advance the virtual clock by `ms` milliseconds, firing any due
@@ -202,62 +312,10 @@ impl TestSchedulerDriver {
     pub fn block_on<F: Future>(&self, fut: F) -> F::Output {
         block_on_on_current_thread_typed(fut)
     }
-}
 
-impl MainSchedulerDriver for TestSchedulerDriver {
-    fn spawn_worker_in(&self, pool: &WorkerPoolHandle, factory: WorkerFactory) -> WorkerHandle {
-        // Host the app on a tur-native lane thread (dedicated while the
-        // pool is under its cap, shared cooperatively beyond it). The lane
-        // driver publishes the shared virtual clock on the lane thread so
-        // `sleep` futures register against the clock the harness advances.
-        let clock = self.clock.clone();
-        self.pools.spawn(
-            pool,
-            factory,
-            Arc::new(move || {
-                CURRENT_CLOCK.with(|c| *c.borrow_mut() = Some(clock.clone()));
-                Rc::new(TestWorkerScheduler)
-            }),
-        )
-    }
-
-    fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        spawn_local_on_current_thread(fut)
-    }
-
-    fn vsync_events(&self) -> VsyncEvents {
-        let (tx, rx) = futures::channel::mpsc::unbounded();
-        // Unconditionally deliver one bootstrap tick to each new subscriber.
-        // `run_loop` subscribes on its first poll (which happens during the
-        // first `block_on`, AFTER any `fire_vsync`), so a fire-before-subscribe
-        // would otherwise be lost. This per-subscriber bootstrap tick makes the
-        // first frame reachable for every run_loop — including the multi-instance
-        // case where several run_loops share one driver.
-        let _ = tx.unbounded_send(());
-        self.vsync_txs.lock().unwrap().push(tx);
-        VsyncEvents(rx)
-    }
-
-    fn request_vsync(&self) {}
-
-    fn sleep(&self, d: Duration) -> Sleep {
-        virtual_sleep(d)
-    }
-}
-
-/// Lane-thread scheduling driver: serves `sleep` against the shared
-/// virtual clock (the lane executor provides `spawn_local` itself, so the
-/// impl here is unreachable through the engine).
-struct TestWorkerScheduler;
-
-impl WorkerSchedulerDriver for TestWorkerScheduler {
-    fn spawn_local(&self, _fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        unimplemented!(
-            "lane spawn_local is provided by tur_native's lane executor; \
-             TestWorkerScheduler only serves `sleep`"
-        )
-    }
-    fn sleep(&self, d: Duration) -> Sleep {
-        virtual_sleep(d)
+    /// Spawn a task on the main-thread `LocalSet` (convenience — same as
+    /// `self.main_loop().spawn_local(fut)`).
+    pub fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
+        self.main_loop().spawn_local(fut)
     }
 }

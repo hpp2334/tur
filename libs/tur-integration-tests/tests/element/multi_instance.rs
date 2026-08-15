@@ -36,7 +36,9 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     let driver = TestSchedulerDriver::new();
     let pool = WorkerPoolHandle::new("test", usize::MAX);
     let runtime = TurRuntime::builder()
-        .scheduler(driver.clone())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())
@@ -257,8 +259,11 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
     let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())
@@ -310,8 +315,11 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
     let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())

@@ -1,14 +1,14 @@
 //! Worker pool declarations.
 //!
 //! A [`WorkerPoolHandle`] is an inert, cheap-to-clone declaration of a
-//! named pool with a maximum thread count. It carries no runtime state:
+//! named pool with a maximum worker count. It carries no runtime state:
 //! it becomes live only after being registered on the runtime builder
 //! ([`TurRuntimeBuilder::worker_pool`]) and is then assigned per-app via
 //! [`TurAppBuilder::worker_pool`]. All apps assigned to the same pool
-//! share at most `max_threads` worker threads: the platform spawn driver
-//! ([`MainSchedulerDriver::spawn_worker_in`]) picks or creates a worker
-//! for each app — first come, first served up to the cap, then apps share
-//! the least-loaded worker cooperatively.
+//! share at most `max_threads` workers: the platform
+//! [`WorkerHost`](crate::core::scheduler::WorkerHost) picks or creates a
+//! worker for each app — first come, first served up to the cap, then
+//! apps share the least-loaded worker cooperatively.
 //!
 //! Pool identity is the `Arc` behind the handle ([`WorkerPoolHandle::ptr_eq`]),
 //! so two handles built with identical `name`/`max_threads` are still
@@ -21,7 +21,6 @@
 //!
 //! [`TurRuntimeBuilder::worker_pool`]: crate::TurRuntimeBuilder::worker_pool
 //! [`TurAppBuilder::worker_pool`]: crate::TurAppBuilder::worker_pool
-//! [`MainSchedulerDriver::spawn_worker_in`]: crate::core::scheduler::MainSchedulerDriver::spawn_worker_in
 
 use std::sync::Arc;
 

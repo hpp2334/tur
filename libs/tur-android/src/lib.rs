@@ -317,7 +317,7 @@ pub mod ops {
                 dpr
             );
             let instance = pollster::block_on(AndroidInstance::build_with_surface(
-                &runtime.runtime,
+                runtime,
                 runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 &runtime.wgpu_instance,
@@ -353,7 +353,7 @@ pub mod ops {
             let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
             log::info!("createHeadlessInstance: building headless instance");
             let instance = AndroidInstance::build_headless(
-                &runtime.runtime,
+                runtime,
                 runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 frame_loop_handle,
@@ -413,7 +413,7 @@ pub mod ops {
                 panic_from_nested_call("tur-android panic-hook backtrace test (debug.tur.crash=1)");
             }
             log::trace!("pump: firing vsync + polling loop");
-            instance.scheduler.fire_vsync();
+            instance.vsync.fire_vsync();
             instance.pump_loop();
         }));
         match result {

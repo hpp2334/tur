@@ -9,6 +9,8 @@ license.workspace = true
 [dependencies]
 tur-engine = { workspace = true }
 tracing = { workspace = true }
+# oneshot channel for `spawn_blocking` completion wakes
+futures = { workspace = true }
 
 # parley's `system` feature pulls in the platform font backends
 # (CoreText on macOS, DirectWrite on Windows, fontconfig on Linux), which

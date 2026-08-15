@@ -10,7 +10,6 @@ use minifb::{Window, WindowOptions};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use tur_engine::TurStdPlugin;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
-use tur_engine::core::scheduler::MainSchedulerDriver;
 use tur_engine::error::TurError;
 use tur_engine::renderer::vello::VelloRenderer;
 use tur_engine::{TurApp, TurRuntime};
@@ -160,7 +159,9 @@ impl TurVelloApp {
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);
         let runtime = TurRuntime::builder()
-            .scheduler(driver.clone())
+            .worker_host(driver.worker_host())
+            .vsync_source(driver.vsync_source())
+            .main_loop(driver.main_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
             .worker_pool(pool.clone())

@@ -18,7 +18,7 @@ use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
 use crate::core::render::{RecordingCanvas, RenderCommand};
-use crate::core::scheduler::WorkerScheduler;
+use crate::core::scheduler::WorkerContext;
 use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
@@ -35,10 +35,10 @@ pub struct TurAppContext {
     pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
-    /// Worker-thread scheduler — cloned from `TurAppInternal::worker_sched`.
+    /// Worker-thread scheduler — cloned from `TurAppInternal::worker_ctx`.
     /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
     /// spawn Rust futures (clipboard writes, etc.) at dispatch time.
-    pub(crate) worker_sched: WorkerScheduler,
+    pub(crate) worker_ctx: WorkerContext,
     /// Cheap-cloned completion handle — cloned from
     /// `TurAppInternal::completion_handle`. Surfaced to subsystems so
     /// spawned futures can push promise-settle closures for `flush()` to
@@ -72,7 +72,7 @@ impl TurAppContext {
         image_manager: Rc<RefCell<ImageManager>>,
         font_context: crate::core::fonts::FontContext,
         font_loader: std::sync::Arc<dyn crate::core::fonts::FontLoader>,
-        worker_sched: WorkerScheduler,
+        worker_ctx: WorkerContext,
         completion_handle: CompletionHandle,
         capabilities: Capabilities,
         clock: Rc<dyn Clock>,
@@ -89,7 +89,7 @@ impl TurAppContext {
             screen: Screen::new(store),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
-            worker_sched,
+            worker_ctx,
             completion_handle,
             capabilities,
             shell: Shell::new(clock),
@@ -127,7 +127,7 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             screen: &mut self.screen,
             need_paint,
-            worker_sched: &self.worker_sched,
+            worker_ctx: &self.worker_ctx,
             completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
@@ -158,7 +158,7 @@ impl TurAppContext {
             app_event_queue: &mut self.app_event_queue,
             screen: &mut self.screen,
             need_paint,
-            worker_sched: &self.worker_sched,
+            worker_ctx: &self.worker_ctx,
             completion_handle: &self.completion_handle,
             capabilities: &self.capabilities,
             frame_id: signals.frame_id,
