@@ -317,7 +317,8 @@ pub mod ops {
                 dpr
             );
             let instance = pollster::block_on(AndroidInstance::build_with_surface(
-                &runtime.runtime,
+                runtime,
+                runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 &runtime.wgpu_instance,
                 window_handle,
@@ -352,7 +353,8 @@ pub mod ops {
             let frame_loop_handle = crate::scheduler::FrameLoopRef::new(frame_loop_ref);
             log::info!("createHeadlessInstance: building headless instance");
             let instance = AndroidInstance::build_headless(
-                &runtime.runtime,
+                runtime,
+                runtime.default_worker_pool.clone(),
                 &runtime.tokio_handle(),
                 frame_loop_handle,
                 configure_instance,
@@ -411,7 +413,7 @@ pub mod ops {
                 panic_from_nested_call("tur-android panic-hook backtrace test (debug.tur.crash=1)");
             }
             log::trace!("pump: firing vsync + polling loop");
-            instance.scheduler.fire_vsync();
+            instance.vsync.fire_vsync();
             instance.pump_loop();
         }));
         match result {
@@ -423,6 +425,35 @@ pub mod ops {
                     .or_else(|| payload.downcast_ref::<String>().cloned())
                     .unwrap_or_else(|| "<non-string panic payload>".into());
                 log::error!("pump: panic caught at JNI boundary, aborting: {msg}");
+                std::process::abort();
+            }
+        }
+    }
+
+    /// `pumpMessages(env omitted, handle): int` — poll the main loop
+    /// WITHOUT firing a vsync. The Kotlin `FrameLoop.requestPump()` (a
+    /// coalesced main-Handler post) calls this when the engine's
+    /// worker→main messages or main-loop tasks need processing but no
+    /// display frame was requested (`FrameOutcome.schedule == Idle`).
+    /// Keeping this separate from [`pump`] (which fires a vsync) is what
+    /// lets an idle instance park at 0% CPU instead of ping-ponging at
+    /// display refresh rate.
+    pub fn pump_messages(handle: jlong) -> jint {
+        let Some(instance) = handle_to_instance(handle) else {
+            return 0;
+        };
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            instance.pump_loop();
+        }));
+        match result {
+            Ok(()) => 1,
+            Err(payload) => {
+                let msg = payload
+                    .downcast_ref::<&str>()
+                    .map(|s| (*s).to_string())
+                    .or_else(|| payload.downcast_ref::<String>().cloned())
+                    .unwrap_or_else(|| "<non-string panic payload>".into());
+                log::error!("pumpMessages: panic caught at JNI boundary, aborting: {msg}");
                 std::process::abort();
             }
         }
@@ -723,6 +754,15 @@ macro_rules! standard_jni_exports {
             handle: $crate::jlong,
         ) -> $crate::jint {
             $crate::ops::pump(handle)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_pumpMessages(
+            _env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            handle: $crate::jlong,
+        ) -> $crate::jint {
+            $crate::ops::pump_messages(handle)
         }
 
         #[unsafe(no_mangle)]

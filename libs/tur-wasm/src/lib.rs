@@ -10,7 +10,7 @@ pub mod worker_spawn;
 pub use app::{AfterFrameHook, WasmApp, WasmAppConfig, WasmRuntime, WasmRuntimeConfig};
 pub use fonts::WasmFontLoader;
 #[cfg(target_arch = "wasm32")]
-pub use scheduler::WasmSchedulerDriver;
+pub use scheduler::{WasmMainLoop, WasmVsyncSource, WasmWorkerHost};
 
 /// One-time wasm runtime init: install the panic hook (readable backtraces in
 /// the browser console) and wire `tracing` events to `console.*`. The embedder

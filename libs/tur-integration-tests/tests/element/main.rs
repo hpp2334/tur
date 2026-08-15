@@ -36,3 +36,6 @@ mod switch_view;
 mod task;
 mod text;
 mod transform;
+mod vsync_source;
+mod worker_pool;
+mod worker_spawn_blocking;

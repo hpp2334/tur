@@ -15,7 +15,7 @@ use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
-use crate::core::scheduler::WorkerScheduler;
+use crate::core::scheduler::WorkerContext;
 
 #[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
@@ -66,14 +66,14 @@ pub struct TurInstanceContext {
     pub(crate) main_tx: MainTx,
     /// Worker-thread scheduler — bridges call `spawn_local(fut)` to drive
     /// async work (clipboard reads, http requests, sleep futures). Set by
-    /// `build_worker_backend` from the worker_sched passed by the runtime.
+    /// `build_worker_backend` from the worker_ctx passed by the runtime.
     ///
     /// Sound to keep out of boa's GC trace: it's pure Rust state
-    /// Worker-thread scheduler view (`WorkerScheduler`, wrapping an
-    /// `Rc<dyn WorkerSchedulerDriver>`), no `boa_gc::Gc`/`GcRefCell`. The
+    /// Worker-thread scheduler view (`WorkerContext`, wrapping an
+    /// `Rc<dyn WorkerContextDriver>`), no `boa_gc::Gc`/`GcRefCell`. The
     /// struct-level `#[boa_gc(unsafe_empty_trace)]` already covers this
     /// same trade-off for the other fields.
-    pub(crate) worker_sched: WorkerScheduler,
+    pub(crate) worker_ctx: WorkerContext,
     /// Cheap-cloned completion handle — bridges call `push(closure)` from
     /// inside spawned futures to settle JsPromises under `&mut Context` on
     /// the next flush. Pushing fires `on_push`, which self-sends
@@ -81,7 +81,7 @@ pub struct TurInstanceContext {
     pub(crate) completion_handle: CompletionHandle,
     /// Cheap-cloned handle to the flush-driven task queue — `sleep` +
     /// `launch` push their driver futures here (instead of
-    /// `worker_sched.spawn_local`) so `flush` polls them in lockstep with
+    /// `worker_ctx.spawn_local`) so `flush` polls them in lockstep with
     /// completions / microtasks. See `core::async_::flush_tasks`.
     pub(crate) flush_task_handle: crate::core::async_::FlushTaskHandle,
     /// Type-erased capability registry shared with the engine builder,
@@ -139,7 +139,7 @@ impl TurInstanceContext {
         image_manager: Rc<RefCell<ImageManager>>,
         main_tx: MainTx,
         store: Store,
-        worker_sched: WorkerScheduler,
+        worker_ctx: WorkerContext,
         completion_handle: CompletionHandle,
         flush_task_handle: crate::core::async_::FlushTaskHandle,
         wake_worker: Arc<dyn Fn() + Send + Sync>,
@@ -157,7 +157,7 @@ impl TurInstanceContext {
             image_manager,
             main_tx,
             store,
-            worker_sched,
+            worker_ctx,
             completion_handle,
             flush_task_handle,
             capabilities,
@@ -210,7 +210,7 @@ impl TurInstanceContext {
     }
 
     /// Spawn a worker-side task, handing it an [`AsyncWorkerContext`] for
-    /// timers / nested spawns / paint signals. The raw `WorkerScheduler` is
+    /// timers / nested spawns / paint signals. The raw `WorkerContext` is
     /// not exposed to spawn sites — this is the entry point for async work
     /// that needs engine interaction (e.g. the caret-blink loop). The
     /// closure receives the context by value; capture it (`async move`) into
@@ -231,15 +231,15 @@ impl TurInstanceContext {
     {
         let aw = crate::core::async_::AsyncWorkerContext::new(self.clone());
         let fut = f(aw);
-        self.worker_sched.spawn_local(Box::pin(fut))
+        self.worker_ctx.spawn_local(Box::pin(fut))
     }
 
     /// Worker-thread scheduler. Core-internal only — engine-internal bridge
     /// fns (`sleep` / `launch`) and [`AsyncWorkerContext`] use it for timers
     /// / nested spawns. External async work goes through [`Self::spawn_local`]
     /// (which hands the task an [`AsyncWorkerContext`]).
-    pub(crate) fn worker_sched(&self) -> &WorkerScheduler {
-        &self.worker_sched
+    pub(crate) fn worker_ctx(&self) -> &WorkerContext {
+        &self.worker_ctx
     }
 
     /// Cheap-cloned completion handle. Bridge fns extract this via

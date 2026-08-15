@@ -171,9 +171,16 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &AsyncPluginContext| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal main-thread channel) and receives an `AsyncPluginContext` — the engine's main-thread hop. Backends that need to run OS-API calls on main (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_main(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance (set via `TurApp::set_cursor_backend` after `app_builder().build(...)`, since it targets a specific surface):
 
 ```rust
+let ui = WorkerPoolHandle::new("ui", 4);              // at most 4 shared workers
+let daemon = WorkerPoolHandle::new("daemon", 2);      // at most 2 shared workers
 let runtime = TurRuntime::builder()
+    .worker_host(host)                          // required — Rc<dyn WorkerHost>
+    .vsync_source(source)                       // required — Rc<dyn VsyncSource>
+    .main_loop(loop_)                           // required — Rc<dyn MainLoop>
     .font_loader(Rc::new(WasmFontLoader::new()))
     .clock(Rc::new(WasmClock))
+    .worker_pool(ui.clone())                   // register pools (required per app)
+    .worker_pool(daemon.clone())
     .capability(|_| Ok(Clipboard::new(WasmClipboard)))   // tur-clipboard-wasm
     .capability(|_| Ok(Http::new(WasmHttp)))             // tur-net-wasm
     .capability(|_| Ok(FilePicker::new(WasmFilePicker))) // tur-filepicker-wasm
@@ -186,9 +193,12 @@ let runtime = TurRuntime::builder()
     .plugin(TurFilePickerPlugin)                 // requires: FilePicker
     .build()?;                                    // Rc<TurRuntime>
 
-// Spawn isolated instances (each its own JS realm + renderer):
+// Spawn isolated instances (each its own JS realm + renderer), each into a
+// declared pool (apps in one pool share ≤ max_threads workers; different
+// pools never share threads):
 let app = runtime
     .app_builder()
+    .worker_pool(ui)                              // required — explicit assignment
     // Optional: define build-time per-instance data readable/updateable by
     // plugins/bridge fns via `TurInstanceContext::data::<T>()` /
     // `with_data::<T, _>(f)` / `update::<T>(v)`. Each type may be defined
@@ -204,7 +214,10 @@ let app = runtime
 app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
 
 // Or a headless instance (no rendering):
-let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
+let headless = runtime
+    .app_builder()
+    .worker_pool(daemon)                          // heavy daemons share 2 threads
+    .build_headless((0.0, 0.0))?;
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
@@ -340,14 +353,16 @@ The engine has a **one runtime, many instances** architecture:
   `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
   registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
 - **`TurApp`** — an isolated instance spawned from a runtime via
-  `runtime.app_builder().build(renderer, viewport, dpr)` (rendering, attached to
-  a surface) or `runtime.app_builder().build_headless(viewport)` (no rendering —
-  JS + capabilities + events only, backed by `NoopRenderer`). Each instance
-  gets its own boa `Context` (JS realm), element tree, reactive store, focus
-  manager, event queues, subsystems, screen, and scheduler (per-instance vsync
-  drivers — e.g. Android instances install their own JNI `FrameLoop`-bound
-  scheduler via `TurApp::set_main_scheduler`). Plugins are re-registered
-  into each instance's fresh realm (the same plugin objects — `register` takes
+  `runtime.app_builder().worker_pool(pool).build(renderer, viewport, dpr)`
+  (rendering, attached to a surface) or
+  `runtime.app_builder().worker_pool(pool).build_headless(viewport)` (no
+  rendering — JS + capabilities + events only, backed by `NoopRenderer`).
+  Each instance gets its own boa `Context` (JS realm), element tree,
+  reactive store, focus manager, event queues, subsystems, screen, and
+  vsync source (per-instance frame cadence — e.g. Android instances
+  install their own JNI `FrameLoop`-bound source via
+  `TurApp::set_vsync_source`). Plugins are re-registered into each
+  instance's fresh realm (the same plugin objects — `register` takes
   `&self`, so no factory needed).
 
 The `Plugin` trait has two phases: `compile` (called once on the runtime —
@@ -359,10 +374,101 @@ mandatory argument to the builder's `build(...)` terminal (one renderer per
 surface). The cursor backend is per-instance (set via
 `TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
 
+### Scheduling contract (single-role traits, worker vocabulary)
+
+`tur-engine::core::scheduler` defines four **single-role** traits — no
+main/worker thread concepts, no `block_on`, every method live on every
+platform (zero `panic!`/`unimplemented!` stubs):
+
+- `WorkerHost` (runtime-level, required on the builder) —
+  `spawn_worker(pool, entry) -> WorkerTicket`: host one app loop in a pool.
+  The `entry` closure runs on the chosen worker, receives a `WorkerContext`,
+  builds the `!Send` backend there, returns the app's main future (the
+  platform drives it for the worker's lifetime). `WorkerTicket` = per-app
+  slot claim: `join()` signals that app's loop completion + `wake()` is the
+  cross-thread kick called after every main→worker send (no-op native,
+  `postMessage(0)` wasm).
+- `VsyncSource` (per-instance) — `subscribe()` + `request_frame()` frame
+  cadence. Swappable per app via `TurApp::set_vsync_source` (swap **before**
+  `run_loop` — the loop subscribes once at startup).
+- `MainLoop` (runtime-level, required) — `spawn_local` on the main thread;
+  roots the engine-internal main-thread drain (the `AsyncPluginContext`
+  hop) + embedder main-thread tasks.
+- `WorkerExecutor` (worker-side surface inside `WorkerContext`) —
+  `spawn_local` (cooperative task on the worker's own loop), `sleep`
+  (platform timer), and `spawn_blocking` (CPU-heavy/blocking work OFF the
+  worker's loop so co-tenant apps on a shared worker keep running). Native:
+  dedicated OS thread whose completion re-queues the awaiting task via its
+  normal waker; wasm: trait-default own cooperative task on the event loop
+  (the honest approximation). Worker-side code NEVER `block_on`s — that
+  would stall every co-tenant on the worker.
+
+Builder wiring (replaces the old single `.scheduler(driver)`):
+
+```rust
+TurRuntime::builder()
+    .worker_host(host)        // Rc<dyn WorkerHost>
+    .vsync_source(source)     // Rc<dyn VsyncSource>
+    .main_loop(loop_)         // Rc<dyn MainLoop>
+    …
+```
+
+Every app is spawned **into a named worker pool**
+(`WorkerPoolHandle::new(name, max_threads)`, registered via
+`TurRuntimeBuilder::worker_pool`, assigned — **required** — via
+`TurAppBuilder::worker_pool`, identity-checked by Arc pointer). All apps in
+one pool share at most `max_threads` workers; apps in different pools never
+share workers — the motivating case: heavy headless daemons in a small
+`daemon` pool can't stall UI rendering in a `ui` pool. A cap ≥ the app count
+degenerates to one-worker-per-app (the historical default; `usize::MAX` for
+"dedicated"). Engine-side (`core/scheduler/pool.rs`) the handle is inert
+data; the engine only validates registration + assignment:
+
+- **Native** — `tur_native::worker_pool::NativeWorkerPools` (implements
+  `WorkerHost`; constructed with a `LaneTimerFactory` — the platform's
+  sleep-only timer seam, `LaneTimer { sleep }`): at most `max_threads`
+  "tur-lane" OS threads per pool; grow-to-cap-then-least-loaded assignment.
+  App state (`boa::Context`, `Rc`s) is `!Send`, so each app's `worker_loop`
+  is pinned to one lane for life — sharing = multiple app loops
+  cooperatively scheduled on one thread (task table + cross-thread-safe
+  ready queue + condvar; `sleep` delegates to the `LaneTimer`; panics
+  contained per app; `WorkerTicket::join` joins that app's loop, not the
+  thread). tur-android (`crate::scheduler::worker_host(handle)` with
+  `TokioLaneTimer`) + the test harness (virtual-clock `LaneTimer`) use it
+  directly as their `WorkerHost`.
+- **Wasm** — `tur-wasm`'s `WasmWorkerHost`: at most `max_threads` Web
+  Workers per pool; extra apps are delivered into the least-loaded worker as
+  tagged `{t:"tur-factory", ptr}` messages and hosted cooperatively on its
+  JS event loop (multi-tenant workers — see `worker_spawn.rs`).
+  `WasmVsyncSource` (rAF) / `WasmMainLoop` (`wasm_bindgen_futures`) /
+  `WasmWorkerExecutor` (setTimeout sleep; default spawn_blocking) fill the
+  other three roles.
+- Android main-thread tasks: `AndroidMainLoop` holds a task list polled
+  from each instance's `pump_loop`; task wakers request a **message pump**
+  (coalesced main-Handler post via Kotlin `FrameLoop.requestPump()` → JNI
+  `pumpMessages`, which polls the loop WITHOUT firing a vsync) so pending
+  tasks get their next poll. This roots the engine's main-thread drain,
+  which previously sat on an unpumped `LocalPool` and could never advance.
+  The Choreographer is armed ONLY by `AndroidVsyncSource::request_frame`
+  (the engine's `FrameOutcome.schedule == Vsync` decision) — never by
+  message wakes. Arming on messages would ping-pong worker↔main at display
+  refresh rate forever (each pump ships a `FrameOutcome`, whose channel
+  wake would re-arm the next frame), burning a full engine flush per
+  display frame even fully idle.
+- `tur-native` is **native-only** (root `compile_error!` on wasm32);
+  `WasmRuntimeConfig::pools` / `WasmAppConfig::pool` + `WasmRuntime::default_pool`
+  expose pools to wasm hosts; `AndroidRuntime::default_worker_pool` + the
+  `default_worker_pool` param on `AndroidInstance::build_*` expose them to
+  the Compose path.
+
 Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
 `WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +
 `rememberTurRuntime` (Compose). The integration tests under
-`tests/element/multi_instance.rs` pin the isolation guarantees.
+`tests/element/multi_instance.rs` pin the isolation guarantees;
+`tests/element/worker_pool.rs` pins the pool contract (sharing, cap,
+cross-pool isolation, lifecycle); `tests/element/worker_spawn_blocking.rs`
+pins `spawn_blocking` (off-thread + co-tenant non-stall);
+`tests/element/vsync_source.rs` pins per-instance vsync-source swap.
 
 
 ### Element types
@@ -449,15 +555,24 @@ libs/
                              #   completion invocations drained each flush)
                              #   + executor (TurJobExecutor — boa
                              #   JobExecutor impl)
-          scheduler.rs         # MainSchedulerDriver + WorkerSchedulerDriver
-                               #   traits + MainScheduler/WorkerScheduler view
-                               #   structs + WorkerFactory +
-                               #   Sleep/VsyncEvents/WorkerHandle +
-                               #   SpawnError/TaskHandle/track_spawn (generic
-                               #   task tracking) + the raw main-thread hop
+          scheduler/           # Platform scheduling contract (single-role
+                               #   traits, worker vocabulary, no thread
+                               #   concepts, no block_on): mod.rs —
+                               #   WorkerHost (host app loops in pools) +
+                               #   VsyncSource (per-instance cadence) +
+                               #   MainLoop (main-thread tasks) +
+                               #   WorkerExecutor/WorkerContext (worker-side
+                               #   spawn_local/spawn_blocking/sleep) +
+                               #   WorkerEntry/WorkerTicket +
+                               #   Sleep/VsyncEvents/SpawnError/TaskHandle/
+                               #   track_spawn + the raw main-thread hop
                                #   mechanics (pub(crate) MainTask/MainDrain/
                                #   main_channel — the plugin-layer
-                               #   AsyncPluginContext wraps the sender)
+                               #   AsyncPluginContext wraps the sender) ·
+                               #   pool.rs — WorkerPoolHandle (the inert pool
+                               #   declaration registered on the runtime
+                               #   builder + assigned per app; pooling itself
+                               #   is platform-implemented)
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge
@@ -606,7 +721,12 @@ libs/
     tur-integration-tests/     # integration test harness + cases
     tur-demo-plugin/           # playground-only plugin (swc compiler services
                               #   only — file IO now lives in tur:filepicker)
-    tur-native/                # native (non-wasm) embedder entry point
+    tur-native/                # native-only platform integrations (root
+                               #   compile_error! on wasm32): NativeFontLoader
+                               #   (system fonts) + worker_pool (the native
+                               #   WorkerHost: NativeWorkerPools with capped
+                               #   shared lane threads + LaneTimer sleep seam
+                               #   + dedicated-thread spawn_blocking)
     tur-filepicker-capability/ # FilePicker capability + FilePickerBackend trait
                               #   + tur:filepicker bridge (exports `filePicker`
                               #   { pick, saveFile }). Opt-in: requires a real

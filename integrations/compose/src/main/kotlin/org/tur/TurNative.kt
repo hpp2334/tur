@@ -55,6 +55,14 @@ object TurNative {
     /** Fire one engine wake — call each Choreographer / Handler tick. */
     external fun pump(handle: Long): Int
 
+    /**
+     * Poll the engine's main loop WITHOUT firing a vsync — the coalesced
+     * message-pump path (worker→main messages / main-loop tasks while the
+     * engine is idle). Keeps an idle instance from ping-ponging at display
+     * refresh rate.
+     */
+    external fun pumpMessages(handle: Long): Int
+
     /** Push a new surface size (logical px + dpr). */
     external fun resize(handle: Long, width: Int, height: Int, dpr: Double)
 

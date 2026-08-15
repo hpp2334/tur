@@ -1,0 +1,43 @@
+name: Publish npm packages
+
+# Publishes the @tur-ng packages under js/packages/ whose local version is newer
+# than the latest on the npm registry. Auth is npm Trusted Publishing (OIDC):
+# no NPM_TOKEN secret — each package must have a trusted publisher configured on
+# npmjs.com (Settings -> Trusted Publisher, GitHub Actions):
+#   org: hpp2334 / repo: tur / workflow: publish-npm.yml / action: npm publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+permissions:
+  id-token: write # required for OIDC trusted publishing
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: js/pnpm-lock.yaml
+
+      - name: Install JS deps
+        run: pnpm install --frozen-lockfile
+        working-directory: ./js
+
+      - name: Publish packages not matching the npm registry
+        run: node scripts/publish-packages.cjs

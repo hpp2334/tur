@@ -13,6 +13,7 @@ use tur_engine::TurStdPlugin;
 use tur_engine::core::capability::Capability;
 use tur_engine::core::platform::PlatformEvent;
 use tur_engine::core::plugin::{CompileContext, Plugin, PluginContext};
+use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::renderer::NoopRenderer;
 use tur_integration_tests::MutexFixedClock;
 use tur_integration_tests::RawAppLooper;
@@ -29,18 +30,23 @@ fn eval_js(app: &Rc<tur_engine::TurApp>, source: &str) -> Result<String, String>
 
 /// Build a runtime with the std + animation plugins (no extra capabilities —
 /// instances are headless). Returns the driver too so callers can spawn a
-/// `RawAppLooper` per instance.
-fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>) {
+/// `RawAppLooper` per instance, plus the (effectively uncapped) default
+/// worker pool each instance assigns.
+fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle) {
     let driver = TestSchedulerDriver::new();
+    let pool = WorkerPoolHandle::new("test", usize::MAX);
     let runtime = TurRuntime::builder()
-        .scheduler(driver.clone())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
         .plugin(TurStdPlugin)
         .plugin(tur_animation::TurAnimationPlugin)
         .build()
         .expect("runtime build");
-    (runtime, driver)
+    (runtime, driver, pool)
 }
 
 const SET_ID_JS: &str = r#"
@@ -51,14 +57,16 @@ const SET_ID_JS: &str = r#"
 
 #[test]
 fn instances_have_isolated_js_realms() {
-    let (runtime, _driver) = build_runtime();
+    let (runtime, _driver, pool) = build_runtime();
     let app_a = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("app A");
     let app_b = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("app B");
@@ -83,14 +91,16 @@ fn instances_have_isolated_js_realms() {
 
 #[test]
 fn instances_have_isolated_element_trees() {
-    let (runtime, driver) = build_runtime();
+    let (runtime, driver, pool) = build_runtime();
     let app_a = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("app A");
     let app_b = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("app B");
@@ -117,9 +127,10 @@ fn instances_have_isolated_element_trees() {
 
 #[test]
 fn headless_instance_runs_js_without_rendering() {
-    let (runtime, driver) = build_runtime();
+    let (runtime, driver, pool) = build_runtime();
     let app = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (0.0, 0.0), 1.0)
         .build()
         .expect("headless");
@@ -149,9 +160,10 @@ fn headless_instance_runs_js_without_rendering() {
 /// worker is actually driving the instance.
 #[test]
 fn build_headless_runs_engine_on_worker() {
-    let (runtime, driver) = build_runtime();
+    let (runtime, driver, pool) = build_runtime();
     let app = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .build_headless((0.0, 0.0))
         .expect("headless_app");
     let looper = RawAppLooper::new(app.clone(), driver);
@@ -175,11 +187,12 @@ fn build_headless_runs_engine_on_worker() {
 fn many_instances_share_one_runtime() {
     // Smoke test: spawn several instances from one runtime to confirm no
     // shared-state corruption (each gets its own boa Context + store).
-    let (runtime, _driver) = build_runtime();
+    let (runtime, _driver, pool) = build_runtime();
     let mut apps = Vec::new();
     for i in 0..5 {
         let app = runtime
             .app_builder()
+            .worker_pool(pool.clone())
             .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
             .build()
             .expect("app");
@@ -245,10 +258,15 @@ impl Plugin for CounterPlugin {
 fn plugin_compile_runs_once_register_runs_per_instance() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
+    let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
         .plugin(TurStdPlugin)
         .plugin(CounterPlugin {
             compile_count: compile_count.clone(),
@@ -274,6 +292,7 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     for _ in 0..3 {
         runtime
             .app_builder()
+            .worker_pool(pool.clone())
             .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
             .build()
             .expect("app");
@@ -295,10 +314,15 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let compile_count = Arc::new(AtomicU32::new(0));
     let register_count = Arc::new(AtomicU32::new(0));
     let cap = SharedCounterCap::new();
+    let pool = WorkerPoolHandle::new("test", usize::MAX);
+    let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .scheduler(tur_integration_tests::TestSchedulerDriver::new())
+        .worker_host(driver.worker_host())
+        .vsync_source(driver.vsync_source())
+        .main_loop(driver.main_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
+        .worker_pool(pool.clone())
         .capability({
             let c = cap.clone();
             move |_| Ok(c)
@@ -315,12 +339,14 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     // N instances the cap reflects N bumps, proving they all see one backend.
     runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
         .expect("A");
     assert_eq!(cap.get(), 1, "instance A's register bumped the shared cap");
     runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
         .expect("B");
@@ -331,6 +357,7 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     );
     runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (10.0, 10.0), 1.0)
         .build()
         .expect("C");
@@ -345,14 +372,16 @@ fn shared_capability_backend_is_visible_from_all_instances() {
 
 #[test]
 fn platform_events_route_to_the_correct_instance() {
-    let (runtime, driver) = build_runtime();
+    let (runtime, driver, pool) = build_runtime();
     let app_a = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("A");
     let app_b = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("B");
@@ -394,14 +423,16 @@ fn platform_events_route_to_the_correct_instance() {
 
 #[test]
 fn reactive_stores_are_isolated_per_instance() {
-    let (runtime, _driver) = build_runtime();
+    let (runtime, _driver, pool) = build_runtime();
     let app_a = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("A");
     let app_b = runtime
         .app_builder()
+        .worker_pool(pool.clone())
         .renderer(Box::new(NoopRenderer::new()), (100.0, 100.0), 1.0)
         .build()
         .expect("B");

@@ -8,7 +8,7 @@ use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, Tur
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::render::RenderCommand;
-use crate::core::scheduler::WorkerScheduler;
+use crate::core::scheduler::WorkerContext;
 use crate::core::subsystem::Subsystem;
 
 use crate::core::fonts::{FontContext, FontLoader};
@@ -39,12 +39,12 @@ pub struct TurAppInternal {
     pub(crate) app_context: Rc<RefCell<TurAppContext>>,
     pub(crate) executor: Rc<TurJobExecutor>,
     /// Worker-thread scheduler. Bridges grab it via
-    /// [`PluginContext::worker_sched`] / [`SubsystemFlushContext::worker_sched`]
+    /// [`PluginContext::worker_ctx`] / [`SubsystemFlushContext::worker_ctx`]
     /// and call `spawn_local(fut)` to drive async work (clipboard reads,
     /// http requests, sleep futures). The driver's `sleep` returns a
     /// platform-specific `Sleep(BoxFuture)`.
     #[allow(dead_code)]
-    pub(crate) worker_sched: WorkerScheduler,
+    pub(crate) worker_ctx: WorkerContext,
     /// Completion queue — closures pushed by spawned futures (e.g. promise
     /// settle closures) are drained inside `flush()` under `&mut Context`.
     /// The `on_push` callback self-sends `WorkerMsg::Wake` to ensure the
@@ -61,7 +61,7 @@ pub struct TurAppInternal {
     /// advance resolves *inside* the same flush (instead of lagging to the
     /// next frame, which the single-pump-per-tick countdown tests never
     /// observe). Real platform async (HTTP / clipboard / file-picker)
-    /// still uses `worker_sched.spawn_local`.
+    /// still uses `worker_ctx.spawn_local`.
     pub(crate) flush_task_queue: Rc<FlushTaskQueue>,
     /// Plugin-registered flush subsystems. Each is `flush`-ed **every
     /// fixed-point iteration** of `flush()` (possibly several times per
@@ -115,7 +115,7 @@ impl TurAppInternal {
         executor: Rc<TurJobExecutor>,
         clock: std::sync::Arc<dyn Clock + Send + Sync>,
         capabilities: crate::core::capability::Capabilities,
-        worker_sched: WorkerScheduler,
+        worker_ctx: WorkerContext,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
         main_tx: crate::core::app::MainTx,
     ) -> Self {
@@ -161,7 +161,7 @@ impl TurAppInternal {
         let completion_queue = Rc::new(CompletionQueue::new(wake_worker.clone()));
         let completion_handle = completion_queue.handle();
         // Flush-driven task queue: `sleep` + `launch` push their driver
-        // futures here (instead of `worker_sched.spawn_local`) so `flush`
+        // futures here (instead of `worker_ctx.spawn_local`) so `flush`
         // polls them in lockstep with completions / microtasks — closing
         // the cross-frame lag that otherwise breaks single-frame sleep
         // semantics. See `async_::flush_tasks`.
@@ -179,7 +179,7 @@ impl TurAppInternal {
             image_manager.clone(),
             main_tx,
             store.clone(),
-            worker_sched.clone(),
+            worker_ctx.clone(),
             completion_handle.clone(),
             flush_task_queue.handle(),
             wake_worker.clone(),
@@ -198,7 +198,7 @@ impl TurAppInternal {
             image_manager,
             font_context,
             font_loader,
-            worker_sched.clone(),
+            worker_ctx.clone(),
             completion_handle.clone(),
             capabilities,
             clock_rc,
@@ -209,7 +209,7 @@ impl TurAppInternal {
             js_context,
             app_context: Rc::new(RefCell::new(app_context)),
             executor,
-            worker_sched,
+            worker_ctx,
             completion_queue,
             completion_handle,
             flush_task_queue,
@@ -300,7 +300,7 @@ impl TurAppInternal {
                     app_event_queue: &mut ctx.app_event_queue,
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    worker_sched: &ctx.worker_sched,
+                    worker_ctx: &ctx.worker_ctx,
                     completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
@@ -357,7 +357,7 @@ impl TurAppInternal {
                     app_event_queue: &mut ctx.app_event_queue,
                     screen: &mut ctx.screen,
                     need_paint: &need_paint,
-                    worker_sched: &ctx.worker_sched,
+                    worker_ctx: &ctx.worker_ctx,
                     completion_handle: &ctx.completion_handle,
                     capabilities: &ctx.capabilities,
                     frame_id: signals.frame_id,
@@ -383,7 +383,7 @@ impl TurAppInternal {
             let handled_mutations = self.flush_pending_mutations(boa_context);
             // Run boa microtasks (PromiseJobs, GenericJobs, AsyncJobs).
             // PromiseJobs fire `.then` callbacks which may call bridge fns
-            // that spawn more Rust futures via `worker_sched.spawn_local`.
+            // that spawn more Rust futures via `worker_ctx.spawn_local`.
             // Those futures' completions are drained at the top of the next
             // iteration, keeping the fixed-point loop alive.
             let jobs_run = self.executor.drain(boa_context).unwrap_or(0);

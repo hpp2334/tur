@@ -5,7 +5,7 @@
 //! cancel handle — instead:
 //!
 //! - `sleep(ms): Promise<void>` resolves after `ms` (engine time), backed by
-//!   [`crate::core::scheduler::WorkerScheduler::sleep`]. The worker-side
+//!   [`crate::core::scheduler::WorkerContext::sleep`]. The worker-side
 //!   scheduler provides a platform-specific `Sleep(BoxFuture)` (setTimeout
 //!   on wasm, tokio::time::sleep on native, virtual clock on tests). When
 //!   the Sleep resolves, the completion settle the promise + fires
@@ -22,7 +22,7 @@
 //! ## Cancellation model
 //!
 //! `launch` runs the generator inside a task spawned via
-//! [`WorkerScheduler::spawn_local`], which returns a [`TaskHandle`]. The
+//! [`WorkerContext::spawn_local`], which returns a [`TaskHandle`]. The
 //! `Task.cancel()` JS method calls `TaskHandle::abort()`, which **drops the
 //! driver future at its next `.await`** — so a pending `sleep` is dropped
 //! (its timer cancelled) and the generator never resumes past the current
@@ -65,11 +65,11 @@ pub fn fns() -> Vec<FnEntry> {
 }
 
 /// `sleep(ms): Promise<void>` — resolves after `ms` milliseconds (engine
-/// time). Backed by [`crate::core::scheduler::WorkerScheduler::sleep`]; the
+/// time). Backed by [`crate::core::scheduler::WorkerContext::sleep`]; the
 /// completion self-sends `WorkerMsg::Wake` so the worker flushes promptly.
 fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
-    let worker_sched = js_ctx.worker_sched().clone();
+    let worker_ctx = js_ctx.worker_ctx().clone();
     let completion_handle = js_ctx.completion_handle();
     let flush_tasks = js_ctx.flush_task_handle();
     let ms = args.get_or_undefined(1).as_number().unwrap_or(0.0).max(0.0) as u64;
@@ -79,9 +79,9 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
     // so `request_paint` is the flag-only fast path there — it sets the
     // paint flag this same flush reads.
     let js_ctx_for_completion = js_ctx.clone();
-    let worker_sched_for_loop = worker_sched.clone();
+    let worker_ctx_for_loop = worker_ctx.clone();
     let fut: Pin<Box<dyn std::future::Future<Output = ()> + 'static>> = Box::pin(async move {
-        worker_sched_for_loop
+        worker_ctx_for_loop
             .sleep(std::time::Duration::from_millis(ms))
             .await;
         // Settle the promise under `&mut Context` on the next flush.
@@ -93,7 +93,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
             Ok(())
         }));
     });
-    // Push to the flush-driven queue (not `worker_sched.spawn_local`) so the
+    // Push to the flush-driven queue (not `worker_ctx.spawn_local`) so the
     // sleep future is polled inside `flush()` — letting a clock `advance`
     // that reaches the deadline resolve the sleep *within the same frame*
     // rather than lagging to the next. See `core::async_::flush_tasks`.

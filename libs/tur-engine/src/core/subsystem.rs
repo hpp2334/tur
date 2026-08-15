@@ -200,11 +200,11 @@ pub struct SubsystemFlushContext<'a> {
     pub screen: &'a mut Screen,
     pub need_paint: &'a Cell<bool>,
     /// Worker-thread scheduler. Subsystems call
-    /// [`WorkerScheduler::spawn_local`] to drive Rust futures (e.g.
+    /// [`WorkerContext::spawn_local`] to drive Rust futures (e.g.
     /// `clipboard.write_text`). The future's completion pushes a closure
     /// via [`Self::completion_handle`]; the engine drains it on the next
     /// flush iteration.
-    pub worker_sched: &'a crate::core::scheduler::WorkerScheduler,
+    pub worker_ctx: &'a crate::core::scheduler::WorkerContext,
     /// Completion handle for spawned futures. A spawned future calls
     /// `completion_handle.push(closure)` from inside its body to settle a
     /// `JsPromise` (or similar) under `&mut Context` on the next flush.

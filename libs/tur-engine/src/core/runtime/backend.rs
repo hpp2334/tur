@@ -19,12 +19,14 @@
 //!
 //! ## Async model
 //!
-//! All channels use `futures::channel` (mpsc + oneshot). The worker thread entry-point wraps
-//! an `async fn worker_loop(...)` via `futures::executor::block_on`, so the
-//! worker awaits on `worker_rx.recv()` instead of blocking on a Mutex +
-//! Condvar. Main-thread `run_loop` and `rpc` are `async fn`; the embedder
-//! supplies the runtime (`wasm_bindgen_futures::spawn_local` on wasm,
-//! `futures::executor::block_on` on native).
+//! All channels use `futures::channel` (mpsc + oneshot). The platform's
+//! `WorkerHost` drives the `async fn worker_loop(...)` future for the
+//! worker's lifetime (native: the lane executor's task loop; wasm: the
+//! cooperative JS-event-loop mini-executor), so the worker awaits on
+//! `worker_rx.recv()` instead of blocking on a Mutex + Condvar.
+//! Main-thread `run_loop` and `rpc` are `async fn`; the embedder
+//! supplies the driving executor (`wasm_bindgen_futures::spawn_local` on
+//! wasm, `block_on` on the test/native caller thread).
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -44,7 +46,7 @@ use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::platform::CursorBackend;
 use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
-use crate::core::scheduler::WorkerHandle;
+use crate::core::scheduler::WorkerTicket;
 use crate::error::TurError;
 
 // ---------------------------------------------------------------------------
@@ -451,12 +453,12 @@ pub struct MainBackend {
     /// thread is single-threaded and `Rc<TurApp>` itself enforces
     /// single-threaded access.
     pub(crate) main_rx: RefCell<MainRx>,
-    /// Holds the worker `JoinHandle` alive for the backend's lifetime so
-    /// the worker thread (or Web Worker on wasm) doesn't get reclaimed.
-    _worker_handle: WorkerHandle,
+    /// Holds the app's worker-slot claim alive for the backend's
+    /// lifetime so the hosting worker doesn't reclaim the slot.
+    _worker_ticket: WorkerTicket,
     /// Cross-thread wake. Called after every main→worker send. No-op on
     /// native; `worker.postMessage(0)` on wasm.
-    worker_notify: Rc<dyn Fn()>,
+    worker_wake: Rc<dyn Fn()>,
     /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
     /// cursor state change; `apply_msg` applies it directly here. Set via
     /// `set_cursor_backend` (called by embedder after
@@ -483,24 +485,25 @@ pub struct MainBackend {
 }
 
 impl MainBackend {
-    /// Spawn a worker via [`MainScheduler::spawn_worker`]. The factory runs
-    /// on the worker thread and constructs the [`WorkerBackend`] (so it can
-    /// build `!Send` types like `Rc<dyn Clock>` and `boa::Context`).
+    /// Host an app loop in `worker_pool` via the runtime's
+    /// [`WorkerHost`](crate::core::scheduler::WorkerHost). The entry runs
+    /// on the chosen worker (lane thread / Web Worker — platform-defined)
+    /// and constructs the [`WorkerBackend`] (so it can build `!Send` types
+    /// like `Rc<dyn Clock>` and `boa::Context`).
     ///
-    /// The driver's `spawn_worker` impl sets up thread-locals on the worker
-    /// thread, constructs a `WorkerScheduler` for it, passes that to the
-    /// factory, and finally drives the factory's returned future (the
-    /// engine's `worker_loop`) the way that platform keeps a worker alive
-    /// — native blocks the OS thread on its LocalPool; wasm roots the
-    /// future on the JS event loop via `spawn_local`. The factory also
-    /// receives a worker→main channel sender clone (`main_tx`) so bridges
-    /// can ship messages (e.g. `MainMsg::UploadImage` from
-    /// `createImageResource`) directly without a staging vec.
+    /// The platform hands the entry a
+    /// [`WorkerContext`](crate::core::scheduler::WorkerContext) for that
+    /// worker and then drives the returned future (the engine's
+    /// `worker_loop`) for the worker's lifetime. The entry also receives
+    /// a worker→main channel sender clone (`main_tx`) so bridges can ship
+    /// messages (e.g. `MainMsg::UploadImage` from `createImageResource`)
+    /// directly without a staging vec.
     pub(crate) fn new(
-        main_sched: crate::core::scheduler::MainScheduler,
+        worker_host: Rc<dyn crate::core::scheduler::WorkerHost>,
         renderer: Box<dyn Renderer>,
+        worker_pool: crate::core::scheduler::WorkerPoolHandle,
         backend_factory: impl FnOnce(
-            crate::core::scheduler::WorkerScheduler,
+            crate::core::scheduler::WorkerContext,
             std::sync::Arc<dyn Fn() + Send + Sync>,
             crate::core::app::MainTx,
         ) -> WorkerBackend
@@ -526,29 +529,31 @@ impl MainBackend {
         let main_tx_for_backend = main_tx.clone();
         #[cfg(not(target_arch = "wasm32"))]
         let init_tx = init_tx;
-        let worker_handle = main_sched.spawn_worker(Box::new(move |worker_sched| {
-            let worker_tx_for_on_push = worker_tx_for_on_push.clone();
-            // `Send + Sync` so the flush-driven task waker (which sleep
-            // futures register with the test `VirtualClock`, fired
-            // cross-thread) can hold an `Arc` clone.
-            let wake_worker: std::sync::Arc<dyn Fn() + Send + Sync> =
-                std::sync::Arc::new(move || {
-                    let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
-                });
-            let backend = backend_factory(worker_sched.clone(), wake_worker, main_tx_for_backend);
-            #[cfg(not(target_arch = "wasm32"))]
-            let _ = init_tx.send(());
-            // Return the worker's main future; the driver drives it
-            // (native blocks on LocalPool; wasm runs the cooperative
-            // mini-executor + cross-thread postMessage wake).
-            Box::pin(worker_loop(backend, worker_rx, main_tx))
-        }));
+        let worker_ticket = worker_host.spawn_worker(
+            &worker_pool,
+            Box::new(move |worker_ctx| {
+                let worker_tx_for_on_push = worker_tx_for_on_push.clone();
+                // `Send + Sync` so the flush-driven task waker (which sleep
+                // futures register with the test `VirtualClock`, fired
+                // cross-thread) can hold an `Arc` clone.
+                let wake_worker: std::sync::Arc<dyn Fn() + Send + Sync> =
+                    std::sync::Arc::new(move || {
+                        let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
+                    });
+                let backend = backend_factory(worker_ctx.clone(), wake_worker, main_tx_for_backend);
+                #[cfg(not(target_arch = "wasm32"))]
+                let _ = init_tx.send(());
+                // Return the worker's main future; the platform drives it
+                // for the worker's lifetime.
+                Box::pin(worker_loop(backend, worker_rx, main_tx))
+            }),
+        );
 
         // Cross-thread wake callback. No-op on native (mpsc waker unparks
         // the OS thread); `worker.postMessage(0)` on wasm (the only way to
         // kick an idle Web Worker's JS event loop without a sync
         // `Atomics.wait`). Called after every main→worker send below.
-        let worker_notify = worker_handle.notify();
+        let worker_wake = worker_ticket.wake();
 
         // Native: synchronously wait for the worker to finish init.
         #[cfg(not(target_arch = "wasm32"))]
@@ -559,8 +564,8 @@ impl MainBackend {
         Self {
             worker_tx: worker_tx.clone(),
             main_rx: RefCell::new(main_rx),
-            _worker_handle: worker_handle,
-            worker_notify,
+            _worker_ticket: worker_ticket,
+            worker_wake,
             cursor_backend: RefCell::new(None),
             focus_changed_handler: RefCell::new(None),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
@@ -608,7 +613,7 @@ impl MainBackend {
     /// main→worker send. `(&*rc)()` derefs the `Rc<dyn Fn>` to call it.
     fn wake_worker(&self) {
         use std::ops::Deref;
-        self.worker_notify.deref()();
+        self.worker_wake.deref()();
     }
 
     /// Apply a render-command batch to the owned renderer (encode +
@@ -816,8 +821,9 @@ impl MainBackend {
     }
 }
 
-/// Worker thread loop. Runs as `async fn` driven by the platform's
-/// `spawn_worker` (native: `LocalPool::run_until`; wasm: `spawn_local`).
+/// Worker loop. Runs as `async fn`, driven for the worker's lifetime by
+/// the platform's `WorkerHost` (native: the lane executor; wasm: the
+/// worker's cooperative JS-event-loop mini-executor).
 ///
 /// Awaits on `worker_rx.recv()` for incoming `WorkerMsg`s. On `Wake`,
 /// pumps the engine (`backend.pump()`), then ships:

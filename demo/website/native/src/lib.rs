@@ -57,6 +57,7 @@ impl TurWebsiteApp {
             // Build the shared runtime once with the demo plugin.
             let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
                 configure: Box::new(|b| b.plugin(tur_demo_plugin::TurDemoPlugin)),
+                pools: Vec::new(),
             })?;
             // Spawn an isolated DOM-wired instance from it.
             let app = tur_wasm::WasmApp::create(
@@ -64,6 +65,7 @@ impl TurWebsiteApp {
                 tur_wasm::WasmAppConfig {
                     container_id,
                     after_frame: None,
+                    pool: None,
                 },
             )
             .await?;

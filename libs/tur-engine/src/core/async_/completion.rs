@@ -3,7 +3,7 @@
 //! Spawned futures (clipboard reads, http requests, file-picker dialogs,
 //! caret blink tasks) need to settle `JsPromise`s under `&mut Context`.
 //! The completion queue carries closures from the future's completion
-//! (running on a `WorkerScheduler`'s executor) to the engine's `flush()`
+//! (running on a `WorkerContext`'s executor) to the engine's `flush()`
 //! loop, where they're drained under `&mut Context`.
 //!
 //! ## Wake-on-push
@@ -18,7 +18,7 @@
 //!
 //! The old `AsyncExecutor` was both a future poller AND a completion queue.
 //! With the new scheduler model, future polling moves to the driver
-//! (`WorkerScheduler::spawn_local` → embedder's executor); only the
+//! (`WorkerContext::spawn_local` → embedder's executor); only the
 //! completion queue remains, narrow and focused.
 
 use std::cell::RefCell;
@@ -110,7 +110,7 @@ impl CompletionHandle {
 
     /// Push a completion that returns a value, and return a [`Future`] that
     /// resolves with that value once the completion drains (on the next
-    /// `flush()`). Used by async code running on a [`WorkerScheduler`]'s
+    /// `flush()`). Used by async code running on a [`WorkerContext`]'s
     /// executor that needs to run boa-touching logic under `&mut Context`
     /// and hand the result back into the async flow — e.g. driving a JS
     /// generator from a spawned task (see `tur_launch`).

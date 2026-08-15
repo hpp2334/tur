@@ -3,7 +3,7 @@
 //! Mirrors the clipboard bridge pattern in tur-clipboard: a **ctx-bound fn
 //! pointer** (no captures) that reads its `Rc<dyn Http>` + scheduler
 //! primitives from `TurInstanceContext`. The fn creates a pending `JsPromise`,
-//! spawns a future via [`WorkerScheduler::spawn_local`] that calls
+//! spawns a future via the instance context's `spawn_local` that calls
 //! `Http::request(opts).await`, and pushes a completion closure that
 //! builds the JS response object and resolves/rejects the promise under
 //! `&mut Context`.
