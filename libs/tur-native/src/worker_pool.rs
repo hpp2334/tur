@@ -106,7 +106,10 @@ const PASS_BUDGET: u32 = 128;
 /// Compose into a platform driver:
 ///
 /// ```no_run
+/// # use std::future::Future;
+/// # use std::pin::Pin;
 /// # use std::rc::Rc;
+/// # use std::time::Duration;
 /// # use tur_native::worker_pool::{LaneDriverFactory, NativeWorkerPools};
 /// # use tur_engine::core::scheduler::{
 /// #     MainSchedulerDriver, Sleep, TaskHandle, VsyncEvents,
