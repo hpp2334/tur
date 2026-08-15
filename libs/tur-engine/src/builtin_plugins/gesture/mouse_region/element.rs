@@ -39,7 +39,7 @@ impl View for MouseRegionView {
             .and_then(|v| read_val(cx, v, boa))
             .unwrap_or_default();
 
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         cx.insert_node(
             id,
             AnyElement::new(MouseRegionElement {

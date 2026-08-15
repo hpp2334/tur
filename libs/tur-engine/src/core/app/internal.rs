@@ -4,8 +4,9 @@ use std::rc::Rc;
 use boa_engine::context::time::Clock;
 
 use crate::core::app::TurAppContext;
+use crate::core::app::view_roots::SharedViewRoots;
 use crate::core::async_::{CompletionHandle, CompletionQueue, FlushTaskQueue, TurJobExecutor};
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId, ViewRootId};
 use crate::core::js_runtime::TurInstanceContext;
 use crate::core::render::RenderCommand;
 use crate::core::scheduler::WorkerScheduler;
@@ -88,11 +89,12 @@ pub struct TurAppInternal {
     ///
     /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
-    /// Worker → main render-command batch produced by the last `flush()`
-    /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
-    /// to main via `MainMsg::RenderCommands`. `None` if no paint happened
-    /// this flush (or already drained).
-    pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
+    /// Worker → main render-command batches produced by the last `flush()`
+    /// that painted — one per view root, tagged with the root id. Drained by
+    /// `MainBackend`'s `worker_loop` and shipped to main via
+    /// `MainMsg::RenderCommands`. Empty if no root painted this flush (or
+    /// already drained).
+    pub(crate) pending_render_batches: RefCell<Vec<(ViewRootId, Vec<RenderCommand>)>>,
 }
 
 /// RAII guard set up at `flush()` entry; clears `in_flush` on drop so the
@@ -121,7 +123,6 @@ impl TurAppInternal {
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
-        use crate::core::elements::NodeTree;
         use crate::core::focus::FocusManager;
         use crate::core::image_resource::ImageManager;
 
@@ -168,10 +169,16 @@ impl TurAppInternal {
         let flush_task_queue = Rc::new(FlushTaskQueue::new(wake_worker.clone()));
 
         let store = Store::new(dirty.clone());
-        let element_tree = NodeTree::new(store.clone());
+        // The view-root registry: one element tree per view root, created
+        // empty here and populated at worker-build time from the builder's
+        // `.view_root(...)` entries. Shared with `TurInstanceContext`
+        // (bridge fns) and `TurAppContext` (flush driver).
+        let view_roots: SharedViewRoots = Rc::new(RefCell::new(
+            crate::core::app::view_roots::ViewRootRegistry::new(),
+        ));
 
         let js_context = TurInstanceContext::new(
-            element_tree.clone(),
+            view_roots.clone(),
             mutation_queue.clone(),
             focus_manager.clone(),
             dirty,
@@ -192,7 +199,7 @@ impl TurAppInternal {
         let capabilities = js_context.capability();
 
         let app_context = TurAppContext::new(
-            element_tree,
+            view_roots,
             mutation_queue,
             focus_manager,
             image_manager,
@@ -216,7 +223,7 @@ impl TurAppInternal {
             subsystems: Rc::new(RefCell::new(Vec::new())),
             frame_id: Cell::new(0),
             event_bus: event_bus.clone(),
-            pending_render_batch: RefCell::new(None),
+            pending_render_batches: RefCell::new(Vec::new()),
         }
     }
 
@@ -293,12 +300,11 @@ impl TurAppInternal {
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
                     boa: boa_context,
-                    element_tree: ctx.element_tree.clone(),
+                    view_roots: ctx.view_roots.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     worker_sched: &ctx.worker_sched,
                     completion_handle: &ctx.completion_handle,
@@ -350,12 +356,11 @@ impl TurAppInternal {
                 let ctx: &mut crate::core::app::TurAppContext = &mut ctx_guard;
                 let mut cx = crate::core::subsystem::SubsystemFlushContext {
                     boa: boa_context,
-                    element_tree: ctx.element_tree.clone(),
+                    view_roots: ctx.view_roots.clone(),
                     focus_manager: ctx.focus_manager.clone(),
                     mutation_queue: ctx.mutation_queue.clone(),
                     platform_event_queue: &mut ctx.platform_event_queue,
                     app_event_queue: &mut ctx.app_event_queue,
-                    screen: &mut ctx.screen,
                     need_paint: &need_paint,
                     worker_sched: &ctx.worker_sched,
                     completion_handle: &ctx.completion_handle,
@@ -403,10 +408,11 @@ impl TurAppInternal {
         }
 
         if needs_render {
-            // Record the paint pass into a `Vec<RenderCommand>`; main
-            // applies it to its renderer (`MainBackend::render_batch`).
-            let batch = self.app_context.borrow_mut().build_render_batch();
-            *self.pending_render_batch.borrow_mut() = Some(batch);
+            // Record one paint batch per view root (each seeded with that
+            // root's viewport clip); main applies each to the root's own
+            // render target (`MainBackend::render_batch`).
+            let batches = self.app_context.borrow_mut().build_render_batches();
+            *self.pending_render_batches.borrow_mut() = batches;
         }
 
         // Decide how the caller should schedule the next frame.
@@ -446,34 +452,42 @@ impl TurAppInternal {
 
         let dirty_subs = store.subscriber_index().dirty_subscribers(&dirties);
 
-        // Mark all dirty subscribers dirty. mark_dirty handles fragments by
-        // skipping them and marking their real parent element.
+        // Mark all dirty subscribers dirty (in whichever tree each id
+        // lives — node ids carry their owning root, so routing is O(1)).
+        // mark_dirty handles fragments by skipping them and marking their
+        // real parent element; it is a no-op for stale (destroyed) ids.
         {
-            let mut tree = self.js_context.element_tree.borrow_mut();
+            let view_roots = self.js_context.view_roots.borrow();
             for sub_id in &dirty_subs {
-                tree.mark_dirty(NodeId::new(sub_id.as_u64()));
+                let node = sub_id.as_node_id();
+                if let Some(tree) = view_roots.tree_of_root(node.root()) {
+                    tree.mark_dirty(node);
+                }
             }
         }
 
         // Split dirty subscribers into elements and fragments so fragment
-        // rebuilds only process dirty fragments (not a full scan).
-        let dirty_frag_ids: Vec<FragmentNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            dirty_subs
-                .iter()
-                .filter(|s| tree.is_fragment(NodeId::new(s.as_u64())))
-                .map(|s| FragmentNodeId::new(s.as_u64()))
-                .collect()
+        // rebuilds only process dirty fragments (not a full scan). The
+        // owning tree is the subscriber's root — `is_fragment` is a cheap
+        // map lookup inside it.
+        let view_roots = self.js_context.view_roots.borrow();
+        let is_frag = |node: NodeId| {
+            view_roots
+                .tree_of_root(node.root())
+                .is_some_and(|t| t.is_fragment(node))
         };
+        let dirty_frag_ids: Vec<FragmentNodeId> = dirty_subs
+            .iter()
+            .filter(|s| is_frag(s.as_node_id()))
+            .map(|s| s.as_node_id().as_fragment_id())
+            .collect();
         // Element ids dirtied this flush (for the post-layout `on_updated` pass).
-        let dirty_element_ids: Vec<ElementNodeId> = {
-            let tree = self.js_context.element_tree.borrow();
-            dirty_subs
-                .iter()
-                .filter(|s| !tree.is_fragment(NodeId::new(s.as_u64())))
-                .map(|s| ElementNodeId::new(s.as_u64()))
-                .collect()
-        };
+        let dirty_element_ids: Vec<ElementNodeId> = dirty_subs
+            .iter()
+            .filter(|s| !is_frag(s.as_node_id()))
+            .map(|s| s.as_node_id().as_element_id())
+            .collect();
+        drop(view_roots);
 
         // Fragment rebuilds (Condition / Each / Switch branch swaps).
         self.rebuild_fragments(boa_context, &dirty_frag_ids);
@@ -492,41 +506,44 @@ impl TurAppInternal {
         dirty_element_ids: &[ElementNodeId],
     ) {
         let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
+        let trees = self.js_context.view_roots.borrow().trees();
 
-        // on_mounted — freshly-inserted elements.
-        let mounted_ids = self
-            .js_context
-            .element_tree
-            .borrow_mut()
-            .take_pending_mounted();
-        for id in mounted_ids {
-            let mut element = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_element_mut(id).and_then(|n| n.element.take())
-            };
-            if let Some(ref mut elem) = element {
-                elem.run_on_mounted(&mut cx, boa_context);
-            }
-            if let Some(elem) = element {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(node) = tree.get_element_mut(id) {
-                    node.element = Some(elem);
+        // on_mounted — freshly-inserted elements (drained from every tree).
+        for tree in &trees {
+            let mounted_ids = tree.borrow_mut().take_pending_mounted();
+            for id in mounted_ids {
+                let mut element = tree
+                    .borrow_mut()
+                    .get_element_mut(id)
+                    .and_then(|n| n.element.take());
+                if let Some(ref mut elem) = element {
+                    elem.run_on_mounted(&mut cx, boa_context);
+                }
+                if let Some(elem) = element {
+                    let mut t = tree.borrow_mut();
+                    if let Some(node) = t.get_element_mut(id) {
+                        node.element = Some(elem);
+                    }
                 }
             }
         }
 
-        // on_updated — elements dirtied this flush (post-layout).
+        // on_updated — elements dirtied this flush (post-layout). Each id
+        // carries its owning root, so tree resolution is O(1).
         for id in dirty_element_ids {
-            let mut element = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_element_mut(*id).and_then(|n| n.element.take())
+            let Some(tree) = trees.iter().find(|t| t.view_root() == id.root()) else {
+                continue;
             };
+            let mut element = tree
+                .borrow_mut()
+                .get_element_mut(*id)
+                .and_then(|n| n.element.take());
             if let Some(ref mut elem) = element {
                 elem.run_on_updated(&mut cx, boa_context);
             }
             if let Some(elem) = element {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(node) = tree.get_element_mut(*id) {
+                let mut t = tree.borrow_mut();
+                if let Some(node) = t.get_element_mut(*id) {
                     node.element = Some(elem);
                 }
             }
@@ -534,14 +551,21 @@ impl TurAppInternal {
 
         // before_destroy — elements removed since the last pass. The element
         // is already detached from the tree (taken out during destroy), so we
-        // just fire the hook and let it drop.
-        let destroyed = self
-            .js_context
-            .element_tree
-            .borrow_mut()
-            .take_pending_destroy();
-        for mut elem in destroyed {
-            elem.run_before_destroy(&mut cx, boa_context);
+        // just fire the hook and let it drop. The hook context is BOUND to
+        // the owning tree: a `before_destroy` may attach a controller (e.g.
+        // a lifecycle `mutate` callback), and the unbound fallback picks the
+        // first SETUP root — which fails when the destroyed root was the
+        // only setup one (teardown of a lone attached root).
+        for tree in &trees {
+            let destroyed = tree.borrow_mut().take_pending_destroy();
+            if destroyed.is_empty() {
+                continue;
+            }
+            let mut destroy_cx =
+                crate::core::view::SharedViewCx::for_tree(self.js_context.clone(), tree.clone());
+            for mut elem in destroyed {
+                elem.run_before_destroy(&mut destroy_cx, boa_context);
+            }
         }
     }
 
@@ -557,28 +581,36 @@ impl TurAppInternal {
         let mut cx = crate::core::view::SharedViewCx::new(self.js_context.clone());
 
         for fid in dirty_frag_ids {
-            let mut kind = {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                tree.get_fragment_mut(*fid).and_then(|h| h.kind.take())
+            // Resolve the fragment's owning tree (ids carry their root).
+            let Some(tree) = self
+                .js_context
+                .view_roots
+                .borrow()
+                .tree_of_root((*fid).root())
+            else {
+                continue;
             };
+            let mut kind = tree
+                .borrow_mut()
+                .get_fragment_mut(*fid)
+                .and_then(|h| h.kind.take());
             let Some(ref mut k) = kind else { continue };
 
             // Save old children + parent BEFORE rebuild (perform_update
             // auto-links new children to frag.children via append_child).
-            let (old_children, parent) = {
-                let tree = self.js_context.element_tree.borrow();
-                tree.get_fragment(*fid)
-                    .map(|f| (f.children.clone(), f.parent))
-                    .unwrap_or((Vec::new(), (*fid).into()))
-            };
+            let (old_children, parent) = tree
+                .borrow()
+                .get_fragment(*fid)
+                .map(|f| (f.children.clone(), f.parent))
+                .unwrap_or((Vec::new(), (*fid).into()));
 
             let new_children = k.perform_update(&mut cx, boa_context, *fid);
 
             if let Some(new) = new_children {
                 // frag.children now has old + new; replace with just new.
                 {
-                    let mut tree = self.js_context.element_tree.borrow_mut();
-                    if let Some(f) = tree.get_fragment_mut(*fid) {
+                    let mut t = tree.borrow_mut();
+                    if let Some(f) = t.get_fragment_mut(*fid) {
                         f.children = new;
                     }
                 }
@@ -591,8 +623,8 @@ impl TurAppInternal {
 
             // Put kind back.
             if let Some(kind) = kind {
-                let mut tree = self.js_context.element_tree.borrow_mut();
-                if let Some(host) = tree.get_fragment_mut(*fid) {
+                let mut t = tree.borrow_mut();
+                if let Some(host) = t.get_fragment_mut(*fid) {
                     host.kind = Some(kind);
                 }
             }
@@ -640,12 +672,13 @@ impl TurAppInternal {
         true
     }
 
-    /// Drain the render-command batch produced by the last `flush()`, if any.
-    /// `MainBackend::worker_loop` calls this after each `pump()` to ship the
-    /// batch to main via `MainMsg::RenderCommands`. Returns `None` if no
-    /// paint happened this flush (or already drained).
-    pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
-        self.pending_render_batch.borrow_mut().take()
+    /// Drain the render-command batches produced by the last `flush()`, if
+    /// any. `MainBackend::worker_loop` calls this after each `pump()` to
+    /// ship the batches to main via `MainMsg::RenderCommands` (one per view
+    /// root, tagged). Returns an empty vec if no root painted this flush (or
+    /// already drained).
+    pub fn take_pending_render_batches(&self) -> Vec<(ViewRootId, Vec<RenderCommand>)> {
+        std::mem::take(&mut *self.pending_render_batches.borrow_mut())
     }
 
     /// Drain the pending-mutation queue and invoke each mutation via the

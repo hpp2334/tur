@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -9,9 +9,7 @@ fn text_content_and_measurement() {
     let text_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_paragraph"));
         container.id
     };
@@ -32,9 +30,7 @@ fn text_empty_content_zero_size() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let text_node = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
+    let text_node = rt.get_element(root.children[0].as_element_id()).unwrap();
     let layout = &text_node.computed_layout;
     assert_eq!(layout.size.width, 0.0);
     assert_eq!(layout.size.height, 0.0);
@@ -48,12 +44,8 @@ fn text_font_size_affects_height() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let small = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    let large = rt
-        .get_element(ElementNodeId::new(root.children[1].as_u64()))
-        .unwrap();
+    let small = rt.get_element(root.children[0].as_element_id()).unwrap();
+    let large = rt.get_element(root.children[1].as_element_id()).unwrap();
     assert!(
         large.computed_layout.size.height > small.computed_layout.size.height,
         "28px ({}) should be taller than 14px ({})",
@@ -70,12 +62,8 @@ fn text_font_weight_affects_width() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let normal = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    let bold = rt
-        .get_element(ElementNodeId::new(root.children[1].as_u64()))
-        .unwrap();
+    let normal = rt.get_element(root.children[0].as_element_id()).unwrap();
+    let bold = rt.get_element(root.children[1].as_element_id()).unwrap();
     assert!(
         bold.computed_layout.size.width > normal.computed_layout.size.width,
         "weight 700 ({}) should be wider than weight 400 ({})",
@@ -92,9 +80,7 @@ fn text_wrapping_with_narrow_constraints() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let text_node = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
+    let text_node = rt.get_element(root.children[0].as_element_id()).unwrap();
     let layout = &text_node.computed_layout;
     assert!(
         layout.size.height > 30.0,
@@ -116,7 +102,7 @@ fn text_wrapping_vs_no_wrapping() {
     let wrapped_height = {
         let rt = app_narrow.element_tree();
         let root = rt.root_element().unwrap();
-        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        rt.get_element(root.children[0].as_element_id())
             .unwrap()
             .computed_layout
             .size
@@ -129,7 +115,7 @@ fn text_wrapping_vs_no_wrapping() {
     let unwrapped_height = {
         let rt = app_wide.element_tree();
         let root = rt.root_element().unwrap();
-        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        rt.get_element(root.children[0].as_element_id())
             .unwrap()
             .computed_layout
             .size
@@ -152,15 +138,9 @@ fn text_in_column_vertical_stacking() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let col = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    let t1 = rt
-        .get_element(ElementNodeId::new(col.children[0].as_u64()))
-        .unwrap();
-    let t2 = rt
-        .get_element(ElementNodeId::new(col.children[1].as_u64()))
-        .unwrap();
+    let col = rt.get_element(root.children[0].as_element_id()).unwrap();
+    let t1 = rt.get_element(col.children[0].as_element_id()).unwrap();
+    let t2 = rt.get_element(col.children[1].as_element_id()).unwrap();
 
     assert_eq!(t1.computed_layout.offset.y, 0.0);
     assert!(
@@ -183,7 +163,7 @@ fn text_max_lines_caps_height() {
     let capped_height = {
         let rt = app_capped.element_tree();
         let root = rt.root_element().unwrap();
-        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        rt.get_element(root.children[0].as_element_id())
             .unwrap()
             .computed_layout
             .size
@@ -196,7 +176,7 @@ fn text_max_lines_caps_height() {
     let full_height = {
         let rt = app_full.element_tree();
         let root = rt.root_element().unwrap();
-        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        rt.get_element(root.children[0].as_element_id())
             .unwrap()
             .computed_layout
             .size
@@ -233,7 +213,7 @@ fn text_overflow_visible_ignores_max_lines() {
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
     let h = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
+        .get_element(root.children[0].as_element_id())
         .unwrap()
         .computed_layout
         .size
@@ -253,9 +233,7 @@ fn text_ellipsis_truncates_to_one_line() {
     let (height, width) = {
         let rt = app.element_tree();
         let root = rt.root_element().unwrap();
-        let node = rt
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let node = rt.get_element(root.children[0].as_element_id()).unwrap();
         let elem_kind = node.kind().unwrap();
         assert_eq!(elem_kind, ElementKind::new("tur_paragraph"));
         (
@@ -271,7 +249,7 @@ fn text_ellipsis_truncates_to_one_line() {
     let clip_height = {
         let rt = app_clip.element_tree();
         let root = rt.root_element().unwrap();
-        rt.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        rt.get_element(root.children[0].as_element_id())
             .unwrap()
             .computed_layout
             .size
@@ -306,9 +284,7 @@ fn text_max_lines_no_truncation_when_fits() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
     let root = rt.root_element().unwrap();
-    let node = rt
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
+    let node = rt.get_element(root.children[0].as_element_id()).unwrap();
     // One line: height ≈ font-size * line-height (≈ 14 * 1.2 ≈ 17), well
     // under 40. If the engine spuriously truncated, the height would still
     // be one line so we additionally assert width > 200 to confirm the full

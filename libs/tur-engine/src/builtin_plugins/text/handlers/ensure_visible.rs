@@ -2,10 +2,10 @@ use crate::builtin_plugins::clipboard::ClipboardPasteEvent;
 use crate::builtin_plugins::scroll::ScrollViewElement;
 use crate::builtin_plugins::scroll::dispatch_wheel;
 use crate::core::app::AppEvent;
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::layout::Axis;
-use crate::core::platform::PlatformEvent;
+use crate::core::platform::{PlatformEvent, ShellEventPayload};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
@@ -18,14 +18,14 @@ use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 /// buffer + caret have already been updated.
 ///
 /// Subscribes to two event streams:
-/// - `PlatformEvent::Key` / `PlatformEvent::Ime` — keyboard / IME caret moves
+/// - `ShellEventPayload::Key` / `ShellEventPayload::Ime` — keyboard / IME caret moves
 ///   happen synchronously in the engine's `KeyboardSubsystem` /
 ///   `ImeSubsystem`, so the post-subsystem can observe them in the same
 ///   platform-event pass.
 /// - [`ClipboardPasteEvent`] (inside `AppEvent::Custom`) — paste is forwarded
-///   from `ClipboardPlatformPasteEvent` (platform) to
+///   from `ClipboardShellPasteEvent` (platform/shell) to
 ///   [`ClipboardPasteEvent`] (app) by tur-clipboard's
-///   `ClipboardPlatformSubsystem`, then consumed by tur-text's
+///   `ClipboardShellSubsystem`, then consumed by tur-text's
 ///   `ClipboardPasteSubsystem`. Since AppEvents drain in a later flush pass
 ///   than the originating PlatformEvent (the queues are snapshotted at the
 ///   start of `flush_app_events`), this subsystem must subscribe to the
@@ -41,8 +41,8 @@ impl Subsystem for CaretVisibilitySubsystem {
         // Only caret-moving events warrant a scroll. Resize / pointer / wheel
         // events don't move the caret. (Paste is handled in
         // `handle_app_event` — see the struct doc for why.)
-        match event {
-            PlatformEvent::Key(_) | PlatformEvent::Ime(_) => {
+        match event.payload() {
+            ShellEventPayload::Key(_) | ShellEventPayload::Ime(_) => {
                 ensure_caret_visible(cx);
             }
             _ => {}
@@ -70,7 +70,10 @@ pub fn ensure_caret_visible(cx: &mut SubsystemFlushContext<'_>) {
     };
 
     let metrics = {
-        let tree = cx.element_tree.borrow();
+        let Some(tree_handle) = cx.tree_containing(focused.into()) else {
+            return;
+        };
+        let tree = tree_handle.borrow();
         let Some((line_top, line_height)) = caret_line_geom(&tree, focused) else {
             return;
         };
@@ -156,14 +159,14 @@ fn caret_line_geom(tree: &NodeTreeData, id: ElementNodeId) -> Option<(f32, f32)>
 fn nearest_scroll_ancestor(tree: &NodeTreeData, start: ElementNodeId) -> Option<ElementNodeId> {
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
-        if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+        if let Some(node) = tree.get_element(id.as_element_id()) {
             if let Some(ref element) = node.element
                 && element.cast::<ScrollViewElement>().is_some()
             {
-                return Some(ElementNodeId::new(id.as_u64()));
+                return Some(id.as_element_id());
             }
             current = node.parent;
-        } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+        } else if let Some(frag) = tree.get_fragment(id.as_fragment_id()) {
             // Fragments can't be ScrollView; hop to the next ancestor.
             current = Some(frag.parent);
         } else {
@@ -180,10 +183,10 @@ fn abs_offset_y(tree: &NodeTreeData, start: ElementNodeId) -> f64 {
     let mut acc = 0.0f64;
     let mut current: Option<NodeId> = Some(start.into());
     while let Some(id) = current {
-        if let Some(n) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+        if let Some(n) = tree.get_element(id.as_element_id()) {
             acc += n.computed_layout.offset.y;
             current = n.parent;
-        } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+        } else if let Some(frag) = tree.get_fragment(id.as_fragment_id()) {
             current = Some(frag.parent);
         } else {
             break;

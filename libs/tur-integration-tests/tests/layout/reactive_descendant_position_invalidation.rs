@@ -1,4 +1,3 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// Reproduces the position-invalidation gap exposed by dragging the editor /
@@ -27,7 +26,7 @@ fn reactive_resize_repositions_descendant() {
         .unwrap();
 
     let tracker_id_raw = app.query_element(&["tracker"]).expect("query tracker");
-    let tracker_id = ElementNodeId::new(tracker_id_raw.as_u64());
+    let tracker_id = tracker_id_raw.as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
 

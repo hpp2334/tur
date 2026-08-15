@@ -36,7 +36,7 @@ pub use self::scrollbar::{ScrollbarElement, ScrollbarView};
 ///
 /// Side effects:
 /// - Registers the boa class [`ScrollController`] on `globalThis`.
-/// - Registers [`ScrollSubsystem`] (consumes `PlatformEvent::Wheel`,
+/// - Registers [`ScrollSubsystem`] (consumes `ShellEventPayload::Wheel`,
 ///   `AppEvent::Scroll` / `ScrollTo` / `ScrollOverscroll`; owns wheel
 ///   dispatch, overscroll chaining, and programmatic scroll-to).
 ///

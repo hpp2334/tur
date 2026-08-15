@@ -5,6 +5,7 @@ mod paint_context;
 mod playback;
 mod recording_canvas;
 mod renderer;
+mod surface;
 
 pub mod brush;
 
@@ -15,6 +16,7 @@ pub use paint_context::*;
 pub use playback::play_commands;
 pub use recording_canvas::RecordingCanvas;
 pub use renderer::*;
+pub use surface::*;
 
 /// One frame's worth of paint state shipped worker → main
 /// (`MainMsg::RenderCommands`). Plain `Vec<RenderCommand>` moved by

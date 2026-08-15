@@ -78,19 +78,14 @@ declare module "tur:std" {
         color?: Color;
     }
 
-    /** The current canvas viewport size in CSS pixels — the value shape of the
-     *  engine-owned `viewportSize$` reactive atom. The engine keeps it in sync
-     *  on every resize; read via `get(viewportSize$).width`. */
+    /** The viewport size value shape — `{width, height}` in CSS pixels. Each
+     *  view root exposes its own live size atom as
+     *  `viewRoot(name).viewportSize$` (read via `get`); there is no global
+     *  `viewportSize$` anymore. */
     export interface ViewportSize {
         width: number;
         height: number;
     }
-
-    /** Engine-owned reactive atom holding the live canvas size
-     *  (`{width, height}` in CSS pixels). Updated each frame from the resize
-     *  handler; import from `tur:std`. Read-only to app code — typed as a
-     *  `Derived` so `set(viewportSize$, …)` is rejected at compile time. */
-    export const viewportSize$: Derived<ViewportSize>;
 
     /** OS cursor keywords (CSS cursor names). Mirrors `tur_engine::core::platform::Cursor`. */
     export type Cursor =

@@ -2,21 +2,21 @@ use tur_engine::builtin_plugins::layout::GridElement;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
-/// Helper: load a Grid inline with the given props + child count, render, and
+/// Helper: load a Grid inline with the given props + child count, setViewRoot, viewRoot, and
 /// return the Grid element's id.
 fn setup_grid(width: f64, height: f64, source: &str) -> (TurTestApp, ElementNodeId) {
-    let mut app = TurTestApp::new(width, height).unwrap();
+    let app = TurTestApp::new(width, height).unwrap();
     app.eval_module_source(source).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["g"]).expect("queryKey 'g' not found");
-    (app, ElementNodeId::new(id.as_u64()))
+    (app, id.as_element_id())
 }
 
 fn color_tile_source(count: usize, grid_opts: &str) -> String {
     format!(
         r#"
-        import {{ render, Grid, Container, createColor }} from "tur:std";
-        render(Grid({{
+        import {{ setViewRoot, viewRoot, Grid, Container, createColor }} from "tur:std";
+        setViewRoot(viewRoot("main"), Grid({{
             queryKey: ["g"],
             {grid_opts}
             children: Array.from({{ length: {count} }}, () =>
@@ -38,9 +38,7 @@ fn grid_mounts_as_tur_grid() {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
     assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
-    let g = tree
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
+    let g = tree.get_element(root.children[0].as_element_id()).unwrap();
     assert_eq!(g.kind().unwrap(), ElementKind::new("tur_grid"));
 }
 
@@ -59,25 +57,19 @@ fn grid_column_count_derived_from_max_extent() {
     assert_eq!(g.children.len(), 8);
 
     // Child 0: (0, 0), size 100x100.
-    let c0 = tree
-        .get_element(ElementNodeId::new(g.children[0].as_u64()))
-        .unwrap();
+    let c0 = tree.get_element(g.children[0].as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 100.0);
     assert_eq!(c0.computed_layout.size.height, 100.0);
     assert_eq!(c0.computed_layout.offset.x, 0.0);
     assert_eq!(c0.computed_layout.offset.y, 0.0);
 
     // Child 3 (last in row 0): x = 300.
-    let c3 = tree
-        .get_element(ElementNodeId::new(g.children[3].as_u64()))
-        .unwrap();
+    let c3 = tree.get_element(g.children[3].as_element_id()).unwrap();
     assert_eq!(c3.computed_layout.offset.x, 300.0);
     assert_eq!(c3.computed_layout.offset.y, 0.0);
 
     // Child 4 (first in row 1): (0, 100).
-    let c4 = tree
-        .get_element(ElementNodeId::new(g.children[4].as_u64()))
-        .unwrap();
+    let c4 = tree.get_element(g.children[4].as_element_id()).unwrap();
     assert_eq!(c4.computed_layout.offset.x, 0.0);
     assert_eq!(c4.computed_layout.offset.y, 100.0);
 }
@@ -92,9 +84,7 @@ fn grid_child_aspect_ratio_scales_main_axis() {
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
-    let c0 = tree
-        .get_element(ElementNodeId::new(g.children[0].as_u64()))
-        .unwrap();
+    let c0 = tree.get_element(g.children[0].as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 100.0);
     assert_eq!(
         c0.computed_layout.size.height, 50.0,
@@ -115,9 +105,7 @@ fn grid_main_axis_extent_overrides_aspect() {
     );
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
-    let c0 = tree
-        .get_element(ElementNodeId::new(g.children[0].as_u64()))
-        .unwrap();
+    let c0 = tree.get_element(g.children[0].as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 100.0);
     assert_eq!(c0.computed_layout.size.height, 80.0);
 }
@@ -139,21 +127,15 @@ fn grid_spacing_advances_positions() {
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
 
-    let c0 = tree
-        .get_element(ElementNodeId::new(g.children[0].as_u64()))
-        .unwrap();
+    let c0 = tree.get_element(g.children[0].as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 92.5);
     assert_eq!(c0.computed_layout.size.height, 92.5);
     assert_eq!(c0.computed_layout.offset.x, 0.0);
 
-    let c1 = tree
-        .get_element(ElementNodeId::new(g.children[1].as_u64()))
-        .unwrap();
+    let c1 = tree.get_element(g.children[1].as_element_id()).unwrap();
     assert_eq!(c1.computed_layout.offset.x, 102.5);
 
-    let c4 = tree
-        .get_element(ElementNodeId::new(g.children[4].as_u64()))
-        .unwrap();
+    let c4 = tree.get_element(g.children[4].as_element_id()).unwrap();
     assert_eq!(c4.computed_layout.offset.x, 0.0);
     assert_eq!(c4.computed_layout.offset.y, 102.5);
 }
@@ -169,9 +151,7 @@ fn grid_fewer_children_than_columns() {
     let tree = app.element_tree();
     let g = tree.get_element(id).unwrap();
     assert_eq!(g.children.len(), 2);
-    let c1 = tree
-        .get_element(ElementNodeId::new(g.children[1].as_u64()))
-        .unwrap();
+    let c1 = tree.get_element(g.children[1].as_element_id()).unwrap();
     assert_eq!(c1.computed_layout.offset.x, 100.0);
     assert_eq!(c1.computed_layout.offset.y, 0.0);
 }

@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -11,15 +11,11 @@ fn pointer_interact_passes_constraints_and_size() {
         let root = tree.root_element().unwrap();
         assert_eq!(root.children.len(), 1);
 
-        let pi = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let pi = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(pi.kind().unwrap(), ElementKind::new("tur_pointer_interact"));
         assert_eq!(pi.children.len(), 1);
 
-        let container = tree
-            .get_element(ElementNodeId::new(pi.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(pi.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
 
         (pi.id, container.id)
@@ -47,17 +43,11 @@ fn pointer_interact_passes_through_in_column() {
     let (pi1_id, pi2_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(col.children.len(), 2);
 
-        let pi1 = tree
-            .get_element(ElementNodeId::new(col.children[0].as_u64()))
-            .unwrap();
-        let pi2 = tree
-            .get_element(ElementNodeId::new(col.children[1].as_u64()))
-            .unwrap();
+        let pi1 = tree.get_element(col.children[0].as_element_id()).unwrap();
+        let pi2 = tree.get_element(col.children[1].as_element_id()).unwrap();
         assert_eq!(
             pi1.kind().unwrap(),
             ElementKind::new("tur_pointer_interact")
@@ -67,12 +57,8 @@ fn pointer_interact_passes_through_in_column() {
             ElementKind::new("tur_pointer_interact")
         );
 
-        let sb1 = tree
-            .get_element(ElementNodeId::new(pi1.children[0].as_u64()))
-            .unwrap();
-        let sb2 = tree
-            .get_element(ElementNodeId::new(pi2.children[0].as_u64()))
-            .unwrap();
+        let sb1 = tree.get_element(pi1.children[0].as_element_id()).unwrap();
+        let sb2 = tree.get_element(pi2.children[0].as_element_id()).unwrap();
 
         (pi1.id, pi2.id, sb1.id, sb2.id)
     };

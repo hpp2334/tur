@@ -11,9 +11,7 @@ fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
     let (sv_id, col_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
         (sv.id, sv.children[0])
     };
 

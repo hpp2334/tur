@@ -1,25 +1,73 @@
-//! WebGL2-backed vello-hybrid renderer (wasm32 browser target).
+//! WebGL2-backed vello-hybrid rendering (wasm32 browser target).
 //!
-//! This module is only compiled when the `webgl` feature is active. It wraps
-//! vello-hybrid's [`WebGlRenderer`], which renders directly to the browser
-//! canvas via the native `WebGl2RenderingContext` — no wgpu dependency, ~3MB
-//! smaller binary than the WebGPU path.
+//! Split into a **factory** ([`WebGlRenderer`] — unit) and a **target**
+//! ([`WebGlTarget`] — one canvas per view root, wrapping vello-hybrid's
+//! `WebGlRenderer` which renders directly to the browser canvas via the
+//! native `WebGl2RenderingContext` — no wgpu dependency, ~3MB smaller binary
+//! than the WebGPU path).
 //!
 //! The engine runs on a worker thread and ships `Vec<RenderCommand>` to
-//! main; main applies the batch via [`WebGlVelloRenderer::render_commands`].
+//! main; main applies the batch to the owning root's
+//! [`WebGlTarget::render_commands`].
 
 use std::collections::HashMap;
 
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
+use crate::core::render::RenderTarget as TurRenderTarget;
 use crate::core::render::Renderer as TurRenderer;
+use crate::core::render::{Surface, SurfaceHandle, downcast_surface};
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
 use vello_common::paint::{ImageId, ImageSource};
-use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer};
+use vello_hybrid::{RenderSize, Resources, Scene, WebGlRenderer as VelloWebGlRenderer};
 use web_sys::HtmlCanvasElement;
 
-pub struct WebGlVelloRenderer {
-    renderer: WebGlRenderer,
+/// Opaque surface payload accepted by [`WebGlRenderer`] — the browser canvas
+/// to render into.
+pub struct CanvasSurface(pub HtmlCanvasElement);
+
+impl Surface for CanvasSurface {
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+/// Factory for [`WebGlTarget`]s. Unit type — each WebGL canvas carries its
+/// own GL context, so there is no shared substrate.
+pub struct WebGlRenderer;
+
+impl Default for WebGlRenderer {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl WebGlRenderer {
+    pub fn new() -> Self {
+        WebGlRenderer
+    }
+}
+
+impl TurRenderer for WebGlRenderer {
+    fn create_target(
+        &mut self,
+        surface: SurfaceHandle,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Result<Box<dyn TurRenderTarget>, crate::error::TurError> {
+        let canvas = downcast_surface::<CanvasSurface>("WebGlRenderer", surface)?;
+        Ok(Box::new(WebGlTarget::new(
+            canvas.0,
+            viewport.0 as u32,
+            viewport.1 as u32,
+            dpr,
+        )))
+    }
+}
+
+/// One WebGL2 render target bound to a single canvas.
+pub struct WebGlTarget {
+    renderer: VelloWebGlRenderer,
     scene: Scene,
     resources: Resources,
     dpr: f64,
@@ -31,8 +79,8 @@ pub struct WebGlVelloRenderer {
     image_uploads: HashMap<ImageResourceId, ImageId>,
 }
 
-impl WebGlVelloRenderer {
-    /// Create a new WebGL renderer bound to the given canvas.
+impl WebGlTarget {
+    /// Create a new target bound to the given canvas.
     ///
     /// The canvas's backing buffer (`width`/`height` attributes) must already
     /// be set to the physical pixel dimensions (`logical * dpr`).
@@ -45,10 +93,10 @@ impl WebGlVelloRenderer {
         let physical_width = (logical_width as f64 * dpr) as u32;
         let physical_height = (logical_height as f64 * dpr) as u32;
 
-        let renderer = WebGlRenderer::new(&canvas);
+        let renderer = VelloWebGlRenderer::new(&canvas);
         let scene = new_scene(physical_width, physical_height);
 
-        WebGlVelloRenderer {
+        WebGlTarget {
             renderer,
             scene,
             resources: Resources::new(),
@@ -61,7 +109,7 @@ impl WebGlVelloRenderer {
 
     /// Render a flat command batch into the scene. Playback happens in
     /// `paint_commands_to_scene`; image upload happens incrementally via
-    /// `TurRenderer::upload_image_resource` as the worker registers
+    /// `TurRenderTarget::upload_image_resource` as the worker registers
     /// resources.
     fn render_commands_to_scene(&mut self, commands: &[RenderCommand]) {
         paint_commands_to_scene(
@@ -93,7 +141,7 @@ impl WebGlVelloRenderer {
     }
 }
 
-impl TurRenderer for WebGlVelloRenderer {
+impl TurRenderTarget for WebGlTarget {
     fn render_commands(&mut self, commands: &[RenderCommand]) {
         // Surface geometry is tracked on `self` (synced via `resize`, which
         // fires on viewport-change events only).
@@ -101,7 +149,7 @@ impl TurRenderer for WebGlVelloRenderer {
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        WebGlVelloRenderer::present(self);
+        WebGlTarget::present(self);
         Ok(())
     }
 

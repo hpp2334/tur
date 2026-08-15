@@ -357,7 +357,7 @@ mod tests {
     use crate::core::render::brush::{Brush, Color};
 
     fn nid(n: u64) -> ElementNodeId {
-        ElementNodeId::new(n)
+        ElementNodeId::new(crate::core::element::ViewRootId::new(0), n)
     }
 
     /// A leaf node that draws a single fill produces exactly one Paint

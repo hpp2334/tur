@@ -7,9 +7,9 @@ use tur_integration_tests::TurTestApp;
 /// `queryKey` lands on Input's Container wrapper; the editable text is that
 /// container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, setViewRoot, viewRoot, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    render(Container({
+    setViewRoot(viewRoot("main"), Container({
         children: [
             Input({
                 controller: controller,
@@ -24,9 +24,9 @@ const PASSWORD_BUNDLE: &str = r#"
 "#;
 
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, setViewRoot, viewRoot, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    render(Container({
+    setViewRoot(viewRoot("main"), Container({
         children: [
             Input({
                 controller: controller,
@@ -43,13 +43,13 @@ const CUSTOM_CHAR_BUNDLE: &str = r#"
 
 fn find_editable(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
-    let container_id = ElementNodeId::new(container_id.as_u64());
+    let container_id = container_id.as_element_id();
     let tree = app.element_tree();
     let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
-        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
+        let node = tree.get_element(cid.as_element_id()).unwrap();
         if node.kind() == Some(ElementKind::new("tur_editable_text")) {
-            return ElementNodeId::new(cid.as_u64());
+            return cid.as_element_id();
         }
     }
     panic!("no tur_editable_text under queryKey {:?}", key);
@@ -155,7 +155,7 @@ fn password_backspace_removes_a_mask_char() {
 
 #[test]
 fn password_empty_value_displays_nothing() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(PASSWORD_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 

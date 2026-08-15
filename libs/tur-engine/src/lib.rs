@@ -12,11 +12,11 @@ pub use crate::core::platform::{CursorBackend, CursorCap, NoopCursor};
 // Re-export the clipboard plugin surface at the crate root so embedders /
 // external backend crates can write `tur_engine::Clipboard`,
 // `tur_engine::ClipboardBackend`, `tur_engine::TurClipboardPlugin`,
-// `tur_engine::platform_paste`. The plugin itself lives in
+// `tur_engine::shell_paste`. The plugin itself lives in
 // `builtin_plugins::clipboard` (inlined from the former
 // `tur-clipboard-capability` crate).
 pub use crate::builtin_plugins::clipboard::{
-    Clipboard, ClipboardBackend, TurClipboardPlugin, platform_paste,
+    Clipboard, ClipboardBackend, TurClipboardPlugin, shell_paste,
 };
 // Re-export `TurStdPlugin` at the crate root so embedders can write
 // `tur_engine::TurStdPlugin` (was previously in a separate `tur-std` crate).
@@ -178,30 +178,110 @@ impl TurApp {
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
-    /// wheel, key, IME, or paste. Re-arms an idle autonomous loop.
+    /// wheel, key, IME, or paste. Every event is a
+    /// `PlatformEvent::Shell` carrying the [`ViewRootId`] of the host
+    /// surface it targets (informational for Key / Ime / Custom — the
+    /// engine routes those via the instance-global focus scope; hosts gate
+    /// on shell focus).
     pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
         self.backend
             .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event));
         self.request_wakeup();
     }
 
-    /// Resize the surface. The embedder calls this at resize-event-receipt
-    /// time (DOM `ResizeObserver` / winit / JNI): it resizes the main-side
-    /// renderer directly (no flush + worker→main round-trip — lower
-    /// latency) AND forwards `PlatformEvent::Resize` to the worker so
-    /// `ResizeSubsystem` updates `Screen` / `viewportSize$` for layout.
-    /// Event-driven, not per-frame, so no dedup is needed.
-    pub fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.backend.resize(logical_width, logical_height, dpr);
+    /// Resize one view root (by name). The embedder calls this at
+    /// resize-event-receipt time (DOM `ResizeObserver` / winit / JNI): it
+    /// resizes the root's main-side render target directly (no flush +
+    /// worker→main round-trip — lower latency) AND forwards a resize shell
+    /// event to the worker so `ResizeSubsystem` updates that root's
+    /// `Screen` / `viewportSize$` for layout. Other roots are
+    /// untouched. Event-driven, not per-frame, so no dedup is needed.
+    pub fn resize_root(&self, name: &str, logical_width: u32, logical_height: u32, dpr: f64) {
+        let Some(root) = self.backend.root_id_of(name) else {
+            tracing::warn!("resize_root: unknown view root `{name}`");
+            return;
+        };
+        self.backend
+            .resize(root, logical_width, logical_height, dpr);
         self.backend
             .send_worker_msg(core::app::WorkerMsg::PlatformEvent(
-                core::platform::PlatformEvent::Resize {
-                    logical_width,
-                    logical_height,
-                    dpr,
-                },
+                core::platform::PlatformEvent::shell(
+                    root,
+                    core::platform::ShellEventPayload::Resize {
+                        logical_width,
+                        logical_height,
+                        dpr,
+                    },
+                ),
             ));
         self.request_wakeup();
+    }
+
+    /// Tear down one view root (by name): release its main-side render
+    /// target (frees the GPU/GL resources — the surface may be gone, e.g.
+    /// a page the user navigated away from) and destroy its built tree
+    /// (unmount hooks fire on the next flush) while RETAINING the mount
+    /// intent. Idempotent — tearing down an already-torn-down root is a
+    /// no-op. Pair with [`Self::setup_root`]: it re-attaches a FRESH
+    /// surface and rebuilds the tree from the retained `setViewRoot`
+    /// intent.
+    pub fn tear_down_root(&self, name: &str) {
+        let Some(root) = self.backend.root_id_of(name) else {
+            tracing::warn!("tear_down_root: unknown view root `{name}`");
+            return;
+        };
+        self.backend.release_surface(root);
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::TearDownRoot(root));
+        self.request_wakeup();
+    }
+
+    /// Set up one view root (by name) by attaching its surface: create the
+    /// root's render target from `surface` on main (fail-fast — synchronous
+    /// `Err` on an unknown root name or a mismatched surface/renderer
+    /// pairing, with the surface consumed), replay retained image uploads
+    /// into the fresh target, sync the root's `Screen` / `viewportSize$` to
+    /// the passed `viewport` / `dpr`, and rebuild the tree from the retained
+    /// mount intent (if `setViewRoot` was called; mount hooks fire).
+    ///
+    /// Roots start PENDING at build — this is how a surface that appears
+    /// late (a page the user hasn't visited yet) first renders. Attaching
+    /// to an already-set-up root REPLACES its target (canvas-element
+    /// replacement) without rebuilding the tree. Idempotent for a pending
+    /// root with no mount intent (just attaches the target).
+    pub fn setup_root(
+        &self,
+        name: &str,
+        surface: core::render::SurfaceHandle,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Result<(), error::TurError> {
+        let Some(root) = self.backend.root_id_of(name) else {
+            return Err(error::TurError::Other(format!(
+                "setup_root: unknown view root `{name}`"
+            )));
+        };
+        self.backend.attach_surface(root, surface, viewport, dpr)?;
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::PlatformEvent(
+                core::platform::PlatformEvent::shell(
+                    root,
+                    core::platform::ShellEventPayload::Resize {
+                        logical_width: viewport.0 as u32,
+                        logical_height: viewport.1 as u32,
+                        dpr,
+                    },
+                ),
+            ));
+        self.backend
+            .send_worker_msg(core::app::WorkerMsg::SetupRoot(root));
+        self.request_wakeup();
+        Ok(())
+    }
+
+    /// All view-root names, in declaration order.
+    pub fn view_root_names(&self) -> Vec<String> {
+        self.backend.root_names()
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
@@ -254,8 +334,12 @@ impl TurApp {
         use futures::future::{Either, select};
         use futures::stream::StreamExt;
 
-        // Pipelining buffer: the latest un-rendered batch from the worker.
-        let mut pending: Option<core::render::RenderCommandBatch> = None;
+        // Pipelining buffer: the latest un-rendered batch per view root
+        // (latest-wins per root, so a quiet root never starves a busy one).
+        let mut pending: std::collections::HashMap<
+            core::element::ViewRootId,
+            core::render::RenderCommandBatch,
+        > = std::collections::HashMap::new();
 
         loop {
             // Race vsync + main_msg streams — first to fire wins.
@@ -271,21 +355,23 @@ impl TurApp {
                     // 1) Kick the worker for the NEXT frame first — it
                     //    flushes+records N+1 while main encodes N below.
                     self.backend.send_worker_msg(core::app::WorkerMsg::Wake);
-                    // 2) Render the latest buffered batch (vsync-aligned,
-                    //    latest-wins). Skip empty batches — an empty command
-                    //    list paints a blank frame (clears the surface), which
-                    //    is never desirable.
-                    if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
-                        self.backend.render_batch(&batch);
+                    // 2) Render the latest buffered batches (vsync-aligned,
+                    //    latest-wins per root). Skip empty batches — an
+                    //    empty command list paints a blank frame (clears the
+                    //    surface), which is never desirable.
+                    for (root, batch) in pending.drain() {
+                        if !batch.is_empty() {
+                            self.backend.render_batch(root, &batch);
+                        }
                     }
                 }
                 Either::Left((None, _)) => break,
                 Either::Right((Some(msg), _)) => {
                     let stop = match self.backend.apply_msg(msg) {
-                        MsgOutcome::Render(batch) => {
-                            // Pipelined: buffer (latest-wins); rendered at
-                            // the next vsync.
-                            pending = Some(batch);
+                        MsgOutcome::Render(root, batch) => {
+                            // Pipelined: buffer (latest-wins per root);
+                            // rendered at the next vsync.
+                            pending.insert(root, batch);
                             false
                         }
                         MsgOutcome::Frame(outcome) => {
@@ -298,15 +384,19 @@ impl TurApp {
                             let stop = if outcome.schedule == core::app::NextFrame::Vsync {
                                 self.main_sched.borrow().request_vsync();
                                 false
-                            } else if let Some(batch) = pending.take().filter(|b| !b.is_empty()) {
+                            } else if !pending.is_empty() {
                                 // Quiescence: no vsync is armed (nothing
                                 // time-driven pending), so the pipeline
-                                // would stall with an un-rendered batch
+                                // would stall with un-rendered batches
                                 // (e.g. the initial frame, or a one-shot
-                                // paint request). Flush it now (empty
+                                // paint request). Flush them now (empty
                                 // batches skipped — they'd paint blank) —
                                 // the next frame only starts on a new input.
-                                self.backend.render_batch(&batch);
+                                for (root, batch) in pending.drain() {
+                                    if !batch.is_empty() {
+                                        self.backend.render_batch(root, &batch);
+                                    }
+                                }
                                 false
                             } else {
                                 // Idle + empty pending: no-op. The loop
@@ -439,12 +529,17 @@ impl TurApp {
         self.backend.set_focus_changed_handler(handler);
     }
 
-    /// Override the main-side cursor backend. The worker emits
-    /// `MainMsg::CursorChanged` on cursor state change; main applies here.
+    /// Override the cursor backend for one view root (by name). The worker
+    /// emits `MainMsg::CursorChanged { root, .. }` on cursor state change;
+    /// main applies it to that root's backend here.
     pub fn set_cursor_backend(
         &self,
+        root_name: &str,
         backend: std::sync::Arc<std::sync::Mutex<dyn core::platform::CursorBackend + Send + Sync>>,
     ) {
-        self.backend.set_cursor_backend(backend);
+        match self.backend.root_id_of(root_name) {
+            Some(root) => self.backend.set_cursor_backend(root, backend),
+            None => tracing::warn!("set_cursor_backend: unknown view root `{root_name}`"),
+        }
     }
 }

@@ -10,12 +10,11 @@
 //! (the drag appeared dead). Mouse drags were unaffected because the mouse
 //! path dispatches to the whole hit-path without a claim probe.
 
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn center_of(app: &TurTestApp, query: &[&str]) -> (f64, f64) {
     let id = app.query_element(query).unwrap();
-    app.get_element_absolute_bounds(ElementNodeId::new(id.as_u64()))
+    app.get_element_absolute_bounds(id.as_element_id())
         .unwrap()
         .center()
 }

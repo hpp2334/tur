@@ -22,7 +22,7 @@ use std::rc::Rc;
 use boa_engine::context::time::Clock;
 
 use crate::core::app::AppEvent;
-use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput, ShellEventPayload};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use crate::builtin_plugins::scroll::event::ScrollFlingEvent;
@@ -46,6 +46,8 @@ struct InertiaState {
     vy: f64,
     /// Hit-test position (touch-up location). Re-used each frame.
     position: crate::core::layout::Offset,
+    /// The view root the fling targets (re-routing through its tree).
+    root: crate::core::element::ViewRootId,
     /// Clock time at the last integration tick (ms since epoch).
     last_ms: u64,
 }
@@ -99,7 +101,7 @@ impl Subsystem for ScrollInertiaSubsystem {
     ) {
         // Any fresh touch (down or cancel) stops the coast immediately —
         // the user touched the screen to grab the flinging content.
-        if let PlatformEvent::Pointer(input) = event {
+        if let ShellEventPayload::Pointer { input, .. } = event.payload() {
             let is_touch = match input {
                 PointerInput::PointerDown { device, .. } => *device == PointerDeviceKind::Touch,
                 PointerInput::PointerCancel { device } => *device == PointerDeviceKind::Touch,
@@ -120,6 +122,7 @@ impl Subsystem for ScrollInertiaSubsystem {
                     vx: fling.vx,
                     vy: fling.vy,
                     position: fling.position,
+                    root: fling.root,
                     last_ms: self.clock.now().millis_since_epoch(),
                 });
             }
@@ -158,6 +161,7 @@ impl Subsystem for ScrollInertiaSubsystem {
                     // work. `ScrollSubsystem` (registered before us) drains
                     // this `AppEvent::Scroll` next iteration.
                     cx.app_event_queue.push(AppEvent::Scroll {
+                        root: state.root,
                         delta_x,
                         delta_y,
                         position: state.position,

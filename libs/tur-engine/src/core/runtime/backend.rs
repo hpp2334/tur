@@ -35,15 +35,16 @@ use boa_engine::{Context, Source};
 use futures::StreamExt;
 
 use crate::FocusedState;
+use crate::core::app::view_roots::ViewRootSpec;
 use crate::core::app::{FrameOutcome, ModuleError, TurAppInternal, WorkerMsg};
 use crate::core::app::{MainMsg, MainRx, MainTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::{ElementNodeId, NodeId, ViewRootId};
 use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::platform::CursorBackend;
-use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
+use crate::core::render::{RenderCommand, RenderCommandBatch, RenderTarget, Renderer};
 use crate::core::scheduler::WorkerHandle;
 use crate::error::TurError;
 
@@ -79,18 +80,27 @@ impl WorkerBackend {
         }
     }
 
-    /// Read the latest cursor applied during the last flush (or `None` if
-    /// no pointer was over the surface / no cursor change happened).
-    pub(crate) fn last_applied_cursor(&self) -> Option<crate::core::platform::Cursor> {
+    /// Read the latest cursor applied during the last flush for one view
+    /// root (or `None` if no pointer was over that root / no change).
+    pub(crate) fn last_applied_cursor_for(
+        &self,
+        root: ViewRootId,
+    ) -> Option<crate::core::platform::Cursor> {
         self.internal
             .app_context
             .borrow()
             .shell
-            .last_applied_cursor()
+            .last_applied_cursor_for(root)
     }
 
-    pub(crate) fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
-        self.internal.take_pending_render_batch()
+    /// All registered view-root ids (for the per-root cursor sweep).
+    pub(crate) fn cursor_roots(&self) -> Vec<ViewRootId> {
+        let roots = self.internal.js_context.view_roots.borrow();
+        roots.slots().iter().map(|s| s.id).collect()
+    }
+
+    pub(crate) fn take_pending_render_batches(&self) -> Vec<(ViewRootId, Vec<RenderCommand>)> {
+        self.internal.take_pending_render_batches()
     }
 
     fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
@@ -231,11 +241,13 @@ impl WorkerBackend {
                 reply.send(self.query_tree_snapshot());
             }
             WorkerMsg::WithElement { id, runner } => {
-                let tree = self.internal.js_context.element_tree.borrow();
-                runner(&tree);
-                // `id` is informational only (the closure did its own
-                // lookup); reference it so the variant's bind stays useful.
-                let _ = id;
+                // Resolve the tree that owns `id` (ids are unique
+                // instance-wide). Unknown ids (e.g. from a torn-down root's
+                // destroyed tree) skip the runner.
+                if let Some(tree) = self.internal.js_context.tree_containing(id.into()) {
+                    let tree = tree.borrow();
+                    runner(&tree);
+                }
             }
             WorkerMsg::QueryFocusedState { reply } => {
                 reply.send(self.focused_state());
@@ -259,6 +271,26 @@ impl WorkerBackend {
             } => {
                 self.internal.event_bus.emit_to_js(channel_id, payload);
                 self.internal.js_context.wake_if_idle();
+            }
+            WorkerMsg::TearDownRoot(root) => {
+                let mut boa = self.boa_context.borrow_mut();
+                crate::core::app::view_root::tear_down_root_impl(
+                    &self.internal.js_context,
+                    root,
+                    &mut boa,
+                );
+                drop(boa);
+                self.wake_if_dirty();
+            }
+            WorkerMsg::SetupRoot(root) => {
+                let mut boa = self.boa_context.borrow_mut();
+                crate::core::app::view_root::setup_root_impl(
+                    &self.internal.js_context,
+                    root,
+                    &mut boa,
+                );
+                drop(boa);
+                self.wake_if_dirty();
             }
             WorkerMsg::AppEvent(event) => {
                 self.push_app_event(event);
@@ -320,13 +352,17 @@ impl WorkerBackend {
 
     pub(crate) fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
         let focused_id = self.focused_element()?;
-        let tree = self.internal.js_context.element_tree.borrow();
+        let tree = self
+            .internal
+            .js_context
+            .tree_containing(focused_id.into())?;
+        let tree = tree.borrow();
 
         let mut abs_x = 0.0f64;
         let mut abs_y = 0.0f64;
         let mut current: Option<NodeId> = Some(focused_id.into());
         while let Some(id) = current {
-            let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+            let node = tree.get_element(id.as_element_id())?;
             abs_x += node.computed_layout.offset.x;
             abs_y += node.computed_layout.offset.y;
             current = node.parent;
@@ -341,39 +377,45 @@ impl WorkerBackend {
 
     pub(crate) fn focused_is_editable(&self) -> bool {
         use crate::core::focus::helper;
-        let tree = self.internal.js_context.element_tree.borrow();
+        let trees = self.internal.js_context.view_roots.borrow().trees();
         let focus = self.internal.js_context.focus_manager.borrow();
-        helper::focused_is_editable(&tree, &focus)
+        trees
+            .iter()
+            .any(|t| helper::focused_is_editable(&t.borrow(), &focus))
     }
 
     pub(crate) fn query_element(&self, key: &[&str]) -> Option<NodeId> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .query_element(key)
+        let trees = self.internal.js_context.view_roots.borrow().trees();
+        trees.iter().find_map(|t| t.query_element(key))
     }
 
     pub(crate) fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
-        let tree = self.internal.js_context.element_tree.borrow();
-        let root_id = tree.root_element_id()?;
+        let trees = self.internal.js_context.view_roots.borrow().trees();
+        let tree = trees.first()?;
+        let root_id = tree.borrow().root_element_id()?;
         tree.dev_tool_node(root_id.into())
     }
 
     pub(crate) fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .dev_tool_node(id)
+        let tree = self.internal.js_context.tree_containing(id)?;
+        tree.dev_tool_node(id)
     }
 
     pub(crate) fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .tree_snapshot()
+        let roots = self.internal.js_context.view_roots.borrow();
+        let mut merged = NodeTreeSnapshot::empty();
+        for slot in roots.slots() {
+            let snap = slot.tree.borrow().tree_snapshot();
+            if merged.root_id.is_none() {
+                merged.root_id = snap.root_id;
+            }
+            merged.elements.extend(snap.elements);
+            merged.fragments.extend(snap.fragments);
+            if let Some(root_elem) = snap.root_id {
+                merged.roots.push((slot.id, root_elem));
+            }
+        }
+        merged
     }
 }
 
@@ -399,8 +441,9 @@ impl WorkerBackend {
 pub(crate) enum MsgOutcome {
     /// Side-effects already applied; the driver should keep draining.
     Continue,
-    /// A render-command batch. The driver decides when to paint it.
-    Render(RenderCommandBatch),
+    /// A render-command batch for one view root. The driver decides when to
+    /// paint it.
+    Render(ViewRootId, RenderCommandBatch),
     /// A completed frame. Terminal for a single-frame advance.
     Frame(FrameOutcome),
     /// The worker's flush errored. Terminal.
@@ -432,7 +475,7 @@ pub(crate) enum MsgOutcome {
 /// driven by the embedder at event-receipt time via
 /// [`TurApp::resize`](crate::TurApp::resize) (DOM `ResizeObserver` / winit
 /// / JNI), which calls [`Self::resize`] directly and forwards
-/// `PlatformEvent::Resize` to the worker for layout — no `MainMsg` round-trip.
+/// `ShellEventPayload::Resize` to the worker for layout — no `MainMsg` round-trip.
 ///
 /// ## Focus-change handler
 ///
@@ -457,11 +500,16 @@ pub struct MainBackend {
     /// Cross-thread wake. Called after every main→worker send. No-op on
     /// native; `worker.postMessage(0)` on wasm.
     worker_notify: Rc<dyn Fn()>,
-    /// Main-side cursor backend. Worker emits `MainMsg::CursorChanged` on
-    /// cursor state change; `apply_msg` applies it directly here. Set via
-    /// `set_cursor_backend` (called by embedder after
-    /// `app_builder().build(...)`).
-    cursor_backend: RefCell<Option<Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>>>,
+    /// Main-side cursor backends, one per view root. Worker emits
+    /// `MainMsg::CursorChanged { root, .. }`; `apply_msg` applies it to the
+    /// root's backend here. Set via `set_cursor_backend` (called by embedder
+    /// after `app_builder().build(...)`).
+    cursor_backends: RefCell<
+        std::collections::HashMap<
+            ViewRootId,
+            Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
+        >,
+    >,
     /// Embedder-installed handler fired from `apply_msg` whenever the
     /// worker ships a deduped `MainMsg::FocusedStateChanged`. The engine
     /// retains no focus cache — embedders that need the value (wasm's
@@ -471,9 +519,20 @@ pub struct MainBackend {
     /// Cross-thread event bus handle. Routes `emit_to_js` via
     /// `WorkerMsg::EventBusToJs` (channel mode).
     event_bus_handle: crate::core::event_bus::EventBusHandle,
-    /// Main-side renderer (owned — no sink callback). Worker ships
-    /// `MainMsg::RenderCommands` batches; main applies them here.
+    /// Main-side render targets — one per ATTACHED view root. Roots start
+    /// pending (no target); [`MainBackend::attach_surface`] creates a
+    /// root's target from the retained renderer factory when the host calls
+    /// `TurApp::setup_root(name, surface, …)` (fail-fast on a mismatched
+    /// surface pairing), and `TurApp::tear_down_root` releases it via
+    /// [`MainBackend::release_surface`]. Worker ships
+    /// `MainMsg::RenderCommands { root, .. }` batches; main applies each to
+    /// the root's own target.
+    targets: RefCell<std::collections::HashMap<ViewRootId, Box<dyn RenderTarget>>>,
+    /// The retained renderer **factory** — outlives `build()` so surfaces
+    /// can attach late (`attach_surface`). Targets minted per root above.
     renderer: RefCell<Box<dyn Renderer>>,
+    /// Root name → id (host methods address roots by name).
+    root_ids: std::collections::HashMap<String, ViewRootId>,
     /// Main-side image resources — the full `ImageResource` (pixel `Blob`
     /// retained) per worker-assigned id. Inserted on `MainMsg::UploadImage`
     /// (under the worker-assigned id) alongside the GPU upload; retained for
@@ -499,6 +558,7 @@ impl MainBackend {
     pub(crate) fn new(
         main_sched: crate::core::scheduler::MainScheduler,
         renderer: Box<dyn Renderer>,
+        roots: Vec<ViewRootSpec>,
         backend_factory: impl FnOnce(
             crate::core::scheduler::WorkerScheduler,
             std::sync::Arc<dyn Fn() + Send + Sync>,
@@ -506,7 +566,19 @@ impl MainBackend {
         ) -> WorkerBackend
         + Send
         + 'static,
-    ) -> Self {
+    ) -> Result<Self, TurError> {
+        // Assign root ids by declaration order and build the name→id map.
+        // NO targets are created at build — every root starts pending; the
+        // factory is retained so surfaces can attach later via
+        // `attach_surface` (fail-fast on a mismatched pairing there). (The
+        // worker-side registry declarations are built by `spawn_instance`
+        // from the same spec list.)
+        let mut root_ids = std::collections::HashMap::new();
+        for (index, root) in roots.into_iter().enumerate() {
+            let id = ViewRootId::new(index as u32);
+            root_ids.insert(root.name.clone(), id);
+        }
+
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (main_tx, main_rx) = futures::channel::mpsc::unbounded::<MainMsg>();
 
@@ -556,28 +628,49 @@ impl MainBackend {
             .recv()
             .expect("worker thread died during backend_factory");
 
-        Self {
+        Ok(Self {
             worker_tx: worker_tx.clone(),
             main_rx: RefCell::new(main_rx),
             _worker_handle: worker_handle,
             worker_notify,
-            cursor_backend: RefCell::new(None),
+            cursor_backends: RefCell::new(std::collections::HashMap::new()),
             focus_changed_handler: RefCell::new(None),
             event_bus_handle: crate::core::event_bus::EventBusHandle::from_channel(worker_tx),
+            targets: RefCell::new(std::collections::HashMap::new()),
             renderer: RefCell::new(renderer),
+            root_ids,
             image_resource_map: RefCell::new(
                 crate::core::image_resource::ImageResourceMap::default(),
             ),
-        }
+        })
     }
 
-    /// Install the main-side cursor backend. Worker emits
-    /// `MainMsg::CursorChanged`; main applies here during `apply_msg`.
+    /// Resolve a root name to its id (host methods address roots by name).
+    pub fn root_id_of(&self, name: &str) -> Option<ViewRootId> {
+        self.root_ids.get(name).copied()
+    }
+
+    /// All registered root names, in declaration order.
+    pub fn root_names(&self) -> Vec<String> {
+        // root_ids is a HashMap; recover declaration order by sorting on id.
+        let mut entries: Vec<(ViewRootId, String)> = self
+            .root_ids
+            .iter()
+            .map(|(name, id)| (*id, name.clone()))
+            .collect();
+        entries.sort_by_key(|(id, _)| id.as_u32());
+        entries.into_iter().map(|(_, name)| name).collect()
+    }
+
+    /// Install the cursor backend for one view root. Worker emits
+    /// `MainMsg::CursorChanged { root, .. }`; main applies here during
+    /// `apply_msg`.
     pub fn set_cursor_backend(
         &self,
+        root: ViewRootId,
         backend: Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>,
     ) {
-        *self.cursor_backend.borrow_mut() = Some(backend);
+        self.cursor_backends.borrow_mut().insert(root, backend);
     }
 
     /// Install a handler fired from [`Self::apply_msg`] whenever the worker
@@ -611,19 +704,23 @@ impl MainBackend {
         self.worker_notify.deref()();
     }
 
-    /// Apply a render-command batch to the owned renderer (encode +
+    /// Apply a render-command batch to the root's render target (encode +
     /// present). Called from `TurApp::run_loop` (both the vsync-aligned
     /// pipelining path and the quiescence flush) — single source of truth
     /// for render application.
-    pub(crate) fn render_batch(&self, commands: &[RenderCommand]) {
-        let mut r = self.renderer.borrow_mut();
-        r.render_commands(commands);
-        let _ = r.present();
+    pub(crate) fn render_batch(&self, root: ViewRootId, commands: &[RenderCommand]) {
+        if let Some(target) = self.targets.borrow_mut().get_mut(&root) {
+            target.render_commands(commands);
+            let _ = target.present();
+        }
     }
 
-    /// Upload a newly-registered image resource to the owned renderer.
+    /// Upload a newly-registered image resource to every render target's
+    /// atlas (each target owns its own GPU context).
     pub(crate) fn upload_image_resource(&self, id: ImageResourceId, image: &ImageResource) {
-        self.renderer.borrow_mut().upload_image_resource(id, image);
+        for target in self.targets.borrow_mut().values_mut() {
+            target.upload_image_resource(id, image);
+        }
     }
 
     /// Retain a shipped image resource on main (under the worker-assigned
@@ -635,19 +732,66 @@ impl MainBackend {
             .insert_with_id(id, image);
     }
 
-    /// Resize the owned renderer. Called by `TurApp::resize`, which the
-    /// embedder invokes at resize-event-receipt time (DOM `ResizeObserver`
-    /// / winit / JNI) — event-driven, not per-frame, so no dedup is needed.
-    pub(crate) fn resize(&self, logical_width: u32, logical_height: u32, dpr: f64) {
-        self.renderer
-            .borrow_mut()
-            .resize(logical_width, logical_height, dpr);
+    /// Resize one root's render target. Called by `TurApp::resize_root`,
+    /// which the embedder invokes at resize-event-receipt time (DOM
+    /// `ResizeObserver` / winit / JNI) — event-driven, not per-frame, so no
+    /// dedup is needed.
+    pub(crate) fn resize(
+        &self,
+        root: ViewRootId,
+        logical_width: u32,
+        logical_height: u32,
+        dpr: f64,
+    ) {
+        if let Some(target) = self.targets.borrow_mut().get_mut(&root) {
+            target.resize(logical_width, logical_height, dpr);
+        }
     }
 
-    /// Pixel readback from the owned renderer (screenshot tests). Returns
-    /// `None` if the renderer doesn't support readback.
+    /// Attach (or replace) one root's render target from its surface —
+    /// called by `TurApp::setup_root(name, surface, viewport, dpr)`. The
+    /// retained renderer factory creates the target (fail-fast on a
+    /// mismatched surface pairing — the surface is consumed either way),
+    /// every retained image resource is replayed into the fresh target
+    /// (context-loss / canvas-replacement path), and any previous target is
+    /// dropped.
+    pub(crate) fn attach_surface(
+        &self,
+        root: ViewRootId,
+        surface: crate::core::render::SurfaceHandle,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Result<(), TurError> {
+        let mut target = self
+            .renderer
+            .borrow_mut()
+            .create_target(surface, viewport, dpr)?;
+        // Replay retained images into the fresh GPU context before the
+        // first batch lands (later batches reference these ids).
+        {
+            let map = self.image_resource_map.borrow();
+            for (id, image) in map.iter_images() {
+                target.upload_image_resource(id, image);
+            }
+        }
+        self.targets.borrow_mut().insert(root, target);
+        Ok(())
+    }
+
+    /// Release one root's render target (frees the GPU/GL resources for a
+    /// gone canvas) — called by `TurApp::tear_down_root`. No-op if the root
+    /// has no target (never attached / already released).
+    pub(crate) fn release_surface(&self, root: ViewRootId) {
+        self.targets.borrow_mut().remove(&root);
+    }
+
+    /// Pixel readback from the **first** declared root's render target
+    /// (screenshot tests — single-root instances). Returns `None` if no
+    /// target exists or the target doesn't support readback.
     pub(crate) fn render_to_pixels(&self) -> Option<Vec<u8>> {
-        self.renderer.borrow_mut().render_to_pixels()
+        let mut targets = self.targets.borrow_mut();
+        let first_id = targets.keys().min().copied()?;
+        targets.get_mut(&first_id)?.render_to_pixels()
     }
 
     /// Borrow the worker→main channel sender. Used by call sites that
@@ -665,17 +809,18 @@ impl MainBackend {
     /// here.
     pub(crate) fn apply_msg(&self, msg: MainMsg) -> MsgOutcome {
         match msg {
-            MainMsg::RenderCommands { commands } => MsgOutcome::Render(commands),
+            MainMsg::RenderCommands { root, commands } => MsgOutcome::Render(root, commands),
             MainMsg::UploadImage { id, image } => {
                 // Retain the full resource (pixel Blob) on main for
-                // context-loss re-upload, then upload into the GPU atlas.
+                // context-loss re-upload, then upload into every target's
+                // GPU atlas.
                 self.insert_image_resource(id, image.clone());
                 self.upload_image_resource(id, &image);
                 MsgOutcome::Continue
             }
-            MainMsg::CursorChanged(cursor) => {
+            MainMsg::CursorChanged { root, cursor } => {
                 #[allow(clippy::collapsible_if)]
-                if let Some(backend) = self.cursor_backend.borrow().as_ref() {
+                if let Some(backend) = self.cursor_backends.borrow().get(&root).cloned() {
                     if let Ok(mut b) = backend.lock() {
                         b.set_cursor(cursor);
                     }
@@ -831,13 +976,17 @@ impl MainBackend {
 /// `main_tx` clone held in `TurInstanceContext` (one ship per decode, FIFO).
 /// `MainMsg::Resized` is also not shipped — the embedder resizes the
 /// main-side renderer directly at event-receipt time and forwards
-/// `PlatformEvent::Resize` here for layout.
+/// `ShellEventPayload::Resize` here for layout.
 ///
 /// All other variants (`PlatformEvent`, `RequestPaint`, RPCs) are
 /// dispatched to `backend.handle_worker_msg` (RPC variants fire their own
 /// `ReplySender`).
 async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, main_tx: MainTx) {
-    let mut last_cursor: Option<crate::core::platform::Cursor> = None;
+    // Per-root cursor dedup caches.
+    let mut last_cursors: std::collections::HashMap<
+        ViewRootId,
+        Option<crate::core::platform::Cursor>,
+    > = std::collections::HashMap::new();
     type FocusCache = Option<(bool, Option<(f64, f64, f64, f64)>)>;
     let mut last_focus: FocusCache = None;
     while let Some(msg) = worker_rx.next().await {
@@ -851,17 +1000,25 @@ async fn worker_loop(backend: WorkerBackend, mut worker_rx: WorkerRx, main_tx: M
                         Err(e.to_string())
                     }
                 };
-                // Ship render commands if the flush painted.
-                if let Some(batch) = backend.take_pending_render_batch() {
-                    let _ = main_tx.unbounded_send(MainMsg::RenderCommands { commands: batch });
+                // Ship render commands per view root (if the flush painted).
+                for (root, batch) in backend.take_pending_render_batches() {
+                    let _ = main_tx.unbounded_send(MainMsg::RenderCommands {
+                        root,
+                        commands: batch,
+                    });
                 }
                 let _ = main_tx.unbounded_send(MainMsg::FrameOutcome(payload));
-                // Ship cursor changes (deduped against the last emitted).
-                let current_cursor = backend.last_applied_cursor();
-                if current_cursor != last_cursor {
-                    last_cursor = current_cursor;
-                    let _ = main_tx
-                        .unbounded_send(MainMsg::CursorChanged(current_cursor.unwrap_or_default()));
+                // Ship cursor changes per root (deduped against the last
+                // emitted for that root).
+                for root in backend.cursor_roots() {
+                    let current = backend.last_applied_cursor_for(root);
+                    if current != last_cursors.get(&root).copied().flatten() {
+                        last_cursors.insert(root, current);
+                        let _ = main_tx.unbounded_send(MainMsg::CursorChanged {
+                            root,
+                            cursor: current.unwrap_or_default(),
+                        });
+                    }
                 }
                 // Ship focus-state changes (deduped against the last
                 // emitted) — `apply_msg` forwards them to an embedder-

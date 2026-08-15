@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -9,14 +9,12 @@ fn image_with_explicit_size() {
     let image_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
 
         let image = tree
-            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .get_element(container.children[0].as_element_id())
             .unwrap();
         assert_eq!(image.kind().unwrap(), ElementKind::new("tur_image"));
         assert_eq!(image.children.len(), 0);

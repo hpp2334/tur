@@ -111,7 +111,7 @@ impl<'a> ViewCx for LayoutViewCx<'a> {
 
     fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
         let sub_index = self.tree.store.subscriber_index();
-        SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
+        SubscribeCx::new(sub_index, SubscriberId::from(id))
     }
 
     fn node_tree(&self) -> NodeTree {

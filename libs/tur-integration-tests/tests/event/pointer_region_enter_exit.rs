@@ -1,4 +1,3 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn flush(app: &mut TurTestApp) {
@@ -24,9 +23,9 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     app.load_bundle("pointer-region-enter-exit-race").unwrap();
 
     let a_id = app.query_element(&["a"]).expect("query a");
-    let a_id = ElementNodeId::new(a_id.as_u64());
+    let a_id = a_id.as_element_id();
     let b_id = app.query_element(&["b"]).expect("query b");
-    let b_id = ElementNodeId::new(b_id.as_u64());
+    let b_id = b_id.as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
 

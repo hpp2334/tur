@@ -8,13 +8,13 @@ use tur_integration_tests::TurTestApp;
 /// editable text is that container's first child).
 fn find_editable_under(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let container_id = app.query_element(key).expect("queryKey not found");
-    let container_id = ElementNodeId::new(container_id.as_u64());
+    let container_id = container_id.as_element_id();
     let tree = app.element_tree();
     let container = tree.get_element(container_id).unwrap();
     for cid in container.children.iter().copied() {
-        let node = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
+        let node = tree.get_element(cid.as_element_id()).unwrap();
         if node.kind() == Some(ElementKind::new("tur_editable_text")) {
-            return ElementNodeId::new(cid.as_u64());
+            return cid.as_element_id();
         }
     }
     panic!("no tur_editable_text under queryKey {:?}", key);
@@ -25,16 +25,13 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
     let tree = app.element_tree();
     let mut current = tree.get_element(id).unwrap().parent;
     while let Some(cid) = current {
-        let is_scroll = app.with_element(ElementNodeId::new(cid.as_u64()), |e| {
+        let is_scroll = app.with_element(cid.as_element_id(), |e| {
             e.cast::<ScrollViewElement>().is_some()
         });
         if is_scroll == Some(true) {
-            return Some(ElementNodeId::new(cid.as_u64()));
+            return Some(cid.as_element_id());
         }
-        current = tree
-            .get_element(ElementNodeId::new(cid.as_u64()))
-            .unwrap()
-            .parent;
+        current = tree.get_element(cid.as_element_id()).unwrap().parent;
     }
     None
 }
@@ -42,17 +39,13 @@ fn find_ancestor_scroll_view(app: &TurTestApp, id: ElementNodeId) -> Option<Elem
 fn find_editable_text_id(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let child = tree
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    let inner = tree
-        .get_element(ElementNodeId::new(child.children[0].as_u64()))
-        .unwrap();
+    let child = tree.get_element(root.children[0].as_element_id()).unwrap();
+    let inner = tree.get_element(child.children[0].as_element_id()).unwrap();
     let kind = inner.kind().unwrap();
     if kind == ElementKind::new("tur_editable_text") {
         inner.id
     } else {
-        tree.get_element(ElementNodeId::new(inner.children[0].as_u64()))
+        tree.get_element(inner.children[0].as_element_id())
             .unwrap()
             .id
     }
@@ -512,7 +505,7 @@ fn multiline_drag_select_batched_events() {
 }
 
 const ONKEY_BUNDLE: &str = r#"
-import { mutate, render, Input } from "tur:std";
+import { mutate, setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__keyHit = "";
 globalThis.__ctrlHeld = "false";
 const onKey = mutate((_storeCtx, ev) => {
@@ -520,7 +513,7 @@ const onKey = mutate((_storeCtx, ev) => {
     globalThis.__ctrlHeld = String(ev.ctrl);
 });
 globalThis.__ctrl = new globalThis.TextEditingController({ onKeyDown: onKey });
-render(Input({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
+setViewRoot(viewRoot("main"), Input({ controller: globalThis.__ctrl, fontSize: 20, width: 200, height: 44 }));
 "#;
 
 /// Regression: the controller's `onKeyDown` listener must fire on every
@@ -565,10 +558,10 @@ fn controller_on_key_down_fires_on_keydown() {
 }
 
 const SPANS_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     fontSize: 20,
     width: 200,
@@ -653,10 +646,10 @@ fn calibrate_char_width(app: &mut TurTestApp) -> f64 {
 }
 
 const CLICK_SINGLE_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "hello" }]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -669,13 +662,13 @@ render(Input({
 // colors, which forces parley to emit MULTIPLE glyph runs on a single line.
 // This is the one configuration difference vs. the single-span tests above.
 const CLICK_SPANS_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "import", color: { r: 200, g: 120, b: 50, a: 255 } },
     { content: " {", color: { r: 80, g: 80, b: 80, a: 255 } },
 ]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -685,10 +678,10 @@ render(Input({
 "#;
 
 const CLICK_MULTI_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: "abc\ndef\nghi" }]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     multiline: true,
     fontFamily: "monospace",
@@ -863,7 +856,7 @@ fn click_with_multi_color_spans_places_caret_correctly() {
 // line. Reproduces the playground "Buy gro|ceries" bug: clicking inside a LATER
 // run (not the first) must still place the caret at the clicked byte.
 const CLICK_FOUR_SPAN_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "AAAA", color: { r: 200, g: 120, b: 50, a: 255 } },
@@ -871,7 +864,7 @@ globalThis.__ctrl.setSpans([
     { content: "CCCC", color: { r: 120, g: 80, b: 200, a: 255 } },
     { content: "DDDD", color: { r: 200, g: 200, b: 80, a: 255 } },
 ]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -918,14 +911,14 @@ fn click_in_later_run_places_caret_correctly() {
 // range (`start == end`) triggered
 // `assertion failed: style_run.range.start < style_run.range.end`.
 const EMPTY_SPAN_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([
     { content: "ab", color: { r: 200, g: 120, b: 50, a: 255 } },
     { content: "", color: { r: 80, g: 200, b: 120, a: 255 } },
     { content: "cd", color: { r: 120, g: 80, b: 200, a: 255 } },
 ]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     fontFamily: "monospace",
     fontSize: 20,
@@ -936,7 +929,7 @@ render(Input({
 
 #[test]
 fn empty_colored_span_does_not_panic() {
-    let mut app = TurTestApp::new(500.0, 200.0).unwrap();
+    let app = TurTestApp::new(500.0, 200.0).unwrap();
     app.eval_module_source(EMPTY_SPAN_BUNDLE).unwrap();
     // Rendering must not panic despite the empty-color span producing an
     // empty (start == end) style range.
@@ -957,12 +950,12 @@ fn empty_colored_span_does_not_panic() {
 // leaves ~92px of scroll headroom — enough that the 2-line scroll in the test
 // body never hits the clamp.
 const CLICK_SCROLLED_BUNDLE: &str = r#"
-import { render, ScrollView, Input } from "tur:std";
+import { setViewRoot, viewRoot, ScrollView, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "L0AAAA\nL1BBBB\nL2CCCC\nL3DDDD\nL4EEEE\nL5FFFF\nL6GGGG\nL7HHHH\nL8IIII\nL9JJJJ\nL10KKK\nL11LLL",
 }]);
-render(ScrollView({
+setViewRoot(viewRoot("main"), ScrollView({
     child: Input({
         controller: globalThis.__ctrl,
         multiline: true,
@@ -1058,12 +1051,12 @@ fn click_on_scrolled_line_places_caret_on_that_line() {
 // digit string has none and overflows instead of wrapping). Bare `Input`
 // root so the app's tight width bounds the editable.
 const CLICK_SOFTWRAP_BUNDLE: &str = r#"
-import { render, Input } from "tur:std";
+import { setViewRoot, viewRoot, Input } from "tur:std";
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{
     content: "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega",
 }]);
-render(Input({
+setViewRoot(viewRoot("main"), Input({
     controller: globalThis.__ctrl,
     multiline: true,
     fontFamily: "monospace",

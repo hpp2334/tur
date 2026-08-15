@@ -6,7 +6,7 @@
 //! - the shared reactive `Store` (so the size→atom sync is self-contained),
 //! - the `viewportSize$` reactive source atom that publishes `{width, height}`
 //!   to JS,
-//! - the [`ResizeSubsystem`] that handles `PlatformEvent::Resize` (resizes the
+//! - the [`ResizeSubsystem`] that handles `ShellEventPayload::Resize` (resizes the
 //!   renderer, updates the size, pushes the atom, and re-marks the tree root
 //!   dirty).
 //!
@@ -28,7 +28,7 @@ use crate::core::edgy::reactive::{Source, Store};
 /// `viewportSize$` reactive source atom that publishes it to JS.
 pub struct Screen {
     /// Current canvas logical size, in CSS pixels. Updated by
-    /// [`ResizeSubsystem`] when a `PlatformEvent::Resize` arrives.
+    /// [`ResizeSubsystem`] when a `ShellEventPayload::Resize` arrives.
     pub logical_size: (f64, f64),
     /// Current device pixel ratio. Updated by [`ResizeSubsystem`]; shipped
     /// to main with each `MainMsg::RenderCommands` so the main-side
@@ -84,7 +84,7 @@ impl Screen {
 
     /// Push the current logical size into the source atom if it has
     /// changed since the last sync. Called by [`ResizeSubsystem`] from its
-    /// `PlatformEvent::Resize` handler (event-driven, not once per `flush()`
+    /// `ShellEventPayload::Resize` handler (event-driven, not once per `flush()`
     /// iteration), so `viewportSize$` subscribers re-layout in the same
     /// fixed-point iteration that mutated [`Self::logical_size`].
     pub(crate) fn sync_source(&self, boa: &mut Context) {

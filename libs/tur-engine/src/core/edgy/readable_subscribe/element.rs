@@ -28,7 +28,7 @@ pub struct ReadableSubscribeView {
 
 impl View for ReadableSubscribeView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         cx.insert_node(
             id,
             AnyElement::new(ReadableSubscribeElement {

@@ -31,6 +31,17 @@ pub trait ViewCx {
     /// Allocate a fresh node id.
     fn alloc_node(&mut self) -> NodeId;
 
+    /// Allocate a fresh **element** id (default: re-wrap of
+    /// [`Self::alloc_node`]). The idiomatic mint for widget `build` fns.
+    fn alloc_element_id(&mut self) -> ElementNodeId {
+        self.alloc_node().as_element_id()
+    }
+
+    /// Allocate a fresh **fragment** id (Each / Condition / Switch).
+    fn alloc_fragment_id(&mut self) -> FragmentNodeId {
+        self.alloc_node().as_fragment_id()
+    }
+
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
     fn insert_node(&mut self, id: ElementNodeId, element: AnyElement, boa: &mut Context);
 
@@ -117,17 +128,28 @@ pub fn read_atom_raw<T>(cx: &dyn ViewCx, readable: Readable<T>, boa: &mut Contex
     cx.store_read_only().read(readable, boa)
 }
 
-/// Borrow the shared handles a controller needs, from a `TurInstanceContext`.
+/// Borrow the shared handles a controller needs, from a `TurInstanceContext`
+/// plus (optionally) the tree the current build is bound to. When `bound` is
+/// `None` (unbound context), falls back to the first setup root's tree —
+/// the historical single-tree behavior.
 pub fn controller_handles(
     js_ctx: &TurInstanceContext,
+    bound: Option<NodeTree>,
 ) -> (
     NodeTree,
     Rc<RefCell<PendingMutationInvocationQueue>>,
     Rc<Cell<bool>>,
 ) {
-    (
-        js_ctx.element_tree.clone(),
-        js_ctx.mutation_queue.clone(),
-        js_ctx.dirty.clone(),
-    )
+    let tree = bound
+        .or_else(|| {
+            js_ctx
+                .view_roots
+                .borrow()
+                .setup_roots()
+                .into_iter()
+                .next()
+                .map(|(_, t)| t)
+        })
+        .expect("no view root tree available for controller attach");
+    (tree, js_ctx.mutation_queue.clone(), js_ctx.dirty.clone())
 }

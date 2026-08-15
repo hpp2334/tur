@@ -225,7 +225,17 @@ impl Class for LazyListController {
                 if let Some(ctx_obj) = args.get_or_undefined(1).as_object()
                     && let Some(js_ctx) = BoaOpaque::<TurInstanceContext>::wrap(&ctx_obj)
                 {
-                    ctrl.element_tree = Some(js_ctx.element_tree.clone());
+                    // Capture the tree that owns the attached element (one
+                    // tree per view root — the element lives in exactly one
+                    // for its lifetime).
+                    let tree = ctrl
+                        .handle
+                        .as_ref()
+                        .and_then(|h| BoaOpaque::<TurNodeHandle>::wrap(h).map(|nh| nh.id))
+                        .and_then(|id| js_ctx.tree_containing(id.into()));
+                    if let Some(tree) = tree {
+                        ctrl.element_tree = Some(tree);
+                    }
                     ctrl.mutation_queue = Some(js_ctx.mutation_queue.clone());
                     ctrl.dirty_flag = Some(js_ctx.dirty.clone());
                 }

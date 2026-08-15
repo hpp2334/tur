@@ -1,18 +1,17 @@
 use std::time::Duration;
-use tur_engine::core::element::ElementNodeId;
 
 use tur_integration_tests::TurTestApp;
 
 #[test]
 fn animation_controller_forward_with_on_tick() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -30,7 +29,7 @@ fn animation_controller_forward_with_on_tick() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -70,14 +69,14 @@ fn animation_controller_forward_with_on_tick() {
 
 #[test]
 fn animation_controller_reverse_with_on_tick() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(200);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -95,7 +94,7 @@ fn animation_controller_reverse_with_on_tick() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -124,14 +123,14 @@ fn animation_controller_reverse_with_on_tick() {
 
 #[test]
 fn animation_controller_stop_freezes_value() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -150,7 +149,7 @@ fn animation_controller_stop_freezes_value() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -186,14 +185,14 @@ fn animation_controller_stop_freezes_value() {
 
 #[test]
 fn animation_controller_repeats() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 100,
@@ -212,7 +211,7 @@ fn animation_controller_repeats() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -242,13 +241,13 @@ fn animation_controller_repeats() {
 
 #[test]
 fn animation_controller_status_transitions() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render } from "tur:std";
+        import { Container, setViewRoot, viewRoot } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 100
@@ -286,13 +285,13 @@ fn animation_controller_status_transitions() {
 
 #[test]
 fn animation_controller_on_end_callback() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__ended = false;
         const ctrl = createAnimationController({
@@ -318,14 +317,14 @@ fn animation_controller_on_end_callback() {
 
 #[test]
 fn animation_controller_ease_in_curve() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(0);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 1000,
@@ -342,7 +341,7 @@ fn animation_controller_ease_in_curve() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -361,14 +360,14 @@ fn animation_controller_ease_in_curve() {
 
 #[test]
 fn animation_controller_pause_freezes_and_resume_continues() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -387,7 +386,7 @@ fn animation_controller_pause_freezes_and_resume_continues() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -439,14 +438,14 @@ fn animation_controller_pause_freezes_and_resume_continues() {
 
 #[test]
 fn animation_controller_seek_jumps_value() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -465,7 +464,7 @@ fn animation_controller_seek_jumps_value() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -499,14 +498,14 @@ fn animation_controller_seek_jumps_value() {
 
 #[test]
 fn animation_controller_set_speed_scales_time() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const width$ = source(100);
         const container = Container({ width: width$ });
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         const ctrl = createAnimationController({
             duration: 200,
@@ -525,7 +524,7 @@ fn animation_controller_set_speed_scales_time() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(ElementNodeId::new(root.children[0].as_u64()))
+        tree.get_element(root.children[0].as_element_id())
             .unwrap()
             .id
     };
@@ -580,13 +579,13 @@ fn controller_on_tick_can_read_status_from_forward() {
     // onTick callback reads ctrl.status. Before the fix this would panic
     // with BorrowError because forward() fires onTick(0) synchronously
     // while holding the RefMut.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__tick_status = null;
         const ctrl = createAnimationController({
@@ -614,13 +613,13 @@ fn controller_on_tick_can_read_status_from_forward() {
 #[test]
 fn controller_on_end_can_read_status_after_complete() {
     // onEnd callback reads ctrl.status after the animation completes.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__end_status = null;
         const ctrl = createAnimationController({
@@ -649,13 +648,13 @@ fn controller_on_tick_can_read_value_during_forward() {
     // a forward animation. Before the fix, this triggered a `BorrowError`
     // because the read attempted a downcast_ref while forward()'s
     // downcast_mut was still held.
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__tick_values = [];
         const ctrl = createAnimationController({
@@ -696,16 +695,16 @@ fn controller_on_tick_can_read_value_during_forward() {
 
 #[test]
 fn controller_infinite_does_not_complete_after_many_iterations() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__tick_count = 0;
         globalThis.__end_count = 0;
         globalThis.__last_tick_value = -1;
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -770,14 +769,14 @@ fn controller_infinite_does_not_complete_after_many_iterations() {
 
 #[test]
 fn controller_infinite_reverse_cycles_back_to_zero() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__tick_values = [];
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -829,14 +828,14 @@ fn controller_infinite_reverse_cycles_back_to_zero() {
 
 #[test]
 fn controller_repeat_three_then_completes() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Container, render, mutate } from "tur:std";
+        import { Container, setViewRoot, viewRoot, mutate } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__end_count = 0;
         const container = Container({});
-        render(container);
+        setViewRoot(viewRoot("main"), container);
 
         globalThis.__ctrl = createAnimationController({
             duration: 100,
@@ -880,10 +879,10 @@ fn animation_started_from_handler_schedules_next_frame() {
     // was registered — so the frame went Idle and the animation stalled until
     // the next platform event (the playground's "white screen until click"
     // case-switch FadeIn bug).
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, Container, render, mutate, set, lifecycleView } from "tur:std";
+        import { source, Container, setViewRoot, viewRoot, mutate, set, lifecycleView } from "tur:std";
         import { createAnimationController } from "tur:animation";
 
         const width$ = source(100);
@@ -892,7 +891,7 @@ fn animation_started_from_handler_schedules_next_frame() {
             curve: "linear",
             onTick: mutate(function(_ctx, v) { set(width$, 100 + (200 - 100) * v); }),
         });
-        render(lifecycleView(() => ({
+        setViewRoot(viewRoot("main"), lifecycleView(() => ({
             element: Container({ width: width$ }),
             onMounted$: mutate((_ctx) => { ctrl.forward(); }),
         })));
@@ -909,11 +908,9 @@ fn animation_started_from_handler_schedules_next_frame() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        tree.get_element(tur_engine::core::element::ElementNodeId::new(
-            root.children[0].as_u64(),
-        ))
-        .unwrap()
-        .id
+        tree.get_element(root.children[0].as_element_id())
+            .unwrap()
+            .id
     };
     let progressed = app.wait_for(|a| {
         let tree = a.element_tree();

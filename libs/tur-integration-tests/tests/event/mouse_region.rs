@@ -6,16 +6,14 @@ use tur_integration_tests::TurTestApp;
 fn build(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("mouse-region-cursor").unwrap();
     let id = app.query_element(&["mr-state"]).unwrap();
-    ElementNodeId::new(id.as_u64())
+    id.as_element_id()
 }
 
 fn find_region(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let col = tree
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    ElementNodeId::new(col.children[0].as_u64())
+    let col = tree.get_element(root.children[0].as_element_id()).unwrap();
+    col.children[0].as_element_id()
 }
 
 fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {

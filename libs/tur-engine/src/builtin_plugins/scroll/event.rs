@@ -17,6 +17,7 @@
 //!   frame until the velocity decays below threshold.
 
 use crate::core::app::{AppEvent, AppEventQueue, CustomAppEvent};
+use crate::core::element::ViewRootId;
 use crate::core::layout::Offset;
 
 /// Touch-fling seed produced by the gesture arena on touch-up after a
@@ -33,6 +34,9 @@ pub struct ScrollFlingEvent {
     /// Hit-test position (the touch-up location). Re-used each frame to
     /// route inertia deltas through the same wheel pipeline as live scroll.
     pub position: Offset,
+    /// The view root the fling targets (inertia re-routes through the same
+    /// root's tree).
+    pub root: ViewRootId,
 }
 
 impl CustomAppEvent for ScrollFlingEvent {
@@ -48,9 +52,15 @@ impl CustomAppEvent for ScrollFlingEvent {
 /// touch-up after a scroll-resolved drag.
 pub(in crate::builtin_plugins) fn push_fling(
     queue: &mut AppEventQueue,
+    root: ViewRootId,
     vx: f64,
     vy: f64,
     position: Offset,
 ) {
-    queue.push(AppEvent::custom(ScrollFlingEvent { vx, vy, position }));
+    queue.push(AppEvent::custom(ScrollFlingEvent {
+        vx,
+        vy,
+        position,
+        root,
+    }));
 }

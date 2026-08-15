@@ -9,7 +9,7 @@ use tur_integration_tests::TurTestApp;
 
 #[test]
 fn stream_collects_multiple_chunks() {
-    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
     // Serve three chunks that concatenate to "Hello, streaming world!"
     app.set_http_stream(
@@ -58,7 +58,7 @@ fn stream_collects_multiple_chunks() {
 
 #[test]
 fn stream_single_chunk() {
-    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
     app.set_http_stream(200, vec![b"one chunk".to_vec()]);
 
@@ -94,7 +94,7 @@ fn stream_single_chunk() {
 
 #[test]
 fn stream_empty_body() {
-    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
 
     // No chunks at all — body should immediately return {done: true}
     app.set_http_stream(204, vec![]);

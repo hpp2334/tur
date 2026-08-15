@@ -21,6 +21,9 @@ pub mod key_event;
 pub mod queue;
 
 pub use cursor::{Cursor, CursorBackend, CursorCap, NoopCursor};
-pub use event::{CustomPlatformEvent, ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+pub use event::{
+    CustomShellEventPayload, ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput, ShellEvent,
+    ShellEventPayload,
+};
 pub use key_event::{KeyEvent, KeyEventType, KeydownEvent, KeyupEvent, Modifiers};
 pub use queue::PlatformEventQueue;

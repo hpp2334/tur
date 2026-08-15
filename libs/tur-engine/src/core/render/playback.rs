@@ -105,7 +105,7 @@ mod tests {
     use vello_common::kurbo::Affine;
 
     fn nid(n: u64) -> ElementNodeId {
-        ElementNodeId::new(n)
+        ElementNodeId::new(crate::core::element::ViewRootId::new(0), n)
     }
 
     /// A canvas that records every call as a string for assertion-friendly

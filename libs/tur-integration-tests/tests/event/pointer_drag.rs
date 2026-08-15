@@ -5,16 +5,14 @@ use tur_integration_tests::TurTestApp;
 fn build_drag(app: &mut TurTestApp) -> ElementNodeId {
     app.load_bundle("pointer-drag").unwrap();
     let id = app.query_element(&["drag-phase"]).unwrap();
-    ElementNodeId::new(id.as_u64())
+    id.as_element_id()
 }
 
 fn find_pointer_interact(app: &TurTestApp) -> ElementNodeId {
     let tree = app.element_tree();
     let root = tree.root_element().unwrap();
-    let col = tree
-        .get_element(ElementNodeId::new(root.children[0].as_u64()))
-        .unwrap();
-    ElementNodeId::new(col.children[0].as_u64())
+    let col = tree.get_element(root.children[0].as_element_id()).unwrap();
+    col.children[0].as_element_id()
 }
 
 fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {
@@ -42,7 +40,7 @@ fn drag_emits_down_move_up() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     let phase_id = build_drag(&mut app);
     let pos_id_raw = app.query_element(&["drag-pos"]).unwrap();
-    let pos_id = ElementNodeId::new(pos_id_raw.as_u64());
+    let pos_id = pos_id_raw.as_element_id();
     let pi_id = find_pointer_interact(&app);
 
     app.wait_for_timeout(std::time::Duration::ZERO);

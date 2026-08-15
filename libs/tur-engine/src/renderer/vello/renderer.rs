@@ -1,11 +1,18 @@
-//! wgpu-backed vello-hybrid renderer (native + WebGPU targets).
+//! wgpu-backed vello-hybrid rendering (native + WebGPU targets).
+//!
+//! Split into a **factory** ([`WgpuRenderer`] — holds the shared `wgpu`
+//! instance) and a **target** ([`VelloTarget`] — one window/canvas surface
+//! per view root).
 //!
 //! This module is only compiled when the `wgpu-backend` feature is active.
 
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::RenderCommand;
+use crate::core::render::RenderTarget as TurRenderTarget;
 use crate::core::render::Renderer as TurRenderer;
+use crate::core::render::{Surface, SurfaceHandle, downcast_surface};
 use crate::renderer::vello::scene_paint::{new_scene, paint_commands_to_scene};
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use std::collections::HashMap;
 use vello_common::paint::{ImageId, ImageSource};
 use vello_hybrid::{RenderSize, RenderTargetConfig, Renderer, Resources, Scene, TextureBindings};
@@ -16,7 +23,90 @@ pub enum VelloRendererError {
     Render(#[source] vello_hybrid::RenderError),
 }
 
-pub struct VelloRenderer {
+/// Opaque surface payload accepted by [`WgpuRenderer`] — a raw window +
+/// display handle pair (winit window, Android `ANativeWindow`, …).
+pub struct RawSurface {
+    pub raw_display_handle: RawDisplayHandle,
+    pub raw_window_handle: RawWindowHandle,
+}
+
+impl Surface for RawSurface {
+    fn into_any(self: Box<Self>) -> Box<dyn std::any::Any> {
+        self
+    }
+}
+
+/// Factory for [`VelloTarget`]s — owns the shared `wgpu::Instance` (behind
+/// an `Arc` so multi-instance embedders can share one instance across
+/// engine instances) so every view root's surface comes off one instance
+/// (shared adapter discovery).
+pub struct WgpuRenderer {
+    instance: std::sync::Arc<wgpu::Instance>,
+}
+
+impl Default for WgpuRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WgpuRenderer {
+    /// Create with a fresh default instance (all backends).
+    pub fn new() -> Self {
+        Self::with_shared_instance(std::sync::Arc::new(wgpu::Instance::new(
+            wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::all(),
+                flags: wgpu::InstanceFlags::default(),
+                memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+                backend_options: wgpu::BackendOptions::default(),
+                display: None,
+            },
+        )))
+    }
+
+    /// Create wrapping an embedder-provided instance.
+    pub fn with_instance(instance: wgpu::Instance) -> Self {
+        Self::with_shared_instance(std::sync::Arc::new(instance))
+    }
+
+    /// Create sharing an embedder-provided instance `Arc` (multi-instance
+    /// embedders share one wgpu instance across every engine instance).
+    pub fn with_shared_instance(instance: std::sync::Arc<wgpu::Instance>) -> Self {
+        Self { instance }
+    }
+
+    /// A shared handle to the underlying instance (embedders may pre-create
+    /// surfaces / more factories with it).
+    pub fn instance_handle(&self) -> std::sync::Arc<wgpu::Instance> {
+        self.instance.clone()
+    }
+}
+
+impl TurRenderer for WgpuRenderer {
+    fn create_target(
+        &mut self,
+        surface: SurfaceHandle,
+        viewport: (f64, f64),
+        dpr: f64,
+    ) -> Result<Box<dyn TurRenderTarget>, crate::error::TurError> {
+        let raw = downcast_surface::<RawSurface>("WgpuRenderer", surface)?;
+        let target = VelloTarget::init_raw(
+            &self.instance,
+            raw.raw_display_handle,
+            raw.raw_window_handle,
+            viewport.0 as u32,
+            viewport.1 as u32,
+            dpr,
+        )
+        .map_err(crate::error::TurError::Render)?;
+        Ok(Box::new(target))
+    }
+}
+
+/// One wgpu-backed vello-hybrid render target (a single window surface).
+/// Created via [`WgpuRenderer::create_target`] or the direct
+/// [`VelloTarget::init_surface`] constructor.
+pub struct VelloTarget {
     renderer: Renderer,
     scene: Scene,
     resources: Resources,
@@ -35,7 +125,8 @@ pub struct VelloRenderer {
     image_uploads: HashMap<ImageResourceId, ImageId>,
 }
 
-impl VelloRenderer {
+impl VelloTarget {
+    #[allow(clippy::too_many_arguments)]
     pub fn init_surface(
         adapter: &wgpu::Adapter,
         device: wgpu::Device,
@@ -86,7 +177,7 @@ impl VelloRenderer {
 
         let scene = new_scene(physical_width, physical_height);
 
-        VelloRenderer {
+        VelloTarget {
             renderer,
             scene,
             resources: Resources::new(),
@@ -101,6 +192,47 @@ impl VelloRenderer {
             max_texture_dimension,
             image_uploads: HashMap::new(),
         }
+    }
+
+    /// Create a target from raw window/display handles off the given
+    /// instance: creates the surface, requests adapter + device + queue
+    /// synchronously (`pollster`), then configures the target. The
+    /// factory-path equivalent of [`Self::init_surface`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn init_raw(
+        instance: &wgpu::Instance,
+        raw_display_handle: RawDisplayHandle,
+        raw_window_handle: RawWindowHandle,
+        logical_width: u32,
+        logical_height: u32,
+        dpr: f64,
+    ) -> Result<Self, String> {
+        let surface = unsafe {
+            instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: Some(raw_display_handle),
+                    raw_window_handle,
+                })
+                .map_err(|e| format!("create surface: {e}"))?
+        };
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        }))
+        .map_err(|e| format!("request adapter: {e}"))?;
+        let (device, queue) =
+            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
+                .map_err(|e| format!("request device: {e}"))?;
+        Ok(Self::init_surface(
+            &adapter,
+            device,
+            queue,
+            surface,
+            logical_width,
+            logical_height,
+            dpr,
+        ))
     }
 
     pub fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
@@ -120,7 +252,7 @@ impl VelloRenderer {
 
     /// Render a flat command batch into the scene. Playback happens in
     /// `paint_commands_to_scene`; image upload happens incrementally via
-    /// `TurRenderer::upload_image_resource` as the worker registers
+    /// `TurRenderTarget::upload_image_resource` as the worker registers
     /// resources.
     pub fn render_commands_to_scene(&mut self, commands: &[RenderCommand]) {
         paint_commands_to_scene(
@@ -328,7 +460,7 @@ impl VelloRenderer {
     }
 }
 
-impl TurRenderer for VelloRenderer {
+impl TurRenderTarget for VelloTarget {
     fn render_commands(&mut self, commands: &[RenderCommand]) {
         // `physical_width` / `physical_height` / `dpr` are tracked on `self`
         // (kept in sync via `resize`, which fires on viewport-change events
@@ -337,18 +469,18 @@ impl TurRenderer for VelloRenderer {
     }
 
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        VelloRenderer::present(self).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+        VelloTarget::present(self).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
 
     fn resize(&mut self, logical_width: u32, logical_height: u32, dpr: f64) {
-        VelloRenderer::resize(self, logical_width, logical_height, dpr);
+        VelloTarget::resize(self, logical_width, logical_height, dpr);
     }
 
     fn upload_image_resource(&mut self, id: ImageResourceId, image: &ImageResource) {
-        VelloRenderer::upload_image_resource(self, id, image);
+        VelloTarget::upload_image_resource(self, id, image);
     }
 
     fn render_to_pixels(&mut self) -> Option<Vec<u8>> {
-        Some(VelloRenderer::render_to_pixels(self))
+        Some(VelloTarget::render_to_pixels(self))
     }
 }

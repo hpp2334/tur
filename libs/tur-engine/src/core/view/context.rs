@@ -11,19 +11,69 @@ use crate::core::view::{View, ViewCx};
 /// Context for building specs into the ElementTree and running effects.
 /// Provides scoped access to the tree and the reactive store.
 ///
+/// One element tree per view root: the context either **binds** a tree
+/// explicitly ([`Self::for_tree`] — used by the `setViewRoot` mount bridge)
+/// or resolves the owning tree per node id via the instance's view-root
+/// registry (node ids are unique instance-wide). Unbound by-id operations
+/// fall back to the first setup root's tree, preserving the historical
+/// single-root behavior.
+///
 /// The boa `Context` is passed alongside (not stored) so callers can reborrow
 /// freely while holding `&mut SharedViewCx`.
 pub struct SharedViewCx {
     js_ctx: TurInstanceContext,
+    tree: Option<NodeTree>,
 }
 
 impl SharedViewCx {
     pub fn new(js_ctx: TurInstanceContext) -> Self {
-        SharedViewCx { js_ctx }
+        SharedViewCx { js_ctx, tree: None }
+    }
+
+    /// Bind to one view root's tree (build/mount flows — `alloc_node` /
+    /// `insert_node` need a definite target).
+    pub fn for_tree(js_ctx: TurInstanceContext, tree: NodeTree) -> Self {
+        SharedViewCx {
+            js_ctx,
+            tree: Some(tree),
+        }
     }
 
     pub fn js_ctx(&self) -> &TurInstanceContext {
         &self.js_ctx
+    }
+
+    /// The bound tree, if any.
+    pub fn bound_tree(&self) -> Option<&NodeTree> {
+        self.tree.as_ref()
+    }
+
+    /// Resolve the tree that owns `id` — the id's root routes to its tree
+    /// directly (the bound-tree check is just a fast path when it matches).
+    fn tree_of(&self, id: NodeId) -> Option<NodeTree> {
+        if let Some(tree) = &self.tree
+            && tree.view_root() == id.root()
+        {
+            return Some(tree.clone());
+        }
+        self.js_ctx.tree_containing(id)
+    }
+
+    /// The tree new nodes go into: the bound tree, else the first setup
+    /// root's tree.
+    fn build_tree(&self) -> NodeTree {
+        self.tree
+            .clone()
+            .or_else(|| {
+                self.js_ctx
+                    .view_roots
+                    .borrow()
+                    .setup_roots()
+                    .into_iter()
+                    .next()
+                    .map(|(_, t)| t)
+            })
+            .expect("no view root tree available for build")
     }
 
     // ----- reactive store -----------------------------------------------------
@@ -43,7 +93,7 @@ impl SharedViewCx {
     /// atomically swapped into the subscriber graph.
     pub fn subscribe_fragment(&self, id: FragmentNodeId) -> SubscribeCx {
         let sub_index = self.js_ctx.store.subscriber_index();
-        SubscribeCx::new(sub_index, SubscriberId::new(id.into()))
+        SubscribeCx::new(sub_index, SubscriberId::from(id))
     }
 
     /// Resolve a `Val<T>` to its current `T` value.  For reactive vals the
@@ -66,30 +116,42 @@ impl SharedViewCx {
 
     // ----- ElementTree helpers ------------------------------------------------
 
-    /// Allocate a fresh node id.
+    /// Allocate a fresh node id (from the bound / first tree's own counter —
+    /// the id carries that tree's root, so ids are unique instance-wide).
     pub fn alloc_node(&self) -> NodeId {
-        self.js_ctx.element_tree.borrow_mut().alloc_id()
+        self.build_tree().borrow_mut().alloc_id()
+    }
+
+    /// Allocate a fresh **element** id (see [`Self::alloc_node`]). This is
+    /// the idiomatic mint for widget `build` fns.
+    pub fn alloc_element_id(&self) -> ElementNodeId {
+        self.alloc_node().as_element_id()
+    }
+
+    /// Allocate a fresh **fragment** id (Each / Condition / Switch).
+    pub fn alloc_fragment_id(&self) -> FragmentNodeId {
+        self.alloc_node().as_fragment_id()
     }
 
     /// Create an `AnyElement`-backed tree node and insert it (no parent yet).
     pub fn insert_node(&self, id: ElementNodeId, element: AnyElement, boa: &mut Context) {
         let node = ElementObject::new(id, element, boa);
-        self.js_ctx.element_tree.borrow_mut().insert_element(node);
+        self.build_tree().borrow_mut().insert_element(node);
     }
 
     /// Insert a `FragmentHost` into the fragments map.
     pub fn insert_fragment(&self, host: FragmentHost) {
-        self.js_ctx.element_tree.borrow_mut().insert_fragment(host);
+        self.build_tree().borrow_mut().insert_fragment(host);
     }
 
     /// Append `child` to `parent`. The child id may reference a real element
     /// node or a fragment — `append_child` auto-detects the variant.
     pub fn link_child(&self, parent: NodeId, child: NodeId) {
-        self.js_ctx
-            .element_tree
-            .borrow_mut()
-            .append_child(parent, child);
-        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
+        let tree = self.tree_of(parent).unwrap_or_else(|| self.build_tree());
+        let mut t = tree.borrow_mut();
+        t.append_child(parent, child);
+        t.mark_dirty(parent);
+        drop(t);
         self.js_ctx.set_dirty();
     }
 
@@ -104,14 +166,13 @@ impl SharedViewCx {
         child: NodeId,
         ref_child: ElementNodeId,
     ) {
-        self.js_ctx
-            .element_tree
-            .borrow_mut()
-            .insert_before(parent, child, ref_child);
-        self.js_ctx
-            .element_tree
-            .borrow_mut()
-            .mark_dirty(parent.into());
+        let tree = self
+            .tree_of(parent.into())
+            .unwrap_or_else(|| self.build_tree());
+        let mut t = tree.borrow_mut();
+        t.insert_before(parent, child, ref_child);
+        t.mark_dirty(parent.into());
+        drop(t);
         self.js_ctx.set_dirty();
     }
 
@@ -122,39 +183,46 @@ impl SharedViewCx {
     /// appends the new child) to splice it into the correct slot when
     /// scrolling up mounts lower-index items.
     pub fn move_child_before(&self, parent: ElementNodeId, child: NodeId, ref_child: NodeId) {
-        self.js_ctx
-            .element_tree
-            .move_child_before(parent, child, ref_child);
+        let tree = self
+            .tree_of(parent.into())
+            .unwrap_or_else(|| self.build_tree());
+        tree.move_child_before(parent, child, ref_child);
         self.js_ctx.set_dirty();
     }
 
     /// Remove `child` from its parent (does not delete the node).
     pub fn unlink_child(&self, parent: NodeId, child: NodeId) {
-        self.js_ctx
-            .element_tree
-            .borrow_mut()
-            .remove_child(parent, child);
-        self.js_ctx.element_tree.borrow_mut().mark_dirty(parent);
+        let tree = self.tree_of(parent).unwrap_or_else(|| self.build_tree());
+        let mut t = tree.borrow_mut();
+        t.remove_child(parent, child);
+        t.mark_dirty(parent);
+        drop(t);
         self.js_ctx.set_dirty();
     }
 
     /// Recursively remove a node and all its descendants from the tree.
     pub fn destroy_subtree(&self, id: ElementNodeId) {
-        self.js_ctx.element_tree.destroy_subtree(id);
-        self.js_ctx.set_dirty();
+        if let Some(tree) = self.tree_of(id.into()) {
+            tree.destroy_subtree(id);
+            self.js_ctx.set_dirty();
+        }
     }
 
     /// Destroy a subtree rooted at a node id (handles both real elements and
     /// fragments — dispatches via `is_fragment`).
     pub fn destroy_child(&self, id: NodeId) {
-        self.js_ctx.element_tree.destroy_child(id);
-        self.js_ctx.set_dirty();
+        if let Some(tree) = self.tree_of(id) {
+            tree.destroy_child(id);
+            self.js_ctx.set_dirty();
+        }
     }
 
     /// Recursively remove a fragment and all its descendants from the tree.
     pub fn destroy_fragment(&self, id: crate::core::element::FragmentNodeId) {
-        self.js_ctx.element_tree.destroy_fragment(id);
-        self.js_ctx.set_dirty();
+        if let Some(tree) = self.tree_of(id.into()) {
+            tree.destroy_fragment(id);
+            self.js_ctx.set_dirty();
+        }
     }
 
     /// Build a child view under `parent` and return the resulting node id.
@@ -169,19 +237,23 @@ impl SharedViewCx {
 
     /// Mark a node dirty (needs re-layout + re-paint).
     pub fn mark_dirty(&self, id: NodeId) {
-        self.js_ctx.element_tree.mark_dirty(id);
+        if let Some(tree) = self.tree_of(id) {
+            tree.mark_dirty(id);
+        }
         self.js_ctx.set_dirty();
     }
 
     /// Set the query-key on a tree node (for test selectors).
     pub fn set_query_key(&self, id: ElementNodeId, keys: Vec<String>) {
-        let mut tree = self.js_ctx.element_tree.borrow_mut();
-        if let Some(node) = tree.get_element_mut(id) {
-            node.query_key = if keys.is_empty() { None } else { Some(keys) };
+        if let Some(tree) = self.tree_of(id.into()) {
+            let mut t = tree.borrow_mut();
+            if let Some(node) = t.get_element_mut(id) {
+                node.query_key = if keys.is_empty() { None } else { Some(keys) };
+            }
+            t.mark_dirty(id.into());
+            drop(t);
+            self.js_ctx.set_dirty();
         }
-        tree.mark_dirty(id.into());
-        drop(tree);
-        self.js_ctx.set_dirty();
     }
 
     /// Read the computed layout of a node (for scroll controllers etc.).
@@ -189,8 +261,7 @@ impl SharedViewCx {
         &self,
         id: ElementNodeId,
     ) -> Option<crate::core::layout::ComputedLayout> {
-        self.js_ctx
-            .element_tree
+        self.tree_of(id.into())?
             .get_element(id)
             .map(|n| n.computed_layout)
     }
@@ -202,25 +273,28 @@ impl SharedViewCx {
     /// focus state (e.g. caret blink).
     pub fn flush_focus_notifications(&mut self, boa: &mut Context) {
         let focus_changes = {
-            let tree = self.js_ctx.element_tree.borrow();
+            let trees = self.js_ctx.view_roots.borrow().trees();
             let mut focus = self.js_ctx.focus_manager.borrow_mut();
             let mut queue = self.js_ctx.mutation_queue.borrow_mut();
-            focus.flush_pending(&tree, &mut queue)
+            focus.flush_pending(&trees, &mut queue)
         };
         if focus_changes.is_empty() {
             return;
         }
         for (id, focused) in &focus_changes {
-            let mut element = {
-                let mut tree = self.js_ctx.element_tree.borrow_mut();
-                tree.get_element_mut(*id).and_then(|n| n.element.take())
+            let Some(tree) = self.tree_of((*id).into()) else {
+                continue;
             };
+            let mut element = tree
+                .borrow_mut()
+                .get_element_mut(*id)
+                .and_then(|n| n.element.take());
             if let Some(ref mut elem) = element {
                 elem.run_on_focus_changed(*focused, self, boa);
             }
             if let Some(elem) = element {
-                let mut tree = self.js_ctx.element_tree.borrow_mut();
-                if let Some(node) = tree.get_element_mut(*id) {
+                let mut t = tree.borrow_mut();
+                if let Some(node) = t.get_element_mut(*id) {
                     node.element = Some(elem);
                 }
             }
@@ -278,15 +352,15 @@ impl ViewCx for SharedViewCx {
         SharedViewCx::subscribe_fragment(self, id)
     }
     fn node_tree(&self) -> NodeTree {
-        controller_handles(&self.js_ctx).0
+        controller_handles(&self.js_ctx, self.tree.clone()).0
     }
     fn mutation_queue(
         &self,
     ) -> std::rc::Rc<std::cell::RefCell<crate::core::edgy::mutation::PendingMutationInvocationQueue>>
     {
-        controller_handles(&self.js_ctx).1
+        controller_handles(&self.js_ctx, self.tree.clone()).1
     }
     fn dirty(&self) -> std::rc::Rc<std::cell::Cell<bool>> {
-        controller_handles(&self.js_ctx).2
+        controller_handles(&self.js_ctx, self.tree.clone()).2
     }
 }

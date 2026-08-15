@@ -25,7 +25,7 @@ use tur_integration_tests::{TurTestApp, text_response};
 
 #[test]
 fn clipboard_read_resolves_and_drives_reactive_set() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     // Pre-canned clipboard content.
     app.set_clipboard_read("hello from clipboard");
@@ -61,7 +61,7 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
 
 #[test]
 fn clipboard_write_logs_to_recording() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     // `writeText` spawns the write on the worker's executor; the spawned
     // future is polled asynchronously after the load-module RPC returns
@@ -86,7 +86,7 @@ fn clipboard_write_logs_to_recording() {
 
 #[test]
 fn http_request_resolves_with_canned_response() {
-    let mut app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_http(200.0, 100.0).unwrap();
     app.set_http_response(text_response(200, "body bytes"));
 
     app.eval_module_source(

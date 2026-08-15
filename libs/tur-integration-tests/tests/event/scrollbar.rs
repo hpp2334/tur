@@ -6,11 +6,11 @@ use tur_integration_tests::TurTestApp;
 /// `ScrollController` with an overlaid `Scrollbar`. The controller is exposed
 /// as `globalThis.__ctrl` so the test can drive `jumpTo` directly.
 const SCROLLBAR_BUNDLE: &str = r#"
-import { render, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "tur:std";
+import { setViewRoot, viewRoot, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "tur:std";
 globalThis.__ctrl = new globalThis.ScrollController();
 const blocks = [];
 for (let i = 0; i < 6; i++) blocks.push(Container({ height: 100 }));
-render(Row({
+setViewRoot(viewRoot("main"), Row({
     children: [
         Expanded({
             child: ScrollView({
@@ -39,12 +39,12 @@ fn scroll_offset(app: &TurTestApp, sv_id: ElementNodeId) -> f64 {
 fn jump_to_sets_scroll_offset() {
     // Regression for the ScrollController binding: `jumpTo` used to be a
     // no-op because the controller was never attached to its scroll-view.
-    let mut app = TurTestApp::new(200.0, 200.0).unwrap();
+    let app = TurTestApp::new(200.0, 200.0).unwrap();
     app.eval_module_source(SCROLLBAR_BUNDLE).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
-    let sv_id = ElementNodeId::new(sv_id.as_u64());
+    let sv_id = sv_id.as_element_id();
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     app.eval_js("globalThis.__ctrl.jumpTo(150)");
@@ -70,9 +70,9 @@ fn dragging_scrollbar_thumb_scrolls() {
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
-    let sv_id = ElementNodeId::new(sv_id.as_u64());
+    let sv_id = sv_id.as_element_id();
     let bar_id = app.query_element(&["bar"]).unwrap();
-    let bar_id = ElementNodeId::new(bar_id.as_u64());
+    let bar_id = bar_id.as_element_id();
     assert_eq!(scroll_offset(&app, sv_id), 0.0);
 
     // The scrollbar column occupies x=[190,200]. Press in the middle of the

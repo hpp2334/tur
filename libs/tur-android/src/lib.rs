@@ -237,7 +237,9 @@ pub mod ops {
     use jni::sys::{jdouble, jint, jlong};
     use tur_engine::core::layout::{MouseButton, Offset};
     use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-    use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
+    use tur_engine::core::platform::{
+        ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput, ShellEventPayload,
+    };
     use tur_engine::{TurApp, TurAppBuilder, TurRuntimeBuilder};
 
     use crate::app::{AndroidInstance, AndroidRuntime};
@@ -428,24 +430,28 @@ pub mod ops {
         }
     }
 
-    /// Resize the surface. Resizes the main-side renderer directly AND
-    /// forwards `PlatformEvent::Resize` to the worker for layout (single
-    /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
-    /// for the instance lifetime; full surface re-attach with a renderer
-    /// swap is a follow-up.)
+    /// Resize the instance's `"main"` view root. Resizes the main-side
+    /// render target directly AND forwards `ShellEventPayload::Resize` to the
+    /// worker for layout (single call — see `TurApp::resize_root`). (v1
+    /// keeps the original wgpu surface for the instance lifetime; full
+    /// surface re-attach with a renderer swap is a follow-up.)
     pub fn resize(env: &mut JNIEnv, handle: jlong, width: jint, height: jint, dpr: jdouble) {
         catch_void(env, "resize", |_env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
-            instance
-                .app
-                .resize(width.max(1) as u32, height.max(1) as u32, dpr.max(1.0));
+            instance.app.resize_root(
+                "main",
+                width.max(1) as u32,
+                height.max(1) as u32,
+                dpr.max(1.0),
+            );
             Ok(())
         });
     }
 
-    /// Push a pointer event. `action` matches Android `MotionEvent.ACTION_*`
-    /// constants: 0=DOWN, 1=UP, 2=MOVE, 3=CANCEL. We translate to engine
-    /// `PointerInput` with `PointerDeviceKind::Touch`.
+    /// Push a pointer event targeting the instance's `"main"` view root.
+    /// `action` matches Android `MotionEvent.ACTION_*` constants: 0=DOWN,
+    /// 1=UP, 2=MOVE, 3=CANCEL. We translate to engine `PointerInput` with
+    /// `PointerDeviceKind::Touch`.
     pub fn push_pointer(
         env: &mut JNIEnv,
         handle: jlong,
@@ -456,10 +462,13 @@ pub mod ops {
     ) {
         catch_void(env, "pushPointer", |_env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let Some(root) = instance.app.backend().root_id_of("main") else {
+                return Ok(());
+            };
             let device = PointerDeviceKind::Touch;
             let position = Offset::new(x, y);
             let button = MouseButton::Left;
-            let ev = match action {
+            let input = match action {
                 0 => PointerInput::PointerDown {
                     position,
                     button,
@@ -480,7 +489,10 @@ pub mod ops {
                 3 => PointerInput::PointerCancel { device },
                 _ => return Ok(()),
             };
-            instance.app.push_platform_event(PlatformEvent::Pointer(ev));
+            instance.app.push_platform_event(PlatformEvent::shell(
+                root,
+                ShellEventPayload::Pointer { input },
+            ));
             Ok(())
         });
     }
@@ -500,6 +512,12 @@ pub mod ops {
     ) {
         catch_void(env, "pushKey", |env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            // Key/Ime are dispatched to the focused element without root
+            // gating — the shell root id is stamped as the event's target
+            // (informational; hosts gate on shell focus).
+            let Some(root) = instance.app.backend().root_id_of("main") else {
+                return Ok(());
+            };
             let key: String = env.get_string(&key)?.into();
             let code: String = env.get_string(&code)?.into();
             let event_type = if action == 1 {
@@ -507,9 +525,9 @@ pub mod ops {
             } else {
                 KeyEventType::Down
             };
-            instance
-                .app
-                .push_platform_event(PlatformEvent::Key(KeyEvent {
+            instance.app.push_platform_event(PlatformEvent::shell(
+                root,
+                ShellEventPayload::Key(KeyEvent {
                     key,
                     code,
                     modifiers: Modifiers {
@@ -519,7 +537,8 @@ pub mod ops {
                         meta: meta != 0,
                     },
                     event_type,
-                }));
+                }),
+            ));
             Ok(())
         });
     }
@@ -554,13 +573,18 @@ pub mod ops {
     pub fn push_ime(env: &mut JNIEnv, handle: jlong, kind: jint, text: JString) {
         catch_void(env, "pushIme", |env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let Some(root) = instance.app.backend().root_id_of("main") else {
+                return Ok(());
+            };
             let text: String = env.get_string(&text)?.into();
             let ime = match kind {
-                0 => PlatformEvent::Ime(ImeEvent::CompositionStart),
-                1 => PlatformEvent::Ime(ImeEvent::CompositionUpdate { text, cursor: None }),
-                _ => PlatformEvent::Ime(ImeEvent::CompositionEnd { text }),
+                0 => ImeEvent::CompositionStart,
+                1 => ImeEvent::CompositionUpdate { text, cursor: None },
+                _ => ImeEvent::CompositionEnd { text },
             };
-            instance.app.push_platform_event(ime);
+            instance
+                .app
+                .push_platform_event(PlatformEvent::shell(root, ShellEventPayload::Ime(ime)));
             Ok(())
         });
     }

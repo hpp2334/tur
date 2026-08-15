@@ -1,4 +1,3 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// Parse "dsx,dsy,dlx,dly" from the fixture's `__getDragInfo()` into a tuple.
@@ -24,7 +23,7 @@ fn drag_delta_from_start_and_from_last_are_correct() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("drag-delta-tracking").unwrap();
     let target = app.query_element(&["drag-target"]).unwrap();
-    let target = ElementNodeId::new(target.as_u64());
+    let target = target.as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
 

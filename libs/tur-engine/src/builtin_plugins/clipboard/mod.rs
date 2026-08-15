@@ -12,20 +12,20 @@
 //!   (`tur-clipboard-wasm::WasmClipboard`, `tur-clipboard-native::NativeClipboard`).
 //! - [`TurClipboardPlugin`] — plugin struct embedders register via
 //!   `TurRuntimeBuilder::plugin`.
-//! - [`platform_paste`] — embedder helper wrapping a paste text as a
-//!   `PlatformEvent::Custom`.
+//! - [`shell_paste`] — embedder helper wrapping a paste text as a
+//!   `ShellEventPayload::Custom`.
 //!
 //! ## Internal to `builtin_plugins`
 //!
 //! - Event payload types + `push_paste` / `push_write` helpers (used by this
 //!   plugin and by `builtin_plugins/text`).
-//! - [`ClipboardPlatformSubsystem`] / [`ClipboardWriteSubsystem`] engine
+//! - [`ClipboardShellSubsystem`] / [`ClipboardWriteSubsystem`] engine
 //!   event-bus handlers.
 //! - The JS bridge fns (ctx-bound `Ptr`s) — registered as the
 //!   `clipboard.readText` / `clipboard.writeText` consts of
 //!   `tur:clipboard`.
 //!
-//! [`ClipboardPlatformSubsystem`]: handlers::ClipboardPlatformSubsystem
+//! [`ClipboardShellSubsystem`]: handlers::ClipboardShellSubsystem
 //! [`ClipboardWriteSubsystem`]: handlers::ClipboardWriteSubsystem
 
 pub(in crate::builtin_plugins) mod bridge;
@@ -34,7 +34,7 @@ pub(in crate::builtin_plugins) mod event;
 pub(in crate::builtin_plugins) mod handlers;
 
 pub use capability::{Clipboard, ClipboardBackend};
-pub use event::platform_paste;
+pub use event::shell_paste;
 pub(in crate::builtin_plugins) use event::{ClipboardPasteEvent, push_write};
 
 use crate::core::capability::CapabilityDecls;
@@ -44,14 +44,14 @@ use crate::error::TurError;
 
 /// tur-clipboard plugin: registers `tur:clipboard` (exporting a
 /// `clipboard` object with `readText` / `writeText` methods) plus the
-/// engine-internal [`ClipboardPlatformSubsystem`](handlers::ClipboardPlatformSubsystem)
+/// engine-internal [`ClipboardShellSubsystem`](handlers::ClipboardShellSubsystem)
 /// (forwards embedder paste into the engine-internal event bus) and
 /// [`ClipboardWriteSubsystem`](handlers::ClipboardWriteSubsystem) (the
 /// Cmd+C/Cmd+X event path).
 ///
 /// Both subsystems route through the engine's `Custom` event variants:
-/// embedders wrap their paste as a [`ClipboardPlatformPasteEvent`] via
-/// [`platform_paste`]; tur-text consumes the forwarded
+/// embedders wrap their paste as a [`ClipboardShellPasteEvent`] via
+/// [`shell_paste`]; tur-text consumes the forwarded
 /// [`ClipboardPasteEvent`] and produces [`ClipboardWriteEvent`] on
 /// copy/cut via [`push_write`].
 ///
@@ -77,7 +77,7 @@ impl Plugin for TurClipboardPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         // Engine-internal subsystems.
         //
-        // `ClipboardPlatformSubsystem` must run BEFORE tur-text's
+        // `ClipboardShellSubsystem` must run BEFORE tur-text's
         // `ClipboardPasteSubsystem` in the AppEvent drain pass: it produces
         // the `ClipboardPasteEvent` (App) that tur-text consumes. Because
         // AppEvents drain on a later fixed-point iteration than the
@@ -90,7 +90,7 @@ impl Plugin for TurClipboardPlugin {
         // dispatch time via `cx.capabilities.of::<Clipboard>()` — so if the
         // cap is missing (which the `requires` declaration above should
         // have caught at build()), writes silently drop with a warning.
-        ctx.register_subsystem(Box::new(handlers::ClipboardPlatformSubsystem));
+        ctx.register_subsystem(Box::new(handlers::ClipboardShellSubsystem));
         ctx.register_subsystem(Box::new(handlers::ClipboardWriteSubsystem));
 
         // Build the `clipboard` object (with `readText`/`writeText` methods)

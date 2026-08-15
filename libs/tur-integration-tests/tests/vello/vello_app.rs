@@ -12,7 +12,7 @@ use tur_engine::TurStdPlugin;
 use tur_engine::core::app::{FrameOutcome, NextFrame};
 use tur_engine::core::scheduler::MainSchedulerDriver;
 use tur_engine::error::TurError;
-use tur_engine::renderer::vello::VelloRenderer;
+use tur_engine::renderer::vello::{RawSurface, WgpuRenderer};
 use tur_engine::{TurApp, TurRuntime};
 use tur_native::NativeFontLoader;
 
@@ -22,13 +22,7 @@ pub enum TurVelloError {
     Engine(#[from] TurError),
     #[error("window creation failed: {0}")]
     Window(String),
-    #[error("wgpu adapter request failed: {0}")]
-    WgpuAdapter(String),
-    #[error("wgpu device request failed: {0}")]
-    WgpuDevice(String),
-    #[error("wgpu surface creation failed: {0}")]
-    WgpuSurface(String),
-    #[error("window handle error: {0}")]
+    #[error("raw window handle error: {0}")]
     Handle(String),
 }
 
@@ -51,6 +45,19 @@ struct TurVelloAppInner {
     driver: Rc<tur_integration_tests::TestSchedulerDriver>,
     frame_rx: futures::channel::mpsc::UnboundedReceiver<FrameOutcome>,
     _window: Window,
+}
+
+/// Explicit shutdown: `destroy()` tells the worker to exit (breaking the
+/// run_loop's channel waits) so the final `settle_local_tasks` in `main`
+/// completes the run_loop and drops the app — render targets and all —
+/// while the thread's TLS is still alive. Without it the run_loop sits in
+/// the thread-local `LocalSet` until thread destruction, where dropping
+/// wgpu buffers after TLS teardown panics in the destructor (order
+/// roulette between the LocalSet TLS and wgpu's internal TLS).
+impl Drop for TurVelloAppInner {
+    fn drop(&mut self) {
+        self.app.destroy();
+    }
 }
 
 impl TurVelloApp {
@@ -117,46 +124,6 @@ impl TurVelloApp {
             .window_handle()
             .map_err(|e| TurVelloError::Handle(format!("window: {e}")))?;
 
-        let surface = unsafe {
-            instance
-                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: Some(raw_display.as_raw()),
-                    raw_window_handle: raw_window.as_raw(),
-                })
-                .map_err(|e| TurVelloError::WgpuSurface(e.to_string()))?
-        };
-
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::HighPerformance,
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .map_err(|e| TurVelloError::WgpuAdapter(e.to_string()))?;
-
-        let (device, queue) = adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                experimental_features: wgpu::ExperimentalFeatures::default(),
-                memory_hints: wgpu::MemoryHints::Performance,
-                trace: wgpu::Trace::default(),
-            })
-            .await
-            .map_err(|e| TurVelloError::WgpuDevice(e.to_string()))?;
-
-        let renderer = VelloRenderer::init_surface(
-            &adapter,
-            device,
-            queue,
-            surface,
-            width as u32,
-            height as u32,
-            dpr,
-        );
-
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let runtime = TurRuntime::builder()
             .scheduler(driver.clone())
@@ -167,11 +134,24 @@ impl TurVelloApp {
             .build()?;
 
         // Threaded engine: worker produces command batches; `MainBackend`
-        // owns the VelloRenderer on main and applies them via `run_loop`.
+        // owns the per-root VelloTarget on main and applies them via
+        // `run_loop`. The root is declared pending at build; the surface
+        // (raw window handles off the shared instance) attaches right here
+        // via `setup_root`.
         let app = runtime
             .app_builder()
-            .renderer(Box::new(renderer), (width, height), dpr)
+            .renderer(Box::new(WgpuRenderer::with_instance(instance)))
+            .view_root("main", (width, height), dpr)
             .build()?;
+        app.setup_root(
+            "main",
+            Box::new(RawSurface {
+                raw_display_handle: raw_display.as_raw(),
+                raw_window_handle: raw_window.as_raw(),
+            }),
+            (width, height),
+            dpr,
+        )?;
         Ok((app, driver, window))
     }
 

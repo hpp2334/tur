@@ -1,5 +1,5 @@
 use tur_engine::builtin_plugins::scroll::ScrollViewElement;
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -10,15 +10,11 @@ fn scroll_view_viewport_constrained() {
     let (sv_id, col_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(sv.kind().unwrap(), ElementKind::new("tur_scroll_view"));
         assert_eq!(sv.children.len(), 1);
 
-        let col = tree
-            .get_element(ElementNodeId::new(sv.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(sv.children[0].as_element_id()).unwrap();
         assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(col.children.len(), 3);
 
@@ -44,16 +40,14 @@ fn scroll_view_child_offset_zero() {
     let col_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
         sv.children[0]
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
+    let col_node = rt.get_element(col_id.as_element_id()).unwrap();
     assert_eq!(col_node.computed_layout.offset.y, 0.0);
     assert_eq!(col_node.computed_layout.offset.x, 0.0);
 }
@@ -66,16 +60,14 @@ fn scroll_view_child_offset_with_prop() {
     let col_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
         sv.children[0]
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
+    let col_node = rt.get_element(col_id.as_element_id()).unwrap();
     assert_eq!(col_node.computed_layout.offset.y, -100.0);
 }
 
@@ -87,7 +79,7 @@ fn scroll_view_content_and_viewport_size() {
     let sv_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        ElementNodeId::new(root.children[0].as_u64())
+        root.children[0].as_element_id()
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -108,25 +100,21 @@ fn scroll_view_children_stacked_correctly() {
     let (sb1_id, sb2_id, sb3_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(sv.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
+        let col = tree.get_element(sv.children[0].as_element_id()).unwrap();
         (col.children[0], col.children[1], col.children[2])
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1 = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(sb1.computed_layout.size.height, 200.0);
     assert_eq!(sb1.computed_layout.offset.y, 0.0);
 
-    let sb2 = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2 = rt.get_element(sb2_id.as_element_id()).unwrap();
     assert_eq!(sb2.computed_layout.offset.y, 200.0);
 
-    let sb3 = rt.get_element(ElementNodeId::new(sb3_id.as_u64())).unwrap();
+    let sb3 = rt.get_element(sb3_id.as_element_id()).unwrap();
     assert_eq!(sb3.computed_layout.offset.y, 400.0);
 }

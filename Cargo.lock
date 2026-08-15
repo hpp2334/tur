@@ -4444,6 +4444,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "parley",
+ "pollster",
+ "raw-window-handle",
  "resvg",
  "thiserror 2.0.18",
  "tracing",

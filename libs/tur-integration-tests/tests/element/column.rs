@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -12,20 +12,14 @@ fn column_basic_vertical_stacking() {
         assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(col.children.len(), 2);
 
-        let sb1 = tree
-            .get_element(ElementNodeId::new(col.children[0].as_u64()))
-            .unwrap();
+        let sb1 = tree.get_element(col.children[0].as_element_id()).unwrap();
         assert_eq!(sb1.kind().unwrap(), ElementKind::new("tur_container"));
 
-        let sb2 = tree
-            .get_element(ElementNodeId::new(col.children[1].as_u64()))
-            .unwrap();
+        let sb2 = tree.get_element(col.children[1].as_element_id()).unwrap();
         assert_eq!(sb2.kind().unwrap(), ElementKind::new("tur_container"));
 
         (col.id, sb1.id, sb2.id)
@@ -54,9 +48,7 @@ fn column_main_alignment_end() {
     let (sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(col.children.len(), 2);
         (col.children[0], col.children[1])
     };
@@ -64,11 +56,11 @@ fn column_main_alignment_end() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1_node = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(sb1_node.computed_layout.size.height, 50.0);
     assert_eq!(sb1_node.computed_layout.offset.y, 520.0);
 
-    let sb2_node = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2_node = rt.get_element(sb2_id.as_element_id()).unwrap();
     assert_eq!(sb2_node.computed_layout.size.height, 30.0);
     assert_eq!(sb2_node.computed_layout.offset.y, 570.0);
 }
@@ -81,15 +73,13 @@ fn column_cross_alignment_start() {
     let sb1_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         col.children[0]
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
-    let sb1_node = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1_node = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(sb1_node.computed_layout.offset.x, 0.0);
 }
 
@@ -101,12 +91,10 @@ fn column_nested_children_do_not_overlap() {
     let (_outer_col_id, sb1_id, inner_col_id, sb3_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let outer_col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let outer_col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(outer_col.children.len(), 3);
         let inner_col = tree
-            .get_element(ElementNodeId::new(outer_col.children[1].as_u64()))
+            .get_element(outer_col.children[1].as_element_id())
             .unwrap();
         (
             outer_col.id,
@@ -119,7 +107,7 @@ fn column_nested_children_do_not_overlap() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1 = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(sb1.computed_layout.size.height, 50.0);
     assert_eq!(sb1.computed_layout.offset.y, 0.0);
 
@@ -133,7 +121,7 @@ fn column_nested_children_do_not_overlap() {
         "inner column with mainAxisSize=Min should size to content"
     );
 
-    let sb3 = rt.get_element(ElementNodeId::new(sb3_id.as_u64())).unwrap();
+    let sb3 = rt.get_element(sb3_id.as_element_id()).unwrap();
     assert_eq!(
         sb3.computed_layout.size.height, 40.0,
         "third child should have non-zero height (not starved by inner column)"
@@ -152,9 +140,7 @@ fn column_overflow_children_keep_natural_height() {
     let (col_id, c0, c1, c2) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(col.children.len(), 3);
         (col.id, col.children[0], col.children[1], col.children[2])
     };
@@ -169,9 +155,7 @@ fn column_overflow_children_keep_natural_height() {
     );
 
     for (i, &child_id) in [c0, c1, c2].iter().enumerate() {
-        let child = rt
-            .get_element(ElementNodeId::new(child_id.as_u64()))
-            .unwrap();
+        let child = rt.get_element(child_id.as_element_id()).unwrap();
         assert_eq!(
             child.computed_layout.size.height, 300.0,
             "child {i} should keep its natural 300px height, not be squished"

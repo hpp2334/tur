@@ -7,7 +7,7 @@ import {
     sleep,
     source,
     type ViewportSize,
-    viewportSize$,
+    viewRoot,
 } from "tur:std";
 import { CASE_SOURCES } from "../cases";
 import type { LayoutMode, MobileTab } from "./types";
@@ -70,11 +70,13 @@ export const layoutHovered$ = source<string | null>(null);
 export const autoRun$ = source(true);
 export const layoutMode$ = source<LayoutMode>("split");
 
-// Responsive layout. `viewportSize$` is engine-owned (synced each frame from
-// the canvas resize handler). Below 720px CSS width the playground switches to
-// the mobile single-pane + bottom-tab layout (see views/shell.ts).
+// Responsive layout. The "main" view root's `viewportSize$` is engine-owned
+// (synced on each resize of that root's surface). Below 720px CSS width the
+// playground switches to the mobile single-pane + bottom-tab layout (see
+// views/shell.ts).
+const mainRoot = viewRoot("main");
 export const isMobile$ = derive(
-    () => get<ViewportSize>(viewportSize$).width < 720,
+    () => get<ViewportSize>(mainRoot.viewportSize$).width < 720,
 );
 
 // Active pane on mobile (bottom tab bar). Desktop uses `layoutMode$` instead.

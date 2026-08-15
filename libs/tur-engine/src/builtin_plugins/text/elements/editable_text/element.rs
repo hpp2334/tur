@@ -121,7 +121,7 @@ pub struct EditableTextView {
 
 impl View for EditableTextView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         let mut spec = self.clone();
 
         if spec.controller.is_none()
@@ -599,9 +599,9 @@ impl EditableTextElement {
             "v" if ctrl || meta => {
                 // Paste: the browser fires a `paste` event on the hidden
                 // textarea when the user presses Cmd+V; the wasm layer
-                // forwards the clipboard text as a ClipboardPlatformPasteEvent
-                // (PlatformEvent::Custom), which tur-clipboard's
-                // ClipboardPlatformSubsystem re-emits as a ClipboardPasteEvent
+                // forwards the clipboard text as a ClipboardShellPasteEvent
+                // (ShellEventPayload::Custom), which tur-clipboard's
+                // ClipboardShellSubsystem re-emits as a ClipboardPasteEvent
                 // (AppEvent::Custom). Here we just mark the key as handled so
                 // no fallback runs.
                 true

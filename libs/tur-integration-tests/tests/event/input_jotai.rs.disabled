@@ -65,7 +65,7 @@ fn read_jotai_atom(app: &mut TurTestApp) -> String {
 #[test]
 fn input_on_input_updates_jotai_atom() {
     let mut app = build_app();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert_eq!(read_jotai_atom(&mut app), "", "atom should start empty");
 
@@ -84,7 +84,7 @@ fn input_on_input_updates_jotai_atom() {
 #[test]
 fn button_state_updates_after_typing() {
     let mut app = build_app();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     for _ in 0..10 {
         let _ = app.tick();

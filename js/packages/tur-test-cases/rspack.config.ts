@@ -8,16 +8,16 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const casesDir = path.resolve(__dirname, "cases");
 
 // Each case source `export default`s a view and no longer calls
-// `render()`. The Rust integration tests eval `dist/<name>.js` and expect the
-// tree to mount on eval, so we register an in-memory wrapper module per case
-// (rspack's VirtualModulesPlugin) that imports the default export and renders
-// it — no generated files on disk.
+// `setViewRoot`. The Rust integration tests eval `dist/<name>.js` and expect
+// the tree to mount on eval, so we register an in-memory wrapper module per
+// case (rspack's VirtualModulesPlugin) that imports the default export and
+// mounts it on the "main" view root — no generated files on disk.
 const entries: Record<string, string> = {};
 const virtualModules: Record<string, string> = {};
 for (const dir of globSync("*/index.ts", { cwd: casesDir })) {
     const name = dir.split("/")[0];
     virtualModules[`virtual-entries/${name}.ts`] =
-        `import Case from "../cases/${name}/index";\nimport { render } from "tur:std";\nrender(Case);\n`;
+        `import Case from "../cases/${name}/index";\nimport { setViewRoot, viewRoot } from "tur:std";\nsetViewRoot(viewRoot("main"), Case);\n`;
     entries[name] = `./virtual-entries/${name}.ts`;
 }
 

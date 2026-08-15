@@ -12,18 +12,37 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::render::{RenderCommand, Renderer};
+use tur_engine::core::render::{RenderCommand, RenderTarget, Renderer, SurfaceHandle};
 use tur_integration_tests::TurTestApp;
 
-/// Renderer that stashes each frame's command batch so the test can inspect
-/// which nodes produced a `Paint` (and, by omission, which were culled).
+/// Render target that stashes each frame's command batch so the test can
+/// inspect which nodes produced a `Paint` (and, by omission, which were
+/// culled). Accepts any surface (the harness registers the default
+/// `NoopSurface` for its `"main"` root).
+struct RecordingTarget {
+    last: Rc<RefCell<Vec<RenderCommand>>>,
+}
+
+impl RenderTarget for RecordingTarget {
+    fn render_commands(&mut self, commands: &[RenderCommand]) {
+        *self.last.borrow_mut() = commands.to_vec();
+    }
+}
+
 struct RecordingRenderer {
     last: Rc<RefCell<Vec<RenderCommand>>>,
 }
 
 impl Renderer for RecordingRenderer {
-    fn render_commands(&mut self, commands: &[RenderCommand]) {
-        *self.last.borrow_mut() = commands.to_vec();
+    fn create_target(
+        &mut self,
+        _surface: SurfaceHandle,
+        _viewport: (f64, f64),
+        _dpr: f64,
+    ) -> Result<Box<dyn RenderTarget>, tur_engine::error::TurError> {
+        Ok(Box::new(RecordingTarget {
+            last: self.last.clone(),
+        }))
     }
 }
 
@@ -42,7 +61,7 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.eval_module_source(
         r#"
-        import { render, ScrollView, Column, Container, createColor } from "tur:std";
+        import { setViewRoot, viewRoot, ScrollView, Column, Container, createColor } from "tur:std";
         const kids = [];
         for (let i = 0; i < 6; i++) {
             kids.push(Container({
@@ -51,7 +70,7 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
                 queryKey: ["item", i],
             }));
         }
-        render(ScrollView({ queryKey: ["scroll"], child: Column({ children: kids }) }));
+        setViewRoot(viewRoot("main"), ScrollView({ queryKey: ["scroll"], child: Column({ children: kids }) }));
     "#,
     )
     .expect("mount");
@@ -166,7 +185,7 @@ fn no_clip_means_no_culling() {
     // culled by the viewport seed alone (a node fully outside the screen is
     // invisible anyway). A node INSIDE the viewport is always painted.
     let last: Rc<RefCell<Vec<RenderCommand>>> = Rc::new(RefCell::new(Vec::new()));
-    let mut app = TurTestApp::new_with_renderer(
+    let app = TurTestApp::new_with_renderer(
         400.0,
         300.0,
         Box::new(RecordingRenderer { last: last.clone() }),
@@ -175,8 +194,8 @@ fn no_clip_means_no_culling() {
 
     app.eval_module_source(
         r#"
-        import { render, Container, createColor } from "tur:std";
-        render(Container({
+        import { setViewRoot, viewRoot, Container, createColor } from "tur:std";
+        setViewRoot(viewRoot("main"), Container({
             width: 100,
             height: 100,
             color: createColor(0, 128, 255, 255),

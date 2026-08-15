@@ -17,8 +17,8 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  sources. A reusable view the website renders.          │
 ├─────────────────────────────────────────────────────┤
 │  js/packages/tur-test-cases                          │
-│  ~60 test cases in cases/ — each calls into           │
-│  tur:std directly                            │
+│  ~60 test cases in cases/ — each mounts via           │
+│  setViewRoot into tur:std                             │
 └──────────────────────┬──────────────────────────────┘
                        │ JS bridge API
 ┌──────────────────────▼──────────────────────────────┐
@@ -26,12 +26,17 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  ├── core/         (engine infrastructure — NO         │
 │  │                  dependency on builtin_plugins/*)   │
 │  │   ├── app/      (TurAppInternal + FrameOutcome +    │
-│  │   │             AppEvent/AppEventQueue + render()   │
-│  │   │             mount + RootView/RootElement        │
-│  │   │             generic-root wrapper)               │
+│  │   │             AppEvent/AppEventQueue +            │
+│  │   │             view_root/view_roots: the           │
+│  │   │             ViewRootRegistry (one tree +        │
+│  │   │             Screen + active$ per view root)     │
+│  │   │             + the viewRoot/setViewRoot/         │
+│  │   │             resetViewRoot bridge +              │
+│  │   │             RootView/RootElement wrapper)       │
 │  │   ├── elements/ (AnyElement, ElementObject,         │
 │  │   │             ElementTree with layout+paint)      │
-│  │   ├── render/   (PaintContext, Renderer,            │
+│  │   ├── render/   (PaintContext, Renderer factory +   │
+│  │   │             RenderTarget + opaque Surface +     │
 │  │   │             ElementRender trait + brush/         │
 │  │   │             Color/Brush/GradientStop + JS        │
 │  │   │             bindings)                            │
@@ -51,10 +56,11 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   │             own tur:core)               │
 │  │   ├── focus/    (FocusManager + Focusable trait +   │
 │  │   │             BlurEvent/FocusEvent/FocusChange)   │
-│  │   ├── screen/   (Screen + viewportSize$ source +    │
+│  │   ├── screen/   (per-view-root Screen +             │
+│  │   │             viewportSize$ source +              │
 │  │   │             ResizeSubsystem)                    │
 │  │   ├── platform/ (Cursor/CursorBackend/CursorCap +   │
-│  │   │             PlatformEvent/PointerInput/Ime +    │
+│  │   │             PlatformEvent (Shell events) +      │
 │  │   │             key_event: KeyEvent/Modifiers/      │
 │  │   │             KeydownEvent/KeyupEvent)            │
 │  │   ├── subsystem.rs (Subsystem trait + flush_pre/post_layout hooks)   │
@@ -91,8 +97,11 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   ├── scroll/    (ScrollView, Scrollbar,            │
 │  │   │               ScrollController, ScrollSubsystem)│
 │  │   └── lazy_container/ (LazyList + LazyListController)│
-│  ├── renderer/vello (VelloRenderer, VelloPaintContext) │
-│  └── renderer/noop  (NoopRenderer, logs tree stats)    │
+│  ├── renderer/vello (WgpuRenderer factory + VelloTarget│
+│  │                + WebGlRenderer/WebGlTarget +        │
+│  │                RawSurface/CanvasSurface)            │
+│  └── renderer/noop  (NoopRenderer factory + NoopTarget │
+│                + NoopSurface; logs tree stats)         │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -186,7 +195,11 @@ let runtime = TurRuntime::builder()
     .plugin(TurFilePickerPlugin)                 // requires: FilePicker
     .build()?;                                    // Rc<TurRuntime>
 
-// Spawn isolated instances (each its own JS realm + renderer):
+// Spawn isolated instances (each its own JS realm):
+// The renderer is a REQUIRED factory (one per instance, RETAINED so
+// surfaces can attach late); each `.view_root` declares one named mount
+// slot that starts PENDING (no surface, no render target, no built tree).
+// One element tree per view root.
 let app = runtime
     .app_builder()
     // Optional: define build-time per-instance data readable/updateable by
@@ -199,12 +212,34 @@ let app = runtime
     //   .instance_data(|cx| {
     //       cx.define::<PluginId>(PluginId("com.example.foo".into()));
     //   })
-    .renderer(Box::new(renderer), (800.0, 600.0), 2.0)  // group all three
+    .renderer(Box::new(renderer_factory))
+    .view_root("main", (800.0, 600.0), 2.0)
     .build()?;
-app.set_cursor_backend(Rc::new(RefCell::new(WasmCursor { canvas })));  // per-instance
+// Attach the surface when it exists — possibly much later (a page the
+// user hasn't visited yet). Fail-fast on a mismatched surface/factory
+// pairing; replays retained image uploads into the fresh target.
+app.setup_root("main", Box::new(surface), (800.0, 600.0), 2.0)?;
 
-// Or a headless instance (no rendering):
-let headless = runtime.app_builder().build_headless((0.0, 0.0))?;
+// A headless daemon: renderer still required (NoopRenderer), ZERO roots:
+let headless = runtime
+    .app_builder()
+    .renderer(Box::new(NoopRenderer::new()))
+    .build()?;
+
+// Per-root host controls (roots addressed by name):
+app.resize_root("main", 1024, 768, 2.0);  // resizes that root's target + screen
+app.tear_down_root("main");               // RELEASE target + destroy tree, RETAIN mount intent
+app.setup_root("main", Box::new(surface), // attach a surface: create target (replays retained
+    (1024.0, 768.0), 2.0)?;               // image uploads) + rebuild from retained intent
+app.set_cursor_backend("main", backend);  // per-root cursor backend
+
+// Or a headless instance with a sized root (Screen + viewportSize$ still work):
+let sized = runtime
+    .app_builder()
+    .renderer(Box::new(NoopRenderer::new()))
+    .view_root("main", (400.0, 600.0), 1.0)
+    .build()?;
+sized.setup_root("main", Box::new(NoopSurface), (400.0, 600.0), 1.0)?;
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
@@ -340,24 +375,77 @@ The engine has a **one runtime, many instances** architecture:
   `Capabilities` registry (shared Clipboard/Http/FilePicker backends), and the
   registered `Plugin`s. Built via `TurRuntime::builder()...build()`.
 - **`TurApp`** — an isolated instance spawned from a runtime via
-  `runtime.app_builder().build(renderer, viewport, dpr)` (rendering, attached to
-  a surface) or `runtime.app_builder().build_headless(viewport)` (no rendering —
-  JS + capabilities + events only, backed by `NoopRenderer`). Each instance
-  gets its own boa `Context` (JS realm), element tree, reactive store, focus
-  manager, event queues, subsystems, screen, and scheduler (per-instance vsync
-  drivers — e.g. Android instances install their own JNI `FrameLoop`-bound
-  scheduler via `TurApp::set_main_scheduler`). Plugins are re-registered
-  into each instance's fresh realm (the same plugin objects — `register` takes
-  `&self`, so no factory needed).
+  `runtime.app_builder().renderer(factory).view_root(name, viewport, dpr)...build()` (roots
+  start PENDING — surfaces attach via `setup_root` when they exist). Each instance gets its own boa `Context` (JS realm),
+  view-root registry (**one element tree + one Screen per view root**),
+  reactive store, focus manager, event queues, subsystems, and scheduler
+  (per-instance vsync drivers — e.g. Android instances install their own JNI
+  `FrameLoop`-bound scheduler via `TurApp::set_main_scheduler`). Plugins are
+  re-registered into each instance's fresh realm (the same plugin objects —
+  `register` takes `&self`, so no factory needed). **Zero view roots =
+  headless** (JS + capabilities + events only; the still-required
+  `NoopRenderer` factory creates no targets).
 
 The `Plugin` trait has two phases: `compile` (called once on the runtime —
 pre-validate/cache) and `register` (called per instance — into the fresh boa
 `Context`). boa `Module`s are realm-bound, so the actual JS parse happens per
 instance in `register`; `compile` is the seam for future caching + fail-fast
-validation. The renderer is **not** on the runtime builder — it's the
-mandatory argument to the builder's `build(...)` terminal (one renderer per
-surface). The cursor backend is per-instance (set via
-`TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
+validation. The renderer factory is **not** on the runtime builder — it's the
+mandatory `.renderer(...)` call on the app builder; each `.view_root(...)`
+declares one pending root whose surface attaches later via `TurApp::setup_root`
+(fail-fast on a mismatched surface/factory pairing at attach time). The
+cursor backend is per root (set via
+`TurApp::set_cursor_backend(name, ...)` after spawn, since it targets a
+specific surface).
+
+### View roots (multi-root rendering)
+
+One engine instance can render into **N host surfaces** — the plugin-system
+use case (one plugin rendering into several canvases + a headless daemon).
+
+- **Concepts**: a `Renderer` is the per-instance **factory** holding shared
+  substrate (`WgpuRenderer` wraps an `Arc<wgpu::Instance>`; `WebGlRenderer`
+  and `NoopRenderer` are units). A `Surface` is an opaque, embedder-supplied
+  payload (`RawSurface` / `CanvasSurface` / `NoopSurface`) that only the
+  paired factory understands — `core/` knows no platform types. A **view
+  root** is a named logical mount slot: `ViewRootRegistry` (worker side)
+  owns one `NodeTree` + one `Screen` (size/dpr/`viewportSize$`) + an
+  `active$` mirror + the mount intent per root; `MainBackend` (main side)
+  owns one `RenderTarget` per ATTACHED root (created by `setup_root`; the
+  renderer factory is retained so surfaces can attach late).
+- **Node ids are composite** `{ view_root_id, node_id }` (`NodeId::new(root, n)`): each tree allocates from its OWN counter (restarting at 1 per tree — teardown frees the id space), and the root field makes ids unique instance-wide. Tree ownership resolves in O(1) from `id.root()` (no tree scan), so
+  the shared reactive store's subscriber graph, the focus manager,
+  controllers, and the dev tool hold ids from any tree without collision.
+- **JS API** (registered in both `tur:core` and `tur:std`): `viewRoot(name)`
+  → opaque handle `{ name, viewportSize$, active$ }`; `viewRoots()` →
+  names; `setViewRoot(handle, view)` mount/replace; `resetViewRoot(handle)`
+  unmount + clear intent. There is no global `render()` / `viewportSize$`.
+- **Event routing**: every `PlatformEvent` is a `Shell(ShellEvent {
+  view_root_id, payload })` — every payload kind carries the target view
+  root. For `Pointer` / `Wheel` / `Resize` payloads the engine routes to
+  that root's tree (positions are root-local); for `Key` / `Ime` /
+  `Custom` payloads the id is informational — the engine dispatches via
+  the instance-global focus scope and does NO root gating (hosts gate on
+  shell focus themselves and only push Key/Ime for focused shells).
+  Derived scroll (`AppEvent::Scroll`) and fling carry the root too. The
+  gesture/pointer/scroll subsystems resolve the routed root's tree;
+  `Shell` tracks pointer position + cursor per root.
+- **Host lifecycle (deferred surfaces)**: roots start PENDING at build (no
+  surface, no render target, `active$ = false`; `setViewRoot` records intent
+  only — right for surfaces that appear late, e.g. a page the user hasn't
+  visited). `setup_root(name, surface, (w, h), dpr)` attaches: creates the
+  target on main from the RETAINED renderer factory (fail-fast on a
+  mismatched pairing), replays retained image uploads into the fresh
+  target, syncs the root's `Screen`/`viewportSize$`, and rebuilds the tree
+  from the intent. `tear_down_root(name)` releases the render target (frees
+  the GPU/GL resources for a gone canvas) AND destroys the tree (unmount
+  hooks fire) while RETAINING the mount intent — the tab-switch pattern.
+  `active$` mirrors the state for JS. Element-local state resets on
+  teardown (same semantics as a `Switch` remount); reactive atoms survive.
+- **Pinned by** `tests/element/multi_root.rs` (independent layout, per-root
+  resize isolation, pointer routing, teardown/setup round-trip, intent
+  semantics, zero-root headless, deferred attach/teardown-release/re-attach
+  incl. image-upload replay).
 
 Embedder splits mirror this: `AndroidRuntime`/`AndroidInstance` (tur-android),
 `WasmRuntime`/`WasmApp` (tur-wasm), and `TurRuntime`/`TurInstance` +
@@ -378,7 +466,7 @@ Animation lives entirely in the standalone `tur-animation` crate (registered via
 - **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, four methods, all defaulting to no-op:
   - `fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order, **before** the layout step. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_next_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_next_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
   - `fn flush_post_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — same cadence + registration order, but **after** the layout step, so it reads the freshly-laid-out tree (`computed_layout`, `absolute_affine_of`). Used for layout-derived recomputation — e.g. `CompositedTransformSubsystem` maps each target's world position onto its follower with final geometry + the follower's just-resolved anchor cache. Without this phase a follower read zero/stale sizes on the first frame and only self-corrected on the next input event (tap/click) — see `follower_correct_on_first_frame_non_topleft_anchor`.
-  - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard platform-bridge).
+  - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard shell-bridge).
   - `fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent)` — called per drained engine-internal event, every fixed-point iteration, in registration order. Used by scroll-chaining / scroll-to / clipboard-write / clipboard-paste / caret-visibility subsystems.
 
   `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, the capability registry, plus the engine-signalling channels `mark_dirty` / `request_paint` / `request_next_frame` and the `frame_id()` self-gate. These channels are bundled in `FlushSignals` (built once per `flush()` and shared with every context constructed that call).
@@ -399,7 +487,7 @@ Text logic lives in `tur-engine::builtin_plugins::text` (inlined from the former
 - **Elements** (`builtin_plugins/text/elements`): `TextElement` (static text), `EditableTextElement` (cursor + selection + IME + paste), `ParagraphElement`.
 - **Controllers** (`builtin_plugins/text/controller`): `TextEditingController` (registered class — `register_class`), `UndoController`, plus `SpanData` + event types.
 - **Post-event caret visibility** (`builtin_plugins/text/handlers`): `CaretVisibilitySubsystem` runs after keyboard/IME/paste subsystems (in registration order) and scrolls the focused editable's `ScrollView` to keep the caret in view. The engine's `builtin_plugins/input/{subsystem.rs,ime.rs}` no longer call caret-scroll directly.
-- **Paste dispatch** (embedder → tur-clipboard → text plugin): the embedder wraps the platform paste as a `ClipboardPlatformPasteEvent` (carried inside `PlatformEvent::Custom`) and pushes it onto the platform queue. tur-clipboard's `ClipboardPlatformSubsystem` (in `builtin_plugins::clipboard::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. The text plugin's `ClipboardPasteSubsystem` (`builtin_plugins/text/handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` / `AppEvent` (typed by the `CustomPlatformEvent` / `CustomAppEvent` traits). The event payload types themselves live in `builtin_plugins::clipboard::event` (clipboard-plugin-owned; cross-plugin via `pub(in crate::builtin_plugins)`).
+- **Paste dispatch** (embedder → tur-clipboard → text plugin): the embedder wraps the platform paste as a `ClipboardShellPasteEvent` (carried inside `ShellEventPayload::Custom`, stamped with the focused shell's root id — via `tur_engine::shell_paste(root, text)`) and pushes it onto the platform queue. tur-clipboard's `ClipboardShellSubsystem` (in `builtin_plugins::clipboard::handlers`, registered by `TurClipboardPlugin`) consumes it and re-emits a `ClipboardPasteEvent` (carried inside `AppEvent::Custom`) on the engine-internal bus. The text plugin's `ClipboardPasteSubsystem` (`builtin_plugins/text/handlers`) consumes the AppEvent, looks up the focused `EditableTextElement`, and inserts the text (replacing any selection, or at the caret). No per-element trait is needed: paste is a single-consumer, stateless op. The engine stays free of any text-element *and* clipboard knowledge — domain-specific events travel through the `Custom` escape hatches on `PlatformEvent` (shell) / `AppEvent` (typed by the `CustomShellEventPayload` / `CustomAppEvent` traits). The event payload types themselves live in `builtin_plugins::clipboard::event` (clipboard-plugin-owned; cross-plugin via `pub(in crate::builtin_plugins)`).
 
 JS surface is unchanged — `tur:std` still exports Text/Input/etc. No `.d.ts` split, no new JS package.
 
@@ -428,11 +516,11 @@ Elements are type-erased via `AnyElement` (private `Erased` trait with blanket i
 
 ### Data flow
 
-1. JS calls `globalThis.__tur.*` → bridge creates `AnyElement` in `ElementTree`
-2. `ElementTree::compute_layout()` lays out dirty nodes: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the store's atom→subscriber index)
-3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
-4. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
-5. `Renderer::render(&mut self, tree: &ElementTree)` drives the frame
+1. JS calls `setViewRoot(viewRoot(name), view)` → bridge builds the view into that root's `ElementTree` (one tree per view root)
+2. Each tree's `compute_layout()` lays out dirty nodes under that root's viewport constraints: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the shared store's atom→subscriber index)
+3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes (in whichever tree they live) via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
+4. Each setup root's tree paints into its own `RecordingCanvas` (seeded with that root's viewport clip), producing one `RenderCommand` batch per root
+5. `MainBackend` applies each root's batch to that root's `RenderTarget` (keyed by `ViewRootId`)
 
 ## Directory structure
 
@@ -443,7 +531,10 @@ libs/
       core/                  # Engine infrastructure — NO dependency on
                              #   builtin_plugins/* (strict boundary)
         app/                 # TurAppInternal + FrameOutcome + AppEvent/
-                             #   AppEventQueue + render() mount +
+                             #   AppEventQueue + view_roots (ViewRootRegistry:
+                             #   one NodeTree + Screen + active$ per view
+                             #   root) + view_root bridge (viewRoot/
+                             #   setViewRoot/resetViewRoot) +
                              #   RootView/RootElement generic-root wrapper
         async_/              # CompletionQueue/CompletionHandle (pending
                              #   completion invocations drained each flush)
@@ -490,8 +581,10 @@ libs/
                              #   EdgeInsets/Axis/MainAxisAlignment/…),
                              #   SubscribeCx
         platform/            # Cursor/CursorBackend/CursorCap +
-                             #   PlatformEvent/PointerInput/ImeEvent +
-                             #   PlatformEventQueue (raw input from embedder) +
+                             #   PlatformEvent::Shell(ShellEvent{
+                             #   view_root_id, payload}) + PointerInput +
+                             #   ImeEvent + PlatformEventQueue (raw input
+                             #   from embedder) +
                              #   key_event.rs (KeyEvent/Modifiers/
                              #   KeyEventType/KeydownEvent/KeyupEvent —
                              #   engine contract types)
@@ -502,12 +595,15 @@ libs/
                              #   engine creates the channel internally in
                              #   build() so no embedder wiring is needed) +
                              #   MainRunFuture + PluginContext::to_async()
-        render/              # PaintContext, Renderer, ElementRender trait,
-                             #   Canvas + brush/ (Color/Brush/GradientStop/
-                             #   RGB types + JS bindings)
-        screen/              # Screen struct (logical_size + viewportSize$
-                             #   source atom) + ResizeSubsystem (handles
-                             #   PlatformEvent::Resize)
+        render/              # PaintContext, Renderer factory + RenderTarget
+                             #   + opaque Surface/SurfaceHandle +
+                             #   ElementRender trait, Canvas + brush/
+                             #   (Color/Brush/GradientStop/ RGB types + JS
+                             #   bindings)
+        screen/              # per-view-root Screen struct (logical_size +
+                             #   per-root viewportSize$ source atom) +
+                             #   ResizeSubsystem (handles routed
+                             #   ShellEventPayload::Resize)
         shell/               # Shell (engine-internal scheduler/clock holder)
         subsystem.rs         # Subsystem trait (flush_pre_layout +
                              #   flush_post_layout + handle_platform_event +
@@ -532,7 +628,7 @@ libs/
                              #   (inlined from former tur-clipboard-capability
                              #   crate). Public surface (Clipboard /
                              #   ClipboardBackend / TurClipboardPlugin /
-                             #   platform_paste) re-exported at tur_engine
+                             #   shell_paste) re-exported at tur_engine
                              #   crate root.
         console.rs           # Global `console` object (log/warn/error/info/
                              #   debug) — install_console registers globals
@@ -725,25 +821,36 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 - JS: TypeScript strict mode, ESNext modules, rspack bundling
 - Linting: biome
 - Layout: Flutter-inspired (Column, Row, Expanded, Stack, Positioned). The layout model follows Flutter's flex layout — Column/Row are flex containers, Expanded fills remaining space, Container with explicit width/height constrains to those dimensions. Default cross-axis alignment for both Column and Row is `Center` (matching Flutter's behavior).
-- Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlVelloRenderer`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`VelloRenderer`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint the element tree into a vello-hybrid `Scene`; each backend wraps it with its own renderer + `Renderer` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
+- Rendering: vello-hybrid (hybrid CPU/GPU sparse-strips vector graphics). Two backends: **WebGL2** (`WebGlRenderer` factory + `WebGlTarget`, used by `tur-wasm` — native browser WebGL2, no wgpu dependency, ~3MB smaller binary) and **wgpu** (`WgpuRenderer` factory + `VelloTarget`, used by native integration tests — Vulkan/Metal/DX12/WebGPU). The `renderer/vello` module keeps the historical name. Shared `VelloPaintContext` + `scene_paint` helpers paint each view root's element tree into a vello-hybrid `Scene`; each backend's target wraps it with its own renderer + `RenderTarget` trait impl. Backend selection is via tur-engine features: `wgpu-backend` (default, native) vs `webgl` (wasm). Also a noop renderer (logs tree stats).
 - JS engine: boa_engine (pure Rust, compiles to wasm32)
 - No separate RenderTree — layout and paint happen directly on ElementTree
 - When developing, especially writing demo cases, if an engine-level issue is found, investigate and plan to fix it in the engine rather than working around it in the demo case itself.
 - Publishable npm packages (the `@tur-ng/*` packages under `js/packages/` that carry a `publishConfig` block — `tur-core`, `tur-std`, `tur-animation`, `tur-clipboard`, `tur-net`): whenever you modify one, bump its **patch** version by exactly +1 over the latest version **published on the npm registry** (`npm view <pkg-name> version`, e.g. `npm view @tur-ng/std version` → set the branch's `version` to that + one patch). Do **not** use `main`'s `version` as the baseline — `main` frequently drifts ahead of the registry (e.g. `main` holds `0.1.0` while `@tur-ng/std` is published at `0.0.2`), so it yields wrong numbers. Never bump twice on the same branch for the same change; never bump minor/major unless asked.
 
-### Renderer trait
+### Renderer / RenderTarget traits
 
-The `Renderer` trait is defined in `tur-engine::core::render`:
+The split is defined in `tur-engine::core::render`: a [`Renderer`] is the
+per-instance **factory** (required on every `app_builder`, RETAINED by
+`MainBackend` so surfaces can attach late); `TurApp::setup_root` mints one
+[`RenderTarget`] from an opaque [`SurfaceHandle`] via
+`Renderer::create_target` (mismatched surface pairings fail fast at attach
+time):
 
 ```rust
 pub trait Renderer {
-    fn render(&mut self, tree: &ElementTree);
+    fn create_target(&mut self, surface: SurfaceHandle, viewport: (f64, f64), dpr: f64)
+        -> Result<Box<dyn RenderTarget>, TurError>;
+}
+pub trait RenderTarget {
+    fn render_commands(&mut self, commands: &[RenderCommand]);
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
 }
 ```
 
-Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
+Use `WgpuRenderer` + `RawSurface` for GPU rendering (native), `WebGlRenderer`
++ `CanvasSurface` for WebGL2 (wasm), or `NoopRenderer` + `NoopSurface` for
+headless/debug.
 
 ## Debugging the playground (main agent + image-reader)
 
@@ -773,7 +880,7 @@ The new context's page isn't tracked by the MCP snapshot/click tools — use `ne
 ### Drive the canvas
 
 1. `playwright_browser_navigate` → `http://localhost:8080/`.
-2. `playwright_browser_evaluate` → read `JSON.parse(globalThis.turDevTool.elementTree())` for exact element rects. The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `JSON.parse(globalThis.turDevTool.getElement(childId))`. Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
+2. `playwright_browser_evaluate` → read `globalThis.turDevTool.elementTree()` for exact element rects. Node ids are objects `{ root, node }` (numbers). The root node carries `{ id, name, label, props, layout:{relative,absolute,width,height,extra?}, queryKey?, children:[{id}, ...] }`; drill into a child via `globalThis.turDevTool.getElement(childId)` (pass the child's `id` object through, e.g. `(await turDevTool.elementTree()).children[0].id`). Hit-testing is pixel-precise: sidebar items are left-aligned at `x=0` and only as wide as their label (56–163px), so click at a small `x` (e.g. 30), not the column center.
 3. Click/type by dispatching events on the canvas, e.g. `canvas.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY }))` + matching `mouseup`. Keyboard: dispatch `KeyboardEvent` on the focused element (canvas or the hidden `<textarea>` when an `EditableText` has focus).
 4. Re-read `turDevTool.elementTree()` / `getElement(id)` or take a screenshot to confirm the result.
 

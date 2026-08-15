@@ -31,7 +31,7 @@ pub struct ConditionView {
 impl View for ConditionView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
-        let frag_id = FragmentNodeId::new(id.as_u64());
+        let frag_id = id.as_fragment_id();
 
         // Resolve the initial condition value and pick the branch.
         let value = read_val(cx, &self.condition, boa).unwrap_or(false);

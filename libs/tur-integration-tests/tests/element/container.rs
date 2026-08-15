@@ -1,5 +1,5 @@
 use tur_engine::builtin_plugins::layout::ContainerElement;
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_engine::core::layout::BorderPosition;
 use tur_integration_tests::TurTestApp;
 
@@ -11,14 +11,12 @@ fn container_with_padding() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
 
         let sb = tree
-            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .get_element(container.children[0].as_element_id())
             .unwrap();
         assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
 
@@ -41,14 +39,12 @@ fn container_update_clears_removed_props() {
     let checkbox_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         let pointer = tree
-            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .get_element(container.children[0].as_element_id())
             .unwrap();
         let checkbox = tree
-            .get_element(ElementNodeId::new(pointer.children[0].as_u64()))
+            .get_element(pointer.children[0].as_element_id())
             .unwrap();
         assert_eq!(checkbox.kind().unwrap(), ElementKind::new("tur_container"),);
         checkbox.id
@@ -91,9 +87,7 @@ fn container_with_border() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
         container.id
@@ -125,15 +119,11 @@ fn container_padding_offsets_child() {
     let (container_id, row_id, sb_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         let row = tree
-            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .get_element(container.children[0].as_element_id())
             .unwrap();
-        let sb = tree
-            .get_element(ElementNodeId::new(row.children[0].as_u64()))
-            .unwrap();
+        let sb = tree.get_element(row.children[0].as_element_id()).unwrap();
         (container.id, row.id, sb.id)
     };
 
@@ -167,15 +157,9 @@ fn container_with_explicit_size_in_flex() {
     let btn_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
-        let row = tree
-            .get_element(ElementNodeId::new(col.children[0].as_u64()))
-            .unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(row.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
+        let row = tree.get_element(col.children[0].as_element_id()).unwrap();
+        let container = tree.get_element(row.children[0].as_element_id()).unwrap();
         container.id
     };
 
@@ -202,9 +186,7 @@ fn container_with_shadow() {
     let container_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(container.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(container.children.len(), 1);
         container.id

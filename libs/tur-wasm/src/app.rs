@@ -6,8 +6,8 @@ use tur_clipboard_wasm::{Clipboard, TurClipboardPlugin, WasmClipboard};
 use tur_engine::TurApp;
 use tur_engine::core::layout::Offset;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
-use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput};
-use tur_engine::renderer::vello::WebGlVelloRenderer;
+use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerInput, ShellEventPayload};
+use tur_engine::renderer::vello::{CanvasSurface, WebGlRenderer};
 use tur_filepicker_wasm::{FilePicker, TurFilePickerPlugin, WasmFilePicker};
 use tur_net_wasm::{Http, TurNetPlugin, WasmHttp};
 use wasm_bindgen::JsCast;
@@ -40,6 +40,9 @@ impl Clock for WasmClock {
 
 struct WasmState {
     app: Rc<TurApp>,
+    /// The view root id this app's single canvas is registered as (`"main"`
+    /// — the first root declared at build).
+    root: tur_engine::core::element::ViewRootId,
     _canvas: web_sys::HtmlCanvasElement,
     textarea: web_sys::HtmlTextAreaElement,
     is_composing: Cell<bool>,
@@ -185,6 +188,19 @@ pub struct WasmApp {
     state: Rc<RefCell<Option<WasmState>>>,
 }
 
+impl WasmState {
+    /// Wrap a `PointerInput` as a shell event routed to this app's view
+    /// root (positions are canvas-local == root-local).
+    fn pointer(&self, input: PointerInput) -> PlatformEvent {
+        self.shell_event(ShellEventPayload::Pointer { input })
+    }
+
+    /// Wrap any shell event payload, stamping this app's view root.
+    fn shell_event(&self, payload: ShellEventPayload) -> PlatformEvent {
+        PlatformEvent::shell(self.root, payload)
+    }
+}
+
 trait JsResult<T> {
     fn err_to_jsval(self) -> Result<T, JsValue>;
 }
@@ -323,7 +339,7 @@ impl WasmApp {
 
         // Claim touch gestures for the app. With `touch-action: none` the
         // browser will not pan/zoom the page on touch-drag (we translate
-        // touchmove → PlatformEvent::Wheel below). Taps are handled
+        // touchmove → ShellEventPayload::Wheel below). Taps are handled
         // entirely in-engine: the gesture arena synthesizes the click
         // (see `TouchUpOutcome::Tap`), and soft-keyboard focus flows from
         // the engine's focus manager to the hidden textarea via the
@@ -408,30 +424,38 @@ impl WasmApp {
         canvas.set_width(physical_width);
         canvas.set_height(physical_height);
 
-        let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
-
         // Spawn an isolated engine instance. The engine runs on a worker
-        // thread; `MainBackend` owns the WebGL renderer on main and drives
-        // it directly (render batches, image uploads, resize-on-event) —
-        // no render_sink callback. `build` pushes the initial Resize
-        // internally.
+        // thread; `MainBackend` owns the per-root WebGL render target on
+        // main and drives it directly (render batches, image uploads,
+        // resize-on-event) — no render_sink callback. The root is declared
+        // pending at build and the single canvas attaches right here via
+        // `setup_root` (deferred-surface lifecycle: hosts whose surface
+        // appears later would attach later).
+        let main_root_id = tur_engine::core::element::ViewRootId::new(0);
         let app = runtime
             .runtime
             .app_builder()
-            .renderer(
-                Box::new(renderer),
-                (logical_width as f64, logical_height as f64),
-                dpr,
-            )
+            .renderer(Box::new(WebGlRenderer::new()))
+            .view_root("main", (logical_width as f64, logical_height as f64), dpr)
             .build()
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        app.setup_root(
+            "main",
+            Box::new(CanvasSurface(canvas.clone())),
+            (logical_width as f64, logical_height as f64),
+            dpr,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-        // The cursor backend is per-instance (it targets this canvas's DOM
+        // The cursor backend is per-root (it targets this canvas's DOM
         // element), so it can't be a shared runtime capability. Override the
         // main-side cursor backend now that the instance exists.
-        app.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
-            canvas: canvas.clone(),
-        })));
+        app.set_cursor_backend(
+            "main",
+            std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
+                canvas: canvas.clone(),
+            })),
+        );
 
         let resize_state = state_clone.clone();
         let resize_container_id = container_id.clone();
@@ -461,10 +485,11 @@ impl WasmApp {
                 let physical_height = (logical_height as f64 * dpr) as u32;
                 s._canvas.set_width(physical_width);
                 s._canvas.set_height(physical_height);
-                // Resize the main-side renderer directly + forward the
+                // Resize the main-side render target directly + forward the
                 // resize to the worker for layout (single call — see
-                // `TurApp::resize`).
-                s.app.resize(logical_width, logical_height, dpr);
+                // `TurApp::resize_root`).
+                s.app
+                    .resize_root("main", logical_width, logical_height, dpr);
             }
         });
 
@@ -497,7 +522,7 @@ impl WasmApp {
                     // (double/triple) classification.
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                        .push_platform_event(s.pointer(PointerInput::PointerDown {
                             position: Offset::new(x, y),
                             button,
                             time_ms,
@@ -524,7 +549,7 @@ impl WasmApp {
                     let button = normalize_mouse_button(event.button() as u16, event.ctrl_key());
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                        .push_platform_event(s.pointer(PointerInput::PointerUp {
                             position: Offset::new(x, y),
                             button,
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
@@ -550,7 +575,7 @@ impl WasmApp {
                     let y = event.client_y() as f64 - rect.top();
                     let time_ms = event.time_stamp() as u64;
                     s.app
-                        .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                        .push_platform_event(s.pointer(PointerInput::PointerMove {
                             position: Offset::new(x, y),
                             device: tur_engine::core::platform::PointerDeviceKind::Mouse,
                             time_ms,
@@ -574,11 +599,12 @@ impl WasmApp {
                     let rect = s._canvas.get_bounding_client_rect();
                     let x = event.client_x() as f64 - rect.left();
                     let y = event.client_y() as f64 - rect.top();
-                    s.app.push_platform_event(PlatformEvent::Wheel {
-                        delta_x: event.delta_x(),
-                        delta_y: event.delta_y(),
-                        position: Offset::new(x, y),
-                    });
+                    s.app
+                        .push_platform_event(s.shell_event(ShellEventPayload::Wheel {
+                            delta_x: event.delta_x(),
+                            delta_y: event.delta_y(),
+                            position: Offset::new(x, y),
+                        }));
                 }
             });
 
@@ -637,7 +663,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerDown {
+                    .push_platform_event(s.pointer(PointerInput::PointerDown {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         time_ms,
@@ -668,7 +694,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerMove {
+                    .push_platform_event(s.pointer(PointerInput::PointerMove {
                         position: Offset::new(x, y),
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
                         time_ms,
@@ -702,14 +728,13 @@ impl WasmApp {
                     let guard = touch_end_state.borrow();
                     if let Some(s) = guard.as_ref() {
                         let time_ms = event.time_stamp() as u64;
-                        s.app.push_platform_event(PlatformEvent::Pointer(
-                            PointerInput::PointerUp {
+                        s.app
+                            .push_platform_event(s.pointer(PointerInput::PointerUp {
                                 position: Offset::new(0.0, 0.0),
                                 button: tur_engine::core::layout::MouseButton::Left,
                                 device: tur_engine::core::platform::PointerDeviceKind::Touch,
                                 time_ms,
-                            },
-                        ));
+                            }));
                     }
                     return;
                 };
@@ -722,7 +747,7 @@ impl WasmApp {
                 let y = t.client_y() as f64 - rect.top();
                 let time_ms = event.time_stamp() as u64;
                 s.app
-                    .push_platform_event(PlatformEvent::Pointer(PointerInput::PointerUp {
+                    .push_platform_event(s.pointer(PointerInput::PointerUp {
                         position: Offset::new(x, y),
                         button: tur_engine::core::layout::MouseButton::Left,
                         device: tur_engine::core::platform::PointerDeviceKind::Touch,
@@ -742,11 +767,10 @@ impl WasmApp {
             Closure::<dyn Fn(web_sys::TouchEvent)>::new(move |_event: web_sys::TouchEvent| {
                 let guard = touch_cancel_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(PlatformEvent::Pointer(
-                        PointerInput::PointerCancel {
+                    s.app
+                        .push_platform_event(s.pointer(PointerInput::PointerCancel {
                             device: tur_engine::core::platform::PointerDeviceKind::Touch,
-                        },
-                    ));
+                        }));
                 }
             });
 
@@ -792,17 +816,18 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
-                        key: event.key(),
-                        code: event.code(),
-                        modifiers: Modifiers {
-                            ctrl: event.ctrl_key(),
-                            shift: event.shift_key(),
-                            alt: event.alt_key(),
-                            meta: event.meta_key(),
-                        },
-                        event_type: KeyEventType::Down,
-                    }));
+                    s.app
+                        .push_platform_event(s.shell_event(ShellEventPayload::Key(KeyEvent {
+                            key: event.key(),
+                            code: event.code(),
+                            modifiers: Modifiers {
+                                ctrl: event.ctrl_key(),
+                                shift: event.shift_key(),
+                                alt: event.alt_key(),
+                                meta: event.meta_key(),
+                            },
+                            event_type: KeyEventType::Down,
+                        })));
                 }
             });
 
@@ -822,17 +847,18 @@ impl WasmApp {
                     if s.is_composing.get() {
                         return;
                     }
-                    s.app.push_platform_event(PlatformEvent::Key(KeyEvent {
-                        key: event.key(),
-                        code: event.code(),
-                        modifiers: Modifiers {
-                            ctrl: event.ctrl_key(),
-                            shift: event.shift_key(),
-                            alt: event.alt_key(),
-                            meta: event.meta_key(),
-                        },
-                        event_type: KeyEventType::Up,
-                    }));
+                    s.app
+                        .push_platform_event(s.shell_event(ShellEventPayload::Key(KeyEvent {
+                            key: event.key(),
+                            code: event.code(),
+                            modifiers: Modifiers {
+                                ctrl: event.ctrl_key(),
+                                shift: event.shift_key(),
+                                alt: event.alt_key(),
+                                meta: event.meta_key(),
+                            },
+                            event_type: KeyEventType::Up,
+                        })));
                 }
             });
 
@@ -850,8 +876,9 @@ impl WasmApp {
                 let guard = comp_start_state.borrow();
                 if let Some(s) = guard.as_ref() {
                     s.is_composing.set(true);
-                    s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionStart));
+                    s.app.push_platform_event(
+                        s.shell_event(ShellEventPayload::Ime(ImeEvent::CompositionStart)),
+                    );
                 }
             },
         );
@@ -864,18 +891,18 @@ impl WasmApp {
             .err_to_jsval()?;
 
         let comp_update_state = state_clone.clone();
-        let compositionupdate_closure =
-            Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
-                move |event: web_sys::CompositionEvent| {
-                    let guard = comp_update_state.borrow();
-                    if let Some(s) = guard.as_ref() {
-                        let text = event.data().unwrap_or_default();
-                        s.app.push_platform_event(PlatformEvent::Ime(
+        let compositionupdate_closure = Closure::<dyn Fn(web_sys::CompositionEvent)>::new(
+            move |event: web_sys::CompositionEvent| {
+                let guard = comp_update_state.borrow();
+                if let Some(s) = guard.as_ref() {
+                    let text = event.data().unwrap_or_default();
+                    s.app
+                        .push_platform_event(s.shell_event(ShellEventPayload::Ime(
                             ImeEvent::CompositionUpdate { text, cursor: None },
-                        ));
-                    }
-                },
-            );
+                        )));
+                }
+            },
+        );
 
         textarea
             .add_event_listener_with_callback(
@@ -891,8 +918,9 @@ impl WasmApp {
                 if let Some(s) = guard.as_ref() {
                     s.is_composing.set(false);
                     let text = event.data().unwrap_or_default();
-                    s.app
-                        .push_platform_event(PlatformEvent::Ime(ImeEvent::CompositionEnd { text }));
+                    s.app.push_platform_event(
+                        s.shell_event(ShellEventPayload::Ime(ImeEvent::CompositionEnd { text })),
+                    );
                     s.textarea.set_value("");
                 }
             },
@@ -908,8 +936,8 @@ impl WasmApp {
         // Paste listener — when the user presses Cmd+V (or Ctrl+V) while
         // the hidden textarea is focused, the browser fires a `paste`
         // event with `clipboardData`. We forward the text to the engine
-        // as a ClipboardPlatformPasteEvent (PlatformEvent::Custom);
-        // tur-clipboard's ClipboardPlatformSubsystem re-emits it as a
+        // as a ClipboardShellPasteEvent (ShellEventPayload::Custom);
+        // tur-clipboard's ClipboardShellSubsystem re-emits it as a
         // ClipboardPasteEvent (AppEvent::Custom), which tur-text's
         // ClipboardPasteSubsystem consumes to insert into the focused
         // editable.
@@ -926,7 +954,8 @@ impl WasmApp {
                 }
                 let guard = paste_state.borrow();
                 if let Some(s) = guard.as_ref() {
-                    s.app.push_platform_event(tur_engine::platform_paste(text));
+                    s.app
+                        .push_platform_event(tur_engine::shell_paste(s.root, text));
                 }
             },
         );
@@ -937,6 +966,7 @@ impl WasmApp {
 
         let wasm_state = WasmState {
             app,
+            root: main_root_id,
             _canvas: canvas,
             textarea,
             is_composing: Cell::new(false),

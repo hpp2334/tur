@@ -12,9 +12,9 @@
 //! ## Paste (Cmd+V)
 //!
 //! The embedder wraps the platform paste as a
-//! [`ClipboardPlatformPasteEvent`] via
-//! [`platform_paste`](super::event::platform_paste) and pushes it on the
-//! platform queue. [`ClipboardPlatformSubsystem`] consumes it and re-emits a
+//! [`ClipboardShellPasteEvent`] via
+//! [`shell_paste`](super::event::shell_paste) and pushes it on the
+//! platform queue. [`ClipboardShellSubsystem`] consumes it and re-emits a
 //! [`ClipboardPasteEvent`] on the engine-internal bus; tur-text's
 //! `ClipboardPasteSubsystem` then inserts the text into the focused
 //! `EditableTextElement`.
@@ -26,8 +26,8 @@ use crate::core::platform::PlatformEvent;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use super::capability::Clipboard;
-use super::event::{ClipboardPlatformPasteEvent, ClipboardWriteEvent, push_paste};
-/// Forwards [`ClipboardPlatformPasteEvent`] (embedder → engine) as a
+use super::event::{ClipboardShellPasteEvent, ClipboardWriteEvent, push_paste};
+/// Forwards [`ClipboardShellPasteEvent`] (embedder → engine) as a
 /// [`ClipboardPasteEvent`](super::event::ClipboardPasteEvent) on the
 /// engine-internal bus. tur-text's `ClipboardPasteSubsystem` then consumes
 /// the AppEvent and inserts the text into the focused editable.
@@ -38,11 +38,11 @@ use super::event::{ClipboardPlatformPasteEvent, ClipboardWriteEvent, push_paste}
 /// handled by tur-text's `CaretVisibilitySubsystem`, which (like the paste
 /// subsystem) subscribes to `ClipboardPasteEvent` and is registered after
 /// `ClipboardPasteSubsystem` in registration order.
-pub(in crate::builtin_plugins) struct ClipboardPlatformSubsystem;
+pub(in crate::builtin_plugins) struct ClipboardShellSubsystem;
 
-impl Subsystem for ClipboardPlatformSubsystem {
+impl Subsystem for ClipboardShellSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        let Some(ev) = event.as_custom::<ClipboardPlatformPasteEvent>() else {
+        let Some(ev) = event.as_custom::<ClipboardShellPasteEvent>() else {
             return;
         };
         push_paste(cx.app_event_queue, ev.text.clone());

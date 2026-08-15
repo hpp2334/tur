@@ -3,28 +3,32 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
+use crate::core::element::ViewRootId;
 use crate::core::layout::Constraints;
 use boa_engine::context::time::Clock;
 use parley::LayoutContext as ParleyLayoutContext;
 
+use crate::core::app::view_roots::SharedViewRoots;
 use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
-use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageManager;
-use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
+use crate::core::platform::{PlatformEvent, PlatformEventQueue};
 use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::scheduler::WorkerScheduler;
-use crate::core::screen::Screen;
 use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {
-    pub(crate) element_tree: NodeTree,
+    /// The instance's view-root registry — one element tree + one screen per
+    /// view root (see `core::app::view_roots`). Shared with
+    /// [`TurInstanceContext`](crate::core::js_runtime::TurInstanceContext)
+    /// and subsystems via [`SubsystemFlushContext`].
+    pub(crate) view_roots: SharedViewRoots,
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     /// Worker-side image state (natural-size map + next-id counter — the
@@ -32,7 +36,6 @@ pub struct TurAppContext {
     pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
-    pub(crate) screen: Screen,
     pub(crate) platform_event_queue: PlatformEventQueue,
     pub(crate) app_event_queue: AppEventQueue,
     /// Worker-thread scheduler — cloned from `TurAppInternal::worker_sched`.
@@ -45,8 +48,8 @@ pub struct TurAppContext {
     /// drain under `&mut Context`.
     pub(crate) completion_handle: CompletionHandle,
     /// Capability registry view, shared with `TurInstanceContext.capabilities`.
-    /// Surfaced to subsystems via [`SubsystemFlushContext::capabilities`] so
-    /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
+    /// Surfaced to subsystems via [`SubsystemFlushContext`] so they can
+    /// look up backends (`Clipboard`, `Http`, etc.) at dispatch
     /// time.
     pub(crate) capabilities: Capabilities,
     /// Shell layer: clock, pointer position, and cursor output (pushed to the
@@ -57,8 +60,16 @@ pub struct TurAppContext {
 
 impl fmt::Debug for TurAppContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let roots = self.view_roots.borrow();
         f.debug_struct("TurAppContext")
-            .field("logical_size", &self.screen.logical_size)
+            .field(
+                "view_roots",
+                &roots
+                    .slots()
+                    .iter()
+                    .map(|s| (s.name.clone(), s.screen.logical_size))
+                    .collect::<Vec<_>>(),
+            )
             .finish_non_exhaustive()
     }
 }
@@ -66,7 +77,7 @@ impl fmt::Debug for TurAppContext {
 impl TurAppContext {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
-        element_tree: NodeTree,
+        view_roots: SharedViewRoots,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         image_manager: Rc<RefCell<ImageManager>>,
@@ -78,15 +89,15 @@ impl TurAppContext {
         clock: Rc<dyn Clock>,
         store: Store,
     ) -> Self {
+        let _ = store;
         let font_manager = FontManager::from_context(font_context, font_loader);
         Self {
-            element_tree,
+            view_roots,
             mutation_queue,
             focus_manager,
             image_manager,
             font_manager,
             text_layout_cx: ParleyLayoutContext::new(),
-            screen: Screen::new(store),
             platform_event_queue: PlatformEventQueue::new(),
             app_event_queue: AppEventQueue::new(),
             worker_sched,
@@ -108,24 +119,27 @@ impl TurAppContext {
         subsystems: &mut [Box<dyn Subsystem>],
         signals: &crate::core::subsystem::FlushSignals<'_>,
     ) {
-        if let PlatformEvent::Pointer(PointerInput::PointerMove {
-            position,
-            device: PointerDeviceKind::Mouse,
-            time_ms: _,
-        }) = event
+        if let crate::core::platform::ShellEventPayload::Pointer {
+            input:
+                crate::core::platform::PointerInput::PointerMove {
+                    position,
+                    device: crate::core::platform::PointerDeviceKind::Mouse,
+                    time_ms: _,
+                },
+        } = event.payload()
         {
-            self.shell.set_pointer_position(Some(*position));
+            self.shell
+                .set_pointer_position(event.view_root_id(), *position);
             need_paint.set(true);
         }
 
         let mut cx = SubsystemFlushContext {
             boa,
-            element_tree: self.element_tree.clone(),
+            view_roots: self.view_roots.clone(),
             focus_manager: self.focus_manager.clone(),
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            screen: &mut self.screen,
             need_paint,
             worker_sched: &self.worker_sched,
             completion_handle: &self.completion_handle,
@@ -151,12 +165,11 @@ impl TurAppContext {
     ) {
         let mut cx = SubsystemFlushContext {
             boa,
-            element_tree: self.element_tree.clone(),
+            view_roots: self.view_roots.clone(),
             focus_manager: self.focus_manager.clone(),
             mutation_queue: self.mutation_queue.clone(),
             platform_event_queue: &mut self.platform_event_queue,
             app_event_queue: &mut self.app_event_queue,
-            screen: &mut self.screen,
             need_paint,
             worker_sched: &self.worker_sched,
             completion_handle: &self.completion_handle,
@@ -170,68 +183,67 @@ impl TurAppContext {
         }
     }
 
+    /// Lay out every **setup** view root's tree. Each root's constraints
+    /// come from its own screen (`min == max == root viewport`), so roots
+    /// are laid out independently — a resize of one root never re-lays-out
+    /// another.
     pub fn layout(&mut self, dirty: Rc<Cell<bool>>, boa: &mut boa_engine::Context) {
-        let (width, height) = self.screen.logical_size;
-        let constraints = Constraints {
-            min_width: width,
-            max_width: width,
-            min_height: height,
-            max_height: height,
-        };
-
         let image_manager = self.image_manager.borrow();
-        let mut tree = self.element_tree.borrow_mut();
-        tree.compute_layout(
-            &constraints,
-            &mut self.font_manager,
-            &mut self.text_layout_cx,
-            &image_manager,
-            self.element_tree.clone(),
-            self.mutation_queue.clone(),
-            dirty,
-            boa,
-        );
-    }
-
-    /// Walk the element tree with a [`RecordingCanvas`] to capture per-node
-    /// paint ops + boundaries, post-process the recording into
-    /// `Vec<RenderCommand>` (paint commands in playback order), and return
-    /// the batch.
-    ///
-    /// The caller is responsible for shipping the batch to whichever
-    /// thread/realm owns the actual renderer. The worker stores it in
-    /// `TurAppInternal::pending_render_batch` for `MainBackend::worker_loop`
-    /// to drain and ship via `MainMsg::RenderCommands`.
-    pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
-        let focused_node_id = self.focus_manager.borrow().focused();
-
-        // Record the paint pass. Seed the recording canvas with the logical
-        // viewport as the bottom-of-stack clip so off-screen subtrees are
-        // culled during the walk (content outside the screen is invisible
-        // anyway). Explicit element clips (ScrollView, overflow-Flex, …)
-        // push further inner clips intersected with this viewport.
-        let tree = self.element_tree.borrow();
-        let (vp_w, vp_h) = self.screen.logical_size;
-        let mut recording = RecordingCanvas::new_with_viewport(vello_common::kurbo::Rect::new(
-            0.0, 0.0, vp_w, vp_h,
-        ));
-        {
-            let shell = self.shell.paint_face();
-            tree.paint(
-                &mut recording,
-                focused_node_id,
-                &self.image_manager.borrow(),
-                shell,
+        let setup_roots = self.view_roots.borrow().setup_roots();
+        for (root_id, tree) in setup_roots {
+            let (width, height) = self
+                .view_roots
+                .borrow()
+                .get(root_id)
+                .map(|s| s.screen.logical_size)
+                .unwrap_or((0.0, 0.0));
+            let constraints = Constraints {
+                min_width: width,
+                max_width: width,
+                min_height: height,
+                max_height: height,
+            };
+            tree.compute_layout(
+                &constraints,
+                &mut self.font_manager,
+                &mut self.text_layout_cx,
+                &image_manager,
+                tree.clone(),
+                self.mutation_queue.clone(),
+                dirty.clone(),
+                boa,
             );
         }
-        drop(tree);
+    }
 
-        // Collect the paint commands into one batch.
-        let batch = recording.into_render_commands();
+    /// Record one paint batch **per setup view root** (each seeded with that
+    /// root's logical viewport as the bottom-of-stack clip so off-screen
+    /// subtrees are culled during the walk). The caller ships the batches to
+    /// main tagged with the root id (`MainMsg::RenderCommands { root, .. }`).
+    pub fn build_render_batches(&mut self) -> Vec<(ViewRootId, Vec<RenderCommand>)> {
+        let focused_node_id = self.focus_manager.borrow().focused();
+        let image_manager = self.image_manager.borrow();
+        let setup_roots = self.view_roots.borrow().setup_roots();
+
+        let mut batches = Vec::with_capacity(setup_roots.len());
+        for (root_id, tree) in setup_roots {
+            let viewport = self
+                .view_roots
+                .borrow()
+                .get(root_id)
+                .map(|s| s.viewport_rect())
+                .unwrap_or_else(|| vello_common::kurbo::Rect::ZERO);
+            let mut recording = RecordingCanvas::new_with_viewport(viewport);
+            {
+                let shell = self.shell.paint_face_for(root_id);
+                tree.paint(&mut recording, focused_node_id, &image_manager, shell);
+            }
+            batches.push((root_id, recording.into_render_commands()));
+        }
 
         // Flush cursor claims accumulated during the record pass.
         self.shell.apply_changes();
 
-        batch
+        batches
     }
 }

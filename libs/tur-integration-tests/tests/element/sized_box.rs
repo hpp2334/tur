@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -9,15 +9,11 @@ fn sized_box_fixed_dimensions() {
     let sb_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sb = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sb = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(sb.children.len(), 1);
 
-        let text = tree
-            .get_element(ElementNodeId::new(sb.children[0].as_u64()))
-            .unwrap();
+        let text = tree.get_element(sb.children[0].as_element_id()).unwrap();
         assert_eq!(text.kind().unwrap(), ElementKind::new("tur_paragraph"));
 
         sb.id

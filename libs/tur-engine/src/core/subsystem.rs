@@ -54,13 +54,12 @@ use std::rc::Rc;
 
 use boa_engine::Context;
 
+use crate::core::app::view_roots::SharedViewRoots;
 use crate::core::app::{AppEvent, AppEventQueue};
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
-use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue};
-use crate::core::screen::Screen;
 
 /// A long-lived participant in the engine's per-frame flush loop.
 ///
@@ -185,19 +184,16 @@ pub struct SubsystemFlushContext<'a> {
     /// tick or event dispatch; the borrow is released before the next
     /// subsystem (or the rest of the flush loop) runs.
     pub boa: &'a mut Context,
-    /// Element tree (shared handle). Borrow on demand via `.borrow()` /
-    /// `.borrow_mut()`.
-    pub element_tree: NodeTree,
+    /// The view-root registry (shared handle) — one element tree + one
+    /// screen per view root. Event-driven subsystems resolve the target
+    /// tree via `cx.view_roots.borrow().tree_of_root(event.root)` (routed
+    /// events) or `tree_containing(node_id)` (focused/derived nodes);
+    /// flush-phase subsystems iterate `setup_roots()`. Borrow on demand.
+    pub view_roots: SharedViewRoots,
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub platform_event_queue: &'a mut PlatformEventQueue,
     pub app_event_queue: &'a mut AppEventQueue,
-    /// Engine screen state — the canvas logical size + the `viewportSize$`
-    /// atom. Driven by [`crate::core::screen::ResizeSubsystem`] on
-    /// `PlatformEvent::Resize` (it sets the size, pushes the atom via
-    /// [`Screen::sync_source`], and requests a paint). Other subsystems may
-    /// read [`Screen::logical_size`]. Backed by `TurAppContext.screen`.
-    pub screen: &'a mut Screen,
     pub need_paint: &'a Cell<bool>,
     /// Worker-thread scheduler. Subsystems call
     /// [`WorkerScheduler::spawn_local`] to drive Rust futures (e.g.
@@ -233,6 +229,35 @@ pub struct SubsystemFlushContext<'a> {
 }
 
 impl<'a> SubsystemFlushContext<'a> {
+    /// The tree of one view root. `None` if the root id is unknown (or its
+    /// tree was never built — torn-down roots still expose their tree, just
+    /// without a root element).
+    pub fn tree_of_root(
+        &self,
+        root: crate::core::element::ViewRootId,
+    ) -> Option<crate::core::elements::NodeTree> {
+        self.view_roots.borrow().tree_of_root(root)
+    }
+
+    /// The tree that owns `id` (node ids are unique instance-wide).
+    pub fn tree_containing(
+        &self,
+        id: crate::core::element::NodeId,
+    ) -> Option<crate::core::elements::NodeTree> {
+        self.view_roots.borrow().tree_containing(id).map(|(_, t)| t)
+    }
+
+    /// The first setup root's tree — the historical single-tree accessor
+    /// (single-root instances + id-based flows that predate root routing).
+    pub fn primary_tree(&self) -> Option<crate::core::elements::NodeTree> {
+        self.view_roots
+            .borrow()
+            .setup_roots()
+            .into_iter()
+            .next()
+            .map(|(_, t)| t)
+    }
+
     /// Mark the current frame as needing a paint. Cheap — just flips a
     /// `Cell<bool>` the engine reads after the flush tick.
     pub fn request_paint(&self) {

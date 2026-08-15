@@ -24,7 +24,7 @@ use tur_integration_tests::TurTestApp;
 
 #[test]
 fn pick_resolves_with_files_and_drives_reactive_set() {
-    let mut app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
 
     // Pre-canned picked files.
     app.set_next_pick(vec![
@@ -70,7 +70,7 @@ fn pick_resolves_with_files_and_drives_reactive_set() {
 
 #[test]
 fn pick_returns_empty_array_when_cancelled() {
-    let mut app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
     // No canned pick → backend resolves with an empty Vec (cancelled).
 
     app.eval_module_source(
@@ -92,7 +92,7 @@ fn pick_returns_empty_array_when_cancelled() {
 
 #[test]
 fn save_file_logs_to_recording() {
-    let mut app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
+    let app = TurTestApp::new_with_filepicker(200.0, 100.0).unwrap();
 
     // `saveFile` spawns the save on the worker's executor; the spawned
     // future is polled asynchronously after the load-module RPC returns

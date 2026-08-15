@@ -9,9 +9,7 @@ fn setup_basic() -> (TurTestApp, ElementNodeId, NodeId) {
     let (sv_id, col_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let sv = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let sv = tree.get_element(root.children[0].as_element_id()).unwrap();
         (sv.id, sv.children[0])
     };
 
@@ -80,7 +78,7 @@ fn wheel_updates_child_position() {
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let rt = app.element_tree();
-    let col_node = rt.get_element(ElementNodeId::new(col_id.as_u64())).unwrap();
+    let col_node = rt.get_element(col_id.as_element_id()).unwrap();
     assert_eq!(col_node.computed_layout.offset.y, -100.0);
 }
 
@@ -105,20 +103,12 @@ fn wheel_chains_to_parent_at_boundary() {
     let (outer_id, inner_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let row = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
-        let outer = tree
-            .get_element(ElementNodeId::new(row.children[1].as_u64()))
-            .unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(outer.children[0].as_u64()))
-            .unwrap();
-        let wrapper = tree
-            .get_element(ElementNodeId::new(col.children[1].as_u64()))
-            .unwrap();
+        let row = tree.get_element(root.children[0].as_element_id()).unwrap();
+        let outer = tree.get_element(row.children[1].as_element_id()).unwrap();
+        let col = tree.get_element(outer.children[0].as_element_id()).unwrap();
+        let wrapper = tree.get_element(col.children[1].as_element_id()).unwrap();
         let inner = tree
-            .get_element(ElementNodeId::new(wrapper.children[0].as_u64()))
+            .get_element(wrapper.children[0].as_element_id())
             .unwrap();
         (outer.id, inner.id)
     };

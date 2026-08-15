@@ -39,7 +39,8 @@ fn transform_translate_is_hittable_at_painted_position() {
 
     // The click is fire-and-forget; wait until the onClick-mounted red box
     // appears in the tree.
-    let mounted = app.wait_for(|a| count_kind(&a.element_tree(), "tur_container") == red_before + 1);
+    let mounted =
+        app.wait_for(|a| count_kind(&a.element_tree(), "tur_container") == red_before + 1);
     assert!(
         mounted,
         "click at the transform-translated position (120,100) should have fired onClick and mounted the red box — got {red_before} → {}",

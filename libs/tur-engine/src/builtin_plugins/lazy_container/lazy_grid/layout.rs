@@ -114,7 +114,7 @@ impl ElementLayout for LazyGridElement {
 
         let visible: Vec<(u64, NodeId)> = self.visible.clone();
         for (_logical, child_id) in &visible {
-            let _ = cx.layout_child(ElementNodeId::new(child_id.as_u64()), &child_cs);
+            let _ = cx.layout_child(child_id.as_element_id(), &child_cs);
         }
 
         // Total content length along the main axis (exact: uniform cells).
@@ -164,7 +164,7 @@ impl LazyGridElement {
                 Axis::Vertical => Offset::new(cross_pos, main_pos),
                 Axis::Horizontal => Offset::new(main_pos, cross_pos),
             };
-            cx.set_child_offset(ElementNodeId::new(child_id.as_u64()), off);
+            cx.set_child_offset(child_id.as_element_id(), off);
         }
     }
 }

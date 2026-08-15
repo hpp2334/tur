@@ -1,4 +1,4 @@
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
@@ -8,7 +8,7 @@ use parley::LayoutContext as ParleyLayoutContext;
 use vello_common::kurbo::{Affine, Point};
 
 use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Store, SubscriberId};
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId, ViewRootId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
 use crate::core::image_resource::ImageManager;
@@ -24,7 +24,12 @@ pub struct NodeTreeData {
     /// the enclosing flex's layout.
     fragments: HashMap<FragmentNodeId, FragmentHost>,
     root_id: Option<ElementNodeId>,
-    next_id: u64,
+    /// The view root this tree renders. Stamped onto every minted node id so
+    /// ids are unique instance-wide (each tree's counter is private).
+    view_root: ViewRootId,
+    /// Per-tree node-id counter (starts at 1). Uniqueness within the instance
+    /// comes from `view_root`, not from the counter.
+    next_node: Cell<u64>,
     pub(crate) store: Store,
     /// Cached read-only reactive face; the layout driver wraps this in a
     /// [`ReactiveReadJsContext`] (with a `Context` borrow) so layout can only
@@ -41,13 +46,17 @@ pub struct NodeTreeData {
 }
 
 impl NodeTreeData {
-    pub fn new(store: Store) -> Self {
+    /// Create for `view_root` with a fresh private node-id counter. Node ids
+    /// are unique instance-wide because they carry the owning root — each
+    /// tree allocates `1, 2, 3, …` independently.
+    pub fn new_for_root(view_root: ViewRootId, store: Store) -> Self {
         let read_face = store.read_only();
         NodeTreeData {
             elements: HashMap::new(),
             fragments: HashMap::new(),
             root_id: None,
-            next_id: 1,
+            view_root,
+            next_node: Cell::new(1),
             store,
             read_face,
             pending_mounted: Vec::new(),
@@ -55,10 +64,25 @@ impl NodeTreeData {
         }
     }
 
+    /// The view root this tree renders (stamped onto every minted node id).
+    pub fn view_root(&self) -> ViewRootId {
+        self.view_root
+    }
+
     pub fn alloc_id(&mut self) -> NodeId {
-        let id = self.next_id;
-        self.next_id += 1;
-        NodeId::new(id)
+        NodeId::new(
+            self.view_root,
+            self.next_node.replace(self.next_node.get().wrapping_add(1)),
+        )
+    }
+
+    /// True if `id` (element or fragment) lives in this tree. Used by the
+    /// instance's tree registry to route id-based lookups (dirty-subscriber
+    /// fan-out, focus queries, dev tool) to the owning tree — callers first
+    /// dispatch on `id.root()`, then confirm membership here.
+    pub fn contains_node(&self, id: NodeId) -> bool {
+        self.elements.contains_key(&id.as_element_id())
+            || self.fragments.contains_key(&id.as_fragment_id())
     }
 
     pub fn element_count(&self) -> usize {
@@ -142,8 +166,7 @@ impl NodeTreeData {
 
     /// True if `id` is a fragment (not a real element node).
     pub fn is_fragment(&self, id: NodeId) -> bool {
-        self.fragments
-            .contains_key(&FragmentNodeId::new(id.as_u64()))
+        self.fragments.contains_key(&id.as_fragment_id())
     }
 
     /// The node's absolute (world) affine: the product of each ancestor's
@@ -158,8 +181,8 @@ impl NodeTreeData {
         let mut chain: Vec<ElementNodeId> = Vec::new();
         let mut cursor: Option<NodeId> = Some(id.into());
         while let Some(cid) = cursor {
-            let eid = ElementNodeId::new(cid.as_u64());
-            let fid = FragmentNodeId::new(cid.as_u64());
+            let eid = cid.as_element_id();
+            let fid = cid.as_fragment_id();
             if let Some(n) = self.elements.get(&eid) {
                 chain.push(eid);
                 cursor = n.parent;
@@ -189,15 +212,9 @@ impl NodeTreeData {
 
     /// Remove a `child_id` entry from a parent's children vec (node or fragment).
     pub fn remove_child_entry(&mut self, parent_id: NodeId, child_id: NodeId) {
-        if let Some(node) = self
-            .elements
-            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
-        {
+        if let Some(node) = self.elements.get_mut(&parent_id.as_element_id()) {
             node.children.retain(|c| *c != child_id);
-        } else if let Some(frag) = self
-            .fragments
-            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
-        {
+        } else if let Some(frag) = self.fragments.get_mut(&parent_id.as_fragment_id()) {
             frag.children.retain(|c| *c != child_id);
         }
     }
@@ -206,59 +223,34 @@ impl NodeTreeData {
         // Guard: don't link to a parent that doesn't exist in either map
         // (e.g. the `temp_parent` placeholder in `tur_render` which is
         // allocated but never inserted). Matches the pre-fragment behavior.
-        if !self
-            .elements
-            .contains_key(&ElementNodeId::new(parent_id.as_u64()))
-            && !self
-                .fragments
-                .contains_key(&FragmentNodeId::new(parent_id.as_u64()))
+        if !self.elements.contains_key(&parent_id.as_element_id())
+            && !self.fragments.contains_key(&parent_id.as_fragment_id())
         {
             return false;
         }
         // Set the child's parent pointer (node or fragment).
-        if let Some(c) = self
-            .elements
-            .get_mut(&ElementNodeId::new(child_id.as_u64()))
-        {
+        if let Some(c) = self.elements.get_mut(&child_id.as_element_id()) {
             c.parent = Some(parent_id);
-        } else if let Some(f) = self
-            .fragments
-            .get_mut(&FragmentNodeId::new(child_id.as_u64()))
-        {
+        } else if let Some(f) = self.fragments.get_mut(&child_id.as_fragment_id()) {
             f.parent = parent_id;
         }
         // Push to the parent's children vec (node or fragment).
-        if let Some(node) = self
-            .elements
-            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
-        {
+        if let Some(node) = self.elements.get_mut(&parent_id.as_element_id()) {
             node.children.push(child_id);
-        } else if let Some(frag) = self
-            .fragments
-            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
-        {
+        } else if let Some(frag) = self.fragments.get_mut(&parent_id.as_fragment_id()) {
             frag.children.push(child_id);
         }
         true
     }
 
     pub fn remove_child(&mut self, parent_id: NodeId, child_id: NodeId) -> bool {
-        if let Some(node) = self
-            .elements
-            .get_mut(&ElementNodeId::new(parent_id.as_u64()))
-        {
+        if let Some(node) = self.elements.get_mut(&parent_id.as_element_id()) {
             node.children.retain(|c| *c != child_id);
-        } else if let Some(frag) = self
-            .fragments
-            .get_mut(&FragmentNodeId::new(parent_id.as_u64()))
-        {
+        } else if let Some(frag) = self.fragments.get_mut(&parent_id.as_fragment_id()) {
             frag.children.retain(|c| *c != child_id);
         }
         // Clear the child's parent pointer (node or fragment).
-        if let Some(c) = self
-            .elements
-            .get_mut(&ElementNodeId::new(child_id.as_u64()))
-        {
+        if let Some(c) = self.elements.get_mut(&child_id.as_element_id()) {
             c.parent = None;
         }
         true
@@ -271,26 +263,16 @@ impl NodeTreeData {
         ref_id: ElementNodeId,
     ) -> bool {
         if !self.elements.contains_key(&parent_id)
-            || (!self
-                .elements
-                .contains_key(&ElementNodeId::new(child_id.as_u64()))
-                && !self
-                    .fragments
-                    .contains_key(&FragmentNodeId::new(child_id.as_u64())))
+            || (!self.elements.contains_key(&child_id.as_element_id())
+                && !self.fragments.contains_key(&child_id.as_fragment_id()))
             || !self.elements.contains_key(&ref_id)
         {
             return false;
         }
         // Set the child's parent pointer.
-        if let Some(c) = self
-            .elements
-            .get_mut(&ElementNodeId::new(child_id.as_u64()))
-        {
+        if let Some(c) = self.elements.get_mut(&child_id.as_element_id()) {
             c.parent = Some(parent_id.into());
-        } else if let Some(f) = self
-            .fragments
-            .get_mut(&FragmentNodeId::new(child_id.as_u64()))
-        {
+        } else if let Some(f) = self.fragments.get_mut(&child_id.as_fragment_id()) {
             f.parent = parent_id.into();
         }
         let insert_fn = |children: &mut Vec<NodeId>| {
@@ -314,11 +296,11 @@ impl NodeTreeData {
         let mut out = Vec::with_capacity(children.len());
         for &child in children {
             if self.is_fragment(child) {
-                if let Some(frag) = self.fragments.get(&FragmentNodeId::new(child.as_u64())) {
+                if let Some(frag) = self.fragments.get(&child.as_fragment_id()) {
                     out.extend(self.flatten_children(&frag.children));
                 }
             } else {
-                out.push(ElementNodeId::new(child.as_u64()));
+                out.push(child.as_element_id());
             }
         }
         out
@@ -372,9 +354,9 @@ impl NodeTreeData {
     /// fragments — dispatches via `is_fragment`).
     pub fn destroy_child(&mut self, id: NodeId) {
         if self.is_fragment(id) {
-            self.destroy_fragment(FragmentNodeId::new(id.as_u64()));
+            self.destroy_fragment(id.as_fragment_id());
         } else {
-            self.destroy_subtree(ElementNodeId::new(id.as_u64()));
+            self.destroy_subtree(id.as_element_id());
         }
     }
 
@@ -428,13 +410,13 @@ impl NodeTreeData {
         {
             let mut current = Some(id);
             while let Some(cid) = current {
-                if let Some(node) = self.elements.get(&ElementNodeId::new(cid.as_u64())) {
+                if let Some(node) = self.elements.get(&cid.as_element_id()) {
                     if node.dirty_layout {
                         break;
                     }
                     path.push(cid);
                     current = node.parent;
-                } else if let Some(frag) = self.fragments.get(&FragmentNodeId::new(cid.as_u64())) {
+                } else if let Some(frag) = self.fragments.get(&cid.as_fragment_id()) {
                     // Skip fragments — hop to the real ancestor.
                     current = Some(frag.parent);
                 } else {
@@ -443,7 +425,7 @@ impl NodeTreeData {
             }
         }
         for cid in path {
-            if let Some(node) = self.elements.get_mut(&ElementNodeId::new(cid.as_u64())) {
+            if let Some(node) = self.elements.get_mut(&cid.as_element_id()) {
                 node.dirty_layout = true;
             }
         }
@@ -556,7 +538,7 @@ impl NodeTreeData {
         // future reactive flush can mark it dirty. The `SubscribeCx` swap
         // (on drop) replaces the node's prior subscriptions.
         let sub_index = cx.tree.store.subscriber_index();
-        let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::new(id.into()));
+        let mut sub_cx = SubscribeCx::new(sub_index, SubscriberId::from(id));
         element.subscribe(&mut sub_cx);
 
         let constrained = constraints.constrain(size);
@@ -687,7 +669,7 @@ impl NodeTreeData {
         if result.is_some() {
             return;
         }
-        let node = match self.elements.get(&ElementNodeId::new(id.as_u64())) {
+        let node = match self.elements.get(&id.as_element_id()) {
             Some(n) => n,
             None => return,
         };
@@ -704,7 +686,7 @@ impl NodeTreeData {
         for &child in &node.children {
             if self.is_fragment(child) {
                 // Check the fragment's own query_key, then recurse its children.
-                if let Some(frag) = self.fragments.get(&FragmentNodeId::new(child.as_u64())) {
+                if let Some(frag) = self.fragments.get(&child.as_fragment_id()) {
                     if frag
                         .query_key
                         .as_ref()
@@ -744,7 +726,7 @@ impl NodeTreeData {
         if result.is_some() {
             return;
         }
-        let frag = match self.fragments.get(&FragmentNodeId::new(frag_id.as_u64())) {
+        let frag = match self.fragments.get(&frag_id.as_fragment_id()) {
             Some(f) => f,
             None => return,
         };
@@ -851,15 +833,13 @@ impl NodeTreeData {
     /// across the JS bridge.
     pub fn dev_tool_node(&self, id: NodeId) -> Option<DevNodeData> {
         // Real element node:
-        if let Some(node) = self.elements.get(&ElementNodeId::new(id.as_u64())) {
+        if let Some(node) = self.elements.get(&id.as_element_id()) {
             let element = node.element.as_ref()?;
             let relative = node.computed_layout.offset;
             // Painted canvas origin via the absolute (world) affine — matches
             // where the node is painted + hit-tested (includes ancestor
             // `Transform` rotate/scale and follower link-tracked translation).
-            let abs = self
-                .absolute_affine_of(ElementNodeId::new(id.as_u64()))
-                .translation();
+            let abs = self.absolute_affine_of(id.as_element_id()).translation();
             return Some(DevNodeData {
                 id: node.id.into(),
                 name: element.type_name(),
@@ -877,20 +857,20 @@ impl NodeTreeData {
             });
         }
         // Fragment node:
-        if let Some(frag) = self.fragments.get(&FragmentNodeId::new(id.as_u64())) {
+        if let Some(frag) = self.fragments.get(&id.as_fragment_id()) {
             let relative = Offset::ZERO;
             // Fragments have zero offset; their absolute origin equals the
             // nearest real ancestor's accumulated offset.
             let mut absolute = Offset::ZERO;
             let mut ancestor = Some(frag.parent);
             while let Some(pid) = ancestor {
-                if let Some(p) = self.elements.get(&ElementNodeId::new(pid.as_u64())) {
+                if let Some(p) = self.elements.get(&pid.as_element_id()) {
                     absolute = Offset::new(
                         absolute.x + p.computed_layout.offset.x,
                         absolute.y + p.computed_layout.offset.y,
                     );
                     ancestor = p.parent;
-                } else if let Some(pf) = self.fragments.get(&FragmentNodeId::new(pid.as_u64())) {
+                } else if let Some(pf) = self.fragments.get(&pid.as_fragment_id()) {
                     ancestor = Some(pf.parent);
                 } else {
                     break;
@@ -972,6 +952,11 @@ pub struct NodeTreeSnapshot {
     /// directly; their `children` are spliced into the enclosing flex.
     pub fragments: std::collections::HashMap<FragmentNodeId, FragmentSnapshot>,
     pub root_id: Option<ElementNodeId>,
+    /// All mounted view roots across the merged trees (root id → root
+    /// element). Populated by the multi-tree merge in
+    /// `WorkerBackend::query_tree_snapshot`; single-tree snapshots leave it
+    /// empty and `root_id` carries the root.
+    pub roots: Vec<(ViewRootId, ElementNodeId)>,
 }
 
 /// Snapshot of a fragment host (Each/Condition/Switch). Only carries the
@@ -1020,8 +1005,8 @@ impl NodeTreeSnapshot {
             .map(|e| {
                 e.children
                     .iter()
-                    .filter(|n| self.elements.contains_key(&ElementNodeId::new(n.as_u64())))
-                    .map(|n| ElementNodeId::new(n.as_u64()))
+                    .filter(|n| self.elements.contains_key(&n.as_element_id()))
+                    .map(|n| n.as_element_id())
                     .collect()
             })
             .unwrap_or_default()
@@ -1032,8 +1017,7 @@ impl NodeTreeSnapshot {
     }
 
     pub fn is_fragment(&self, id: NodeId) -> bool {
-        self.fragments
-            .contains_key(&FragmentNodeId::new(id.as_u64()))
+        self.fragments.contains_key(&id.as_fragment_id())
     }
 }
 
@@ -1075,6 +1059,7 @@ impl NodeTreeData {
             elements,
             fragments,
             root_id: self.root_id,
+            roots: Vec::new(),
         }
     }
 }
@@ -1111,10 +1096,28 @@ pub struct NodeTree {
 }
 
 impl NodeTree {
-    pub fn new(store: Store) -> Self {
+    /// Create for `view_root` with a fresh private node-id counter (see
+    /// [`NodeTreeData::new_for_root`]). Single-tree instances / tests that
+    /// don't care about the root use [`Self::new`].
+    pub fn new_for_root(view_root: ViewRootId, store: Store) -> Self {
         NodeTree {
-            data: Rc::new(RefCell::new(NodeTreeData::new(store))),
+            data: Rc::new(RefCell::new(NodeTreeData::new_for_root(view_root, store))),
         }
+    }
+
+    /// Create for the default root `ViewRootId::new(0)`.
+    pub fn new(store: Store) -> Self {
+        Self::new_for_root(ViewRootId::new(0), store)
+    }
+
+    /// The view root this tree renders.
+    pub fn view_root(&self) -> ViewRootId {
+        self.data.borrow().view_root()
+    }
+
+    /// True if `id` lives in this tree (see [`NodeTreeData::contains_node`]).
+    pub fn contains_node(&self, id: NodeId) -> bool {
+        self.data.borrow().contains_node(id)
     }
 
     /// Borrow the interior immutably. Prefer the delegating methods below for

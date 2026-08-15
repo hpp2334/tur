@@ -93,7 +93,7 @@ impl Mounted {
 impl View for SwitchView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
-        let frag_id = FragmentNodeId::new(id.as_u64());
+        let frag_id = id.as_fragment_id();
 
         let value = read_val(cx, &self.value, boa);
         let mounted = Mounted::resolve(self, value);

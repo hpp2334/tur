@@ -12,14 +12,14 @@
 //!
 //! This is also where **derived** scrolling lives: when the gesture arena
 //! resolves a touch drag to scroll it emits [`AppEvent::Scroll`] here (rather
-//! than faking a `PlatformEvent::Wheel`), so the wheel handler can process
+//! than faking a `ShellEventPayload::Wheel`), so the wheel handler can process
 //! real and derived scroll through one path.
 //!
 //! Domain-specific app events (e.g. clipboard write / paste) travel inside
 //! [`AppEvent::Custom`] as [`CustomAppEvent`] payloads, keeping the engine
 //! free of per-domain variant knowledge.
 
-use crate::core::element::ElementNodeId;
+use crate::core::element::{ElementNodeId, ViewRootId};
 use crate::core::layout::Offset;
 
 /// Trait implemented by payload types carried inside an [`AppEvent::Custom`].
@@ -57,10 +57,12 @@ pub enum AppEvent {
         delta: f64,
     },
     /// Derived scroll delta produced by the gesture arena (e.g. a touch drag
-    /// that the arena resolved to scroll). Consumed by the wheel handler and
-    /// routed through the exact same pipeline as a real
-    /// [`PlatformEvent::Wheel`](crate::core::platform::PlatformEvent::Wheel).
+    /// that the arena resolved to scroll), targeting the view root the
+    /// touch landed on. Consumed by the wheel handler and routed through
+    /// the exact same pipeline as a real
+    /// [`ShellEventPayload::Wheel`](crate::core::platform::ShellEventPayload::Wheel).
     Scroll {
+        root: ViewRootId,
         delta_x: f64,
         delta_y: f64,
         position: Offset,

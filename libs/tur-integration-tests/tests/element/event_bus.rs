@@ -23,7 +23,7 @@ use tur_integration_tests::TurTestApp;
 
 #[test]
 fn host_emits_bytes_js_decodes() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -46,7 +46,7 @@ fn host_emits_bytes_js_decodes() {
 
 #[test]
 fn host_emits_multiple_messages_js_collects_all() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -78,7 +78,7 @@ fn host_emits_multiple_messages_js_collects_all() {
 
 #[test]
 fn js_sends_bytes_host_receives() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     let received: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let received_clone = received.clone();
@@ -107,7 +107,7 @@ fn js_sends_bytes_host_receives() {
 
 #[test]
 fn js_sends_raw_uint8array() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     let received: Arc<Mutex<Vec<Vec<u8>>>> = Arc::new(Mutex::new(Vec::new()));
     let received_clone = received.clone();
@@ -140,7 +140,7 @@ fn js_sends_raw_uint8array() {
 
 #[test]
 fn json_round_trip_with_id_correlation() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     // JS sends a JSON-encoded request → host echoes it back with a prefix →
     // JS parses the response. Validates the full byte round-trip:
@@ -178,7 +178,7 @@ fn json_round_trip_with_id_correlation() {
 
 #[test]
 fn host_emits_raw_binary_js_reads_bytes() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -212,7 +212,7 @@ fn host_emits_raw_binary_js_reads_bytes() {
 fn host_emits_to_isolated_channel_js() {
     // Register JS handlers on channels 1 and 2; emit to channel 1 only;
     // assert only the channel-1 handler fires.
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -238,7 +238,7 @@ fn host_emits_to_isolated_channel_js() {
 fn js_sends_to_isolated_channel_host() {
     // Register host handlers on channels 1 and 2; JS sends on channel 2
     // only; assert only the channel-2 handler fires.
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     let ch1: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
     let ch2: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -280,7 +280,7 @@ fn js_sends_to_isolated_channel_host() {
 fn no_handler_on_channel_no_panic() {
     // Emit/send on channels with no registered handlers — the bus must
     // silently drop (standard pub/sub) and never panic.
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"

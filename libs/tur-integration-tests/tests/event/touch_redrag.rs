@@ -8,7 +8,6 @@
 //! drive it with **touch** events (which go through the gesture arena, unlike
 //! the mouse path the existing drag_delta test exercises).
 
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 fn last_event(app: &TurTestApp) -> String {
@@ -44,7 +43,7 @@ fn second_touch_drag_after_release_still_registers() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("drag-delta-tracking").unwrap();
     let target = app.query_element(&["drag-target"]).unwrap();
-    let target = ElementNodeId::new(target.as_u64());
+    let target = target.as_element_id();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = app.get_element_absolute_bounds(target).unwrap().center();
 
@@ -75,7 +74,7 @@ fn drag_with_lift_second_drag_after_release_registers() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("drag-with-lift").unwrap();
     let target = app.query_element(&["lift-target"]).unwrap();
-    let target = ElementNodeId::new(target.as_u64());
+    let target = target.as_element_id();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx, cy) = app.get_element_absolute_bounds(target).unwrap().center();
 
@@ -118,11 +117,11 @@ fn multi_tile_second_drag_on_other_tile_registers() {
     let id1 = app.query_element(&["tile-1"]).unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let (cx0, cy0) = app
-        .get_element_absolute_bounds(ElementNodeId::new(id0.as_u64()))
+        .get_element_absolute_bounds(id0.as_element_id())
         .unwrap()
         .center();
     let (cx1, cy1) = app
-        .get_element_absolute_bounds(ElementNodeId::new(id1.as_u64()))
+        .get_element_absolute_bounds(id1.as_element_id())
         .unwrap()
         .center();
 

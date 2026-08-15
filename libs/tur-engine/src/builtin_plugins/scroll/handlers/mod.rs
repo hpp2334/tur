@@ -1,9 +1,9 @@
 use crate::core::app::AppEvent;
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{ElementOnWheelContext, NodeTreeData, WheelEvent};
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
-use crate::core::platform::PlatformEvent;
+use crate::core::platform::{PlatformEvent, ShellEventPayload};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 mod inertia;
@@ -14,7 +14,7 @@ use crate::builtin_plugins::scroll::scroll_view::ScrollViewElement;
 
 /// Unified scroll subsystem. Owns the entire scroll event pipeline:
 ///
-/// - **Input** — real device wheel (`PlatformEvent::Wheel`) and derived
+/// - **Input** — real device wheel (`ShellEventPayload::Wheel`) and derived
 ///   scroll produced by the gesture arena (`AppEvent::Scroll`). Both feed
 ///   the same `process_scroll_delta` path: hit-test to the deepest
 ///   wheel-bearing element, dispatch the delta via `dispatch_wheel`, and
@@ -37,16 +37,20 @@ pub struct ScrollSubsystem;
 
 impl Subsystem for ScrollSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        // Real device wheel / trackpad scroll from the platform.
-        let PlatformEvent::Wheel {
+        // Real device wheel / trackpad scroll from the platform, routed to
+        // one view root.
+        let ShellEventPayload::Wheel {
             delta_x,
             delta_y,
             position,
-        } = event
+        } = event.payload()
         else {
             return;
         };
-        process_scroll_delta(cx, *delta_x, *delta_y, *position);
+        let Some(tree) = cx.tree_of_root(event.view_root_id()) else {
+            return;
+        };
+        process_scroll_delta(cx, &tree, *delta_x, *delta_y, *position);
     }
 
     fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent) {
@@ -56,11 +60,14 @@ impl Subsystem for ScrollSubsystem {
             // as a real platform wheel so hit-testing, overscroll and chaining
             // behave identically.
             AppEvent::Scroll {
+                root,
                 delta_x,
                 delta_y,
                 position,
             } => {
-                process_scroll_delta(cx, *delta_x, *delta_y, *position);
+                if let Some(tree) = cx.tree_of_root(*root) {
+                    process_scroll_delta(cx, &tree, *delta_x, *delta_y, *position);
+                }
             }
 
             // Scroll-chaining: a child couldn't consume the full delta —
@@ -82,22 +89,21 @@ impl Subsystem for ScrollSubsystem {
 
 // ── Wheel input ───────────────────────────────────────────────────────
 
-/// Shared scroll-delta processing for real (`PlatformEvent::Wheel`) and
+/// Shared scroll-delta processing for real (`ShellEventPayload::Wheel`) and
 /// derived (`AppEvent::Scroll`) scroll: hit-test to the deepest wheel-bearing
 /// element, dispatch the delta, and forward any residual as overscroll.
 fn process_scroll_delta(
     cx: &mut SubsystemFlushContext<'_>,
+    tree: &crate::core::elements::NodeTree,
     delta_x: f64,
     delta_y: f64,
     position: Offset,
 ) {
-    let (hit_path, target) = {
-        let tree = cx.element_tree.borrow();
-        let hit_path = HitTest::new(&tree).path(position);
-        let target = find_deepest_with_wheel(&tree, &hit_path);
-        (hit_path, target)
+    let target = {
+        let t = tree.borrow();
+        let hit_path = HitTest::new(&t).path(position);
+        find_deepest_with_wheel(&t, &hit_path)
     };
-    let _ = hit_path;
 
     let Some(target_id) = target else {
         return;
@@ -131,8 +137,10 @@ fn find_deepest_with_wheel(
 
 fn chain_overscroll(cx: &mut SubsystemFlushContext<'_>, source_id: ElementNodeId, delta: f64) {
     let parent_id = {
-        let tree = cx.element_tree.borrow();
-        find_ancestor_with_wheel(&tree, source_id)
+        let Some(tree) = cx.tree_containing(source_id.into()) else {
+            return;
+        };
+        find_ancestor_with_wheel(&tree.borrow(), source_id)
     };
     let Some(parent_id) = parent_id else {
         return;
@@ -153,14 +161,14 @@ fn chain_overscroll(cx: &mut SubsystemFlushContext<'_>, source_id: ElementNodeId
 fn find_ancestor_with_wheel(tree: &NodeTreeData, start: ElementNodeId) -> Option<ElementNodeId> {
     let mut current: Option<NodeId> = tree.get_element(start).and_then(|n| n.parent);
     while let Some(id) = current {
-        if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+        if let Some(node) = tree.get_element(id.as_element_id()) {
             if let Some(ref element) = node.element
                 && element.has_on_wheel()
             {
-                return Some(ElementNodeId::new(id.as_u64()));
+                return Some(id.as_element_id());
             }
             current = node.parent;
-        } else if let Some(frag) = tree.get_fragment(FragmentNodeId::new(id.as_u64())) {
+        } else if let Some(frag) = tree.get_fragment(id.as_fragment_id()) {
             current = Some(frag.parent);
         } else {
             break;
@@ -173,12 +181,18 @@ fn find_ancestor_with_wheel(tree: &NodeTreeData, start: ElementNodeId) -> Option
 
 fn resolve_scroll_to(cx: &mut SubsystemFlushContext<'_>, node_id: ElementNodeId, offset: f64) {
     let current = {
-        let tree = cx.element_tree.borrow();
-        tree.get_element(node_id)
+        let Some(tree) = cx.tree_containing(node_id.into()) else {
+            return;
+        };
+        let t = tree.borrow();
+        let sv = t
+            .get_element(node_id)
             .and_then(|n| n.element.as_ref())
-            .and_then(|e| e.cast::<ScrollViewElement>())
-            .map(|sv| sv.scroll_offset())
-            .unwrap_or(0.0)
+            .and_then(|e| e.cast::<ScrollViewElement>());
+        match sv {
+            Some(sv) => sv.scroll_offset(),
+            None => return,
+        }
     };
 
     let delta = offset - current;
@@ -199,8 +213,11 @@ pub fn dispatch_wheel(
     delta_x: f64,
     delta_y: f64,
 ) -> f64 {
-    let mut tree = cx.element_tree.borrow_mut();
-    let Some(node) = tree.get_element_mut(id) else {
+    let Some(tree) = cx.tree_containing(id.into()) else {
+        return 0.0;
+    };
+    let mut t = tree.borrow_mut();
+    let Some(node) = t.get_element_mut(id) else {
         return 0.0;
     };
     let Some(ref mut element) = node.element else {
@@ -210,6 +227,6 @@ pub fn dispatch_wheel(
     let mut el_cx =
         ElementOnWheelContext::new(&mut *cx.app_event_queue, &mut mq, cx.need_paint, id);
     let overscroll = element.on_wheel_event(&mut el_cx, &WheelEvent { delta_x, delta_y });
-    tree.mark_dirty(id.into());
+    t.mark_dirty(id.into());
     overscroll
 }

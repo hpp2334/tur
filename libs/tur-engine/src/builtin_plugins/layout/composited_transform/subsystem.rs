@@ -25,7 +25,6 @@ use std::rc::Rc;
 
 use vello_common::kurbo::Affine;
 
-use crate::core::element::ElementNodeId;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 use super::follower::FollowerElement;
@@ -46,7 +45,6 @@ impl Subsystem for CompositedTransformSubsystem {
         let mut any_changed = false;
         let mut keep: Vec<Rc<CompositedLinkState>> = Vec::new();
 
-        let tree = cx.element_tree.borrow();
         for state in &snapshot {
             let has_target = state.target_node.get().is_some();
             let has_follower = state.follower_node.get().is_some();
@@ -60,14 +58,25 @@ impl Subsystem for CompositedTransformSubsystem {
                 state.linked.set(false);
                 continue;
             };
-            let Some(target_node) = tree.get_element(target_id) else {
-                // Target vanished (e.g. Condition flipped it off).
+            // Target + follower may live in any of the instance's view-root
+            // trees (ids are unique instance-wide) — resolve each by id.
+            let Some(target_tree) = cx.tree_containing(target_id.into()) else {
+                // Target vanished (e.g. Condition flipped it off, or its root
+                // was torn down).
                 state.linked.set(false);
                 continue;
             };
-
-            let target_size = target_node.computed_layout.size;
-            let target_world = tree.absolute_affine_of(target_id);
+            let (target_size, target_world) = {
+                let tree = target_tree.borrow();
+                let Some(target_node) = tree.get_element(target_id) else {
+                    state.linked.set(false);
+                    continue;
+                };
+                (
+                    target_node.computed_layout.size,
+                    tree.absolute_affine_of(target_id),
+                )
+            };
             state.target_world.set(target_world);
             state.target_size.set(target_size);
             state.linked.set(true);
@@ -75,7 +84,11 @@ impl Subsystem for CompositedTransformSubsystem {
             let Some(follower_id) = state.follower_node.get() else {
                 continue;
             };
-            let Some(follower_node) = tree.get_element(follower_id) else {
+            let Some(follower_tree) = cx.tree_containing(follower_id.into()) else {
+                continue;
+            };
+            let follower_tree_ref = follower_tree.borrow();
+            let Some(follower_node) = follower_tree_ref.get_element(follower_id) else {
                 continue;
             };
             let Some(element) = follower_node.element.as_ref() else {
@@ -100,7 +113,7 @@ impl Subsystem for CompositedTransformSubsystem {
             // `relative_transform` will compose it during paint/hit-test.
             let parent_world = follower_node
                 .parent
-                .map(|pid| tree.absolute_affine_of(ElementNodeId::new(pid.as_u64())))
+                .map(|pid| follower_tree_ref.absolute_affine_of(pid.as_element_id()))
                 .unwrap_or(Affine::IDENTITY);
             let new_transform = parent_world.inverse() * Affine::translate((desired.x, desired.y));
 

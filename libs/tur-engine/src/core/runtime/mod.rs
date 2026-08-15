@@ -9,19 +9,17 @@ use boa_engine::property::Attribute;
 
 use crate::TurApp;
 use crate::core::app::TurAppInternal;
-use crate::core::app::render;
+use crate::core::app::view_root;
+use crate::core::app::view_roots::ViewRootSpec;
 use crate::core::async_::TurJobExecutor;
 use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::dev::dev_tool;
-use crate::core::edgy::reactive;
 use crate::core::fonts::{FontContext, FontLoader};
 use crate::core::js_runtime::helpers::FnEntry;
 use crate::core::js_runtime::instance_context::InstanceDataCx;
-use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
 use crate::core::plugin::{AsyncPluginContext, CompileContext, Plugin, PluginContext};
-use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
@@ -101,14 +99,14 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 /// - the registered plugins (their `register` takes `&self`, so the same
 ///   plugin objects register into every instance's fresh boa `Context`).
 ///
-/// Spawn instances via [`TurRuntime::app_builder`] (rendering or headless).
+/// Spawn instances via [`TurRuntime::app_builder`] (0..N view roots; zero
+/// roots = headless).
 ///
 /// ```no_run
-///
 /// # use tur_engine::*;
 /// # use tur_engine::core::fonts::FontLoader;
 /// # use tur_engine::core::render::Renderer;
-/// # use tur_engine::renderer::noop::NoopRenderer;
+/// # use tur_engine::renderer::noop::{NoopRenderer, NoopSurface};
 /// # fn _doc(loader: std::sync::Arc<dyn tur_engine::core::fonts::FontLoader>) -> Result<(), tur_engine::error::TurError> {
 /// let runtime = TurRuntime::builder()
 ///     .font_loader(loader)
@@ -116,15 +114,20 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 ///     .plugin(TurStdPlugin)
 ///     .build()?;
 ///
-/// // Two isolated instances sharing fonts/clock/capabilities/plugins.
-/// // Each owns its renderer (created by the embedder; no render_sink):
+/// // A rendering instance: one view root per surface (multi-root: call
+/// // `.view_root(...)` once per canvas/window — roots start PENDING until
+/// // `setup_root` attaches their surface).
 /// let app_a = runtime
 ///     .app_builder()
-///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .renderer(Box::new(NoopRenderer::new()))
+///     .view_root("main", (800.0, 600.0), 2.0)
 ///     .build()?;
+/// app_a.setup_root("main", Box::new(NoopSurface), (800.0, 600.0), 2.0)?;
+///
+/// // A headless daemon: renderer still required (NoopRenderer), zero roots.
 /// let app_b = runtime
 ///     .app_builder()
-///     .renderer(Box::new(NoopRenderer::new()), (400.0, 300.0), 1.0)
+///     .renderer(Box::new(NoopRenderer::new()))
 ///     .build()?;
 /// # Ok(())
 /// # }
@@ -170,48 +173,39 @@ impl TurRuntime {
     }
 
     /// Begin building an isolated [`TurApp`] instance. Configure the
-    /// surface with [`TurAppBuilder::renderer`], then terminate with
-    /// [`TurAppBuilder::build`] (rendering) or
-    /// [`TurAppBuilder::build_headless`] (no renderer).
+    /// renderer backend with [`TurAppBuilder::renderer`] (required), add
+    /// 0..N view roots with [`TurAppBuilder::view_root`], then terminate
+    /// with [`TurAppBuilder::build`]. Zero view roots = a headless instance
+    /// (JS + capabilities + events only).
     ///
     /// The engine runs on a worker thread (via [`MainBackend`]); the
-    /// renderer lives on the main thread and is owned by `MainBackend`
-    /// (passed to `build`). `MainBackend` applies each `Vec<RenderCommand>`
-    /// batch directly to the renderer, uploads new image resources
-    /// incrementally, and calls `renderer.resize(...)` on viewport-change
-    /// events only.
+    /// renderer factory + per-root render targets live on the main thread
+    /// and are owned by `MainBackend`. `MainBackend` applies each root's
+    /// `Vec<RenderCommand>` batch to that root's target, uploads new image
+    /// resources incrementally to every target, and resizes a root's target
+    /// on that root's viewport-change events only.
     ///
-    /// The instance gets its own boa `Context` (JS realm), element tree,
-    /// reactive store, focus manager, event queues, subsystems, screen and
-    /// shell — fully isolated from every other instance. Fonts, clock, and
-    /// capability backends are shared from this runtime. Plugins are
-    /// re-registered into the instance's fresh realm.
-    ///
-    /// **Capabilities are NOT shared with the worker** — the runtime's
-    /// `Capabilities` is `Rc<RefCell<…>>` (`!Send`). The threaded factory
-    /// constructs a fresh, empty `Capabilities` on the worker; embedders
-    /// that need capabilities (Clipboard/Http/FilePicker/Cursor) should
-    /// construct them inside a custom factory via the lower-level
-    /// [`build_worker_backend`] helper.
+    /// The instance gets its own boa `Context` (JS realm), view-root
+    /// registry (one element tree + screen per root), reactive store,
+    /// focus manager, event queues, subsystems, and shell — fully isolated
+    /// from every other instance. Fonts, clock, and capability backends are
+    /// shared from this runtime. Plugins are re-registered into the
+    /// instance's fresh realm.
     pub fn app_builder(self: &Rc<Self>) -> TurAppBuilder<'_> {
         TurAppBuilder {
             runtime: self,
             renderer: None,
-            viewport: None,
-            dpr: None,
+            view_roots: Vec::new(),
             instance_data_definer: None,
         }
     }
 
     /// Internal: build an instance from already-resolved config. Called by
-    /// both [`TurAppBuilder::build`] (rendering) and
-    /// [`TurAppBuilder::build_headless`] (the latter passes a
-    /// [`NoopRenderer`](crate::renderer::NoopRenderer)).
+    /// [`TurAppBuilder::build`].
     fn spawn_instance(
         self: &Rc<Self>,
         renderer: Box<dyn crate::core::render::Renderer>,
-        viewport: (f64, f64),
-        dpr: f64,
+        roots: Vec<ViewRootSpec>,
         instance_data_definer: Option<InstanceDataDefiner>,
     ) -> Result<Rc<TurApp>, TurError> {
         let clock = self.clock.clone();
@@ -220,6 +214,20 @@ impl TurRuntime {
         let plugins = self.plugins.clone();
         let capability_inserts = self.capability_inserts.clone();
         let main_cx = self.main_cx.clone();
+        // Worker-side root declarations: ids assigned by declaration order
+        // (mirroring `MainBackend::new`'s target assignment).
+        let worker_roots: Vec<(crate::core::element::ViewRootId, String, (f64, f64), f64)> = roots
+            .iter()
+            .enumerate()
+            .map(|(index, root)| {
+                (
+                    crate::core::element::ViewRootId::new(index as u32),
+                    root.name.clone(),
+                    root.viewport,
+                    root.dpr,
+                )
+            })
+            .collect();
         let backend_factory = move |worker_sched: crate::core::scheduler::WorkerScheduler,
                                     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
                                     main_tx: crate::core::app::MainTx|
@@ -234,7 +242,7 @@ impl TurRuntime {
                 font_loader,
                 capabilities,
                 &plugins,
-                viewport,
+                &worker_roots,
                 worker_sched,
                 wake_worker,
                 main_tx,
@@ -243,43 +251,49 @@ impl TurRuntime {
             )
             .expect("threaded backend factory failed")
         };
-        let backend = MainBackend::new(self.main_scheduler.clone(), renderer, backend_factory);
+        let backend = MainBackend::new(
+            self.main_scheduler.clone(),
+            renderer,
+            roots,
+            backend_factory,
+        )?;
         let app = Rc::new(TurApp::new(backend, self.main_scheduler.clone()));
-        // Bootstrap the viewport: resize the main-side renderer directly
-        // AND seed the worker's screen state + `viewportSize$` atom before
-        // frame 1 (the forwarded `PlatformEvent::Resize` does the worker
-        // half).
-        app.resize(viewport.0 as u32, viewport.1 as u32, dpr);
         Ok(app)
     }
 }
 
 /// Builder for an isolated [`TurApp`] instance, started via
-/// [`TurRuntime::app_builder`]. Configure the surface with
-/// [`Self::renderer`], then terminate with [`Self::build`] (rendering —
-/// requires [`Self::renderer`]) or [`Self::build_headless`] (no renderer).
+/// [`TurRuntime::app_builder`]. Configure the renderer backend with
+/// [`Self::renderer`] (required), declare view roots with [`Self::view_root`]
+/// (0..N; zero = headless), then terminate with [`Self::build`].
 ///
 /// ```no_run
 /// # use tur_engine::*;
-/// # use tur_engine::renderer::noop::NoopRenderer;
+/// # use tur_engine::renderer::noop::{NoopRenderer, NoopSurface};
 /// # use std::rc::Rc;
 /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
 /// let app = runtime
 ///     .app_builder()
-///     .renderer(Box::new(NoopRenderer::new()), (800.0, 600.0), 2.0)
+///     .renderer(Box::new(NoopRenderer::new()))
+///     .view_root("main", (800.0, 600.0), 2.0)
 ///     .build()?;
+/// // Attach the surface when it exists (immediately here; a later page
+/// // visit in a real host):
+/// app.setup_root("main", Box::new(NoopSurface), (800.0, 600.0), 2.0)?;
 /// # Ok(())
 /// # }
 /// /// ```
 pub struct TurAppBuilder<'rt> {
     runtime: &'rt Rc<TurRuntime>,
-    /// Rendering surface: renderer + viewport + dpr grouped together (a
-    /// non-headless app supplies all three at once via [`Self::renderer`]).
-    /// `None` until [`Self::renderer`] is called; [`Self::build`] requires
-    /// `Some`.
+    /// The renderer **factory** — creates one [`RenderTarget`] per view
+    /// root from an embedder-supplied opaque surface. Required (pass
+    /// `NoopRenderer` for a headless instance).
+    ///
+    /// [`RenderTarget`]: crate::core::render::RenderTarget
     renderer: Option<Box<dyn crate::core::render::Renderer>>,
-    viewport: Option<(f64, f64)>,
-    dpr: Option<f64>,
+    /// View roots, in declaration order. Zero roots = headless. Duplicate
+    /// names fail at `build()`.
+    view_roots: Vec<ViewRootSpec>,
     /// Optional build-time definer for per-instance data. See
     /// [`Self::instance_data`]. Replayed once on the worker inside
     /// `build_worker_backend` before any plugin `register`.
@@ -287,25 +301,34 @@ pub struct TurAppBuilder<'rt> {
 }
 
 impl<'rt> TurAppBuilder<'rt> {
-    /// Group the rendering surface — renderer, viewport, dpr — onto this
-    /// builder. A non-headless app must supply all three together; the
-    /// terminal [`Self::build`] then takes no arguments. `MainBackend`
-    /// owns the renderer on main and drives it directly (render batches,
-    /// image uploads, resize-on-event) — no `render_sink` callback.
-    ///
-    /// `viewport` is the initial logical `(width, height)` of the render
-    /// target; `dpr` is the device pixel ratio. The engine pushes the
-    /// initial `PlatformEvent::Resize` into the worker so `viewportSize$`
-    /// + the main-side renderer are seeded before frame 1.
-    pub fn renderer(
-        mut self,
-        renderer: Box<dyn crate::core::render::Renderer>,
-        viewport: (f64, f64),
-        dpr: f64,
-    ) -> Self {
+    /// Set the renderer backend (the per-view-root render-target factory).
+    /// Required — `build()` errors without it. Headless instances pass
+    /// [`NoopRenderer`](crate::renderer::NoopRenderer) (optionally with a
+    /// `NoopSurface` root if a sized `viewportSize$` is wanted).
+    pub fn renderer(mut self, renderer: Box<dyn crate::core::render::Renderer>) -> Self {
         self.renderer = Some(renderer);
-        self.viewport = Some(viewport);
-        self.dpr = Some(dpr);
+        self
+    }
+
+    /// Register one view root — a named logical mount slot that starts
+    /// **PENDING** (no surface, no render target, no built tree). Call 0..N
+    /// times (one per canvas/window). Each root gets its own element tree
+    /// (JS mounts via `setViewRoot(viewRoot(name), view)` — recorded as
+    /// intent while pending), its own `Screen` (`viewportSize$`), and its
+    /// render target later, when the host attaches a surface via
+    /// [`TurApp::setup_root`](crate::TurApp::setup_root).
+    ///
+    /// - `viewport` — the root's initial logical `(width, height)` (the
+    ///   pending `viewportSize$`; refined by `setup_root` / `resize_root`).
+    /// - `dpr` — the root's device pixel ratio.
+    ///
+    /// Duplicate names fail at `build()`. Zero roots = headless daemon.
+    pub fn view_root(mut self, name: &str, viewport: (f64, f64), dpr: f64) -> Self {
+        self.view_roots.push(ViewRootSpec {
+            name: name.to_string(),
+            viewport,
+            dpr,
+        });
         self
     }
 
@@ -352,53 +375,36 @@ impl<'rt> TurAppBuilder<'rt> {
     }
 
     /// Terminal: build the instance. Requires [`Self::renderer`] to have
-    /// been called (a non-headless app supplies renderer + viewport + dpr
-    /// together). Errors with a clear message otherwise.
+    /// been called; errors with a clear message otherwise. Zero view roots
+    /// builds a headless instance (JS + capabilities + events; the
+    /// `NoopRenderer` discards nothing because there is nothing to paint).
     pub fn build(self) -> Result<Rc<TurApp>, TurError> {
         let TurAppBuilder {
             runtime,
             renderer,
-            viewport,
-            dpr,
+            view_roots,
             instance_data_definer,
         } = self;
         let renderer = renderer.ok_or_else(|| {
             TurError::Other(
-                "TurAppBuilder::build() requires `.renderer(renderer, viewport, dpr)` \
-                 to have been called; for a headless build use `.build_headless(viewport)` \
-                 instead"
+                "TurAppBuilder::build() requires `.renderer(renderer)` to have been called \
+                 (pass `NoopRenderer::new()` for a headless instance)"
                     .to_string(),
             )
         })?;
-        let viewport = viewport.expect("renderer() sets viewport atomically with renderer");
-        let dpr = dpr.expect("renderer() sets dpr atomically with renderer");
-        runtime.spawn_instance(renderer, viewport, dpr, instance_data_definer)
-    }
-
-    /// Terminal: build a headless instance (no renderer, no rendering).
-    /// The instance still runs JS, owns a reactive store, accepts platform
-    /// events if fed any, and can use capabilities (http, clipboard, etc.).
-    /// The engine runs on a worker thread (via [`MainBackend`]) — JS
-    /// execution, frame flushes, and every `async` RPC round-trip through
-    /// the same main↔worker channel as a rendering instance; the only
-    /// difference is the main-side [`Renderer`](crate::core::render::Renderer)
-    /// is a [`NoopRenderer`](crate::renderer::NoopRenderer), so paint
-    /// batches are discarded.
-    ///
-    /// `viewport` sets the initial `viewportSize$` (read by JS layout);
-    /// pass `(0.0, 0.0)` if layout is irrelevant.
-    pub fn build_headless(self, viewport: (f64, f64)) -> Result<Rc<TurApp>, TurError> {
-        let TurAppBuilder {
-            runtime,
-            instance_data_definer,
-            ..
-        } = self;
-        runtime.spawn_instance(
-            Box::new(crate::renderer::NoopRenderer::new()),
-            viewport,
-            1.0,
-            instance_data_definer,
-        )
+        // Duplicate names fail fast.
+        {
+            let mut names = std::collections::HashSet::new();
+            for root in &view_roots {
+                if !names.insert(root.name.as_str()) {
+                    return Err(TurError::Other(format!(
+                        "duplicate view root name `{}` — each `.view_root(...)` name must be unique",
+                        root.name
+                    )));
+                }
+            }
+        }
+        runtime.spawn_instance(renderer, view_roots, instance_data_definer)
     }
 }
 
@@ -419,7 +425,7 @@ pub(crate) fn build_worker_backend(
     font_loader: Arc<dyn FontLoader>,
     capabilities: crate::core::capability::Capabilities,
     plugins: &[Box<dyn Plugin>],
-    viewport: (f64, f64),
+    roots: &[(crate::core::element::ViewRootId, String, (f64, f64), f64)],
     worker_sched: crate::core::scheduler::WorkerScheduler,
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
     main_tx: crate::core::app::MainTx,
@@ -449,18 +455,21 @@ pub(crate) fn build_worker_backend(
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
     let ctx_val: boa_engine::JsValue = opaque.object().clone().into();
 
-    let viewport_size_js: boa_engine::JsValue = {
-        internal.app_context.borrow_mut().screen.logical_size = viewport;
-        let init = Screen::size_js(viewport.0, viewport.1, &mut boa_context);
-        let src: reactive::Source<boa_engine::JsValue> =
-            internal.js_context.store.bridge().source(init);
-        internal.app_context.borrow_mut().screen.set_source(src);
-        src.into_js(&mut boa_context)
-    };
+    // Register every view root into the worker-side registry: mints each
+    // root's tree + screen (logical size + dpr) + `viewportSize$` /
+    // `active$` atoms. JS discovers roots via `viewRoot(name)` /
+    // `viewRoots()`.
+    {
+        let store = internal.js_context.store.clone();
+        let mut registry = internal.js_context.view_roots.borrow_mut();
+        for (_id, name, viewport, dpr) in roots {
+            registry.register(name, store.clone(), *viewport, *dpr, &mut boa_context)?;
+        }
+    }
 
     let mut core_fns: Vec<FnEntry> = Vec::new();
     core_fns.extend(crate::core::edgy::bridge::fns());
-    core_fns.extend(render::fns());
+    core_fns.extend(view_root::fns());
     let core_module = build_native_module(
         &mut boa_context,
         opaque.object().clone().into(),
@@ -516,7 +525,6 @@ pub(crate) fn build_worker_backend(
             app: internal.app_context.clone(),
             subsystems: internal.subsystems.clone(),
             event_bus: internal.event_bus.clone(),
-            viewport_size: viewport_size_js.clone(),
             async_cx: async_cx.clone(),
         };
         plugin.register(&mut plugin_ctx)?;

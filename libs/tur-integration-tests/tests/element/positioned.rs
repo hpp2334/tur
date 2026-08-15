@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -9,15 +9,11 @@ fn positioned_with_left_top() {
     let pos_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let stack = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let stack = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(stack.kind().unwrap(), ElementKind::new("tur_stack"));
         assert_eq!(stack.children.len(), 1);
 
-        let positioned = tree
-            .get_element(ElementNodeId::new(stack.children[0].as_u64()))
-            .unwrap();
+        let positioned = tree.get_element(stack.children[0].as_element_id()).unwrap();
         assert_eq!(
             positioned.kind().unwrap(),
             ElementKind::new("tur_positioned")
@@ -25,7 +21,7 @@ fn positioned_with_left_top() {
         assert_eq!(positioned.children.len(), 1);
 
         let sb = tree
-            .get_element(ElementNodeId::new(positioned.children[0].as_u64()))
+            .get_element(positioned.children[0].as_element_id())
             .unwrap();
         assert_eq!(sb.kind().unwrap(), ElementKind::new("tur_container"));
 

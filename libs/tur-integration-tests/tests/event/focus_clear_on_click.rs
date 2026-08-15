@@ -3,7 +3,7 @@ use tur_integration_tests::TurTestApp;
 
 fn qid(app: &TurTestApp, key: &[&str]) -> ElementNodeId {
     let id = app.query_element(key).expect("queryKey not found");
-    ElementNodeId::new(id.as_u64())
+    id.as_element_id()
 }
 
 /// Regression for the github-viewer crash: a pointer-up that lands outside any

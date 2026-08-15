@@ -1,23 +1,25 @@
 //! Verify `tur:core` exposes ONLY the reactive core — atom primitives
-//! (`source`/`derive`/`mutate`/`get`/`set`/`view`) + `render`. Views, enums,
-//! colors, and event types live in `tur:std`.
+//! (`source`/`derive`/`mutate`/`get`/`set`/`view`) + the view-root mount
+//! API (`viewRoot`/`viewRoots`/`setViewRoot`/`resetViewRoot`). Views,
+//! enums, colors, and event types live in `tur:std`.
 
 use tur_integration_tests::TurTestApp;
 
-/// The reactive primitives + `render` are importable from `tur:core`
-/// and work end-to-end (a `view()` factory + `render()` mount).
+/// The reactive primitives + the view-root mount API are importable from
+/// `tur:core` and work end-to-end (a `view()` factory +
+/// `setViewRoot(viewRoot("main"), view)` mount).
 #[test]
-fn core_reactive_primitives_import_and_render() {
+fn core_reactive_primitives_import_and_mount() {
     let app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { view, render } from "tur:core";
-            // `view` produces an opaque handle; `render` mounts it. The actual
-            // view tree is built by the std-layer factory in `std_module_check`.
-            // Here we just confirm the core primitives resolve and `view` returns
-            // a non-null opaque handle.
+            import { view, setViewRoot, viewRoot } from "tur:core";
+            // `view` produces an opaque handle; `setViewRoot` mounts it. The
+            // actual view tree is built by the std-layer factory in
+            // `std_module_check`. Here we just confirm the core primitives
+            // resolve and `view` returns a non-null opaque handle.
             globalThis.__handle = view(() => {
-                throw new Error("view body should not run until render");
+                throw new Error("view body should not run until mounted");
             });
         "#,
     )
@@ -29,20 +31,29 @@ fn core_reactive_primitives_import_and_render() {
     );
 }
 
-/// `render` is importable from core and mounts a tree. Uses a `view` thunk
-/// whose body builds nothing (the real widget tests live in `std_module_check`).
+/// The view-root mount API is importable from core and mounts a tree. Uses
+/// a `view` thunk whose body builds nothing (the real widget tests live in
+/// `std_module_check`).
 #[test]
-fn core_render_importable() {
+fn core_view_root_api_importable() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { view, render } from "tur:core";
+            import {
+                view, setViewRoot, resetViewRoot, viewRoot, viewRoots,
+            } from "tur:core";
             const h = view(() => null);
-            globalThis.__has_render = typeof render === "function";
+            globalThis.__api_ok =
+                typeof setViewRoot === "function" &&
+                typeof resetViewRoot === "function" &&
+                typeof viewRoot === "function" &&
+                typeof viewRoots === "function" &&
+                h !== null &&
+                JSON.stringify(viewRoots()) === JSON.stringify(["main"]);
         "#,
     )
     .unwrap();
-    assert_eq!(app.eval_js("globalThis.__has_render"), "true");
+    assert_eq!(app.eval_js("globalThis.__api_ok"), "true");
 }
 
 /// Views, enums, and colors are NOT in core anymore — they moved to

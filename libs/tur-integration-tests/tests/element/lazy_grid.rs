@@ -5,11 +5,11 @@ use tur_integration_tests::TurTestApp;
 /// Build a 10,000-item virtualized grid inline: 400x600 viewport,
 /// maxCrossAxisExtent 100 → 4 columns of 100x100 cells, stride 100.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyGrid, Container, createColor } from "tur:std";
-        render(LazyGrid({
+        import { setViewRoot, viewRoot, LazyGrid, Container, createColor } from "tur:std";
+        setViewRoot(viewRoot("main"), LazyGrid({
             axis: 0,
             itemCount: 10000,
             maxCrossAxisExtent: 100,
@@ -22,7 +22,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["lg"]).expect("queryKey 'lg' not found");
-    (app, ElementNodeId::new(id.as_u64()))
+    (app, id.as_element_id())
 }
 
 fn with_lg<R: Send + 'static>(
@@ -89,9 +89,7 @@ fn lazy_grid_position_math_matches_formula() {
         let expected_x = col as f64 * cell_cross;
         let expected_y = row as f64 * stride - scroll;
         let tree = app.element_tree();
-        let node = tree
-            .get_element(ElementNodeId::new(child_id.as_u64()))
-            .unwrap();
+        let node = tree.get_element(child_id.as_element_id()).unwrap();
         assert!(
             (node.computed_layout.offset.x - expected_x).abs() < 0.5,
             "cell {logical} x should be {expected_x}, got {}",
@@ -179,8 +177,8 @@ fn lazy_grid_horizontal_axis() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyGrid, Container, createColor } from "tur:std";
-        render(LazyGrid({
+        import { setViewRoot, viewRoot, LazyGrid, Container, createColor } from "tur:std";
+        setViewRoot(viewRoot("main"), LazyGrid({
             axis: 1,
             itemCount: 1000,
             maxCrossAxisExtent: 100,
@@ -193,7 +191,7 @@ fn lazy_grid_horizontal_axis() {
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["lg"]).expect("queryKey 'lg' not found");
-    let id = ElementNodeId::new(id.as_u64());
+    let id = id.as_element_id();
 
     // viewport height 600, maxExtent 100 → 6 cross-axis slots.
     let cols = with_lg(&app, id, |lg| lg.cross_axis_count());
@@ -211,7 +209,7 @@ fn lazy_grid_horizontal_axis() {
         let lg = tree.get_element(id).unwrap();
         lg.children.iter().any(|child| {
             let x = tree
-                .get_element(ElementNodeId::new(child.as_u64()))
+                .get_element(child.as_element_id())
                 .unwrap()
                 .computed_layout
                 .offset

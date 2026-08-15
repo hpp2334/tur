@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId, FragmentNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 // Regression: a content-sized Row containing an `Each` (a vertical,
@@ -15,19 +15,11 @@ fn row_with_each_does_not_inflate() {
     let (col_id, row_id, each_id, marker_id, expanded_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(col.kind().unwrap(), ElementKind::new("tur_flex"));
-        let row = tree
-            .get_element(ElementNodeId::new(col.children[0].as_u64()))
-            .unwrap();
-        let marker = tree
-            .get_element(ElementNodeId::new(col.children[1].as_u64()))
-            .unwrap();
-        let expanded = tree
-            .get_element(ElementNodeId::new(col.children[2].as_u64()))
-            .unwrap();
+        let row = tree.get_element(col.children[0].as_element_id()).unwrap();
+        let marker = tree.get_element(col.children[1].as_element_id()).unwrap();
+        let expanded = tree.get_element(col.children[2].as_element_id()).unwrap();
         // The Each sits after the sized box inside the Row. It is now a
         // Fragment (no layout box of its own), so take its id directly
         // instead of looking it up as an element.
@@ -44,9 +36,9 @@ fn row_with_each_does_not_inflate() {
     // into the Row. Read the first such child's height as a proxy for the
     // debug log.
     let each_h = rt
-        .get_fragment(FragmentNodeId::new(each_id.as_u64()))
+        .get_fragment(each_id.as_fragment_id())
         .and_then(|f| f.children.first().copied())
-        .and_then(|cid| rt.get_element(ElementNodeId::new(cid.as_u64())))
+        .and_then(|cid| rt.get_element(cid.as_element_id()))
         .map(|n| n.computed_layout.size.height)
         .unwrap_or(0.0);
     eprintln!("row height={row_h}, each height={each_h}");

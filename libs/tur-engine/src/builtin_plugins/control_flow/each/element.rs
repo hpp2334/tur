@@ -85,7 +85,7 @@ impl EachView {
 impl View for EachView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
         let id = cx.alloc_node();
-        let frag_id = FragmentNodeId::new(id.as_u64());
+        let frag_id = id.as_fragment_id();
 
         let kind = EachFragment { view: self.clone() };
 

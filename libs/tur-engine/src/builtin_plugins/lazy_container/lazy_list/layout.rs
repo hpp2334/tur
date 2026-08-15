@@ -90,7 +90,7 @@ impl ElementLayout for LazyListElement {
         let visible: Vec<(u64, NodeId)> = self.visible.clone();
         let mut measured_main = 0.0f64;
         for (logical, child_id) in &visible {
-            let size = cx.layout_child(ElementNodeId::new(child_id.as_u64()), &child_cs);
+            let size = cx.layout_child(child_id.as_element_id(), &child_cs);
             let extent = self.axis.main(size);
             self.child_extents.push(extent);
             measured_main += extent;
@@ -151,7 +151,7 @@ impl LazyListElement {
                 crate::core::layout::Axis::Vertical => Offset::new(0.0, main_pos),
                 crate::core::layout::Axis::Horizontal => Offset::new(main_pos, 0.0),
             };
-            cx.set_child_offset(ElementNodeId::new(child_id.as_u64()), off);
+            cx.set_child_offset(child_id.as_element_id(), off);
             offset += self.extent_cache.get(&i).copied().unwrap_or(avg);
         }
     }

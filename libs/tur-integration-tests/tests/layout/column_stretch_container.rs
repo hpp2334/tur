@@ -10,8 +10,8 @@ fn column_stretch_container_with_text_is_visible() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("column-stretch-container-text").unwrap();
 
-    let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
-    let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
+    let container_id = app.query_element(&["container"]).unwrap().as_element_id();
+    let text_id = app.query_element(&["text"]).unwrap().as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
@@ -52,8 +52,8 @@ fn column_expanded_container_with_text_is_visible() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("column-expanded-container-text").unwrap();
 
-    let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
-    let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
+    let container_id = app.query_element(&["container"]).unwrap().as_element_id();
+    let text_id = app.query_element(&["text"]).unwrap().as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
@@ -90,8 +90,8 @@ fn scroll_view_container_with_text_is_visible() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.load_bundle("scroll-container-text").unwrap();
 
-    let container_id = ElementNodeId::new(app.query_element(&["container"]).unwrap().as_u64());
-    let text_id = ElementNodeId::new(app.query_element(&["text"]).unwrap().as_u64());
+    let container_id = app.query_element(&["container"]).unwrap().as_element_id();
+    let text_id = app.query_element(&["text"]).unwrap().as_element_id();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();

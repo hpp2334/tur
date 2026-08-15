@@ -8,10 +8,12 @@ use boa_engine::JsData;
 use boa_gc::{Finalize, Trace};
 
 use crate::core::app::MainTx;
+use crate::core::app::view_roots::SharedViewRoots;
 use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
 use crate::core::edgy::reactive::Store;
+use crate::core::element::NodeId;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
@@ -20,7 +22,11 @@ use crate::core::scheduler::WorkerScheduler;
 #[derive(Clone, Trace, Finalize, JsData)]
 #[boa_gc(unsafe_empty_trace)]
 pub struct TurInstanceContext {
-    pub element_tree: NodeTree,
+    /// The instance's view-root registry — one element tree per view root
+    /// (see `core::app::view_roots`). Bridge fns resolve the owning tree
+    /// for a node id via [`Self::tree_containing`] or address a root's tree
+    /// directly via [`Self::tree_of_root`].
+    pub view_roots: SharedViewRoots,
     pub mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub focus_manager: Rc<RefCell<FocusManager>>,
     pub(crate) dirty: Rc<Cell<bool>>,
@@ -126,12 +132,8 @@ pub struct TurInstanceContext {
 
 impl TurInstanceContext {
     #[allow(clippy::too_many_arguments)]
-    /// `capabilities` is the shared registry owned by the
-    /// [`TurRuntime`](crate::TurRuntime) — every instance spawned from one
-    /// runtime shares the same capability backends (Clipboard/Http/etc.).
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        element_tree: NodeTree,
+        view_roots: SharedViewRoots,
         mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
         focus_manager: Rc<RefCell<FocusManager>>,
         dirty: Rc<Cell<bool>>,
@@ -146,7 +148,7 @@ impl TurInstanceContext {
         capabilities: Capabilities,
     ) -> Self {
         Self {
-            element_tree,
+            view_roots,
             mutation_queue,
             focus_manager,
             dirty,
@@ -163,6 +165,21 @@ impl TurInstanceContext {
             capabilities,
             instance_data: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    /// The tree that owns `node` (node ids are unique instance-wide — see
+    /// `core::app::view_roots`). Returns `None` for ids from a torn-down
+    /// root's destroyed tree.
+    pub fn tree_containing(&self, node: NodeId) -> Option<NodeTree> {
+        self.view_roots
+            .borrow()
+            .tree_containing(node)
+            .map(|(_, tree)| tree)
+    }
+
+    /// The tree of one view root.
+    pub fn tree_of_root(&self, root: crate::core::element::ViewRootId) -> Option<NodeTree> {
+        self.view_roots.borrow().tree_of_root(root)
     }
 
     /// Mark this frame as paint-worthy AND, if the worker is idle (not

@@ -15,7 +15,7 @@ fn find_by_kind(
         return Some(id);
     }
     for c in &node.children {
-        if let Some(found) = find_by_kind(tree, ElementNodeId::new(c.as_u64()), kind) {
+        if let Some(found) = find_by_kind(tree, c.as_element_id(), kind) {
             return Some(found);
         }
     }
@@ -299,7 +299,7 @@ fn follower_no_flash_on_sibling_relayout() {
 /// frame, asserting the follower is already at its anchor-aligned position.
 #[test]
 fn follower_correct_on_first_frame_non_topleft_anchor() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     // Load the case module WITHOUT settling — we want to observe the very
     // first flush frame, which `load_bundle` would mask via its `settle()`.
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();

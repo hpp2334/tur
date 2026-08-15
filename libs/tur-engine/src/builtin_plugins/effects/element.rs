@@ -24,7 +24,7 @@ pub struct OpacityView {
 
 impl View for OpacityView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         cx.insert_node(
             id,
             AnyElement::new(OpacityElement {
@@ -119,7 +119,7 @@ pub struct TransformView {
 
 impl View for TransformView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         cx.insert_node(
             id,
             AnyElement::new(TransformElement {

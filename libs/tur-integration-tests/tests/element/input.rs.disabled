@@ -56,7 +56,7 @@ fn input_layout_positive_size() {
     let mut app = build_input_basic();
     let input_id = find_input_id(&app);
 
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     let rt = app.element_tree();
     let input_node = rt.get(input_id).unwrap();
     let layout = &input_node.computed_layout;
@@ -74,7 +74,7 @@ fn input_placeholder_layout_when_empty() {
 
     let input_id = find_input_id(&app);
 
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     let rt = app.element_tree();
     let input_node = rt.get(input_id).unwrap();
     let layout = &input_node.computed_layout;
@@ -89,7 +89,7 @@ fn input_placeholder_layout_when_empty() {
 fn input_click_to_focus() {
     let mut app = build_input_basic();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert!(
         app.focused_element() != Some(input_id),
@@ -108,7 +108,7 @@ fn input_click_to_focus() {
 fn input_key_type_character() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("H");
@@ -129,7 +129,7 @@ fn input_key_type_character() {
 fn input_backspace_deletes() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -152,7 +152,7 @@ fn input_backspace_deletes() {
 fn input_cursor_movement() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -204,7 +204,7 @@ fn input_on_input_callback() {
     app.load_bundle("input-callback").unwrap();
 
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("x");
@@ -225,7 +225,7 @@ fn input_on_input_callback() {
 fn shift_arrow_left_creates_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -253,7 +253,7 @@ fn shift_arrow_left_creates_selection() {
 fn shift_arrow_right_creates_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -278,7 +278,7 @@ fn shift_arrow_right_creates_selection() {
 fn ctrl_a_selects_all() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("h");
@@ -313,7 +313,7 @@ fn ctrl_a_selects_all() {
 fn backspace_deletes_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -350,7 +350,7 @@ fn backspace_deletes_selection() {
 fn typing_replaces_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -378,7 +378,7 @@ fn typing_replaces_selection() {
 fn arrow_cancels_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -414,7 +414,7 @@ fn arrow_cancels_selection() {
 fn shift_home_selects_to_start() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -438,7 +438,7 @@ fn shift_home_selects_to_start() {
 fn shift_end_selects_to_end() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -463,7 +463,7 @@ fn shift_end_selects_to_end() {
 fn delete_key_deletes_selection() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -491,7 +491,7 @@ fn delete_key_deletes_selection() {
 fn selected_text_returns_range() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -517,7 +517,7 @@ fn selected_text_returns_range() {
 fn composition_start_sets_state() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -541,7 +541,7 @@ fn composition_start_sets_state() {
 fn composition_update_updates_text() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -568,7 +568,7 @@ fn composition_update_updates_text() {
 fn composition_end_commits_text() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -595,7 +595,7 @@ fn composition_end_commits_text() {
 fn composition_end_advances_cursor() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -620,7 +620,7 @@ fn composition_end_advances_cursor() {
 fn composition_display_text_shows_preedit() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -655,7 +655,7 @@ fn composition_display_text_shows_preedit() {
 fn keyboard_suppressed_during_composition() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -678,7 +678,7 @@ fn keyboard_suppressed_during_composition() {
 fn composition_after_existing_text() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -707,7 +707,7 @@ fn composition_after_existing_text() {
 fn composition_at_middle_position() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("a");
@@ -734,7 +734,7 @@ fn composition_at_middle_position() {
 fn composition_display_text_without_composition() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("h");
@@ -757,7 +757,7 @@ fn composition_display_text_without_composition() {
 fn cursor_rect_returns_position_when_focused() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_key("h");
@@ -782,7 +782,7 @@ fn cursor_rect_none_when_not_focused() {
 fn focused_is_input_returns_true_for_input() {
     let mut app = build_input_basic();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     assert!(
@@ -804,7 +804,7 @@ fn focused_is_input_returns_false_when_not_focused() {
 fn multiple_composition_cycles() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -831,7 +831,7 @@ fn multiple_composition_cycles() {
 fn composition_with_update_changes() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);
@@ -861,7 +861,7 @@ fn composition_with_update_changes() {
 fn composition_state_clean_after_end() {
     let mut app = build_input_typing();
     let input_id = find_input_id(&app);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     focus_input(&mut app, input_id);
 
     app.send_ime(ImeEvent::CompositionStart);

@@ -127,11 +127,6 @@ pub struct PluginContext<'a> {
     ///
     /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
-    /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wraps
-    /// a `Source<JsValue>`). Plugins export this as a const so JS can
-    /// `import { viewportSize$ } from "tur:std"` and read the live
-    /// canvas size via `get`. The engine updates it each frame in `flush`.
-    pub viewport_size: JsValue,
     /// The engine's [`AsyncPluginContext`] — a `Send + Sync + Clone`
     /// handle for hopping work onto the engine's main thread (for OS APIs
     /// that require it, e.g. macOS `NSPasteboard` via `arboard`). Set by

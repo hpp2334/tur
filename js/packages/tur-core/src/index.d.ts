@@ -4,9 +4,10 @@
  * Runtime is a synthetic boa module registered by tur-engine
  * (`core::bridge::module_loader`) under the specifier `"tur:core"`.
  * It exports only the reactive substrate + event framework: atom primitives
- * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the `render` mount entry
- * point, and the opaque meta-types (`Element`/`Source`/`Derived`/`Mutation`/
- * `Readable`/`Val`/`ReadonlyStoreCtx`/`StoreCtx`).
+ * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the view-root mount API
+ * (`viewRoot`/`viewRoots`/`setViewRoot`/`resetViewRoot`), and the opaque
+ * meta-types (`Element`/`Source`/`Derived`/`Mutation`/`Readable`/`Val`/
+ * `ReadonlyStoreCtx`/`StoreCx`/`ViewRoot`).
  *
  * This is the authoritative contract for the engine's reactive layer. The
  * widget library (`tur:std`, declared in `@tur-ng/std`) re-exports
@@ -94,8 +95,37 @@ declare module "tur:core" {
     export function view(f: () => Element): Element;
 
     // ---------------------------------------------------------------------------
-    // Mounting
+    // View roots — mounting
+    //
+    // One view root per host-registered surface (canvas/window). JS resolves
+    // a root by name (`viewRoot("main")`), mounts (or replaces) its view via
+    // `setViewRoot`, and reads the root's per-root size atom
+    // (`root.viewportSize$`) + host-written lifecycle mirror (`root.active$`).
     // ---------------------------------------------------------------------------
 
-    export function render(root: Element): void;
+    /** Opaque handle to one view root, obtained via `viewRoot(name)`. Exposes
+     *  `name`, the per-root size atom `viewportSize$` (`{width, height}` in
+     *  CSS pixels), and the host-written `active$` mirror (`true` while the
+     *  root is set up; torn-down roots read `false`). */
+    export interface ViewRoot {
+        readonly name: string;
+        readonly viewportSize$: Source<{ width: number; height: number }>;
+        readonly active$: Source<boolean>;
+    }
+
+    /** Resolve a registered view root by name. Throws on an unknown name. */
+    export function viewRoot(name: string): ViewRoot;
+
+    /** All registered view-root names, in host declaration order. */
+    export function viewRoots(): string[];
+
+    /** Mount (or replace) a view root's view. Replacing destroys the previous
+     *  subtree first (unmount hooks fire on the next flush). Mounting while
+     *  the root is torn down records the intent only — the build is deferred
+     *  until the host sets the root up again. */
+    export function setViewRoot(root: ViewRoot, view: Element): void;
+
+    /** Unmount the root's built tree AND clear the mount intent (a later
+     *  host `setup_root` finds nothing to rebuild). */
+    export function resetViewRoot(root: ViewRoot): void;
 }

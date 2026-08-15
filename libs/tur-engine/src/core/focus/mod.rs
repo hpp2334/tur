@@ -115,9 +115,13 @@ impl FocusManager {
     /// to dispatch Rust-level `on_focus_changed` callbacks (e.g. to spawn
     /// async tasks tied to focus state) and to force a paint so
     /// that focus-sensitive paint effects update immediately.
+    /// Resolve pending focus/blur changes to mutations + lifecycle
+    /// notifications. Pending changes may reference elements in any of the
+    /// instance's view-root trees (node ids are unique instance-wide), so
+    /// each change resolves against the tree that owns its element id.
     pub fn flush_pending(
         &mut self,
-        tree: &crate::core::elements::NodeTreeData,
+        trees: &[crate::core::elements::NodeTree],
         queue: &mut crate::core::edgy::mutation::PendingMutationInvocationQueue,
     ) -> Vec<(ElementNodeId, bool)> {
         let changes = self.drain_pending();
@@ -127,6 +131,10 @@ impl FocusManager {
         let mut result = Vec::new();
         for change in changes {
             let id = change.id();
+            let Some(tree) = trees.iter().find(|t| t.view_root() == id.root()) else {
+                continue;
+            };
+            let tree = tree.borrow();
             let Some(node) = tree.get_element(id) else {
                 continue;
             };

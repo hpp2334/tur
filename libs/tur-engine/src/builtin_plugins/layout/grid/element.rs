@@ -37,7 +37,7 @@ impl View for GridView {
         boa: &mut Context,
         parent: crate::core::element::NodeId,
     ) -> crate::core::element::NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
         cx.insert_node(
             id,
             AnyElement::new(GridElement {

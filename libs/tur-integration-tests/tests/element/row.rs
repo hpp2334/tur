@@ -1,4 +1,4 @@
-use tur_engine::core::element::{ElementKind, ElementNodeId};
+use tur_engine::core::element::ElementKind;
 use tur_integration_tests::TurTestApp;
 
 #[test]
@@ -12,18 +12,12 @@ fn row_basic_horizontal_stacking() {
         assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
-        let row = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let row = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(row.kind().unwrap(), ElementKind::new("tur_flex"));
         assert_eq!(row.children.len(), 2);
 
-        let sb1 = tree
-            .get_element(ElementNodeId::new(row.children[0].as_u64()))
-            .unwrap();
-        let sb2 = tree
-            .get_element(ElementNodeId::new(row.children[1].as_u64()))
-            .unwrap();
+        let sb1 = tree.get_element(row.children[0].as_element_id()).unwrap();
+        let sb2 = tree.get_element(row.children[1].as_element_id()).unwrap();
         assert_eq!(sb1.kind().unwrap(), ElementKind::new("tur_container"));
         assert_eq!(sb2.kind().unwrap(), ElementKind::new("tur_container"));
 
@@ -53,11 +47,9 @@ fn row_cross_center_in_tight_container() {
     let (container_id, row_id, sb1_id, sb2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let container = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let container = tree.get_element(root.children[0].as_element_id()).unwrap();
         let row = tree
-            .get_element(ElementNodeId::new(container.children[0].as_u64()))
+            .get_element(container.children[0].as_element_id())
             .unwrap();
         (container.id, row.id, row.children[0], row.children[1])
     };
@@ -75,7 +67,7 @@ fn row_cross_center_in_tight_container() {
         "Row inside Container(height=36) should be 36px tall (tight constraints)"
     );
 
-    let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1 = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(sb1.computed_layout.size.width, 20.0);
     assert_eq!(sb1.computed_layout.size.height, 20.0);
     assert_eq!(
@@ -83,7 +75,7 @@ fn row_cross_center_in_tight_container() {
         "20px child centered in 36px Row: (36-20)/2 = 8"
     );
 
-    let sb2 = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2 = rt.get_element(sb2_id.as_element_id()).unwrap();
     assert_eq!(sb2.computed_layout.size.height, 10.0);
     assert_eq!(
         sb2.computed_layout.offset.y, 13.0,
@@ -99,12 +91,8 @@ fn row_cross_center_in_column_does_not_starve_siblings() {
     let (row_id, sb1_id, sb2_id, sb3_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let col = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
-        let row = tree
-            .get_element(ElementNodeId::new(col.children[0].as_u64()))
-            .unwrap();
+        let col = tree.get_element(root.children[0].as_element_id()).unwrap();
+        let row = tree.get_element(col.children[0].as_element_id()).unwrap();
         (row.id, row.children[0], row.children[1], col.children[2])
     };
 
@@ -117,19 +105,19 @@ fn row_cross_center_in_column_does_not_starve_siblings() {
         "Row with MainAxisSize.Min should be tallest child height"
     );
 
-    let sb1 = rt.get_element(ElementNodeId::new(sb1_id.as_u64())).unwrap();
+    let sb1 = rt.get_element(sb1_id.as_element_id()).unwrap();
     assert_eq!(
         sb1.computed_layout.offset.y, 0.0,
         "20px child in 20px Row: centered at y=0"
     );
 
-    let sb2 = rt.get_element(ElementNodeId::new(sb2_id.as_u64())).unwrap();
+    let sb2 = rt.get_element(sb2_id.as_element_id()).unwrap();
     assert_eq!(
         sb2.computed_layout.offset.y, 5.0,
         "10px child centered in 20px Row: (20-10)/2 = 5"
     );
 
-    let sb3 = rt.get_element(ElementNodeId::new(sb3_id.as_u64())).unwrap();
+    let sb3 = rt.get_element(sb3_id.as_element_id()).unwrap();
     assert_eq!(sb3.computed_layout.size.height, 20.0);
     assert_eq!(
         sb3.computed_layout.offset.y, 50.0,

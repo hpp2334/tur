@@ -121,6 +121,36 @@ fn block_on_on_current_thread_typed<F: Future>(fut: F) -> F::Output {
     local.block_on(rt_ref, fut)
 }
 
+/// Drive the current thread's `LocalSet` until idle so every spawned
+/// task (`run_loop` futures etc.) observes closed channels, completes, and
+/// DROPS while the thread's TLS is still alive. Without this, tasks sit in
+/// the thread-local `LocalSet` until thread destruction — dropping
+/// wgpu-backed state (render targets) after TLS teardown panics inside the
+/// destructor and aborts the process. Call once at the end of a test
+/// binary's `main` (see `tests/vello/main.rs`).
+pub fn settle_local_tasks() {
+    let Some((rt, local)) = CURRENT_EXEC.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map(|(rt, local)| (rt.clone(), local.clone()))
+    }) else {
+        return;
+    };
+    let rt_ref = &*rt;
+    // Poll the set repeatedly (a yield completes immediately, so each
+    // block_on is one poll round); completed run_loops release their
+    // `Rc<TurApp>` clones while the thread is still alive. The worker
+    // thread needs a beat to observe the closed channels and drop its
+    // senders, hence the tiny sleep per round. A bound guards against a
+    // task that never quiesces.
+    for _ in 0..64 {
+        local.block_on(rt_ref, async {
+            tokio::task::yield_now().await;
+        });
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+}
+
 /// Construct a Sleep future backed by the shared virtual clock.
 fn virtual_sleep(d: Duration) -> Sleep {
     let clock = CURRENT_CLOCK.with(|c| {

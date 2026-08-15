@@ -47,7 +47,7 @@ pub struct LazyListView {
 
 impl View for LazyListView {
     fn build(&self, cx: &mut dyn ViewCx, boa: &mut Context, parent: NodeId) -> NodeId {
-        let id: ElementNodeId = ElementNodeId::new(cx.alloc_node().as_u64());
+        let id: ElementNodeId = cx.alloc_node().as_element_id();
 
         // Resolve the eager props needed by the element up-front.
         let axis = self

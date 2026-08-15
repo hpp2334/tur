@@ -16,9 +16,9 @@
 //! — which `Canvas::fill_text_layout` consumes to do the actual drawing.
 //! This plugin produces these structs from JS-side props via
 //! `extract_layout_data`. Paste flows through the engine-internal bus:
-//! tur-clipboard's `ClipboardPlatformSubsystem` (registered by
+//! tur-clipboard's `ClipboardShellSubsystem` (registered by
 //! `TurClipboardPlugin`) forwards the embedder's
-//! `ClipboardPlatformPasteEvent` (PlatformEvent::Custom) as a
+//! `ClipboardShellPasteEvent` (ShellEventPayload::Custom) as a
 //! `ClipboardPasteEvent` (AppEvent::Custom), which
 //! [`handlers::ClipboardPasteSubsystem`] consumes here.
 
@@ -42,7 +42,7 @@ use crate::error::TurError;
 ///   [`UndoController`] on `globalThis`.
 /// - Registers this plugin's [`handlers::ClipboardPasteSubsystem`] (consumes
 ///   a `ClipboardPasteEvent` — AppEvent::Custom — forwarded by
-///   tur-clipboard's `ClipboardPlatformSubsystem`) and
+///   tur-clipboard's `ClipboardShellSubsystem`) and
 ///   [`handlers::CaretVisibilitySubsystem`] (post-subsystem that keeps the
 ///   caret visible after keyboard / IME / paste events). Registration order
 ///   matters: paste subsystem before caret-visible subsystem, so the latter

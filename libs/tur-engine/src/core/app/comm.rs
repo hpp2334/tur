@@ -35,7 +35,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
-use crate::core::element::{ElementNodeId, NodeId};
+use crate::core::element::{ElementNodeId, NodeId, ViewRootId};
 use crate::core::elements::{DevNodeData, NodeTreeData, NodeTreeSnapshot};
 use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
@@ -150,6 +150,12 @@ pub enum WorkerMsg {
     /// next flush and delivers to JS `eventBus.on` callbacks registered on
     /// `channel_id`.
     EventBusToJs { channel_id: u64, payload: Vec<u8> },
+    /// Tear down one view root: destroy its built tree (unmount hooks fire
+    /// on the next flush) but RETAIN the mount intent. Idempotent.
+    TearDownRoot(ViewRootId),
+    /// Set up one previously-torn-down view root: rebuild from the retained
+    /// mount intent (if any). Idempotent.
+    SetupRoot(ViewRootId),
     /// Push an engine-internal event (programmatic scroll, clipboard
     /// write, etc.).
     AppEvent(crate::core::app::AppEvent),
@@ -162,14 +168,16 @@ pub enum WorkerMsg {
 /// ([`MainMsg::RenderCommands`], [`MainMsg::FocusedStateChanged`]) or in
 /// response to a [`WorkerMsg`] RPC ([`MainMsg::DevReply`]).
 pub enum MainMsg {
-    /// One frame's worth of paint state. Main applies the batch to its
-    /// renderer (owned by `MainBackend`) directly.
+    /// One frame's worth of paint state for ONE view root. Main applies the
+    /// batch to that root's render target (owned by `MainBackend`).
     ///
     /// Images are NOT shipped here — they travel once per new resource via
-    /// [`MainMsg::UploadImage`] (main uploads them into its atlas
-    /// incrementally). Resizes travel via [`MainMsg::Resized`] (main calls
-    /// `renderer.resize(...)` only when the viewport actually changes).
-    RenderCommands { commands: Vec<RenderCommand> },
+    /// [`MainMsg::UploadImage`] (main uploads them into every target's
+    /// atlas incrementally).
+    RenderCommands {
+        root: ViewRootId,
+        commands: Vec<RenderCommand>,
+    },
     /// A newly-registered image resource (`createImageResource` /
     /// `createSvgResource` on the worker). Shipped exactly once per id
     /// (sent directly from the `createImageResource` bridge via the shared
@@ -186,9 +194,9 @@ pub enum MainMsg {
     /// directly because its `JsEval` variant holds a boa `JsError` which
     /// is `!Send` — main re-wraps as `TurError::Other`).
     FrameOutcome(Result<FrameOutcome, String>),
-    /// Resolved cursor changed this frame (deduped: only emitted on
-    /// change). Main forwards to its `CursorBackend` and caches it.
-    CursorChanged(Cursor),
+    /// Resolved cursor changed for one view root this frame (deduped: only
+    /// emitted on change). Main forwards to the root's `CursorBackend`.
+    CursorChanged { root: ViewRootId, cursor: Cursor },
     /// Focused-element state changed (used by main for IME / caret
     /// placement on platforms where the IME target lives off-engine).
     /// Pushed once per change, not per frame. Main caches it for
@@ -310,6 +318,8 @@ impl fmt::Debug for WorkerMsg {
                 .field("channel_id", channel_id)
                 .field("len", &payload.len())
                 .finish(),
+            Self::TearDownRoot(root) => f.debug_tuple("TearDownRoot").field(root).finish(),
+            Self::SetupRoot(root) => f.debug_tuple("SetupRoot").field(root).finish(),
             Self::AppEvent(_) => f.debug_tuple("AppEvent").finish_non_exhaustive(),
             Self::Destroy { .. } => write!(f, "Destroy"),
         }
@@ -319,13 +329,18 @@ impl fmt::Debug for WorkerMsg {
 impl fmt::Debug for MainMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RenderCommands { commands, .. } => f
-                .debug_tuple("RenderCommands")
-                .field(&commands.len())
+            Self::RenderCommands { root, commands } => f
+                .debug_struct("RenderCommands")
+                .field("root", root)
+                .field("commands", &commands.len())
                 .finish(),
             Self::UploadImage { id, .. } => f.debug_tuple("UploadImage").field(id).finish(),
             Self::FrameOutcome(fo) => f.debug_tuple("FrameOutcome").field(fo).finish(),
-            Self::CursorChanged(c) => f.debug_tuple("CursorChanged").field(c).finish(),
+            Self::CursorChanged { root, cursor } => f
+                .debug_struct("CursorChanged")
+                .field("root", root)
+                .field("cursor", cursor)
+                .finish(),
             Self::FocusedStateChanged {
                 is_editable,
                 cursor_rect,

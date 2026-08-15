@@ -7,12 +7,12 @@ use tur_integration_tests::TurTestApp;
 /// viewport. The ScrollView is the root element, so it receives the window
 /// size as a bounded viewport.
 const CARET_SCROLL_BUNDLE: &str = r#"
-import { render, ScrollView, Input } from "tur:std";
+import { setViewRoot, viewRoot, ScrollView, Input } from "tur:std";
 const lines = [];
 for (let i = 0; i < 30; i++) lines.push("line " + i);
 globalThis.__ctrl = new globalThis.TextEditingController();
 globalThis.__ctrl.setSpans([{ content: lines.join("\n") }]);
-render(ScrollView({
+setViewRoot(viewRoot("main"), ScrollView({
     queryKey: ["scroll"],
     child: Input({
         controller: globalThis.__ctrl,
@@ -38,7 +38,7 @@ fn caret_into_view_scrolls_to_caret() {
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let sv_id = app.query_element(&["scroll"]).unwrap();
-    let sv_id = ElementNodeId::new(sv_id.as_u64());
+    let sv_id = sv_id.as_element_id();
     assert_eq!(
         scroll_offset(&app, sv_id),
         0.0,

@@ -1,10 +1,10 @@
-use tur_engine::core::element::{ElementNodeId, NodeId};
+use tur_engine::core::element::NodeId;
 use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_integration_tests::TurTestApp;
 
 fn print_tree(tree: &NodeTreeSnapshot) {
     fn go(tree: &NodeTreeSnapshot, id: NodeId, depth: usize) {
-        if let Some(node) = tree.get_element(ElementNodeId::new(id.as_u64())) {
+        if let Some(node) = tree.get_element(id.as_element_id()) {
             eprintln!(
                 "{}{} id={} children={}",
                 "  ".repeat(depth),

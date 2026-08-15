@@ -9,7 +9,7 @@ fn find_text_width(tree: &NodeTreeSnapshot, id: ElementNodeId) -> Option<f64> {
         return Some(node.computed_layout.size.width);
     }
     for c in &node.children {
-        if let Some(w) = find_text_width(tree, ElementNodeId::new(c.as_u64())) {
+        if let Some(w) = find_text_width(tree, c.as_element_id()) {
             return Some(w);
         }
     }
@@ -23,9 +23,9 @@ fn find_text_width(tree: &NodeTreeSnapshot, id: ElementNodeId) -> Option<f64> {
 /// `flag`, and asserts the Text width changes (proving the derive recomputed).
 #[test]
 fn readable_subscribe_propagates_reactive_updates_to_child() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, render } from "tur:std";
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, setViewRoot, viewRoot } from "tur:std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -39,7 +39,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
             onUpdate$: mutate(function () {}),
             child: inner
         });
-        render(tree);
+        setViewRoot(viewRoot("main"), tree);
     "#)
     .unwrap();
 
@@ -72,9 +72,9 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 /// reactive propagation to the inner Text.
 #[test]
 fn readable_subscribe_inside_stack_positioned_still_updates() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, render } from "tur:std";
+        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, setViewRoot, viewRoot } from "tur:std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -90,7 +90,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         });
         const positioned = Positioned({ left: 30, top: 30, child: rs });
         const stack = Stack({ children: [ positioned ] });
-        render(stack);
+        setViewRoot(viewRoot("main"), stack);
     "#)
     .unwrap();
 
@@ -123,9 +123,9 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 /// Text, the animation machinery is what breaks sibling reactive propagation.
 #[test]
 fn animated_container_pattern_inner_text_still_updates() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, set, render } from "tur:std";
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, set, setViewRoot, viewRoot } from "tur:std";
         import { createAnimationController } from "tur:animation";
 
         globalThis.__flag = source(false);
@@ -160,7 +160,7 @@ fn animated_container_pattern_inner_text_still_updates() {
             }),
             child: inner
         });
-        render(tree);
+        setViewRoot(viewRoot("main"), tree);
     "#)
     .unwrap();
 
@@ -195,9 +195,9 @@ fn animated_container_pattern_inner_text_still_updates() {
 /// the triple-nested-controller structure is what breaks propagation.
 #[test]
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, render, Opacity } from "tur:std";
+        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, setViewRoot, viewRoot, Opacity } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
@@ -230,7 +230,7 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
         const layer3 = makeLayer(text, true);
         const layer2 = makeLayer(layer3, false);
         const layer1 = makeLayer(layer2, true);
-        render(layer1);
+        setViewRoot(viewRoot("main"), layer1);
     "#)
     .unwrap();
 
@@ -268,10 +268,10 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
 /// t=0 (start), mid, and end to verify the interpolation actually advances.
 #[test]
 fn js_animated_container_pattern_animates_width_over_time() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, derive, Container, ReadableSubscribe, mutate, set, render } from "tur:std";
+        import { source, derive, Container, ReadableSubscribe, mutate, set, setViewRoot, viewRoot } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__target = source(100);
         const target = globalThis.__target;
@@ -296,7 +296,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
             }),
             child: container
         });
-        render(tree);
+        setViewRoot(viewRoot("main"), tree);
     "#,
     )
     .unwrap();
@@ -307,12 +307,8 @@ fn js_animated_container_pattern_animates_width_over_time() {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
         // root -> ReadableSubscribe(pass-through) -> Container
-        let rs = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
-        tree.get_element(ElementNodeId::new(rs.children[0].as_u64()))
-            .unwrap()
-            .id
+        let rs = tree.get_element(root.children[0].as_element_id()).unwrap();
+        tree.get_element(rs.children[0].as_element_id()).unwrap().id
     };
     let width_at = |app: &TurTestApp| {
         let tree = app.element_tree();

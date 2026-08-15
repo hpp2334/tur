@@ -1,11 +1,11 @@
 use crate::builtin_plugins::gesture::mouse_region::{MouseRegionElement, PointerRegionEvent};
 use crate::builtin_plugins::gesture::pointer_region_tracker::PointerRegionTracker;
 use crate::core::edgy::mutation::MutationHandle;
-use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
+use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::NodeTreeData;
 use crate::core::hit_test::HitTest;
 use crate::core::layout::Offset;
-use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput};
+use crate::core::platform::{PlatformEvent, PointerDeviceKind, PointerInput, ShellEventPayload};
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 /// Tracks `onEnter` / `onExit` callbacks for `MouseRegion`s as the pointer
@@ -32,18 +32,26 @@ impl PointerSubsystem {
 
 impl Subsystem for PointerSubsystem {
     fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent) {
-        let PlatformEvent::Pointer(PointerInput::PointerMove {
-            position,
-            device: PointerDeviceKind::Mouse,
-            time_ms: _,
-        }) = event
+        let ShellEventPayload::Pointer {
+            input:
+                PointerInput::PointerMove {
+                    position,
+                    device: PointerDeviceKind::Mouse,
+                    time_ms: _,
+                },
+        } = event.payload()
         else {
             return;
         };
         let position = *position;
+        // Hover tracking is scoped to the routed root's tree — a pointer
+        // over root A must not exit regions in root B.
+        let Some(tree_handle) = cx.tree_of_root(event.view_root_id()) else {
+            return;
+        };
 
         let (exited, entered) = {
-            let tree = cx.element_tree.borrow();
+            let tree = tree_handle.borrow();
             let hit_path = HitTest::new(&tree).path(position);
             let filtered = filter_opaque_path(&hit_path, &tree);
             let diff = self
@@ -55,7 +63,7 @@ impl Subsystem for PointerSubsystem {
         };
 
         let mut mq = cx.mutation_queue.borrow_mut();
-        let tree = cx.element_tree.borrow();
+        let tree = tree_handle.borrow();
         for id in &exited {
             let Some(m) = mouse_region_exit_mutation(&tree, *id) else {
                 continue;
@@ -143,11 +151,11 @@ fn local_position(tree: &NodeTreeData, node_id: ElementNodeId, global: Offset) -
     let mut abs_y = 0.0f64;
     let mut current: Option<NodeId> = Some(node_id.into());
     while let Some(cid) = current {
-        if let Some(n) = tree.get_element(ElementNodeId::new(cid.as_u64())) {
+        if let Some(n) = tree.get_element(cid.as_element_id()) {
             abs_x += n.computed_layout.offset.x;
             abs_y += n.computed_layout.offset.y;
             current = n.parent;
-        } else if let Some(f) = tree.get_fragment(FragmentNodeId::new(cid.as_u64())) {
+        } else if let Some(f) = tree.get_fragment(cid.as_fragment_id()) {
             current = Some(f.parent);
         } else {
             break;

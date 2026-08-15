@@ -57,6 +57,12 @@ fn main() {
     }
 
     println!("\n{} passed; {} failed;", passed, failed);
+
+    // Drop the thread-local `LocalSet`'s pending tasks cleanly (while TLS
+    // is alive) instead of at thread destruction — the run_loop futures
+    // hold `Rc<TurApp>` clones whose render targets own wgpu buffers.
+    tur_integration_tests::test_scheduler::settle_local_tasks();
+
     if failed > 0 {
         std::process::exit(1);
     }

@@ -57,11 +57,11 @@ fn get_text_content(app: &TurTestApp, query_key: &[&str]) -> String {
 }
 
 fn click_query_key(app: &mut TurTestApp, query_key: &[&str]) {
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
     let id = app.query_element(query_key).unwrap_or_else(|| panic!("{:?} not found", query_key));
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 }
 
 fn get_input_text(app: &TurTestApp, input_id: ElementNodeId) -> String {
@@ -76,7 +76,7 @@ fn get_input_text(app: &TurTestApp, input_id: ElementNodeId) -> String {
 #[test]
 fn todolist_initial_render() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert_eq!(todo_count(&app), 4, "should start with 4 todos");
     assert_eq!(get_text_content(&app, &["toggle", "1"]), "\u{2713}");
@@ -88,7 +88,7 @@ fn todolist_initial_render() {
 #[test]
 fn todolist_toggle_task() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert_eq!(get_text_content(&app, &["toggle", "1"]), "\u{2713}");
 
@@ -106,7 +106,7 @@ fn todolist_toggle_task() {
 #[test]
 fn todolist_toggle_multiple() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     click_query_key(&mut app, &["toggle", "1"]);
     click_query_key(&mut app, &["toggle", "2"]);
@@ -121,7 +121,7 @@ fn todolist_toggle_multiple() {
 #[test]
 fn todolist_input_typing() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     let input_id = find_input_id(&app);
     focus_input(&mut app, input_id);
@@ -137,7 +137,7 @@ fn todolist_input_typing() {
 #[test]
 fn todolist_input_enter_clears() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     let input_id = find_input_id(&app);
     focus_input(&mut app, input_id);
@@ -159,7 +159,7 @@ fn todolist_input_enter_clears() {
 #[test]
 fn todolist_input_backspace() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     let input_id = find_input_id(&app);
     focus_input(&mut app, input_id);
@@ -176,7 +176,7 @@ fn todolist_input_backspace() {
 #[test]
 fn todolist_remove_click_fires() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     let remove_id = app.query_element(&["remove", "2"]).expect("remove-2 not found");
     let pi_id = {
@@ -196,7 +196,7 @@ fn todolist_remove_click_fires() {
 #[test]
 fn todolist_toggle_does_not_select() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     click_query_key(&mut app, &["toggle", "1"]);
 
@@ -208,14 +208,14 @@ fn todolist_toggle_does_not_select() {
 #[test]
 fn todolist_click_item_selects() {
     let mut app = build_todolist();
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert!(app.query_element(&["todo-item", "2", "unselected"]).is_some());
 
     let id = app.query_element(&["todo-item", "2", "unselected"]).unwrap();
     let (cx, cy) = app.get_element_absolute_bounds(id).unwrap().center();
     app.click(cx, cy);
-    app.render();
+    app.setViewRoot(viewRoot("main"), );
 
     assert!(app.query_element(&["todo-item", "2", "selected"]).is_some());
 }

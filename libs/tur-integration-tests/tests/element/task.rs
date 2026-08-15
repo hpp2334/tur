@@ -11,7 +11,7 @@ use tur_integration_tests::TurTestApp;
 
 #[test]
 fn sleep_resolves_after_delay() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -32,7 +32,7 @@ fn sleep_resolves_after_delay() {
 
 #[test]
 fn launch_runs_generator_and_resumes_after_sleep() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -56,7 +56,7 @@ fn launch_runs_generator_and_resumes_after_sleep() {
 
 #[test]
 fn launch_repeating_loop_ticks_multiple_times() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -78,7 +78,7 @@ fn launch_repeating_loop_ticks_multiple_times() {
 
 #[test]
 fn launch_cancel_stops_resumption() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -105,7 +105,7 @@ fn launch_cancel_stops_resumption() {
 
 #[test]
 fn launch_debounce_supersedes_previous_task() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -136,7 +136,7 @@ fn launch_debounce_supersedes_previous_task() {
 /// returning an object whose `.next(value)` returns `{done, value}`.
 #[test]
 fn launch_drives_non_native_iterator() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -173,7 +173,7 @@ fn launch_drives_non_native_iterator() {
 /// loop's JobQueue flush resolves exactly like a `sleep` resolution.
 #[test]
 fn launch_caught_rejection_resumes_generator() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"
@@ -204,7 +204,7 @@ fn launch_caught_rejection_resumes_generator() {
 /// stops resuming. The body after the rejected `yield` never runs.
 #[test]
 fn launch_uncaught_rejection_stops_without_panic() {
-    let mut app = TurTestApp::new(200.0, 100.0).unwrap();
+    let app = TurTestApp::new(200.0, 100.0).unwrap();
 
     app.eval_module_source(
         r#"

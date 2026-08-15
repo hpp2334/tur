@@ -1,4 +1,3 @@
-use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
 /// A Column with a single `Expanded` child that fills the viewport's main
@@ -6,8 +5,8 @@ use tur_integration_tests::TurTestApp;
 /// happens if the resize cascade re-lays-out the whole subtree (the
 /// `mark_root_dirty` fix), not just the root.
 const RESIZE_BUNDLE: &str = r#"
-import { render, Column, Expanded, Container } from "tur:std";
-render(Column({
+import { setViewRoot, viewRoot, Column, Expanded, Container } from "tur:std";
+setViewRoot(viewRoot("main"), Column({
     children: [
         Expanded({ child: Container({ queryKey: ["fill"] }) }),
     ],
@@ -16,7 +15,7 @@ render(Column({
 
 fn fill_height(app: &TurTestApp) -> f64 {
     let id = app.query_element(&["fill"]).unwrap();
-    let id = ElementNodeId::new(id.as_u64());
+    let id = id.as_element_id();
     let b = app.get_element_absolute_bounds(id).unwrap();
     b.bottom - b.top
 }

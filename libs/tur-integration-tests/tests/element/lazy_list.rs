@@ -12,9 +12,7 @@ fn lazy_list_viewport_size() {
         assert_eq!(root.kind().unwrap(), ElementKind::new("tur_root"));
         assert_eq!(root.children.len(), 1);
 
-        let ll = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let ll = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert_eq!(ll.kind().unwrap(), ElementKind::new("tur_lazy_list"));
         ll.id
     };
@@ -35,9 +33,7 @@ fn lazy_list_children_positioned_by_index() {
     let (child0_id, child1_id, child2_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let ll = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert!(ll.children.len() >= 3, "should have at least 3 children");
         (ll.children[0], ll.children[1], ll.children[2])
     };
@@ -45,21 +41,15 @@ fn lazy_list_children_positioned_by_index() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let c0 = rt
-        .get_element(ElementNodeId::new(child0_id.as_u64()))
-        .unwrap();
+    let c0 = rt.get_element(child0_id.as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.height, 50.0);
     assert_eq!(c0.computed_layout.offset.y, 0.0);
 
-    let c1 = rt
-        .get_element(ElementNodeId::new(child1_id.as_u64()))
-        .unwrap();
+    let c1 = rt.get_element(child1_id.as_element_id()).unwrap();
     assert_eq!(c1.computed_layout.size.height, 50.0);
     assert_eq!(c1.computed_layout.offset.y, 50.0);
 
-    let c2 = rt
-        .get_element(ElementNodeId::new(child2_id.as_u64()))
-        .unwrap();
+    let c2 = rt.get_element(child2_id.as_element_id()).unwrap();
     assert_eq!(c2.computed_layout.size.height, 50.0);
     assert_eq!(c2.computed_layout.offset.y, 100.0);
 }
@@ -72,18 +62,14 @@ fn lazy_list_children_tight_constraints() {
     let child0_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let ll = tree.get_element(root.children[0].as_element_id()).unwrap();
         ll.children[0]
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let c0 = rt
-        .get_element(ElementNodeId::new(child0_id.as_u64()))
-        .unwrap();
+    let c0 = rt.get_element(child0_id.as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 400.0);
     assert_eq!(c0.computed_layout.size.height, 50.0);
 }
@@ -96,7 +82,7 @@ fn lazy_list_element_properties() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        ElementNodeId::new(root.children[0].as_u64())
+        root.children[0].as_element_id()
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -127,7 +113,7 @@ fn lazy_list_scroll_updates_position() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        ElementNodeId::new(root.children[0].as_u64())
+        root.children[0].as_element_id()
     };
 
     // First mounted index should be 4 (scroll/extent = 4).
@@ -147,7 +133,7 @@ fn lazy_list_scroll_updates_position() {
     let ll = tree.get_element(ll_id).unwrap();
     let first_mounted_child = ll.children[0];
     let c0 = tree
-        .get_element(ElementNodeId::new(first_mounted_child.as_u64()))
+        .get_element(first_mounted_child.as_element_id())
         .unwrap();
     assert_eq!(
         c0.computed_layout.offset.y, 0.0,
@@ -156,9 +142,7 @@ fn lazy_list_scroll_updates_position() {
     );
 
     // Item 5 should be at viewport y=50.
-    let c1 = tree
-        .get_element(ElementNodeId::new(ll.children[1].as_u64()))
-        .unwrap();
+    let c1 = tree.get_element(ll.children[1].as_element_id()).unwrap();
     assert_eq!(
         c1.computed_layout.offset.y, 50.0,
         "second mounted child (index 5) should be at viewport y=50, got {}",
@@ -174,9 +158,7 @@ fn lazy_list_row_horizontal_layout() {
     let (child0_id, child1_id) = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        let ll = tree
-            .get_element(ElementNodeId::new(root.children[0].as_u64()))
-            .unwrap();
+        let ll = tree.get_element(root.children[0].as_element_id()).unwrap();
         assert!(ll.children.len() >= 2);
         (ll.children[0], ll.children[1])
     };
@@ -184,16 +166,12 @@ fn lazy_list_row_horizontal_layout() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     let rt = app.element_tree();
 
-    let c0 = rt
-        .get_element(ElementNodeId::new(child0_id.as_u64()))
-        .unwrap();
+    let c0 = rt.get_element(child0_id.as_element_id()).unwrap();
     assert_eq!(c0.computed_layout.size.width, 80.0);
     assert_eq!(c0.computed_layout.size.height, 300.0);
     assert_eq!(c0.computed_layout.offset.x, 0.0);
 
-    let c1 = rt
-        .get_element(ElementNodeId::new(child1_id.as_u64()))
-        .unwrap();
+    let c1 = rt.get_element(child1_id.as_element_id()).unwrap();
     assert_eq!(c1.computed_layout.size.width, 80.0);
     assert_eq!(c1.computed_layout.offset.x, 80.0);
 }
@@ -206,7 +184,7 @@ fn lazy_list_scroll_clamps_at_content_end() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        ElementNodeId::new(root.children[0].as_u64())
+        root.children[0].as_element_id()
     };
 
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -239,8 +217,8 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyList, Container, createColor, Text } from "tur:std";
-        render(LazyList({
+        import { setViewRoot, viewRoot, LazyList, Container, createColor, Text } from "tur:std";
+        setViewRoot(viewRoot("main"), LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 50,
@@ -259,7 +237,7 @@ fn lazy_list_virtualizes_large_item_count() {
     let ll_id = {
         let tree = app.element_tree();
         let root = tree.root_element().unwrap();
-        ElementNodeId::new(root.children[0].as_u64())
+        root.children[0].as_element_id()
     };
 
     // After layout, the visible range should be roughly (viewport / extent)
@@ -310,11 +288,11 @@ fn lazy_list_virtualizes_large_item_count() {
 
 /// Helper: load a virtualized 10,000-item list with fixed 56px extent.
 fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyList, Container, createColor, Text } from "tur:std";
-        render(LazyList({
+        import { setViewRoot, viewRoot, LazyList, Container, createColor, Text } from "tur:std";
+        setViewRoot(viewRoot("main"), LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 56,
@@ -331,7 +309,7 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     .unwrap();
     app.wait_for_timeout(std::time::Duration::ZERO);
     let id = app.query_element(&["ll"]).expect("queryKey ll not found");
-    (app, ElementNodeId::new(id.as_u64()))
+    (app, id.as_element_id())
 }
 
 /// `with_element` helper that returns the closure's R directly (panics if
@@ -428,7 +406,7 @@ fn virtualized_far_scroll_lands_on_correct_item() {
         ll_node.children.iter().any(|child| {
             let child_id = *child;
             let y = tree
-                .get_element(ElementNodeId::new(child_id.as_u64()))
+                .get_element(child_id.as_element_id())
                 .unwrap()
                 .computed_layout
                 .offset
@@ -525,7 +503,7 @@ fn virtualized_position_math_matches_content_index_formula() {
         let expected_y = (logical as f64) * extent - scroll_amount;
         let actual_y = app
             .element_tree()
-            .get_element(ElementNodeId::new(child_id.as_u64()))
+            .get_element(child_id.as_element_id())
             .unwrap()
             .computed_layout
             .offset
@@ -593,7 +571,7 @@ fn virtualized_scroll_past_end_clamps_and_no_negative_positions() {
     for child in &ll_node.children {
         let child_id = *child;
         let y = tree
-            .get_element(ElementNodeId::new(child_id.as_u64()))
+            .get_element(child_id.as_element_id())
             .unwrap()
             .computed_layout
             .offset
@@ -636,7 +614,7 @@ fn virtualized_scroll_back_to_zero_resets_cleanly() {
                 .children
                 .iter()
                 .map(|c| {
-                    tree.get_element(ElementNodeId::new((*c).as_u64()))
+                    tree.get_element((*c).as_element_id())
                         .unwrap()
                         .computed_layout
                         .offset
@@ -742,7 +720,7 @@ fn virtualized_repeated_scroll_up_no_orphans_or_crash() {
         let tree = app.element_tree();
         for &child_id in &child_ids {
             let node = tree
-                .get_element(ElementNodeId::new(child_id.as_u64()))
+                .get_element(child_id.as_element_id())
                 .unwrap_or_else(|| {
                     panic!(
                         "iteration {i}: child id {child_id:?} in parent.children but not in tree \
@@ -785,7 +763,7 @@ fn scroll_does_not_remeasure_mounted_children() {
             .iter()
             .map(|c| {
                 let cid = *c;
-                let n = tree.get_element(ElementNodeId::new(cid.as_u64())).unwrap();
+                let n = tree.get_element(cid.as_element_id()).unwrap();
                 (cid, n.computed_layout.size, n.computed_layout.offset.y)
             })
             .collect()
@@ -809,9 +787,7 @@ fn scroll_does_not_remeasure_mounted_children() {
         if !live_ids.contains(cid) {
             continue; // unmounted by scroll — out of scope for this check
         }
-        let n = tree
-            .get_element(ElementNodeId::new((*cid).as_u64()))
-            .unwrap();
+        let n = tree.get_element((*cid).as_element_id()).unwrap();
         assert_eq!(
             n.computed_layout.size, *size_before,
             "child {:?} was re-measured on scroll — size was {size_before:?}, now {:?} \

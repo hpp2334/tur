@@ -18,7 +18,7 @@ import {
     type StoreCtx,
     Text,
     type ViewportSize,
-    viewportSize$,
+    viewRoot,
 } from "tur:std";
 import {
     getIcon,
@@ -48,9 +48,10 @@ const SUGGESTIONS: Repo[] = [
 // Responsive: cap the card to the available width (viewport minus the outer
 // padding from index.ts) so it never overflows on mobile. Desktop viewports
 // are wide enough that this stays at 440.
-const isMobile = derive(() => get<ViewportSize>(viewportSize$).width < 720);
+const mainRoot = viewRoot("main");
+const isMobile = derive(() => get<ViewportSize>(mainRoot.viewportSize$).width < 720);
 const cardWidth = derive(() =>
-    Math.min(440, get<ViewportSize>(viewportSize$).width - 44),
+    Math.min(440, get<ViewportSize>(mainRoot.viewportSize$).width - 44),
 );
 
 function Suggestion({ repo }: { repo: Repo }): Element {

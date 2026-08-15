@@ -131,11 +131,14 @@ fn build_app(
     let runtime = configure(builder).build()?;
     let app = runtime
         .app_builder()
-        .renderer(
-            Box::new(tur_engine::renderer::noop::NoopRenderer::new()),
-            (400.0, 600.0),
-            1.0,
-        )
+        .renderer(Box::new(tur_engine::renderer::noop::NoopRenderer::new()))
+        .view_root("main", (400.0, 600.0), 1.0)
         .build()?;
+    app.setup_root(
+        "main",
+        Box::new(tur_engine::renderer::noop::NoopSurface),
+        (400.0, 600.0),
+        1.0,
+    )?;
     Ok(app)
 }

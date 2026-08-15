@@ -6,8 +6,8 @@ use crate::builtin_plugins::text::controller::{CursorChangeEvent, InputEvent};
 use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 
 /// Consumes a [`ClipboardPasteEvent`] (forwarded by tur-clipboard's
-/// [`ClipboardPlatformSubsystem`](crate::builtin_plugins::clipboard::handlers::ClipboardPlatformSubsystem)
-/// from the embedder's [`ClipboardPlatformPasteEvent`]) and inserts the
+/// [`ClipboardShellSubsystem`](crate::builtin_plugins::clipboard::handlers::ClipboardShellSubsystem)
+/// from the embedder's [`ClipboardShellPasteEvent`]) and inserts the
 /// pasted text into the focused [`EditableTextElement`], replacing any
 /// active selection or inserting at the caret.
 ///
@@ -21,7 +21,7 @@ use crate::builtin_plugins::text::elements::editable_text::EditableTextElement;
 /// subscribes to the same [`ClipboardPasteEvent`] and must be registered
 /// after this subsystem so the caret move it observes is the post-paste one.
 ///
-/// [`ClipboardPlatformPasteEvent`]: crate::builtin_plugins::clipboard::ClipboardPlatformPasteEvent
+/// [`ClipboardShellPasteEvent`]: crate::builtin_plugins::clipboard::ClipboardShellPasteEvent
 pub struct ClipboardPasteSubsystem;
 
 impl Subsystem for ClipboardPasteSubsystem {
@@ -37,8 +37,11 @@ impl Subsystem for ClipboardPasteSubsystem {
 
         // Take the element out of the tree so we can mutate it without
         // holding the tree borrow while we access the controller.
+        let Some(tree_handle) = cx.tree_containing(focused_id.into()) else {
+            return;
+        };
         let mut element_opt = {
-            let mut tree = cx.element_tree.borrow_mut();
+            let mut tree = tree_handle.borrow_mut();
             let Some(node) = tree.get_element_mut(focused_id) else {
                 return;
             };
@@ -95,7 +98,7 @@ impl Subsystem for ClipboardPasteSubsystem {
         }
 
         // Put the element back.
-        let mut tree = cx.element_tree.borrow_mut();
+        let mut tree = tree_handle.borrow_mut();
         if let Some(node) = tree.get_element_mut(focused_id) {
             node.element = element_opt;
         }

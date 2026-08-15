@@ -35,23 +35,61 @@ struct AtomId(u32);
 // traits; the private opaque wrappers are never named outside this module.
 // ---------------------------------------------------------------------------
 
-/// Opaque identifier for an external subscriber (e.g. an `NodeId`)
+/// Opaque identifier for an external subscriber (e.g. an element node id)
 /// that reads a reactive atom during layout.  The store records atom→subscriber
-/// edges so a reactive flush can mark affected subscribers dirty.  Kept as a
-/// plain `u64` newtype so the reactive module stays decoupled from the element
-/// module — callers convert `NodeId` → `SubscriberId` at the boundary.
+/// edges so a reactive flush can mark affected subscribers dirty.  Carries the
+/// subscriber's view root + per-tree node counter (mirrors the element id
+/// shape without depending on the element module) — callers convert
+/// `ElementNodeId` → `SubscriberId` at the boundary via `From`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SubscriberId(u64);
+pub struct SubscriberId {
+    root: u32,
+    sub: u64,
+}
 
 impl SubscriberId {
     #[inline]
-    pub fn new(id: u64) -> Self {
-        SubscriberId(id)
+    pub fn new(root: u32, sub: u64) -> Self {
+        SubscriberId { root, sub }
     }
 
+    /// The subscriber's view root.
     #[inline]
-    pub fn as_u64(self) -> u64 {
-        self.0
+    pub fn root(self) -> u32 {
+        self.root
+    }
+
+    /// The per-tree subscriber counter.
+    #[inline]
+    pub fn sub(self) -> u64 {
+        self.sub
+    }
+
+    /// Reconstruct the element node id this subscriber stands for.
+    #[inline]
+    pub fn as_node_id(self) -> crate::core::element::NodeId {
+        crate::core::element::NodeId::new(
+            crate::core::element::ViewRootId::new(self.root),
+            self.sub,
+        )
+    }
+}
+
+impl From<crate::core::element::ElementNodeId> for SubscriberId {
+    fn from(id: crate::core::element::ElementNodeId) -> Self {
+        SubscriberId {
+            root: id.root().as_u32(),
+            sub: id.node(),
+        }
+    }
+}
+
+impl From<crate::core::element::FragmentNodeId> for SubscriberId {
+    fn from(id: crate::core::element::FragmentNodeId) -> Self {
+        SubscriberId {
+            root: id.root().as_u32(),
+            sub: id.node(),
+        }
     }
 }
 

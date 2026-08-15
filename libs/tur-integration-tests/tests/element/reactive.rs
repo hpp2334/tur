@@ -8,7 +8,7 @@ use tur_integration_tests::TurTestApp;
 /// `set(setSpeed, factor, label)` flow).
 #[test]
 fn set_mutation_receives_ctx_then_args() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
         import { source, mutate, set } from "tur:std";
@@ -46,7 +46,7 @@ fn set_mutation_receives_ctx_then_args() {
 /// in the prepend logic.
 #[test]
 fn set_mutation_with_zero_args_passes_ctx_only() {
-    let mut app = TurTestApp::new(400.0, 600.0).unwrap();
+    let app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
         import { source, mutate, set } from "tur:std";

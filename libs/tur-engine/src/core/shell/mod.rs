@@ -1,8 +1,10 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::core::element::ViewRootId;
 use crate::core::layout::Offset;
 use crate::core::platform::Cursor;
 use boa_engine::context::time::Clock;
@@ -19,7 +21,7 @@ use boa_engine::context::time::Clock;
 /// [`Shell`] and is reset implicitly each frame by `apply_changes`
 /// (which calls `take`). [`PaintShell::set_cursor`] writes through it.
 #[derive(Clone)]
-pub struct CursorSink(Rc<Cell<Option<Cursor>>>);
+pub struct CursorSink(Rc<std::cell::Cell<Option<Cursor>>>);
 
 impl CursorSink {
     pub fn new() -> Self {
@@ -59,9 +61,12 @@ pub struct Shell {
     clock: Rc<dyn Clock>,
     cursor_platform:
         Option<Arc<std::sync::Mutex<dyn crate::core::platform::CursorBackend + Send + Sync>>>,
-    pointer_position: Option<Offset>,
-    cursor: CursorSink,
-    applied_cursor: Option<Cursor>,
+    /// Per-root pointer positions (canvas-local logical pixels). Multi-root
+    /// instances track one position per root; cursor claims resolve against
+    /// the root being painted.
+    pointer_positions: RefCell<HashMap<ViewRootId, Offset>>,
+    cursor_sinks: RefCell<HashMap<ViewRootId, CursorSink>>,
+    applied_cursors: RefCell<HashMap<ViewRootId, Cursor>>,
 }
 
 impl Shell {
@@ -69,9 +74,9 @@ impl Shell {
         Shell {
             clock,
             cursor_platform: None,
-            pointer_position: None,
-            cursor: CursorSink::new(),
-            applied_cursor: None,
+            pointer_positions: RefCell::new(HashMap::new()),
+            cursor_sinks: RefCell::new(HashMap::new()),
+            applied_cursors: RefCell::new(HashMap::new()),
         }
     }
 
@@ -104,23 +109,25 @@ impl Shell {
         self.clock.clone()
     }
 
-    /// Record the latest pointer position (canvas-local logical pixels), or
-    /// `None` to indicate no pointer is present. Called by the event layer on
-    /// `PointerMove`.
-    pub fn set_pointer_position(&mut self, position: Option<Offset>) {
-        self.pointer_position = position;
+    /// Record the latest pointer position for one view root (canvas-local
+    /// logical pixels). Called by the event layer on routed `PointerMove`s.
+    pub fn set_pointer_position(&mut self, root: ViewRootId, position: Offset) {
+        self.pointer_positions.borrow_mut().insert(root, position);
     }
 
-    /// Flush the cursor claims accumulated during paint: resolve the
-    /// deepest-wins value, dedup against the last applied cursor, and on change
-    /// invoke the installed `CursorBackend`'s `set_cursor`. Called once
-    /// by the driver after the paint pass. `take` empties the sink so the next
-    /// frame starts clean (no separate reset needed).
-    pub fn apply_changes(&mut self) {
-        let resolved = self.cursor.take().unwrap_or_default();
-        let present = self.pointer_position.is_some();
-        if present && self.applied_cursor != Some(resolved) {
-            self.applied_cursor = Some(resolved);
+    /// Flush the cursor claims accumulated during paint of one root:
+    /// resolve the deepest-wins value, dedup against the last applied cursor
+    /// for that root, and on change invoke the installed `CursorBackend`'s
+    /// `set_cursor`. Called by the driver once per root after its paint
+    /// pass. `take` empties the sink so the next frame starts clean.
+    pub fn apply_changes_for(&mut self, root: ViewRootId) {
+        let Some(sink) = self.cursor_sinks.borrow().get(&root).cloned() else {
+            return;
+        };
+        let resolved = sink.take().unwrap_or_default();
+        let present = self.pointer_positions.borrow().contains_key(&root);
+        if present && self.applied_cursors.borrow().get(&root) != Some(&resolved) {
+            self.applied_cursors.borrow_mut().insert(root, resolved);
             #[allow(clippy::collapsible_if)]
             if let Some(backend) = self.cursor_platform.as_ref() {
                 if let Ok(mut b) = backend.lock() {
@@ -130,17 +137,27 @@ impl Shell {
         }
     }
 
-    /// The most recent cursor applied via `apply_changes` (or `None` if
-    /// no pointer position was ever recorded). Used by `ThreadedBackend`'s
-    /// worker loop to ship cursor changes to main via
-    /// `MainMsg::CursorChanged`.
-    pub fn last_applied_cursor(&self) -> Option<Cursor> {
-        self.applied_cursor
+    /// Flush every root's cursor claims (in registration-agnostic map
+    /// order). Called after the full per-root paint pass.
+    pub fn apply_changes(&mut self) {
+        let roots: Vec<ViewRootId> = self.cursor_sinks.borrow().keys().copied().collect();
+        for root in roots {
+            self.apply_changes_for(root);
+        }
     }
 
-    /// Borrow the biz/paint face for one paint pass.
-    pub fn paint_face(&self) -> PaintShell<'_> {
-        PaintShell { inner: self }
+    /// The most recent cursor applied for `root` (or `None` if no pointer
+    /// position was ever recorded for it). Shipped to main via
+    /// `MainMsg::CursorChanged` per root.
+    pub fn last_applied_cursor_for(&self, root: ViewRootId) -> Option<Cursor> {
+        self.applied_cursors.borrow().get(&root).copied()
+    }
+
+    /// Borrow the biz/paint face for one root's paint pass.
+    pub fn paint_face_for(&self, root: ViewRootId) -> PaintShell<'_> {
+        // Ensure a sink exists for this root before handing out the face.
+        self.cursor_sinks.borrow_mut().entry(root).or_default();
+        PaintShell { inner: self, root }
     }
 }
 
@@ -153,14 +170,17 @@ impl Shell {
 #[derive(Clone, Copy)]
 pub struct PaintShell<'a> {
     inner: &'a Shell,
+    root: ViewRootId,
 }
 
 impl<'a> PaintShell<'a> {
     /// Claim the host cursor for this frame. May be called many times during
     /// one paint pass (deepest painted region wins). Nothing is committed to
-    /// the host until the driver flushes (`Shell::apply_changes`).
+    /// the host until the driver flushes (`Shell::apply_changes_for`).
     pub fn set_cursor(&self, cursor: Cursor) {
-        self.inner.cursor.set(cursor);
+        if let Some(sink) = self.inner.cursor_sinks.borrow().get(&self.root) {
+            sink.set(cursor);
+        }
     }
 
     /// Current frame time as a `Duration` since the epoch.
@@ -168,8 +188,13 @@ impl<'a> PaintShell<'a> {
         self.inner.now()
     }
 
-    /// Last known pointer position, or `None` if no pointer move was received.
+    /// Last known pointer position in this root's local space, or `None` if
+    /// no pointer move was received for this root.
     pub fn pointer_position(&self) -> Option<Offset> {
-        self.inner.pointer_position
+        self.inner
+            .pointer_positions
+            .borrow()
+            .get(&self.root)
+            .copied()
     }
 }

@@ -35,7 +35,7 @@ use crate::builtin_plugins::{
     layout::enums, layout::install_layout, lazy_container::install_lazy_container,
     lifecycle::install_lifecycle, scroll::install_scroll, text::install_text,
 };
-use crate::core::app::render;
+use crate::core::app::view_root;
 use crate::core::async_::task;
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::plugin::{Plugin, PluginContext};
@@ -70,7 +70,7 @@ impl Plugin for TurStdPlugin {
         // keyboard / ime subsystems are registered by their respective
         // `install_xxx` calls below.
         ctx.register_subsystem(Box::new(ResizeSubsystem));
-        // Note: ClipboardPlatformSubsystem (embedder paste → engine-internal
+        // Note: ClipboardShellSubsystem (embedder paste → engine-internal
         // paste forwarding) and ClipboardWriteSubsystem (Cmd+C/X → backend)
         // both live in `builtin_plugins::clipboard` (TurClipboardPlugin) —
         // registered there along with the JS bridge so the embedder wires
@@ -109,10 +109,10 @@ impl Plugin for TurStdPlugin {
         std_closures.extend(ct_closures);
         std_fns.extend(install_lifecycle(ctx)?);
         std_fns.extend(install_encode()?);
-        // Render mount + async task primitives stay in `core::app::render`
+        // View-root mount + async task primitives stay in `core::app::view_root`
         // and `core::async_::task` (renderer/async infra, not element-plugin
         // affinity).
-        std_fns.extend(render::fns());
+        std_fns.extend(view_root::fns());
         std_fns.extend(task::fns());
         std_fns.extend(crate::core::render::brush::bridge::fns());
 
@@ -123,10 +123,9 @@ impl Plugin for TurStdPlugin {
             js_ctx_value,
         ));
         std_consts.extend(enums::consts(ctx.boa_mut()));
-        // Engine-owned reactive source exposing the live canvas size as
-        // `{width, height}` (CSS pixels). The engine syncs it each frame in
-        // `TurAppInternal::flush`; JS reads it via `get(viewportSize$).width`.
-        std_consts.push(("viewportSize$", ctx.viewport_size.clone()));
+        // NOTE: per-root size atoms are NOT consts anymore — each view root
+        // exposes its own `viewportSize$` + `active$` on the handle returned
+        // by `viewRoot(name)` (see `core::app::view_root`).
         // Event bus: bidirectional byte-channel between host and JS.
         // Engine infrastructure (lives in `core::event_bus`); the shared
         // state is created up-front by `TurAppInternal::new`, so

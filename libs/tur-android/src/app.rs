@@ -16,7 +16,7 @@ mod imp {
     use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
     use tur_clipboard_android::{AndroidClipboard, Clipboard};
     use tur_engine::error::TurError;
-    use tur_engine::renderer::vello::VelloRenderer;
+    use tur_engine::renderer::vello::{RawSurface, WgpuRenderer};
     use tur_engine::{
         CursorCap, FocusedState, NoopCursor, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder,
     };
@@ -80,7 +80,7 @@ mod imp {
     /// `jlong` runtime handle Kotlin holds).
     pub struct AndroidRuntime {
         pub runtime: Rc<TurRuntime>,
-        pub wgpu_instance: wgpu::Instance,
+        pub wgpu_instance: std::sync::Arc<wgpu::Instance>,
         /// Tokio runtime — `sleep` timers (via
         /// [`AndroidSchedulerDriver`]) + optionally `NativeHttp`/reqwest.
         pub tokio: tokio::runtime::Runtime,
@@ -126,13 +126,14 @@ mod imp {
             builder = configure(builder);
             let runtime = builder.build()?;
 
-            let wgpu_instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-                backends: wgpu::Backends::VULKAN,
-                flags: wgpu::InstanceFlags::default(),
-                memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
-                backend_options: wgpu::BackendOptions::default(),
-                display: None,
-            });
+            let wgpu_instance =
+                std::sync::Arc::new(wgpu::Instance::new(wgpu::InstanceDescriptor {
+                    backends: wgpu::Backends::VULKAN,
+                    flags: wgpu::InstanceFlags::default(),
+                    memory_budget_thresholds: wgpu::MemoryBudgetThresholds::default(),
+                    backend_options: wgpu::BackendOptions::default(),
+                    display: None,
+                }));
 
             Ok(Self {
                 runtime,
@@ -238,22 +239,24 @@ mod imp {
                 *task = None;
             }
         }
-        /// Build a rendering instance over a freshly-created wgpu surface
-        /// backed by the given Android `Surface`'s `ANativeWindow*`, using the
-        /// runtime's shared `wgpu::Instance`. `frame_loop` drives the wake
-        /// cadence.
+        /// Build a rendering instance over the Android `Surface`'s
+        /// `ANativeWindow*`, using the runtime's shared `wgpu::Instance` via
+        /// the engine's `WgpuRenderer` factory (the single surface is
+        /// registered as the `"main"` view root). `frame_loop` drives the
+        /// wake cadence.
         ///
         /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
-        /// `.renderer(…)` is applied — chain
-        /// [`TurAppBuilder::instance_data`] (or any other pre-build hook)
-        /// on it and return it. The surface-backed renderer is set up by
-        /// this function after the closure returns, so the embedder cannot
-        /// accidentally override it. Pass `|b| b` for the no-op default.
+        /// `.renderer(…)` / `.view_root(…)` / `setup_root(…)` are applied —
+        /// chain [`TurAppBuilder::instance_data`] (or any other pre-build
+        /// hook) on it and return it. The renderer + root declaration +
+        /// surface attach are performed by this function after the closure
+        /// returns, so the embedder cannot accidentally override them. Pass
+        /// `|b| b` for the no-op default.
         ///
         /// Architecture: the engine runs on a worker thread; `MainBackend`
-        /// owns the wgpu `VelloRenderer` on the caller thread (main) and
-        /// drives it directly — command batches, incremental image uploads,
-        /// and resize-on-event.
+        /// owns the per-root wgpu `VelloTarget` on the caller thread (main)
+        /// and drives it directly — command batches, incremental image
+        /// uploads, and resize-on-event.
         #[allow(clippy::too_many_arguments)]
         pub async fn build_with_surface(
             runtime: &Rc<TurRuntime>,
@@ -266,6 +269,7 @@ mod imp {
             frame_loop: FrameLoopRef,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
+            let _ = tokio;
             let raw_display = window_handle
                 .display_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("display: {e}")))?;
@@ -273,52 +277,29 @@ mod imp {
                 .window_handle()
                 .map_err(|e| TurAndroidError::WgpuSurface(format!("window: {e}")))?;
 
-            let surface = unsafe {
-                wgpu_instance
-                    .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                        raw_display_handle: Some(raw_display.as_raw()),
-                        raw_window_handle: raw_window.as_raw(),
-                    })
-                    .map_err(|e| TurAndroidError::WgpuSurface(e.to_string()))?
-            };
-
-            let adapter = wgpu_instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::HighPerformance,
-                    compatible_surface: Some(&surface),
-                    force_fallback_adapter: false,
-                })
-                .await
-                .map_err(|e| TurAndroidError::WgpuAdapter(e.to_string()))?;
-
-            let (device, queue) = adapter
-                .request_device(&wgpu::DeviceDescriptor::default())
-                .await
-                .map_err(|e| TurAndroidError::WgpuDevice(e.to_string()))?;
-
-            let renderer = VelloRenderer::init_surface(
-                &adapter,
-                device,
-                queue,
-                surface,
-                logical_width,
-                logical_height,
-                dpr,
-            );
-
             // Apply the embedder's pre-build customization (e.g.
-            // `.instance_data(...)`), then attach the surface-backed
-            // renderer and build. The engine runs on a worker thread;
-            // `MainBackend` owns the wgpu renderer on main and drives it
-            // directly (render batches, image uploads, resize-on-event) —
-            // no render_sink callback.
+            // `.instance_data(...)`), then attach the renderer factory +
+            // the surface-backed view root and build. The root is declared
+            // pending and the Android `Surface` attaches right here via
+            // `setup_root`. The engine runs on a worker thread;
+            // `MainBackend` creates the wgpu render target on main (this
+            // thread — adapter/device requested synchronously inside the
+            // factory) and drives it directly.
             let app = configure_instance(runtime.app_builder())
-                .renderer(
-                    Box::new(renderer),
-                    (logical_width as f64, logical_height as f64),
-                    dpr,
-                )
+                .renderer(Box::new(WgpuRenderer::with_shared_instance(
+                    wgpu_instance.clone(),
+                )))
+                .view_root("main", (logical_width as f64, logical_height as f64), dpr)
                 .build()?;
+            app.setup_root(
+                "main",
+                Box::new(RawSurface {
+                    raw_display_handle: raw_display.as_raw(),
+                    raw_window_handle: raw_window.as_raw(),
+                }),
+                (logical_width as f64, logical_height as f64),
+                dpr,
+            )?;
 
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
@@ -331,11 +312,11 @@ mod imp {
             })
         }
 
-        /// Build a headless instance (no surface, no rendering) from the
-        /// runtime. Runs JS + capabilities + events only.
+        /// Build a headless instance (zero view roots — no rendering) from
+        /// the runtime. Runs JS + capabilities + events only.
         ///
         /// `configure_instance` receives the [`TurAppBuilder`] BEFORE
-        /// `.build_headless(…)` is applied — chain
+        /// `.renderer(…)` / `.build()` are applied — chain
         /// [`TurAppBuilder::instance_data`] on it and return it. Pass
         /// `|b| b` for the no-op default.
         pub fn build_headless(
@@ -344,7 +325,9 @@ mod imp {
             frame_loop: FrameLoopRef,
             configure_instance: impl for<'a> FnOnce(TurAppBuilder<'a>) -> TurAppBuilder<'a>,
         ) -> Result<Self, TurAndroidError> {
-            let app = configure_instance(runtime.app_builder()).build_headless((0.0, 0.0))?;
+            let app = configure_instance(runtime.app_builder())
+                .renderer(Box::new(tur_engine::renderer::NoopRenderer::new()))
+                .build()?;
             let (scheduler, loop_task, vsync_wake_fn) =
                 Self::install_frame_loop(&app, frame_loop, tokio);
 

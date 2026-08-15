@@ -4,7 +4,7 @@ use tur_integration_tests::TurTestApp;
 
 fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
     let id = app.query_element(qk).unwrap();
-    let id = ElementNodeId::new(id.as_u64());
+    let id = id.as_element_id();
     app.with_element(id, |e| {
         e.cast::<TextElement>()
             .map(|c| {
@@ -20,7 +20,7 @@ fn get_text(app: &TurTestApp, qk: &[&str]) -> String {
 
 fn find_pointer_interact(app: &TurTestApp) -> (ElementNodeId, f64, f64) {
     let pi_id = app.query_element(&["inc"]).expect("inc button not found");
-    let pi_id = ElementNodeId::new(pi_id.as_u64());
+    let pi_id = pi_id.as_element_id();
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     (pi_id, cx, cy)
 }

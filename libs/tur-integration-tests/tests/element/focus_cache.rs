@@ -33,8 +33,8 @@ fn focus_changed_handler_fires_on_editable_focus() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Input, render } from "tur:std";
-        render(Input({
+        import { Input, setViewRoot, viewRoot } from "tur:std";
+        setViewRoot(viewRoot("main"), Input({
             text: "",
             width: 200,
             height: 44,
