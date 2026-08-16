@@ -10,7 +10,7 @@ import {
     sleep,
     type Task,
 } from "tur:std";
-import { CASE_SOURCES, compileCase } from "../cases";
+import { CASE_SOURCES, compileCase, takePublishedView } from "../cases";
 import { buildHighlightSpans } from "../cases/compile";
 import {
     autoRun$,
@@ -35,16 +35,36 @@ import type { CaseFileMap, EditorController } from "./types";
 
 const caseViews = new Map<string, Element>();
 
+/** Per-case cleanup returned by the last invoked `start()` (the module
+ *  lifecycle contract, in-realm form). Runs before that case's next
+ *  recompile so controllers / animation loops don't leak across runs. */
+const caseCleanups = new Map<string, () => void>();
+
 /** Per-case file cache: case name → { filename → current editor text }.
  *  Populated from CASE_SOURCES on first load; updated on each recompile. */
 const caseFileCache = new Map<string, CaseFileMap>();
+
+/** Run a compiled case's `start()`: tear down the previous run's cleanup,
+ *  invoke `start`, then drain the view it published via `setCaseView`. */
+function invokeCaseStart(name: string, start: () => (() => void) | void): void {
+    caseCleanups.get(name)?.();
+    caseCleanups.delete(name);
+    const cleanup = start();
+    if (typeof cleanup === "function") {
+        caseCleanups.set(name, cleanup);
+    }
+    const view = takePublishedView();
+    if (view != null) {
+        caseViews.set(name, view as Element);
+    }
+}
 
 function compileIntoCache(name: string): void {
     const files = CASE_SOURCES[name];
     if (!files) return;
     const result = compileCase(files);
-    if (result.view) {
-        caseViews.set(name, result.view as Element);
+    if (result.start) {
+        invokeCaseStart(name, result.start);
     }
 }
 
@@ -162,12 +182,12 @@ export function recompile(): void {
     const files = caseFileCache.get(name) ?? {};
 
     const result = compileCase(files);
-    if (result.error || !result.view) {
+    if (result.error || !result.start) {
         set(status$, "error");
         set(errorMsg$, result.error ?? "unknown error");
         return;
     }
-    caseViews.set(name, result.view as Element);
+    invokeCaseStart(name, result.start);
     lastCompiledFiles.set(name, { ...files });
     set(lastCompiledAtMs$, Date.now());
     set(status$, "ready");

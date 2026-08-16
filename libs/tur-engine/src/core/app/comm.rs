@@ -68,28 +68,20 @@ pub enum WorkerMsg {
     /// emits [`HostMsg::RenderCommands`] (if it painted) and
     /// [`HostMsg::FrameOutcome`].
     Wake,
-    /// Parse + load + evaluate a JS module. Reply carries the parse/eval
-    /// outcome. `Arc<str>` because module sources can be large (the
-    /// playground ships multi-KB compiled JS) — `Arc` lets the message be
-    /// duplicated cheaply if needed (e.g. dev-tool logging).
+    /// Parse + load + evaluate a JS module, then invoke its `start()`
+    /// export (the module lifecycle contract: `start` returns an optional
+    /// cleanup function that runs before the next load or at destroy).
+    /// Reply carries the parse/eval outcome. `Arc<str>` because module
+    /// sources can be large (the playground ships multi-KB compiled JS) —
+    /// `Arc` lets the message be duplicated cheaply if needed (e.g.
+    /// dev-tool logging).
     LoadModule {
-        source: Arc<str>,
-        reply: ReplySender<Result<(), ModuleError>>,
-    },
-    /// Evaluate a plain JS script (not a module).
-    LoadJs {
-        source: Arc<str>,
-        reply: ReplySender<Result<(), ModuleError>>,
-    },
-    /// Parse + evaluate a JS module without `load_link_evaluate` semantics
-    /// (used by `eval_module` for re-evaluation scenarios).
-    EvalModule {
         source: Arc<str>,
         reply: ReplySender<Result<(), ModuleError>>,
     },
     /// Synchronous JS expression evaluation (test-only). Runs `ctx.eval(source)`
     /// on the worker, converts the result to its display string, and replies.
-    /// Production code uses `LoadModule` / `EvalModule`; this is for tests
+    /// Production code uses `LoadModule`; this is for tests
     /// that read JS-side state via `globalThis.__x = ...`.
     EvalJs {
         source: Arc<str>,
@@ -272,14 +264,6 @@ impl fmt::Debug for WorkerMsg {
             Self::Wake => write!(f, "Wake"),
             Self::LoadModule { source, .. } => f
                 .debug_struct("LoadModule")
-                .field("source_len", &source.len())
-                .finish_non_exhaustive(),
-            Self::LoadJs { source, .. } => f
-                .debug_struct("LoadJs")
-                .field("source_len", &source.len())
-                .finish_non_exhaustive(),
-            Self::EvalModule { source, .. } => f
-                .debug_struct("EvalModule")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
             Self::EvalJs { source, .. } => f

@@ -18,6 +18,20 @@ fn tur_mount(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResu
         )
     })?;
 
+    // One-root invariant: tear down any tree a previous `mount` left behind
+    // (a re-mount replaces the root rather than leaking the old subtree).
+    // This is also what cleans up on the module-lifecycle teardown path, so
+    // a module's cleanup never needs to unmount its own tree — the engine
+    // owns root-tree lifecycle.
+    {
+        let js = &js_ctx;
+        let old_root = js.element_tree.borrow().root_element_id();
+        if let Some(old) = old_root {
+            tracing::debug!("mount: replacing existing root {old:?}");
+            js.element_tree.borrow_mut().destroy_subtree(old);
+        }
+    }
+
     // Wrap the user's view in the engine-owned `RootView` (`RootElement`).
     // The wrapper is mandatory: the user's view may be a fragment
     // (`Switch` / `Each` / `Condition` / `Fragment`) with no

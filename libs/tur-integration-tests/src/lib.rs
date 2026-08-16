@@ -107,6 +107,33 @@ impl Plugin for NativeModulePlugin {
 /// time as a frame count rather than a wall duration.
 const FRAME_STEP_MS: u64 = 16;
 
+/// Legacy fixture adapter: if `source` doesn't already contain an `export`
+/// (inline fixtures never do; dist bundles and hand-written contract
+/// modules always do), hoist its import statements to the top and wrap the
+/// remaining statements in `export function start() { … }` so the source
+/// satisfies the module lifecycle contract without hand-editing every
+/// inline test bundle.
+fn wrap_legacy_start(source: &str) -> String {
+    if source.contains("export") {
+        return source.to_string();
+    }
+    let mut imports = String::new();
+    let mut body = String::new();
+    let mut in_import = false;
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        if in_import || trimmed.starts_with("import ") {
+            in_import = !trimmed.contains(" from ") && !trimmed.ends_with(';');
+            imports.push_str(line);
+            imports.push('\n');
+        } else {
+            body.push_str(line);
+            body.push('\n');
+        }
+    }
+    format!("{imports}export function start() {{\n{body}}}\n")
+}
+
 /// `Clipboard` impl for tests. Reads return a pre-canned value (set via
 /// [`Self::set_next_read`]); writes are appended to a log drainable via
 /// [`Self::take_writes`] / [`Self::last_write`]. Both resolve eagerly
@@ -1047,14 +1074,24 @@ impl TurTestApp {
         block_on(self.inner.backend().eval_js(source))
     }
 
-    pub fn load_bundle_source(&self, source: &str) -> Result<(), TurError> {
-        block_on(self.inner.load_js(source))
-    }
-
-    /// Evaluate `source` as an ES module — supports real
+    /// Evaluate `source` as an ES module and invoke its `start()` export
+    /// (the module lifecycle contract) — supports real
     /// `import { … } from "tur:std"` (or `tur-ext/demo-helper`/`tur:net`). Returns
     /// nothing; read results back via [`eval_js`](Self::eval_js).
+    ///
+    /// Legacy fixture adapter: inline test bundles predate the lifecycle
+    /// contract, so a source that doesn't already export `start` is
+    /// auto-wrapped (imports hoisted, remaining statements moved into
+    /// `export function start() { … }`). Contract tests use
+    /// [`load_module_raw`](Self::load_module_raw) for the strict path.
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
+        let wrapped = wrap_legacy_start(source);
+        block_on(self.inner.load_module(&wrapped))
+    }
+
+    /// Strict module-lifecycle path: loads `source` verbatim — it MUST
+    /// export `function start()` (missing/invalid `start` fails the load).
+    pub fn load_module_raw(&self, source: &str) -> Result<(), TurError> {
         block_on(self.inner.load_module(source))
     }
 

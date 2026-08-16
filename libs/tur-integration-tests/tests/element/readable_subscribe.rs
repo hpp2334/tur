@@ -26,8 +26,9 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
+        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
+        globalThis.__set = set;
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
@@ -53,8 +54,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
     };
 
     // Flip the flag — the inner Text's derive must recompute → width changes.
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
-        .unwrap();
+    app.eval_js(r#"globalThis.__set(globalThis.__flag, true);"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let w2 = {
@@ -76,8 +76,9 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 fn readable_subscribe_inside_stack_positioned_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, mount } from "tur:std";
+        import { source, derive, set, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
+        globalThis.__set = set;
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
             return g.get(flag) ? "EXPANDED_LABEL_LONG" : "short";
@@ -103,8 +104,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
-        .unwrap();
+    app.eval_js(r#"globalThis.__set(globalThis.__flag, true);"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     let w2 = {
@@ -131,6 +131,7 @@ fn animated_container_pattern_inner_text_still_updates() {
         import { createAnimationController } from "tur:animation";
 
         globalThis.__flag = source(false);
+        globalThis.__set = set;
         const flag = globalThis.__flag;
 
         // Animation progress (drives the Container's width).
@@ -173,8 +174,7 @@ fn animated_container_pattern_inner_text_still_updates() {
         find_text_width(&tree, root.id).expect("Text should be mounted")
     };
 
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
-        .unwrap();
+    app.eval_js(r#"globalThis.__set(globalThis.__flag, true);"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
     // advance past the animation duration so retarget + tick have run
     app.wait_for_timeout(std::time::Duration::from_millis(300));
@@ -199,9 +199,11 @@ fn animated_container_pattern_inner_text_still_updates() {
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, mount, Opacity } from "tur:std";
+        import { source, derive, set, get, Container, Text, ReadableSubscribe, mutate, mount, Opacity } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__flag = source(false);
+        globalThis.__set = set;
+        globalThis.__get = get;
         const flag = globalThis.__flag;
         // Sink captures the cardText derive's recomputed value (ground truth,
         // independent of layout measurement).
@@ -237,21 +239,15 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
     .unwrap();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
-    app.eval_module_source(
-        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
-    )
-    .unwrap();
+    app.wait_for_timeout(std::time::Duration::ZERO);
+    app.eval_js(r#"globalThis.__result = globalThis.__get(globalThis.__sink);"#);
     let v1: String = app.eval_js("globalThis.__result");
 
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__flag, true);"#)
-        .unwrap();
+    app.eval_js(r#"globalThis.__set(globalThis.__flag, true);"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.wait_for_timeout(std::time::Duration::from_millis(300));
 
-    app.eval_module_source(
-        r#"import { get } from "tur:std"; globalThis.__result = get(globalThis.__sink);"#,
-    )
-    .unwrap();
+    app.eval_js(r#"globalThis.__result = globalThis.__get(globalThis.__sink);"#);
     let v2: String = app.eval_js("globalThis.__result");
     assert_eq!(
         v1, "compact",
@@ -276,6 +272,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
         import { source, derive, Container, ReadableSubscribe, mutate, set, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__target = source(100);
+        globalThis.__set = set;
         const target = globalThis.__target;
         const progress = source(1.0);
         const widthTween = {
@@ -329,8 +326,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
     assert_eq!(width_at(&app), 100.0, "initial width should be 100");
 
     // Flip the target -> on_updated -> retarget (begin=100, end=200) + forward.
-    app.eval_module_source(r#"import { set } from "tur:std"; set(globalThis.__target, 200);"#)
-        .unwrap();
+    app.eval_js(r#"globalThis.__set(globalThis.__target, 200);"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
     // ctrl.forward() resets progress to 0 then advances; after a tiny advance
     // the width should be moving away from 100 toward 200.

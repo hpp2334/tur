@@ -24,11 +24,11 @@
 //! - [`EventBus::on_bus_event`] — register a Rust handler invoked with
 //!   `Vec<u8>` for each JS→host message on a channel.
 //!
-//! Shared state lives directly on [`EventBus`] (no separate "inner" type);
-//! all sides (host handle, JS bridge closures, the
-//! [`EmbedderBusSubsystem`]) hold `Rc<EventBus>`. Queues use separate `RefCell`s
-//! so a host handler calling `emit_to_js` (or a JS callback calling `send`)
-//! does not cause double-borrow panics.
+//! The worker-side shared state lives on [`EventBus`] (held by the JS
+//! bridge closures + the [`EmbedderBusSubsystem`]); the host-side
+//! [`EventBusHandle`] holds the worker channel instead. Queues use separate
+//! `RefCell`s so a host handler calling `emit_to_js` (or a JS callback
+//! calling `send`) does not cause double-borrow panics.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
@@ -74,13 +74,17 @@ pub struct EventBus {
     /// `RefCell` because boa's `JsFunction` is `!Send`/`!Sync` — these stay
     /// on the worker thread (the subsystem that invokes them runs there).
     js_handlers: RefCell<HashMap<u64, Vec<JsFunction>>>,
-    /// Host-side handlers registered via `on_bus_event`, keyed by
-    /// `channel_id`. Run during the worker's `EmbedderBusSubsystem` flush
-    /// (inline mode only — threaded mode ships bytes to main via `host_tx`).
+    /// Worker-side handlers registered via `EventBus::on_bus_event`,
+    /// keyed by `channel_id`. Run during the worker's
+    /// `EmbedderBusSubsystem` flush when no `host_tx` is set (handler
+    /// registered on the worker itself, e.g. by a plugin — no `Send`
+    /// bound). With `host_tx` set, bytes ship to main and host-side
+    /// `EventBusHandle::on_bus_event` handlers fire instead.
     embedder_handlers: RefCell<HashMap<u64, Vec<EmbedderHandler>>>,
-    /// Worker → main sender. When set (threaded mode), JS→host bytes are
-    /// shipped to main via `HostMsg::EventBusToEmbedder` so handlers registered
-    /// on the host-side `EventBusHandle` fire. `None` in inline mode.
+    /// Worker → main sender. When set, JS→host bytes are shipped to main
+    /// via `HostMsg::EventBusToEmbedder` so handlers registered on the
+    /// host-side `EventBusHandle` fire. Always set by
+    /// `TurAppInternal::new`; `None` only for a standalone `EventBus::new`.
     host_tx: RefCell<Option<crate::core::app::HostTx>>,
 }
 
@@ -95,33 +99,9 @@ impl EventBus {
         }
     }
 
-    /// Construct with pre-existing cross-thread queues. Used by
-    /// the threaded backend to share queues between the worker's
-    /// `EventBus` and main's `EventBusHandle`.
-    pub fn from_queues(
-        embedder_to_js: EmbedderToJsQueue,
-        js_to_embedder: JsToEmbedderQueue,
-    ) -> Self {
-        Self {
-            embedder_to_js,
-            js_to_embedder,
-            js_handlers: RefCell::new(HashMap::new()),
-            embedder_handlers: RefCell::new(HashMap::new()),
-            host_tx: RefCell::new(None),
-        }
-    }
-
-    /// Clone the cross-thread queues. The returned handle can be sent
-    /// across threads (Arc<Mutex> is Send + Sync); the full EventBus
-    /// stays on the worker thread.
-    pub fn queues(&self) -> (EmbedderToJsQueue, JsToEmbedderQueue) {
-        (self.embedder_to_js.clone(), self.js_to_embedder.clone())
-    }
-
     /// Retrieve the engine's cross-thread event bus handle. The full
     /// `EventBus` lives on the worker thread; this handle routes
-    /// `emit_to_js` via the worker's channel and exposes `drain_js_to_embedder`
-    /// for tests that drive the worker inline (no thread).
+    /// `emit_to_js` via the worker's channel.
     ///
     /// Production code uses [`TurApp::event_bus_handle`](crate::TurApp::event_bus_handle)
     /// directly. This alias is kept for back-compat with code that imported
@@ -164,125 +144,73 @@ impl Default for EventBus {
 }
 
 // ---------------------------------------------------------------------------
-// Main-side handle (for threaded mode) — owns just the queues
+// Main-side handle — ships via the worker's channel
 // ---------------------------------------------------------------------------
 
-/// Main-side handle to the event bus. Holds either:
-/// - **Queues mode** (inline): direct `Arc<Mutex<>>` queue clones,
-///   shared with the worker's `EventBus`. Full functionality.
-/// - **Channel mode** (threaded): a worker `Sender<WorkerMsg>`.
-///   `emit_to_js` ships via `WorkerMsg::EventBusToJs`. `drain_js_to_embedder`
-///   returns empty (handlers run on worker).
-///
-/// Both modes make `emit_to_js` work cross-thread, which is the embedder
-/// hot path. Use `TurApp::event_bus_handle()` for cross-thread access;
-/// use `TurApp::event_bus()` for inline-only full API
-/// (`on_bus_event` etc.).
-#[derive(Clone)]
-pub struct EventBusHandle {
-    inner: EventBusHandleInner,
-}
-
-/// Host-side handler stored on the host-side `EventBusHandle` (channel mode).
+/// Host-side handler stored on the `EventBusHandle`.
 type MainHostHandler = Box<dyn FnMut(Vec<u8>) + Send>;
 
 /// Shared handler list keyed by `channel_id` — all clones of an
-/// `EventBusHandle` in channel mode see the same map, so a handler
-/// registered on one clone fires when `AppBackend` dispatches on its own
-/// clone for the matching `channel_id`.
+/// `EventBusHandle` see the same map, so a handler registered on one
+/// clone fires when `AppBackend` dispatches on its own clone for the
+/// matching `channel_id`.
 type SharedHostHandlers = Arc<Mutex<HashMap<u64, Vec<MainHostHandler>>>>;
 
+/// Main-side handle to the event bus. Holds the worker
+/// `Sender<WorkerMsg>`: `emit_to_js` ships via `WorkerMsg::EventBusToJs`,
+/// and JS→host messages come back as `HostMsg::EventBusToEmbedder`, which
+/// `AppBackend` dispatches into the shared `embedder_handlers` map.
 #[derive(Clone)]
-enum EventBusHandleInner {
-    /// Inline mode — shared queues with the worker's `EventBus`.
-    Queues(EmbedderToJsQueue, JsToEmbedderQueue),
-    /// Threaded mode — ship via the worker's `futures::channel` sender.
-    /// `embedder_handlers` is shared across all clones (Arc<Mutex>) so a handler
-    /// registered on one clone fires when `AppBackend` dispatches a
-    /// `HostMsg::EventBusToEmbedder` on its own clone.
-    Channel {
-        worker_tx: crate::core::app::WorkerTx,
-        embedder_handlers: SharedHostHandlers,
-    },
+pub struct EventBusHandle {
+    worker_tx: crate::core::app::WorkerTx,
+    /// Shared handler list keyed by `channel_id` — all clones of an
+    /// `EventBusHandle` see the same map, so a handler registered on one
+    /// clone fires when `AppBackend` dispatches on its own clone for the
+    /// matching `channel_id`.
+    embedder_handlers: SharedHostHandlers,
 }
 
 impl EventBusHandle {
-    pub fn from_queues(
-        embedder_to_js: EmbedderToJsQueue,
-        js_to_embedder: JsToEmbedderQueue,
-    ) -> Self {
-        Self {
-            inner: EventBusHandleInner::Queues(embedder_to_js, js_to_embedder),
-        }
-    }
-
     pub fn from_channel(worker_tx: crate::core::app::WorkerTx) -> Self {
         Self {
-            inner: EventBusHandleInner::Channel {
-                worker_tx,
-                embedder_handlers: Arc::new(Mutex::new(HashMap::new())),
-            },
+            worker_tx,
+            embedder_handlers: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
     /// Push bytes on `channel_id` to be delivered to JS `on` callbacks
     /// registered on `channel_id` on the next flush.
     pub fn emit_to_js(&self, channel_id: u64, payload: Vec<u8>) {
-        match &self.inner {
-            EventBusHandleInner::Queues(h, _) => h.lock().unwrap().push_back((channel_id, payload)),
-            EventBusHandleInner::Channel { worker_tx, .. } => {
-                let _ = worker_tx.unbounded_send(crate::core::app::WorkerMsg::EventBusToJs {
-                    channel_id,
-                    payload,
-                });
-            }
-        }
+        let _ = self
+            .worker_tx
+            .unbounded_send(crate::core::app::WorkerMsg::EventBusToJs {
+                channel_id,
+                payload,
+            });
     }
 
     /// Register a host-side handler for JS→host messages on `channel_id`.
-    /// In channel mode the handler is stored in a shared `Arc<Mutex>` and
-    /// fires when `AppBackend` dispatches a `HostMsg::EventBusToEmbedder` for
+    /// The handler is stored in a shared `Arc<Mutex>` and fires when
+    /// `AppBackend` dispatches a `HostMsg::EventBusToEmbedder` for
     /// `channel_id`.
     pub fn on_bus_event(&self, channel_id: u64, handler: impl FnMut(Vec<u8>) + Send + 'static) {
-        if let EventBusHandleInner::Channel {
-            embedder_handlers, ..
-        } = &self.inner
-        {
-            embedder_handlers
-                .lock()
-                .unwrap()
-                .entry(channel_id)
-                .or_default()
-                .push(Box::new(handler));
-        }
+        self.embedder_handlers
+            .lock()
+            .unwrap()
+            .entry(channel_id)
+            .or_default()
+            .push(Box::new(handler));
     }
 
     /// Dispatch JS→host bytes on `channel_id` to handlers registered on
     /// `channel_id`. Called by `AppBackend` when it receives
     /// `HostMsg::EventBusToEmbedder`.
     pub(crate) fn dispatch_to_host(&self, channel_id: u64, bytes: Vec<u8>) {
-        if let EventBusHandleInner::Channel {
-            embedder_handlers, ..
-        } = &self.inner
-        {
-            let mut handlers = embedder_handlers.lock().unwrap();
-            if let Some(channel_handlers) = handlers.get_mut(&channel_id) {
-                for handler in channel_handlers.iter_mut() {
-                    handler(bytes.clone());
-                }
+        let mut handlers = self.embedder_handlers.lock().unwrap();
+        if let Some(channel_handlers) = handlers.get_mut(&channel_id) {
+            for handler in channel_handlers.iter_mut() {
+                handler(bytes.clone());
             }
-        }
-    }
-
-    /// Drain pending JS→host messages (as `(channel_id, bytes)`). Returns
-    /// empty in channel mode (handlers run on the worker).
-    pub fn drain_js_to_embedder(&self) -> Vec<(u64, Vec<u8>)> {
-        match &self.inner {
-            EventBusHandleInner::Queues(_, j) => {
-                let mut q = j.lock().unwrap();
-                q.drain(..).collect()
-            }
-            EventBusHandleInner::Channel { .. } => Vec::new(),
         }
     }
 }
@@ -326,8 +254,8 @@ impl Subsystem for EmbedderBusSubsystem {
 
         let js_msgs: Vec<(u64, Vec<u8>)> = inner.js_to_embedder.lock().unwrap().drain(..).collect();
         if !js_msgs.is_empty() {
-            // Threaded mode: ship each message to main so handlers
-            // registered on the host-side `EventBusHandle` fire.
+            // Ship each message to main so handlers registered on the
+            // host-side `EventBusHandle` fire.
             if let Some(tx) = inner.host_tx.borrow().as_ref() {
                 for (channel_id, msg) in &js_msgs {
                     let _ = tx.unbounded_send(crate::core::app::HostMsg::EventBusToEmbedder {
@@ -336,8 +264,8 @@ impl Subsystem for EmbedderBusSubsystem {
                     });
                 }
             }
-            // Inline mode: call worker-side handlers directly, filtered by
-            // channel_id.
+            // Worker-side handlers (registered on the `EventBus` itself,
+            // e.g. by a plugin) run directly, filtered by `channel_id`.
             let mut handlers = inner.embedder_handlers.borrow_mut();
             for (channel_id, msg) in js_msgs {
                 let Some(channel_handlers) = handlers.get_mut(&channel_id) else {
