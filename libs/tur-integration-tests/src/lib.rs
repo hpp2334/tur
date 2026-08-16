@@ -46,7 +46,7 @@ impl MutexFixedClock {
 }
 use tur_engine::core::cursor::Cursor;
 use tur_engine::core::elements::AnyElement;
-use tur_engine::core::elements::NodeTreeSnapshot;
+use tur_engine::core::elements::{NodeTreeData, NodeTreeSnapshot};
 use tur_engine::core::layout::{MouseButton, Offset};
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
@@ -939,11 +939,10 @@ impl TurTestApp {
         block_on(self.inner.query_element(key))
     }
 
+    /// Absolute bounds of the node (translation of its world affine +
+    /// painted size), from a `DevNodeData` snapshot built on the worker.
     pub fn get_element_absolute_bounds(&self, id: ElementNodeId) -> Option<Rect> {
-        // RPC: the worker returns a `DevNodeData` snapshot carrying the
-        // node's absolute position (translation of its world affine) + its
-        // painted size.
-        let node = block_on(self.inner.dev_tool_get_element(id.into()))?;
+        let node = self.dev_tool_get_element(id.into())?;
         let (x, y) = node.absolute;
         let (w, h) = node.size;
         Some(Rect {
@@ -958,12 +957,27 @@ impl TurTestApp {
         block_on(self.inner.focused_element())
     }
 
+    /// Logical-space `(x, y, w, h)` of the focused element's caret —
+    /// ancestor-offset accumulation plus the element's own
+    /// `cursor_rect_relative`, computed on the worker via `with_tree`.
     pub fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        block_on(self.inner.focused_cursor_rect())
-    }
-
-    pub fn focused_is_editable(&self) -> bool {
-        block_on(self.inner.focused_is_editable())
+        self.with_tree(|tree, focus| {
+            let focused_id = focus.focused()?;
+            let mut abs_x = 0.0f64;
+            let mut abs_y = 0.0f64;
+            let mut current = Some(NodeId::from(focused_id));
+            while let Some(id) = current {
+                let node = tree.get_element(ElementNodeId::new(id.as_u64()))?;
+                abs_x += node.computed_layout.offset.x;
+                abs_y += node.computed_layout.offset.y;
+                current = node.parent;
+            }
+            let node = tree.get_element(focused_id)?;
+            let element = node.element.as_ref()?;
+            let (cx, cy, cw, ch) = element.cursor_rect_relative()?;
+            Some((abs_x + cx, abs_y + cy, cw, ch))
+        })
+        .flatten()
     }
 
     /// Inspect an element's internal state via a closure. The closure runs
@@ -980,6 +994,17 @@ impl TurTestApp {
         cb: impl FnOnce(&AnyElement) -> R + Send + 'static,
     ) -> Option<R> {
         block_on(self.inner.with_element(id, cb))
+    }
+
+    /// Like [`Self::with_element`], but the closure receives the whole
+    /// live `NodeTreeData` AND `FocusManager` — the general test-only
+    /// escape hatch (reconstructs the former per-field focused/dev-tool
+    /// queries). Same `Send + 'static` constraints.
+    pub fn with_tree<R: Send + 'static>(
+        &self,
+        cb: impl FnOnce(&NodeTreeData, &tur_engine::core::focus::FocusManager) -> R + Send + 'static,
+    ) -> Option<R> {
+        block_on(self.inner.with_tree(cb))
     }
 
     /// Returns the most recent cursor pushed by the engine since the last
@@ -1098,7 +1123,11 @@ impl TurTestApp {
     /// Structured dev-tool snapshot of the root node, or `None` if no tree
     /// is mounted. Children are bare ids; iterate with `dev_tool_get_element`.
     pub fn dev_tool_element_tree(&self) -> Option<tur_engine::core::elements::DevNodeData> {
-        block_on(self.inner.dev_tool_element_tree())
+        self.with_tree(|tree, _focus| {
+            tree.root_element_id()
+                .and_then(|root| tree.dev_tool_node(root.into()))
+        })
+        .flatten()
     }
 
     /// Structured dev-tool snapshot of an arbitrary node by id.
@@ -1106,7 +1135,8 @@ impl TurTestApp {
         &self,
         id: NodeId,
     ) -> Option<tur_engine::core::elements::DevNodeData> {
-        block_on(self.inner.dev_tool_get_element(id))
+        self.with_tree(move |tree, _focus| tree.dev_tool_node(id))
+            .flatten()
     }
 }
 
