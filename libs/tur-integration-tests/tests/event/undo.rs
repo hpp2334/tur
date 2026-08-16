@@ -154,10 +154,10 @@ fn select_all_cut_then_undo_restores_text() {
     // Cmd+X — cut.
     app.send_key_with_modifiers_full("x", false, false, true);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let written = app.take_clipboard_write();
+    let written = app.wait_for_clipboard_write();
     assert_eq!(
-        written.as_deref(),
-        Some("hello world"),
+        written.as_str(),
+        "hello world",
         "Cmd+X should write the cut text to the clipboard slot"
     );
     assert_eq!(get_text(&app, id), "", "Cmd+X should clear the buffer");

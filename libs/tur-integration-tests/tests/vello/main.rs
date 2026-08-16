@@ -2,62 +2,51 @@ mod raw;
 mod snapshot;
 mod vello_app;
 
+use libtest_mimic::{Arguments, Trial};
+
 fn main() {
-    let tests: &[(&str, fn())] = &[
-        ("vello_counter_app", raw::vello_counter_app),
-        (
-            "vello_dpr_1_renders_colors",
-            raw::vello_dpr_1_renders_colors,
-        ),
-        (
-            "vello_dpr_1_5_renders_colors",
-            raw::vello_dpr_1_5_renders_colors,
-        ),
-        (
-            "vello_dpr_2_renders_colors",
-            raw::vello_dpr_2_renders_colors,
-        ),
-        (
-            "vello_dpr_3_renders_colors",
-            raw::vello_dpr_3_renders_colors,
-        ),
-        ("vello_image_renders", raw::vello_image_renders),
-        (
-            "vello_snapshot_reported_stretch_bug",
-            snapshot::reported_stretch_bug_renders_red_strip,
-        ),
-        (
-            "vello_container_clip_rounded",
-            snapshot::container_clip_rounded_corner_clipped,
-        ),
+    let mut args = Arguments::from_args();
+    // Each trial creates a real window + GPU surface (minifb + wgpu), which
+    // macOS only allows on the process main thread. Default to 1 thread —
+    // with cargo-nextest each test already runs in its own process, so
+    // sequential-in-process costs nothing (an explicit --test-threads still
+    // wins).
+    if args.test_threads.is_none() {
+        args.test_threads = Some(1);
+    }
+    let tests = vec![
+        Trial::test("vello_counter_app", || {
+            raw::vello_counter_app();
+            Ok(())
+        }),
+        Trial::test("vello_dpr_1_renders_colors", || {
+            raw::vello_dpr_1_renders_colors();
+            Ok(())
+        }),
+        Trial::test("vello_dpr_1_5_renders_colors", || {
+            raw::vello_dpr_1_5_renders_colors();
+            Ok(())
+        }),
+        Trial::test("vello_dpr_2_renders_colors", || {
+            raw::vello_dpr_2_renders_colors();
+            Ok(())
+        }),
+        Trial::test("vello_dpr_3_renders_colors", || {
+            raw::vello_dpr_3_renders_colors();
+            Ok(())
+        }),
+        Trial::test("vello_image_renders", || {
+            raw::vello_image_renders();
+            Ok(())
+        }),
+        Trial::test("vello_snapshot_reported_stretch_bug", || {
+            snapshot::reported_stretch_bug_renders_red_strip();
+            Ok(())
+        }),
+        Trial::test("vello_container_clip_rounded", || {
+            snapshot::container_clip_rounded_corner_clipped();
+            Ok(())
+        }),
     ];
-
-    let mut passed = 0;
-    let mut failed = 0;
-
-    for (name, test_fn) in tests {
-        print!("test {name} ... ");
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(test_fn)) {
-            Ok(()) => {
-                println!("ok");
-                passed += 1;
-            }
-            Err(e) => {
-                let msg = if let Some(s) = e.downcast_ref::<&str>() {
-                    s.to_string()
-                } else if let Some(s) = e.downcast_ref::<String>() {
-                    s.clone()
-                } else {
-                    format!("{e:?}")
-                };
-                println!("FAILED\n  {msg}");
-                failed += 1;
-            }
-        }
-    }
-
-    println!("\n{} passed; {} failed;", passed, failed);
-    if failed > 0 {
-        std::process::exit(1);
-    }
+    libtest_mimic::run(&args, tests).exit();
 }

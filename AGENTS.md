@@ -819,9 +819,12 @@ libs/
 
 ```sh
 cargo build --workspace
-cargo test --workspace --test element
+cargo nextest run --workspace            # test runner: per-test process isolation
+cargo test --workspace --doc --locked    # doctests (nextest doesn't run these)
 cargo clippy --workspace -- -D warnings
 ```
+
+Tests run under **cargo-nextest** (config: `.config/nextest.toml`; CI uses `--profile ci` with `retries = 2` so an intermittent flake is reported but doesn't fail the run). Each test executes in its own process — a wedged or crashing test can't take down its binary's siblings. Doctests stay on `cargo test --doc`.
 
 **Before running tests**, prepare JS fixtures (install deps, generate TS types, build JS):
 
@@ -829,7 +832,7 @@ cargo clippy --workspace -- -D warnings
 node scripts/prepare-js-fixtures.cjs
 ```
 
-**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo test --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo test --workspace --test element`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { painted, schedule }`) to inspect the schedule decision directly.
+**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo nextest run --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo nextest run --workspace`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { painted, schedule }`) to inspect the schedule decision directly.
 
 ### tur-website (wasm)
 

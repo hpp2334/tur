@@ -132,10 +132,10 @@ fn cmd_c_copies_selected_text_to_clipboard_slot() {
     app.send_key_with_modifiers_full("c", false, false, true);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let written = app.take_clipboard_write();
+    let written = app.wait_for_clipboard_write();
     assert_eq!(
-        written.as_deref(),
-        Some("ll"),
+        written.as_str(),
+        "ll",
         "Cmd+C should write the selected text to the clipboard slot"
     );
 
@@ -180,10 +180,10 @@ fn cmd_x_cuts_selected_text_to_clipboard_slot() {
     app.send_key_with_modifiers_full("x", false, false, true);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
-    let written = app.take_clipboard_write();
+    let written = app.wait_for_clipboard_write();
     assert_eq!(
-        written.as_deref(),
-        Some("ll"),
+        written.as_str(),
+        "ll",
         "Cmd+X should write the cut text to the clipboard slot"
     );
 
@@ -262,7 +262,7 @@ fn cut_then_paste_roundtrips_text() {
     // Cut the whole word.
     app.send_key_with_modifiers_full("x", false, false, true);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    let cut_text = app.take_clipboard_write().expect("Cmd+X should write");
+    let cut_text = app.wait_for_clipboard_write();
     assert_eq!(cut_text, "hello");
     assert_eq!(get_text(&app, id), "");
 
