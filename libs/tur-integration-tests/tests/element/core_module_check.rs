@@ -1,23 +1,23 @@
 //! Verify `tur:core` exposes ONLY the reactive core — atom primitives
-//! (`source`/`derive`/`mutate`/`get`/`set`/`view`) + `render`. Views, enums,
+//! (`source`/`derive`/`mutate`/`get`/`set`/`view`) + `mount`. Views, enums,
 //! colors, and event types live in `tur:std`.
 
 use tur_integration_tests::TurTestApp;
 
-/// The reactive primitives + `render` are importable from `tur:core`
-/// and work end-to-end (a `view()` factory + `render()` mount).
+/// The reactive primitives + `mount` are importable from `tur:core`
+/// and work end-to-end (a `view()` factory + `mount()` mount).
 #[test]
-fn core_reactive_primitives_import_and_render() {
+fn core_reactive_primitives_import_and_mount() {
     let app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { view, render } from "tur:core";
-            // `view` produces an opaque handle; `render` mounts it. The actual
+            import { view, mount } from "tur:core";
+            // `view` produces an opaque handle; `mount` builds it. The actual
             // view tree is built by the std-layer factory in `std_module_check`.
             // Here we just confirm the core primitives resolve and `view` returns
             // a non-null opaque handle.
             globalThis.__handle = view(() => {
-                throw new Error("view body should not run until render");
+                throw new Error("view body should not run until mount");
             });
         "#,
     )
@@ -29,20 +29,20 @@ fn core_reactive_primitives_import_and_render() {
     );
 }
 
-/// `render` is importable from core and mounts a tree. Uses a `view` thunk
+/// `mount` is importable from core and builds the view tree. Uses a `view` thunk
 /// whose body builds nothing (the real widget tests live in `std_module_check`).
 #[test]
-fn core_render_importable() {
+fn core_mount_importable() {
     let app = TurTestApp::new(100.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { view, render } from "tur:core";
+            import { view, mount } from "tur:core";
             const h = view(() => null);
-            globalThis.__has_render = typeof render === "function";
+            globalThis.__has_mount = typeof mount === "function";
         "#,
     )
     .unwrap();
-    assert_eq!(app.eval_js("globalThis.__has_render"), "true");
+    assert_eq!(app.eval_js("globalThis.__has_mount"), "true");
 }
 
 /// Views, enums, and colors are NOT in core anymore — they moved to

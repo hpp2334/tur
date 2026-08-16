@@ -16,7 +16,7 @@
 //! `Canvas::draw_image` consumes. This plugin produces these structs from
 //! raw bytes / SVG strings via [`decode`]. Decoded images are registered via
 //! `TurInstanceContext::register_image` (worker keeps sizes only; the pixel `Blob`
-//! ships to main via `MainMsg::UploadImage`).
+//! ships to main via `HostMsg::UploadImage`).
 
 pub mod bridge;
 pub mod decode;

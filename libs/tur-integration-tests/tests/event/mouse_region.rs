@@ -1,6 +1,6 @@
 use tur_engine::builtin_plugins::text::elements::TextElement;
+use tur_engine::core::cursor::Cursor;
 use tur_engine::core::element::ElementNodeId;
-use tur_engine::core::platform::Cursor;
 use tur_integration_tests::TurTestApp;
 
 fn build(app: &mut TurTestApp) -> ElementNodeId {
@@ -32,7 +32,9 @@ fn span_content(app: &TurTestApp, id: ElementNodeId) -> String {
     .unwrap_or_default()
 }
 
-fn flush(app: &mut TurTestApp) {
+fn drive_to_quiescence(app: &mut TurTestApp) {
+    // 6 quiescence drives: enough for the event 2192 handler 2192 reactive flush
+    // ripple to fully settle without perturbing time-sensitive asserts.
     for _ in 0..6 {
         app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
@@ -68,7 +70,7 @@ fn hover_cursor_applies() {
     let (cx, cy) = app.get_element_absolute_bounds(region_id).unwrap().center();
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     // Cursor applied.
     assert_eq!(
@@ -81,7 +83,7 @@ fn hover_cursor_applies() {
     // Move away — cursor resets to default.
     app.pointer_move(999.0, 999.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         app.take_current_cursor(),
@@ -107,7 +109,7 @@ fn reactive_cursor_updates() {
     // Initial cursor resolves to the source's initial value ("pointer").
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
     assert_eq!(
         app.take_current_cursor(),
         Some(Cursor::Pointer),
@@ -117,7 +119,7 @@ fn reactive_cursor_updates() {
     // Move away — resets to default.
     app.pointer_move(999.0, 999.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
     assert_eq!(app.take_current_cursor(), Some(Cursor::Default));
 
     // Flip the cursor source and re-hover — the cursor must update after a
@@ -126,7 +128,7 @@ fn reactive_cursor_updates() {
     app.wait_for_timeout(std::time::Duration::ZERO);
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
     assert_eq!(
         app.take_current_cursor(),
         Some(Cursor::EwResize),

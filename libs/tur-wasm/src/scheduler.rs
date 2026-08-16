@@ -1,7 +1,7 @@
 //! Wasm-backed scheduling objects — one per role.
 //!
-//! - [`WasmWorkerHost`] (runtime-level) hosts app loops on per-pool Web
-//!   Workers: a pool grows up to its `max_threads` workers (first apps
+//! - [`WasmWorkerSpawner`] (runtime-level) hosts app loops on per-pool Web
+//!   Workers: a pool grows up to its `max_workers` workers (first apps
 //!   each get a fresh worker), then additional apps are delivered into
 //!   the least-loaded existing worker as a **factory message** — the
 //!   worker hosts multiple app loop futures cooperatively on its JS event
@@ -10,7 +10,7 @@
 //!   one-worker-per-app.
 //! - [`WasmVsyncSource`] (per-instance) arms a `requestAnimationFrame`
 //!   callback; on fire it pushes an event into every subscribed channel.
-//! - [`WasmMainLoop`] (runtime-level) spawns main-thread tasks via
+//! - [`WasmHostLoop`] (runtime-level) spawns main-thread tasks via
 //!   `wasm_bindgen_futures::spawn_local`.
 //! - [`WasmWorkerExecutor`] (worker-side) runs on each Web Worker:
 //!   `spawn_local` → `wasm_bindgen_futures::spawn_local` (works on any
@@ -49,8 +49,8 @@ use js_sys::{Object, Reflect};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 
 use tur_engine::core::scheduler::{
-    LocalFut, MainLoop, Sleep, TaskHandle, VsyncEvents, VsyncSource, WorkerEntry, WorkerExecutor,
-    WorkerHost, WorkerPoolHandle, WorkerTicket, track_spawn,
+    HostLoop, LocalFut, Sleep, TaskHandle, VsyncEvents, VsyncSource, WorkerEntry, WorkerExecutor,
+    WorkerPoolHandle, WorkerSpawner, WorkerTicket, track_spawn,
 };
 
 use crate::worker_spawn;
@@ -62,7 +62,7 @@ use crate::worker_spawn;
 /// Hosts app loops on pooled Web Workers. Main-thread only (the registry
 /// is a `RefCell`); workers are reaped (terminated + removed) lazily when
 /// a later spawn finds them at zero live apps.
-pub struct WasmWorkerHost {
+pub struct WasmWorkerSpawner {
     pools: RefCell<Vec<PoolEntry>>,
 }
 
@@ -79,7 +79,7 @@ struct PoolWorker {
     live: Rc<Cell<usize>>,
 }
 
-impl WasmWorkerHost {
+impl WasmWorkerSpawner {
     pub fn new() -> Rc<Self> {
         Rc::new(Self {
             pools: RefCell::new(Vec::new()),
@@ -87,7 +87,7 @@ impl WasmWorkerHost {
     }
 }
 
-impl WorkerHost for WasmWorkerHost {
+impl WorkerSpawner for WasmWorkerSpawner {
     fn spawn_worker(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket {
         // Reap workers whose last app finished (terminate + remove) —
         // a lazy exit, mirroring the native registry's lane reaping.
@@ -114,7 +114,7 @@ impl WorkerHost for WasmWorkerHost {
             }
         }
 
-        let pool_worker = if registry.workers.len() < pool.max_threads() {
+        let pool_worker = if registry.workers.len() < pool.max_workers() {
             // Grow: this app gets a fresh worker (the factory travels in
             // the worker's init payload — the existing spawn path).
             let worker = Rc::new(worker_spawn::spawn(entry));
@@ -172,7 +172,7 @@ impl WorkerHost for WasmWorkerHost {
         let join: Box<dyn FnOnce()> = Box::new(move || {
             // Join = this app's slot released; terminate the worker when
             // the last app is gone (in practice join is never called by
-            // the engine — MainBackend holds the ticket for its lifetime —
+            // the engine — AppBackend holds the ticket for its lifetime —
             // so reaping normally happens lazily at the next spawn).
             if live.get() > 0 {
                 live.set(live.get() - 1);
@@ -279,9 +279,9 @@ impl VsyncSource for WasmVsyncSource {
 /// Main-thread task spawner — zero state; spawns via
 /// `wasm_bindgen_futures::spawn_local` on the JS event loop. Roots the
 /// engine's internal main-thread drain + any embedder main-thread tasks.
-pub struct WasmMainLoop;
+pub struct WasmHostLoop;
 
-impl MainLoop for WasmMainLoop {
+impl HostLoop for WasmHostLoop {
     fn spawn_local(&self, fut: LocalFut) -> TaskHandle {
         track_spawn(fut, wasm_bindgen_futures::spawn_local)
     }

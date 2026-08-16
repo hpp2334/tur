@@ -159,9 +159,9 @@ impl TurVelloApp {
         let driver = tur_integration_tests::TestSchedulerDriver::new();
         let pool = tur_engine::WorkerPoolHandle::new("vello-test", usize::MAX);
         let runtime = TurRuntime::builder()
-            .worker_host(driver.worker_host())
+            .worker_spawner(driver.worker_spawner())
             .vsync_source(driver.vsync_source())
-            .main_loop(driver.main_loop())
+            .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(StdClock::new()))
             .worker_pool(pool.clone())
@@ -169,7 +169,7 @@ impl TurVelloApp {
             .plugin(tur_animation::TurAnimationPlugin)
             .build()?;
 
-        // Threaded engine: worker produces command batches; `MainBackend`
+        // Threaded engine: worker produces command batches; `AppBackend`
         // owns the VelloRenderer on main and applies them via `run_loop`.
         let app = runtime
             .app_builder()
@@ -204,7 +204,7 @@ impl TurVelloApp {
             // Drive to quiescence at this tick (cap 8 sub-iterations).
             for _ in 0..8 {
                 let outcome = self.drive_one_frame();
-                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                if !outcome.painted && outcome.schedule == NextFrame::Idle {
                     break;
                 }
             }

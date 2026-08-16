@@ -239,8 +239,8 @@ fn lazy_list_virtualizes_large_item_count() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyList, Container, createColor, Text } from "tur:std";
-        render(LazyList({
+        import { mount, LazyList, Container, createColor, Text } from "tur:std";
+        mount(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 50,
@@ -313,8 +313,8 @@ fn setup_virtualized() -> (TurTestApp, ElementNodeId) {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { render, LazyList, Container, createColor, Text } from "tur:std";
-        render(LazyList({
+        import { mount, LazyList, Container, createColor, Text } from "tur:std";
+        mount(LazyList({
             axis: 0,
             itemCount: 10000,
             itemExtent: 56,

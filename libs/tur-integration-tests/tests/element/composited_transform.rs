@@ -294,14 +294,14 @@ fn follower_no_flash_on_sibling_relayout() {
 /// input event (tap/click) triggered a fresh flush — visibly wrong on real
 /// devices (one flush per input, then idle).
 ///
-/// This loads the module WITHOUT the `settle()` that `load_bundle` performs
+/// This loads the module WITHOUT the quiescence drive that `load_bundle` performs
 /// (so the tree is built but not yet flushed) and then pumps EXACTLY ONE
 /// frame, asserting the follower is already at its anchor-aligned position.
 #[test]
 fn follower_correct_on_first_frame_non_topleft_anchor() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    // Load the case module WITHOUT settling — we want to observe the very
-    // first flush frame, which `load_bundle` would mask via its `settle()`.
+    // Load the case module WITHOUT driving to quiescence — we want to observe the very
+    // first flush frame, which `load_bundle` would mask via its quiescence drive.
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let workspace_root = Path::new(&manifest_dir)
         .parent()

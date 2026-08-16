@@ -5,11 +5,11 @@
 //!   (Choreographer-backed). When the Choreographer fires, Kotlin calls
 //!   `nativePump` which invokes [`AndroidVsyncSource::fire_vsync`],
 //!   pushing an event into every subscribed channel.
-//! - [`AndroidMainLoop`] — main-thread task spawner: tasks are held in a
+//! - [`AndroidHostLoop`] — main-thread task spawner: tasks are held in a
 //!   list polled from `AndroidInstance::pump_loop` (each wake-up), with
 //!   wakers that request a prompt pump so pending tasks get their next
 //!   poll. Roots the engine's main-thread drain (the
-//!   `AsyncPluginContext` hop) + any embedder main-thread tasks.
+//!   `HostExecutor` hop) + any embedder main-thread tasks.
 //! - Worker hosting comes from
 //!   [`tur_native::worker_pool::NativeWorkerPools`] (the shared native
 //!   lane executor) with [`TokioLaneTimer`] as the lane timer — pools
@@ -43,7 +43,7 @@ use jni::objects::JObject;
 use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
 
 use tur_engine::core::scheduler::{
-    LocalFut, MainLoop, Sleep, TaskHandle, VsyncEvents, VsyncSource, track_spawn,
+    HostLoop, LocalFut, Sleep, TaskHandle, VsyncEvents, VsyncSource, track_spawn,
 };
 
 /// Handle to Kotlin's `org.tur.FrameLoop` object, stashed at create time so
@@ -86,7 +86,7 @@ impl LaneTimer for TokioLaneTimer {
 
 /// Build the native worker host with the tokio-backed lane timer. The
 /// handle is shared with `HttpBackend` (reqwest) by the embedder.
-pub fn worker_host(runtime: tokio::runtime::Handle) -> Rc<NativeWorkerPools> {
+pub fn worker_spawner(runtime: tokio::runtime::Handle) -> Rc<NativeWorkerPools> {
     let runtime = Arc::new(runtime);
     Rc::new(NativeWorkerPools::with_timer(Arc::new(move || {
         Rc::new(TokioLaneTimer {
@@ -234,15 +234,15 @@ impl std::task::Wake for MainLoopWaker {
 /// request a pump (via the wake closures registered by live instances) so
 /// a task that becomes ready between pumps gets polled promptly.
 ///
-/// This roots the engine's main-thread drain (the `AsyncPluginContext`
-/// hop — clipboard `run_on_main` etc.), which historically sat on an
+/// This roots the engine's main-thread drain (the `HostExecutor`
+/// hop — clipboard `run_on_host` etc.), which historically sat on an
 /// unpumped `LocalPool` and could never advance.
-pub struct AndroidMainLoop {
+pub struct AndroidHostLoop {
     tasks: Rc<RefCell<Vec<LocalFut>>>,
     wake_fns: Arc<Mutex<Vec<WakeFn>>>,
 }
 
-impl AndroidMainLoop {
+impl AndroidHostLoop {
     pub fn new() -> Rc<Self> {
         Rc::new(Self {
             tasks: Rc::new(RefCell::new(Vec::new())),
@@ -283,7 +283,7 @@ impl AndroidMainLoop {
     }
 }
 
-impl MainLoop for AndroidMainLoop {
+impl HostLoop for AndroidHostLoop {
     fn spawn_local(&self, fut: LocalFut) -> TaskHandle {
         let handle = track_spawn(fut, |tracked| {
             self.tasks.borrow_mut().push(tracked);

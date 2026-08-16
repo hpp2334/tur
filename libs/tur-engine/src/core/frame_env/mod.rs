@@ -1,10 +1,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 
+use crate::core::cursor::Cursor;
 use crate::core::layout::Offset;
-use crate::core::platform::Cursor;
 use boa_engine::context::time::Clock;
 
 /// Per-frame cursor-claim accumulator written during the paint walk.
@@ -16,8 +15,9 @@ use boa_engine::context::time::Clock;
 /// to drop any claims already written by its ancestors (which painted earlier).
 ///
 /// `Cursor` is `Copy`, so the sink is a cheap shared `Cell`. It lives in
-/// [`Shell`] and is reset implicitly each frame by `apply_changes`
-/// (which calls `take`). [`PaintShell::set_cursor`] writes through it.
+/// [`FrameEnv`] and is reset implicitly each frame by
+/// `apply_cursor_changes` (which calls `take`). [`PaintEnv::set_cursor`]
+/// writes through it.
 #[derive(Clone)]
 pub struct CursorSink(Rc<Cell<Option<Cursor>>>);
 
@@ -44,45 +44,37 @@ impl Default for CursorSink {
     }
 }
 
-/// Owner of shell state and the privileged driver operations.
+/// Owner of per-frame environment state (clock, pointer position, cursor
+/// resolution) and the privileged driver operations.
 ///
 /// Held by the app driver (`TurAppContext`). The biz (paint / views) never
-/// sees this type — only the [`PaintShell`] face borrowed via [`paint_face`].
+/// sees this type — only the [`PaintEnv`] face borrowed via
+/// [`paint_env`].
 ///
-/// `apply_changes` is the privileged post-paint flush: it resolves the
-/// deepest cursor claim, dedups against the last applied value, and pushes
-/// the result through the installed `CursorBackend` (looked up from the
-/// capability registry at `build()` time). Biz cannot call it.
+/// `apply_cursor_changes` is the privileged post-paint flush: it resolves
+/// the deepest cursor claim and dedups against the last applied value.
+/// It is pure state — the *application* happens on the host thread: the
+/// worker loop ships each change as `HostMsg::CursorChanged` and the
+/// per-instance backend installed via
+/// [`TurApp::set_cursor_backend`](crate::TurApp::set_cursor_backend)
+/// applies it. Biz cannot call it.
 ///
-/// [`paint_face`]: Shell::paint_face
-pub struct Shell {
+/// [`paint_env`]: FrameEnv::paint_env
+pub struct FrameEnv {
     clock: Rc<dyn Clock>,
-    cursor_platform:
-        Option<Arc<std::sync::Mutex<dyn crate::core::platform::CursorBackend + Send + Sync>>>,
     pointer_position: Option<Offset>,
     cursor: CursorSink,
     applied_cursor: Option<Cursor>,
 }
 
-impl Shell {
+impl FrameEnv {
     pub fn new(clock: Rc<dyn Clock>) -> Self {
-        Shell {
+        FrameEnv {
             clock,
-            cursor_platform: None,
             pointer_position: None,
             cursor: CursorSink::new(),
             applied_cursor: None,
         }
-    }
-
-    /// Install the cursor backend. Called at build time by the engine
-    /// builder after looking up the `Cursor` capability. The backend fires
-    /// at runtime during `apply_changes` whenever the resolved cursor changes.
-    pub fn set_cursor_platform(
-        &mut self,
-        backend: Arc<std::sync::Mutex<dyn crate::core::platform::CursorBackend + Send + Sync>>,
-    ) {
-        self.cursor_platform = Some(backend);
     }
 
     /// Current frame time as a `Duration` since the epoch.
@@ -112,53 +104,49 @@ impl Shell {
     }
 
     /// Flush the cursor claims accumulated during paint: resolve the
-    /// deepest-wins value, dedup against the last applied cursor, and on change
-    /// invoke the installed `CursorBackend`'s `set_cursor`. Called once
-    /// by the driver after the paint pass. `take` empties the sink so the next
-    /// frame starts clean (no separate reset needed).
-    pub fn apply_changes(&mut self) {
+    /// deepest-wins value and dedup against the last applied cursor.
+    /// Called once by the driver after the paint pass. `take` empties the
+    /// sink so the next frame starts clean (no separate reset needed).
+    ///
+    /// Pure state — the worker loop ships the deduped change (see
+    /// `last_applied_cursor`) to the host thread, where the per-instance
+    /// `CursorBackend` applies it.
+    pub fn apply_cursor_changes(&mut self) {
         let resolved = self.cursor.take().unwrap_or_default();
         let present = self.pointer_position.is_some();
-        if present && self.applied_cursor != Some(resolved) {
+        if present {
             self.applied_cursor = Some(resolved);
-            #[allow(clippy::collapsible_if)]
-            if let Some(backend) = self.cursor_platform.as_ref() {
-                if let Ok(mut b) = backend.lock() {
-                    b.set_cursor(resolved);
-                }
-            }
         }
     }
 
-    /// The most recent cursor applied via `apply_changes` (or `None` if
-    /// no pointer position was ever recorded). Used by `ThreadedBackend`'s
-    /// worker loop to ship cursor changes to main via
-    /// `MainMsg::CursorChanged`.
+    /// The most recent cursor resolved via `apply_cursor_changes` (or `None`
+    /// if no pointer position was ever recorded). Used by the worker loop to
+    /// ship cursor changes to the host thread via `HostMsg::CursorChanged`.
     pub fn last_applied_cursor(&self) -> Option<Cursor> {
         self.applied_cursor
     }
 
     /// Borrow the biz/paint face for one paint pass.
-    pub fn paint_face(&self) -> PaintShell<'_> {
-        PaintShell { inner: self }
+    pub fn paint_env(&self) -> PaintEnv<'_> {
+        PaintEnv { inner: self }
     }
 }
 
 /// The face the biz (paint / `MouseRegion` / `PaintContext`) sees.
 ///
-/// Constructed only via `Shell::paint_face`. It exposes claiming a
-/// cursor plus reading time and pointer position — but **not** the privileged
-/// `apply_changes` / `set_pointer_position`, so biz cannot flush
-/// or mutate driver state.
+/// Constructed only via `FrameEnv::paint_env`. It exposes claiming a
+/// cursor plus reading time and pointer position — but **not** the
+/// privileged `apply_cursor_changes` / `set_pointer_position`, so biz
+/// cannot flush or mutate driver state.
 #[derive(Clone, Copy)]
-pub struct PaintShell<'a> {
-    inner: &'a Shell,
+pub struct PaintEnv<'a> {
+    inner: &'a FrameEnv,
 }
 
-impl<'a> PaintShell<'a> {
+impl<'a> PaintEnv<'a> {
     /// Claim the host cursor for this frame. May be called many times during
     /// one paint pass (deepest painted region wins). Nothing is committed to
-    /// the host until the driver flushes (`Shell::apply_changes`).
+    /// the host until the driver flushes (`FrameEnv::apply_cursor_changes`).
     pub fn set_cursor(&self, cursor: Cursor) {
         self.inner.cursor.set(cursor);
     }

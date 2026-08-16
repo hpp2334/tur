@@ -42,7 +42,7 @@ fn painted_ids(cmds: &[RenderCommand]) -> HashSet<ElementNodeId> {
 fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
     app.eval_module_source(
         r#"
-        import { render, ScrollView, Column, Container, createColor } from "tur:std";
+        import { mount, ScrollView, Column, Container, createColor } from "tur:std";
         const kids = [];
         for (let i = 0; i < 6; i++) {
             kids.push(Container({
@@ -51,7 +51,7 @@ fn mount_and_collect_ids(app: &mut TurTestApp) -> Vec<ElementNodeId> {
                 queryKey: ["item", i],
             }));
         }
-        render(ScrollView({ queryKey: ["scroll"], child: Column({ children: kids }) }));
+        mount(ScrollView({ queryKey: ["scroll"], child: Column({ children: kids }) }));
     "#,
     )
     .expect("mount");
@@ -175,8 +175,8 @@ fn no_clip_means_no_culling() {
 
     app.eval_module_source(
         r#"
-        import { render, Container, createColor } from "tur:std";
-        render(Container({
+        import { mount, Container, createColor } from "tur:std";
+        mount(Container({
             width: 100,
             height: 100,
             color: createColor(0, 128, 255, 255),

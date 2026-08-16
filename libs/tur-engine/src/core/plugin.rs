@@ -121,26 +121,26 @@ pub struct PluginContext<'a> {
     /// Always-installed event bus — shared with
     /// [`TurAppInternal::event_bus`](crate::core::app::TurAppInternal). Plugins
     /// (specifically `install_event_bus`) read this to wire up the JS bridge
-    /// (`eventBus.on`/`send`) and the [`HostBusSubsystem`] against the same
+    /// (`eventBus.on`/`send`) and the [`EmbedderBusSubsystem`] against the same
     /// handle that [`TurApp::event_bus`](crate::TurApp::event_bus) returns to
     /// embedders.
     ///
-    /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
+    /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Engine-owned `viewportSize$` source handle (a `JsValue` opaque wraps
     /// a `Source<JsValue>`). Plugins export this as a const so JS can
     /// `import { viewportSize$ } from "tur:std"` and read the live
     /// canvas size via `get`. The engine updates it each frame in `flush`.
     pub viewport_size: JsValue,
-    /// The engine's [`AsyncPluginContext`] — a `Send + Sync + Clone`
-    /// handle for hopping work onto the engine's main thread (for OS APIs
+    /// The engine's [`HostExecutor`] — a `Send + Sync + Clone`
+    /// handle for hopping work onto the engine's host thread (for OS APIs
     /// that require it, e.g. macOS `NSPasteboard` via `arboard`). Set by
     /// the engine when the `PluginContext` is constructed; plugins obtain a
-    /// clone via [`to_async`](PluginContext::to_async). Capabilities that
-    /// need main-thread access receive their own clone at construction via
+    /// clone via [`to_host_executor`](PluginContext::to_host_executor). Capabilities that
+    /// need host-thread access receive their own clone at construction via
     /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder)'s
     /// closure form.
-    pub(crate) async_cx: AsyncPluginContext,
+    pub(crate) host_exec: HostExecutor,
 }
 
 impl<'a> PluginContext<'a> {
@@ -174,9 +174,9 @@ impl<'a> PluginContext<'a> {
         );
     }
 
-    /// Register a ctx-free native module (host fns that don't need `TurInstanceContext`).
+    /// Register a ctx-free native module (free functions that don't need `TurInstanceContext`).
     /// Used for `tur:net`, `tur-ext/demo-helper`, etc.
-    pub fn register_host_module(
+    pub fn register_native_module(
         &mut self,
         specifier: &str,
         exports: Vec<(String, NativeFunction, usize)>,
@@ -188,7 +188,7 @@ impl<'a> PluginContext<'a> {
         let module = build_fn_module(self.boa, &owned);
         self.loader.register(specifier, module);
         tracing::info!(
-            "registered host module {specifier} ({} exports)",
+            "registered native module {specifier} ({} exports)",
             owned.len()
         );
     }
@@ -236,24 +236,24 @@ impl<'a> PluginContext<'a> {
         self.js_ctx.spawn_local(f)
     }
 
-    /// Obtain the engine's [`AsyncPluginContext`] — a `Send + Sync + Clone`
-    /// handle for hopping work onto the engine's main thread. Plugins /
-    /// bridges / subsystems that need to run OS-API calls on main (e.g.
+    /// Obtain the engine's [`HostExecutor`] — a `Send + Sync + Clone`
+    /// handle for hopping work onto the engine's host thread. Plugins /
+    /// bridges / subsystems that need to run OS-API calls on the host thread (e.g.
     /// macOS `NSPasteboard` via `arboard`) clone this and call
-    /// [`AsyncPluginContext::run_on_main`] (sync closure, result bridged
-    /// via oneshot) or [`AsyncPluginContext::spawn_on_main`]
+    /// [`HostExecutor::run_on_host`] (sync closure, result bridged
+    /// via oneshot) or [`HostExecutor::spawn_on_host`]
     /// (fire-and-forget).
     ///
-    /// The hop runs on a serialized drain on the engine's main thread
+    /// The hop runs on a serialized drain on the engine's host thread
     /// (safe for non-reentrant OS APIs). The engine creates the channel
     /// internally at `build()` — no embedder wiring is required.
     ///
-    /// Capabilities (backends) that need main-thread access receive their
+    /// Capabilities (backends) that need host-thread access receive their
     /// own clone at construction via the closure form of
     /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder), so they
     /// don't go through this accessor.
-    pub fn to_async(&self) -> AsyncPluginContext {
-        self.async_cx.clone()
+    pub fn to_host_executor(&self) -> HostExecutor {
+        self.host_exec.clone()
     }
 
     /// Cheap-cloned completion handle. Plugins' bridge fns capture this
@@ -300,7 +300,7 @@ impl<'a> PluginContext<'a> {
     /// that own time-driven subsystems (animation, audio, etc.) stash this
     /// handle at registration time and query `clock.now()` during their tick.
     pub fn clock(&self) -> Rc<dyn Clock> {
-        self.app.borrow().shell.clock()
+        self.app.borrow().frame_env.clock()
     }
 
     /// Register a [`Subsystem`] — a long-lived participant in the engine's
@@ -345,118 +345,117 @@ impl<'a> PluginContext<'a> {
 }
 
 // ---------------------------------------------------------------------------
-// AsyncPluginContext — the engine's main-thread hop (plugin layer)
+// HostExecutor — the engine's host-thread hop (plugin layer)
 // ---------------------------------------------------------------------------
 
-/// `Send + Sync + Clone` handle for posting work onto the engine's **main
-/// thread**. The plugin-layer abstraction over the scheduler's raw
-/// [`MainTask`](crate::core::scheduler::MainTask) channel.
+/// `Send + Sync + Clone` handle for posting work onto the engine's **host
+/// thread** (the platform main thread). The plugin-layer abstraction over the scheduler's raw
+/// [`HostTask`](crate::core::scheduler::HostTask) channel.
 ///
 /// The engine creates the channel internally in
 /// [`TurRuntimeBuilder::build`](crate::TurRuntimeBuilder) and spawns the
-/// paired drain on the main thread, so the hop "just works" with no embedder
+/// paired drain on the host thread, so the hop "just works" with no embedder
 /// wiring. Plugins obtain a clone via
-/// [`PluginContext::to_async`](PluginContext::to_async); capabilities
-/// (backends) that need main-thread access receive their own clone at
+/// [`PluginContext::to_host_executor`](PluginContext::to_host_executor); capabilities
+/// (backends) that need host-thread access receive their own clone at
 /// construction via the closure form of
 /// [`TurRuntimeBuilder::capability`](crate::TurRuntimeBuilder).
 ///
-/// Use this to run OS-API calls that require the main thread (e.g. macOS
+/// Use this to run OS-API calls that require the host thread (e.g. macOS
 /// `NSPasteboard` via `arboard` — `flush()` + bridges run on the worker
 /// thread after the worker-owns-paint refactor, so any AppKit / Cocoa /
-/// Win32 call must hop). The hop is the main-thread analog of a
+/// Win32 call must hop). The hop is the host-thread analog of a
 /// `tokio::runtime::Handle`: a cheap, `Clone + Send + Sync` sender whose
 /// paired drain runs received tasks inline + serialized (one `await` per
 /// task, in arrival order — safe for non-reentrant OS APIs).
 ///
 /// The result bridge is a reactor-agnostic `oneshot`: the caller polls it on
-/// its own thread (typically the worker's executor) and is woken when main
+/// its own thread (typically the worker's executor) and is woken when the host thread
 /// completes — no shared executor required.
 #[derive(Clone)]
-pub struct AsyncPluginContext {
-    tx: futures::channel::mpsc::UnboundedSender<crate::core::scheduler::MainTask>,
+pub struct HostExecutor {
+    tx: futures::channel::mpsc::UnboundedSender<crate::core::scheduler::HostTask>,
 }
 
-impl AsyncPluginContext {
+impl HostExecutor {
     /// Wrap a scheduler channel sender. Called once by the engine in
     /// `TurRuntimeBuilder::build` (after creating the channel via
-    /// [`scheduler::main_channel`](crate::core::scheduler::main_channel)).
+    /// [`scheduler::host_channel`](crate::core::scheduler::host_channel)).
     pub(crate) fn from_sender(
-        tx: futures::channel::mpsc::UnboundedSender<crate::core::scheduler::MainTask>,
+        tx: futures::channel::mpsc::UnboundedSender<crate::core::scheduler::HostTask>,
     ) -> Self {
         Self { tx }
     }
 
-    /// Fire-and-forget: run `fut` on the main thread. Cheap; safe to call
-    /// from any thread. The task runs on the main-thread drain (see
-    /// [`MainDrain::run`](crate::core::scheduler::MainDrain)); its result is
+    /// Fire-and-forget: run `fut` on the host thread. Cheap; safe to call
+    /// from any thread. The task runs on the host-thread drain (see
+    /// [`HostDrain::run`](crate::core::scheduler::HostDrain)); its result is
     /// dropped.
-    pub fn spawn_on_main<Fut>(&self, fut: Fut)
+    pub fn spawn_on_host<Fut>(&self, fut: Fut)
     where
         Fut: Future<Output = ()> + Send + 'static,
     {
         let _ = self.tx.unbounded_send(Box::pin(fut));
     }
 
-    /// Run a (synchronous) closure on the main thread and await its result.
-    /// Returns a future that resolves to `Ok(output)` once the main thread
+    /// Run a (synchronous) closure on the host thread and await its result.
+    /// Returns a future that resolves to `Ok(output)` once the host thread
     /// has run the closure, or `Err(SpawnError::Dropped)` if the drain was
     /// dropped before it could run (engine shutting down).
     ///
     /// This is the right primitive for OS calls that touch `!Send` platform
     /// handles (e.g. macOS `NSPasteboard`): the closure is constructed on the
-    /// worker but **executed** on main, so it may construct + use + drop
-    /// `!Send` OS objects entirely on the main thread — they never appear in
+    /// worker but **executed** on the host thread, so it may construct + use + drop
+    /// `!Send` OS objects entirely on the host thread — they never appear in
     /// a `Send`-checked future's state. Only the closure's captures (which
     /// must be `Send`) and the result `R` cross the thread boundary.
-    pub fn run_on_main<R>(&self, f: impl FnOnce() -> R + Send + 'static) -> MainRunFuture<R>
+    pub fn run_on_host<R>(&self, f: impl FnOnce() -> R + Send + 'static) -> HostRunFuture<R>
     where
         R: Send + 'static,
     {
         let (tx, rx) = futures::channel::oneshot::channel();
-        self.spawn_on_main(async move {
+        self.spawn_on_host(async move {
             let r = f();
             let _ = tx.send(r);
         });
-        MainRunFuture { rx }
+        HostRunFuture { rx }
     }
 
-    /// Run an async-producing closure on the main thread and await its
+    /// Run an async-producing closure on the host thread and await its
     /// result: the closure `f` is **called on main** (producing the future
     /// there), the future is driven to completion on main, and the result
     /// is bridged back via oneshot.
     ///
-    /// The closure must be `Send` (it crosses worker→main); the produced
-    /// future `Fut` must be `Send` too (its state is held in the posted
-    /// task, which crosses the boundary). Use [`run_on_main`](Self::run_on_main)
+    /// The closure must be `Send` (it crosses worker→host); the produced
+    /// future `Fut` must be `Send` too (x    /// task, which crosses the boundary). Use [`run_on_host`](Self::run_on_host)
     /// instead when the work is synchronous — it imposes no `Send` bound on
     /// the OS objects touched.
-    pub fn run_on_main_async<F, Fut, R>(&self, f: F) -> MainRunFuture<R>
+    pub fn run_on_host_async<F, Fut, R>(&self, f: F) -> HostRunFuture<R>
     where
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = R> + Send + 'static,
         R: Send + 'static,
     {
         let (tx, rx) = futures::channel::oneshot::channel();
-        self.spawn_on_main(async move {
+        self.spawn_on_host(async move {
             let r = f().await;
             let _ = tx.send(r);
         });
-        MainRunFuture { rx }
+        HostRunFuture { rx }
     }
 }
 
-/// Future returned by [`AsyncPluginContext::run_on_main`] /
-/// [`AsyncPluginContext::run_on_main_async`]. Resolves to `Ok(R)` on
+/// Future returned by [`HostExecutor::run_on_host`] /
+/// [`HostExecutor::run_on_host_async`]. Resolves to `Ok(R)` on
 /// completion, or `Err(SpawnError::Dropped)` if the drain was dropped
 /// (engine shutdown) before running the work.
 #[derive(Debug)]
 #[must_use = "futures do nothing unless polled"]
-pub struct MainRunFuture<R> {
+pub struct HostRunFuture<R> {
     rx: futures::channel::oneshot::Receiver<R>,
 }
 
-impl<R> Future for MainRunFuture<R> {
+impl<R> Future for HostRunFuture<R> {
     type Output = Result<R, crate::core::scheduler::SpawnError>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<Self::Output> {
         match Pin::new(&mut self.rx).poll(cx) {
@@ -471,28 +470,28 @@ impl<R> Future for MainRunFuture<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::scheduler::{SpawnError, main_channel};
+    use crate::core::scheduler::{SpawnError, host_channel};
     use std::cell::Cell;
     use std::rc::Rc;
 
-    /// `run_on_main` posts the closure to the drain, the drain runs it, and
+    /// `run_on_host` posts the closure to the drain, the drain runs it, and
     /// the result round-trips back via the oneshot. Drives the caller +
     /// drain together via `join` on one thread; when the caller ends its
     /// handle clone drops, closing the channel so the drain ends and `join`
     /// resolves.
     #[test]
-    fn async_context_run_on_main_round_trips() {
+    fn host_executor_run_on_host_round_trips() {
         use futures::executor::block_on;
         use futures::future::join;
 
-        let (tx, drain) = main_channel();
-        let handle = AsyncPluginContext::from_sender(tx);
+        let (tx, drain) = host_channel();
+        let handle = HostExecutor::from_sender(tx);
         let got = Rc::new(Cell::new(None));
         let got_for_task = got.clone();
 
         block_on(join(
             async move {
-                let v: Result<u32, SpawnError> = handle.run_on_main(|| 7 * 6).await;
+                let v: Result<u32, SpawnError> = handle.run_on_host(|| 7 * 6).await;
                 got_for_task.set(v.ok());
             },
             drain.run(),
@@ -500,27 +499,27 @@ mod tests {
         assert_eq!(got.get(), Some(42));
     }
 
-    /// `spawn_on_main` (fire-and-forget) also runs on the drain. The task is
+    /// `spawn_on_host` (fire-and-forget) also runs on the drain. The task is
     /// enqueued before the caller ends and drops the handle (the last
     /// sender), so the drain processes the queued task then observes the
     /// closed channel and exits. The task must be `Send` (it crosses into
     /// the drain), so it captures an `Arc<AtomicBool>`, not `Rc`.
     #[test]
-    fn async_context_spawn_on_main_runs_on_drain() {
+    fn host_executor_spawn_on_host_runs_on_drain() {
         use std::sync::Arc;
         use std::sync::atomic::{AtomicBool, Ordering};
 
         use futures::executor::block_on;
         use futures::future::join;
 
-        let (tx, drain) = main_channel();
-        let handle = AsyncPluginContext::from_sender(tx);
+        let (tx, drain) = host_channel();
+        let handle = HostExecutor::from_sender(tx);
         let fired = Arc::new(AtomicBool::new(false));
         let fired_for_task = fired.clone();
 
         block_on(join(
             async move {
-                handle.spawn_on_main(async move {
+                handle.spawn_on_host(async move {
                     fired_for_task.store(true, Ordering::SeqCst);
                 });
             },

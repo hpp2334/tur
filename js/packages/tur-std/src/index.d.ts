@@ -19,7 +19,7 @@
  */
 
 declare module "tur:std" {
-    // Re-export the reactive core (source/derive/mutate/get/set/view/render,
+    // Re-export the reactive core (source/derive/mutate/get/set/view/mount,
     // Element/Source/Derived/Mutation/Readable/Val, ReadonlyStoreCtx/StoreCtx).
     export * from "tur:core";
 

@@ -38,7 +38,7 @@ use crate::manager::AnimationManager;
 ///
 /// `TurAnimationPlugin` should be registered **immediately after
 /// `TurStdPlugin`** in the engine builder call site. The
-/// [`Subsystem::flush`] runs in plugin registration order; the animation
+/// [`Subsystem::flush_pre_layout`] runs in plugin registration order; the animation
 /// subsystem must tick before `flush_reactive` (which it does naturally as
 /// the first registered subsystem) so its enqueued `onTick` mutations land
 /// in the mutation queue before the next fixed-point iteration drains them.

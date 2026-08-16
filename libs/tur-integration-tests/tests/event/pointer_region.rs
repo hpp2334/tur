@@ -31,7 +31,9 @@ fn get_span_content(app: &TurTestApp, container_id: ElementNodeId) -> String {
     .unwrap_or_default()
 }
 
-fn flush(app: &mut TurTestApp) {
+fn drive_to_quiescence(app: &mut TurTestApp) {
+    // 6 quiescence drives: enough for the event 2192 handler 2192 reactive flush
+    // ripple to fully settle without perturbing time-sensitive asserts.
     for _ in 0..6 {
         app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
@@ -70,7 +72,7 @@ fn pointer_enter_updates_text() {
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -90,7 +92,7 @@ fn pointer_exit_updates_text() {
     let (cx, cy) = app.get_element_absolute_bounds(pi_id).unwrap().center();
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -100,7 +102,7 @@ fn pointer_exit_updates_text() {
 
     app.pointer_move(999.0, 999.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -123,7 +125,7 @@ fn pointer_move_within_does_not_exit() {
 
     app.pointer_move(cx, cy);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -133,7 +135,7 @@ fn pointer_move_within_does_not_exit() {
 
     app.pointer_move(cx + 5.0, cy + 5.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -143,7 +145,7 @@ fn pointer_move_within_does_not_exit() {
 
     app.pointer_move(cx - 3.0, cy - 3.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     assert_eq!(
         get_span_content(&app, text_id),
@@ -160,9 +162,9 @@ fn no_events_without_callbacks() {
 
     app.pointer_move(50.0, 25.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 
     app.pointer_move(999.0, 999.0);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
 }

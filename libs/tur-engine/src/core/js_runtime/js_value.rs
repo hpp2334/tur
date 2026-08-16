@@ -15,11 +15,11 @@
 //! that downcast without the runtime. [`IntoJs`] *does* take a [`Context`]
 //! because encoding may allocate JS objects/opaques.
 
+use crate::core::cursor::Cursor;
 use crate::core::layout::{
     Alignment, Axis, BorderPosition, BoxFit, ClipBehavior, CrossAxisAlignment, FlexDirection,
     FlexFit, HitTestBehavior, MainAxisAlignment, MainAxisSize, StackFit,
 };
-use crate::core::platform::Cursor;
 use boa_engine::{Context, JsError, JsNativeError, JsValue};
 use num_traits::FromPrimitive;
 

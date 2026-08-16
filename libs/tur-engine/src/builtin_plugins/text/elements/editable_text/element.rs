@@ -205,7 +205,7 @@ pub struct EditableTextElement {
     pub(crate) painting: EditableTextPainting,
     /// Handle to the caret-blink task. `Some` while focused (the spawned
     /// loop sleeps for `CARET_BLINK_HALF_PERIOD_MS` then calls
-    /// `request_paint`, which self-wakes the worker to render the toggle);
+    /// `request_frame`, which self-wakes the worker to render the toggle);
     /// `None` when unfocused. On blur or element drop, the handle is
     /// aborted, which drops the pending `Sleep` and halts the loop
     /// immediately.
@@ -847,7 +847,7 @@ impl Lifecycle for EditableTextElement {
     fn on_focus_changed(&mut self, focused: bool, cx: &mut SharedViewCx, _boa: &mut Context) {
         if focused {
             // Spawn the blink loop on the worker. Each half-period it sleeps,
-            // then calls `request_paint`, which sets the paint flag and —
+            // then calls `request_frame`, which sets the paint flag and —
             // since the task runs out-of-flush — emits a coalesced
             // `WorkerMsg::Wake` so the worker's own loop pumps a flush and
             // renders the caret toggle. `abort()` on blur/drop drops the
@@ -856,7 +856,7 @@ impl Lifecycle for EditableTextElement {
                 loop {
                     aw.sleep(Duration::from_millis(CARET_BLINK_HALF_PERIOD_MS))
                         .await;
-                    aw.request_paint();
+                    aw.request_frame();
                 }
             }));
         } else {

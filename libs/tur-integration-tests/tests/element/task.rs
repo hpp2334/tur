@@ -96,7 +96,7 @@ fn launch_cancel_stops_resumption() {
     // Cancel before the sleep deadline elapses.
     app.eval_js("globalThis.__task.cancel()");
 
-    // Advance well past the sleep deadline and settle: the in-flight sleep
+    // Advance well past the sleep deadline: the in-flight sleep
     // resolves, but the driver ignores a cancelled task, so `__hit` stays 0.
     app.wait_for_timeout(Duration::from_millis(200));
 

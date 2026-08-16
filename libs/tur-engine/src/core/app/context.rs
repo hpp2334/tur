@@ -15,12 +15,12 @@ use crate::core::edgy::reactive::Store;
 use crate::core::elements::NodeTree;
 use crate::core::focus::FocusManager;
 use crate::core::fonts::FontManager;
+use crate::core::frame_env::FrameEnv;
 use crate::core::image_resource::ImageManager;
 use crate::core::platform::{PlatformEvent, PlatformEventQueue, PointerDeviceKind, PointerInput};
 use crate::core::render::{RecordingCanvas, RenderCommand};
 use crate::core::scheduler::WorkerContext;
 use crate::core::screen::Screen;
-use crate::core::shell::Shell;
 use crate::core::subsystem::{Subsystem, SubsystemFlushContext};
 
 pub struct TurAppContext {
@@ -28,7 +28,7 @@ pub struct TurAppContext {
     pub(crate) mutation_queue: Rc<RefCell<PendingMutationInvocationQueue>>,
     pub(crate) focus_manager: Rc<RefCell<FocusManager>>,
     /// Worker-side image state (natural-size map + next-id counter — the
-    /// pixel `Blob` lives on main, shipped via `MainMsg::UploadImage`).
+    /// pixel `Blob` lives on the host thread, shipped via `HostMsg::UploadImage`).
     pub(crate) image_manager: Rc<RefCell<ImageManager>>,
     pub(crate) font_manager: FontManager,
     pub(crate) text_layout_cx: ParleyLayoutContext<[u8; 4]>,
@@ -49,10 +49,10 @@ pub struct TurAppContext {
     /// they can look up backends (`Clipboard`, `Http`, etc.) at dispatch
     /// time.
     pub(crate) capabilities: Capabilities,
-    /// Shell layer: clock, pointer position, and cursor output (pushed to the
+    /// FrameEnv layer: clock, pointer position, and cursor output (pushed to the
     /// embedder via a callback installed by a plugin). Owns the time source
-    /// shared with the boa `Context`. See [`Shell`].
-    pub(crate) shell: Shell,
+    /// shared with the boa `Context`. See [`FrameEnv`].
+    pub(crate) frame_env: FrameEnv,
 }
 
 impl fmt::Debug for TurAppContext {
@@ -92,13 +92,13 @@ impl TurAppContext {
             worker_ctx,
             completion_handle,
             capabilities,
-            shell: Shell::new(clock),
+            frame_env: FrameEnv::new(clock),
         }
     }
 
     /// Dispatch a platform (input) event to every registered subsystem via
     /// [`Subsystem::handle_platform_event`]. Mouse `PointerMove`s also
-    /// update the shell's tracked pointer position and request a paint, since
+    /// update the frame_env's tracked pointer position and request a paint, since
     /// the cursor is resolved during paint (not in a subsystem).
     pub fn dispatch_platform_event(
         &mut self,
@@ -114,7 +114,7 @@ impl TurAppContext {
             time_ms: _,
         }) = event
         {
-            self.shell.set_pointer_position(Some(*position));
+            self.frame_env.set_pointer_position(Some(*position));
             need_paint.set(true);
         }
 
@@ -200,8 +200,8 @@ impl TurAppContext {
     ///
     /// The caller is responsible for shipping the batch to whichever
     /// thread/realm owns the actual renderer. The worker stores it in
-    /// `TurAppInternal::pending_render_batch` for `MainBackend::worker_loop`
-    /// to drain and ship via `MainMsg::RenderCommands`.
+    /// `TurAppInternal::pending_render_batch` for `AppBackend::worker_loop`
+    /// to drain and ship via `HostMsg::RenderCommands`.
     pub fn build_render_batch(&mut self) -> Vec<RenderCommand> {
         let focused_node_id = self.focus_manager.borrow().focused();
 
@@ -216,12 +216,12 @@ impl TurAppContext {
             0.0, 0.0, vp_w, vp_h,
         ));
         {
-            let shell = self.shell.paint_face();
+            let frame_env = self.frame_env.paint_env();
             tree.paint(
                 &mut recording,
                 focused_node_id,
                 &self.image_manager.borrow(),
-                shell,
+                frame_env,
             );
         }
         drop(tree);
@@ -230,7 +230,7 @@ impl TurAppContext {
         let batch = recording.into_render_commands();
 
         // Flush cursor claims accumulated during the record pass.
-        self.shell.apply_changes();
+        self.frame_env.apply_cursor_changes();
 
         batch
     }

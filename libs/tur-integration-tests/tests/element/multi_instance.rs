@@ -36,9 +36,9 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
     let driver = TestSchedulerDriver::new();
     let pool = WorkerPoolHandle::new("test", usize::MAX);
     let runtime = TurRuntime::builder()
-        .worker_host(driver.worker_host())
+        .worker_spawner(driver.worker_spawner())
         .vsync_source(driver.vsync_source())
-        .main_loop(driver.main_loop())
+        .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())
@@ -50,9 +50,9 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 }
 
 const SET_ID_JS: &str = r#"
-    import { Text, render } from "tur:std";
+    import { Text, mount } from "tur:std";
     globalThis.__instanceId = "VALUE";
-    render(Text({ text: "VALUE" }));
+    mount(Text({ text: "VALUE" }));
 "#;
 
 #[test]
@@ -109,8 +109,8 @@ fn instances_have_isolated_element_trees() {
     // Mount a tree only in A.
     futures::executor::block_on(app_a.load_module(
         r#"
-            import { Text, render } from "tur:std";
-            render(Text({ text: "only-in-A", queryKey: ["a_only"] }));
+            import { Text, mount } from "tur:std";
+            mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
         "#,
     ))
     .expect("load A");
@@ -261,9 +261,9 @@ fn plugin_compile_runs_once_register_runs_per_instance() {
     let pool = WorkerPoolHandle::new("test", usize::MAX);
     let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .worker_host(driver.worker_host())
+        .worker_spawner(driver.worker_spawner())
         .vsync_source(driver.vsync_source())
-        .main_loop(driver.main_loop())
+        .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())
@@ -317,9 +317,9 @@ fn shared_capability_backend_is_visible_from_all_instances() {
     let pool = WorkerPoolHandle::new("test", usize::MAX);
     let driver = tur_integration_tests::TestSchedulerDriver::new();
     let runtime = TurRuntime::builder()
-        .worker_host(driver.worker_host())
+        .worker_spawner(driver.worker_spawner())
         .vsync_source(driver.vsync_source())
-        .main_loop(driver.main_loop())
+        .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .worker_pool(pool.clone())

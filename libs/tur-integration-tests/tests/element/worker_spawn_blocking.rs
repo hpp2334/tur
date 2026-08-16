@@ -65,9 +65,9 @@ fn build_runtime(
     probe: Option<BlockingProbePlugin>,
 ) -> Rc<TurRuntime> {
     let mut builder = TurRuntime::builder()
-        .worker_host(driver.worker_host())
+        .worker_spawner(driver.worker_spawner())
         .vsync_source(driver.vsync_source())
-        .main_loop(driver.main_loop())
+        .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin);

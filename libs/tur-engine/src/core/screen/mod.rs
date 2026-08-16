@@ -31,7 +31,7 @@ pub struct Screen {
     /// [`ResizeSubsystem`] when a `PlatformEvent::Resize` arrives.
     pub logical_size: (f64, f64),
     /// Current device pixel ratio. Updated by [`ResizeSubsystem`]; shipped
-    /// to main with each `MainMsg::RenderCommands` so the main-side
+    /// to main with each `HostMsg::RenderCommands` so the host-side
     /// renderer can call `resize()` + apply the dpr root transform.
     pub dpr: f64,
     /// The shared reactive store, captured at construction so the resize

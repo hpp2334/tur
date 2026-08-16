@@ -9,7 +9,7 @@
 //!   DirectWrite, fontconfig).
 //! - [`worker_pool`] — the native worker-pool executor
 //!   ([`NativeWorkerPools`], implementing
-//!   [`WorkerHost`](tur_engine::core::scheduler::WorkerHost)) hosting
+//!   [`WorkerSpawner`](tur_engine::core::scheduler::WorkerSpawner)) hosting
 //!   app loops on capped shared "lane" threads, with dedicated-thread
 //!   `spawn_blocking` offload.
 //!

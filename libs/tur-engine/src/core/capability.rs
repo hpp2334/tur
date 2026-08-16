@@ -9,7 +9,7 @@
 //! - **Bridge fns** via `js_ctx.capability().of::<C>()` (at JS call time).
 //! - **Handlers** via `cx.capabilities.of::<C>()` (at event dispatch time).
 //! - **The engine builder** internally (e.g. for the `Cursor` install on
-//!   [`crate::core::shell::Shell`]).
+//!   [`crate::core::frame_env::FrameEnv`]).
 //!
 //! Plugins declare their hard dependencies via [`Plugin::requires`] so the
 //! engine builder can verify all required capabilities are registered before

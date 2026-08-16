@@ -10,7 +10,7 @@
 //! - **Worker side** — [`ImageManager`]: only the `natural_size` per id
 //!   (plus the next-id counter). Layout + paint read sizes from it; the
 //!   pixel `Blob` never lives on the worker across a frame boundary (it is
-//!   shipped to main via `MainMsg::UploadImage`).
+//!   shipped to main via `HostMsg::UploadImage`).
 //! - **Main side** — [`ImageResourceMap`]: the full `ImageResource` (with its
 //!   Arc-backed pixel `Blob`) per id, retained for context-loss re-upload.
 //!   Main inserts under the worker-assigned id via
@@ -49,7 +49,7 @@ impl ImageResourceId {
 ///
 /// `Clone` is cheap — `ImageData` wraps an `Arc`-backed `Blob`, so cloning
 /// just bumps a refcount. This lets the worker stage decoded images for the
-/// one-way `MainMsg::UploadImage` ship to main without deep-copying pixel
+/// one-way `HostMsg::UploadImage` ship to main without deep-copying pixel
 /// data.
 #[derive(Clone)]
 pub struct ImageResource {
@@ -82,7 +82,7 @@ impl ImageResource {
 }
 
 /// Worker-side image metadata: just the natural size (layout + paint read
-/// the size; the pixel `Blob` lives on main). One entry per
+/// the size; the pixel `Blob` lives on the host thread). One entry per
 /// `createImageResource` / `createSvgResource` — inserted by
 /// `ImageManager::allocate` at decode time. Wrapped in a struct (not
 /// a bare `Size`) so future metadata fields can be added without rippling
@@ -118,7 +118,7 @@ impl ImageManager {
 
     /// Assign the next worker-side id, record the image's natural size, and
     /// return the id. The pixel `Blob` is NOT stored here — the caller ships
-    /// it to main via `MainMsg::UploadImage` under the returned id. This is
+    /// it to main via `HostMsg::UploadImage` under the returned id. This is
     /// the single mutation point: id allocation + size recording are atomic
     /// so layout + paint can never observe a stale size for an id the bridge
     /// already handed out.
@@ -167,7 +167,7 @@ impl fmt::Debug for ImageResourceMap {
 impl ImageResourceMap {
     /// Insert an image under the worker-assigned id. Ids are the worker's
     /// authority (`TurInstanceContext::register_image` assigns them); main only
-    /// stores what the worker ships via `MainMsg::UploadImage`.
+    /// stores what the worker ships via `HostMsg::UploadImage`.
     pub fn insert_with_id(&mut self, id: ImageResourceId, image: ImageResource) {
         self.resources.insert(id, image);
     }

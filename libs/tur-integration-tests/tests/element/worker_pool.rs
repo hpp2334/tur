@@ -43,9 +43,9 @@ impl Plugin for TidProbePlugin {
 fn build_runtime(pools: Vec<WorkerPoolHandle>) -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>) {
     let driver = TestSchedulerDriver::new();
     let mut builder = TurRuntime::builder()
-        .worker_host(driver.worker_host())
+        .worker_spawner(driver.worker_spawner())
         .vsync_source(driver.vsync_source())
-        .main_loop(driver.main_loop())
+        .host_loop(driver.host_loop())
         .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
         .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
         .plugin(TurStdPlugin)
@@ -117,22 +117,22 @@ fn unregistered_pool_handle_errors() {
 }
 
 #[test]
-fn zero_max_threads_errors_at_runtime_build() {
+fn zero_max_workers_errors_at_runtime_build() {
     let driver = TestSchedulerDriver::new();
     let msg = expect_err_msg(
         TurRuntime::builder()
-            .worker_host(driver.worker_host())
+            .worker_spawner(driver.worker_spawner())
             .vsync_source(driver.vsync_source())
-            .main_loop(driver.main_loop())
+            .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
             .worker_pool(WorkerPoolHandle::new("bad", 0))
             .build(),
-        "max_threads == 0 must fail build",
+        "max_workers == 0 must fail build",
     );
     assert!(
-        msg.contains("max_threads"),
-        "error should mention max_threads, got: {msg}"
+        msg.contains("max_workers"),
+        "error should mention max_workers, got: {msg}"
     );
 }
 
@@ -141,9 +141,9 @@ fn duplicate_pool_name_errors_at_runtime_build() {
     let driver = TestSchedulerDriver::new();
     let msg = expect_err_msg(
         TurRuntime::builder()
-            .worker_host(driver.worker_host())
+            .worker_spawner(driver.worker_spawner())
             .vsync_source(driver.vsync_source())
-            .main_loop(driver.main_loop())
+            .host_loop(driver.host_loop())
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(std::sync::Arc::new(MutexFixedClock::new(0)))
             .worker_pool(WorkerPoolHandle::new("dup", 1))
@@ -202,7 +202,7 @@ fn capped_pool_shares_one_thread_between_apps() {
 }
 
 #[test]
-fn capped_pool_never_exceeds_max_threads() {
+fn capped_pool_never_exceeds_max_workers() {
     let pool = WorkerPoolHandle::new("two", 2);
     let (runtime, _driver) = build_runtime(vec![pool.clone()]);
     let apps: Vec<_> = (0..4).map(|_| spawn_headless(&runtime, &pool)).collect();

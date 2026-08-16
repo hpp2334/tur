@@ -20,7 +20,7 @@ class WasmBuildPlugin implements RspackPluginInstance {
                 .info(
                     "Building WASM (multi-threaded, +atomics, --no-opt) with wasm-pack...",
                 );
-            // Multi-threaded build via `wasm_thread` (Web Workers via
+            // Multi-threaded engine workers (Web Workers via the
             // SharedArrayBuffer). The `+atomics` rustflags in
             // `.cargo/config.toml` apply to ALL wasm32 builds regardless of
             // profile, so workers spawn fine even with `--no-opt`.
@@ -62,10 +62,10 @@ class WasmBuildPlugin implements RspackPluginInstance {
                     );
                     logger.info(`Copied WASM asset: ${file}`);
                 }
-                // Emit per-snippet files (e.g. wasm_thread's web worker
+                // Emit per-snippet files (e.g. the engine's web worker
                 // helper, wasm-streams inline modules) preserving the
                 // `snippets/<crate-hash>/<file>` path the JS glue expects.
-                // Recurses into subdirs (wasm_thread's worker script lives
+                // Recurses into subdirs (the engine worker script lives
                 // under `snippets/<crate-hash>/src/...`).
                 const snippetsDir = join(wasmPkgDir, "snippets");
                 if (existsSync(snippetsDir)) {
@@ -173,7 +173,7 @@ export default defineConfig({
         host: "0.0.0.0",
         allowedHosts: "all",
         // Always set COOP/COEP — the wasm multi-threaded backend uses
-        // SharedArrayBuffer + Web Workers (via `wasm_thread`), which
+        // SharedArrayBuffer + Web Workers (via the in-tree worker_spawn), which
         // requires `self.crossOriginIsolated`. Without these headers
         // `Worker.postMessage` fails with
         // `DataCloneError: SharedArrayBuffer transfer requires

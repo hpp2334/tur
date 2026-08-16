@@ -6,11 +6,11 @@ use tur_integration_tests::TurTestApp;
 /// `ScrollController` with an overlaid `Scrollbar`. The controller is exposed
 /// as `globalThis.__ctrl` so the test can drive `jumpTo` directly.
 const SCROLLBAR_BUNDLE: &str = r#"
-import { render, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "tur:std";
+import { mount, Container, Row, Expanded, ScrollView, Column, Scrollbar } from "tur:std";
 globalThis.__ctrl = new globalThis.ScrollController();
 const blocks = [];
 for (let i = 0; i < 6; i++) blocks.push(Container({ height: 100 }));
-render(Row({
+mount(Row({
     children: [
         Expanded({
             child: ScrollView({

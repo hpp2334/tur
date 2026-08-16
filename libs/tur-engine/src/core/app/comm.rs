@@ -1,8 +1,8 @@
-//! Worker ↔ main message vocabulary.
+//! Worker ↔ host message vocabulary.
 //!
-//! The engine runs on a worker thread (see [`crate::core::runtime::MainBackend`]);
-//! the embedder drives it from main via [`WorkerMsg`]s and receives
-//! [`MainMsg`] replies. Every public `TurApp` method is a thin wrapper
+//! The engine runs on a worker thread (see [`crate::core::runtime::AppBackend`]);
+//! the embedder drives it from the host thread via [`WorkerMsg`]s and receives
+//! [`HostMsg`] replies. Every public `TurApp` method is a thin wrapper
 //! that builds a `WorkerMsg`, sends it via the channel, and awaits the
 //! matching [`Reply`] (one-shot slot).
 //!
@@ -13,15 +13,15 @@
 //!
 //! | Channel       | Direction       | Capacity    | Sender side            | Receiver side           |
 //! |---------------|-----------------|-------------|------------------------|-------------------------|
-//! | `WorkerMsg`   | main → worker   | unbounded   | main `unbounded_send`  | worker `next().await`   |
-//! | `MainMsg`     | worker → main   | unbounded   | worker `unbounded_send`| main `next().await`     |
-//! | `Reply<T>`    | worker → main   | oneshot     | worker `send` (consume)| main `await`            |
+//! | `WorkerMsg`   | host → worker   | unbounded   | main `unbounded_send`  | worker `next().await`   |
+//! | `HostMsg`     | worker → host   | unbounded   | worker `unbounded_send`| main `next().await`     |
+//! | `Reply<T>`    | worker → host   | oneshot     | worker `send` (consume)| main `await`            |
 //!
 //! ## Why `futures::channel` over `async_channel`
 //!
 //! `async_channel` internally uses `event_listener`, which on contention takes
 //! a `std::sync::Mutex`. On the wasm32 main thread that mutex's `lock_contended`
-//! calls `Atomics.wait` — forbidden by spec on the main thread, so it traps
+//! calls `Atomics.wait` — forbidden by the JS spec on the main thread, so it traps
 //! with "RuntimeError: Atomics.wait cannot be called in this context".
 //! `futures::channel` uses Waker-based notification (no futex, no
 //! `event_listener`), so it is safe to poll on the wasm main thread.
@@ -35,28 +35,29 @@ use std::fmt;
 use std::sync::Arc;
 
 use crate::core::app::FrameOutcome;
+use crate::core::cursor::Cursor;
 use crate::core::element::{ElementNodeId, NodeId};
 use crate::core::elements::{DevNodeData, NodeTreeData, NodeTreeSnapshot};
-use crate::core::platform::Cursor;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
 
-/// main → worker channel sender. Unbounded — main pushes input (platform
-/// events, wake, RPC requests) and the worker drains them in arrival order.
+/// host → worker channel sender. Unbounded — the host side pushes input
+/// (platform events, wake, RPC requests) and the worker drains them in
+/// arrival order.
 pub type WorkerTx = futures::channel::mpsc::UnboundedSender<WorkerMsg>;
-/// main → worker channel receiver. Held by the worker thread; awaited in
+/// host → worker channel receiver. Held by the worker thread; awaited in
 /// `worker_loop`.
 pub type WorkerRx = futures::channel::mpsc::UnboundedReceiver<WorkerMsg>;
 
-/// worker → main channel sender. Unbounded — the worker ships per-frame
+/// worker → host channel sender. Unbounded — the worker ships per-frame
 /// messages (render batch, FrameOutcome, cursor / focus changes) without
-/// coordinating with main. Main drains them in `pump`'s recv loop.
-pub type MainTx = futures::channel::mpsc::UnboundedSender<MainMsg>;
-/// worker → main channel receiver. Held by the main thread; awaited in
-/// `MainBackend::pump`.
-pub type MainRx = futures::channel::mpsc::UnboundedReceiver<MainMsg>;
+/// coordinating with the host side. The host side drains them in the run loop's recv loop.
+pub type HostTx = futures::channel::mpsc::UnboundedSender<HostMsg>;
+/// worker → host channel receiver. Held by the host thread; drained by
+/// [`TurApp::run_loop`](crate::TurApp::run_loop).
+pub type HostRx = futures::channel::mpsc::UnboundedReceiver<HostMsg>;
 
-/// main → worker. All input that can drive the engine flows through one of
+/// host → worker. All input that can drive the engine flows through one of
 /// these variants.
 pub enum WorkerMsg {
     /// DOM / JNI / winit platform event (pointer, key, wheel, IME, resize,
@@ -64,8 +65,8 @@ pub enum WorkerMsg {
     /// flush iteration.
     PlatformEvent(PlatformEvent),
     /// Drive one flush iteration. Sent by main's rAF loop. The worker then
-    /// emits [`MainMsg::RenderCommands`] (if it painted) and
-    /// [`MainMsg::FrameOutcome`].
+    /// emits [`HostMsg::RenderCommands`] (if it painted) and
+    /// [`HostMsg::FrameOutcome`].
     Wake,
     /// Parse + load + evaluate a JS module. Reply carries the parse/eval
     /// outcome. `Arc<str>` because module sources can be large (the
@@ -145,8 +146,8 @@ pub enum WorkerMsg {
         id: ElementNodeId,
         runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
     },
-    /// Event bus — host → JS bytes on `channel_id`. Worker pushes into the
-    /// `EventBus` `host_to_js` queue; `HostBusSubsystem` drains it on the
+    /// Event bus — embedder → JS bytes on `channel_id`. Worker pushes into the
+    /// `EventBus` `embedder_to_js` queue; `EmbedderBusSubsystem` drains it on the
     /// next flush and delivers to JS `eventBus.on` callbacks registered on
     /// `channel_id`.
     EventBusToJs { channel_id: u64, payload: Vec<u8> },
@@ -158,22 +159,22 @@ pub enum WorkerMsg {
     Destroy { reply: ReplySender<()> },
 }
 
-/// worker → main. Emitted by the worker either during a flush
-/// ([`MainMsg::RenderCommands`], [`MainMsg::FocusedStateChanged`]) or in
-/// response to a [`WorkerMsg`] RPC ([`MainMsg::DevReply`]).
-pub enum MainMsg {
+/// worker → host. Emitted by the worker either during a flush
+/// ([`HostMsg::RenderCommands`], [`HostMsg::FocusedStateChanged`]) or in
+/// response to a [`WorkerMsg`] RPC ([`HostMsg::DevReply`]).
+pub enum HostMsg {
     /// One frame's worth of paint state. Main applies the batch to its
-    /// renderer (owned by `MainBackend`) directly.
+    /// renderer (owned by `AppBackend`) directly.
     ///
     /// Images are NOT shipped here — they travel once per new resource via
-    /// [`MainMsg::UploadImage`] (main uploads them into its atlas
-    /// incrementally). Resizes travel via [`MainMsg::Resized`] (main calls
+    /// [`HostMsg::UploadImage`] (main uploads them into its atlas
+    /// incrementally). Resizes travel via [`HostMsg::Resized`] (main calls
     /// `renderer.resize(...)` only when the viewport actually changes).
     RenderCommands { commands: Vec<RenderCommand> },
     /// A newly-registered image resource (`createImageResource` /
     /// `createSvgResource` on the worker). Shipped exactly once per id
     /// (sent directly from the `createImageResource` bridge via the shared
-    /// `main_tx`); main uploads it to the renderer's image atlas and
+    /// `host_tx`); main uploads it to the renderer's image atlas and
     /// retains the `ImageResource` (pixel `Blob`) keyed by
     /// `ImageResourceId` for context-loss re-upload.
     UploadImage {
@@ -197,11 +198,11 @@ pub enum MainMsg {
         is_editable: bool,
         cursor_rect: Option<(f64, f64, f64, f64)>,
     },
-    /// Event bus — JS → host bytes on `channel_id`. Worker ships one
-    /// `MainMsg` per `eventBus.send` dispatch; `MainBackend` dispatches to
-    /// handlers registered on `channel_id` on the main-side
+    /// Event bus — JS → embedder bytes on `channel_id`. Worker ships one
+    /// `HostMsg` per `eventBus.send` dispatch; `AppBackend` dispatches to
+    /// handlers registered on `channel_id` on the host-side
     /// `EventBusHandle`.
-    EventBusToHost { channel_id: u64, payload: Vec<u8> },
+    EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
     /// Reply to a dev-tool RPC.
     DevReply(DevReply),
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
@@ -316,7 +317,7 @@ impl fmt::Debug for WorkerMsg {
     }
 }
 
-impl fmt::Debug for MainMsg {
+impl fmt::Debug for HostMsg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::RenderCommands { commands, .. } => f
@@ -334,11 +335,11 @@ impl fmt::Debug for MainMsg {
                 .field("is_editable", is_editable)
                 .field("cursor_rect", cursor_rect)
                 .finish(),
-            Self::EventBusToHost {
+            Self::EventBusToEmbedder {
                 channel_id,
                 payload,
             } => f
-                .debug_struct("EventBusToHost")
+                .debug_struct("EventBusToEmbedder")
                 .field("channel_id", channel_id)
                 .field("len", &payload.len())
                 .finish(),
@@ -370,19 +371,19 @@ impl<T> fmt::Debug for ReplySender<T> {
 }
 
 // Compile-time Send assertions — guard against future variants breaking
-// the worker↔main channel contract. If these fail, a new field's type
+// the worker↔host channel contract. If these fail, a new field's type
 // isn't Send and needs wrapping (typically `Arc<T>`).
 const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<WorkerMsg>();
-    assert_send::<MainMsg>();
+    assert_send::<HostMsg>();
     assert_send::<DevReply>();
     assert_send::<ModuleError>();
     // Channels themselves must be Send + Sync.
     assert_send::<WorkerTx>();
     assert_send::<WorkerRx>();
-    assert_send::<MainTx>();
-    assert_send::<MainRx>();
+    assert_send::<HostTx>();
+    assert_send::<HostRx>();
 };
 
 #[cfg(test)]

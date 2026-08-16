@@ -2,23 +2,23 @@ use std::time::Duration;
 
 use vello_common::kurbo::{Affine, Point};
 
+use crate::core::cursor::Cursor;
 use crate::core::layout::Size;
-use crate::core::platform::Cursor;
 
 use crate::core::element::ElementNodeId;
 use crate::core::elements::NodeTreeData;
+use crate::core::frame_env::PaintEnv;
 use crate::core::image_resource::{ImageManager, ImageResourceId};
 use crate::core::render::Canvas;
-use crate::core::shell::PaintShell;
 
 pub struct PaintContext<'a> {
     tree: &'a NodeTreeData,
     image_manager: &'a ImageManager,
     focused_node_id: Option<ElementNodeId>,
     current_node_id: Option<ElementNodeId>,
-    /// Shell face for this paint pass: cursor claims, time, pointer position.
-    /// See [`PaintShell`] for the (deliberately limited) surface.
-    shell: PaintShell<'a>,
+    /// FrameEnv face for this paint pass: cursor claims, time, pointer position.
+    /// See [`PaintEnv`] for the (deliberately limited) surface.
+    frame_env: PaintEnv<'a>,
     /// This node's absolute (world) affine — the product of its ancestors'
     /// `relative_transform` and its own. The paint walk pushes each node's
     /// `relative_transform` onto the canvas transform stack, so element `paint`
@@ -34,7 +34,7 @@ impl<'a> PaintContext<'a> {
         focused_node_id: Option<ElementNodeId>,
         current_node_id: ElementNodeId,
         image_manager: &'a ImageManager,
-        shell: PaintShell<'a>,
+        frame_env: PaintEnv<'a>,
         current_transform: Affine,
     ) -> Self {
         PaintContext {
@@ -42,7 +42,7 @@ impl<'a> PaintContext<'a> {
             image_manager,
             focused_node_id,
             current_node_id: Some(current_node_id),
-            shell,
+            frame_env,
             current_transform,
         }
     }
@@ -57,7 +57,7 @@ impl<'a> PaintContext<'a> {
             self.current_transform,
             self.focused_node_id,
             self.image_manager,
-            self.shell,
+            self.frame_env,
         );
     }
 
@@ -68,12 +68,12 @@ impl<'a> PaintContext<'a> {
     /// Current frame time as a `Duration` since the epoch. Used by
     /// time-based paint effects.
     pub fn now(&self) -> Duration {
-        self.shell.now()
+        self.frame_env.now()
     }
 
     /// Natural size of a registered image resource. Paint reads the size
     /// (BoxFit math + `Canvas::draw_image(rid, size, …)`); the pixel data
-    /// lives on main, not in this map.
+    /// lives on the host thread, not in this map.
     pub fn get_image_size(&self, id: ImageResourceId) -> Option<Size> {
         self.image_manager.get(id).map(|m| m.size)
     }
@@ -84,15 +84,15 @@ impl<'a> PaintContext<'a> {
     /// for translated / rotated / scaled subtrees (used for cursor claims).
     /// Returns `false` when no pointer position is known.
     pub fn pointer_inside(&self, size: &Size) -> bool {
-        let Some(p) = self.shell.pointer_position() else {
+        let Some(p) = self.frame_env.pointer_position() else {
             return false;
         };
         let local = self.current_transform.inverse() * Point::new(p.x, p.y);
         local.x >= 0.0 && local.x < size.width && local.y >= 0.0 && local.y < size.height
     }
 
-    /// Claim the host cursor for this frame. See [`PaintShell::set_cursor`].
+    /// Claim the host cursor for this frame. See [`PaintEnv::set_cursor`].
     pub fn set_cursor(&self, cursor: Cursor) {
-        self.shell.set_cursor(cursor);
+        self.frame_env.set_cursor(cursor);
     }
 }

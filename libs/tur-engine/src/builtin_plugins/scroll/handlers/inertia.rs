@@ -60,7 +60,7 @@ struct InertiaState {
 ///
 /// ## Flush frequency / self-gating
 ///
-/// The engine calls [`Subsystem::flush`] **every fixed-point iteration** of a
+/// The engine calls [`Subsystem::flush_pre_layout`] **every fixed-point iteration** of a
 /// `flush` call (possibly several times per frame). Integrating the decay,
 /// however, must sample the clock **at most once per frame** — otherwise the
 /// same frame would apply the delta multiple times. We self-gate that via
@@ -176,7 +176,7 @@ impl Subsystem for ScrollInertiaSubsystem {
         // iteration (cheap + idempotent) so a fling seeded mid-frame (from a
         // handler) still advances on the next frame.
         if self.state.is_some() {
-            cx.request_next_frame();
+            cx.request_frame();
         }
     }
 }

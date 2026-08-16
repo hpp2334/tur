@@ -13,8 +13,8 @@ fn std_module_imports_and_renders() {
     let mut app = TurTestApp::new(400.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-            import { Column, SizedBox, CrossAxisAlignment, render, view } from "tur:std";
-            render(view(() =>
+            import { Column, SizedBox, CrossAxisAlignment, mount, view } from "tur:std";
+            mount(view(() =>
                 Column({
                     crossAlignment: CrossAxisAlignment.Start,
                     children: [ SizedBox({ height: 50 }), SizedBox({ height: 30 }) ],
