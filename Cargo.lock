@@ -4411,25 +4411,9 @@ dependencies = [
  "boa_engine",
  "tur-android",
  "tur-animation",
- "tur-demo-plugin",
  "tur-engine",
  "tur-net-native",
-]
-
-[[package]]
-name = "tur-demo-plugin"
-version = "0.1.0"
-dependencies = [
- "boa_engine",
- "swc_common",
- "swc_ecma_ast",
- "swc_ecma_codegen",
- "swc_ecma_parser",
- "swc_ecma_transforms_base",
- "swc_ecma_transforms_typescript",
- "swc_ecma_visit",
- "tracing",
- "tur-engine",
+ "tur-playground-plugin",
 ]
 
 [[package]]
@@ -4548,6 +4532,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tur-playground-plugin"
+version = "0.1.0"
+dependencies = [
+ "boa_engine",
+ "swc_common",
+ "swc_ecma_ast",
+ "swc_ecma_codegen",
+ "swc_ecma_parser",
+ "swc_ecma_transforms_base",
+ "swc_ecma_transforms_typescript",
+ "swc_ecma_visit",
+ "tracing",
+ "tur-engine",
+]
+
+[[package]]
 name = "tur-wasm"
 version = "0.1.0"
 dependencies = [
@@ -4578,8 +4578,8 @@ dependencies = [
  "js-sys",
  "tracing",
  "tracing-wasm",
- "tur-demo-plugin",
  "tur-engine",
+ "tur-playground-plugin",
  "tur-wasm",
  "wasm-bindgen",
  "wasm-bindgen-futures",

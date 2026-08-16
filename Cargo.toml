@@ -12,7 +12,7 @@ members = [
     "libs/tur-filepicker-capability",
     "libs/tur-filepicker-wasm",
     "libs/tur-filepicker-native",
-    "libs/tur-demo-plugin",
+    "demo/tur-playground-plugin",
     "libs/tur-wasm",
     "libs/tur-native",
     "libs/tur-android",
@@ -40,7 +40,7 @@ tur-net-native = { path = "libs/tur-net-native" }
 tur-filepicker-capability = { path = "libs/tur-filepicker-capability" }
 tur-filepicker-wasm = { path = "libs/tur-filepicker-wasm" }
 tur-filepicker-native = { path = "libs/tur-filepicker-native" }
-tur-demo-plugin = { path = "libs/tur-demo-plugin", default-features = false }
+tur-playground-plugin = { path = "demo/tur-playground-plugin", default-features = false }
 tur-native = { path = "libs/tur-native" }
 tur-android = { path = "libs/tur-android" }
 tur-integration-tests = { path = "libs/tur-integration-tests" }
@@ -87,6 +87,12 @@ winit = "0.30"
 # (tur-android JNI trampoline and vello integration tests rely on
 # `catch_unwind`). The dedicated profile is selected via
 # `wasm-pack build --profile wasm-dev`.
+# Deps almost never need variable-level debuginfo in dev builds; keep only
+# line tables (backtraces stay useful) to cut target/ size roughly in half.
+# Workspace crates keep full debuginfo from the default dev profile.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.wasm-dev]
 inherits = "dev"
 panic = "abort"

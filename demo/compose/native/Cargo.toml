@@ -22,7 +22,7 @@ tur-net-native.workspace = true
 # IO. File picking (`tur:filepicker`) is not wired on Android yet — there is no
 # native backend, so the plugin is intentionally omitted (opt-in: code that
 # imports `tur:filepicker` without a backend installed fails fast).
-tur-demo-plugin = { workspace = true }
+tur-playground-plugin = { workspace = true }
 
 # Scoped to Android so a host `cargo check --workspace` produces an empty
 # (but compiling) cdylib — the JNI entry points and create fn are android-only.

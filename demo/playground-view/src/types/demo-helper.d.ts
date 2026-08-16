@@ -1,11 +1,11 @@
 /**
  * @tur-ng/demo-helper — ambient type declarations for the demo-helper module.
  *
- * The runtime is a synthetic boa module registered by `tur-demo-plugin`
- * (`TurDemoPlugin`) under the specifier `"tur-ext/demo-helper"`. It exposes
- * swc-backed compiler services (transpile / tokenize / AST). These are
- * demo/playground-only and depend on swc — they are not part of the core
- * engine surface. File IO now lives in `tur:filepicker` (@tur-ng/filepicker).
+ * The runtime is a synthetic boa module registered by `tur-playground-plugin`
+ * (`TurPlaygroundPlugin`) under the specifier `"tur-ext/demo-helper"`. It
+ * exposes swc-backed compiler services (transpile / tokenize / AST). These are
+ * playground-only and depend on swc — they are not part of the core engine
+ * surface. File IO now lives in `tur:filepicker` (@tur-ng/filepicker).
  */
 
 declare module "tur-ext/demo-helper" {
@@ -16,7 +16,7 @@ declare module "tur-ext/demo-helper" {
 
     /** Lexical token span for syntax highlighting.
      *  `kind` indexes into the caller's highlight palette (see
-     *  `highlight_tsx` in tur-demo-plugin). */
+     *  `highlight_tsx` in tur-playground-plugin). */
     export interface TokenSpan {
         start: number;
         end: number;

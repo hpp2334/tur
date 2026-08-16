@@ -3,7 +3,7 @@
 //! Exposes a C ABI (under the `Java_org_tur_TurNative_*` JNI names) that Kotlin
 //! (`integrations/compose`) calls to build, drive, and tear down a tur engine
 //! instance. The engine itself, the renderer, and all plugins come from
-//! `tur-engine` + `tur-animation` + `tur-demo-plugin` unchanged; this crate is
+//! `tur-engine` + `tur-animation` + plugins unchanged; this crate is
 //! only the embedder glue (surface, events, loop driver) — the same three
 //! integration seams the wasm and native harnesses use.
 //!

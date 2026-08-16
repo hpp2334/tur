@@ -4,8 +4,8 @@
 //! glue but exports no `#[wasm_bindgen]` surface and pulls in no playground
 //! code). This crate is the website's *own* `.so`: it wraps `tur-wasm`'s
 //! [`tur_wasm::WasmRuntime`] + [`tur_wasm::WasmApp`] builders and adds the
-//! playground-only [`tur_demo_plugin::TurDemoPlugin`] (swc TS compiler). JS
-//! imports `TurWebsiteApp` from the generated `tur_website.js`.
+//! playground-only [`tur_playground_plugin::TurPlaygroundPlugin`] (swc TS
+//! compiler). JS imports `TurWebsiteApp` from the generated `tur_website.js`.
 //!
 //! Mirrors the Android split: `tur-android` (pure rlib) vs `demo/compose/native`
 //! (the app's own cdylib that adds the demo plugin set).
@@ -56,7 +56,7 @@ impl TurWebsiteApp {
         wasm_bindgen_futures::future_to_promise(async move {
             // Build the shared runtime once with the demo plugin.
             let runtime = tur_wasm::WasmRuntime::create(tur_wasm::WasmRuntimeConfig {
-                configure: Box::new(|b| b.plugin(tur_demo_plugin::TurDemoPlugin)),
+                configure: Box::new(|b| b.plugin(tur_playground_plugin::TurPlaygroundPlugin)),
                 worker_pools: Vec::new(),
             })?;
             // Spawn an isolated DOM-wired instance from it.
