@@ -21,13 +21,14 @@ import androidx.compose.ui.viewinterop.AndroidView
  * renders the given JS into it.
  *
  * The single-call integration point: obtain a [TurRuntime] once (e.g. via
- * [rememberTurRuntime]), drop this composable into any Compose UI, pass a JS
- * bundle string (an ES module importing from `tur:std` / `tur:animation` /
- * etc.), and tur renders into the surface. When the surface becomes ready the
- * view spawns an instance via [TurRuntime.createInstance]; when the surface is
- * destroyed the instance is torn down (the runtime survives). Pointer (touch),
- * resize, and the frame loop are wired automatically; basic key dispatch is
- * wired when the surface has focus.
+ * [rememberTurRuntime]), drop this composable into any Compose UI, pass a
+ * module **source handle** (an ES module source registered on the runtime via
+ * [TurRuntime.registerModuleSource] or created on the Rust side), and tur
+ * renders into the surface. When the surface becomes ready the view spawns an
+ * instance via [TurRuntime.createInstance]; when the surface is destroyed the
+ * instance is torn down (the runtime survives). Pointer (touch), resize, and
+ * the frame loop are wired automatically; basic key dispatch is wired when
+ * the surface has focus.
  *
  * Multiple `TurView`s sharing one [runtime] coexist as isolated instances
  * (each its own JS realm) while sharing fonts/clock/capabilities/plugins — the
@@ -36,20 +37,24 @@ import androidx.compose.ui.viewinterop.AndroidView
  * Example:
  * ```
  * val runtime = rememberTurRuntime { ctx -> DemoNative.createRuntime(ctx) }
- * val js = remember { context.assets.open("playground.js").bufferedReader().use { it.readText() } }
- * TurView(runtime = runtime, js = js, modifier = Modifier.fillMaxSize())
+ * val source = rememberTurModuleSource(runtime) {
+ *     runtime.registerModuleSource(assets.open("playground.js").bufferedReader().use { it.readText() })
+ * }
+ * TurView(runtime = runtime, sourceHandle = source, modifier = Modifier.fillMaxSize())
  * ```
  *
  * @param runtime the shared [TurRuntime] to spawn the instance from.
- * @param js an ES module source (the bundle produced by rspack from
- *   `playground-view` or a `tur-test-cases` case). Imports of `tur:*` /
- *   `tur-ext/demo-helper` are resolved by the engine's module loader.
+ * @param sourceHandle a registered module-source handle (from
+ *   [TurRuntime.registerModuleSource] or a Rust-side registration). The
+ *   source is an ES module importing from `tur:std` / `tur:animation` /
+ *   etc., resolved by the engine's module loader. Loading by handle means
+ *   the bundle never crosses the Kotlin↔Rust boundary as a string per load.
  * @param dpr force a DPR (defaults to the window's `Resources.displayMetrics.density`).
  */
 @Composable
 fun TurView(
     runtime: TurRuntime,
-    js: String,
+    sourceHandle: Long,
     modifier: Modifier = Modifier,
     dpr: Double? = null,
 ) {
@@ -64,7 +69,7 @@ fun TurView(
     )
 
     DisposableEffect(surfaceView) {
-        surfaceView.bind(runtime, js, resolvedDpr)
+        surfaceView.bind(runtime, sourceHandle, resolvedDpr)
         onDispose { surfaceView.unbind() }
     }
 }
@@ -90,6 +95,29 @@ fun rememberTurRuntime(
 }
 
 /**
+ * Create a module-source handle once via [factory] and remember it across
+ * recomposition, releasing it ([TurRuntime.releaseModuleSource]) when
+ * [runtime] changes or the composable leaves the composition.
+ *
+ * The [factory] receives the [TurRuntime] (whose handle Rust-side
+ * registrations were made against) and returns a source handle — either from
+ * [TurRuntime.registerModuleSource] or, when the Rust side created the source
+ * (e.g. reading an APK asset natively via the embedder's `.so`), the raw
+ * handle it returned. Returning `0` signals "no source" and skips release.
+ */
+@Composable
+fun rememberTurModuleSource(
+    runtime: TurRuntime,
+    factory: (TurRuntime) -> Long,
+): Long {
+    val sourceHandle = remember(runtime) { factory(runtime) }
+    DisposableEffect(runtime, sourceHandle) {
+        onDispose { runtime.releaseModuleSource(sourceHandle) }
+    }
+    return sourceHandle
+}
+
+/**
  * `SurfaceView` subclass that owns the [TurInstance] lifecycle + input dispatch.
  *
  * The instance is created lazily via [bind] (called once the surface is ready —
@@ -98,7 +126,7 @@ fun rememberTurRuntime(
  */
 private class TurSurfaceView(context: android.content.Context) : SurfaceView(context) {
     private var instance: TurInstance? = null
-    private var pendingJs: String? = null
+    private var pendingSourceHandle: Long = 0L
     private var dprValue: Double = 0.0
     private var runtime: TurRuntime? = null
     /** Tracks the last IME state we drove so we only call the IMM on
@@ -120,10 +148,10 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
         holder.setFormat(android.graphics.PixelFormat.RGBA_8888)
     }
 
-    /** Stash the JS + dpr + runtime and register the surface callback; spawn the
-     *  instance when the surface is ready. */
-    fun bind(runtime: TurRuntime, js: String, dpr: Double) {
-        pendingJs = js
+    /** Stash the source handle + dpr + runtime and register the surface
+     *  callback; spawn the instance when the surface is ready. */
+    fun bind(runtime: TurRuntime, sourceHandle: Long, dpr: Double) {
+        pendingSourceHandle = sourceHandle
         dprValue = dpr
         this.runtime = runtime
         isFocusable = true
@@ -162,8 +190,9 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
     private val surfaceCallback = object : SurfaceHolder.Callback {
         override fun surfaceCreated(holder: SurfaceHolder) {
             if (instance != null) return
-            val js = pendingJs ?: return
+            val sourceHandle = pendingSourceHandle
             val rt = runtime ?: return
+            if (sourceHandle == 0L) return
             // `SurfaceHolder.surfaceFrame` (and `surfaceChanged`'s width/height)
             // report *physical* pixels, but the engine's `viewportSize$` (and
             // thus JS-side layout thresholds like the playground's
@@ -181,7 +210,7 @@ private class TurSurfaceView(context: android.content.Context) : SurfaceView(con
                 // TurNative.createInstance under the hood — the runtime's loop
                 // driver arms wake-ups against the instance's FrameLoop).
                 rt.createInstance(holder.surface, w, h, dprValue).also {
-                    it.loadModule(js)
+                    it.loadModule(sourceHandle)
                     // After each frame, sync the soft keyboard with the
                     // engine's focused-element state (reads the value native
                     // pushed into the FrameLoop via onFocusChanged).

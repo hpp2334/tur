@@ -65,16 +65,38 @@ class MainActivity : ComponentActivity() {
         setContent {
             // Build the shared runtime once (the .so registers your plugins).
             val runtime = rememberTurRuntime { ctx -> AppNative.createRuntime(ctx) }
-            val js = remember { assets.open("bundle.js").bufferedReader().use { it.readText() } }
-            // TurView spawns an isolated instance from the runtime per surface.
-            TurView(runtime = runtime, js = js, modifier = Modifier.fillMaxSize())
+            // Register the bundle as a module source (auto-released on dispose).
+            val source = rememberTurModuleSource(runtime) { rt ->
+                rt.registerModuleSource(assets.open("bundle.js").bufferedReader().use { it.readText() })
+            }
+            // TurView spawns an isolated instance from the runtime per surface
+            // and loads the registered source by handle.
+            TurView(runtime = runtime, sourceHandle = source, modifier = Modifier.fillMaxSize())
         }
     }
 }
 ```
 
-`js` is an ES module that imports from `tur:std`, `tur:animation`, etc. — the
-same bundle the web playground runs.
+The source is an ES module that imports from `tur:std`, `tur:animation`, etc. —
+the same bundle the web playground runs.
+
+### Module sources: Kotlin string vs Rust-side handle
+
+`TurView` loads by **source handle**, not string. Two ways to get a handle:
+
+- **From Kotlin**: `runtime.registerModuleSource(js)` / `rememberTurModuleSource`
+  — the string crosses JNI exactly once, at registration; every (re)load is a
+  refcount handoff.
+- **From Rust** (zero JNI string traffic): your `.so` reads the source natively
+  (e.g. an APK asset via the NDK `AAssetManager`) and registers it on the
+  runtime's `ModuleSourceRegistry` — see
+  `tur_android::ops::with_runtime(h, |rt| rt.module_sources.register(source))`
+  and the demo's `DemoNative.createAssetModuleSource`. Kotlin only ever sees
+  the opaque `Long`.
+
+Sources are shared across every instance of the runtime; release them with
+`runtime.releaseModuleSource(handle)` (or let `rememberTurModuleSource` do it).
+Stale handles are safe misses — ids are monotonic and never reused.
 
 ### 3. Dependencies
 

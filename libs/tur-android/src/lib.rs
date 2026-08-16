@@ -17,8 +17,11 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 mod app;
+mod module_source;
 pub mod scheduler;
 mod surface;
+
+pub use module_source::ModuleSourceRegistry;
 
 // Re-export the JNI primitive types so the `standard_jni_exports!()` macro
 // (expanded inside an embedder's cdylib) can name them via `$crate::…` without
@@ -218,10 +221,12 @@ fn init_logger_once() {
 /// - [`create_instance`] / [`create_headless_instance`] spawn an isolated
 ///   [`AndroidInstance`] from a runtime handle (rendering / headless). Returns
 ///   an instance handle.
-/// - `load_module`/`pump`/`resize`/`push_*`/`destroy`
-///   operate on **instance** handles. (Focused-element state is pushed to
-///   Kotlin via `FrameLoop.onFocusChanged` from the engine's focus-change
-///   handler — no `focused_is_editable` JNI poll.)
+/// - [`register_module_source`] / [`release_module_source`] /
+///   `load_module`/`pump`/`resize`/`push_*`/`destroy`
+///   operate on **instance** handles (module sources register on the
+///   **runtime**, then load into any of its instances by handle). (Focused-
+///   element state is pushed to Kotlin via `FrameLoop.onFocusChanged` from
+///   the engine's focus-change handler — no `focused_is_editable` JNI poll.)
 /// - [`destroy_runtime`] drops the runtime.
 ///
 /// Runtime creation varies per embedder (plugin set), so [`create_runtime`]
@@ -365,16 +370,57 @@ pub mod ops {
         })
     }
 
-    /// Evaluate `js` as an ES module (resolved by the engine's `TurModuleLoader`
-    /// — `tur:std`, `tur:animation`, etc. must already be registered, which
-    /// instance creation does). Then request a paint so the bundle renders on
-    /// the next frame.
-    pub fn load_module(env: &mut JNIEnv, handle: jlong, js: JString) {
-        catch_void(env, "loadModule", |env| {
-            let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
+    /// `registerModuleSource(env, runtimeHandle, js): long`
+    ///
+    /// Register a module source on the runtime's shared
+    /// [`ModuleSourceRegistry`](crate::ModuleSourceRegistry) and return its
+    /// opaque handle (`0` on failure). The source crosses JNI exactly once,
+    /// here — `loadModule` then loads it into any instance of the runtime by
+    /// handle. Rust embedders skip even this hop: read the source natively
+    /// and call `runtime.module_sources.register(…)` via [`with_runtime`].
+    pub fn register_module_source(env: &mut JNIEnv, runtime_handle: jlong, js: JString) -> jlong {
+        catch_into_zero(env, "registerModuleSource", |env| {
+            let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
             let js: String = env.get_string(&js)?.into();
-            log::info!("loadModule: {} bytes", js.len());
-            futures::executor::block_on(instance.app.load_module(&js))?;
+            Ok(runtime.module_sources.register(js) as jlong)
+        })
+    }
+
+    /// `releaseModuleSource(env, runtimeHandle, sourceHandle)`
+    ///
+    /// Drop a registered module source. Idempotent — an unknown/stale handle
+    /// is a no-op (handles are monotonic ids, never reused). Everything left
+    /// registered is released wholesale when the runtime is destroyed.
+    pub fn release_module_source(env: &mut JNIEnv, runtime_handle: jlong, source_handle: jlong) {
+        catch_void(env, "releaseModuleSource", |_env| {
+            let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
+            runtime.module_sources.remove(source_handle as u64);
+            Ok(())
+        })
+    }
+
+    /// Evaluate the registered module source `source_handle` as an ES module
+    /// (resolved by the engine's `TurModuleLoader` — `tur:std`,
+    /// `tur:animation`, etc. must already be registered, which instance
+    /// creation does), then request a paint so the bundle renders on the
+    /// next frame.
+    ///
+    /// The registry's `Arc<str>` flows to the worker by refcount — no copy,
+    /// no JNI string traffic. A source produced on the Rust side (e.g. an
+    /// APK asset read via `AAssetManager`) therefore reaches the JS realm
+    /// without ever being serialized across the JNI boundary.
+    pub fn load_module(env: &mut JNIEnv, handle: jlong, source_handle: jlong) {
+        catch_void(env, "loadModule", |_env| {
+            let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
+            let source = instance
+                .module_sources
+                .get(source_handle as u64)
+                .ok_or("unknown module source handle")?;
+            log::info!(
+                "loadModule: source handle {source_handle} ({} bytes)",
+                source.len()
+            );
+            futures::executor::block_on(instance.app.load_module(source))?;
             log::info!("loadModule: module evaluated OK");
             log::info!("loadModule: paint requested");
             Ok(())
@@ -576,6 +622,22 @@ pub mod ops {
         Some(f(&instance.app))
     }
 
+    /// Escape hatch mirroring [`with_app`] for the **runtime** handle: run
+    /// `f` with `&`[`AndroidRuntime`]. Used from an embedder's own JNI
+    /// trampolines — the motivating case is registering an APK asset as a
+    /// module source entirely on the Rust side (read via `AAssetManager`,
+    /// then `with_runtime(h, |rt| rt.module_sources.register(source))`),
+    /// so the JS bundle never crosses the JNI boundary. Returns `None` if
+    /// `handle` is `0` or stale, in which case `f` is not run.
+    ///
+    /// Unlike [`with_app`] there is no `!Send` constraint — the runtime
+    /// handle is process-shared infrastructure — but follow the crate's JNI
+    /// discipline and call it on the main thread.
+    pub fn with_runtime<R>(handle: jlong, f: impl FnOnce(&AndroidRuntime) -> R) -> Option<R> {
+        let runtime = handle_to_runtime(handle)?;
+        Some(f(runtime))
+    }
+
     /// Push an IME composition event onto the platform-event queue. `kind`:
     /// `0=CompositionStart`, `1=CompositionUpdate { text }`,
     /// `2=CompositionEnd { text }`. Routed to the focused editable's
@@ -682,8 +744,9 @@ pub mod ops {
 
 /// Generate the standard engine-operation JNI entry points inside the caller's
 /// cdylib. Emits the instance/runtime-operation `Java_org_tur_TurNative_*`
-/// trampolines (`createInstance`, `createHeadlessInstance`, `loadModule`,
-/// `pump`, `resize`, `pushPointer`, `pushKey`, `pushIme`, `destroy`,
+/// trampolines (`createInstance`, `createHeadlessInstance`,
+/// `registerModuleSource`, `releaseModuleSource`, `loadModule`, `pump`,
+/// `resize`, `pushPointer`, `pushKey`, `pushIme`, `destroy`,
 /// `destroyRuntime`) that forward to [`ops`](crate::ops).
 /// Invoking this macro is all an embedder needs to make its `.so` drivable by
 /// the Kotlin `org.tur.TurNative` bridge — **runtime creation** is NOT included
@@ -738,13 +801,33 @@ macro_rules! standard_jni_exports {
         }
 
         #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_registerModuleSource(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            runtime_handle: $crate::jlong,
+            js: $crate::JString,
+        ) -> $crate::jlong {
+            $crate::ops::register_module_source(&mut env, runtime_handle, js)
+        }
+
+        #[unsafe(no_mangle)]
+        pub extern "system" fn Java_org_tur_TurNative_releaseModuleSource(
+            mut env: $crate::JNIEnv,
+            _class: $crate::JClass,
+            runtime_handle: $crate::jlong,
+            source_handle: $crate::jlong,
+        ) {
+            $crate::ops::release_module_source(&mut env, runtime_handle, source_handle)
+        }
+
+        #[unsafe(no_mangle)]
         pub extern "system" fn Java_org_tur_TurNative_loadModule(
             mut env: $crate::JNIEnv,
             _class: $crate::JClass,
             handle: $crate::jlong,
-            js: $crate::JString,
+            source_handle: $crate::jlong,
         ) {
-            $crate::ops::load_module(&mut env, handle, js)
+            $crate::ops::load_module(&mut env, handle, source_handle)
         }
 
         #[unsafe(no_mangle)]

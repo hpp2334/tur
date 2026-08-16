@@ -4409,6 +4409,7 @@ name = "tur-demo"
 version = "0.1.0"
 dependencies = [
  "boa_engine",
+ "log",
  "tur-android",
  "tur-animation",
  "tur-engine",

@@ -41,10 +41,16 @@ class TurInstance(
         frameLoop.onPump = { if (handle != 0L) TurNative.pumpMessages(handle) }
     }
 
-    /** Evaluate [js] (an ES module) and request a paint. */
-    fun loadModule(js: String) {
+    /**
+     * Evaluate a registered module source (a [TurRuntime.registerModuleSource]
+     * handle, or one created on the Rust side) as an ES module and request a
+     * paint. The shared source reaches the engine by refcount — no JNI string
+     * copy per load.
+     */
+    fun loadModule(sourceHandle: Long) {
         check(handle != 0L) { "instance destroyed" }
-        TurNative.loadModule(handle, js)
+        check(sourceHandle != 0L) { "invalid module source handle" }
+        TurNative.loadModule(handle, sourceHandle)
     }
 
     /** Push a new logical size + dpr (from `SurfaceHolder.Callback.surfaceChanged`). */

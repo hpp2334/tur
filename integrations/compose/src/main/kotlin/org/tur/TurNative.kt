@@ -49,8 +49,32 @@ object TurNative {
         frameLoop: FrameLoop,
     ): Long
 
-    /** Evaluate [js] as an ES module (`import … from "tur:*"` resolved by the engine). */
-    external fun loadModule(handle: Long, js: String)
+    /**
+     * Register a JS module source on the runtime's shared registry and return
+     * an opaque source handle (`0` on failure). The source crosses JNI exactly
+     * once, here; [loadModule] then loads it into any instance of the runtime
+     * by handle — no per-load string copies.
+     *
+     * Rust-side embedders can skip this hop entirely (read the source
+     * natively, e.g. an APK asset, and register it from Rust) — see the demo
+     * app's `createAssetModuleSource`.
+     */
+    external fun registerModuleSource(runtimeHandle: Long, js: String): Long
+
+    /**
+     * Drop a registered module source. Idempotent — a stale/unknown handle is
+     * a no-op. Everything left registered is freed when the runtime is
+     * destroyed.
+     */
+    external fun releaseModuleSource(runtimeHandle: Long, sourceHandle: Long)
+
+    /**
+     * Evaluate the registered module source ([registerModuleSource]'s return
+     * value) as an ES module (`import … from "tur:*"` resolved by the engine).
+     * The shared source flows to the engine by refcount — zero JNI string
+     * traffic.
+     */
+    external fun loadModule(handle: Long, sourceHandle: Long)
 
     /** Fire one engine wake — call each Choreographer / Handler tick. */
     external fun pump(handle: Long): Int

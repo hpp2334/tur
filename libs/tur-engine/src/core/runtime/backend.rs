@@ -722,9 +722,12 @@ impl AppBackend {
         rx.rx.await.expect("reply sender dropped without firing")
     }
 
-    pub async fn load_module(&self, source: &str) -> Result<(), ModuleError> {
+    pub async fn load_module(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+    ) -> Result<(), ModuleError> {
         self.rpc(|tx| WorkerMsg::LoadModule {
-            source: std::sync::Arc::from(source),
+            source: source.into(),
             reply: tx,
         })
         .await
