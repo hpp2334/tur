@@ -32,6 +32,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use boa_engine::object::builtins::JsFunction;
 use boa_engine::{Context, Source};
 use futures::StreamExt;
 
@@ -65,6 +66,11 @@ pub(crate) struct WorkerBackend {
     pub(crate) boa_context: RefCell<Context>,
     pub(crate) internal: TurAppInternal,
     pub(crate) executor: Rc<TurJobExecutor>,
+    /// The cleanup function returned by the currently-loaded module's
+    /// `start()` (the module lifecycle contract). Runs (best-effort)
+    /// before the next `load_module` evaluates and at destroy. Worker-side
+    /// only — a `JsFunction` is `!Send`, matching the rest of the state.
+    pending_cleanup: RefCell<Option<JsFunction>>,
 }
 
 impl WorkerBackend {
@@ -77,6 +83,7 @@ impl WorkerBackend {
             boa_context: RefCell::new(boa_context),
             internal,
             executor,
+            pending_cleanup: RefCell::new(None),
         }
     }
 
@@ -94,21 +101,36 @@ impl WorkerBackend {
         self.internal.take_pending_render_batch()
     }
 
-    fn load_js_inner(&self, source: &str) -> Result<(), ModuleError> {
-        let mut boa = self.boa_context.borrow_mut();
-        boa.eval(Source::from_bytes(source).with_path(Path::new("bundle.js")))
-            .map_err(|e| {
-                tracing::error!("JS eval error: {e}");
-                ModuleError::Eval(e.to_string())
-            })?;
-        if let Err(e) = self.executor.drain(&mut boa) {
-            tracing::error!("load_js drain error: {e}");
+    /// Run the pending module cleanup (best-effort) and clear any leftover
+    /// root tree. Called before a new module evaluates and at destroy, so a
+    /// re-load always starts from a clean tree even when the previous
+    /// module's cleanup forgot to `unmount`.
+    fn teardown_current_module(&self) {
+        if let Some(cleanup) = self.pending_cleanup.borrow_mut().take() {
+            let mut boa = self.boa_context.borrow_mut();
+            if let Err(e) = cleanup.call(&boa_engine::JsValue::undefined(), &[], &mut boa) {
+                tracing::error!("module cleanup error: {e}");
+            }
+            drop(boa);
+            let mut boa = self.boa_context.borrow_mut();
+            let _ = boa.run_jobs();
+            drop(boa);
+            let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
         }
-        tracing::info!("load_js: bundle evaluated successfully");
-        Ok(())
+        // Auto-clear: if the previous module's start mounted a root and its
+        // cleanup didn't unmount it, tear the stale tree down now.
+        let js = &self.internal.js_context;
+        let leftover_root = js.element_tree.borrow().root_element_id();
+        if let Some(root) = leftover_root {
+            tracing::debug!("load_module: auto-clearing leftover root {root:?}");
+            js.element_tree.borrow_mut().destroy_subtree(root);
+            js.set_dirty();
+        }
     }
 
     fn load_module_inner(&self, source: &str) -> Result<(), ModuleError> {
+        // Parse first, so a syntactically-broken reload doesn't destroy the
+        // currently-running module's tree.
         let mut boa = self.boa_context.borrow_mut();
         let module = boa_engine::Module::parse(
             Source::from_bytes(source).with_path(Path::new("entry.mjs")),
@@ -119,6 +141,13 @@ impl WorkerBackend {
             tracing::error!("module parse error: {e}");
             ModuleError::Parse(e.to_string())
         })?;
+        drop(boa);
+
+        // Module lifecycle contract: run the previous module's cleanup (if
+        // any) + clear its leftover root tree before the new module runs.
+        self.teardown_current_module();
+
+        let mut boa = self.boa_context.borrow_mut();
         let promise = module.load_link_evaluate(&mut boa);
         if let Err(e) = boa.run_jobs() {
             tracing::error!("module run_jobs error: {e}");
@@ -136,30 +165,41 @@ impl WorkerBackend {
             drop(boa);
             return Err(ModuleError::Eval(to_string));
         }
+
+        // The lifecycle contract: the module MUST export a callable
+        // `start`. Call it; a function return value becomes the pending
+        // cleanup (invoked before the next load / at destroy).
+        let namespace = module.namespace(&mut boa);
+        let start = namespace
+            .get(boa_engine::js_string!("start"), &mut boa)
+            .map_err(|e| {
+                tracing::error!("module start export read error: {e}");
+                ModuleError::Eval(e.to_string())
+            })?;
+        let result = if !start.is_callable() {
+            let msg = "module must export a function start()".to_string();
+            tracing::error!("{msg}");
+            drop(boa);
+            return Err(ModuleError::Eval(msg));
+        } else {
+            let f = JsFunction::from_object(start.as_object().expect("is_callable checked"))
+                .expect("is_callable checked");
+            f.call(&boa_engine::JsValue::undefined(), &[], &mut boa)
+        };
+        let cleanup = match result {
+            Ok(v) => v.as_object().and_then(JsFunction::from_object),
+            Err(e) => {
+                let msg = e.to_string();
+                tracing::error!("module start() error: {msg}");
+                drop(boa);
+                return Err(ModuleError::Eval(msg));
+            }
+        };
         drop(boa);
+        *self.pending_cleanup.borrow_mut() = cleanup;
         if let Err(e) = self.executor.drain(&mut self.boa_context.borrow_mut()) {
             tracing::error!("load_module drain error: {e}");
         }
-        Ok(())
-    }
-
-    fn eval_module_inner(&self, source: &str) -> Result<(), ModuleError> {
-        let mut boa = self.boa_context.borrow_mut();
-        let module = boa_engine::Module::parse(
-            Source::from_bytes(source).with_path(Path::new("eval.mjs")),
-            None,
-            &mut boa,
-        )
-        .map_err(|e| {
-            tracing::error!("eval_module parse error: {e}");
-            ModuleError::Parse(e.to_string())
-        })?;
-        let _promise = module.load_link_evaluate(&mut boa);
-        if let Err(e) = boa.run_jobs() {
-            tracing::error!("eval_module run_jobs error: {e}");
-        }
-        drop(boa);
-        let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
         Ok(())
     }
 
@@ -185,16 +225,6 @@ impl WorkerBackend {
                 // `set_dirty`; this also covers a pure reactive `set`),
                 // re-arm an idle worker so the bundle renders without an
                 // embedder paint request.
-                self.wake_if_dirty();
-                reply.send(res);
-            }
-            WorkerMsg::LoadJs { source, reply } => {
-                let res = self.load_js_inner(&source);
-                self.wake_if_dirty();
-                reply.send(res);
-            }
-            WorkerMsg::EvalModule { source, reply } => {
-                let res = self.eval_module_inner(&source);
                 self.wake_if_dirty();
                 reply.send(res);
             }
@@ -265,6 +295,9 @@ impl WorkerBackend {
                 self.push_app_event(event);
             }
             WorkerMsg::Destroy { reply } => {
+                // Module lifecycle contract: run the loaded module's
+                // cleanup (best-effort) before the worker tears down.
+                self.teardown_current_module();
                 reply.send(());
             }
         }
@@ -300,12 +333,6 @@ impl WorkerBackend {
     #[allow(dead_code)]
     pub(crate) fn event_bus(&self) -> Rc<EventBus> {
         self.internal.event_bus.clone()
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn event_bus_handle(&self) -> crate::core::event_bus::EventBusHandle {
-        let (h, j) = self.internal.event_bus.queues();
-        crate::core::event_bus::EventBusHandle::from_queues(h, j)
     }
 
     pub(crate) fn focused_state(&self) -> FocusedState {
@@ -470,7 +497,7 @@ pub struct AppBackend {
     /// handler here; on-demand reads use [`Self::focused_state`] (RPC).
     focus_changed_handler: RefCell<Option<crate::FocusChangedHook>>,
     /// Cross-thread event bus handle. Routes `emit_to_js` via
-    /// `WorkerMsg::EventBusToJs` (channel mode).
+    /// `WorkerMsg::EventBusToJs`.
     event_bus_handle: crate::core::event_bus::EventBusHandle,
     /// Main-side renderer (owned — no sink callback). Worker ships
     /// `HostMsg::RenderCommands` batches; main applies them here.
@@ -731,14 +758,6 @@ impl AppBackend {
         rx.rx.await.expect("reply sender dropped without firing")
     }
 
-    pub async fn load_js(&self, source: &str) -> Result<(), ModuleError> {
-        self.rpc(|tx| WorkerMsg::LoadJs {
-            source: std::sync::Arc::from(source),
-            reply: tx,
-        })
-        .await
-    }
-
     pub async fn load_module(&self, source: &str) -> Result<(), ModuleError> {
         self.rpc(|tx| WorkerMsg::LoadModule {
             source: std::sync::Arc::from(source),
@@ -747,17 +766,9 @@ impl AppBackend {
         .await
     }
 
-    pub async fn eval_module(&self, source: &str) -> Result<(), ModuleError> {
-        self.rpc(|tx| WorkerMsg::EvalModule {
-            source: std::sync::Arc::from(source),
-            reply: tx,
-        })
-        .await
-    }
-
     /// Synchronous JS expression evaluation. Test-only — production code
-    /// uses `load_module` / `eval_module`. Useful for inspecting JS-side
-    /// state via `globalThis.__x = ...`.
+    /// uses `load_module`. Useful for inspecting JS-side state via
+    /// `globalThis.__x = ...`.
     pub async fn eval_js(&self, source: &str) -> String {
         self.rpc(|tx| WorkerMsg::EvalJs {
             source: std::sync::Arc::from(source),

@@ -27,8 +27,10 @@ const KIND_COLOR: Color[] = [
 
 export interface CaseCompileResult {
     error?: string;
-    /** The case's default export — a view handle (`Element`). */
-    view?: unknown;
+    /** The case's `start()` (module lifecycle contract). Invoking it
+     *  publishes the case view via `setCaseView`; it may return a cleanup
+     *  function the case store runs before the next case / recompile. */
+    start?: () => (() => void) | void;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,11 +146,16 @@ function rewriteModule(transpiled: string): {
 }
 
 /** Rewrite the entry file. Like `rewriteModule` but converts
- *  `export default X` → `return X` (the entry factory's return value is the
- *  case view), and drops other exports without tracking. */
+ *  `export default X` → a generated `start()` that publishes X as the case
+ *  view (the module lifecycle contract, in-realm form: the compiler injects
+ *  `__setCaseView` and the case store invokes `start` / runs its returned
+ *  cleanup). An explicit `export function start()` passes through verbatim
+ *  (advanced cases with resources to dispose call `__setCaseView(...)`
+ *  themselves and may return a cleanup function). */
 function rewriteEntry(transpiled: string): string {
     const ast = Host.generateAst(transpiled);
     const parts: string[] = [];
+    let hasExplicitStart = false;
 
     for (const node of ast) {
         switch (node.kind) {
@@ -161,15 +168,22 @@ function rewriteEntry(transpiled: string): string {
 
             case "exportDecl": {
                 parts.push(node.body ?? node.text);
+                if (node.names?.includes("start")) hasExplicitStart = true;
                 break;
             }
 
             case "exportDefault": {
-                parts.push(`return ${node.body ?? node.text};`);
+                parts.push(
+                    `exports.start = function () {\n    __setCaseView(${node.body ?? node.text});\n};`,
+                );
                 break;
             }
 
-            case "exportNamed":
+            case "exportNamed": {
+                if (node.names?.includes("start")) hasExplicitStart = true;
+                break;
+            }
+
             case "exportAll":
             case "exportType": {
                 break;
@@ -182,6 +196,12 @@ function rewriteEntry(transpiled: string): string {
         }
     }
 
+    // An explicit `export function start` in the entry wins over the
+    // default-export wrapper — the compiler wires the declared `start`
+    // through to the module's exports below.
+    if (hasExplicitStart) {
+        parts.push("exports.start = start;");
+    }
     return parts.join("\n");
 }
 
@@ -189,9 +209,27 @@ function rewriteEntry(transpiled: string): string {
 // Compile
 // ---------------------------------------------------------------------------
 
+/** Lifecycle sink: the view published by the currently-started case's
+ *  `setCaseView(...)` call. Drained once by `takePublishedView` after the
+ *  case store invokes `start()`. */
+let publishedView: unknown = null;
+
+function setCaseView(view: unknown): void {
+    publishedView = view;
+}
+
+/** Drain the view published by the last `start()` (null if it never called
+ *  `setCaseView`). */
+export function takePublishedView(): unknown {
+    const v = publishedView;
+    publishedView = null;
+    return v;
+}
+
 /** Evaluate rewritten case code in an isolated function scope with the
- *  `tur:*` modules and the per-case `__modules` registry injected as
- *  parameters (no `globalThis` pollution). Returns the function's value. */
+ *  `tur:*` modules, the per-case `__modules` registry, and the lifecycle
+ *  `__setCaseView` sink injected as parameters (no `globalThis` pollution).
+ *  Returns the function's value. */
 function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
     const fn = new Function(
         "Std",
@@ -201,9 +239,19 @@ function runCaseBody(body: string, modules: Record<string, unknown>): unknown {
         "Clipboard",
         "FilePicker",
         "__modules",
+        "__setCaseView",
         body,
     );
-    return fn(Std, Anim, Host, Net, Clipboard, FilePicker, modules);
+    return fn(
+        Std,
+        Anim,
+        Host,
+        Net,
+        Clipboard,
+        FilePicker,
+        modules,
+        setCaseView,
+    );
 }
 
 export function compileCase(files: Record<string, string>): CaseCompileResult {
@@ -274,19 +322,23 @@ export function compileCase(files: Record<string, string>): CaseCompileResult {
         };
     }
 
-    let view: unknown;
+    let entryExports: Record<string, unknown> | null;
     try {
-        view = runCaseBody(entryJs, modules);
+        entryExports = runCaseBody(
+            ["var exports = {};", entryJs, "return exports;"].join("\n"),
+            modules,
+        ) as Record<string, unknown> | null;
     } catch (e) {
         return {
             error: `eval index.ts: ${e instanceof Error ? e.message : String(e)}`,
         };
     }
 
-    if (view == null) {
-        return { error: "case has no default export view" };
+    const start = entryExports?.start;
+    if (typeof start !== "function") {
+        return { error: "case must export a function start()" };
     }
-    return { view };
+    return { start: start as () => (() => void) | void };
 }
 
 /** Build colored `SpanData[]` for a source string by tokenizing it. */

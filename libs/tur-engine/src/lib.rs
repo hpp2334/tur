@@ -141,22 +141,14 @@ impl TurApp {
         &self.backend
     }
 
-    pub async fn load_js(&self, source: &str) -> Result<(), TurError> {
-        tracing::info!("load_js: evaluating bundle ({} bytes)", source.len());
-        self.backend.load_js(source).await.map_err(TurError::from)
-    }
-
+    /// Parse + evaluate `source` as an ES module and invoke its `start()`
+    /// export (the module lifecycle contract: `start` returns an optional
+    /// cleanup function; the engine runs it before the next load and at
+    /// destroy).
     pub async fn load_module(&self, source: &str) -> Result<(), TurError> {
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
         self.backend
             .load_module(source)
-            .await
-            .map_err(TurError::from)
-    }
-
-    pub async fn eval_module(&self, source: &str) -> Result<(), TurError> {
-        self.backend
-            .eval_module(source)
             .await
             .map_err(TurError::from)
     }
@@ -168,8 +160,8 @@ impl TurApp {
     }
 
     /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
-    /// worker's channel; `drain_js_to_embedder` returns empty on main (the
-    /// worker emits `HostMsg::EventBusToEmbedder` separately when needed).
+    /// worker's channel; JS→host messages fire handlers registered via
+    /// `on_bus_event` (shipped back as `HostMsg::EventBusToEmbedder`).
     pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
         self.backend.event_bus_handle()
     }

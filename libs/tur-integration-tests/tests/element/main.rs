@@ -31,6 +31,7 @@ mod row;
 mod scroll_view;
 mod sized_box;
 mod stack;
+mod start_contract;
 mod std_module_check;
 mod switch_view;
 mod task;

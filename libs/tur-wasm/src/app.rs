@@ -1053,30 +1053,11 @@ impl WasmApp {
         Ok(WasmApp { state: state_clone })
     }
 
-    pub async fn load_and_run_js(&self, js_source: &str) -> Result<(), JsValue> {
-        // Clone the `Rc<TurApp>` out of the state RefCell before awaiting,
-        // so the borrow is released before the await point. Otherwise a
-        // concurrent RPC borrow_mut on the same RefCell would panic.
-        let app = {
-            let guard = self.state.borrow();
-            let Some(s) = guard.as_ref() else {
-                return Err(JsValue::from_str("app not initialized"));
-            };
-            s.app.clone()
-        };
-        app.load_js(js_source)
-            .await
-            .map_err(|e| JsValue::from_str(&e.to_string()))?;
-        // The worker self-paints on load: eval sets dirty state, which the
-        // worker's `wake_if_dirty` turns into a coalesced self-wake — no
-        // embedder paint request needed.
-        Ok(())
-    }
-
     /// Evaluate `js_source` as an ES module (supports real
     /// `import { ... } from "tur:..."`, resolved by the engine's module
     /// loader), then start the frame loop. Used by the website to load the
-    /// playground-view bundle.
+    /// playground-view bundle. The module must export `start()` (the
+    /// module lifecycle contract).
     pub async fn load_and_run_module(&self, js_source: &str) -> Result<(), JsValue> {
         let app = {
             let guard = self.state.borrow();

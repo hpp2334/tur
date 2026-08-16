@@ -2,6 +2,17 @@
 
 A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
 
+## Module lifecycle contract
+
+`load_module(source)` is the ONLY module entry (plus test-only `eval_js` for script-mode state reads). A loaded module MUST export `function start()`:
+
+- The engine parses the new module FIRST (a broken reload never destroys the running module's tree), then runs the previous module's cleanup (the function `start` returned, if any) and clears any leftover root tree, then evaluates the new module and calls its `start()`.
+- Missing / non-function `start` fails the load (`ModuleError::Eval`); a throwing `start` fails it too. `start` returning undefined is fine (no cleanup).
+- The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: `mount` replaces any existing root, and module teardown clears it. A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
+- Cleanup also runs (best-effort) at instance destroy.
+
+Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell; the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup); `tur-test-cases` dist wrappers mount inside `start`. The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
+
 ## Architecture
 
 ```

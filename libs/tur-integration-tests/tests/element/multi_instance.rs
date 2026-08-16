@@ -51,8 +51,10 @@ fn build_runtime() -> (Rc<TurRuntime>, Rc<TestSchedulerDriver>, WorkerPoolHandle
 
 const SET_ID_JS: &str = r#"
     import { Text, mount } from "tur:std";
-    globalThis.__instanceId = "VALUE";
-    mount(Text({ text: "VALUE" }));
+    export function start() {
+        globalThis.__instanceId = "VALUE";
+        mount(Text({ text: "VALUE" }));
+    }
 "#;
 
 #[test]
@@ -110,7 +112,9 @@ fn instances_have_isolated_element_trees() {
     futures::executor::block_on(app_a.load_module(
         r#"
             import { Text, mount } from "tur:std";
-            mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
+            export function start() {
+                mount(Text({ text: "only-in-A", queryKey: ["a_only"] }));
+            }
         "#,
     ))
     .expect("load A");
@@ -140,9 +144,11 @@ fn headless_instance_runs_js_without_rendering() {
     futures::executor::block_on(app.load_module(
         r#"
         import { source, get } from "tur:std";
-        globalThis.__val = source(42);
-        const v = get(globalThis.__val);
-        globalThis.__readBack = v;
+        export function start() {
+            globalThis.__val = source(42);
+            const v = get(globalThis.__val);
+            globalThis.__readBack = v;
+        }
     "#,
     ))
     .expect("load");
@@ -172,8 +178,10 @@ fn build_headless_runs_engine_on_worker() {
     futures::executor::block_on(app.load_module(
         r#"
         import { source, get } from "tur:std";
-        globalThis.__val = source(7);
-        globalThis.__readBack = get(globalThis.__val);
+        export function start() {
+            globalThis.__val = source(7);
+            globalThis.__readBack = get(globalThis.__val);
+        }
     "#,
     ))
     .expect("load");
@@ -196,10 +204,9 @@ fn many_instances_share_one_runtime() {
             .renderer(Box::new(NoopRenderer::new()), (50.0, 50.0), 1.0)
             .build()
             .expect("app");
-        futures::executor::block_on(
-            app.load_module(format!(r#"globalThis.__idx = {i};"#).as_str()),
-        )
-        .expect("load");
+        // No `start` ceremony needed for pure state — `eval_js` runs a
+        // classic script in the same realm.
+        eval_js(&app, &format!(r#"globalThis.__idx = {i};"#)).expect("load");
         apps.push(app);
     }
     for (i, app) in apps.iter().enumerate() {
@@ -401,9 +408,11 @@ fn platform_events_route_to_the_correct_instance() {
     // mode (no imports), so do the import in a module eval and stash the JSON
     // on globalThis, then read it back with eval_js.
     let read_vp = |app: &Rc<tur_engine::TurApp>| -> String {
-        let _ = futures::executor::block_on(app.eval_module(
+        let _ = futures::executor::block_on(app.load_module(
             r#"import { viewportSize$, get } from "tur:std";
-               globalThis.__vp = JSON.stringify(get(viewportSize$));"#,
+               export function start() {
+                   globalThis.__vp = JSON.stringify(get(viewportSize$));
+               }"#,
         ));
         eval_js(app, "globalThis.__vp").unwrap_or_default()
     };
@@ -438,10 +447,12 @@ fn reactive_stores_are_isolated_per_instance() {
         .expect("B");
 
     // Create a source in A and set a value.
-    futures::executor::block_on(app_a.eval_module(
+    futures::executor::block_on(app_a.load_module(
         r#"import { source, set } from "tur:std";
-           globalThis.__atom = source("from-A");
-           set(globalThis.__atom, "A2");"#,
+           export function start() {
+               globalThis.__atom = source("from-A");
+               set(globalThis.__atom, "A2");
+           }"#,
     ))
     .expect("setup A");
 
@@ -458,11 +469,12 @@ fn reactive_stores_are_isolated_per_instance() {
 
     // A still has its own value. `import` needs module context, so eval as a
     // module and stash on globalThis, then read back.
-    futures::executor::block_on(
-        app_a.eval_module(
-            r#"import { get } from "tur:std"; globalThis.__r = get(globalThis.__atom);"#,
-        ),
-    )
+    futures::executor::block_on(app_a.load_module(
+        r#"import { get } from "tur:std";
+           export function start() {
+               globalThis.__r = get(globalThis.__atom);
+           }"#,
+    ))
     .expect("read A");
     let a_val = eval_js(&app_a, "globalThis.__r").unwrap_or_default();
     assert_eq!(a_val, "A2", "instance A retains its own reactive state");
