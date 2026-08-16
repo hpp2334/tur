@@ -42,7 +42,7 @@ use crate::core::app::{HostMsg, HostRx, HostTx, Reply, WorkerRx, WorkerTx};
 use crate::core::async_::TurJobExecutor;
 use crate::core::cursor::CursorBackend;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{DevNodeData, NodeTreeSnapshot};
+use crate::core::elements::NodeTreeSnapshot;
 use crate::core::event_bus::EventBus;
 use crate::core::image_resource::{ImageResource, ImageResourceId};
 use crate::core::render::{RenderCommand, RenderCommandBatch, Renderer};
@@ -252,12 +252,6 @@ impl WorkerBackend {
                 let _ = self.executor.drain(&mut self.boa_context.borrow_mut());
                 reply.send(display);
             }
-            WorkerMsg::DevElementTree { reply } => {
-                reply.send(self.dev_tool_element_tree());
-            }
-            WorkerMsg::DevGetElement { id, reply } => {
-                reply.send(self.dev_tool_get_element(id));
-            }
             WorkerMsg::QueryTreeSnapshot { reply } => {
                 reply.send(self.query_tree_snapshot());
             }
@@ -268,17 +262,16 @@ impl WorkerBackend {
                 // lookup); reference it so the variant's bind stays useful.
                 let _ = id;
             }
-            WorkerMsg::QueryFocusedState { reply } => {
-                reply.send(self.focused_state());
+            WorkerMsg::WithTree { runner } => {
+                // Co-borrow is safe: `element_tree` and `focus_manager`
+                // are distinct RefCells (the sync `focused_is_editable`
+                // below borrows both the same way).
+                let tree = self.internal.js_context.element_tree.borrow();
+                let focus = self.internal.js_context.focus_manager.borrow();
+                runner(&tree, &focus);
             }
             WorkerMsg::QueryFocusedElement { reply } => {
                 reply.send(self.focused_element());
-            }
-            WorkerMsg::QueryFocusedCursorRect { reply } => {
-                reply.send(self.focused_cursor_rect());
-            }
-            WorkerMsg::QueryFocusedIsEditable { reply } => {
-                reply.send(self.focused_is_editable());
             }
             WorkerMsg::QueryElement { key, reply } => {
                 let key_refs: Vec<&str> = key.iter().map(|s| s.as_str()).collect();
@@ -382,20 +375,6 @@ impl WorkerBackend {
             .query_element(key)
     }
 
-    pub(crate) fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
-        let tree = self.internal.js_context.element_tree.borrow();
-        let root_id = tree.root_element_id()?;
-        tree.dev_tool_node(root_id.into())
-    }
-
-    pub(crate) fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
-        self.internal
-            .js_context
-            .element_tree
-            .borrow()
-            .dev_tool_node(id)
-    }
-
     pub(crate) fn query_tree_snapshot(&self) -> NodeTreeSnapshot {
         self.internal
             .js_context
@@ -468,8 +447,8 @@ pub(crate) enum MsgOutcome {
 /// (deduped against the previous frame) alongside the FrameOutcome. `apply_msg`
 /// applies the cursor directly to the cursor backend and forwards focus
 /// changes to an embedder-installed handler (see [`Self::set_focus_changed_handler`]).
-/// The engine retains no focus cache — embedders read focus either from the
-/// handler (push) or via [`Self::focused_state`] (async RPC).
+/// The engine retains no focus cache — embedders read focus from the
+/// handler (push, the only production path).
 pub struct AppBackend {
     worker_tx: WorkerTx,
     /// Wrapped in `RefCell` because `futures::channel::mpsc::UnboundedReceiver::next`
@@ -494,7 +473,7 @@ pub struct AppBackend {
     /// worker ships a deduped `HostMsg::FocusedStateChanged`. The engine
     /// retains no focus cache — embedders that need the value (wasm's
     /// textarea positioning, Android's soft-keyboard sync) register a
-    /// handler here; on-demand reads use [`Self::focused_state`] (RPC).
+    /// handler here (push is the only production path).
     focus_changed_handler: RefCell<Option<crate::FocusChangedHook>>,
     /// Cross-thread event bus handle. Routes `emit_to_js` via
     /// `WorkerMsg::EventBusToJs`.
@@ -601,9 +580,8 @@ impl AppBackend {
 
     /// Install a handler fired from [`Self::apply_msg`] whenever the worker
     /// ships a deduped `HostMsg::FocusedStateChanged`. The engine keeps no
-    /// focus cache — embedders obtain focus state either by registering
-    /// here (push, on change) or via [`Self::focused_state`] (async RPC,
-    /// on demand). Pass `None` to clear.
+    /// focus cache — embedders obtain focus state by registering
+    /// here (push, on change). Pass `None` to clear.
     pub fn set_focus_changed_handler(&self, handler: Option<crate::FocusChangedHook>) {
         *self.focus_changed_handler.borrow_mut() = handler;
     }
@@ -727,8 +705,6 @@ impl AppBackend {
                 self.event_bus_handle.dispatch_to_host(channel_id, payload);
                 MsgOutcome::Continue
             }
-            // DevReply — handlers ignore (the Reply<T> slot handles RPC replies).
-            _ => MsgOutcome::Continue,
         }
     }
 
@@ -765,23 +741,8 @@ impl AppBackend {
         .await
     }
 
-    pub async fn focused_state(&self) -> FocusedState {
-        self.rpc(|tx| WorkerMsg::QueryFocusedState { reply: tx })
-            .await
-    }
-
     pub async fn focused_element(&self) -> Option<ElementNodeId> {
         self.rpc(|tx| WorkerMsg::QueryFocusedElement { reply: tx })
-            .await
-    }
-
-    pub async fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        self.rpc(|tx| WorkerMsg::QueryFocusedCursorRect { reply: tx })
-            .await
-    }
-
-    pub async fn focused_is_editable(&self) -> bool {
-        self.rpc(|tx| WorkerMsg::QueryFocusedIsEditable { reply: tx })
             .await
     }
 
@@ -792,15 +753,6 @@ impl AppBackend {
             reply: tx,
         })
         .await
-    }
-
-    pub async fn dev_tool_element_tree(&self) -> Option<DevNodeData> {
-        self.rpc(|tx| WorkerMsg::DevElementTree { reply: tx }).await
-    }
-
-    pub async fn dev_tool_get_element(&self, id: NodeId) -> Option<DevNodeData> {
-        self.rpc(|tx| WorkerMsg::DevGetElement { id, reply: tx })
-            .await
     }
 
     /// Test/dev-tool RPC: full element-tree snapshot.

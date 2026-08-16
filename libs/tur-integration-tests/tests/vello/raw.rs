@@ -4,10 +4,15 @@ pub fn vello_counter_app() {
     let app = TurVelloApp::new(1024.0, 768.0, 1.0).unwrap();
     app.load_bundle("vello-column-basic").unwrap();
 
-    // Worker owns the element tree; main reads snapshots via the dev-tool
-    // RPC. The root must have at least one child for this case to render.
-    let root =
-        futures::executor::block_on(app.app().dev_tool_element_tree()).expect("element tree");
+    // Worker owns the element tree; main reads via the test-only
+    // `with_tree` escape hatch. The root must have at least one child for
+    // this case to render.
+    let root = futures::executor::block_on(app.app().with_tree(|tree, _focus| {
+        tree.root_element_id()
+            .and_then(|root| tree.dev_tool_node(root.into()))
+    }))
+    .flatten()
+    .expect("element tree");
     assert!(!root.children.is_empty());
 
     app.wait_for_timeout(std::time::Duration::ZERO);

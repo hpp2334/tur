@@ -121,11 +121,19 @@ fn instances_have_isolated_element_trees() {
     looper_a.wait_for_timeout(Duration::ZERO);
 
     // B has no tree mounted.
-    let b_tree = futures::executor::block_on(app_b.dev_tool_element_tree());
+    let b_tree = futures::executor::block_on(app_b.with_tree(|tree, _focus| {
+        tree.root_element_id()
+            .and_then(|root| tree.dev_tool_node(root.into()))
+    }))
+    .flatten();
     assert!(b_tree.is_none(), "instance B should have no tree");
 
     // A does have a tree.
-    let a_tree = futures::executor::block_on(app_a.dev_tool_element_tree());
+    let a_tree = futures::executor::block_on(app_a.with_tree(|tree, _focus| {
+        tree.root_element_id()
+            .and_then(|root| tree.dev_tool_node(root.into()))
+    }))
+    .flatten();
     assert!(a_tree.is_some(), "instance A should have a tree");
 }
 

@@ -53,8 +53,7 @@ use core::app::FrameOutcome;
 
 /// Snapshot of focused-element state — single struct for the two-value
 /// `focused_is_editable` + `focused_cursor_rect` pair. Delivered to
-/// embedders via [`TurApp::set_focus_changed_handler`] (push, on change)
-/// and [`TurApp::focused_state`] (async RPC, on demand).
+/// embedders via [`TurApp::set_focus_changed_handler`] (push, on change).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FocusedState {
     pub is_editable: bool,
@@ -164,14 +163,6 @@ impl TurApp {
     /// `on_bus_event` (shipped back as `HostMsg::EventBusToEmbedder`).
     pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
         self.backend.event_bus_handle()
-    }
-
-    /// Combined focused-element state — RPC variant (awaits the worker's
-    /// reply). For change-driven reads, register
-    /// [`Self::set_focus_changed_handler`] (push, fired on focus / caret
-    /// change).
-    pub async fn focused_state(&self) -> FocusedState {
-        self.backend.focused_state().await
     }
 
     /// Push a platform (input) event from the embedder — resize, pointer,
@@ -354,17 +345,6 @@ impl TurApp {
         self.vsync.borrow().request_frame();
     }
 
-    pub async fn dev_tool_element_tree(&self) -> Option<core::elements::DevNodeData> {
-        self.backend.dev_tool_element_tree().await
-    }
-
-    pub async fn dev_tool_get_element(
-        &self,
-        id: core::element::NodeId,
-    ) -> Option<core::elements::DevNodeData> {
-        self.backend.dev_tool_get_element(id).await
-    }
-
     /// Run `cb` against the live `AnyElement` at `id`, on the worker
     /// thread. The closure executes where the element actually lives, so
     /// it can do typed introspection that can't be serialized across the
@@ -377,8 +357,8 @@ impl TurApp {
     /// - `cb: Send + 'static` — the closure crosses host→worker.
     ///
     /// Production code should never call this — it pins test-only typed
-    /// element access to the worker. Use `dev_tool_get_element` /
-    /// `query_tree_snapshot` for serializable snapshots.
+    /// element access to the worker. Use `query_tree_snapshot` for a
+    /// serializable snapshot.
     pub async fn with_element<R: Send + 'static>(
         &self,
         id: core::element::ElementNodeId,
@@ -404,6 +384,34 @@ impl TurApp {
         rx.rx.await.unwrap_or(None)
     }
 
+    /// Test-only: run `cb` against the worker's live `NodeTreeData` AND
+    /// `FocusManager`. This is the general escape hatch the former
+    /// per-field queries (`focused_cursor_rect`, `focused_is_editable`,
+    /// `dev_tool_element_tree`, `dev_tool_get_element`) were folded into —
+    /// callers reconstruct those views from the raw pair (the tree's
+    /// `dev_tool_node` / `root_element_id`, focus's `focused()`, the
+    /// `focused_is_editable` helper in [`core::focus::helper`]).
+    ///
+    /// Returns `None` if the worker is gone. Same constraints as
+    /// [`Self::with_element`] (`R: Send + 'static`, `cb: Send + 'static`).
+    /// Production code should never call this.
+    pub async fn with_tree<R: Send + 'static>(
+        &self,
+        cb: impl FnOnce(&core::elements::NodeTreeData, &core::focus::FocusManager) -> R + Send + 'static,
+    ) -> Option<R> {
+        use core::app::comm::{Reply, TreeRunner, WorkerMsg};
+
+        let (tx, rx) = Reply::<Option<R>>::pair();
+        let runner: TreeRunner = Box::new(move |tree, focus| {
+            tx.send(Some(cb(tree, focus)));
+        });
+        let _ = self
+            .backend
+            .worker_tx()
+            .unbounded_send(WorkerMsg::WithTree { runner });
+        rx.rx.await.unwrap_or(None)
+    }
+
     pub async fn query_element(&self, key: &[&str]) -> Option<core::element::NodeId> {
         self.backend.query_element(key).await
     }
@@ -412,21 +420,11 @@ impl TurApp {
         self.backend.focused_element().await
     }
 
-    pub async fn focused_cursor_rect(&self) -> Option<(f64, f64, f64, f64)> {
-        self.backend.focused_cursor_rect().await
-    }
-
-    /// True if the currently-focused element is an editable text element.
-    pub async fn focused_is_editable(&self) -> bool {
-        self.backend.focused_is_editable().await
-    }
-
     /// Install a handler fired whenever the worker ships a deduped
     /// `HostMsg::FocusedStateChanged` (i.e. the focused element's
     /// editable-ness or caret rect changes). The engine retains no focus
-    /// cache — embedders obtain focus state either by registering here
-    /// (push, on change) or via [`Self::focused_state`] (async RPC, on
-    /// demand). Pass `None` to clear.
+    /// cache — this push path is the only production way to read focus
+    /// state (tests may use [`Self::with_tree`]). Pass `None` to clear.
     ///
     /// The handler runs inside [`Self::apply_msg`](core::runtime::AppBackend::apply_msg),
     /// so it observes identical state on the `run_loop` path. Used by the

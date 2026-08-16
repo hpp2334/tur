@@ -37,9 +37,15 @@ use std::sync::Arc;
 use crate::core::app::FrameOutcome;
 use crate::core::cursor::Cursor;
 use crate::core::element::{ElementNodeId, NodeId};
-use crate::core::elements::{DevNodeData, NodeTreeData, NodeTreeSnapshot};
+use crate::core::elements::{NodeTreeData, NodeTreeSnapshot};
+use crate::core::focus::FocusManager;
 use crate::core::platform::PlatformEvent;
 use crate::core::render::RenderCommand;
+
+/// Type-erased closure run against the worker's live tree + focus state
+/// (see [`WorkerMsg::WithTree`]). Ships its result via a `Reply` channel
+/// it captures, so `WorkerMsg` stays monomorphic.
+pub type TreeRunner = Box<dyn FnOnce(&NodeTreeData, &FocusManager) + Send + 'static>;
 
 /// host → worker channel sender. Unbounded — the host side pushes input
 /// (platform events, wake, RPC requests) and the worker drains them in
@@ -87,16 +93,7 @@ pub enum WorkerMsg {
         source: Arc<str>,
         reply: ReplySender<String>,
     },
-    /// Dev-tool: full element-tree snapshot. RPC.
-    DevElementTree {
-        reply: ReplySender<Option<DevNodeData>>,
-    },
-    /// Dev-tool: single-node snapshot.
-    DevGetElement {
-        id: NodeId,
-        reply: ReplySender<Option<DevNodeData>>,
-    },
-    /// Test/dev-tool: full element-tree snapshot (every node, with kind +
+    /// Dev-tool: full element-tree snapshot (every node, with kind +
     /// children + computed_layout). Used by `TurTestApp::element_tree` to
     /// serve the legacy `NodeTreeData`-shaped read surface from the worker
     /// side (the live `NodeTreeData` is `!Send` because `ElementObject`
@@ -104,20 +101,10 @@ pub enum WorkerMsg {
     QueryTreeSnapshot {
         reply: ReplySender<NodeTreeSnapshot>,
     },
-    /// Query the focused-element state.
-    QueryFocusedState {
-        reply: ReplySender<crate::FocusedState>,
-    },
     /// Query the focused-element id.
     QueryFocusedElement {
         reply: ReplySender<Option<ElementNodeId>>,
     },
-    /// Query the focused element's caret rect (logical-space `(x, y, w, h)`).
-    QueryFocusedCursorRect {
-        reply: ReplySender<Option<(f64, f64, f64, f64)>>,
-    },
-    /// Query whether the focused element is an editable text element.
-    QueryFocusedIsEditable { reply: ReplySender<bool> },
     /// Path-based element lookup. `key` is the path segments.
     QueryElement {
         key: Vec<String>,
@@ -138,6 +125,14 @@ pub enum WorkerMsg {
         id: ElementNodeId,
         runner: Box<dyn FnOnce(&NodeTreeData) + Send + 'static>,
     },
+    /// Test-only: run a closure against the worker's live `NodeTreeData`
+    /// AND `FocusManager` — everything needed to reconstruct the former
+    /// per-field focus/dev-tool queries (`focused_cursor_rect`,
+    /// `focused_is_editable`, `dev_tool_get_element`, ...) on the caller
+    /// side. Same reply-channel pattern as [`WorkerMsg::WithElement`]: the
+    /// closure ships its result via a reply channel it captures, so the
+    /// enum stays monomorphic.
+    WithTree { runner: TreeRunner },
     /// Event bus — embedder → JS bytes on `channel_id`. Worker pushes into the
     /// `EventBus` `embedder_to_js` queue; `EmbedderBusSubsystem` drains it on the
     /// next flush and delivers to JS `eventBus.on` callbacks registered on
@@ -153,7 +148,7 @@ pub enum WorkerMsg {
 
 /// worker → host. Emitted by the worker either during a flush
 /// ([`HostMsg::RenderCommands`], [`HostMsg::FocusedStateChanged`]) or in
-/// response to a [`WorkerMsg`] RPC ([`HostMsg::DevReply`]).
+/// response to a [`WorkerMsg`] RPC (`Reply<T>` slots).
 pub enum HostMsg {
     /// One frame's worth of paint state. Main applies the batch to its
     /// renderer (owned by `AppBackend`) directly.
@@ -195,16 +190,8 @@ pub enum HostMsg {
     /// handlers registered on `channel_id` on the host-side
     /// `EventBusHandle`.
     EventBusToEmbedder { channel_id: u64, payload: Vec<u8> },
-    /// Reply to a dev-tool RPC.
-    DevReply(DevReply),
     /// Worker finished shutting down (response to `WorkerMsg::Destroy`).
     Destroyed,
-}
-
-/// Dev-tool RPC reply payload.
-pub enum DevReply {
-    ElementTree(Option<DevNodeData>),
-    GetElement(Option<DevNodeData>),
 }
 
 /// Error returned from module load / eval RPCs.
@@ -270,20 +257,10 @@ impl fmt::Debug for WorkerMsg {
                 .debug_struct("EvalJs")
                 .field("source_len", &source.len())
                 .finish_non_exhaustive(),
-            Self::DevElementTree { .. } => f.debug_struct("DevElementTree").finish(),
-            Self::DevGetElement { id, .. } => {
-                f.debug_struct("DevGetElement").field("id", id).finish()
-            }
             Self::QueryTreeSnapshot { .. } => f.debug_struct("QueryTreeSnapshot").finish(),
             Self::WithElement { id, .. } => f.debug_struct("WithElement").field("id", id).finish(),
-            Self::QueryFocusedState { .. } => f.debug_struct("QueryFocusedState").finish(),
+            Self::WithTree { .. } => f.debug_struct("WithTree").finish(),
             Self::QueryFocusedElement { .. } => f.debug_struct("QueryFocusedElement").finish(),
-            Self::QueryFocusedCursorRect { .. } => {
-                f.debug_struct("QueryFocusedCursorRect").finish()
-            }
-            Self::QueryFocusedIsEditable { .. } => {
-                f.debug_struct("QueryFocusedIsEditable").finish()
-            }
             Self::QueryElement { key, .. } => {
                 f.debug_struct("QueryElement").field("key", &key).finish()
             }
@@ -327,17 +304,7 @@ impl fmt::Debug for HostMsg {
                 .field("channel_id", channel_id)
                 .field("len", &payload.len())
                 .finish(),
-            Self::DevReply(_) => f.debug_tuple("DevReply").finish_non_exhaustive(),
             Self::Destroyed => write!(f, "Destroyed"),
-        }
-    }
-}
-
-impl fmt::Debug for DevReply {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ElementTree(_) => f.debug_tuple("ElementTree").finish_non_exhaustive(),
-            Self::GetElement(_) => f.debug_tuple("GetElement").finish_non_exhaustive(),
         }
     }
 }
@@ -361,7 +328,6 @@ const _: fn() = || {
     fn assert_send<T: Send>() {}
     assert_send::<WorkerMsg>();
     assert_send::<HostMsg>();
-    assert_send::<DevReply>();
     assert_send::<ModuleError>();
     // Channels themselves must be Send + Sync.
     assert_send::<WorkerTx>();
