@@ -575,7 +575,10 @@ libs/
                              #   builtin_plugins/* (strict boundary)
         app/                 # TurAppInternal + FrameOutcome + AppEvent/
                              #   AppEventQueue + mount() entry +
-                             #   RootView/RootElement generic-root wrapper
+                             #   RootView/RootElement generic-root wrapper +
+                             #   module_source.rs (ModuleSourceRegistry —
+                             #   engine-owned shared Arc<str> source store
+                             #   for handle-based module loading)
         async_/              # CompletionQueue/CompletionHandle (pending
                              #   completion invocations drained each flush)
                              #   + executor (TurJobExecutor — boa

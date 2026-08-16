@@ -39,6 +39,12 @@ pub use crate::core::runtime::{AppBackend, TurAppBuilder, TurRuntime, TurRuntime
 // `build()`, so no embedder wiring is required.
 pub use crate::core::plugin::{HostExecutor, HostRunFuture};
 pub use crate::core::scheduler::SpawnError;
+// Re-export the module-source registry so embedders can write
+// `tur_engine::ModuleSourceRegistry` — the handle-based module-loading path
+// (register an `Arc<str>` once, load it into any instance by opaque id,
+// never crossing an embedder boundary as a string). Owned by embedder-side
+// runtime state (e.g. `AndroidRuntime`), not by `TurRuntime` itself.
+pub use crate::core::app::ModuleSourceRegistry;
 // Re-export the worker-pool declaration type so embedders can write
 // `tur_engine::WorkerPoolHandle` (registered via
 // `TurRuntimeBuilder::worker_pool`, assigned via `TurAppBuilder::worker_pool`).
@@ -158,6 +164,25 @@ impl TurApp {
             .load_module(source)
             .await
             .map_err(TurError::from)
+    }
+
+    /// Handle-based variant of [`load_module`](Self::load_module): resolve
+    /// `handle` in `registry` and load the shared source. The natural pair
+    /// for [`ModuleSourceRegistry`] — embedders that register sources Rust-
+    /// side (APK assets, bundle files) load them by opaque id, so the source
+    /// never crosses an embedder boundary as a string.
+    ///
+    /// An unknown / released handle is an error (never UB — registry handles
+    /// are monotonic ids, so a stale value can only miss).
+    pub async fn load_module_source(
+        &self,
+        registry: &ModuleSourceRegistry,
+        handle: u64,
+    ) -> Result<(), TurError> {
+        let source = registry
+            .get(handle)
+            .ok_or_else(|| TurError::Other(format!("unknown module source handle: {handle}")))?;
+        self.load_module(source).await
     }
 
     /// Read rendered pixels back from the owned renderer (screenshot
