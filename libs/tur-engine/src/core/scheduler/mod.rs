@@ -104,6 +104,17 @@ pub trait WorkerSpawner: 'static {
     /// lifetime. The closure itself is `Send + 'static` (it crosses
     /// host-thread → worker and may capture only `Send` config); the
     /// returned future runs on the worker only.
+    ///
+    /// ## Readiness contract
+    ///
+    /// Implementations that can block the calling thread (native) MUST
+    /// return only after the entry's synchronous prologue — backend
+    /// construction + plugin `register` — completed, so `spawn_worker`
+    /// returning guarantees the worker's plugin-level side effects are
+    /// observable. Implementations on non-blocking hosts (wasm: the entry
+    /// is delivered as a message and the JS main thread cannot block)
+    /// return immediately; embedders confirm readiness by awaiting the
+    /// first RPC instead.
     fn spawn_worker(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket;
 }
 

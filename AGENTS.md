@@ -401,7 +401,15 @@ platform (zero `panic!`/`unimplemented!` stubs):
   `spawn_worker(pool, entry) -> WorkerTicket`: host one app loop in a pool.
   The `entry` closure runs on the chosen worker, receives a `WorkerContext`,
   builds the `!Send` backend there, returns the app's run-loop future (the
-  platform drives it for the worker's lifetime). `WorkerTicket` = per-app
+  platform drives it for the worker's lifetime). **Readiness contract**:
+  implementations that can block (native) return only after the entry's
+  synchronous prologue (backend construction + plugin `register`) completed —
+  so `app_builder().build(...)` returning guarantees plugin-level side
+  effects are observable; wasm returns immediately (the JS main thread can't
+  block) and embedders confirm readiness via the first RPC await. The native
+  rendezvous lives in `NativeWorkerPools::spawn_app` (a `started_tx` handshake
+  per `LaneMsg::SpawnApp`), NOT in the engine — `AppBackend::new` is
+  platform-uniform. `WorkerTicket` = per-app
   slot claim: `join()` signals that app's loop completion + `wake()` is the
   cross-thread kick called after every host→worker send (no-op native,
   `postMessage(0)` wasm).
