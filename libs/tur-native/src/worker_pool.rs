@@ -566,7 +566,7 @@ fn lane_main(
         live,
     });
     let mut disconnected = false;
-    loop {
+    'outer: loop {
         // 1. Drain the spawn inbox (buffered messages are still delivered
         //    after Disconnected — std mpsc guarantees — so late sends that
         //    raced a reap are never lost).
@@ -587,9 +587,13 @@ fn lane_main(
         //    re-wake themselves; leftovers run next iteration (after the
         //    inbox is re-checked). A sentinel is a KICK, not a task:
         //    something may have been delivered to the spawn inbox after
-        //    the drain above — break out and re-drain before polling more
-        //    (skipping it silently could park the lane with an undelivered
-        //    Spawn — a lost wake-up).
+        //    the drain above — jump back to the top to re-drain BEFORE
+        //    parking. Falling through to the park instead would consume
+        //    the kick while the Spawn sits unadopted: `spawn_app` blocks
+        //    on the readiness handshake, so no later kick can rescue it
+        //    (lost wake-up → deadlock). The sender pushes the Spawn
+        //    BEFORE its sentinel (mutex-ordered), so a popped sentinel
+        //    guarantees the inbox holds the Spawn.
         let mut budget = PASS_BUDGET;
         while budget > 0 {
             let Some(key) = state.shared.pop_front() else {
@@ -597,7 +601,7 @@ fn lane_main(
             };
             budget -= 1;
             if key == SENTINEL {
-                break; // re-enter the outer loop → drain the inbox first
+                continue 'outer;
             }
             state.poll_task(key);
         }
