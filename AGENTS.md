@@ -173,8 +173,8 @@ Entry points follow the contract: `demo/playground-view/src/index.ts` exports `s
 ├─────────────────────────────────────────────────────┤
 │  demo/website/native (tur-website cdylib — the host .so) │
 │  The website's own wasm entry: wraps WasmAppHandle,      │
-│  adds TurDemoPlugin (swc compiler only). File IO now     │
-│  lives in tur:filepicker (registered by tur-wasm).       │
+│  adds TurPlaygroundPlugin (swc compiler only). File IO  │
+│  now lives in tur:filepicker (registered by tur-wasm).  │
 │  Exports #[wasm_bindgen] TurWebsiteApp (create /         │
 │  create_in / loadAndRunModule / dev_tool) → tur_website.js.│
 │  Mirrors tur-android (rlib) + demo/compose/native (cdylib).│
@@ -748,8 +748,6 @@ libs/
                               #   extra plugins + an optional after-frame hook).
                               #   The host cdylib (demo/website/native) wraps it.
     tur-integration-tests/     # integration test harness + cases
-    tur-demo-plugin/           # playground-only plugin (swc compiler services
-                              #   only — file IO now lives in tur:filepicker)
     tur-native/                # native-only platform integrations (root
                                #   compile_error! on wasm32): NativeFontLoader
                                #   (system fonts) + worker_pool (the native
@@ -770,6 +768,9 @@ libs/
                               #   a runtime handle via TurRuntimeFactory (the app
                               #   loads its own .so and builds the engine).
  demo/
+   tur-playground-plugin/       # playground-only plugin (TurPlaygroundPlugin —
+                              #   registers tur-ext/demo-helper: swc compiler
+                              #   services; file IO lives in tur:filepicker)
    compose/                    # Android playground app: MainActivity + DemoNative
                               #   (loads libtur_demo.so, declares createEngine) +
                               #   the gradle cargo-ndk pipeline
@@ -785,9 +786,10 @@ libs/
                               #   wasm-pack on `native/` + bundles
                               #   playground-view's dist/impl.js.
       native/                   # `tur-website` cdylib: the host .wasm. Wraps
-                              #   tur-wasm's WasmAppHandle + adds TurDemoPlugin
-                              #   (swc compiler only). File IO lives in
-                              #   tur:filepicker (registered by tur-wasm).
+                              #   tur-wasm's WasmAppHandle + adds
+                              #   TurPlaygroundPlugin (swc compiler only). File
+                              #   IO lives in tur:filepicker (registered by
+                              #   tur-wasm).
                               #   Exports #[wasm_bindgen] TurWebsiteApp
                               #   (create / create_in / loadAndRunModule /
                               #   dev_tool) → tur_website.js. The wasm mirror

@@ -86,7 +86,7 @@ impl tur_engine::CursorBackend for WasmCursor {
 /// Configuration for building a shared wasm tur runtime via
 /// [`WasmRuntime::create`].
 ///
-/// `tur-wasm` is a reusable embedder lib (no playground / demo-plugin code):
+/// `tur-wasm` is a reusable embedder lib (no playground-plugin code):
 /// the host cdylib supplies the engine-customization callback (extra plugins)
 /// while `tur-wasm` owns all the generic capability backends.
 pub struct WasmRuntimeConfig {

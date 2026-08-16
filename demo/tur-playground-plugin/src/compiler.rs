@@ -1,7 +1,7 @@
 //! TSX → JS transpilation and tokenization for syntax highlighting, backed by
-//! swc. Lives in `tur-demo-plugin` (not `tur-engine`) so the core engine stays
-//! free of compiler dependencies. Exposed to JS via the `tur-ext/demo-helper`
-//! module registered by `TurDemoPlugin`.
+//! swc. Lives in `tur-playground-plugin` (not `tur-engine`) so the core engine
+//! stays free of compiler dependencies. Exposed to JS via the
+//! `tur-ext/demo-helper` module registered by [`TurPlaygroundPlugin`].
 
 use swc_common::{
     BytePos, FileName, GLOBALS, Globals, Mark, SourceMap, Span, Spanned,

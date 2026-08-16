@@ -1,7 +1,7 @@
-//! Demo-only plugin for tur.
+//! Playground-only plugin for tur.
 //!
-//! Provides [`TurDemoPlugin`], which registers the `tur-ext/demo-helper` JS
-//! module — swc-backed compiler services (`transpileTsx`, `tokenizeTsx`,
+//! Provides [`TurPlaygroundPlugin`], which registers the `tur-ext/demo-helper`
+//! JS module — swc-backed compiler services (`transpileTsx`, `tokenizeTsx`,
 //! `generateAst`). These are playground-specific helpers that depend on swc;
 //! they are not part of the core engine surface.
 //!
@@ -25,18 +25,18 @@ pub use compiler::{
     tokenize_tsx, transpile_tsx,
 };
 
-/// The demo-helper plugin. Registers the `tur-ext/demo-helper` module with
-/// swc-backed compiler services. Playground-only — not part of the core engine
-/// API.
-pub struct TurDemoPlugin;
+/// The playground plugin. Registers the `tur-ext/demo-helper` module with
+/// swc-backed compiler services. Playground-only — not part of the core
+/// engine API.
+pub struct TurPlaygroundPlugin;
 
-impl Default for TurDemoPlugin {
+impl Default for TurPlaygroundPlugin {
     fn default() -> Self {
         Self
     }
 }
 
-impl Plugin for TurDemoPlugin {
+impl Plugin for TurPlaygroundPlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let service_fns = host_fns::build_host_service_fns();
         let exports: Vec<(String, boa_engine::NativeFunction, usize)> = service_fns

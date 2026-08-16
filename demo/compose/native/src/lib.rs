@@ -36,9 +36,9 @@ pub extern "system" fn Java_org_tur_demo_DemoNative_createRuntime(
     context: tur_android::JObject,
 ) -> tur_android::jlong {
     use tur_animation::TurAnimationPlugin;
-    use tur_demo_plugin::TurDemoPlugin;
     use tur_engine::{TurClipboardPlugin, TurStdPlugin};
     use tur_net_native::TurNetPlugin;
+    use tur_playground_plugin::TurPlaygroundPlugin;
 
     tur_android::ops::create_runtime(&mut env, context, |builder| {
         builder
@@ -46,6 +46,6 @@ pub extern "system" fn Java_org_tur_demo_DemoNative_createRuntime(
             .plugin(TurAnimationPlugin)
             .plugin(TurClipboardPlugin)
             .plugin(TurNetPlugin)
-            .plugin(TurDemoPlugin)
+            .plugin(TurPlaygroundPlugin)
     })
 }

@@ -1,6 +1,6 @@
 [package]
-name = "tur-demo-plugin"
-description = "Demo-only plugin for tur (TurDemoPlugin — registers tur-ext/demo-helper: swc compiler services)"
+name = "tur-playground-plugin"
+description = "Playground-only plugin for tur (TurPlaygroundPlugin — registers tur-ext/demo-helper: swc compiler services)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
