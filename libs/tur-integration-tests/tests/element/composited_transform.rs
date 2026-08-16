@@ -312,7 +312,7 @@ fn follower_correct_on_first_frame_non_topleft_anchor() {
             .join("js/packages/tur-test-cases/dist/composited-transform-follower-anchor.js"),
     )
     .unwrap();
-    app.with_app(|a| futures::executor::block_on(a.load_module(&source)))
+    app.with_app(|a| futures::executor::block_on(a.load_module(source.as_str())))
         .unwrap();
     // Drive to quiescence so the follower is mounted + positioned. (The
     // first-frame-correctness invariant is now pinned by a

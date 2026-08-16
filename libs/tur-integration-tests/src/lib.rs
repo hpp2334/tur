@@ -566,7 +566,7 @@ impl TurTestApp {
         let source = std::fs::read_to_string(&path).map_err(TurError::Io)?;
         // Case dist files are ES modules that import `tur:std` (resolved by
         // the engine's module loader) and call `render(<case default>)`.
-        block_on(self.inner.load_module(&source))?;
+        block_on(self.inner.load_module(source.as_str()))?;
         // Drive the module's initial render to quiescence (frozen clock)
         // before the test starts interacting.
         self.wait_for_timeout(Duration::ZERO);
@@ -1111,7 +1111,7 @@ impl TurTestApp {
     /// [`load_module_raw`](Self::load_module_raw) for the strict path.
     pub fn eval_module_source(&self, source: &str) -> Result<(), TurError> {
         let wrapped = wrap_legacy_start(source);
-        block_on(self.inner.load_module(&wrapped))
+        block_on(self.inner.load_module(wrapped.as_str()))
     }
 
     /// Strict module-lifecycle path: loads `source` verbatim — it MUST

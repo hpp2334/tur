@@ -35,6 +35,7 @@ mod imp {
         }
     }
 
+    use crate::ModuleSourceRegistry;
     use crate::scheduler::{AndroidHostLoop, AndroidVsyncSource, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
@@ -90,6 +91,12 @@ mod imp {
         /// its vsync-arm closure (so pending main-loop tasks schedule a
         /// Choreographer tick) and polls the tasks from `pump_loop`.
         pub host_loop: Rc<AndroidHostLoop>,
+        /// Shared registry of `Arc<str>` module sources (the handle-based
+        /// module-loading path). Sources registered here — from Kotlin via
+        /// `registerModuleSource` or from Rust embedder code — load into any
+        /// instance of this runtime by handle, never crossing JNI as a
+        /// string. Dropped wholesale with the runtime.
+        pub module_sources: ModuleSourceRegistry,
         /// The default worker pool every instance is assigned to unless the
         /// embedder overrides via `configure`. Effectively uncapped → each
         /// instance gets its own dedicated lane thread (the historical
@@ -162,6 +169,7 @@ mod imp {
                 wgpu_instance,
                 tokio,
                 host_loop,
+                module_sources: ModuleSourceRegistry::new(),
                 default_worker_pool,
             })
         }
@@ -183,6 +191,9 @@ mod imp {
         /// Per-instance vsync source bound to this instance's Kotlin
         /// `FrameLoop`. JNI `pump` fires it before polling the loop.
         pub vsync: Rc<AndroidVsyncSource>,
+        /// The runtime's shared module-source registry (cloned handle — same
+        /// entries). `loadModule` resolves its `jlong` source handle here.
+        pub module_sources: ModuleSourceRegistry,
         /// The runtime's main-thread task spawner, polled each `pump`.
         host_loop: Rc<AndroidHostLoop>,
         /// The autonomous `run_loop` future. `TurApp` is `Rc`-based
@@ -372,6 +383,7 @@ mod imp {
             Ok(Self {
                 app,
                 vsync,
+                module_sources: runtime.module_sources.clone(),
                 host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,
@@ -405,6 +417,7 @@ mod imp {
             Ok(Self {
                 app,
                 vsync,
+                module_sources: runtime.module_sources.clone(),
                 host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,

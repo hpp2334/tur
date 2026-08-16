@@ -144,7 +144,15 @@ impl TurApp {
     /// export (the module lifecycle contract: `start` returns an optional
     /// cleanup function; the engine runs it before the next load and at
     /// destroy).
-    pub async fn load_module(&self, source: &str) -> Result<(), TurError> {
+    ///
+    /// Accepts `&str` / `String` / `Arc<str>`. Passing an already-shared
+    /// `Arc<str>` (e.g. a module-source handle resolved from a registry) is
+    /// zero-copy — the refcounted source flows to the worker untouched.
+    pub async fn load_module(
+        &self,
+        source: impl Into<std::sync::Arc<str>>,
+    ) -> Result<(), TurError> {
+        let source = source.into();
         tracing::info!("load_module: evaluating module ({} bytes)", source.len());
         self.backend
             .load_module(source)

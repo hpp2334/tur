@@ -28,3 +28,6 @@ tur-playground-plugin = { workspace = true }
 # (but compiling) cdylib — the JNI entry points and create fn are android-only.
 [target.'cfg(target_os = "android")'.dependencies]
 boa_engine = { workspace = true, features = ["jsvalue-enum"] }
+# Errors from `createAssetModuleSource` — routed through the global logger
+# (`android_logger`, installed by tur-android's first JNI call).
+log = "0.4"
