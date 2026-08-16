@@ -524,6 +524,12 @@ impl AppBackend {
     /// a worker→host channel sender clone (`host_tx`) so bridges can ship
     /// messages (e.g. `HostMsg::UploadImage` from `createImageResource`)
     /// directly without a staging vec.
+    ///
+    /// Readiness follows the spawner's
+    /// [contract](crate::core::scheduler::WorkerSpawner::spawn_worker):
+    /// blocking implementations return only after the entry's synchronous
+    /// prologue completed; wasm returns immediately and embedders confirm
+    /// via the first RPC await.
     pub(crate) fn new(
         worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
         renderer: Box<dyn Renderer>,
@@ -539,22 +545,12 @@ impl AppBackend {
         let (worker_tx, worker_rx) = futures::channel::mpsc::unbounded::<WorkerMsg>();
         let (host_tx, host_rx) = futures::channel::mpsc::unbounded::<HostMsg>();
 
-        // One-shot init signal: worker fires after `backend_factory()` (which
-        // runs `plugin.register` + capability replay) completes. Native main
-        // blocks on this so `app_builder().build(...)` returning guarantees the
-        // worker's plugin-level side effects are observable. On wasm the main
-        // thread cannot block — embedders must await an RPC instead.
-        #[cfg(not(target_arch = "wasm32"))]
-        let (init_tx, init_rx) = std::sync::mpsc::channel::<()>();
-
         let worker_tx_for_on_push = worker_tx.clone();
         // Clone of the worker→host sender handed to the backend so bridges
         // can ship messages directly (FIFO order is preserved across the
         // shared channel — the bridge enqueues during flush, worker_loop
         // enqueues after flush).
         let main_tx_for_backend = host_tx.clone();
-        #[cfg(not(target_arch = "wasm32"))]
-        let init_tx = init_tx;
         let worker_ticket = worker_spawner.spawn_worker(
             &worker_pool,
             Box::new(move |worker_ctx| {
@@ -567,8 +563,6 @@ impl AppBackend {
                         let _ = worker_tx_for_on_push.unbounded_send(WorkerMsg::Wake);
                     });
                 let backend = backend_factory(worker_ctx.clone(), wake_worker, main_tx_for_backend);
-                #[cfg(not(target_arch = "wasm32"))]
-                let _ = init_tx.send(());
                 // Return the worker's main future; the platform drives it
                 // for the worker's lifetime.
                 Box::pin(worker_loop(backend, worker_rx, host_tx))
@@ -580,12 +574,6 @@ impl AppBackend {
         // kick an idle Web Worker's JS event loop without a sync
         // `Atomics.wait`). Called after every host→worker send below.
         let worker_wake = worker_ticket.wake();
-
-        // Native: synchronously wait for the worker to finish init.
-        #[cfg(not(target_arch = "wasm32"))]
-        init_rx
-            .recv()
-            .expect("worker thread died during backend_factory");
 
         Self {
             worker_tx: worker_tx.clone(),

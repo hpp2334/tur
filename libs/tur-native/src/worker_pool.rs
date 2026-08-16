@@ -70,6 +70,15 @@
 //! main-thread only (`RefCell` registry) — `spawn_worker` is only ever
 //! called from `app_builder().build(...)` on the main thread.
 //!
+//! ## Readiness
+//!
+//! `spawn_worker` blocks until the entry's synchronous prologue (backend
+//! construction + plugin `register`) completed — a `started_tx` handshake
+//! per [`LaneMsg::SpawnApp`] — so the engine's
+//! `app_builder().build(...)` returning guarantees the worker's
+//! plugin-level side effects are observable. A panicking prologue drops
+//! the sender mid-unwind, failing the wait loudly.
+//!
 //! ## Fairness tradeoff
 //!
 //! Apps sharing a lane run cooperatively: a long synchronous JS flush in
@@ -207,10 +216,17 @@ impl WorkerSpawner for NativeWorkerPools {
 // ---------------------------------------------------------------------------
 
 enum LaneMsg {
-    /// Deliver an app's worker entry; `done_tx` fires when that app's
-    /// loop future completes (or the entry itself panics).
+    /// Deliver an app's worker entry.
+    ///
+    /// - `started_tx` fires when the entry's synchronous prologue (backend
+    ///   construction + plugin `register`) completed — the host side blocks
+    ///   on it so `spawn_worker` returning guarantees the app is
+    ///   observable.
+    /// - `done_tx` fires when that app's loop future completes (or the
+    ///   entry itself panics).
     SpawnApp {
         entry: WorkerEntry,
+        started_tx: StdSender<()>,
         done_tx: StdSender<()>,
     },
 }
@@ -252,6 +268,7 @@ impl LaneHandle {
 
     fn spawn_app(&self, entry: WorkerEntry) -> WorkerTicket {
         let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let (started_tx, started_rx) = std::sync::mpsc::channel::<()>();
         // Count the app BEFORE delivery: the lane thread adopts the entry
         // asynchronously, so a lane-side increment would leave a window
         // where `live == 0` for a lane with an in-flight spawn — and the
@@ -260,7 +277,11 @@ impl LaneHandle {
         // timing-independent; the lane fires the matching decrement on
         // entry panic or loop completion.
         self.live.fetch_add(1, Ordering::AcqRel);
-        if let Err(e) = self.tx.send(LaneMsg::SpawnApp { entry, done_tx }) {
+        if let Err(e) = self.tx.send(LaneMsg::SpawnApp {
+            entry,
+            started_tx,
+            done_tx,
+        }) {
             // Unreachable in practice: a lane in the registry always has a
             // live receiver (exit requires the registry handle to have been
             // dropped first). Kept as a defensive error path — undo the
@@ -270,6 +291,14 @@ impl LaneHandle {
         }
         // Kick the lane so a parked thread drains the inbox promptly.
         self.shared.push(SENTINEL);
+        // Synchronously wait for the entry's prologue (backend construction
+        // + plugin `register`): `spawn_worker` returning must guarantee the
+        // worker's plugin-level side effects are observable. A prologue
+        // panic drops `started_tx` mid-unwind, so `recv()` errs — matching
+        // the historical "worker died during backend_factory" failure.
+        started_rx
+            .recv()
+            .expect("tur lane died during app entry prologue");
         WorkerTicket::new(Box::new(move || {
             // Join = this app's loop completion, NOT the lane thread
             // (co-tenants keep it alive).
@@ -369,7 +398,11 @@ impl LaneState {
     /// this thread, spawn the returned loop as a task. A panicking entry
     /// is contained (logged + `done` fired); co-tenants are unaffected.
     fn handle_spawn(self: &Rc<Self>, msg: LaneMsg, timer: &Rc<dyn LaneTimer>) {
-        let LaneMsg::SpawnApp { entry, done_tx } = msg;
+        let LaneMsg::SpawnApp {
+            entry,
+            started_tx,
+            done_tx,
+        } = msg;
         // The worker view shares THIS lane's state — `spawn_local` from
         // any co-tenant app lands on the same task table + ready queue.
         let view = WorkerContext::new(Rc::new(LaneWorkerExecutor {
@@ -378,6 +411,9 @@ impl LaneState {
         }));
         match catch_unwind(AssertUnwindSafe(|| entry(view))) {
             Ok(fut) => {
+                // Entry prologue completed — release the host-side
+                // readiness wait (`spawn_worker`'s blocking recv).
+                let _ = started_tx.send(());
                 // `live` was already incremented on the main side at
                 // delivery (see `LaneHandle::spawn_app`); this task's
                 // completion fires the matching decrement in
@@ -393,7 +429,10 @@ impl LaneState {
             Err(panic) => {
                 tracing::error!("tur lane: app entry panicked: {panic:?}");
                 // The entry never became a task, so `finish_task` will not
-                // run: undo the host-side delivery count here.
+                // run: undo the host-side delivery count here. The panic
+                // unwound past `started_tx`'s send, so the host side's
+                // readiness wait fails loudly instead of observing a
+                // half-built app.
                 self.live.fetch_sub(1, Ordering::AcqRel);
                 let _ = done_tx.send(());
             }
