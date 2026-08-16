@@ -96,8 +96,7 @@ fn save_file_logs_to_recording() {
 
     // `saveFile` spawns the save on the worker's executor; the spawned
     // future is polled asynchronously after the load-module RPC returns
-    // (and after each frame's `FrameOutcome` is shipped). `settle()` can
-    // exit after a single frame — before the worker has polled the save
+    // (and after each frame's `FrameOutcome` is shipped). x    // exit after a single frame — before the worker has polled the save
     // future — so we synchronize on the promise's `.then` (which fires only
     // after `FilePickerBackend::save_file` has logged the save), mirroring
     // the `pick` tests. This eliminates the main↔worker race that flaked

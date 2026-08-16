@@ -459,7 +459,7 @@ pub mod ops {
         }
     }
 
-    /// Resize the surface. Resizes the main-side renderer directly AND
+    /// Resize the surface. Resizes the host-side renderer directly AND
     /// forwards `PlatformEvent::Resize` to the worker for layout (single
     /// call — see `TurApp::resize`). (v1 keeps the original wgpu surface
     /// for the instance lifetime; full surface re-attach with a renderer
@@ -559,7 +559,7 @@ pub mod ops {
     /// instance handle. Used from an embedder's *own* JNI trampolines (its
     /// cdylib) to reach plugin-installed per-instance data — e.g.
     /// `with_app(h, |app| EventBus::of(app))` — or to nudge a wake:
-    /// `with_app(h, |app| app.request_paint())`.
+    /// `with_app(h, |app| app.request_frame())`.
     ///
     /// Not part of [`standard_jni_exports!`](crate::standard_jni_exports!)
     /// (Kotlin can't pass a Rust closure); the embedder wires its own

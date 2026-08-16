@@ -26,7 +26,7 @@
 //! init payload (`[module, memory, ptr]`, consumed by the bootstrap
 //! script); additional factories arrive later as tagged messages
 //! (`{ t: "tur-factory", ptr }`, dispatched by the Rust `onmessage`
-//! handler installed in [`run_loop`]). All loops share the worker's JS
+//! handler installed by `install_executor`). All loops share the worker's JS
 //! event loop and are polled cooperatively — one `poll_once` pass polls
 //! every live task (round-robin). Apps keep isolated state (each loop owns
 //! its boa `Context` + channels); they only share the thread.
@@ -191,7 +191,7 @@ pub fn tur_worker_main(ptr: f64) {
     let factory = entry.0;
     let worker_ctx = WorkerContext::new(Rc::new(WasmWorkerExecutor));
     let loop_fut = factory(worker_ctx);
-    run_loop(loop_fut);
+    install_executor(loop_fut);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ impl Wake for NoopWaker {
 }
 
 /// Install `loop_fut` + the wake handlers, then kick off the first poll.
-pub(super) fn run_loop(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
+pub(super) fn install_executor(loop_fut: Pin<Box<dyn Future<Output = ()> + 'static>>) {
     let state = Rc::new(ExecutorState {
         tasks: RefCell::new(vec![loop_fut]),
         scheduled: Cell::new(false),
@@ -320,7 +320,7 @@ fn schedule_repoll() {
         }
         let poll_fn = match state.poll_fn.borrow().as_ref() {
             Some(f) => f.clone(),
-            None => return, // not installed yet (only during run_loop setup)
+            None => return, // not installed yet (only during executor setup)
         };
         drop(guard);
         schedule_set_timeout(&poll_fn, 0);
@@ -338,7 +338,7 @@ fn poll_once() {
     state.scheduled.set(false);
     let worker_tid = WORKER_TID
         .with(|t| t.get())
-        .expect("worker tid set during run_loop");
+        .expect("worker tid set during executor install");
     let waker = Waker::from(Arc::new(NoopWaker { worker_tid }));
     let mut cx = Context::from_waker(&waker);
     let mut tasks = state.tasks.borrow_mut();

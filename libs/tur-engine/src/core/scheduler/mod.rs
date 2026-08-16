@@ -5,12 +5,12 @@
 //! lanes, Web Workers, or `block_on` — "how a worker stays alive" is
 //! entirely a platform-layer detail:
 //!
-//! - [`WorkerHost`] (runtime-level) — host app loops in named
+//! - [`WorkerSpawner`] (runtime-level) — host app loops in named
 //!   [`WorkerPoolHandle`] pools.
 //! - [`VsyncSource`] (per-instance) — frame cadence: subscribe + arm.
 //!   Swappable per app via [`crate::TurApp::set_vsync_source`].
-//! - [`MainLoop`] (runtime-level) — spawn tasks on the main thread
-//!   (drives the engine's internal main-thread drain).
+//! - [`HostLoop`] (runtime-level) — spawn tasks on the host thread (the
+//!   platform main thread; drives the engine's internal host-thread drain).
 //! - [`WorkerExecutor`] (worker-side) — the surface an app loop runs on:
 //!   `spawn_local` / `spawn_blocking` / `sleep`. Every method is live on
 //!   every platform — no `unimplemented!` stubs anywhere.
@@ -41,7 +41,7 @@ use futures::channel::mpsc;
 use futures::future::{AbortHandle, Abortable};
 
 /// A boxed, `!Send` future runnable on the thread it was created on
-/// (worker lane or main thread).
+/// (worker lane or host thread).
 pub type LocalFut = Pin<Box<dyn Future<Output = ()> + 'static>>;
 
 /// Newtype around a boxed future. Implementations construct it from their
@@ -78,10 +78,10 @@ impl Stream for VsyncEvents {
 // ---------------------------------------------------------------------------
 
 /// Host app loops in worker pools. Runtime-level: the engine calls
-/// [`WorkerHost::spawn_worker`] exactly once per app, from
+/// [`WorkerSpawner::spawn_worker`] exactly once per app, from
 /// `TurRuntime::app_builder().worker_pool(pool)…build()`.
 ///
-/// The host picks or creates a worker in `pool` (grow-to-cap-then-
+/// The spawner picks or creates a worker in `pool` (grow-to-cap-then-
 /// least-loaded; see [`pool`]), delivers the [`WorkerEntry`] there, and
 /// returns a [`WorkerTicket`] claiming one slot on that worker.
 ///
@@ -90,43 +90,43 @@ impl Stream for VsyncEvents {
 ///   shared OS "lane" threads; each app's loop future is pinned to one
 ///   lane for its lifetime (`!Send` state: boa `Context`, `Rc`s) and lanes
 ///   run multiple app loops cooperatively.
-/// - **Wasm** (`tur_wasm::scheduler::WasmWorkerHost`): capped shared Web
+/// - **Wasm** (`tur_wasm::scheduler::WasmWorkerSpawner`): capped shared Web
 ///   Workers; each hosts multiple app loops on one JS event loop
 ///   (multi-tenant workers, factory delivery via `postMessage`).
 ///
 /// Apps in different pools never share workers. A cap ≥ the app count
 /// degenerates to one-worker-per-app.
-pub trait WorkerHost: 'static {
+pub trait WorkerSpawner: 'static {
     /// Host one app loop in `pool`. The `entry` closure runs on the chosen
     /// worker (native lane thread / Web Worker — platform-defined), builds
-    /// the `!Send` engine backend there, and returns the app's main
+    /// the `!Send` engine backend there, and returns the app's run-loop
     /// future; the platform then drives that future for the worker's
     /// lifetime. The closure itself is `Send + 'static` (it crosses
-    /// main → worker and may capture only `Send` config); the returned
-    /// future runs on the worker only.
+    /// host-thread → worker and may capture only `Send` config); the
+    /// returned future runs on the worker only.
     fn spawn_worker(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket;
 }
 
 /// The engine's per-app worker entry: runs on the chosen worker, receives
 /// the worker's [`WorkerContext`], builds the `!Send` backend (boa
-/// `Context`, `Rc`s) there, and returns the app's main future (the
+/// `Context`, `Rc`s) there, and returns the app's run-loop future (the
 /// engine's `worker_loop`).
 pub type WorkerEntry = Box<dyn FnOnce(WorkerContext) -> LocalFut + Send + 'static>;
 
 /// Claim on one app's slot in a worker. Returned by
-/// [`WorkerHost::spawn_worker`]; held for the app's lifetime.
+/// [`WorkerSpawner::spawn_worker`]; held for the app's lifetime.
 ///
 /// Two faces, both required by the engine:
 /// - `join` — signals **that app's loop** completed (not the underlying
 ///   worker, which may host co-tenant apps that keep it alive).
 /// - `wake` — cross-thread kick, called by the engine after every
-///   main→worker channel send. No-op on native (the mpsc waker unparks
+///   host→worker channel send. No-op on native (the mpsc waker unparks
 ///   the OS thread directly); `worker.postMessage(0)` on wasm (the only
 ///   way to rouse an idle Web Worker's JS event loop without a sync
 ///   `Atomics.wait`, which would freeze it).
 ///
 /// `wake` is `Rc<dyn Fn>` (`!Send`) because wasm implementations capture
-/// a `web_sys::Worker` handle that lives only on the main thread.
+/// a `web_sys::Worker` handle that lives only on the host thread.
 pub struct WorkerTicket {
     join: Box<dyn FnOnce()>,
     wake: Rc<dyn Fn()>,
@@ -154,8 +154,8 @@ impl WorkerTicket {
         (self.join)()
     }
 
-    /// Clone of the cross-thread wake callback. The engine's `MainBackend`
-    /// calls it after every main→worker send.
+    /// Clone of the cross-thread wake callback. The engine's `AppBackend`
+    /// calls it after every host→worker send.
     pub fn wake(&self) -> Rc<dyn Fn()> {
         self.wake.clone()
     }
@@ -183,18 +183,19 @@ pub trait VsyncSource: 'static {
 }
 
 // ---------------------------------------------------------------------------
-// Main thread — runtime-level
+// Host thread — runtime-level
 // ---------------------------------------------------------------------------
 
-/// Spawn tasks on the main thread's executor. Runtime-level; the engine
-/// uses it exactly once (rooting its internal main-thread drain at
-/// `build()`); embedders may use it for their own main-thread tasks.
+/// Spawn tasks on the host thread's executor (the host thread is the
+/// platform main thread). Runtime-level; the engine uses it exactly once
+/// (rooting its internal host-thread drain at `build()`); embedders may
+/// use it for their own host-thread tasks.
 ///
 /// The engine core itself drives [`crate::TurApp::run_loop`] directly
 /// (`wasm_bindgen_futures::spawn_local` on wasm, JNI `pump` polling on
 /// Android, `block_on` in tests) — this trait exists for tasks the engine
 /// must root, not for the frame loop.
-pub trait MainLoop: 'static {
+pub trait HostLoop: 'static {
     fn spawn_local(&self, fut: LocalFut) -> TaskHandle;
 }
 
@@ -275,7 +276,7 @@ pub struct WorkerContext {
 
 impl WorkerContext {
     /// Wrap a worker executor. Called by the platform's
-    /// [`WorkerHost::spawn_worker`] implementation when it hands the
+    /// [`WorkerSpawner::spawn_worker`] implementation when it hands the
     /// engine its per-worker scheduling surface.
     pub fn new(executor: Rc<dyn WorkerExecutor>) -> Self {
         Self { executor }
@@ -453,43 +454,43 @@ pub fn track_spawn<T: Send + 'static>(
 }
 
 // ---------------------------------------------------------------------------
-// Main-thread task hop — raw mechanics (pub(crate))
+// Host-thread task hop — raw mechanics (pub(crate))
 // ---------------------------------------------------------------------------
 //
-// The plugin-layer abstraction over these is `AsyncPluginContext`
+// The plugin-layer abstraction over these is `HostExecutor`
 // (`core/plugin.rs`), which wraps the sender half and exposes
-// `run_on_main` / `run_on_main_async` / `spawn_on_main`. The engine creates
+// `run_on_host` / `run_on_host_async` / `spawn_on_host`. The engine creates
 // the channel here in `TurRuntimeBuilder::build` and roots the drain on
-// the main thread via the runtime's [`MainLoop`]. Keeping the raw channel
+// the host thread via the runtime's [`HostLoop`]. Keeping the raw channel
 // in the scheduler module (not the plugin module) preserves the dependency
 // direction: plugin → scheduler.
 
-/// A boxed, `Send` future runnable on the main thread. Crosses the worker →
-/// main boundary, so it must be `Send` (a stronger bound than a single-threaded
+/// A boxed, `Send` future runnable on the host thread. Crosses the worker →
+/// host boundary, so it must be `Send` (a stronger bound than a single-threaded
 /// `spawn_local` requires).
-pub(crate) type MainTask = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+pub(crate) type HostTask = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 
-/// Receiver side of the main-thread channel. Spawned on the main thread once
-/// (via [`MainLoop::spawn_local`]) at runtime `build()`; runs received tasks
+/// Receiver side of the host-thread channel. Spawned on the host thread once
+/// (via [`HostLoop::spawn_local`]) at runtime `build()`; runs received tasks
 /// inline, in arrival order. When the last sender (the
-/// [`AsyncPluginContext`](crate::core::plugin::AsyncPluginContext)) is
-/// dropped the channel closes and [`MainDrain::run`] completes.
-pub(crate) struct MainDrain {
-    pub(crate) rx: mpsc::UnboundedReceiver<MainTask>,
+/// [`HostExecutor`](crate::core::plugin::HostExecutor)) is
+/// dropped the channel closes and [`HostDrain::run`] completes.
+pub(crate) struct HostDrain {
+    pub(crate) rx: mpsc::UnboundedReceiver<HostTask>,
 }
 
 /// Create the `(sender, drain)` pair. The engine wraps the sender into an
-/// [`AsyncPluginContext`](crate::core::plugin::AsyncPluginContext) (plugin
-/// layer) and roots the drain on the main thread in `build()`.
-pub(crate) fn main_channel() -> (mpsc::UnboundedSender<MainTask>, MainDrain) {
+/// [`HostExecutor`](crate::core::plugin::HostExecutor) (plugin
+/// layer) and roots the drain on the host thread in `build()`.
+pub(crate) fn host_channel() -> (mpsc::UnboundedSender<HostTask>, HostDrain) {
     let (tx, rx) = mpsc::unbounded();
-    (tx, MainDrain { rx })
+    (tx, HostDrain { rx })
 }
 
-impl MainDrain {
+impl HostDrain {
     /// Run the drain loop: receive tasks and `await` them, one at a time,
-    /// until the last sender is dropped. Must be spawned on the **main
-    /// thread** (via [`MainLoop::spawn_local`]) so the tasks' OS-API
+    /// until the last sender is dropped. Must be spawned on the **host
+    /// thread** (via [`HostLoop::spawn_local`]) so the tasks' OS-API
     /// calls execute there.
     ///
     /// Tasks run **inline + serialized**: a blocking OS call briefly delays
@@ -509,7 +510,7 @@ mod tests {
 
     /// `track_spawn` returns `Ok(t)` for a value-producing future joined
     /// naturally, and the generic `TaskHandle<T>` carries the output. The
-    /// `AsyncPluginContext` (main-thread hop) round-trip tests live in
+    /// `HostExecutor` (host-thread hop) round-trip tests live in
     /// `core/plugin.rs` next to that type.
     #[test]
     fn task_handle_join_returns_value() {

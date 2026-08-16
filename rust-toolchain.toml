@@ -1,6 +1,6 @@
 [toolchain]
 # Recent nightly required for `-Z build-std` with atomics-enabled std (used by
-# `wasm_thread` on wasm32 + the shared-memory + TLS-export config in
+# the in-tree `worker_spawn` on wasm32 + the shared-memory + TLS-export config in
 # `.cargo/config.toml`).
 channel = "nightly-2026-07-15"
 components = ["rust-src", "rustfmt", "clippy"]

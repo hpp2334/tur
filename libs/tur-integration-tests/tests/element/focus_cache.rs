@@ -1,17 +1,17 @@
 //! Regression tests for the engine's focus-change handler
 //! (`TurApp::set_focus_changed_handler`).
 //!
-//! Background: the engine has two execution paths over the worker→main
-//! channel — `TurApp::pump` (single-frame; used by these tests) and
-//! `TurApp::run_loop` (autonomous; Choreographer-polled on Android,
-//! `spawn_local`'d on wasm). Both used to dispatch `MainMsg`s through
-//! *separate* handlers, and only `pump`'s handler updated the main-side
-//! focus state. The autonomous path dropped `MainMsg::FocusedStateChanged`
+//! Background: the engine's `run_loop` (autonomous; Choreographer-polled on
+//! Android, `spawn_local`'d on wasm — driven frame-by-frame by the harness
+//! `pump` in these tests) used to dispatch `HostMsg`s through *separate*
+//! handlers depending on the entry point, and only the single-frame path's
+//! handler updated the host-side focus state. The autonomous path dropped
+//! `HostMsg::FocusedStateChanged`
 //! on the floor, so on Android the soft keyboard never rose when tapping
 //! the code editor.
 //!
 //! The fix unified both paths on a single handler
-//! (`MainBackend::apply_msg`) and replaced the engine-side focus cache
+//! (`AppBackend::apply_msg`) and replaced the engine-side focus cache
 //! with a push handler the embedder registers. These tests pin that: after
 //! an editable is focused, the handler must fire with `is_editable == true`
 //! on the `pump` path. Because `run_loop` routes every message through the
@@ -33,8 +33,8 @@ fn focus_changed_handler_fires_on_editable_focus() {
     let mut app = TurTestApp::new(200.0, 100.0).unwrap();
     app.eval_module_source(
         r#"
-        import { Input, render } from "tur:std";
-        render(Input({
+        import { Input, mount } from "tur:std";
+        mount(Input({
             text: "",
             width: 200,
             height: 44,

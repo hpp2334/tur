@@ -1,7 +1,9 @@
 use tur_engine::core::element::ElementNodeId;
 use tur_integration_tests::TurTestApp;
 
-fn flush(app: &mut TurTestApp) {
+fn drive_to_quiescence(app: &mut TurTestApp) {
+    // 6 quiescence drives: enough for the event 2192 handler 2192 reactive flush
+    // ripple to fully settle without perturbing time-sensitive asserts.
     for _ in 0..6 {
         app.wait_for_timeout(std::time::Duration::from_millis(16));
     }
@@ -36,7 +38,7 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     // Step 1: move into A to register it in the pointer-region tracker.
     app.pointer_move(ax, ay);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
     assert_eq!(
         app.eval_js("globalThis.__getHover()"),
         "A",
@@ -48,7 +50,7 @@ fn move_between_adjacent_regions_keeps_target_hovered() {
     // source is cleared; with exit-before-enter it ends at "B".
     app.pointer_move(bx, by);
     app.wait_for_timeout(std::time::Duration::ZERO);
-    flush(&mut app);
+    drive_to_quiescence(&mut app);
     assert_eq!(
         app.eval_js("globalThis.__getHover()"),
         "B",

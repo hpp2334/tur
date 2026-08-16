@@ -71,23 +71,17 @@ struct WasmCursor {
 
 // SAFETY: `WasmCursor` is only ever accessed from the main thread (it's
 // installed via `app.set_cursor_backend` after construction and invoked
-// from `MainMsg::CursorChanged` inside main's pump). The `HtmlCanvasElement`
+// from `HostMsg::CursorChanged` inside main's pump). The `HtmlCanvasElement`
 // isn't `Send`/`Sync` on wasm32 because it wraps a raw `*mut` JsValue, but
 // our usage is single-threaded so the unsafe impl is sound.
 unsafe impl Send for WasmCursor {}
 unsafe impl Sync for WasmCursor {}
 
 impl tur_engine::CursorBackend for WasmCursor {
-    fn set_cursor(&mut self, cursor: tur_engine::core::platform::Cursor) {
+    fn set_cursor(&mut self, cursor: tur_engine::core::cursor::Cursor) {
         let _ = self.canvas.style().set_property("cursor", cursor.as_str());
     }
 }
-
-/// After-frame callback run inside the engine's after-frame hook, where a
-/// `&mut boa `Context`` is available (so a JS-evaluating callback can drain
-/// pending host resolutions). The generic textarea / caret-focus logic always
-/// runs after this.
-pub type AfterFrameHook = Rc<dyn Fn(&mut boa_engine::Context)>;
 
 /// Configuration for building a shared wasm tur runtime via
 /// [`WasmRuntime::create`].
@@ -104,9 +98,9 @@ pub struct WasmRuntimeConfig {
     /// Extra worker pools to register (in addition to the built-in
     /// effectively-uncapped `default` pool every app falls back to).
     /// Declare a capped pool here (e.g. `WorkerPoolHandle::new("daemon", 2)`)
-    /// and assign it per-app via [`WasmAppConfig::pool`] so heavy background
+    /// and assign it per-app via [`WasmAppConfig::worker_pool`] so heavy background
     /// apps share workers without stalling the UI pool.
-    pub pools: Vec<WorkerPoolHandle>,
+    pub worker_pools: Vec<WorkerPoolHandle>,
 }
 
 /// The shared wasm runtime — created once via [`WasmRuntime::create`]. Owns the
@@ -117,9 +111,9 @@ pub struct WasmRuntimeConfig {
 pub struct WasmRuntime {
     runtime: Rc<tur_engine::TurRuntime>,
     /// The built-in effectively-uncapped pool assigned to apps that don't
-    /// pick one explicitly via [`WasmAppConfig::pool`]. Registered on the
+    /// pick one explicitly via [`WasmAppConfig::worker_pool`]. Registered on the
     /// engine runtime alongside `WasmRuntimeConfig::pools`.
-    default_pool: WorkerPoolHandle,
+    default_worker_pool: WorkerPoolHandle,
 }
 
 impl WasmRuntime {
@@ -129,11 +123,12 @@ impl WasmRuntime {
     /// plugins / capability overrides). No canvas/DOM — instances are spawned
     /// separately.
     pub fn create(cfg: WasmRuntimeConfig) -> Result<Self, JsValue> {
-        // Architecture: the engine runs on a Web Worker (via `wasm_thread`,
-        // an `std::thread` drop-in for `wasm32` backed by `SharedArrayBuffer`).
-        // The WebGL renderer stays on the main thread (web-sys types are
-        // realm-local); the worker ships `Vec<RenderCommand>` batches to
-        // main each frame and main applies them via the render sink.
+        // Architecture: the engine runs on a Web Worker (booted by the
+        // in-tree `worker_spawn` module — a `SharedArrayBuffer`-backed
+        // factory-message scheme). The WebGL renderer stays on the host
+        // thread (web-sys types are realm-local); the worker ships
+        // `Vec<RenderCommand>` batches to the host thread each frame and
+        // `AppBackend` applies them to the renderer.
         //
         // Build-side config (in `.cargo/config.toml` + `rust-toolchain.toml`
         // + `[profile.wasm-dev]` in workspace `Cargo.toml`):
@@ -144,23 +139,22 @@ impl WasmRuntime {
         //   • `--export=__tls_*` / `__wasm_init_tls` (thread-id injection)
         //
         // No JS-side `initThreadPool(n)` is required: workers spawn on
-        // demand from Rust via `wasm_thread::spawn` (driven by
-        // `MainBackend::new`).
+        // demand from Rust (driven by `AppBackend::new`).
 
-        let worker_host = crate::scheduler::WasmWorkerHost::new();
+        let worker_spawner = crate::scheduler::WasmWorkerSpawner::new();
         let vsync_source = crate::scheduler::WasmVsyncSource::new();
-        let main_loop = Rc::new(crate::scheduler::WasmMainLoop);
+        let host_loop = Rc::new(crate::scheduler::WasmHostLoop);
         // Built-in default pool: effectively uncapped → one dedicated Web
         // Worker per app (the historical behavior) unless the embedder
-        // assigns a capped pool per-app via `WasmAppConfig::pool`.
-        let default_pool = WorkerPoolHandle::new("default", usize::MAX);
+        // assigns a capped pool per-app via `WasmAppConfig::worker_pool`.
+        let default_worker_pool = WorkerPoolHandle::new("default", usize::MAX);
         let builder = tur_engine::TurRuntime::builder()
-            .worker_host(worker_host)
+            .worker_spawner(worker_spawner)
             .vsync_source(vsync_source)
-            .main_loop(main_loop)
+            .host_loop(host_loop)
             .font_loader(std::sync::Arc::new(WasmFontLoader::new()))
             .clock(std::sync::Arc::new(WasmClock))
-            .worker_pool(default_pool.clone())
+            .worker_pool(default_worker_pool.clone())
             .capability(|_| Ok(Clipboard::new(WasmClipboard)))
             .capability(|_| Ok(Http::new(WasmHttp)))
             .capability(|_| Ok(FilePicker::new(WasmFilePicker)))
@@ -171,7 +165,7 @@ impl WasmRuntime {
             .plugin(TurFilePickerPlugin);
         // Let the embedder add its own plugins / override capabilities.
         let mut builder = (cfg.configure)(builder);
-        for pool in cfg.pools {
+        for pool in cfg.worker_pools {
             builder = builder.worker_pool(pool);
         }
         let runtime = builder
@@ -179,7 +173,7 @@ impl WasmRuntime {
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(Self {
             runtime,
-            default_pool,
+            default_worker_pool,
         })
     }
 
@@ -193,8 +187,8 @@ impl WasmRuntime {
     /// pick one explicitly. Embedders building raw instances via
     /// [`Self::runtime`] can assign it (or a pool from
     /// [`WasmRuntimeConfig::pools`]) via `TurAppBuilder::worker_pool`.
-    pub fn default_pool(&self) -> &WorkerPoolHandle {
-        &self.default_pool
+    pub fn default_worker_pool(&self) -> &WorkerPoolHandle {
+        &self.default_worker_pool
     }
 }
 
@@ -204,16 +198,12 @@ pub struct WasmAppConfig {
     /// `None` ⇒ full-viewport canvas (own wrapper `div`); `Some(id)` ⇒ embed
     /// the canvas inside the element with that id.
     pub container_id: Option<String>,
-    /// Extra after-frame work run inside the engine's after-frame hook (where
-    /// a `&mut boa Context` is available). `None` for embedders with no such
-    /// work.
-    pub after_frame: Option<AfterFrameHook>,
     /// The worker pool this app's engine worker is spawned into. `None` ⇒
     /// the runtime's built-in effectively-uncapped `default` pool (one
     /// dedicated Web Worker per app). Assign a capped pool registered via
-    /// [`WasmRuntimeConfig::pools`] to share workers between apps of the
-    /// same group.
-    pub pool: Option<WorkerPoolHandle>,
+    /// [`WasmRuntimeConfig::worker_pools`] to share workers between apps of
+    /// the same group.
+    pub worker_pool: Option<WorkerPoolHandle>,
 }
 
 /// Owning handle to a running wasm tur app instance. Built via
@@ -257,17 +247,16 @@ impl WasmApp {
     /// Build a DOM-wired wasm tur app instance from a [`WasmRuntime`]: create
     /// the canvas (+ wrapper / hidden textarea), wire all DOM event listeners,
     /// spawn an isolated instance via `runtime.app_builder().build(renderer, …)`,
-    /// register the after-frame hook, and start the autonomous rAF loop.
+    /// register the focus-change handler, and start the autonomous rAF loop.
     /// Resolves to the owning handle.
     pub async fn create(runtime: &WasmRuntime, cfg: WasmAppConfig) -> Result<Self, JsValue> {
         let WasmAppConfig {
             container_id,
-            after_frame: after_frame_hook,
-            pool,
+            worker_pool,
         } = cfg;
         // Resolve the worker pool: the app's explicit choice, or the
         // runtime's built-in effectively-uncapped default.
-        let pool = pool.unwrap_or_else(|| runtime.default_pool.clone());
+        let worker_pool = worker_pool.unwrap_or_else(|| runtime.default_worker_pool.clone());
         let state: Rc<RefCell<Option<WasmState>>> = Rc::new(RefCell::new(None));
         let state_clone = state.clone();
 
@@ -456,14 +445,14 @@ impl WasmApp {
         let renderer = WebGlVelloRenderer::new(canvas.clone(), logical_width, logical_height, dpr);
 
         // Spawn an isolated engine instance. The engine runs on a worker
-        // thread; `MainBackend` owns the WebGL renderer on main and drives
+        // thread; `AppBackend` owns the WebGL renderer on main and drives
         // it directly (render batches, image uploads, resize-on-event) —
-        // no render_sink callback. `build` pushes the initial Resize
+        // `build` pushes the initial Resize
         // internally.
         let app = runtime
             .runtime
             .app_builder()
-            .worker_pool(pool)
+            .worker_pool(worker_pool)
             .renderer(
                 Box::new(renderer),
                 (logical_width as f64, logical_height as f64),
@@ -474,7 +463,7 @@ impl WasmApp {
 
         // The cursor backend is per-instance (it targets this canvas's DOM
         // element), so it can't be a shared runtime capability. Override the
-        // main-side cursor backend now that the instance exists.
+        // host-side cursor backend now that the instance exists.
         app.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(WasmCursor {
             canvas: canvas.clone(),
         })));
@@ -507,7 +496,7 @@ impl WasmApp {
                 let physical_height = (logical_height as f64 * dpr) as u32;
                 s._canvas.set_width(physical_width);
                 s._canvas.set_height(physical_height);
-                // Resize the main-side renderer directly + forward the
+                // Resize the host-side renderer directly + forward the
                 // resize to the worker for layout (single call — see
                 // `TurApp::resize`).
                 s.app.resize(logical_width, logical_height, dpr);
@@ -1009,13 +998,12 @@ impl WasmApp {
 
         // Autonomous loop. The engine owns the frame logic (clock advance
         // is its own `StdClock`, no manual forwarding); this driver just
-        // arms rAF / setTimeout per the engine's `NextFrame` verdict. The
-        // `after_frame` hook — fired by the engine after each wake — is a
-        // back-compat no-op (see below); DOM side-effects that depend on
-        // focus state (textarea focus / caret positioning) live in the
-        // `focus_changed_handler` registered below, which fires exactly
-        // when the worker ships a deduped `FocusedStateChanged` (on
-        // editable↔non-editable transitions *and* caret moves).
+        // arms rAF / setTimeout per the engine's `NextFrame` verdict.
+        // DOM side-effects that depend on focus state (textarea focus /
+        // caret positioning) live in the `focus_changed_handler`
+        // registered below, which fires exactly when the worker ships a
+        // deduped `FocusedStateChanged` (on editable↔non-editable
+        // transitions *and* caret moves).
         //
         // Async pump: the wake trampoline the engine installs hands a
         // `Box::pin(async { wake().await })` future to the spawn closure
@@ -1029,18 +1017,6 @@ impl WasmApp {
             .app
             .clone();
         let state_weak: Weak<RefCell<Option<WasmState>>> = Rc::downgrade(&state_clone);
-        let after_frame: Rc<dyn Fn(tur_engine::core::app::FrameOutcome)> =
-            Rc::new(move |_outcome| {
-                // Embedder-supplied after-frame hook (`AfterFrameHook`)
-                // required `&mut Context` access, which is incompatible with
-                // the threaded backend (the boa `Context` lives on the
-                // worker). The hook type is retained for API back-compat but
-                // is intentionally not invoked here. Embedders needing
-                // post-frame JS work should call `eval_module` / `eval_js`
-                // via the public TurApp RPC API from the after-frame
-                // callback instead.
-                let _ = after_frame_hook.as_ref();
-            });
         // Focus-change handler: positions the hidden `<textarea>` (focus it
         // + set caret coords) whenever the focused element's editable-ness
         // or caret rect changes. Pushed by the engine from `apply_msg`, so
@@ -1065,7 +1041,6 @@ impl WasmApp {
                 }
             })
         };
-        app.set_after_frame_hook(Some(after_frame));
         app.set_focus_changed_handler(Some(focus_changed));
         // Spawn the autonomous loop. The embedder (wasm main thread)
         // drives the future via `wasm_bindgen_futures::spawn_local`. The
@@ -1080,9 +1055,8 @@ impl WasmApp {
 
     pub async fn load_and_run_js(&self, js_source: &str) -> Result<(), JsValue> {
         // Clone the `Rc<TurApp>` out of the state RefCell before awaiting,
-        // so the borrow is released before the await point. Otherwise the
-        // after_frame hook (which borrow_mut's the same RefCell) would
-        // panic when it fires mid-RPC.
+        // so the borrow is released before the await point. Otherwise a
+        // concurrent RPC borrow_mut on the same RefCell would panic.
         let app = {
             let guard = self.state.borrow();
             let Some(s) = guard.as_ref() else {

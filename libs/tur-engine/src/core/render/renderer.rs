@@ -26,7 +26,7 @@ pub trait Renderer {
     /// command batch itself only carries `ImageResourceId`s.
     ///
     /// Cursor claims happen during the worker-side recording pass; main
-    /// replays commands without re-claiming, so no `PaintShell` is needed
+    /// replays commands without re-claiming, so no `PaintEnv` is needed
     /// here.
     fn render_commands(&mut self, commands: &[RenderCommand]);
 
@@ -37,7 +37,7 @@ pub trait Renderer {
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
 
     /// Upload (or refresh) one image resource in the GPU atlas. Called once
-    /// per newly-registered resource (`MainMsg::UploadImage`), replacing
+    /// per newly-registered resource (`HostMsg::UploadImage`), replacing
     /// the old per-frame full-map upload sweep. Default: no-op.
     fn upload_image_resource(&mut self, _id: ImageResourceId, _image: &ImageResource) {}
 

@@ -7,17 +7,17 @@
 use std::path::Path;
 
 use boa_engine::{JsArgs, JsValue, Module, NativeFunction, Source, js_string};
-use tur_integration_tests::{HostExport, HostModulePlugin, TurTestApp};
+use tur_integration_tests::{NativeExport, NativeModulePlugin, TurTestApp};
 
 #[test]
 fn reentrant_module_load_via_host_fn() {
     // `loadModule(src)` — parses + evaluates `src` as a module on the
     // current context (re-entrant safe if boa supports nested module eval).
-    // Built fresh per instance via the HostExport builder (Phase 7).
+    // Built fresh per instance via the NativeExport builder (Phase 7).
 
-    let plugin = HostModulePlugin {
+    let plugin = NativeModulePlugin {
         specifier: "tur:cases",
-        exports: vec![HostExport {
+        exports: vec![NativeExport {
             name: "loadModule".to_string(),
             // Builder produces a fresh NativeFunction per instance (Phase 7:
             // `NativeFunction` is `!Send`, so we hold a Send+Sync builder

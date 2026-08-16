@@ -4,11 +4,11 @@ pub mod renderer;
 
 pub mod error;
 
-// Re-export engine-internal cursor-capability types at the crate root so
-// embedders can write `tur_engine::CursorBackend`, `tur_engine::CursorCap`,
-// `tur_engine::NoopCursor` without reaching into `core::platform`. The std
-// plugin itself (`TurStdPlugin`) lives in `builtin_plugins::std`.
-pub use crate::core::platform::{CursorBackend, CursorCap, NoopCursor};
+// Re-export cursor-output types at the crate root so embedders can write
+// `tur_engine::CursorBackend`, `tur_engine::NoopCursor` without reaching
+// into `core::cursor`. The std plugin itself (`TurStdPlugin`) lives in
+// `builtin_plugins::std`.
+pub use crate::core::cursor::{CursorBackend, NoopCursor};
 // Re-export the clipboard plugin surface at the crate root so embedders /
 // external backend crates can write `tur_engine::Clipboard`,
 // `tur_engine::ClipboardBackend`, `tur_engine::TurClipboardPlugin`,
@@ -25,19 +25,19 @@ pub use crate::core::event_bus::EventBus;
 // Re-export the runtime + builder at the crate root — the primary entry point
 // for embedders. `TurRuntime::builder()` is the shared, created-once object;
 // `runtime.app_builder().renderer(r, viewport, dpr).build()` spawns an isolated
-// `TurApp` instance (engine on a worker thread; `MainBackend` owns the renderer
-// on main and drives it directly — no render_sink callback).
-pub use crate::core::runtime::{MainBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
+// `TurApp` instance (engine on a worker thread; `AppBackend` owns the renderer
+// on the host thread and drives it directly).
+pub use crate::core::runtime::{AppBackend, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
 // Re-export the plugin-layer main-thread hop surface so backends in other
 // crates (`tur-clipboard-native`, future OS-API backends) can name the type
 // without reaching into `core::plugin`. OS-API backends receive an
-// `AsyncPluginContext` clone at construction (via the closure form of
+// `HostExecutor` clone at construction (via the closure form of
 // `TurRuntimeBuilder::capability`) and hop OS-API calls onto the engine's
 // main thread (required by some platforms — e.g. macOS
 // `arboard`/`NSPasteboard`); plugin code reaches the same channel via
-// `PluginContext::to_async`. The engine creates the channel internally at
+// `PluginContext::to_host_executor`. The engine creates the channel internally at
 // `build()`, so no embedder wiring is required.
-pub use crate::core::plugin::{AsyncPluginContext, MainRunFuture};
+pub use crate::core::plugin::{HostExecutor, HostRunFuture};
 pub use crate::core::scheduler::SpawnError;
 // Re-export the worker-pool declaration type so embedders can write
 // `tur_engine::WorkerPoolHandle` (registered via
@@ -65,10 +65,10 @@ pub struct FocusedState {
 
 /// A running tur engine instance.
 ///
-/// Wraps a [`MainBackend`] that owns a worker thread (running a
-/// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the main-side
+/// Wraps a [`AppBackend`] that owns a worker thread (running a
+/// [`WorkerBackend`](core::runtime::WorkerBackend)) **and** the host-side
 /// renderer (passed to `TurRuntime::app_builder().build(...)`). Main drives
-/// the renderer directly from [`MainBackend`] — no `render_sink` callback.
+/// the renderer directly from [`AppBackend`].
 /// Everything else (boa `Context`, element tree, reactive store, layout,
 /// subsystems) lives on the worker.
 ///
@@ -79,11 +79,11 @@ pub struct FocusedState {
 ///
 /// All public methods are `async fn`. The embedder supplies the runtime:
 /// - On wasm, `wasm_bindgen_futures::spawn_local` runs futures
-///   cooperatively on the JS event loop (main thread never blocks).
+///   cooperatively on the JS event loop (the host thread never blocks).
 /// - On native (Android JNI, integration tests), `futures::executor::block_on`
 ///   parks the calling thread until the future resolves.
 pub struct TurApp {
-    backend: MainBackend,
+    backend: AppBackend,
     /// Per-instance frame cadence. Cloned from the runtime at
     /// construction; embedders with per-instance cadence (Android's
     /// per-`FrameLoop` sources) replace it via [`Self::set_vsync_source`]
@@ -105,18 +105,18 @@ pub struct TurApp {
 /// [`TurApp::set_after_frame_hook`].
 pub type AfterFrameHook = Rc<dyn Fn(FrameOutcome)>;
 
-/// Per-focus-change hook fired from [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg)
-/// when the worker ships a deduped `MainMsg::FocusedStateChanged`. See
+/// Per-focus-change hook fired from [`AppBackend::apply_msg`](core::runtime::AppBackend::apply_msg)
+/// when the worker ships a deduped `HostMsg::FocusedStateChanged`. See
 /// [`TurApp::set_focus_changed_handler`].
 pub type FocusChangedHook = Rc<dyn Fn(FocusedState)>;
 
 impl TurApp {
-    /// Construct a `TurApp` backed by the given [`MainBackend`] + vsync
+    /// Construct a `TurApp` backed by the given [`AppBackend`] + vsync
     /// source. The runtime calls this from
     /// [`TurRuntime::app_builder`](crate::core::runtime::TurRuntime::app_builder)
     /// → [`TurAppBuilder::build`](crate::core::runtime::TurAppBuilder::build);
     /// embedders normally don't call it directly.
-    pub fn new(backend: MainBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
+    pub fn new(backend: AppBackend, vsync: Rc<dyn core::scheduler::VsyncSource>) -> Self {
         Self {
             backend,
             vsync: RefCell::new(vsync),
@@ -135,9 +135,9 @@ impl TurApp {
         *self.vsync.borrow_mut() = source;
     }
 
-    /// Direct accessor on the underlying [`MainBackend`]. Embedders use it
+    /// Direct accessor on the underlying [`AppBackend`]. Embedders use it
     /// to install the cursor backend after construction.
-    pub fn backend(&self) -> &MainBackend {
+    pub fn backend(&self) -> &AppBackend {
         &self.backend
     }
 
@@ -168,8 +168,8 @@ impl TurApp {
     }
 
     /// Cross-thread-safe event bus handle. `emit_to_js` ships via the
-    /// worker's channel; `drain_js_to_host` returns empty on main (the
-    /// worker emits `MainMsg::EventBusToHost` separately when needed).
+    /// worker's channel; `drain_js_to_embedder` returns empty on main (the
+    /// worker emits `HostMsg::EventBusToEmbedder` separately when needed).
     pub fn event_bus_handle(&self) -> core::event_bus::EventBusHandle {
         self.backend.event_bus_handle()
     }
@@ -187,12 +187,12 @@ impl TurApp {
     pub fn push_platform_event(&self, event: core::platform::PlatformEvent) {
         self.backend
             .send_worker_msg(core::app::WorkerMsg::PlatformEvent(event));
-        self.request_wakeup();
+        self.request_frame();
     }
 
     /// Resize the surface. The embedder calls this at resize-event-receipt
-    /// time (DOM `ResizeObserver` / winit / JNI): it resizes the main-side
-    /// renderer directly (no flush + worker→main round-trip — lower
+    /// time (DOM `ResizeObserver` / winit / JNI): it resizes the host-side
+    /// renderer directly (no flush + worker→host round-trip — lower
     /// latency) AND forwards `PlatformEvent::Resize` to the worker so
     /// `ResizeSubsystem` updates `Screen` / `viewportSize$` for layout.
     /// Event-driven, not per-frame, so no dedup is needed.
@@ -206,7 +206,7 @@ impl TurApp {
                     dpr,
                 },
             ));
-        self.request_wakeup();
+        self.request_frame();
     }
 
     /// Push an engine-internal event onto the app-event bus (programmatic
@@ -214,7 +214,7 @@ impl TurApp {
     pub fn push_app_event(&self, event: core::app::AppEvent) {
         self.backend
             .send_worker_msg(core::app::WorkerMsg::AppEvent(event));
-        self.request_wakeup();
+        self.request_frame();
     }
 
     /// The autonomous frame loop — driven by the embedder's platform loop
@@ -224,11 +224,11 @@ impl TurApp {
     /// + [`VsyncSource::request_frame`](core::scheduler::VsyncSource::request_frame).
     ///
     /// Each iteration races the platform vsync stream against the worker's
-    /// `MainMsg` stream:
+    /// `HostMsg` stream:
     /// - **vsync** — kick the worker for the NEXT frame (it flushes+records
     ///   N+1 while main encodes N), then paint the latest buffered batch
     ///   (vsync-aligned, latest-wins).
-    /// - **worker msg** — dispatch via [`MainBackend::apply_msg`](core::runtime::MainBackend::apply_msg),
+    /// - **worker msg** — dispatch via [`AppBackend::apply_msg`](core::runtime::AppBackend::apply_msg),
     ///   the single shared handler. `RenderCommands` is buffered into
     ///   `pending` for vsync-aligned pipelining; `FrameOutcome` fires the
     ///   `after_frame` hook and re-arms vsync (or flushes `pending` on
@@ -250,10 +250,10 @@ impl TurApp {
         );
 
         let mut vsync_rx = self.vsync.borrow().subscribe();
-        // `main_rx` is in a RefCell; borrow for the lifetime of this loop.
+        // `host_rx` is in a RefCell; borrow for the lifetime of this loop.
         // Safe: run_loop is called exactly once per app (asserted above).
         #[allow(clippy::await_holding_refcell_ref)]
-        let mut main_rx = self.backend.main_rx.borrow_mut();
+        let mut host_rx = self.backend.host_rx.borrow_mut();
 
         use crate::core::runtime::MsgOutcome;
         use futures::future::{Either, select};
@@ -263,9 +263,9 @@ impl TurApp {
         let mut pending: Option<core::render::RenderCommandBatch> = None;
 
         loop {
-            // Race vsync + main_msg streams — first to fire wins.
+            // Race vsync + host_msg streams — first to fire wins.
             let vsync_fut = vsync_rx.next();
-            let main_fut = main_rx.next();
+            let main_fut = host_rx.next();
             let event = select(vsync_fut, main_fut).await;
 
             match event {
@@ -358,7 +358,7 @@ impl TurApp {
 
     /// Re-arm an idle autonomous loop: ask the vsync source for one
     /// wake-up on the next frame. Idempotent at the source (armed flag).
-    fn request_wakeup(&self) {
+    fn request_frame(&self) {
         self.vsync.borrow().request_frame();
     }
 
@@ -381,8 +381,8 @@ impl TurApp {
     /// host).
     ///
     /// Constraints:
-    /// - `R: Send + 'static` — the result crosses the worker→main channel.
-    /// - `cb: Send + 'static` — the closure crosses main→worker.
+    /// - `R: Send + 'static` — the result crosses the worker→host channel.
+    /// - `cb: Send + 'static` — the closure crosses host→worker.
     ///
     /// Production code should never call this — it pins test-only typed
     /// element access to the worker. Use `dev_tool_get_element` /
@@ -430,13 +430,13 @@ impl TurApp {
     }
 
     /// Install a handler fired whenever the worker ships a deduped
-    /// `MainMsg::FocusedStateChanged` (i.e. the focused element's
+    /// `HostMsg::FocusedStateChanged` (i.e. the focused element's
     /// editable-ness or caret rect changes). The engine retains no focus
     /// cache — embedders obtain focus state either by registering here
     /// (push, on change) or via [`Self::focused_state`] (async RPC, on
     /// demand). Pass `None` to clear.
     ///
-    /// The handler runs inside [`Self::apply_msg`](core::runtime::MainBackend::apply_msg),
+    /// The handler runs inside [`Self::apply_msg`](core::runtime::AppBackend::apply_msg),
     /// so it observes identical state on the `run_loop` path. Used by the
     /// wasm embedder (textarea focus / caret positioning) and Android
     /// (soft-keyboard sync via a JNI callback into the Kotlin `FrameLoop`).
@@ -444,11 +444,11 @@ impl TurApp {
         self.backend.set_focus_changed_handler(handler);
     }
 
-    /// Override the main-side cursor backend. The worker emits
-    /// `MainMsg::CursorChanged` on cursor state change; main applies here.
+    /// Override the host-side cursor backend. The worker emits
+    /// `HostMsg::CursorChanged` on cursor state change; main applies here.
     pub fn set_cursor_backend(
         &self,
-        backend: std::sync::Arc<std::sync::Mutex<dyn core::platform::CursorBackend + Send + Sync>>,
+        backend: std::sync::Arc<std::sync::Mutex<dyn core::cursor::CursorBackend + Send + Sync>>,
     ) {
         self.backend.set_cursor_backend(backend);
     }

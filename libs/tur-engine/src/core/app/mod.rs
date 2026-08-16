@@ -2,12 +2,12 @@ pub mod comm;
 mod context;
 pub mod event;
 mod internal;
+pub mod mount;
 pub mod queue;
-pub mod render;
 pub mod root;
 
 pub use comm::{
-    DevReply, MainMsg, MainRx, MainTx, ModuleError, Reply, ReplySender, WorkerMsg, WorkerRx,
+    DevReply, HostMsg, HostRx, HostTx, ModuleError, Reply, ReplySender, WorkerMsg, WorkerRx,
     WorkerTx,
 };
 pub use context::TurAppContext;

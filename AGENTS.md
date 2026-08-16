@@ -1,12 +1,12 @@
 # tur
 
-A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
+A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls into the engine via the `tur:std` / `tur:animation` / `tur:clipboard` / `tur:net` / `tur:filepicker` modules registered by engine plugins.
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  demo/website (web host app — @tur-ng/website)            │
+│  demo/website (web embedder app — @tur-ng/website)            │
 │  Thin browser host: loads the tur WASM + the           │
 │  playground-view bundle. Co-located with its own        │
 │  wasm cdylib (demo/website/native → tur-website).       │
@@ -26,7 +26,7 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  ├── core/         (engine infrastructure — NO         │
 │  │                  dependency on builtin_plugins/*)   │
 │  │   ├── app/      (TurAppInternal + FrameOutcome +    │
-│  │   │             AppEvent/AppEventQueue + render()   │
+│  │   │             AppEvent/AppEventQueue + mount()   │
 │  │   │             mount + RootView/RootElement        │
 │  │   │             generic-root wrapper)               │
 │  │   ├── elements/ (AnyElement, ElementObject,         │
@@ -53,10 +53,13 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │   │             BlurEvent/FocusEvent/FocusChange)   │
 │  │   ├── screen/   (Screen + viewportSize$ source +    │
 │  │   │             ResizeSubsystem)                    │
-│  │   ├── platform/ (Cursor/CursorBackend/CursorCap +   │
-│  │   │             PlatformEvent/PointerInput/Ime +    │
+│  │   ├── cursor/   (Cursor enum + CursorBackend trait  │
+│  │   │             + NoopCursor — the window's cursor- │
+│  │   │             output egress seam)                 │
+│  │   ├── platform/ (PlatformEvent/PointerInput/Ime +   │
 │  │   │             key_event: KeyEvent/Modifiers/      │
-│  │   │             KeydownEvent/KeyupEvent)            │
+│  │   │             KeydownEvent/KeyupEvent — input     │
+│  │   │             events from the host only)          │
 │  │   ├── subsystem.rs (Subsystem trait + flush_pre/post_layout hooks)   │
 │  │   ├── text/     (TextLayoutData, FontManager —      │
 │  │   │             paint/layout contract types only)   │
@@ -113,9 +116,10 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │  │    (ClipboardBackend trait + Clipboard cap +        │
 │  │    tur:clipboard + engine-internal          │
 │  │    subsystems + event payloads)                     │
-│  │  • Cursor      — `core::platform::cursor`           │
-│  │    (CursorBackend trait + CursorCap + Cursor enum;  │
-│  │    no JS bridge — engine-internal only)             │
+│  │  • Cursor      — `core::cursor` (NOT a capability: │
+│  │    CursorBackend trait + Cursor enum; per-instance │
+│  │    egress seam applied host-side via               │
+│  │    `TurApp::set_cursor_backend`)                   │
 │  └─ External capability crates (split per domain):     │
 │     ├── tur-net-capability (Http + HttpBackend trait + │
 │     │   tur:net)                               │
@@ -132,14 +136,14 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 │     ├── tur-clipboard-wasm  (WasmClipboard; re-exports │
 │     │   Clipboard/ClipboardBackend/TurClipboardPlugin) │
 │     └── tur-clipboard-native (NativeClipboard via      │
-│         arboard; same re-exports + AsyncPluginContext; │
-│         new(&cx) self-hops each read/write to main)    │
+│         arboard; same re-exports + HostExecutor; │
+│         new(&cx) self-hops each read/write to the host thread)    │
 │  Embedders register backends via .capability(|cx|...): │
-│    the closure receives &AsyncPluginContext -- backends │
-│    needing main take cx (NativeClipboard self-hops);   │
+│    the closure receives &HostExecutor -- backends │
+│    needing the host thread take cx (NativeClipboard self-hops);   │
 │    the rest ignore it (WasmClipboard/Http/FilePicker). │
 │    Engine creates the channel internally in build();   │
-│    no main_handle/main_drain builder wiring needed.    │
+│    no no builder wiring needed.    │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────▼──────────────────────────────┐
@@ -168,15 +172,15 @@ A JavaScript rendering engine built with winit, vello-hybrid, and boa_engine. JS
 
 ### Capability registry
 
-Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &AsyncPluginContext| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal main-thread channel) and receives an `AsyncPluginContext` — the engine's main-thread hop. Backends that need to run OS-API calls on main (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_main(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance (set via `TurApp::set_cursor_backend` after `app_builder().build(...)`, since it targets a specific surface):
+Embedders register swappable backends (clipboard, http, filepicker) on the runtime builder (shared across all instances spawned from the runtime). Registration is **closure-based**: `.capability(|cx: &HostExecutor| Result<C, TurError>)`. The closure runs once in `build()` (after the engine creates its internal host-thread channel) and receives an `HostExecutor` — the engine's host-thread hop. Backends that need to run OS-API calls on the host thread (e.g. `NativeClipboard` on macOS, where `arboard`/`NSPasteboard` require main-thread access) store a clone and self-hop via `cx.run_on_host(...)`; the rest (wasm, HTTP via tokio, filepicker via `rfd`) ignore the argument. The cursor is per-instance and NOT a capability (set via `TurApp::set_cursor_backend` after `app_builder().build(...)`, since it targets a specific window — the resolved cursor ships to the host thread as `HostMsg::CursorChanged`):
 
 ```rust
 let ui = WorkerPoolHandle::new("ui", 4);              // at most 4 shared workers
 let daemon = WorkerPoolHandle::new("daemon", 2);      // at most 2 shared workers
 let runtime = TurRuntime::builder()
-    .worker_host(host)                          // required — Rc<dyn WorkerHost>
+    .worker_spawner(host)                     // required — Rc<dyn WorkerSpawner>
     .vsync_source(source)                       // required — Rc<dyn VsyncSource>
-    .main_loop(loop_)                           // required — Rc<dyn MainLoop>
+    .host_loop(loop_)                         // required — Rc<dyn HostLoop>
     .font_loader(Rc::new(WasmFontLoader::new()))
     .clock(Rc::new(WasmClock))
     .worker_pool(ui.clone())                   // register pools (required per app)
@@ -184,7 +188,7 @@ let runtime = TurRuntime::builder()
     .capability(|_| Ok(Clipboard::new(WasmClipboard)))   // tur-clipboard-wasm
     .capability(|_| Ok(Http::new(WasmHttp)))             // tur-net-wasm
     .capability(|_| Ok(FilePicker::new(WasmFilePicker))) // tur-filepicker-wasm
-    // A backend that needs main-thread access takes the context:
+    // A backend that needs host-thread access takes the context:
     //   .capability(|cx| Ok(Clipboard::new(NativeClipboard::new(cx)?)))
     .plugin(TurStdPlugin)
     .plugin(TurAnimationPlugin)                  // tur-animation (after TurStdPlugin)
@@ -194,7 +198,7 @@ let runtime = TurRuntime::builder()
     .build()?;                                    // Rc<TurRuntime>
 
 // Spawn isolated instances (each its own JS realm + renderer), each into a
-// declared pool (apps in one pool share ≤ max_threads workers; different
+// declared pool (apps in one pool share ≤ max_workers workers; different
 // pools never share threads):
 let app = runtime
     .app_builder()
@@ -221,15 +225,16 @@ let headless = runtime
 ```
 
 - `Capability: Any + Clone + 'static` — marker trait, implemented explicitly per
-  newtype (`Clipboard`, `Http`, `FilePicker`, `CursorCap`).
-- `AsyncPluginContext` (`core::plugin`, re-exported at the crate root) — the
-  engine's `Send + Sync + Clone` main-thread hop. The engine creates the
-  channel internally in `build()` and spawns the drain on the main thread, so
-  **no embedder wiring is required** (no `main_handle`/`main_drain` builder
-  methods). OS-API backends receive a clone at construction (via the
-  capability closure) and self-hop; plugin/bridge code reaches the same
-  channel via `PluginContext::to_async()`. The raw `MainTask`/`MainDrain`/
-  `main_channel()` live `pub(crate)` in `core::scheduler` (the plugin layer
+  newtype (`Clipboard`, `Http`, `FilePicker`).
+- `HostExecutor` (`core::plugin`, re-exported at the crate root) — the
+  engine's `Send + Sync + Clone` host-thread hop (the host thread is the
+  platform main thread). The engine creates the
+  channel internally in `build()` and spawns the drain on the host thread, so
+  **no embedder wiring is required**. OS-API backends receive a clone at
+  construction (via the capability closure) and self-hop; plugin/bridge code
+  reaches the same channel via `PluginContext::to_host_executor()`. The raw
+  `HostTask`/`HostDrain`/`host_channel()` live `pub(crate)` in
+  `core::scheduler` (the plugin layer
   wraps the sender — dependency direction: plugin → scheduler, never reverse).
 - `Plugin::requires(&mut CapabilityDecls)` — declare hard deps; the builder
   validates them BEFORE any plugin's `register` runs, so missing capabilities
@@ -248,7 +253,7 @@ let headless = runtime
     the ONLY way to introduce a new `TypeId` into the map. The closure runs
     on the worker (right after `TurInstanceContext` is constructed, before
     any plugin `register`), so values built fresh in the body never cross
-    the main↔worker boundary; only captured values need `Send`. Each type
+    the host↔worker boundary; only captured values need `Send`. Each type
     may be defined exactly once per instance — duplicate `define` panics
     (fail-fast). Plugins see all defined slots as already-present at
     `register` time.
@@ -264,8 +269,9 @@ let headless = runtime
   Lives entirely in the worker.
 - Convention: capability newtypes use base names (`Clipboard`, `Http`,
   `FilePicker`); backend traits use `*Backend` suffix (`ClipboardBackend`,
-  `HttpBackend`, `FilePickerBackend`, `CursorBackend`). `CursorCap` is the lone
-  exception because `core::platform::Cursor` already names the cursor-kind enum.
+  `HttpBackend`, `FilePickerBackend`, `CursorBackend`). Cursor is NOT a
+  capability (see `core::cursor` above) — it targets a specific window, not
+  the process.
 
 
 ### Reactive substrate (plugin-facing atom minting)
@@ -372,7 +378,7 @@ instance in `register`; `compile` is the seam for future caching + fail-fast
 validation. The renderer is **not** on the runtime builder — it's the
 mandatory argument to the builder's `build(...)` terminal (one renderer per
 surface). The cursor backend is per-instance (set via
-`TurApp::set_cursor_backend` after spawn, since it targets a specific surface).
+`TurApp::set_cursor_backend` after spawn, since it targets a specific window).
 
 ### Scheduling contract (single-role traits, worker vocabulary)
 
@@ -380,19 +386,19 @@ surface). The cursor backend is per-instance (set via
 main/worker thread concepts, no `block_on`, every method live on every
 platform (zero `panic!`/`unimplemented!` stubs):
 
-- `WorkerHost` (runtime-level, required on the builder) —
+- `WorkerSpawner` (runtime-level, required on the builder) —
   `spawn_worker(pool, entry) -> WorkerTicket`: host one app loop in a pool.
   The `entry` closure runs on the chosen worker, receives a `WorkerContext`,
-  builds the `!Send` backend there, returns the app's main future (the
+  builds the `!Send` backend there, returns the app's run-loop future (the
   platform drives it for the worker's lifetime). `WorkerTicket` = per-app
   slot claim: `join()` signals that app's loop completion + `wake()` is the
-  cross-thread kick called after every main→worker send (no-op native,
+  cross-thread kick called after every host→worker send (no-op native,
   `postMessage(0)` wasm).
 - `VsyncSource` (per-instance) — `subscribe()` + `request_frame()` frame
   cadence. Swappable per app via `TurApp::set_vsync_source` (swap **before**
   `run_loop` — the loop subscribes once at startup).
-- `MainLoop` (runtime-level, required) — `spawn_local` on the main thread;
-  roots the engine-internal main-thread drain (the `AsyncPluginContext`
+- `HostLoop` (runtime-level, required) — `spawn_local` on the host thread (the platform main thread);
+  roots the engine-internal main-thread drain (the `HostExecutor`
   hop) + embedder main-thread tasks.
 - `WorkerExecutor` (worker-side surface inside `WorkerContext`) —
   `spawn_local` (cooperative task on the worker's own loop), `sleep`
@@ -407,17 +413,17 @@ Builder wiring (replaces the old single `.scheduler(driver)`):
 
 ```rust
 TurRuntime::builder()
-    .worker_host(host)        // Rc<dyn WorkerHost>
+    .worker_spawner(host)   // Rc<dyn WorkerSpawner>
     .vsync_source(source)     // Rc<dyn VsyncSource>
-    .main_loop(loop_)         // Rc<dyn MainLoop>
+    .main_loop(loop_)         // Rc<dyn HostLoop>
     …
 ```
 
 Every app is spawned **into a named worker pool**
-(`WorkerPoolHandle::new(name, max_threads)`, registered via
+(`WorkerPoolHandle::new(name, max_workers)`, registered via
 `TurRuntimeBuilder::worker_pool`, assigned — **required** — via
 `TurAppBuilder::worker_pool`, identity-checked by Arc pointer). All apps in
-one pool share at most `max_threads` workers; apps in different pools never
+one pool share at most `max_workers` workers; apps in different pools never
 share workers — the motivating case: heavy headless daemons in a small
 `daemon` pool can't stall UI rendering in a `ui` pool. A cap ≥ the app count
 degenerates to one-worker-per-app (the historical default; `usize::MAX` for
@@ -425,25 +431,25 @@ degenerates to one-worker-per-app (the historical default; `usize::MAX` for
 data; the engine only validates registration + assignment:
 
 - **Native** — `tur_native::worker_pool::NativeWorkerPools` (implements
-  `WorkerHost`; constructed with a `LaneTimerFactory` — the platform's
-  sleep-only timer seam, `LaneTimer { sleep }`): at most `max_threads`
+  `WorkerSpawner`; constructed with a `LaneTimerFactory` — the platform's
+  sleep-only timer seam, `LaneTimer { sleep }`): at most `max_workers`
   "tur-lane" OS threads per pool; grow-to-cap-then-least-loaded assignment.
   App state (`boa::Context`, `Rc`s) is `!Send`, so each app's `worker_loop`
   is pinned to one lane for life — sharing = multiple app loops
   cooperatively scheduled on one thread (task table + cross-thread-safe
   ready queue + condvar; `sleep` delegates to the `LaneTimer`; panics
   contained per app; `WorkerTicket::join` joins that app's loop, not the
-  thread). tur-android (`crate::scheduler::worker_host(handle)` with
+  thread). tur-android (`crate::scheduler::worker_spawner(handle)` with
   `TokioLaneTimer`) + the test harness (virtual-clock `LaneTimer`) use it
-  directly as their `WorkerHost`.
-- **Wasm** — `tur-wasm`'s `WasmWorkerHost`: at most `max_threads` Web
+  directly as their `WorkerSpawner`.
+- **Wasm** — `tur-wasm`'s `WasmWorkerSpawner`: at most `max_workers` Web
   Workers per pool; extra apps are delivered into the least-loaded worker as
   tagged `{t:"tur-factory", ptr}` messages and hosted cooperatively on its
   JS event loop (multi-tenant workers — see `worker_spawn.rs`).
   `WasmVsyncSource` (rAF) / `WasmMainLoop` (`wasm_bindgen_futures`) /
   `WasmWorkerExecutor` (setTimeout sleep; default spawn_blocking) fill the
   other three roles.
-- Android main-thread tasks: `AndroidMainLoop` holds a task list polled
+- Android main-thread tasks: `AndroidHostLoop` holds a task list polled
   from each instance's `pump_loop`; task wakers request a **message pump**
   (coalesced main-Handler post via Kotlin `FrameLoop.requestPump()` → JNI
   `pumpMessages`, which polls the loop WITHOUT firing a vsync) so pending
@@ -482,12 +488,12 @@ Flutter-like layout model: flex-based Column/Row with Expanded children, Stack w
 Animation lives entirely in the standalone `tur-animation` crate (registered via `TurAnimationPlugin`). The engine core exposes only the `Subsystem` flush hooks (`flush_pre_layout` / `flush_post_layout`) + `Clock` accessor — no animation code is in `tur-engine`.
 
 - **`Subsystem` trait** (`tur-engine::core::subsystem`) — one trait, four methods, all defaulting to no-op:
-  - `fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order, **before** the layout step. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_next_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_next_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
+  - `fn flush_pre_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — returns nothing; called **every fixed-point iteration** of `flush()` (possibly several times per frame), in registration order, **before** the layout step. Used for time-driven state advance. `AnimationSubsystem` owns `AnimationManager` + the engine `Clock` and advances the manager at most once per frame, self-gating via `cx.frame_id()` (a per-`flush()` epoch stable across iterations, differing across frames). Subsystems push intent back into the engine via `cx.mark_dirty()` (re-layout + paint this iteration), `cx.request_paint()` (paint this frame), and `cx.request_frame()` (schedule the next vsync — accumulates across all iterations and feeds the post-loop schedule decision). Emitting `request_frame()` every iteration a controller is active is what keeps an animation started from a callback (event/lifecycle handler) advancing without waiting for the next platform input.
   - `fn flush_post_layout(&mut self, cx: &mut SubsystemFlushContext<'_>)` — same cadence + registration order, but **after** the layout step, so it reads the freshly-laid-out tree (`computed_layout`, `absolute_affine_of`). Used for layout-derived recomputation — e.g. `CompositedTransformSubsystem` maps each target's world position onto its follower with final geometry + the follower's just-resolved anchor cache. Without this phase a follower read zero/stale sizes on the first frame and only self-corrected on the next input event (tap/click) — see `follower_correct_on_first_frame_non_topleft_anchor`.
   - `fn handle_platform_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &PlatformEvent)` — called per drained platform event, every fixed-point iteration, in registration order. Used by input subsystems (keyboard, IME, gesture, pointer, scroll, resize, clipboard platform-bridge).
   - `fn handle_app_event(&mut self, cx: &mut SubsystemFlushContext<'_>, event: &AppEvent)` — called per drained engine-internal event, every fixed-point iteration, in registration order. Used by scroll-chaining / scroll-to / clipboard-write / clipboard-paste / caret-visibility subsystems.
 
-  `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, the capability registry, plus the engine-signalling channels `mark_dirty` / `request_paint` / `request_next_frame` and the `frame_id()` self-gate. These channels are bundled in `FlushSignals` (built once per `flush()` and shared with every context constructed that call).
+  `SubsystemFlushContext` exposes the boa `Context`, the element tree / focus manager / mutation queue (as shared `Rc<RefCell<>>` so subsystems that already hold their own Rc clone — like `AnimationSubsystem` capturing the mutation queue for `onTick` callbacks — don't panic on a double-borrow), both event queues, the renderer, the canvas size, the async executor, the capability registry, plus the engine-signalling channels `mark_dirty` / `request_paint` / `request_frame` and the `frame_id()` self-gate. These channels are bundled in `FlushSignals` (built once per `flush()` and shared with every context constructed that call).
 - **`Curve`** (`tur-animation::curve`) — a time-remap `f64 → f64` (Flutter `Curve`): `Linear`/`EaseIn`/`EaseOut`/`EaseInOut`. Parsed from JS strings like `"easeInOut"`.
 - **`Tween<T>`** (`tur-animation::tween`) — a value range `{begin, end}` with `lerp(t) → T` (Flutter `Tween<T>`). `NumTween` for `f64`, `ColorTween` for component-wise `Color` interpolation via `Color::lerp`. Exposed in JS as `Tween({begin, end})` / `ColorTween({begin, end})` with mutable `begin`/`end` and `lerp`/`transform` methods.
 - **Effect elements**: `Opacity` (alpha-mask a child) and `Transform` (rotate/scale/translate). Registered by `tur-animation` under `tur:animation`.
@@ -538,7 +544,7 @@ Elements are type-erased via `AnyElement` (private `Erased` trait with blanket i
 2. `ElementTree::compute_layout()` lays out dirty nodes: each node runs `perform_layout` (resolving `Val<T>` props untracked) then `subscribe` (explicitly re-declaring its reactive deps into the store's atom→subscriber index)
 3. When an atom changes, a reactive flush maps stale atoms → subscribed nodes via `dirty_subscribers` → `mark_dirty` (propagates to ancestors) → next layout re-resolves values
 4. `ElementTree::paint()` walks the tree, calling each element's paint via `PaintContext`
-5. `Renderer::render(&mut self, tree: &ElementTree)` drives the frame
+5. The worker records the paint walk into a `RenderCommandBatch`; `AppBackend` applies it host-side via `Renderer::render_commands` + `present`
 
 ## Directory structure
 
@@ -549,7 +555,7 @@ libs/
       core/                  # Engine infrastructure — NO dependency on
                              #   builtin_plugins/* (strict boundary)
         app/                 # TurAppInternal + FrameOutcome + AppEvent/
-                             #   AppEventQueue + render() mount +
+                             #   AppEventQueue + mount() entry +
                              #   RootView/RootElement generic-root wrapper
         async_/              # CompletionQueue/CompletionHandle (pending
                              #   completion invocations drained each flush)
@@ -558,17 +564,17 @@ libs/
           scheduler/           # Platform scheduling contract (single-role
                                #   traits, worker vocabulary, no thread
                                #   concepts, no block_on): mod.rs —
-                               #   WorkerHost (host app loops in pools) +
+                               #   WorkerSpawner (host app loops in pools) +
                                #   VsyncSource (per-instance cadence) +
-                               #   MainLoop (main-thread tasks) +
+                               #   HostLoop (main-thread tasks) +
                                #   WorkerExecutor/WorkerContext (worker-side
                                #   spawn_local/spawn_blocking/sleep) +
                                #   WorkerEntry/WorkerTicket +
                                #   Sleep/VsyncEvents/SpawnError/TaskHandle/
-                               #   track_spawn + the raw main-thread hop
-                               #   mechanics (pub(crate) MainTask/MainDrain/
-                               #   main_channel — the plugin-layer
-                               #   AsyncPluginContext wraps the sender) ·
+                               #   track_spawn + the raw host-thread hop
+                               #   mechanics (pub(crate) HostTask/HostDrain/
+                               #   host_channel — the plugin-layer
+                               #   HostExecutor wraps the sender) ·
                                #   pool.rs — WorkerPoolHandle (the inert pool
                                #   declaration registered on the runtime
                                #   builder + assigned per app; pooling itself
@@ -604,32 +610,36 @@ libs/
                              #   primitives (Constraints/Offset/Size/
                              #   EdgeInsets/Axis/MainAxisAlignment/…),
                              #   SubscribeCx
-        platform/            # Cursor/CursorBackend/CursorCap +
-                             #   PlatformEvent/PointerInput/ImeEvent +
+        cursor/             # Cursor/CursorBackend/NoopCursor — the
+                             #   window's cursor-output egress seam
+        platform/            # PlatformEvent/PointerInput/ImeEvent +
                              #   PlatformEventQueue (raw input from embedder) +
                              #   key_event.rs (KeyEvent/Modifiers/
                              #   KeyEventType/KeydownEvent/KeyupEvent —
                              #   engine contract types)
         plugin.rs            # Plugin trait (register + requires) + PluginContext
-                             #   + CompileContext + AsyncPluginContext
-                             #   (Send+Sync+Clone main-thread hop — wraps the
+                             #   + CompileContext + HostExecutor
+                             #   (Send+Sync+Clone host-thread hop — wraps the
                              #   scheduler's pub(crate) channel sender; the
                              #   engine creates the channel internally in
                              #   build() so no embedder wiring is needed) +
-                             #   MainRunFuture + PluginContext::to_async()
+                             #   HostRunFuture + PluginContext::to_host_executor()
         render/              # PaintContext, Renderer, ElementRender trait,
                              #   Canvas + brush/ (Color/Brush/GradientStop/
                              #   RGB types + JS bindings)
         screen/              # Screen struct (logical_size + viewportSize$
                              #   source atom) + ResizeSubsystem (handles
                              #   PlatformEvent::Resize)
-        shell/               # Shell (engine-internal scheduler/clock holder)
+        cursor/             # Cursor/CursorBackend/NoopCursor — the
+                             #   window's cursor-output egress seam
+        frame_env/          # FrameEnv (clock + pointer + cursor-resolve
+                             #   state) + PaintEnv + CursorSink
         subsystem.rs         # Subsystem trait (flush_pre_layout +
                              #   flush_post_layout + handle_platform_event +
                              #   handle_app_event) +
                              #   SubsystemFlushContext + FlushSignals
                              #   (subsystems signal via cx.mark_dirty /
-                             #    request_paint / request_next_frame; flush
+                             #    request_paint / request_frame; flush
                              #    returns () — no SubsystemOutcome)
         text/                # TextLayoutData + LineInfo + TextRunData
                              #   (paint/layout contract types only — the
@@ -687,8 +697,8 @@ libs/
                              #   re-exports Clipboard/ClipboardBackend/
                              #   TurClipboardPlugin from tur_engine
   tur-clipboard-native/      # NativeClipboard (arboard) backend — same
-                             #   re-exports + AsyncPluginContext.
-                             #   NativeClipboard::new(&AsyncPluginContext)
+                             #   re-exports + HostExecutor.
+                             #   NativeClipboard::new(&HostExecutor)
                              #   stores it and self-hops each read/write to
                              #   main (macOS NSPasteboard needs main-thread)
   tur-net-capability/        # HttpBackend trait + Http cap + tur:net
@@ -724,7 +734,7 @@ libs/
     tur-native/                # native-only platform integrations (root
                                #   compile_error! on wasm32): NativeFontLoader
                                #   (system fonts) + worker_pool (the native
-                               #   WorkerHost: NativeWorkerPools with capped
+                               #   WorkerSpawner: NativeWorkerPools with capped
                                #   shared lane threads + LaneTimer sleep seam
                                #   + dedicated-thread spawn_blocking)
     tur-filepicker-capability/ # FilePicker capability + FilePickerBackend trait
@@ -795,7 +805,7 @@ cargo clippy --workspace -- -D warnings
 node scripts/prepare-js-fixtures.cjs
 ```
 
-**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo test --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo test --workspace --test element`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { rendered, schedule }`) instead of `settle()`/`advance()` when they need to inspect the schedule decision.
+**Workflow (TDD):** for engine bug fixes and behavior changes, write a failing ("red") test under `libs/tur-integration-tests/tests/` that pins the intended behavior **first**; confirm it fails on the current code, then implement the change until it passes ("green"). This catches regressions and clarifies intent before implementation. Use `cargo test --workspace --test element <name>` for the red→green cycle, then run the full suite (`cargo test --workspace --test element`) + clippy to confirm no regressions. Tests that assert on the engine's per-frame outcome can use `app.pump()` (returns `FrameOutcome { painted, schedule }`) to inspect the schedule decision directly.
 
 ### tur-website (wasm)
 
@@ -818,7 +828,7 @@ cd demo/website && pnpm dev
 # → https://localhost:8080/ (self-signed cert)
 ```
 
-The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` + `Cross-Origin-Resource-Policy: same-origin`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `wasm_thread`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`. COEP value must be `require-corp`, NOT `credentialless` — `credentialless` is Chromium-only (Firefox desktop + Android never implemented it and silently ignore it, so `crossOriginIsolated` stays false).
+The dev server always sets COOP/COEP headers (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` + `Cross-Origin-Resource-Policy: same-origin`) — the wasm multi-threaded backend uses `SharedArrayBuffer` + Web Workers via `in-tree worker_spawn`, which requires `self.crossOriginIsolated`. Without these headers `Worker.postMessage` panics with `DataCloneError: SharedArrayBuffer transfer requires self.crossOriginIsolated`. COEP value must be `require-corp`, NOT `credentialless` — `credentialless` is Chromium-only (Firefox desktop + Android never implemented it and silently ignore it, so `crossOriginIsolated` stays false).
 
 ### JS (js/ workspace — also covers demo/website + demo/playground-view)
 
@@ -853,17 +863,22 @@ Android build (`cargo ndk` + `gradlew assembleRelease`), the unsigned-APK debug-
 
 ### Renderer trait
 
-The `Renderer` trait is defined in `tur-engine::core::render`:
+The `Renderer` trait is defined in `tur-engine::core::render`. The renderer
+lives on the host thread (owned by `AppBackend`); the worker ships it a
+`RenderCommandBatch` (one frame's recorded paint ops):
 
 ```rust
 pub trait Renderer {
-    fn render(&mut self, tree: &ElementTree);
+    fn render_commands(&mut self, commands: &[RenderCommand]);
     fn present(&mut self) -> Result<(), Box<dyn std::error::Error>> { Ok(()) }
     fn resize(&mut self, _logical_width: u32, _logical_height: u32, _dpr: f64) {}
+    fn upload_image_resource(&mut self, _id: ImageResourceId, _image: &ImageResource) {}
+    fn render_to_pixels(&mut self) -> Option<(u32, u32, Vec<u8>)> { None }
 }
 ```
 
-Use `VelloRenderer` for GPU rendering or `NoopRenderer` for debug logging.
+Use `VelloRenderer` (wgpu, native) or `WebGlVelloRenderer` (wasm) for GPU
+rendering, or `NoopRenderer` for debug logging.
 
 ## Debugging the playground (main agent + image-reader)
 

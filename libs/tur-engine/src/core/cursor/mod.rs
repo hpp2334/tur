@@ -1,30 +1,25 @@
-//! Platform capability traits + the cursor-kind enum for the std widget
-//! library's plugins.
+//! Cursor output — the resolved pointer shape the engine pushes to the
+//! window. This is an **egress** seam (sibling of the renderer, not a
+//! platform input event, not a runtime capability): a cursor targets one
+//! specific window, so the backend is per-instance and applied on the
+//! host thread via [`crate::TurApp::set_cursor_backend`].
 //!
-//! These describe host services the engine can't provide itself (cursor
-//! output). HTTP lives in `tur-net`; the clipboard plugin
-//! (`builtin_plugins::clipboard`) bundles its own backend trait +
-//! capability newtype + JS bridge. The traits here are registered as capability newtypes via
-//! [`crate::TurRuntimeBuilder::capability`] and looked up at runtime via the
-//! [`crate::core::capability::Capabilities`] registry.
+//! Pipeline: the paint walk accumulates `MouseRegion` cursor claims into
+//! a sink (deepest painted region wins) → `FrameEnv::apply_cursor_changes`
+//! resolves + dedups on the worker → the change ships to the host side as
+//! `HostMsg::CursorChanged` → the host-side `CursorBackend` applies it.
 //!
-//! [`Cursor`] lives here because it is the single typed representation
-//! threaded through the engine (MouseRegion prop, handler slot, embedder
-//! poll) and is consumed by [`CursorBackend::set_cursor`] below.
+//! [`Cursor`] is the single typed representation threaded through the
+//! engine (MouseRegion prop, handler slot, embedder poll) and is consumed
+//! by [`CursorBackend::set_cursor`].
 
-use std::sync::Arc;
-
-use crate::core::capability::Capability;
-
-// ---------------------------------------------------------------------------
-// Cursor — the set of OS cursor styles, mirroring the standard CSS cursor
-// keywords. The embedder maps a `Cursor` back to its keyword via
-// [`Cursor::as_str`] (e.g. for the web canvas `style.cursor`, or a host-native
-// cursor icon).
-//
-// Unrecognized keyword strings fail `FromJs` decode (see the `FromJs` impl in
-// tur-engine); callers that want to tolerate them must opt in.
-// ---------------------------------------------------------------------------
+/// The set of OS cursor styles, mirroring the standard CSS cursor
+/// keywords. The embedder maps a `Cursor` back to its keyword via
+/// [`Cursor::as_str`] (e.g. for the web canvas `style.cursor`, or a
+/// host-native cursor icon).
+///
+/// Unrecognized keyword strings fail `FromJs` decode (see the `FromJs`
+/// impl in tur-engine); callers that want to tolerate them must opt in.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Cursor {
@@ -155,16 +150,12 @@ impl Cursor {
     }
 }
 
-/// Cursor output capability. The engine pushes the resolved cursor (deepest
-/// painted `MouseRegion` claim) during the frame loop's `apply_changes`
-/// pass; the backend applies it (e.g. set the host canvas CSS cursor in
-/// tur-wasm).
-///
-/// Backends are registered via
-/// [`crate::TurRuntimeBuilder::capability`](`CursorCap::new(...)`); the engine
-/// builder looks the cap up after all plugins register and installs the
-/// backend on [`crate::core::shell::Shell`]. If absent, the engine falls
-/// back to [`NoopCursor`] (cursor never changes).
+/// Cursor output capability. The engine resolves the cursor (deepest
+/// painted `MouseRegion` claim) each frame and ships changes to the host
+/// side via `HostMsg::CursorChanged`; the per-instance backend (installed
+/// via [`crate::TurApp::set_cursor_backend`]) applies it — e.g. set the
+/// host canvas CSS cursor in tur-wasm. If no backend is installed, cursor
+/// changes are dropped.
 pub trait CursorBackend: Send + Sync + 'static {
     fn set_cursor(&mut self, cursor: Cursor);
 }
@@ -174,33 +165,3 @@ pub struct NoopCursor;
 impl CursorBackend for NoopCursor {
     fn set_cursor(&mut self, _cursor: Cursor) {}
 }
-
-/// Capability newtype wrapping an `Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>`.
-/// The `Mutex` is required because [`CursorBackend::set_cursor`] takes
-/// `&mut self` but the engine holds the backend in a shared `Arc`.
-///
-/// Named `CursorCap` (not `Cursor`) because [`Cursor`] above names the
-/// cursor-kind enum (`Default`, `Pointer`, ...) used pervasively across the
-/// engine — renaming that would be ~74 mechanical call-site edits for a
-/// naming preference. This is the lone exception to the "capability
-/// newtypes use base names" convention.
-///
-/// Registered via [`crate::TurRuntimeBuilder::capability`] with
-/// `CursorCap::new(backend)`; the engine builder installs the backend on the
-/// Shell at `build()` time.
-#[derive(Clone)]
-pub struct CursorCap(Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>>);
-
-impl CursorCap {
-    /// Wrap a backend in the capability newtype.
-    pub fn new(backend: impl CursorBackend + 'static) -> Self {
-        Self(Arc::new(std::sync::Mutex::new(backend)))
-    }
-
-    /// Borrow the underlying backend handle.
-    pub fn backend(&self) -> &Arc<std::sync::Mutex<dyn CursorBackend + Send + Sync>> {
-        &self.0
-    }
-}
-
-impl Capability for CursorCap {}

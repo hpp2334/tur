@@ -1,5 +1,5 @@
 pub mod test_scheduler;
-pub use test_scheduler::{TestMainLoop, TestSchedulerDriver, TestVsyncSource};
+pub use test_scheduler::{TestHostLoop, TestSchedulerDriver, TestVsyncSource};
 
 use std::cell::RefCell;
 use std::future::Future;
@@ -44,10 +44,10 @@ impl MutexFixedClock {
         self.0.lock().unwrap().forward(millis);
     }
 }
+use tur_engine::core::cursor::Cursor;
 use tur_engine::core::elements::AnyElement;
 use tur_engine::core::elements::NodeTreeSnapshot;
 use tur_engine::core::layout::{MouseButton, Offset};
-use tur_engine::core::platform::Cursor;
 use tur_engine::core::platform::key_event::{KeyEvent, KeyEventType, Modifiers};
 use tur_engine::core::platform::{ImeEvent, PlatformEvent, PointerDeviceKind, PointerInput};
 use tur_engine::core::plugin::{Plugin, PluginContext};
@@ -56,7 +56,7 @@ use tur_engine::core::scheduler::WorkerPoolHandle;
 use tur_engine::error::TurError;
 use tur_engine::renderer::noop::NoopRenderer;
 use tur_engine::{Clipboard, ClipboardBackend, TurClipboardPlugin};
-use tur_engine::{CursorBackend, CursorCap, TurApp, TurRuntime};
+use tur_engine::{CursorBackend, TurApp, TurRuntime};
 use tur_filepicker_capability::{
     FilePicker, FilePickerBackend, PickOptions, PickedFile, SaveOptions, TurFilePickerPlugin,
 };
@@ -68,36 +68,36 @@ use tur_net_capability::{
 
 /// A minimal [`Plugin`] that registers a single ctx-free host module at
 /// build time. Test-only convenience for the cases that previously used the
-/// runtime `TurApp::register_host_module` API (now removed) — lets a test
+/// runtime `TurApp::register_native_module` API (now removed) — lets a test
 /// inject `tur:<whatever>` exports through the plugin path.
 ///
 /// **Phase 7**: holds builder closures (not pre-built `NativeFunction`s)
 /// because `NativeFunction` wraps a boa `TraceableClosure` (`!Send`). Each
 /// instance's `register()` calls the builder to produce a fresh
 /// `NativeFunction` against its own boa `Context`.
-pub struct HostModulePlugin {
+pub struct NativeModulePlugin {
     /// Module specifier to register (e.g. `"tur:test"`).
     pub specifier: &'static str,
     /// `(name, builder, length)` exports.
-    pub exports: Vec<HostExport>,
+    pub exports: Vec<NativeExport>,
 }
 
-/// One export of a [`HostModulePlugin`]. The `builder` closure produces a
+/// One export of a [`NativeModulePlugin`]. The `builder` closure produces a
 /// fresh `NativeFunction` for each instance (called inside `register`).
-pub struct HostExport {
+pub struct NativeExport {
     pub name: String,
     pub builder: Box<dyn Fn(&mut Context) -> NativeFunction + Send + Sync>,
     pub length: usize,
 }
 
-impl Plugin for HostModulePlugin {
+impl Plugin for NativeModulePlugin {
     fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
         let exports: Vec<(String, NativeFunction, usize)> = self
             .exports
             .iter()
             .map(|e| (e.name.clone(), (e.builder)(ctx.boa_mut()), e.length))
             .collect();
-        ctx.register_host_module(self.specifier, exports);
+        ctx.register_native_module(self.specifier, exports);
         Ok(())
     }
 }
@@ -334,16 +334,16 @@ impl Rect {
 pub struct TurTestApp {
     inner: Rc<TurApp>,
     /// The engine's deterministic clock. Advanced frame-by-frame by
-    /// [`Self::wait_frames`] / [`Self::wait_for`] (and the legacy
-    /// [`Self::advance`]). Shared with the engine `Shell` and the boa
-    /// `Context`, so `Date.now()` and timer scheduling see the same time.
+    /// [`Self::wait_for`] / [`Self::wait_for_timeout`]. Shared with the
+    /// engine `FrameEnv` and the boa `Context`, so `Date.now()` and timer
+    /// scheduling see the same time.
     clock: std::sync::Arc<MutexFixedClock>,
     /// The scheduler driver's virtual clock. Advanced alongside `clock`
     /// so `sleep()` futures fire on the same virtual timeline.
     driver: Rc<TestSchedulerDriver>,
     /// Per-frame outcomes shipped by the engine's `run_loop` via the
-    /// `after_frame` hook. `drive_one_frame` awaits one item per vsync kick;
-    /// `wait_for` / `wait_for_timeout` build on `drive_one_frame`.
+    /// `after_frame` hook. `pump` awaits one item per vsync kick;
+    /// `wait_for` / `wait_for_timeout` build on `pump`.
     frame_rx: RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
     cursor_slot: std::sync::Arc<std::sync::Mutex<Option<Cursor>>>,
     clipboard: RecordingClipboard,
@@ -389,7 +389,7 @@ impl TurTestApp {
 
     /// Construct with additional plugins registered beyond the default
     /// `TurStdPlugin` + `TurClipboardPlugin`. Used by tests that need to
-    /// inject extra modules (e.g. [`HostModulePlugin`] for a test-only
+    /// inject extra modules (e.g. [`NativeModulePlugin`] for a test-only
     /// `tur:*` module).
     pub fn new_with_extra_plugins(
         width: f64,
@@ -430,14 +430,10 @@ impl TurTestApp {
         let mut builder = TurRuntime::builder()
             .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
             .clock(clock.clone())
-            .worker_host(driver.worker_host())
+            .worker_spawner(driver.worker_spawner())
             .vsync_source(driver.vsync_source())
-            .main_loop(driver.main_loop())
+            .host_loop(driver.host_loop())
             .worker_pool(worker_pool.clone())
-            .capability({
-                let last = cursor_slot.clone();
-                move |_| Ok(CursorCap::new(RecordingCursor { last }))
-            })
             .capability({
                 let clip = clipboard.clone();
                 move |_| Ok(Clipboard::new(clip))
@@ -465,9 +461,17 @@ impl TurTestApp {
             .worker_pool(worker_pool)
             .renderer(renderer, (width, height), 1.0)
             .build()?;
+        // Cursor output is a per-instance egress seam (see `core::cursor`):
+        // install the recording backend host-side, before the run loop
+        // starts, exactly like an embedder would.
+        inner.set_cursor_backend(std::sync::Arc::new(std::sync::Mutex::new(
+            RecordingCursor {
+                last: cursor_slot.clone(),
+            },
+        )));
         // Drive the production `run_loop` (the same loop wasm/Android drive).
         // The `after_frame` hook ships each `FrameOutcome` into `frame_rx`;
-        // `drive_one_frame` pairs one `fire_vsync` with one awaited outcome.
+        // `pump` pairs one `fire_vsync` with one awaited outcome.
         let (frame_tx, frame_rx) = futures::channel::mpsc::unbounded::<FrameOutcome>();
         inner.set_after_frame_hook(Some(Rc::new(move |o| {
             let _ = frame_tx.unbounded_send(o);
@@ -487,7 +491,7 @@ impl TurTestApp {
         // Bootstrap: the worker self-paints on load (the initial resize the
         // engine pushes in `app_builder().build(...)`); drive one frame so
         // the app is mounted before the test starts.
-        let _ = app.drive_one_frame();
+        let _ = app.pump();
         Ok(app)
     }
 
@@ -562,18 +566,8 @@ impl TurTestApp {
     /// (cursor / focus / images) via the shared `apply_msg`, so this path is
     /// identical to what wasm/Android drive. The single frame primitive every
     /// sync helper builds on.
-    fn drive_one_frame(&self) -> FrameOutcome {
-        use futures::future::FutureExt;
-        // Drain stale outcomes the worker produced between drives (it
-        // self-wakes via `wake_if_dirty` whenever flush leaves paint-worthy
-        // state). Without this drain, a stale frame would be consumed instead
-        // of the fresh one that processes currently-queued events — mirroring
-        // the old `pump`'s stale drain.
-        while let Some(Some(_stale)) = self.frame_rx.borrow_mut().next().now_or_never() {}
-        self.driver.fire_vsync();
-        self.driver
-            .block_on(self.frame_rx.borrow_mut().next())
-            .expect("worker destroyed mid-frame")
+    pub fn pump(&self) -> FrameOutcome {
+        pump_one(&self.driver, &self.frame_rx)
     }
 
     /// The condition-wait primitive. Drives `run_loop` one frame at a time,
@@ -590,7 +584,7 @@ impl TurTestApp {
         loop {
             self.advance_clock(FRAME_STEP_MS);
             elapsed_ms += FRAME_STEP_MS;
-            self.drive_one_frame();
+            self.pump();
             if predicate(self) {
                 return true;
             }
@@ -601,14 +595,13 @@ impl TurTestApp {
     }
 
     /// The time-advance primitive. Advances the virtual clock by `timeout` in
-    /// `FRAME_STEP_MS` ticks, driving `run_loop` to **quiescence** at each tick
-    /// (mirroring the old `advance` + `settle` pair). `timeout == ZERO` is the
-    /// pure quiescence form: drive frames at a frozen clock until the engine
-    /// reports no immediately-available work (the old `settle`/`render`
-    /// semantics) — this is what event-syncs use, since it doesn't perturb
-    /// time-sensitive assertions. Pure e2e model: only `wait_for` (sync to an
-    /// observable, frozen clock) and `wait_for_timeout` (advance time +
-    /// quiescence) drive the loop.
+    /// `FRAME_STEP_MS` ticks, driving `run_loop` to **quiescence** at each tick.
+    /// `timeout == ZERO` is the pure quiescence form: drive frames at a
+    /// frozen clock until the engine reports no immediately-available work —
+    /// this is what event-syncs use, since it doesn't perturb time-sensitive
+    /// assertions. Pure e2e model: only `wait_for` (sync to an observable,
+    /// frozen clock) and `wait_for_timeout` (advance time + quiescence)
+    /// drive the loop.
     pub fn wait_for_timeout(&self, timeout: Duration) {
         let total_ms = timeout.as_millis() as u64;
         let mut elapsed_ms: u64 = 0;
@@ -616,11 +609,10 @@ impl TurTestApp {
             let step = FRAME_STEP_MS.min(total_ms.saturating_sub(elapsed_ms));
             self.advance_clock(step);
             elapsed_ms += step;
-            // Drive to quiescence at this clock tick (cap 8 frames per tick,
-            // matching the old `settle`).
+            // Drive to quiescence at this clock tick (cap 8 frames per tick).
             for _ in 0..8 {
-                let outcome = self.drive_one_frame();
-                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                let outcome = self.pump();
+                if !outcome.painted && outcome.schedule == NextFrame::Idle {
                     break;
                 }
             }
@@ -964,8 +956,8 @@ impl TurTestApp {
     }
 
     /// Returns the most recent cursor pushed by the engine since the last
-    /// call. The engine pushes cursor changes through the `RecordingCursorPlatform`
-    /// during `apply_changes`; this drains that recording.
+    /// call. The engine pushes cursor changes through the host-side `RecordingCursor` backend
+    /// as `HostMsg::CursorChanged` is applied; this drains that recording.
     pub fn take_current_cursor(&self) -> Option<Cursor> {
         self.cursor_slot.lock().unwrap().take()
     }
@@ -1081,11 +1073,31 @@ impl TurTestApp {
     }
 }
 
+/// Single-frame pump shared by `TurTestApp::pump` and `RawAppLooper`:
+/// drain stale outcomes the worker produced between drives, fire one
+/// vsync, then block until the `after_frame` hook reports a completed
+/// frame.
+fn pump_one(
+    driver: &TestSchedulerDriver,
+    frame_rx: &RefCell<futures::channel::mpsc::UnboundedReceiver<FrameOutcome>>,
+) -> FrameOutcome {
+    use futures::future::FutureExt;
+    // Drain stale outcomes the worker produced between drives (it
+    // self-wakes via `wake_if_dirty` whenever flush leaves paint-worthy
+    // state). Without this drain, a stale frame would be consumed instead
+    // of the fresh one that processes currently-queued events.
+    while let Some(Some(_stale)) = frame_rx.borrow_mut().next().now_or_never() {}
+    driver.fire_vsync();
+    driver
+        .block_on(frame_rx.borrow_mut().next())
+        .expect("worker destroyed mid-frame")
+}
+
 /// Run-loop driver for tests that hold a raw `Rc<TurApp>` (multi-instance,
 /// custom runtime). Mirrors `TurTestApp`'s driving: spawns the production
 /// `run_loop` once, installs an `after_frame` hook feeding a frame channel,
-/// and exposes the same `wait_for` / `wait_for_timeout` primitives. Construct
-/// one per app instance.
+/// and exposes the same `pump` / `wait_for` / `wait_for_timeout` primitives.
+/// Construct one per app instance.
 pub struct RawAppLooper {
     app: Rc<TurApp>,
     driver: Rc<TestSchedulerDriver>,
@@ -1105,7 +1117,7 @@ impl RawAppLooper {
             driver,
             frame_rx: RefCell::new(frame_rx),
         };
-        let _ = looper.drive_one_frame();
+        let _ = looper.pump();
         looper
     }
 
@@ -1113,13 +1125,9 @@ impl RawAppLooper {
         &self.app
     }
 
-    fn drive_one_frame(&self) -> FrameOutcome {
-        use futures::future::FutureExt;
-        while let Some(Some(_stale)) = self.frame_rx.borrow_mut().next().now_or_never() {}
-        self.driver.fire_vsync();
-        self.driver
-            .block_on(self.frame_rx.borrow_mut().next())
-            .expect("worker destroyed mid-frame")
+    /// Drive `run_loop` forward by exactly one frame (see [`TurTestApp::pump`]).
+    pub fn pump(&self) -> FrameOutcome {
+        pump_one(&self.driver, &self.frame_rx)
     }
 
     /// Drive frames at a frozen clock until `predicate` holds (cap ~2 s). The
@@ -1127,7 +1135,7 @@ impl RawAppLooper {
     pub fn wait_for(&self, predicate: impl Fn() -> bool) -> bool {
         const CAP_FRAMES: usize = 125;
         for _ in 0..CAP_FRAMES {
-            self.drive_one_frame();
+            self.pump();
             if predicate() {
                 return true;
             }
@@ -1144,8 +1152,8 @@ impl RawAppLooper {
         for _ in 0..iters {
             // drive to quiescence at this tick (cap 8).
             for _ in 0..8 {
-                let outcome = self.drive_one_frame();
-                if !outcome.rendered && outcome.schedule == NextFrame::Idle {
+                let outcome = self.pump();
+                if !outcome.painted && outcome.schedule == NextFrame::Idle {
                     break;
                 }
             }

@@ -1,7 +1,7 @@
 //! Native worker-pool executor: capped shared "lane" threads.
 //!
 //! Implements the pool side of
-//! [`WorkerHost`](tur_engine::core::scheduler::WorkerHost) for native
+//! [`WorkerSpawner`](tur_engine::core::scheduler::WorkerSpawner) for native
 //! platforms. Embedders construct one [`NativeWorkerPools`] with their
 //! platform's timer ([`LaneTimer`]) and pass it to the runtime builder as
 //! the worker host:
@@ -10,7 +10,7 @@
 //! # use std::rc::Rc;
 //! # use std::sync::Arc;
 //! # use std::time::Duration;
-//! # use tur_engine::core::scheduler::{Sleep, WorkerHost};
+//! # use tur_engine::core::scheduler::{Sleep, WorkerSpawner};
 //! # use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
 //! # struct MyTimer;
 //! # impl LaneTimer for MyTimer {
@@ -19,15 +19,15 @@
 //! // The factory must be Send + Sync (it crosses into lane threads); each
 //! // call mints a fresh per-lane timer.
 //! let pools = Rc::new(NativeWorkerPools::with_timer(Arc::new(|| Rc::new(MyTimer) as _)));
-//! // TurRuntime::builder().worker_host(pools)…
+//! // TurRuntime::builder().worker_spawner(pools)…
 //! # let _pools: Rc<NativeWorkerPools> = pools;
 //! ```
 //!
 //! ## Model
 //!
-//! Each pool owns at most `max_threads` **lane** OS threads ("tur-lane").
+//! Each pool owns at most `max_workers` **lane** OS threads ("tur-lane").
 //! App assignment is grow-to-cap-then-least-loaded: the first
-//! `max_threads` apps each get a fresh lane; later apps share the
+//! `max_workers` apps each get a fresh lane; later apps share the
 //! least-loaded existing lane. Because engine app state (`boa::Context`,
 //! `Rc`s) is `!Send`, each app's loop future is pinned to exactly one lane
 //! for its entire lifetime — "sharing" means multiple app loops
@@ -95,7 +95,7 @@ use std::time::Duration;
 
 use tur_engine::core::scheduler::{
     BlockingSpawn, BlockingWork, Sleep, TaskHandle, WorkerContext, WorkerEntry, WorkerExecutor,
-    WorkerHost, WorkerPoolHandle, WorkerTicket, track_spawn,
+    WorkerPoolHandle, WorkerSpawner, WorkerTicket, track_spawn,
 };
 
 /// The platform's per-lane timer backend — the only platform seam a lane
@@ -122,11 +122,11 @@ const SENTINEL: u64 = u64::MAX;
 const PASS_BUDGET: u32 = 128;
 
 // ---------------------------------------------------------------------------
-// Registry — main-thread object used as the runtime's WorkerHost
+// Registry — main-thread object used as the runtime's WorkerSpawner
 // ---------------------------------------------------------------------------
 
 /// Registry of worker pools → lane threads, implementing
-/// [`WorkerHost`] for native platforms. Main-thread only (the registry
+/// [`WorkerSpawner`] for native platforms. Main-thread only (the registry
 /// is a `RefCell`; `spawn_worker` is called exclusively from
 /// `app_builder().build(...)`, which the engine invokes on the main
 /// thread).
@@ -150,7 +150,7 @@ impl NativeWorkerPools {
     }
 
     /// Host one app loop in `pool`: pick the least-loaded live lane, or
-    /// grow a fresh one while the pool is under its `max_threads` cap.
+    /// grow a fresh one while the pool is under its `max_workers` cap.
     /// The entry runs on the lane thread and returns the app's loop
     /// future; the returned [`WorkerTicket`] joins **that app's loop**
     /// (not the lane thread).
@@ -177,7 +177,7 @@ impl NativeWorkerPools {
             // drops the lane's last sender → its inbox disconnects → the
             // lane thread observes it and exits.
             entry.lanes.retain(|l| l.live.load(Ordering::Acquire) > 0);
-            if entry.lanes.len() < pool.max_threads() {
+            if entry.lanes.len() < pool.max_workers() {
                 // Grow: first apps each get a fresh lane (max parallelism).
                 let lane = LaneHandle::spawn(self.timer_factory.clone());
                 entry.lanes.push(lane.clone());
@@ -196,14 +196,14 @@ impl NativeWorkerPools {
     }
 }
 
-impl WorkerHost for NativeWorkerPools {
+impl WorkerSpawner for NativeWorkerPools {
     fn spawn_worker(&self, pool: &WorkerPoolHandle, entry: WorkerEntry) -> WorkerTicket {
         self.spawn(pool, entry)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Lane handle — main-side handle to one lane thread
+// Lane handle — host-side handle to one lane thread
 // ---------------------------------------------------------------------------
 
 enum LaneMsg {
@@ -393,7 +393,7 @@ impl LaneState {
             Err(panic) => {
                 tracing::error!("tur lane: app entry panicked: {panic:?}");
                 // The entry never became a task, so `finish_task` will not
-                // run: undo the main-side delivery count here.
+                // run: undo the host-side delivery count here.
                 self.live.fetch_sub(1, Ordering::AcqRel);
                 let _ = done_tx.send(());
             }

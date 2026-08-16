@@ -6,14 +6,14 @@
 //! code imports directly:
 //!
 //! ```js
-//! import { source, render } from "tur:core";
+//! import { source, mount } from "tur:core";
 //! import { Container, Color } from "tur:std";
 //! ```
 //!
 //! The loader keeps a registry of bare `tur:*` specifiers → pre-built
 //! [`Module`]s. Plugins register additional capability modules
 //! (`tur:net`, `tur:clipboard`, …) through
-//! [`PluginContext::register_module`] / [`PluginContext::register_host_module`].
+//! [`PluginContext::register_module`] / [`PluginContext::register_native_module`].
 
 use std::cell::RefCell;
 use std::collections::HashMap;

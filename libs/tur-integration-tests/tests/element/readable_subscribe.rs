@@ -24,8 +24,9 @@ fn find_text_width(tree: &NodeTreeSnapshot, id: ElementNodeId) -> Option<f64> {
 #[test]
 fn readable_subscribe_propagates_reactive_updates_to_child() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
-    app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, render } from "tur:std";
+    app.eval_module_source(
+        r#"
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -39,8 +40,9 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
             onUpdate$: mutate(function () {}),
             child: inner
         });
-        render(tree);
-    "#)
+        mount(tree);
+    "#,
+    )
     .unwrap();
 
     app.wait_for_timeout(std::time::Duration::ZERO);
@@ -74,7 +76,7 @@ fn readable_subscribe_propagates_reactive_updates_to_child() {
 fn readable_subscribe_inside_stack_positioned_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, render } from "tur:std";
+        import { source, derive, Container, Text, ReadableSubscribe, Positioned, Stack, mutate, mount } from "tur:std";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
         const cardText = derive(function (g) {
@@ -90,7 +92,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
         });
         const positioned = Positioned({ left: 30, top: 30, child: rs });
         const stack = Stack({ children: [ positioned ] });
-        render(stack);
+        mount(stack);
     "#)
     .unwrap();
 
@@ -125,7 +127,7 @@ fn readable_subscribe_inside_stack_positioned_still_updates() {
 fn animated_container_pattern_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, Container, Text, ReadableSubscribe, mutate, set, render } from "tur:std";
+        import { source, derive, Container, Text, ReadableSubscribe, mutate, set, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
 
         globalThis.__flag = source(false);
@@ -160,7 +162,7 @@ fn animated_container_pattern_inner_text_still_updates() {
             }),
             child: inner
         });
-        render(tree);
+        mount(tree);
     "#)
     .unwrap();
 
@@ -197,7 +199,7 @@ fn animated_container_pattern_inner_text_still_updates() {
 fn triple_nested_readable_subscribe_inner_text_still_updates() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(r#"
-        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, render, Opacity } from "tur:std";
+        import { source, derive, set, Container, Text, ReadableSubscribe, mutate, mount, Opacity } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__flag = source(false);
         const flag = globalThis.__flag;
@@ -230,7 +232,7 @@ fn triple_nested_readable_subscribe_inner_text_still_updates() {
         const layer3 = makeLayer(text, true);
         const layer2 = makeLayer(layer3, false);
         const layer1 = makeLayer(layer2, true);
-        render(layer1);
+        mount(layer1);
     "#)
     .unwrap();
 
@@ -271,7 +273,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
     let mut app = TurTestApp::new(400.0, 600.0).unwrap();
     app.eval_module_source(
         r#"
-        import { source, derive, Container, ReadableSubscribe, mutate, set, render } from "tur:std";
+        import { source, derive, Container, ReadableSubscribe, mutate, set, mount } from "tur:std";
         import { createAnimationController } from "tur:animation";
         globalThis.__target = source(100);
         const target = globalThis.__target;
@@ -296,7 +298,7 @@ fn js_animated_container_pattern_animates_width_over_time() {
             }),
             child: container
         });
-        render(tree);
+        mount(tree);
     "#,
     )
     .unwrap();

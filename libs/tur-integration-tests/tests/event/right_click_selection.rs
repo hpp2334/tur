@@ -3,9 +3,9 @@ use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
 const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    render(Container({
+    mount(Container({
         children: [
             Input({
                 controller: controller,

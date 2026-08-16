@@ -76,7 +76,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
 
     let (promise, resolvers) = JsPromise::new_pending(ctx);
     // The completion runs in-flush (drained at the top of the flush loop),
-    // so `request_paint` is the flag-only fast path there — it sets the
+    // so `request_frame` is the fast path there — it sets the
     // paint flag this same flush reads.
     let js_ctx_for_completion = js_ctx.clone();
     let worker_ctx_for_loop = worker_ctx.clone();
@@ -88,7 +88,7 @@ fn tur_sleep(_this: &JsValue, args: &[JsValue], ctx: &mut Context) -> JsResult<J
         // `request_paint` mirrors the old timer's flush flag so a paint
         // follows even if the `.then` body makes no reactive `set`.
         completion_handle.push(Box::new(move |ctx| {
-            js_ctx_for_completion.request_paint();
+            js_ctx_for_completion.request_frame();
             resolvers.resolve.call(&JsValue::undefined(), &[], ctx)?;
             Ok(())
         }));

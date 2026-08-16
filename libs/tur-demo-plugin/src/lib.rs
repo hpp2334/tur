@@ -43,7 +43,7 @@ impl Plugin for TurDemoPlugin {
             .into_iter()
             .map(|(n, f, l)| (n.to_string(), f, l))
             .collect();
-        ctx.register_host_module("tur-ext/demo-helper", exports);
+        ctx.register_native_module("tur-ext/demo-helper", exports);
         Ok(())
     }
 }

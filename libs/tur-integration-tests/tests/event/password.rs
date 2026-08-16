@@ -7,9 +7,9 @@ use tur_integration_tests::TurTestApp;
 /// `queryKey` lands on Input's Container wrapper; the editable text is that
 /// container's first child.
 const PASSWORD_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    render(Container({
+    mount(Container({
         children: [
             Input({
                 controller: controller,
@@ -24,9 +24,9 @@ const PASSWORD_BUNDLE: &str = r#"
 "#;
 
 const CUSTOM_CHAR_BUNDLE: &str = r#"
-    import { createTextEditingController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    render(Container({
+    mount(Container({
         children: [
             Input({
                 controller: controller,

@@ -78,10 +78,10 @@ async function loadWasm(): Promise<Record<string, unknown>> {
         await (mod.default as (b: WebAssembly.Module) => Promise<unknown>)(
             compiled,
         );
-        // No JS-side thread-pool init needed: `tur-engine`'s `ThreadedBackend`
-        // uses `wasm_thread` (Web Workers spawn on demand from Rust via
-        // `wasm_thread::spawn`). Compare to the previous wasm-bindgen-rayon
-        // setup which required `await initThreadPool(n)` here.
+        // No JS-side thread-pool init needed: the engine's in-tree
+        // `worker_spawn` boots Web Workers on demand from Rust. Compare to
+        // the previous wasm-bindgen-rayon setup which required
+        // `await initThreadPool(n)` here.
         return mod;
     })();
     return wasmReady;

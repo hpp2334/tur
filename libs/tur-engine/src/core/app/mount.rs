@@ -1,4 +1,4 @@
-//! `render(ctx, rootViewHandle)` — mount the view tree into the ElementTree.
+//! `mount(ctx, rootViewHandle)` — mount the view tree into the ElementTree.
 
 use boa_engine::{Context, JsArgs, JsError, JsNativeError, JsResult, JsValue};
 
@@ -7,14 +7,14 @@ use crate::core::js_runtime::helpers::{FnEntry, Ptr, extract_js_ctx};
 use crate::core::view::{SharedViewCx, View, extract_view};
 
 pub fn fns() -> Vec<FnEntry> {
-    vec![("render", 2, tur_render as Ptr)]
+    vec![("mount", 2, tur_mount as Ptr)]
 }
 
-fn tur_render(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
+fn tur_mount(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsResult<JsValue> {
     let js_ctx = extract_js_ctx(args)?;
     let user_view = extract_view(args.get_or_undefined(1)).ok_or_else(|| {
         JsError::from(
-            JsNativeError::typ().with_message("render: expected a view handle as second argument"),
+            JsNativeError::typ().with_message("mount: expected a view handle as second argument"),
         )
     })?;
 
@@ -23,7 +23,7 @@ fn tur_render(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsRes
     // (`Switch` / `Each` / `Condition` / `Fragment`) with no
     // `perform_layout` of its own, so the engine needs a layout-capable
     // element at the root. The wrapper is a minimal vertical-stack in
-    // `core::app::root` — `core::app::render` has zero coupling to any
+    // `core::app::root` — `core::app::mount` has zero coupling to any
     // layout plugin (historical FlexView wrapper removed).
     let root_view = RootView { child: user_view };
 
@@ -35,6 +35,6 @@ fn tur_render(_this: &JsValue, args: &[JsValue], context: &mut Context) -> JsRes
         .borrow_mut()
         .set_root_element(crate::core::element::ElementNodeId::new(root_id.as_u64()));
 
-    tracing::info!("render: view tree built");
+    tracing::info!("mount: view tree built");
     Ok(JsValue::undefined())
 }

@@ -65,8 +65,7 @@ fn clipboard_write_logs_to_recording() {
 
     // `writeText` spawns the write on the worker's executor; the spawned
     // future is polled asynchronously after the load-module RPC returns
-    // (and after each frame's `FrameOutcome` is shipped). `settle()` can
-    // exit after a single frame — before the worker has polled the write
+    // (and after each frame's `FrameOutcome` is shipped). x    // exit after a single frame — before the worker has polled the write
     // future — so we synchronize on the promise's `.then` (which fires only
     // after `clipboard.write_text` has logged the write), mirroring the
     // read test. This eliminates the main↔worker race that flaked under CI.

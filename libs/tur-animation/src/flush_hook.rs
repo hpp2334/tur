@@ -22,7 +22,7 @@ use crate::manager::AnimationManager;
 ///
 /// ## Flush frequency / self-gating
 ///
-/// The engine calls [`Subsystem::flush`] **every fixed-point iteration** of a
+/// The engine calls [`Subsystem::flush_pre_layout`] **every fixed-point iteration** of a
 /// `TurAppInternal::flush` call (possibly several times per frame). Advancing
 /// the controllers, however, must sample the clock **at most once per frame**
 /// — otherwise the same frame would re-fire `onTick`/`onEnd` callbacks with
@@ -31,7 +31,7 @@ use crate::manager::AnimationManager;
 /// across the iterations of one frame and differs across frames. We advance
 /// only when the id changes.
 ///
-/// The schedule signal (`request_next_frame`) is cheap and idempotent, so we
+/// The schedule signal (`request_frame`) is cheap and idempotent, so we
 /// emit it on **every** iteration while any controller is active — including
 /// iterations where a controller was registered mid-frame (e.g. from an
 /// event/lifecycle handler). That is what keeps such an animation advancing
@@ -92,7 +92,7 @@ impl Subsystem for AnimationSubsystem {
         // here on the very next iteration, so the engine schedules the next
         // vsync and the controller advances on the following frame.
         if self.manager.borrow().has_active() {
-            cx.request_next_frame();
+            cx.request_frame();
         }
     }
 }

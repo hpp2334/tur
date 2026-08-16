@@ -11,10 +11,10 @@ use crate::core::edgy::reactive::{ReactiveReadJsContext, ReactiveReadStore, Stor
 use crate::core::element::{ElementNodeId, FragmentNodeId, NodeId};
 use crate::core::elements::{AnyElement, ElementObject, FragmentHost, TraceValue};
 use crate::core::fonts::FontManager;
+use crate::core::frame_env::PaintEnv;
 use crate::core::image_resource::ImageManager;
 use crate::core::layout::{LayoutContext, SubscribeCx};
 use crate::core::render::{Canvas, PaintContext};
-use crate::core::shell::PaintShell;
 
 pub struct NodeTreeData {
     pub(crate) elements: HashMap<ElementNodeId, ElementObject>,
@@ -204,7 +204,7 @@ impl NodeTreeData {
 
     pub fn append_child(&mut self, parent_id: NodeId, child_id: NodeId) -> bool {
         // Guard: don't link to a parent that doesn't exist in either map
-        // (e.g. the `temp_parent` placeholder in `tur_render` which is
+        // (e.g. the `temp_parent` placeholder in `tur_mount` which is
         // allocated but never inserted). Matches the pre-fragment behavior.
         if !self
             .elements
@@ -573,7 +573,7 @@ impl NodeTreeData {
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
         image_manager: &ImageManager,
-        shell: PaintShell<'_>,
+        frame_env: PaintEnv<'_>,
     ) {
         let root_id = match self.root_id {
             Some(id) => id,
@@ -585,7 +585,7 @@ impl NodeTreeData {
             Affine::IDENTITY,
             focused_node_id,
             image_manager,
-            shell,
+            frame_env,
         );
     }
 
@@ -597,7 +597,7 @@ impl NodeTreeData {
         parent_absolute: Affine,
         focused_node_id: Option<ElementNodeId>,
         image_manager: &ImageManager,
-        shell: PaintShell<'_>,
+        frame_env: PaintEnv<'_>,
     ) {
         let node = match self.elements.get(&id) {
             Some(n) => n,
@@ -651,8 +651,14 @@ impl NodeTreeData {
 
         canvas.notify_node_entry(id, absolute, node.computed_layout.size);
 
-        let paint_ctx =
-            PaintContext::new(self, focused_node_id, id, image_manager, shell, absolute);
+        let paint_ctx = PaintContext::new(
+            self,
+            focused_node_id,
+            id,
+            image_manager,
+            frame_env,
+            absolute,
+        );
         // Flatten: paint fragment children as direct children of this node.
         let children = self.flatten_children(&node.children);
         element.paint(canvas, &node.computed_layout, &children, &paint_ctx);
@@ -932,7 +938,7 @@ pub struct DevNodeData {
 }
 
 /// Owned snapshot of a single element node — the test/dev-tool counterpart
-/// of [`ElementObject`] that can cross the worker→main thread boundary
+/// of [`ElementObject`] that can cross the worker→host thread boundary
 /// (ElementObject itself holds a boxed `AnyElement` which is `!Send`).
 ///
 /// Carries exactly the fields tests + dev tools read: identity (`id`),
@@ -958,7 +964,7 @@ impl ElementSnapshot {
 }
 
 /// Owned snapshot of the entire element tree — what
-/// [`crate::core::runtime::MainBackend::query_tree_snapshot`] ships from the
+/// [`crate::core::runtime::AppBackend::query_tree_snapshot`] ships from the
 /// worker to main. The accessor surface mirrors the read-only methods on
 /// [`NodeTreeData`] (root_element / get_element / element_count / …) so
 /// existing test code keeps compiling when `TurTestApp::element_tree()` is
@@ -1281,11 +1287,11 @@ impl NodeTree {
         canvas: &mut dyn Canvas,
         focused_node_id: Option<ElementNodeId>,
         image_manager: &ImageManager,
-        shell: PaintShell<'_>,
+        frame_env: PaintEnv<'_>,
     ) {
         self.data
             .borrow()
-            .paint(canvas, focused_node_id, image_manager, shell);
+            .paint(canvas, focused_node_id, image_manager, frame_env);
     }
 }
 

@@ -28,8 +28,8 @@ pub enum NextFrame {
 /// Outcome of a single [`TurAppInternal::flush`] / `pump` call.
 #[derive(Debug, Clone, Copy)]
 pub struct FrameOutcome {
-    /// Whether a new frame was actually rendered this call.
-    pub rendered: bool,
+    /// Whether a new frame was actually painted this call.
+    pub painted: bool,
     /// How the caller should schedule the next frame.
     pub schedule: NextFrame,
 }
@@ -83,14 +83,14 @@ pub struct TurAppInternal {
     /// `install_event_bus`) read this via
     /// [`crate::core::plugin::PluginContext::event_bus`] to register the
     /// JS-side bridge (`eventBus.on`/`send`) and the
-    /// [`HostBusSubsystem`] that drains the queues
+    /// [`EmbedderBusSubsystem`] that drains the queues
     /// each flush.
     ///
-    /// [`HostBusSubsystem`]: crate::core::event_bus::HostBusSubsystem
+    /// [`EmbedderBusSubsystem`]: crate::core::event_bus::EmbedderBusSubsystem
     pub(crate) event_bus: Rc<crate::core::event_bus::EventBus>,
     /// Worker → main render-command batch produced by the last `flush()`
-    /// that painted. Drained by `MainBackend`'s `worker_loop` and shipped
-    /// to main via `MainMsg::RenderCommands`. `None` if no paint happened
+    /// that painted. Drained by `AppBackend`'s `worker_loop` and shipped
+    /// to main via `HostMsg::RenderCommands`. `None` if no paint happened
     /// this flush (or already drained).
     pub(crate) pending_render_batch: RefCell<Option<Vec<RenderCommand>>>,
 }
@@ -117,7 +117,7 @@ impl TurAppInternal {
         capabilities: crate::core::capability::Capabilities,
         worker_ctx: WorkerContext,
         wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
-        main_tx: crate::core::app::MainTx,
+        host_tx: crate::core::app::HostTx,
     ) -> Self {
         use crate::core::edgy::mutation::PendingMutationInvocationQueue;
         use crate::core::edgy::reactive::Store;
@@ -130,22 +130,22 @@ impl TurAppInternal {
         let dirty = Rc::new(Cell::new(false));
         let need_paint = Rc::new(Cell::new(false));
 
-        // Event bus — created early so `main_tx` can be set before any
-        // flush runs. The `HostBusSubsystem` ships JS→host bytes to main
-        // via this sender; without it, main-side `on_bus_event` handlers
+        // Event bus — created early so `host_tx` can be set before any
+        // flush runs. The `EmbedderBusSubsystem` ships JS→host bytes to main
+        // via this sender; without it, host-side `on_bus_event` handlers
         // never fire.
         let event_bus = Rc::new(crate::core::event_bus::EventBus::new());
-        event_bus.set_main_tx(main_tx.clone());
+        event_bus.set_host_tx(host_tx.clone());
 
         // Worker-side image state: metadata (sizes) + next-id counter,
         // bundled in one `ImageManager`. The pixel `Blob` ships to main
         // directly from the `createImageResource` bridge via the shared
-        // `main_tx` channel (one `MainMsg::UploadImage` per decode). The
+        // `host_tx` channel (one `HostMsg::UploadImage` per decode). The
         // worker never retains pixels across a frame boundary.
         let image_manager = Rc::new(RefCell::new(ImageManager::new()));
 
         // Adapt the shared `Arc<dyn Clock + Send + Sync>` to the
-        // `Rc<dyn Clock>` that `Shell` expects (per-instance + worker-side
+        // `Rc<dyn Clock>` that `FrameEnv` expects (per-instance + worker-side
         // only, never shared across threads). ClockProxy is a Sized adapter
         // that delegates to the Arc.
         let clock_rc: Rc<dyn Clock> = Rc::new(crate::core::runtime::ClockProxy(clock));
@@ -177,7 +177,7 @@ impl TurAppInternal {
             dirty,
             need_paint,
             image_manager.clone(),
-            main_tx,
+            host_tx,
             store.clone(),
             worker_ctx.clone(),
             completion_handle.clone(),
@@ -228,7 +228,7 @@ impl TurAppInternal {
         // the *next* pump). See `TurInstanceContext::begin_flush` / `end_flush`.
         self.js_context.begin_flush();
         let _flush_guard = FlushGuard(self);
-        let mut needs_render = false;
+        let mut needs_paint = false;
         // Per-`flush()` epoch, bumped once per call. Stable across the
         // fixed-point iterations below so subsystems can self-gate "advance
         // once per frame" (clock sampling) via `cx.frame_id()`.
@@ -239,7 +239,7 @@ impl TurAppInternal {
         };
         // Per-iteration dirty flag (subsystems flip via `cx.mark_dirty`) and
         // per-`flush()` schedule accumulator (subsystems flip via
-        // `cx.request_next_frame`). `sub_dirty` is taken after each iteration
+        // `cx.request_frame`). `sub_dirty` is taken after each iteration
         // and folded into the per-iteration dirty decision; `sub_request_frame`
         // accumulates across all iterations and feeds the post-loop schedule.
         let sub_dirty = Cell::new(false);
@@ -274,14 +274,14 @@ impl TurAppInternal {
             // owns its own clock + state; time-driven ones self-gate via
             // `cx.frame_id()` so the clock advances at most once per frame.
             // Subsystems push intent back via `cx.mark_dirty()` /
-            // `cx.request_paint()` / `cx.request_next_frame()` instead of
+            // `cx.request_paint()` / `cx.request_frame()` instead of
             // returning an outcome.
             //
             // Animation (registered via `tur-animation::TurAnimationPlugin`)
             // is the canonical example: it ticks active
             // `AnimationController`s once per frame here (gated by frame_id),
             // enqueuing `onTick`/`onEnd` mutations that fire later in
-            // `flush_pending_mutations`, and calls `request_next_frame()`
+            // `flush_pending_mutations`, and calls `request_frame()`
             // every iteration a controller is active — including iterations
             // where a controller was registered mid-frame (e.g. from an
             // event/lifecycle handler). That is what keeps an animation
@@ -331,7 +331,7 @@ impl TurAppInternal {
                 || reactive_changed
                 || subsystem_dirtied;
             if dirty {
-                needs_render = true;
+                needs_paint = true;
                 self.app_context
                     .borrow_mut()
                     .layout(self.js_context.dirty.clone(), boa_context);
@@ -402,9 +402,9 @@ impl TurAppInternal {
             }
         }
 
-        if needs_render {
+        if needs_paint {
             // Record the paint pass into a `Vec<RenderCommand>`; main
-            // applies it to its renderer (`MainBackend::render_batch`).
+            // applies it to its renderer (`AppBackend::render_batch`).
             let batch = self.app_context.borrow_mut().build_render_batch();
             *self.pending_render_batch.borrow_mut() = Some(batch);
         }
@@ -424,7 +424,7 @@ impl TurAppInternal {
         };
 
         Ok(FrameOutcome {
-            rendered: needs_render,
+            painted: needs_paint,
             schedule,
         })
     }
@@ -439,7 +439,7 @@ impl TurAppInternal {
         if !flush_engine.has_pending() {
             return (false, Vec::new());
         }
-        let dirties = flush_engine.flush();
+        let dirties = flush_engine.flush_atoms();
         if dirties.is_empty() {
             return (false, Vec::new());
         }
@@ -641,8 +641,8 @@ impl TurAppInternal {
     }
 
     /// Drain the render-command batch produced by the last `flush()`, if any.
-    /// `MainBackend::worker_loop` calls this after each `pump()` to ship the
-    /// batch to main via `MainMsg::RenderCommands`. Returns `None` if no
+    /// `AppBackend::worker_loop` calls this after each `pump()` to ship the
+    /// batch to main via `HostMsg::RenderCommands`. Returns `None` if no
     /// paint happened this flush (or already drained).
     pub fn take_pending_render_batch(&self) -> Option<Vec<RenderCommand>> {
         self.pending_render_batch.borrow_mut().take()

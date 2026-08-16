@@ -32,7 +32,7 @@ fn image_with_explicit_size() {
 
 /// Phase-4 image ownership split: the worker keeps only metadata (sizes);
 /// the decoded pixel `Blob` ships to main directly from the
-/// `createImageResource` bridge (one `MainMsg::UploadImage` per decode,
+/// `createImageResource` bridge (one `HostMsg::UploadImage` per decode,
 /// via the shared `main_tx`). Main retains the full `ImageResource` (for
 /// context-loss re-upload).
 #[test]

@@ -9,12 +9,12 @@
 //! - [`AsyncWorkerContext::spawn_blocking`] — CPU-heavy or blocking work
 //!   off the worker's own loop, accepting a bare closure or a boxed
 //!   callback (native: dedicated thread; wasm: own cooperative task),
-//! - [`AsyncWorkerContext::request_paint`] — the worker's self-waking paint
+//! - [`AsyncWorkerContext::request_frame`] — the worker's self-waking paint
 //!   signal (sets `need_paint` and, if the worker is idle, emits a coalesced
 //!   `WorkerMsg::Wake` so the worker's own loop pumps a flush).
 //!
 //! This is the canonical home for deferred, timer-driven paints (e.g. the
-//! caret-blink loop): the task sleeps, then calls `request_paint`, and the
+//! caret-blink loop): the task sleeps, then calls `request_frame`, and the
 //! worker re-arms itself — no main involvement, no raw scheduler access.
 
 use std::future::Future;
@@ -75,7 +75,7 @@ impl AsyncWorkerContext {
     /// Mark this frame paint-worthy and, if the worker is idle, emit a
     /// coalesced self-wake so the worker's own loop pumps a flush. The
     /// canonical signal for a deferred paint (e.g. a caret-blink tick).
-    pub fn request_paint(&self) {
-        self.js_ctx.request_paint();
+    pub fn request_frame(&self) {
+        self.js_ctx.request_frame();
     }
 }

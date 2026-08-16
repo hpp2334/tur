@@ -104,15 +104,15 @@ impl DerivedGraph {
 struct FlushState {
     stale_sources: RefCell<HashSet<AtomId>>,
     source_changed: Cell<bool>,
-    host_dirty: Rc<Cell<bool>>,
+    app_dirty: Rc<Cell<bool>>,
 }
 
 impl FlushState {
-    fn new(host_dirty: Rc<Cell<bool>>) -> Self {
+    fn new(app_dirty: Rc<Cell<bool>>) -> Self {
         FlushState {
             stale_sources: RefCell::new(HashSet::new()),
             source_changed: Cell::new(false),
-            host_dirty,
+            app_dirty,
         }
     }
 }
@@ -220,11 +220,11 @@ pub struct ReactiveCore {
 }
 
 impl ReactiveCore {
-    fn new(host_dirty: Rc<Cell<bool>>) -> Self {
+    fn new(app_dirty: Rc<Cell<bool>>) -> Self {
         ReactiveCore {
             atoms: AtomRegistry::new(),
             graph: DerivedGraph::new(),
-            flush: FlushState::new(host_dirty),
+            flush: FlushState::new(app_dirty),
             weak_self: RefCell::new(Weak::new()),
         }
     }
@@ -408,7 +408,7 @@ impl ReactiveCore {
             }
         }
 
-        self.flush.host_dirty.set(true);
+        self.flush.app_dirty.set(true);
     }
 
     /// Invoke a mutation atom. `args` are the **user-supplied** args only
@@ -512,8 +512,8 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(host_dirty: Rc<Cell<bool>>) -> Store {
-        let core = Rc::new(RefCell::new(ReactiveCore::new(host_dirty)));
+    pub fn new(app_dirty: Rc<Cell<bool>>) -> Store {
+        let core = Rc::new(RefCell::new(ReactiveCore::new(app_dirty)));
         let graph = Rc::new(RefCell::new(SubscriberGraph::new()));
         *core.borrow().weak_self.borrow_mut() = Rc::downgrade(&core);
         Store { core, graph }
@@ -682,7 +682,7 @@ pub struct FlushEngineStore {
 }
 
 impl FlushEngineStore {
-    pub fn flush(&self) -> HashSet<AnyReadable> {
+    pub fn flush_atoms(&self) -> HashSet<AnyReadable> {
         self.core
             .borrow()
             .flush()

@@ -46,10 +46,10 @@ fn focus_editable(app: &mut TurTestApp, id: ElementNodeId) {
 /// Inline bundle that places a single Input at the top-left of the canvas,
 /// wired up with an `UndoController` (mirrors the playground editor config).
 const UNDO_INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, createUndoController, render, Container, Input } from "tur:std";
+    import { createTextEditingController, createUndoController, mount, Container, Input } from "tur:std";
     globalThis.__ctrl = createTextEditingController({});
     globalThis.__undo = createUndoController();
-    render(Container({
+    mount(Container({
         children: [
             Input({
                 controller: globalThis.__ctrl,
@@ -69,7 +69,7 @@ const UNDO_INPUT_BUNDLE: &str = r#"
 /// `setSpansPreserveCursor`. Used to reproduce the demo's "select all → cut →
 /// undo does nothing" bug at the engine level.
 const PLAYGROUND_BUNDLE: &str = r#"
-    import { mutate, createTextEditingController, createUndoController, render, Container, Input } from "tur:std";
+    import { mutate, createTextEditingController, createUndoController, mount, Container, Input } from "tur:std";
     // Tokenize the buffer into a single plain span (no syntax highlighting —
     // the act of calling setSpansPreserveCursor on every input is what matters).
     const onInput = mutate((_ctxArg) => {
@@ -81,7 +81,7 @@ const PLAYGROUND_BUNDLE: &str = r#"
         onInput: onInput,
     });
     globalThis.__undo = createUndoController();
-    render(Container({
+    mount(Container({
         children: [
             Input({
                 controller: globalThis.__ctrl,

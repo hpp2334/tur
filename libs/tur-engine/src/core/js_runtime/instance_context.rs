@@ -7,7 +7,7 @@ use std::sync::Arc;
 use boa_engine::JsData;
 use boa_gc::{Finalize, Trace};
 
-use crate::core::app::MainTx;
+use crate::core::app::HostTx;
 use crate::core::async_::CompletionHandle;
 use crate::core::capability::Capabilities;
 use crate::core::edgy::mutation::PendingMutationInvocationQueue;
@@ -54,7 +54,7 @@ pub struct TurInstanceContext {
     pub(crate) store: Store,
     /// Worker→main channel sender clone. Bridges use it to ship messages
     /// directly to main without a staging vec — most notably
-    /// [`Self::register_image`] sends one `MainMsg::UploadImage` per decoded
+    /// [`Self::register_image`] sends one `HostMsg::UploadImage` per decoded
     /// image. FIFO is preserved across the shared channel (the bridge
     /// enqueues during flush; `worker_loop` enqueues after flush), so main
     /// always uploads an image before playing back the frame that uses it.
@@ -63,7 +63,7 @@ pub struct TurInstanceContext {
     /// (`futures::channel::mpsc::UnboundedSender`), no `boa_gc::Gc`/
     /// `GcRefCell`. The struct-level `#[boa_gc(unsafe_empty_trace)]` already
     /// covers this same trade-off for the other fields.
-    pub(crate) main_tx: MainTx,
+    pub(crate) host_tx: HostTx,
     /// Worker-thread scheduler — bridges call `spawn_local(fut)` to drive
     /// async work (clipboard reads, http requests, sleep futures). Set by
     /// `build_worker_backend` from the worker_ctx passed by the runtime.
@@ -137,7 +137,7 @@ impl TurInstanceContext {
         dirty: Rc<Cell<bool>>,
         need_paint: Rc<Cell<bool>>,
         image_manager: Rc<RefCell<ImageManager>>,
-        main_tx: MainTx,
+        host_tx: HostTx,
         store: Store,
         worker_ctx: WorkerContext,
         completion_handle: CompletionHandle,
@@ -155,7 +155,7 @@ impl TurInstanceContext {
             wake_pending: Rc::new(Cell::new(false)),
             wake_worker,
             image_manager,
-            main_tx,
+            host_tx,
             store,
             worker_ctx,
             completion_handle,
@@ -173,7 +173,7 @@ impl TurInstanceContext {
     /// tick, a reactive `set` from a callback) re-arms an idle worker
     /// without main's involvement. During a `flush()` it is a no-op (the
     /// flush is already driving this frame).
-    pub fn request_paint(&self) {
+    pub fn request_frame(&self) {
         self.need_paint.set(true);
         self.wake_if_idle();
     }
@@ -220,7 +220,7 @@ impl TurInstanceContext {
     /// js_ctx.spawn_local(|aw| async move {
     ///     loop {
     ///         aw.sleep(half_period).await;
-    ///         aw.request_paint();
+    ///         aw.request_frame();
     ///     }
     /// });
     /// ```
@@ -276,7 +276,7 @@ impl TurInstanceContext {
     /// Register a decoded image: allocate the worker-side id + record its
     /// natural size via [`ImageManager::allocate`] (so layout + paint can
     /// size the element this frame), and ship the pixel `Blob` to main
-    /// directly via `MainMsg::UploadImage` on the shared `main_tx` channel.
+    /// directly via `HostMsg::UploadImage` on the shared `host_tx` channel.
     /// Stays synchronous — `unbounded_send` is non-blocking, and the FIFO
     /// channel guarantees main receives the `UploadImage` before any
     /// `RenderCommands` that plays the image back (the bridge enqueues
@@ -287,8 +287,8 @@ impl TurInstanceContext {
     ) -> ImageResourceId {
         let id = self.image_manager.borrow_mut().allocate(&image);
         let _ = self
-            .main_tx
-            .unbounded_send(crate::core::app::MainMsg::UploadImage { id, image });
+            .host_tx
+            .unbounded_send(crate::core::app::HostMsg::UploadImage { id, image });
         id
     }
 

@@ -1,13 +1,13 @@
 //! Verify plugin-registered host modules (`tur:*`) resolve via the loader.
 
 use boa_engine::{JsArgs, NativeFunction};
-use tur_integration_tests::{HostExport, HostModulePlugin, TurTestApp};
+use tur_integration_tests::{NativeExport, NativeModulePlugin, TurTestApp};
 
 #[test]
 fn host_module_is_importable() {
-    let plugin = HostModulePlugin {
+    let plugin = NativeModulePlugin {
         specifier: "tur:test",
-        exports: vec![HostExport {
+        exports: vec![NativeExport {
             name: "echo".to_string(),
             // Builder produces a fresh NativeFunction per instance (Phase 7:
             // `NativeFunction` is `!Send`, so we hold a Send+Sync builder

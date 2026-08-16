@@ -18,9 +18,7 @@ mod imp {
     use tur_engine::core::scheduler::{VsyncSource, WorkerPoolHandle};
     use tur_engine::error::TurError;
     use tur_engine::renderer::vello::VelloRenderer;
-    use tur_engine::{
-        CursorCap, FocusedState, NoopCursor, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder,
-    };
+    use tur_engine::{FocusedState, TurApp, TurAppBuilder, TurRuntime, TurRuntimeBuilder};
     use tur_net_native::{Http, NativeHttp};
 
     /// `std::task::Wake` impl wrapping a `Send + Sync` closure that
@@ -37,7 +35,7 @@ mod imp {
         }
     }
 
-    use crate::scheduler::{AndroidMainLoop, AndroidVsyncSource, FrameLoopRef};
+    use crate::scheduler::{AndroidHostLoop, AndroidVsyncSource, FrameLoopRef};
     use crate::surface::AndroidWindowHandle;
     use tur_native::NativeFontLoader;
 
@@ -91,7 +89,7 @@ mod imp {
         /// The runtime's main-thread task spawner. Each instance registers
         /// its vsync-arm closure (so pending main-loop tasks schedule a
         /// Choreographer tick) and polls the tasks from `pump_loop`.
-        pub main_loop: Rc<AndroidMainLoop>,
+        pub host_loop: Rc<AndroidHostLoop>,
         /// The default worker pool every instance is assigned to unless the
         /// embedder overrides via `configure`. Effectively uncapped → each
         /// instance gets its own dedicated lane thread (the historical
@@ -104,7 +102,7 @@ mod imp {
     impl AndroidRuntime {
         /// Build the shared runtime. `configure` receives the
         /// [`TurRuntimeBuilder`] (by value) AFTER the Android defaults are
-        /// installed (native font loader, wall-clock `StdClock`, `NoopCursor`,
+        /// installed (native font loader, wall-clock `StdClock`,
         /// `AndroidClipboard`, `NativeHttp`, the base scheduler driver), so the
         /// callback only needs to chain `.plugin(…)` calls and return the
         /// builder.
@@ -128,22 +126,21 @@ mod imp {
             // timers); base vsync with no frame loop (per-instance — each
             // instance installs its own via `TurApp::set_vsync_source`);
             // main-loop tasks polled from each instance's `pump_loop`.
-            let worker_host = crate::scheduler::worker_host(tokio.handle().clone());
+            let worker_spawner = crate::scheduler::worker_spawner(tokio.handle().clone());
             let base_vsync = AndroidVsyncSource::new(None);
-            let main_loop = AndroidMainLoop::new();
+            let host_loop = AndroidHostLoop::new();
 
             // Default (effectively uncapped) worker pool — one dedicated
             // lane thread per instance unless the embedder registers more.
             let default_worker_pool = WorkerPoolHandle::new("default", usize::MAX);
 
             let mut builder = TurRuntime::builder()
-                .worker_host(worker_host)
+                .worker_spawner(worker_spawner)
                 .vsync_source(base_vsync)
-                .main_loop(main_loop.clone())
+                .host_loop(host_loop.clone())
                 .font_loader(std::sync::Arc::new(NativeFontLoader::new()))
                 .clock(std::sync::Arc::new(StdClock::new()))
                 .worker_pool(default_worker_pool.clone())
-                .capability(|_| Ok(CursorCap::new(NoopCursor)))
                 .capability(move |_| Ok(Clipboard::new(AndroidClipboard::new(context))))
                 .capability({
                     let handle = tokio.handle().clone();
@@ -164,7 +161,7 @@ mod imp {
                 runtime,
                 wgpu_instance,
                 tokio,
-                main_loop,
+                host_loop,
                 default_worker_pool,
             })
         }
@@ -187,7 +184,7 @@ mod imp {
         /// `FrameLoop`. JNI `pump` fires it before polling the loop.
         pub vsync: Rc<AndroidVsyncSource>,
         /// The runtime's main-thread task spawner, polled each `pump`.
-        main_loop: Rc<AndroidMainLoop>,
+        host_loop: Rc<AndroidHostLoop>,
         /// The autonomous `run_loop` future. `TurApp` is `Rc`-based
         /// (!Send — the boa realm lives on the main thread), so the loop
         /// cannot run on a spawned thread: JNI `pump` polls it once per
@@ -215,7 +212,7 @@ mod imp {
         fn install_frame_loop(
             app: &Rc<TurApp>,
             frame_loop: FrameLoopRef,
-            main_loop: &Rc<AndroidMainLoop>,
+            host_loop: &Rc<AndroidHostLoop>,
         ) -> (
             Rc<AndroidVsyncSource>,
             std::cell::RefCell<Option<Pin<Box<dyn Future<Output = ()>>>>>,
@@ -240,7 +237,7 @@ mod imp {
             let vsync_wake_fn = vsync.make_vsync_wake_fn();
             // Pending main-loop tasks (the engine's drain) request a pump on
             // this instance → the next `pump_loop` polls them.
-            main_loop.add_wake_fn(vsync_wake_fn.clone());
+            host_loop.add_wake_fn(vsync_wake_fn.clone());
             let loop_task = std::cell::RefCell::new(Some(
                 Box::pin(app.clone().run_loop()) as Pin<Box<dyn Future<Output = ()>>>
             ));
@@ -279,7 +276,7 @@ mod imp {
             }
             // Advance the runtime's main-thread tasks (the engine's drain)
             // on the same Choreographer tick.
-            self.main_loop.poll();
+            self.host_loop.poll();
         }
         /// Build a rendering instance over a freshly-created wgpu surface
         /// backed by the given Android `Surface`'s `ANativeWindow*`, using the
@@ -293,7 +290,7 @@ mod imp {
         /// this function after the closure returns, so the embedder cannot
         /// accidentally override it. Pass `|b| b` for the no-op default.
         ///
-        /// Architecture: the engine runs on a worker thread; `MainBackend`
+        /// Architecture: the engine runs on a worker thread; `AppBackend`
         /// owns the wgpu `VelloRenderer` on the caller thread (main) and
         /// drives it directly — command batches, incremental image uploads,
         /// and resize-on-event.
@@ -353,9 +350,9 @@ mod imp {
             // Apply the embedder's pre-build customization (e.g.
             // `.instance_data(...)`, `.worker_pool(...)`), then attach the
             // surface-backed renderer and build. The engine runs on a
-            // worker; `MainBackend` owns the wgpu renderer on main and
+            // worker; `AppBackend` owns the wgpu renderer on main and
             // drives it directly (render batches, image uploads,
-            // resize-on-event) — no render_sink callback.
+            // resize-on-event).
             let app = configure_instance(
                 runtime
                     .runtime
@@ -370,12 +367,12 @@ mod imp {
             .build()?;
 
             let (vsync, loop_task, vsync_wake_fn) =
-                Self::install_frame_loop(&app, frame_loop, &runtime.main_loop);
+                Self::install_frame_loop(&app, frame_loop, &runtime.host_loop);
 
             Ok(Self {
                 app,
                 vsync,
-                main_loop: runtime.main_loop.clone(),
+                host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,
             })
@@ -403,12 +400,12 @@ mod imp {
             )
             .build_headless((0.0, 0.0))?;
             let (vsync, loop_task, vsync_wake_fn) =
-                Self::install_frame_loop(&app, frame_loop, &runtime.main_loop);
+                Self::install_frame_loop(&app, frame_loop, &runtime.host_loop);
 
             Ok(Self {
                 app,
                 vsync,
-                main_loop: runtime.main_loop.clone(),
+                host_loop: runtime.host_loop.clone(),
                 loop_task,
                 vsync_wake_fn,
             })

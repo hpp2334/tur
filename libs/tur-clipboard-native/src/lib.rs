@@ -15,7 +15,7 @@
 //! # ;
 //! ```
 //!
-//! The closure receives an [`AsyncPluginContext`] — each `arboard` call is
+//! The closure receives an [`HostExecutor`] — each `arboard` call is
 //! hopped onto the engine's main thread (macOS `NSPasteboard` requires it).
 //! The engine creates the channel internally, so no extra wiring is needed.
 //!
@@ -23,9 +23,9 @@
 //! target-gated to `cfg(not(target_family = "wasm"))`). Embedders targeting
 //! wasm should depend on `tur-clipboard-wasm` instead.
 //!
-//! [`AsyncPluginContext`]: tur_engine::AsyncPluginContext
+//! [`HostExecutor`]: tur_engine::HostExecutor
 
-pub use tur_engine::{AsyncPluginContext, Clipboard, ClipboardBackend, TurClipboardPlugin};
+pub use tur_engine::{Clipboard, ClipboardBackend, HostExecutor, TurClipboardPlugin};
 
 #[cfg(not(target_family = "wasm"))]
 mod backend;

@@ -41,7 +41,7 @@
 //!   [`SubsystemFlushContext::frame_id`], a per-`flush()` epoch that is stable
 //!   across iterations within one frame but differs across frames, and record
 //!   the last id it advanced for. Signals (`mark_dirty` / `request_paint` /
-//!   `request_next_frame`) are cheap and idempotent, so calling them every
+//!   `request_frame`) are cheap and idempotent, so calling them every
 //!   iteration is fine.
 //! - [`Subsystem::handle_platform_event`] and [`Subsystem::handle_app_event`]
 //!   are called **per drained event**, every fixed-point iteration, in
@@ -80,7 +80,7 @@ use crate::core::screen::Screen;
 /// (re-layout + paint this frame),
 /// [`SubsystemFlushContext::request_paint`](crate::core::subsystem::SubsystemFlushContext::request_paint)
 /// (paint this frame), and
-/// [`SubsystemFlushContext::request_next_frame`](crate::core::subsystem::SubsystemFlushContext::request_next_frame)
+/// [`SubsystemFlushContext::request_frame`](crate::core::subsystem::SubsystemFlushContext::request_frame)
 /// (schedule the next vsync). See the [module docs](crate::core::subsystem)
 /// for ordering and frequency guarantees.
 pub trait Subsystem {
@@ -96,7 +96,7 @@ pub trait Subsystem {
     ///   - mutate their own state,
     ///   - signal the engine via [`SubsystemFlushContext::mark_dirty`] /
     ///     [`SubsystemFlushContext::request_paint`] /
-    ///     [`SubsystemFlushContext::request_next_frame`].
+    ///     [`SubsystemFlushContext::request_frame`].
     fn flush_pre_layout(&mut self, _cx: &mut SubsystemFlushContext<'_>) {}
 
     /// Recompute layout-derived state. Called **every fixed-point iteration**,
@@ -141,7 +141,7 @@ pub trait Subsystem {
 /// `frame_id` is a per-`flush()` epoch (stable across iterations, differs
 /// across calls); `sub_dirty` / `sub_request_frame` are the accumulators
 /// behind [`SubsystemFlushContext::mark_dirty`] /
-/// [`SubsystemFlushContext::request_next_frame`].
+/// [`SubsystemFlushContext::request_frame`].
 pub struct FlushSignals<'a> {
     pub frame_id: u64,
     pub sub_dirty: &'a Cell<bool>,
@@ -149,7 +149,7 @@ pub struct FlushSignals<'a> {
 }
 
 /// Per-flush context passed to every [`Subsystem`] method. The same shape is
-/// used for the per-iteration [`Subsystem::flush`] tick and the per-event
+/// used for the per-iteration [`Subsystem::flush_pre_layout`] tick and the per-event
 /// [`Subsystem::handle_platform_event`] / [`Subsystem::handle_app_event`]
 /// dispatch.
 ///
@@ -172,7 +172,7 @@ pub struct FlushSignals<'a> {
 ///   - [`Self::mark_dirty`] — the subsystem changed layout-affecting state;
 ///     the engine re-lays-out and marks the frame for paint this iteration.
 ///   - [`Self::request_paint`] — paint this frame (no re-layout necessarily).
-///   - [`Self::request_next_frame`] — schedule the next vsync (e.g. an
+///   - [`Self::request_frame`] — schedule the next vsync (e.g. an
 ///     animation is still running). This is the signal that keeps time-driven
 ///     work advancing frame-to-frame; it accumulates across all iterations of
 ///     a single `flush()` and feeds the post-loop schedule decision.
@@ -226,7 +226,7 @@ pub struct SubsystemFlushContext<'a> {
     /// forces the engine to re-lay-out (and marks the frame for paint) this
     /// iteration. Owned by the flush loop; `.take()`n after each iteration.
     pub sub_dirty: &'a Cell<bool>,
-    /// Accumulator for [`Self::request_next_frame`]: any subsystem that flips
+    /// Accumulator for [`Self::request_frame`]: any subsystem that flips
     /// it makes the engine schedule the next vsync. Owned by the flush loop;
     /// read once after the loop to decide the next-frame schedule.
     pub sub_request_frame: &'a Cell<bool>,
@@ -253,7 +253,7 @@ impl<'a> SubsystemFlushContext<'a> {
     /// single `flush()` call and feeds the post-loop schedule decision
     /// (`NextFrame::Vsync`). Cheap and idempotent — safe to call every
     /// iteration.
-    pub fn request_next_frame(&self) {
+    pub fn request_frame(&self) {
         self.sub_request_frame.set(true);
     }
 

@@ -4,7 +4,7 @@
  * Runtime is a synthetic boa module registered by tur-engine
  * (`core::bridge::module_loader`) under the specifier `"tur:core"`.
  * It exports only the reactive substrate + event framework: atom primitives
- * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the `render` mount entry
+ * (`source`/`derive`/`mutate`/`get`/`set`/`view`), the `mount` view-tree entry
  * point, and the opaque meta-types (`Element`/`Source`/`Derived`/`Mutation`/
  * `Readable`/`Val`/`ReadonlyStoreCtx`/`StoreCtx`).
  *
@@ -97,5 +97,5 @@ declare module "tur:core" {
     // Mounting
     // ---------------------------------------------------------------------------
 
-    export function render(root: Element): void;
+    export function mount(root: Element): void;
 }

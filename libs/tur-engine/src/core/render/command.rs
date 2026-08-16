@@ -1,4 +1,4 @@
-//! Render commands — the worker→main paint vocabulary.
+//! Render commands — the worker→host paint vocabulary.
 //!
 //! - [`CanvasOp`] is 1:1 with the [`Canvas`](super::Canvas) trait — draw ops
 //!   and layer ops. Plain `Send` data; produced by [`RecordingCanvas`](super::RecordingCanvas).
@@ -115,7 +115,7 @@ pub enum RenderCommand {
 }
 
 // Compile-time Send assertions — guard against future fields breaking the
-// worker→main channel contract. If these fail, the new field's type isn't
+// worker→host channel contract. If these fail, the new field's type isn't
 // Send and needs wrapping (typically `Arc<T>` or a custom `Send` wrapper).
 const _: fn() = || {
     fn assert_send<T: Send>() {}

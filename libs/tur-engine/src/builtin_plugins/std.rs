@@ -35,7 +35,7 @@ use crate::builtin_plugins::{
     layout::enums, layout::install_layout, lazy_container::install_lazy_container,
     lifecycle::install_lifecycle, scroll::install_scroll, text::install_text,
 };
-use crate::core::app::render;
+use crate::core::app::mount;
 use crate::core::async_::task;
 use crate::core::js_runtime::helpers::{ConstEntry, FnEntry};
 use crate::core::plugin::{Plugin, PluginContext};
@@ -109,10 +109,10 @@ impl Plugin for TurStdPlugin {
         std_closures.extend(ct_closures);
         std_fns.extend(install_lifecycle(ctx)?);
         std_fns.extend(install_encode()?);
-        // Render mount + async task primitives stay in `core::app::render`
+        // View-tree mount + async task primitives stay in `core::app::mount`
         // and `core::async_::task` (renderer/async infra, not element-plugin
         // affinity).
-        std_fns.extend(render::fns());
+        std_fns.extend(mount::fns());
         std_fns.extend(task::fns());
         std_fns.extend(crate::core::render::brush::bridge::fns());
 

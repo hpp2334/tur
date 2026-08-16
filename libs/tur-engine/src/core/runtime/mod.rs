@@ -9,7 +9,7 @@ use boa_engine::property::Attribute;
 
 use crate::TurApp;
 use crate::core::app::TurAppInternal;
-use crate::core::app::render;
+use crate::core::app::mount;
 use crate::core::async_::TurJobExecutor;
 use crate::core::capability::{Capabilities, CapabilityDecls};
 use crate::core::dev::dev_tool;
@@ -20,18 +20,18 @@ use crate::core::js_runtime::instance_context::InstanceDataCx;
 use crate::core::js_runtime::js_value::IntoJs;
 use crate::core::js_runtime::module_loader::{bound_native, build_native_module};
 use crate::core::js_runtime::{BoaOpaque, TurModuleLoader};
-use crate::core::plugin::{AsyncPluginContext, CompileContext, Plugin, PluginContext};
+use crate::core::plugin::{CompileContext, HostExecutor, Plugin, PluginContext};
 use crate::core::scheduler::WorkerPoolHandle;
 use crate::core::screen::Screen;
 use crate::error::TurError;
 
 pub mod backend;
-pub use backend::MainBackend;
+pub use backend::AppBackend;
 // `WorkerBackend` is `pub(crate)` — internal to the engine, only
-// `MainBackend` (which owns a worker running `WorkerBackend`) is public.
+// `AppBackend` (which owns a worker running `WorkerBackend`) is public.
 pub(crate) use backend::WorkerBackend;
 // `MsgOutcome` is `pub(crate)` — the result of the single shared message
-// handler (`MainBackend::apply_msg`), consumed by both `pump` and
+// handler (`AppBackend::apply_msg`), consumed by both `pump` and
 // `TurApp::run_loop` (the latter lives in `lib.rs`).
 pub(crate) use backend::MsgOutcome;
 
@@ -39,7 +39,7 @@ pub(crate) use backend::MsgOutcome;
 /// concrete (`Sized`) `C`, so it won't accept an already-erased
 /// `Arc<dyn Clock + Send + Sync>`. `ClockProxy` is a Sized adapter that
 /// delegates to the shared `Arc<dyn Clock + Send + Sync>` — giving every
-/// instance's boa `Context` and the runtime `Shell` one shared time
+/// instance's boa `Context` and the runtime `FrameEnv` one shared time
 /// source. `Send + Sync` so the runtime can be shared across worker
 /// threads (Phase 8 threaded mode).
 #[derive(Clone)]
@@ -54,7 +54,7 @@ impl Clock for ClockProxy {
 }
 
 /// Deferred capability-insert closure (the per-worker replay). Built by a
-/// [`CapabilityBuilder`] (which receives the [`AsyncPluginContext`]) and
+/// [`CapabilityBuilder`] (which receives the [`HostExecutor`]) and
 /// stored on the runtime; each worker spawned from
 /// [`app_builder`](TurRuntime::app_builder) replays its
 /// closures into its own fresh `Capabilities`. The closure is `Fn` (not
@@ -64,14 +64,14 @@ impl Clock for ClockProxy {
 type CapabilityInsert = Box<dyn Fn(&Capabilities) + Send + Sync>;
 
 /// Deferred capability-construction closure. Captures the embedder's backend
-/// construction (which may need the [`AsyncPluginContext`], e.g. an OS-API
+/// construction (which may need the [`HostExecutor`], e.g. an OS-API
 /// backend that hops calls onto the main thread) and produces a
 /// [`CapabilityInsert`] replay closure. Runs **once** in `build()` (after the
 /// main-thread channel is created) — the resulting backend is shared across
 /// every instance (Capability newtypes are `Arc`-backed). `FnOnce` + `Send +
 /// Sync` so it can be stored on the builder and consumed in `build()`.
 type CapabilityBuilder =
-    Box<dyn FnOnce(&AsyncPluginContext) -> Result<CapabilityInsert, TurError> + Send + Sync>;
+    Box<dyn FnOnce(&HostExecutor) -> Result<CapabilityInsert, TurError> + Send + Sync>;
 
 /// Deferred per-instance data definer closure. Captured on the
 /// `TurAppBuilder` (main thread) and replayed once on the worker inside
@@ -84,7 +84,7 @@ type CapabilityBuilder =
 /// body never cross the main↔worker boundary; only values captured by the
 /// closure need to be `Send` (hence the `Send + 'static` bound). This is
 /// the per-instance counterpart to the per-runtime `CapabilityBuilder` —
-/// but simpler: no `AsyncPluginContext` parameter (the definer is pure
+/// but simpler: no `HostExecutor` parameter (the definer is pure
 /// data, no OS-API hop needed at definition time) and `FnOnce` (one
 /// instance per closure).
 type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>;
@@ -120,7 +120,7 @@ type InstanceDataDefiner = Box<dyn FnOnce(&mut InstanceDataCx) + Send + 'static>
 ///     .build()?;
 ///
 /// // Two isolated instances sharing fonts/clock/capabilities/plugins.
-/// // Each owns its renderer (created by the embedder; no render_sink):
+/// // Each owns its renderer (created by the embedder):
 /// let app_a = runtime
 ///     .app_builder()
 ///     .worker_pool(ui.clone())
@@ -153,9 +153,9 @@ pub struct TurRuntime {
     /// objects work for both inline and threaded instances.
     plugins: Arc<Vec<Box<dyn Plugin>>>,
     /// Worker hosting — hosts each app's loop in a registered pool
-    /// (single role: see [`WorkerHost`](crate::core::scheduler::WorkerHost)).
-    /// Cloned into each `MainBackend` at `app_builder().build(...)`.
-    worker_host: Rc<dyn crate::core::scheduler::WorkerHost>,
+    /// (single role: see [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner)).
+    /// Cloned into each `AppBackend` at `app_builder().build(...)`.
+    worker_spawner: Rc<dyn crate::core::scheduler::WorkerSpawner>,
     /// Default per-instance frame cadence. Cloned into each `TurApp`;
     /// embedders with per-instance scheduling replace it via
     /// [`TurApp::set_vsync_source`](crate::TurApp::set_vsync_source).
@@ -163,7 +163,7 @@ pub struct TurRuntime {
     /// Main-thread task spawner. Roots the engine-internal main-thread
     /// drain at `build()`; embedders may reuse it for their own
     /// main-thread tasks.
-    main_loop: Rc<dyn crate::core::scheduler::MainLoop>,
+    host_loop: Rc<dyn crate::core::scheduler::HostLoop>,
     /// Worker pools registered via
     /// [`TurRuntimeBuilder::worker_pool`]. Each app builder must assign one
     /// of these (see [`TurAppBuilder::worker_pool`]); validated by identity
@@ -172,10 +172,10 @@ pub struct TurRuntime {
     /// The engine's main-thread hop context. Created internally in `build()`
     /// (the channel + drain are engine-internal — embedders never wire them).
     /// Cloned into each worker's [`PluginContext`] (so plugins reach main via
-    /// [`PluginContext::to_async`](crate::core::plugin::PluginContext::to_async))
+    /// [`PluginContext::to_host_executor`](crate::core::plugin::PluginContext::to_host_executor))
     /// and handed to capability constructors that need it (via the closure
     /// form of [`TurRuntimeBuilder::capability`]).
-    main_cx: AsyncPluginContext,
+    main_cx: HostExecutor,
 }
 
 impl TurRuntime {
@@ -191,8 +191,8 @@ impl TurRuntime {
     /// The runtime's main-thread task spawner. Embedders may use it for
     /// their own main-thread tasks (it also roots the engine-internal
     /// main-thread drain spawned at `build()`).
-    pub fn main_loop(&self) -> Rc<dyn crate::core::scheduler::MainLoop> {
-        self.main_loop.clone()
+    pub fn host_loop(&self) -> Rc<dyn crate::core::scheduler::HostLoop> {
+        self.host_loop.clone()
     }
 
     /// Begin building an isolated [`TurApp`] instance. Configure the
@@ -200,9 +200,9 @@ impl TurRuntime {
     /// [`TurAppBuilder::build`] (rendering) or
     /// [`TurAppBuilder::build_headless`] (no renderer).
     ///
-    /// The engine runs on a worker thread (via [`MainBackend`]); the
-    /// renderer lives on the main thread and is owned by `MainBackend`
-    /// (passed to `build`). `MainBackend` applies each `Vec<RenderCommand>`
+    /// The engine runs on a worker thread (via [`AppBackend`]); the
+    /// renderer lives on the main thread and is owned by `AppBackend`
+    /// (passed to `build`). `AppBackend` applies each `Vec<RenderCommand>`
     /// batch directly to the renderer, uploads new image resources
     /// incrementally, and calls `renderer.resize(...)` on viewport-change
     /// events only.
@@ -250,7 +250,7 @@ impl TurRuntime {
         let main_cx = self.main_cx.clone();
         let backend_factory = move |worker_ctx: crate::core::scheduler::WorkerContext,
                                     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
-                                    main_tx: crate::core::app::MainTx|
+                                    host_tx: crate::core::app::HostTx|
               -> WorkerBackend {
             let capabilities = Capabilities::new();
             for insert_fn in capability_inserts.iter() {
@@ -265,20 +265,20 @@ impl TurRuntime {
                 viewport,
                 worker_ctx,
                 wake_worker,
-                main_tx,
+                host_tx,
                 main_cx.clone(),
                 instance_data_definer,
             )
             .expect("threaded backend factory failed")
         };
-        let backend = MainBackend::new(
-            self.worker_host.clone(),
+        let backend = AppBackend::new(
+            self.worker_spawner.clone(),
             renderer,
             worker_pool,
             backend_factory,
         );
         let app = Rc::new(TurApp::new(backend, self.vsync_source.clone()));
-        // Bootstrap the viewport: resize the main-side renderer directly
+        // Bootstrap the viewport: resize the host-side renderer directly
         // AND seed the worker's screen state + `viewportSize$` atom before
         // frame 1 (the forwarded `PlatformEvent::Resize` does the worker
         // half).
@@ -298,7 +298,7 @@ impl TurRuntime {
 /// # use tur_engine::renderer::noop::NoopRenderer;
 /// # use std::rc::Rc;
 /// # fn _doc(runtime: Rc<TurRuntime>) -> Result<(), tur_engine::error::TurError> {
-/// let pool = WorkerPoolHandle::new("main", usize::MAX);
+/// let pool = WorkerPoolHandle::new("ui", usize::MAX);
 /// let app = runtime
 ///     .app_builder()
 ///     .worker_pool(pool)
@@ -328,14 +328,14 @@ pub struct TurAppBuilder<'rt> {
 impl<'rt> TurAppBuilder<'rt> {
     /// Group the rendering surface — renderer, viewport, dpr — onto this
     /// builder. A non-headless app must supply all three together; the
-    /// terminal [`Self::build`] then takes no arguments. `MainBackend`
-    /// owns the renderer on main and drives it directly (render batches,
-    /// image uploads, resize-on-event) — no `render_sink` callback.
+    /// terminal [`Self::build`] then takes no arguments. `AppBackend`
+    /// owns the renderer on the host thread and drives it directly (render batches,
+    /// image uploads, resize-on-event).
     ///
     /// `viewport` is the initial logical `(width, height)` of the render
     /// target; `dpr` is the device pixel ratio. The engine pushes the
     /// initial `PlatformEvent::Resize` into the worker so `viewportSize$`
-    /// + the main-side renderer are seeded before frame 1.
+    /// + the host-side renderer are seeded before frame 1.
     pub fn renderer(
         mut self,
         renderer: Box<dyn crate::core::render::Renderer>,
@@ -397,7 +397,7 @@ impl<'rt> TurAppBuilder<'rt> {
     /// (identity-checked, not name-checked).
     ///
     /// All apps assigned to the same pool share at most
-    /// [`WorkerPoolHandle::max_threads`] worker threads; apps in different
+    /// [`WorkerPoolHandle::max_workers`] worker threads; apps in different
     /// pools never share threads. A cap ≥ the app count gives each app its
     /// own worker (the historical default).
     ///
@@ -452,10 +452,10 @@ impl<'rt> TurAppBuilder<'rt> {
     /// Terminal: build a headless instance (no renderer, no rendering).
     /// The instance still runs JS, owns a reactive store, accepts platform
     /// events if fed any, and can use capabilities (http, clipboard, etc.).
-    /// The engine runs on a worker thread (via [`MainBackend`]) — JS
+    /// The engine runs on a worker thread (via [`AppBackend`]) — JS
     /// execution, frame flushes, and every `async` RPC round-trip through
     /// the same main↔worker channel as a rendering instance; the only
-    /// difference is the main-side [`Renderer`](crate::core::render::Renderer)
+    /// difference is the host-side [`Renderer`](crate::core::render::Renderer)
     /// is a [`NoopRenderer`](crate::renderer::NoopRenderer), so paint
     /// batches are discarded.
     ///
@@ -487,7 +487,7 @@ impl<'rt> TurAppBuilder<'rt> {
         let pool = pool.ok_or_else(|| {
             TurError::Other(
                 "TurAppBuilder requires `.worker_pool(handle)`; declare one via \
-                  WorkerPoolHandle::new(name, max_threads) and register it with \
+                  WorkerPoolHandle::new(name, max_workers) and register it with \
                   TurRuntimeBuilder::worker_pool(...)"
                     .to_string(),
             )
@@ -523,8 +523,8 @@ pub(crate) fn build_worker_backend(
     viewport: (f64, f64),
     worker_ctx: crate::core::scheduler::WorkerContext,
     wake_worker: std::sync::Arc<dyn Fn() + Send + Sync>,
-    main_tx: crate::core::app::MainTx,
-    async_cx: AsyncPluginContext,
+    host_tx: crate::core::app::HostTx,
+    host_exec: HostExecutor,
     instance_data_definer: Option<InstanceDataDefiner>,
 ) -> Result<WorkerBackend, TurError> {
     let executor = Rc::new(TurJobExecutor::new());
@@ -544,7 +544,7 @@ pub(crate) fn build_worker_backend(
         capabilities,
         worker_ctx,
         wake_worker,
-        main_tx,
+        host_tx,
     );
 
     let opaque = BoaOpaque::new(internal.js_context.clone(), &mut boa_context);
@@ -561,7 +561,7 @@ pub(crate) fn build_worker_backend(
 
     let mut core_fns: Vec<FnEntry> = Vec::new();
     core_fns.extend(crate::core::edgy::bridge::fns());
-    core_fns.extend(render::fns());
+    core_fns.extend(mount::fns());
     let core_module = build_native_module(
         &mut boa_context,
         opaque.object().clone().into(),
@@ -618,25 +618,9 @@ pub(crate) fn build_worker_backend(
             subsystems: internal.subsystems.clone(),
             event_bus: internal.event_bus.clone(),
             viewport_size: viewport_size_js.clone(),
-            async_cx: async_cx.clone(),
+            host_exec: host_exec.clone(),
         };
         plugin.register(&mut plugin_ctx)?;
-    }
-
-    {
-        let cursor_backend = internal
-            .js_context
-            .capability()
-            .of::<crate::core::platform::CursorCap>()
-            .map(|c| c.backend().clone())
-            .unwrap_or_else(|| {
-                std::sync::Arc::new(std::sync::Mutex::new(crate::core::platform::NoopCursor))
-            });
-        internal
-            .app_context
-            .borrow_mut()
-            .shell
-            .set_cursor_platform(cursor_backend);
     }
 
     tracing::info!("WorkerBackend built ({} plugins)", plugins.len());
@@ -648,9 +632,9 @@ pub struct TurRuntimeBuilder {
     clock: Option<Arc<dyn Clock + Send + Sync>>,
     plugins: Vec<Box<dyn Plugin>>,
     capability_builders: Vec<CapabilityBuilder>,
-    worker_host: Option<Rc<dyn crate::core::scheduler::WorkerHost>>,
+    worker_spawner: Option<Rc<dyn crate::core::scheduler::WorkerSpawner>>,
     vsync_source: Option<Rc<dyn crate::core::scheduler::VsyncSource>>,
-    main_loop: Option<Rc<dyn crate::core::scheduler::MainLoop>>,
+    host_loop: Option<Rc<dyn crate::core::scheduler::HostLoop>>,
     worker_pools: Vec<WorkerPoolHandle>,
 }
 
@@ -667,9 +651,9 @@ impl TurRuntimeBuilder {
             clock: None,
             plugins: Vec::new(),
             capability_builders: Vec::new(),
-            worker_host: None,
+            worker_spawner: None,
             vsync_source: None,
-            main_loop: None,
+            host_loop: None,
             worker_pools: Vec::new(),
         }
     }
@@ -716,10 +700,10 @@ impl TurRuntimeBuilder {
     /// [`app_builder`](TurRuntime::app_builder) →
     /// [`TurAppBuilder::build`](TurAppBuilder::build).
     ///
-    /// The closure receives an [`AsyncPluginContext`] clone — the engine's
+    /// The closure receives an [`HostExecutor`] clone — the engine's
     /// main-thread hop. Backends that need to run OS-API calls on the main
     /// thread (e.g. macOS `arboard`/`NSPasteboard`) store it and self-hop
-    /// via [`AsyncPluginContext::run_on_main`]; backends that don't (wasm,
+    /// via [`HostExecutor::run_on_host`]; backends that don't (wasm,
     /// HTTP via tokio, filepicker via `rfd`) ignore the argument. The
     /// closure is `FnOnce`: the backend is constructed exactly once and
     /// shared (Capability newtypes wrap `Arc`, so per-worker replay is a
@@ -750,10 +734,10 @@ impl TurRuntimeBuilder {
     pub fn capability<C, F>(mut self, build: F) -> Self
     where
         C: crate::core::capability::Capability + Send + Sync + 'static,
-        F: FnOnce(&AsyncPluginContext) -> Result<C, TurError> + Send + Sync + 'static,
+        F: FnOnce(&HostExecutor) -> Result<C, TurError> + Send + Sync + 'static,
     {
         self.capability_builders
-            .push(Box::new(move |cx: &AsyncPluginContext| {
+            .push(Box::new(move |cx: &HostExecutor| {
                 let cap = build(cx)?;
                 Ok(Box::new(move |registry: &Capabilities| {
                     registry.insert::<C>(cap.clone());
@@ -763,12 +747,12 @@ impl TurRuntimeBuilder {
     }
 
     /// Set the worker host. Required before `build()`. The host implements
-    /// [`WorkerHost`](crate::core::scheduler::WorkerHost) — native
+    /// [`WorkerSpawner`](crate::core::scheduler::WorkerSpawner) — native
     /// embedders pass an `Rc<NativeWorkerPools>`
     /// (`tur_native::worker_pool`, constructed with the platform's lane
-    /// timer); wasm passes `WasmWorkerHost`.
-    pub fn worker_host(mut self, host: Rc<dyn crate::core::scheduler::WorkerHost>) -> Self {
-        self.worker_host = Some(host);
+    /// timer); wasm passes `WasmWorkerSpawner`.
+    pub fn worker_spawner(mut self, host: Rc<dyn crate::core::scheduler::WorkerSpawner>) -> Self {
+        self.worker_spawner = Some(host);
         self
     }
 
@@ -785,25 +769,25 @@ impl TurRuntimeBuilder {
 
     /// Set the main-thread task spawner. Required before `build()`. Roots
     /// the engine's internal main-thread drain (the
-    /// [`AsyncPluginContext`](crate::AsyncPluginContext) hop) plus any
+    /// [`HostExecutor`](crate::HostExecutor) hop) plus any
     /// embedder main-thread tasks.
-    pub fn main_loop(mut self, lp: Rc<dyn crate::core::scheduler::MainLoop>) -> Self {
-        self.main_loop = Some(lp);
+    pub fn host_loop(mut self, lp: Rc<dyn crate::core::scheduler::HostLoop>) -> Self {
+        self.host_loop = Some(lp);
         self
     }
 
     /// Register a worker pool. Every [`TurAppBuilder`] spawned from this
     /// runtime must assign one of the registered pools via
     /// [`TurAppBuilder::worker_pool`] (identity-checked). Apps assigned to
-    /// the same pool share at most [`WorkerPoolHandle::max_threads`]
+    /// the same pool share at most [`WorkerPoolHandle::max_workers`]
     /// worker threads; apps in different pools never share threads — so,
     /// e.g., heavy daemon workloads cannot stall UI rendering.
     ///
-    /// Pooling itself is platform-implemented: the [`WorkerHost`] supplied
-    /// to [`Self::worker_host`] hosts the app loops (native: compose
-    /// `tur_native::NativeWorkerPools`; wasm: `WasmWorkerHost` built in).
+    /// Pooling itself is platform-implemented: the [`WorkerSpawner`] supplied
+    /// to [`Self::worker_spawner`] hosts the app loops (native: compose
+    /// `tur_native::NativeWorkerPools`; wasm: `WasmWorkerSpawner` built in).
     ///
-    /// Fails at [`build`](Self::build) on `max_threads == 0` or a duplicate
+    /// Fails at [`build`](Self::build) on `max_workers == 0` or a duplicate
     /// pool name.
     ///
     /// ```no_run
@@ -829,22 +813,22 @@ impl TurRuntimeBuilder {
         let clock = self
             .clock
             .expect("clock must be set (use TurRuntimeBuilder::clock)");
-        let worker_host = self
-            .worker_host
-            .expect("worker_host must be set (use TurRuntimeBuilder::worker_host)");
+        let worker_spawner = self
+            .worker_spawner
+            .expect("worker_spawner must be set (use TurRuntimeBuilder::worker_spawner)");
         let vsync_source = self
             .vsync_source
             .expect("vsync_source must be set (use TurRuntimeBuilder::vsync_source)");
-        let main_loop = self
-            .main_loop
-            .expect("main_loop must be set (use TurRuntimeBuilder::main_loop)");
+        let host_loop = self
+            .host_loop
+            .expect("host_loop must be set (use TurRuntimeBuilder::host_loop)");
 
         // Validate worker pools: non-zero caps + unique names (identity is
         // the Arc, but names stay unique so diagnostics are unambiguous).
         for pool in &self.worker_pools {
-            if pool.max_threads() == 0 {
+            if pool.max_workers() == 0 {
                 return Err(TurError::Other(format!(
-                    "worker pool `{}` must declare max_threads >= 1",
+                    "worker pool `{}` must declare max_workers >= 1",
                     pool.name()
                 )));
             }
@@ -868,14 +852,14 @@ impl TurRuntimeBuilder {
         // Create the engine-internal main-thread channel + root the drain
         // on the main loop. `build()` runs on the main thread, so
         // `spawn_local` is valid here; the drain runs on the next
-        // main-executor tick and serves the `AsyncPluginContext`
+        // main-executor tick and serves the `HostExecutor`
         // (plugin/bridge hops) for the runtime's life.
-        let (tx, drain) = crate::core::scheduler::main_channel();
-        main_loop.spawn_local(Box::pin(drain.run()));
-        let main_cx = AsyncPluginContext::from_sender(tx);
+        let (tx, drain) = crate::core::scheduler::host_channel();
+        host_loop.spawn_local(Box::pin(drain.run()));
+        let main_cx = HostExecutor::from_sender(tx);
 
         // Run each capability-construction closure once (receives the
-        // `AsyncPluginContext`), producing the per-worker replay closures.
+        // `HostExecutor`), producing the per-worker replay closures.
         // A failing backend (e.g. no clipboard on headless CI) propagates
         // `Err` out of `build()`.
         let mut capability_inserts: Vec<CapabilityInsert> = Vec::new();
@@ -931,9 +915,9 @@ impl TurRuntimeBuilder {
             capabilities,
             capability_inserts: Arc::new(capability_inserts),
             plugins: Arc::new(self.plugins),
-            worker_host,
+            worker_spawner,
             vsync_source,
-            main_loop,
+            host_loop,
             worker_pools: self.worker_pools,
             main_cx,
         }))

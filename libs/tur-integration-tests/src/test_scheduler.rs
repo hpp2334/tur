@@ -4,7 +4,7 @@
 //! - [`TestVsyncSource`] — manual vsync channel
 //!   ([`TurApp::set_vsync_source`](tur_engine::TurApp::set_vsync_source)
 //!   accepts one; the harness fires it per driven frame).
-//! - [`TestMainLoop`] — main-thread task spawner backed by a thread-local
+//! - [`TestHostLoop`] — main-thread task spawner backed by a thread-local
 //!   tokio `LocalSet` (drives the engine's `run_loop` + the engine's
 //!   main-thread drain).
 //! - Worker hosting comes from
@@ -39,7 +39,7 @@ use tokio::runtime::{Builder as TokioRuntimeBuilder, Runtime};
 use tokio::task::LocalSet;
 use tur_native::worker_pool::{LaneTimer, NativeWorkerPools};
 
-use tur_engine::core::scheduler::{MainLoop, Sleep, TaskHandle, VsyncEvents, VsyncSource};
+use tur_engine::core::scheduler::{HostLoop, Sleep, TaskHandle, VsyncEvents, VsyncSource};
 
 /// Shared virtual clock state. The test harness holds a clone + advances
 /// it via [`VirtualClock::advance`]; sleep futures register deadlines +
@@ -218,9 +218,9 @@ impl VsyncSource for TestVsyncSource {
 /// Main-thread task spawner backed by the current thread's `LocalSet`
 /// (created by [`TestSchedulerDriver::new`]). Drives the engine's
 /// `run_loop` futures + the engine's main-thread drain.
-pub struct TestMainLoop;
+pub struct TestHostLoop;
 
-impl MainLoop for TestMainLoop {
+impl HostLoop for TestHostLoop {
     fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
         let local = CURRENT_EXEC.with(|c| {
             c.borrow()
@@ -244,9 +244,9 @@ impl MainLoop for TestMainLoop {
 /// ```text
 /// let driver = TestSchedulerDriver::new();
 /// TurRuntime::builder()
-///     .worker_host(driver.worker_host())
+///     .worker_spawner(driver.worker_spawner())
 ///     .vsync_source(driver.vsync_source())
-///     .main_loop(driver.main_loop())
+///     .host_loop(driver.host_loop())
 ///     …
 /// ```
 pub struct TestSchedulerDriver {
@@ -277,7 +277,7 @@ impl TestSchedulerDriver {
 
     /// The native worker host (capped shared lane threads + virtual-clock
     /// timers + dedicated-thread `spawn_blocking`).
-    pub fn worker_host(&self) -> Rc<NativeWorkerPools> {
+    pub fn worker_spawner(&self) -> Rc<NativeWorkerPools> {
         self.pools.clone()
     }
 
@@ -287,8 +287,8 @@ impl TestSchedulerDriver {
     }
 
     /// The main-thread task spawner.
-    pub fn main_loop(&self) -> Rc<TestMainLoop> {
-        Rc::new(TestMainLoop)
+    pub fn host_loop(&self) -> Rc<TestHostLoop> {
+        Rc::new(TestHostLoop)
     }
 
     /// Push one vsync tick (convenience — same as
@@ -314,8 +314,8 @@ impl TestSchedulerDriver {
     }
 
     /// Spawn a task on the main-thread `LocalSet` (convenience — same as
-    /// `self.main_loop().spawn_local(fut)`).
+    /// `self.host_loop().spawn_local(fut)`).
     pub fn spawn_local(&self, fut: Pin<Box<dyn Future<Output = ()> + 'static>>) -> TaskHandle {
-        self.main_loop().spawn_local(fut)
+        self.host_loop().spawn_local(fut)
     }
 }

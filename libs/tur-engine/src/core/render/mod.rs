@@ -17,6 +17,6 @@ pub use recording_canvas::RecordingCanvas;
 pub use renderer::*;
 
 /// One frame's worth of paint state shipped worker → main
-/// (`MainMsg::RenderCommands`). Plain `Vec<RenderCommand>` moved by
+/// (`HostMsg::RenderCommands`). Plain `Vec<RenderCommand>` moved by
 /// ownership across the channel (no clone).
 pub type RenderCommandBatch = Vec<RenderCommand>;

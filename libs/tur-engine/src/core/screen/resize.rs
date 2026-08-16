@@ -14,7 +14,7 @@ impl Subsystem for ResizeSubsystem {
             return;
         };
 
-        // The renderer lives on main; the embedder resizes it directly at
+        // The renderer lives on the host thread; the embedder resizes it directly at
         // event-receipt time via `TurApp::resize` (which also forwards this
         // `PlatformEvent::Resize` to the worker). Here we only update the
         // worker-side screen state.
