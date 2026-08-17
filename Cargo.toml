@@ -60,8 +60,8 @@ async-channel = "2"
 
 parley = { version = "0.9", default-features = false, features = ["std"] }
 wgpu = "29"
-boa_engine = { git = "https://github.com/boa-dev/boa.git", rev = "6ef5370c1cff770c51f3e4f8600590f11d66eeaf" }
-boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "6ef5370c1cff770c51f3e4f8600590f11d66eeaf" }
+boa_engine = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
+boa_gc = { git = "https://github.com/boa-dev/boa.git", rev = "93a9e31a83bbaa15bbd8b687e61639ffc53bbef1" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 resvg = "0.47"
 usvg = "0.47"
