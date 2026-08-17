@@ -12,5 +12,5 @@ function run(label, cmd, opts) {
 
 run('pnpm install', 'pnpm install --frozen-lockfile', { cwd: jsDir });
 run('build js', 'pnpm build', { cwd: jsDir });
-run('cargo test', 'xvfb-run -a cargo test --workspace --locked', { cwd: root });
+run('cargo nextest', 'xvfb-run -a cargo nextest run --workspace --locked', { cwd: root });
 run('wasm-pack build', 'wasm-pack build --target web --no-opt -- --locked', { cwd: wasmDir });

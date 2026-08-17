@@ -19,11 +19,16 @@ tokio = { workspace = true }
 
 [dev-dependencies]
 image = { workspace = true }
+libtest-mimic = "0.8"
 minifb = "0.28"
 pollster = "0.4"
 raw-window-handle = "0.6"
 thiserror = { workspace = true }
 wgpu = { workspace = true }
+
+# The vello suite keeps `harness = false` (it drives a real GPU surface via
+# minifb); libtest-mimic gives it the standard libtest CLI + wire format so
+# cargo-nextest can list/filter/retry its tests like every other binary.
 
 [[test]]
 name = "vello"

@@ -17,11 +17,13 @@
 #![cfg_attr(not(target_os = "android"), allow(dead_code))]
 
 mod app;
-mod module_source;
 pub mod scheduler;
 mod surface;
 
-pub use module_source::ModuleSourceRegistry;
+// Re-exported for embedder convenience — the registry itself is engine-owned
+// (`tur_engine::ModuleSourceRegistry`); the Android glue only stores and
+// drives it (registerModuleSource / releaseModuleSource JNI ops).
+pub use tur_engine::ModuleSourceRegistry;
 
 // Re-export the JNI primitive types so the `standard_jni_exports!()` macro
 // (expanded inside an embedder's cdylib) can name them via `$crate::…` without
@@ -373,11 +375,12 @@ pub mod ops {
     /// `registerModuleSource(env, runtimeHandle, js): long`
     ///
     /// Register a module source on the runtime's shared
-    /// [`ModuleSourceRegistry`](crate::ModuleSourceRegistry) and return its
-    /// opaque handle (`0` on failure). The source crosses JNI exactly once,
-    /// here — `loadModule` then loads it into any instance of the runtime by
-    /// handle. Rust embedders skip even this hop: read the source natively
-    /// and call `runtime.module_sources.register(…)` via [`with_runtime`].
+    /// [`ModuleSourceRegistry`] (engine-owned; the Android glue stores it on
+    /// the runtime) and return its opaque handle (`0` on failure). The
+    /// source crosses JNI exactly once, here — `loadModule` then loads it
+    /// into any instance of the runtime by handle. Rust embedders skip even
+    /// this hop: read the source natively and register it via
+    /// [`with_runtime`].
     pub fn register_module_source(env: &mut JNIEnv, runtime_handle: jlong, js: JString) -> jlong {
         catch_into_zero(env, "registerModuleSource", |env| {
             let runtime = handle_to_runtime(runtime_handle).ok_or("invalid runtime handle")?;
@@ -412,15 +415,19 @@ pub mod ops {
     pub fn load_module(env: &mut JNIEnv, handle: jlong, source_handle: jlong) {
         catch_void(env, "loadModule", |_env| {
             let instance = handle_to_instance(handle).ok_or("invalid instance handle")?;
-            let source = instance
-                .module_sources
-                .get(source_handle as u64)
-                .ok_or("unknown module source handle")?;
             log::info!(
                 "loadModule: source handle {source_handle} ({} bytes)",
-                source.len()
+                instance
+                    .module_sources
+                    .get(source_handle as u64)
+                    .map(|s| s.len())
+                    .unwrap_or(0)
             );
-            futures::executor::block_on(instance.app.load_module(source))?;
+            futures::executor::block_on(
+                instance
+                    .app
+                    .load_module_source(&instance.module_sources, source_handle as u64),
+            )?;
             log::info!("loadModule: module evaluated OK");
             log::info!("loadModule: paint requested");
             Ok(())
@@ -629,10 +636,6 @@ pub mod ops {
     /// then `with_runtime(h, |rt| rt.module_sources.register(source))`),
     /// so the JS bundle never crosses the JNI boundary. Returns `None` if
     /// `handle` is `0` or stale, in which case `f` is not run.
-    ///
-    /// Unlike [`with_app`] there is no `!Send` constraint — the runtime
-    /// handle is process-shared infrastructure — but follow the crate's JNI
-    /// discipline and call it on the main thread.
     pub fn with_runtime<R>(handle: jlong, f: impl FnOnce(&AndroidRuntime) -> R) -> Option<R> {
         let runtime = handle_to_runtime(handle)?;
         Some(f(runtime))

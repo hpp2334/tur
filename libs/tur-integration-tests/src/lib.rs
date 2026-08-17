@@ -1023,6 +1023,30 @@ impl TurTestApp {
         self.clipboard.last_write()
     }
 
+    /// Condition-wait variant of [`Self::take_clipboard_write`]: drive
+    /// frames until a clipboard write lands, returning the latest one.
+    ///
+    /// The write is spawned on the worker's own executor
+    /// (`WorkerContext::spawn_local` in `ClipboardWriteSubsystem`), which
+    /// the lane thread polls **after** the frame reply is sent — a single
+    /// `wait_for_timeout(ZERO)` therefore gives the test no happens-before
+    /// edge over the poll, and under CPU contention (parallel test runs)
+    /// the raw `take_clipboard_write` can observe `None` before the write
+    /// lands. Polling here is the deterministic sync point. Panics if no
+    /// write arrives within `wait_for`'s cap (~2 s virtual).
+    pub fn wait_for_clipboard_write(&self) -> String {
+        let last = std::cell::RefCell::new(None);
+        assert!(
+            self.wait_for(|app| {
+                *last.borrow_mut() = app.take_clipboard_write();
+                last.borrow().is_some()
+            }),
+            "timed out waiting for a clipboard write"
+        );
+        last.into_inner()
+            .expect("wait_for returned true without a write")
+    }
+
     /// Pre-canned text returned by the next `clipboardReadText()` call from
     /// JS, or `set_source` on a reactive atom driven by it. Useful for
     /// testing paste-via-read flows.

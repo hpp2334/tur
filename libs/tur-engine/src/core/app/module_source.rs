@@ -1,17 +1,22 @@
 //! Module-source registry — the shared-source half of the handle-based
 //! module-loading path.
 //!
-//! [`WorkerMsg::LoadModule`](tur_engine::core::app::WorkerMsg) carries the
-//! module source as an `Arc<str>`, so a source created on the Rust side (e.g.
-//! an APK asset read directly in native code) can be registered once and then
-//! loaded into any instance of the runtime **without ever crossing the JNI
-//! boundary as a string** — Kotlin only ever sees the opaque `u64` handle.
+//! [`WorkerMsg::LoadModule`](super::WorkerMsg) carries the module source as
+//! an `Arc<str>`, so a source created on the embedder's Rust side (e.g. an
+//! APK asset read directly in native code, a bundle file read by a desktop
+//! host) can be registered once and then loaded into any instance via
+//! [`TurApp::load_module`](crate::TurApp::load_module) /
+//! [`TurApp::load_module_source`](crate::TurApp::load_module_source)
+//! **without ever crossing an embedder boundary as a string** — the host
+//! language (Kotlin glue, JS glue, etc.) only ever sees the opaque `u64`
+//! handle.
 //!
 //! Handles are monotonically increasing ids (never reused): a stale or
-//! double-released handle is a safe miss (`get` → `None`), unlike the crate's
-//! boxed-pointer runtime/instance handles where a dangling value would be UB.
-//! The registry lives on the shared runtime (dropped wholesale by
-//! `destroyRuntime`) and is cloned per instance.
+//! double-released handle is a safe miss (`get` → `None`), unlike boxed-
+//! pointer handles where a dangling value would be UB. The registry is owned
+//! by the embedder's runtime-side state (e.g. `AndroidRuntime` holds one and
+//! clones it per instance) — it is deliberately NOT part of `TurRuntime`
+//! itself, so embedders that load by string never pay for it.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -20,9 +25,9 @@ use std::sync::{Arc, Mutex};
 /// Shared, id-keyed store of `Arc<str>` module sources.
 ///
 /// Cheap to clone (two `Arc`s); every clone sees the same entries. Thread-safe
-/// (id allocation is atomic, the map is mutex-guarded) even though the JNI
-/// discipline calls everything on the main thread — the safety net costs
-/// nothing on the happy path.
+/// (id allocation is atomic, the map is mutex-guarded) even though embedders
+/// typically call everything from one thread — the safety net costs nothing
+/// on the happy path.
 #[derive(Clone, Default)]
 pub struct ModuleSourceRegistry {
     inner: Arc<Mutex<HashMap<u64, Arc<str>>>>,

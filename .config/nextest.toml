@@ -1,0 +1,15 @@
+# cargo-nextest workspace configuration — https://nexte.st/book/configuration
+#
+# The runner for all Rust tests in this workspace (lib + integration test
+# binaries; doctests are NOT run by nextest and stay on `cargo test --doc`).
+# Each test executes in its own process, so a wedged or crashing test can't
+# take down its test binary's other tests.
+
+[profile.ci]
+# Flaky-test tolerance for CI: retry each failing test up to 2 times. A test
+# that passes on retry is reported as "flaky" (visible in the summary) but
+# does not fail the run; a test that fails all attempts fails the run.
+retries = 2
+# Retry immediately — the engine tests are hermetic (virtual clock, in-memory
+# clipboard/HTTP), so there is nothing to back off for.
+backoff = "fixed"

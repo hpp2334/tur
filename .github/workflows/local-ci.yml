@@ -31,8 +31,21 @@ jobs:
         run: pnpm build
         working-directory: ./js
 
+      - name: Install cargo-nextest
+        run: |
+          command -v cargo-nextest >/dev/null || {
+            curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
+          }
+          cargo nextest --version
+
       - name: Cargo test
-        run: xvfb-run -a cargo test --workspace --locked
+        run: xvfb-run -a cargo nextest run --workspace --locked --profile ci
+        timeout-minutes: 5
+        env:
+          RUST_MIN_STACK: 8388608
+
+      - name: Cargo doc test
+        run: cargo test --workspace --doc --locked
         timeout-minutes: 5
         env:
           RUST_MIN_STACK: 8388608
