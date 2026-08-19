@@ -5,11 +5,12 @@ use std::rc::{Rc, Weak};
 
 use boa_engine::object::JsObject;
 use boa_engine::object::builtins::JsFunction;
-use boa_engine::{Context, JsResult, JsValue};
+use boa_engine::{Context, JsError, JsNativeError, JsResult, JsValue};
 
 use super::any_readable_of;
 use super::atom_id_of;
 use super::{AnyReadable, AtomId, Derived, Mutation, Readable, Source, SubscriberId};
+use crate::core::edgy::watch::WatcherRegistry;
 
 // ---------------------------------------------------------------------------
 // Data sub-structs.  Each is a by-value group; fields keep interior
@@ -251,6 +252,8 @@ pub struct SharedReactive {
     graph: DerivedGraph,
     flush: FlushState,
     subscribers: SubscriberGraph,
+    /// `watch()` registry — non-element subscribers (see `edgy::watch`).
+    watchers: WatcherRegistry,
     weak_self: RefCell<Weak<SharedReactive>>,
 }
 
@@ -264,6 +267,7 @@ impl SharedReactive {
             graph: DerivedGraph::new(),
             flush: FlushState::new(app_dirty),
             subscribers: SubscriberGraph::new(),
+            watchers: WatcherRegistry::new(),
             weak_self: RefCell::new(Weak::new()),
         }
     }
@@ -449,11 +453,22 @@ impl SharedReactive {
             .unwrap_or(JsValue::undefined())
     }
 
-    pub(crate) fn write_by_id(&self, id: AtomId, via: &Rc<StoreKv>, value: JsValue) {
+    pub(crate) fn write_by_id(
+        &self,
+        id: AtomId,
+        via: &Rc<StoreKv>,
+        value: JsValue,
+    ) -> JsResult<()> {
         let kv = self.route(id, via);
         let prev = kv.values.borrow().get(&id).cloned();
         if prev.as_ref() == Some(&value) {
-            return;
+            return Ok(());
+        }
+        // Watch-loop guard: while a watcher callback is delivering, a write
+        // that re-invalidates a delivering watcher's watched atom throws at
+        // the JS call site (the write is rejected, no state changes).
+        if let Some(message) = self.detect_watch_loop(id) {
+            return Err(JsError::from(JsNativeError::typ().with_message(message)));
         }
         kv.values.borrow_mut().insert(id, value);
         self.register_holder(id, &kv);
@@ -492,6 +507,46 @@ impl SharedReactive {
         }
 
         self.flush.app_dirty.set(true);
+        Ok(())
+    }
+
+    /// Watch-loop detection: while any watcher callback is delivering, a
+    /// write to `written` is rejected if it transitively invalidates a
+    /// delivering watcher's watched atom. The dependents closure is walked
+    /// read-only (no recompute, no state change) — a `derive` on the path
+    /// is not recomputed, only its dependency edges are followed.
+    fn detect_watch_loop(&self, written: AtomId) -> Option<String> {
+        if !self.watchers.is_delivering() {
+            return None;
+        }
+        let watched = self.watchers.delivering_watched();
+        if watched.is_empty() {
+            return None;
+        }
+        let mut seen: HashSet<AtomId> = HashSet::new();
+        let mut queue = vec![written];
+        while let Some(atom) = queue.pop() {
+            if !seen.insert(atom) {
+                continue;
+            }
+            if let Some(deps) = self.graph.dependents.borrow().get(&atom).cloned() {
+                for dep in deps {
+                    queue.push(dep);
+                }
+            }
+        }
+        for w in watched {
+            if seen.contains(&w) {
+                return Some(format!(
+                    "watch loop detected: a watch callback wrote atom {} which \
+                     re-invalidates the atom it watches — watchers must not write \
+                     what they watch (write to a different atom, or restructure the \
+                     flow so the watched atom only changes from outside the callback)",
+                    w.0
+                ));
+            }
+        }
+        None
     }
 
     // ----- mutation invoke ----------------------------------------------------
@@ -513,7 +568,10 @@ impl SharedReactive {
             Some(Seed::Mutate(c)) => c.clone(),
             _ => return Ok(JsValue::undefined()),
         };
-        match closure {
+        // Arm the watch-loop guard when this mutation is a watcher callback,
+        // so writes inside the closure run `detect_watch_loop`.
+        let armed = self.watchers.arm(id);
+        let outcome = match closure {
             Closure::Js(f) => {
                 // Build the per-store `{get, set}` JsObject and prepend it
                 // before invoking — JS closures expect `(ctx, ...args)`.
@@ -541,7 +599,11 @@ impl SharedReactive {
                     id
                 );
             }
+        };
+        if armed {
+            self.watchers.disarm();
         }
+        outcome
     }
 
     // ----- flush ---------------------------------------------------------------
@@ -672,6 +734,14 @@ impl Store {
     /// report whether any are pending. Held by the layout driver.
     pub fn flush_engine(&self) -> FlushEngineStore {
         FlushEngineStore {
+            shared: self.shared.clone(),
+        }
+    }
+
+    /// View over the `watch()` registry (delivery side): which watcher
+    /// callbacks are due for a set of dirtied atoms. Held by the flush loop.
+    pub fn watch_dispatch(&self) -> WatchDispatchStore {
+        WatchDispatchStore {
             shared: self.shared.clone(),
         }
     }
@@ -817,6 +887,28 @@ impl FlushEngineStore {
 }
 
 // ---------------------------------------------------------------------------
+// WatchDispatchStore — capability face over the `watch()` registry's delivery
+// side. `due_callbacks` returns the callbacks owed for a set of dirtied atoms,
+// coalesced to at most once per flush epoch per watcher. The flush loop pushes
+// them onto the mutation queue — same invocation rail as every other mutation.
+// ---------------------------------------------------------------------------
+
+#[derive(Clone)]
+pub struct WatchDispatchStore {
+    shared: Rc<SharedReactive>,
+}
+
+impl WatchDispatchStore {
+    /// Watcher callbacks due for `dirties` at flush epoch `epoch`. Stamps
+    /// each returned watcher's epoch (a watcher delivers at most once per
+    /// epoch — the convergence backstop for indirect write cycles).
+    pub fn due_callbacks(&self, dirties: &HashSet<AnyReadable>, epoch: u64) -> Vec<Mutation> {
+        let ids: HashSet<AtomId> = dirties.iter().copied().map(atom_id_of).collect();
+        self.shared.watchers.take_due(&ids, epoch)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // ReactiveBridgeStore — the JS-bridge capability face: the sole entry point
 // for atom creation (`source`/`derive`/`mutate`), plus the read/write surface
 // the bridge needs (`read`/`set_source`/`invoke_mutation`) and ctx-object
@@ -927,14 +1019,61 @@ impl ReactiveBridgeStore {
         ))
     }
 
+    /// `watch(readable, cb)` support: register a watcher over `watched` with
+    /// `callback` (already minted via `decl_mutate` by the bridge fn), and
+    /// mint the `start$` / `stop$` control mutations. Returns
+    /// `(start_mutation, stop_mutation)`.
+    ///
+    /// The control closures capture a `Weak` to the shared machinery — a
+    /// strong capture would create an Rc cycle (the closure lives in the
+    /// shared seed registry, which the closure would hold alive).
+    ///
+    /// `start$` additionally materializes the watched atom once (through the
+    /// invoking store): a declared-but-never-computed derived otherwise sits
+    /// in the stale set, and the next *unrelated* source write would count it
+    /// as dirtied and fire the watcher spuriously. After the materializing
+    /// read the atom is clean, so only real dep changes re-dirty it.
+    pub(crate) fn register_watch(
+        &self,
+        watched: AnyReadable,
+        callback: Mutation,
+    ) -> (Mutation, Mutation) {
+        let watcher = self
+            .store
+            .shared
+            .watchers
+            .register(atom_id_of(watched), callback);
+
+        let weak_start = Rc::downgrade(&self.store.shared);
+        let start = self.build_mutate(move |bridge, _args, ctx| {
+            let Some(shared) = weak_start.upgrade() else {
+                return Ok(JsValue::undefined());
+            };
+            if let Some((watched_id, _)) = shared.watchers.activate(watcher) {
+                let _ = shared.read_by_id(watched_id, &bridge.store.kv, ctx);
+            }
+            Ok(JsValue::undefined())
+        });
+
+        let weak_stop = Rc::downgrade(&self.store.shared);
+        let stop = self.build_mutate(move |_bridge, _args, _ctx| {
+            if let Some(shared) = weak_stop.upgrade() {
+                shared.watchers.deactivate(watcher);
+            }
+            Ok(JsValue::undefined())
+        });
+
+        (start, stop)
+    }
+
     pub fn read<T>(&self, readable: Readable<T>, ctx: &mut Context) -> JsValue {
         self.store.read_only().read(readable, ctx)
     }
 
-    pub fn set_source<T>(&self, source: Source<T>, value: JsValue) {
+    pub fn set_source<T>(&self, source: Source<T>, value: JsValue) -> JsResult<()> {
         self.store
             .shared
-            .write_by_id(source.id(), &self.store.kv, value);
+            .write_by_id(source.id(), &self.store.kv, value)
     }
 
     /// Invoke a mutation atom. `args` are the **user-supplied** args only

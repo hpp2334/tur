@@ -6,15 +6,19 @@ import {
     CrossAxisAlignment,
     type Element,
     Expanded,
+    lifecycleView,
     Stack,
     Switch,
     Text,
-    view,
 } from "tur:std";
 import { ExplorerScreen } from "./explorer";
 import { LandingScreen } from "./landing";
-import { hasHttp, view$ } from "./state";
+import { hasHttp, repoWatch, view$ } from "./state";
 import { COLORS } from "./theme";
+
+// The in-realm case compiler (`compile.ts` → `runCaseBody`) injects
+// `__setCaseView` as a function parameter when evaluating this module.
+declare const __setCaseView: (view: unknown) => void;
 
 /** Capability guard: the viewer needs the playground's HTTP module; if it is
  *  somehow absent the whole viewer is replaced with a short notice. */
@@ -42,8 +46,8 @@ function Body(): Element {
     });
 }
 
-export default view(() =>
-    Expanded({
+function CaseRoot(): Element {
+    return Expanded({
         child: Stack({
             children: [
                 Container({
@@ -64,5 +68,20 @@ export default view(() =>
                 }),
             ],
         }),
-    }),
-);
+    });
+}
+
+/** Advanced case: an explicit `start()` (wins over the default-export
+ *  wrapper). The root is wrapped in `lifecycleView` so the `target$` watcher
+ *  (`repoWatch`) starts when this case's view mounts and stops when it is
+ *  torn down (case switch / recompile / module reload) — the watcher lives
+ *  exactly as long as the tree that owns it. */
+export function start() {
+    __setCaseView(
+        lifecycleView(() => ({
+            element: CaseRoot(),
+            onMounted$: repoWatch.start$,
+            beforeDestroy$: repoWatch.stop$,
+        })),
+    );
+}

@@ -10,6 +10,7 @@ pub mod bridge;
 pub mod mutation;
 pub mod reactive;
 pub mod readable_subscribe;
+pub(crate) mod watch;
 
 pub use readable_subscribe::{ReadableSubscribeElement, ReadableSubscribeView};
 

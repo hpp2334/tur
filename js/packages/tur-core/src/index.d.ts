@@ -54,6 +54,17 @@
  * event payload shapes (`PointerInteractEvent`, `KeyEvent`, …) live in
  * `tur:std` — core is event-type-agnostic.
  *
+ * `watch(atom, cb)` subscribes a mutation to an atom OUTSIDE the element
+ * tree — the non-element counterpart of `ReadableSubscribe`. `cb` is a
+ * `mutate((ctx) => …)` handle (the same convention as `onTick`). It
+ * returns `{ start$, stop$ }` mutations: dispatch `start$` to begin
+ * delivery (`store.set(handle.start$)`, or hand it to `lifecycleView` as
+ * `onMounted$`) and `stop$` to end it (`beforeDestroy$`). Change-only:
+ * starting does NOT fire the callback; it fires when the watched atom is
+ * dirtied, at most once per frame. Watchers must not write the atom they
+ * watch (directly or through a derived's dep) — the engine throws a
+ * "watch loop detected" error at the offending `set` call site.
+ *
  * `derive` callbacks receive a `ReadonlyStoreCtx` (get-only); `mutate` and
  * other side-effecting callbacks receive the full `StoreCtx` (get + set).
  */
@@ -134,6 +145,50 @@ declare module "tur:core" {
     export function mutate<Args extends unknown[], R>(
         fn: (ctx: StoreCtx, ...args: Args) => R,
     ): Mutation<Args, R>;
+
+    // ---------------------------------------------------------------------------
+    // watch — non-element subscription over an atom. The counterpart of
+    // `ReadableSubscribe` for state flows that live outside the view tree:
+    // fetch-on-change, persistence, loggers, derived side effects.
+    // ---------------------------------------------------------------------------
+
+    /** Control handle returned by `watch` — both fields are mutations.
+     *  `start$` begins delivery (idempotent; does NOT fire the callback),
+     *  `stop$` ends it (idempotent). Dispatch them like any mutation:
+     *  `store.set(handle.start$)` / `ctx.set(handle.start$)`, or wire them
+     *  straight into `lifecycleView` (`onMounted$: start$`,
+     *  `beforeDestroy$: stop$`) so the watcher lives exactly as long as the
+     *  tree that owns it. */
+    export interface WatchHandle {
+        start$: Mutation<[], void>;
+        stop$: Mutation<[], void>;
+    }
+
+    /** Subscribe `cb` — a mutation handle (`mutate((ctx) => …)`, the same
+     *  convention as `onTick` / `onUpdate$`) — to a source or derived atom.
+     *  While started, the engine invokes it with the store ctx whenever the
+     *  watched atom is dirtied — change-only (starting never fires it), at
+     *  most once per frame (same-frame coalescing), same rail as every other
+     *  mutation.
+     *
+     *  Writes are equality-gated per atom value; note a derived whose dep
+     *  changes but which recomputes to the same value still counts as
+     *  dirtied (delivery is invalidation-based, not value-based).
+     *
+     *  LOOP RULE: the callback must not write the watched atom — directly,
+     *  or by writing a dep of a watched derived. The engine throws a
+     *  "watch loop detected" error at the offending `set` call site and
+     *  rejects the write. For a fetch-style flow, write results to a
+     *  separate result atom; to force a refetch, bump a nonce inside the
+     *  watched trigger object (writes compare object values by reference,
+     *  so a fresh `{ query, nonce }` object always triggers).
+     *
+     *  `watch` is a pure declaration (like `source`/`mutate`): registration
+     *  happens at call time, but nothing is delivered until `start$`. */
+    export function watch<T>(
+        atom: Readable<T>,
+        cb: Mutation<[], void>,
+    ): WatchHandle;
 
     /** Create a store — the KV container for atom values. Declarations read
      *  or written through it materialize there; the same declaration in two

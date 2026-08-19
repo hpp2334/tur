@@ -14,7 +14,7 @@ mod store;
 pub use store::Store;
 pub use store::{
     FlushEngineStore, ReactiveBridgeStore, ReactiveReadJsContext, ReactiveReadStore,
-    SharedReactive, StoreKv, SubscriberIndexStore,
+    SharedReactive, StoreKv, SubscriberIndexStore, WatchDispatchStore,
 };
 
 /// Unique identifier for a reactive atom — the single id space for ALL atoms
@@ -434,7 +434,7 @@ pub fn build_store_context_object(
                 return match readable {
                     AnyReadable::Source(_) => {
                         let value = args.get_or_undefined(1).clone();
-                        shared_for_set.write_by_id(readable.id(), &kv_for_set, value);
+                        shared_for_set.write_by_id(readable.id(), &kv_for_set, value)?;
                         Ok(JsValue::undefined())
                     }
                     AnyReadable::Derived(_) => Err(JsError::from(
@@ -508,7 +508,7 @@ pub fn make_store_js_object(context: &mut Context, store: Store) -> JsObject {
                             readable.id(),
                             &set_store.kv_handle(),
                             value,
-                        );
+                        )?;
                         Ok(JsValue::undefined())
                     }
                     AnyReadable::Derived(_) => Err(JsError::from(

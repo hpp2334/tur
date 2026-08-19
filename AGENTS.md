@@ -379,6 +379,22 @@ Implementation notes:
 - Closures are `!Send` (`Rc`-captured); they live entirely on the worker
   thread. Matches the `Rc<RefCell<...>>` discipline throughout the substrate
   and the `!Send` `JsFunction` path.
+- **`watch`** (`edgy::watch`, bridge fn in the same table): a non-element
+  subscriber over any source/derived. `watch(atom, cb)` takes a
+  caller-supplied `Mutation` handle (`mutate((ctx) => …)` — the same
+  convention as `onTick`/`onUpdate$`), registers it directly in the
+  `WatcherRegistry` (on `SharedReactive`, next to the subscriber graph),
+  and returns `{ start$, stop$ }` control mutations (Rust-closure
+  `build_mutate`s — the closures hold `Weak`s so no Rc cycle). Delivery:
+  `flush_reactive` asks `Store::watch_dispatch()` for due callbacks and
+  pushes them onto the mutation queue — same rail, same frame. Semantics:
+  change-only (`start$` does not fire the callback; it materializes the
+  watched atom once so a never-computed derived can't fire spuriously),
+  idempotent start/stop, and at most one delivery per watcher per flush
+  epoch (`frame_id`) — the convergence backstop. Loop guard: while a
+  watcher callback is invoking, `write_by_id` rejects (JS error at the call
+  site) any write whose dependents closure reaches a delivering watcher's
+  watched atom — a callback must not write what it watches.
 
 ### Multi-instance model (TurRuntime + TurApp)
 
@@ -630,9 +646,12 @@ libs/
                              #   Source/Derived/AnyReadable handles) +
                              #   mutation/ (MutationHandle/
                              #   PendingMutationInvocationQueue) +
-                             #   source/derive/mutate/createStore/
+                             #   source/derive/mutate/watch/createStore/
                              #   view bridge + ReadableSubscribe (the
-                             #   engine's own tur:core)
+                             #   engine's own tur:core) + watch/
+                             #   (WatcherRegistry — non-element
+                             #   subscribers: start$/stop$ handles,
+                             #   epoch coalescing, loop guard)
         element.rs           # ElementKind / ElementNodeId / NodeId /
                              #   FragmentNodeId
         elements/            # AnyElement, ElementObject, ElementTree
