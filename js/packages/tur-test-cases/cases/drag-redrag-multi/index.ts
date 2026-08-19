@@ -2,17 +2,17 @@ import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
+    createStore,
     derive,
-    get,
     mutate,
     PointerInteract,
     Positioned,
     Stack,
-    set,
     source,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Multi-tile drag-and-drop with a SHARED lift animation — a faithful,
@@ -32,7 +32,7 @@ import {
 // test can assert that a second drag, started right after the first release,
 // still fires onPointerDown / onPointerMove on the OTHER tile.
 //
-// Reads use the `get(src)` import (NOT `src.get()` — a source exposes no
+// Reads use the `store.get(src)` import (NOT `src.get()` — a source exposes no
 // `.get()` method), matching the puzzle / drag-delta-tracking convention.
 // ---------------------------------------------------------------------------
 
@@ -45,7 +45,7 @@ const liftCtrl = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
     onTick: mutate((_ctx, v: number) => {
-        set(dragScale$, 1 + v * (LIFT_MAX - 1));
+        store.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
@@ -68,7 +68,7 @@ let lastDragId: number | null = null;
 let dragOffset = { dx: 0, dy: 0 };
 
 function readTile(id: number): TileState {
-    return get(tilePos$[id]);
+    return store.get(tilePos$[id]);
 }
 
 Object.assign(globalThis, {
@@ -90,7 +90,7 @@ Object.assign(globalThis, {
 // just-released tile (during settle) read the animated `dragScale$`; every
 // other tile stays at 1.0.
 function tileScale(id: number): number {
-    if (dragId === id || lastDragId === id) return get(dragScale$);
+    if (dragId === id || lastDragId === id) return store.get(dragScale$);
     return 1;
 }
 
@@ -116,7 +116,7 @@ function makeTile(id: number) {
                 }),
                 onPointerMove: mutate((_ctx, ev) => {
                     if (dragId !== id) return;
-                    set(tilePos$[id], {
+                    store.set(tilePos$[id], {
                         x: ev.global.x - dragOffset.dx,
                         y: ev.global.y - dragOffset.dy,
                     });

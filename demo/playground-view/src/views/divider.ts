@@ -3,14 +3,13 @@ import {
     Container,
     derive,
     type Element,
-    get,
     MouseRegion,
     mutate,
     type Point,
     PointerInteract,
-    set,
     source,
 } from "tur:std";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 // ---------------------------------------------------------------------------
@@ -50,12 +49,13 @@ export function VDivider(opts: {
         cursor: "col-resize",
         child: PointerInteract({
             onPointerDown: mutate((_ctx, ev) => {
-                set(dragOwner$, myId);
+                store.set(dragOwner$, myId);
                 dragStart = { x: ev.global.x, y: ev.global.y };
                 dragLast = { x: ev.global.x, y: ev.global.y };
             }),
             onPointerMove: mutate((_ctx, ev) => {
-                if (get(dragOwner$) !== myId || !dragStart || !dragLast) return;
+                if (store.get(dragOwner$) !== myId || !dragStart || !dragLast)
+                    return;
                 const event: PointerDragEvent = {
                     deltaFromStart: {
                         x: ev.global.x - dragStart.x,
@@ -75,15 +75,15 @@ export function VDivider(opts: {
                 }
             }),
             onPointerUp: mutate((_ctx, _ev) => {
-                if (get(dragOwner$) !== myId) return;
-                set(dragOwner$, null);
+                if (store.get(dragOwner$) !== myId) return;
+                store.set(dragOwner$, null);
                 dragStart = null;
                 dragLast = null;
             }),
             child: Container({
                 width: 8,
                 color: derive(() =>
-                    get(dragOwner$) === myId
+                    store.get(dragOwner$) === myId
                         ? Color.hex("#0ea5e922")
                         : Color.hex("#00000000"),
                 ),
@@ -91,7 +91,7 @@ export function VDivider(opts: {
                     Container({
                         width: 1,
                         color: derive(() =>
-                            get(dragOwner$) === myId
+                            store.get(dragOwner$) === myId
                                 ? tokens.accent.solid
                                 : tokens.border.subtle,
                         ),

@@ -5,16 +5,17 @@ import {
     createSvgResource,
     createTextEditingController,
     derive,
-    get,
+    getStore,
     launch,
     mutate,
     type Readable,
     type StoreCtx,
-    set,
     sleep,
     source,
     type Task,
 } from "tur:std";
+
+const store = getStore();
 
 // ---------------------------------------------------------------------------
 // Types
@@ -95,7 +96,7 @@ const spinCtrl = createAnimationController({
     duration: 900,
     curve: "linear",
     repeat: "infinite",
-    onTick: mutate((_ctx: StoreCtx, v: number) => set(spinProgress$, v)),
+    onTick: mutate((_ctx: StoreCtx, v: number) => store.set(spinProgress$, v)),
 });
 
 // ---------------------------------------------------------------------------
@@ -106,11 +107,11 @@ const spinCtrl = createAnimationController({
  *  tree + `pathSegments$`. No HTTP. Folder clicks / breadcrumbs just mutate
  *  `pathSegments$` and this recomputes instantly. */
 export const entries$: Readable<DirEntry[]> = derive(() => {
-    const tree = get(fileTree$);
+    const tree = store.get(fileTree$);
     if (!tree) return [];
-    const segments = get(pathSegments$);
-    const repo = get(repo$);
-    const ver = get(version$);
+    const segments = store.get(pathSegments$);
+    const repo = store.get(repo$);
+    const ver = store.get(version$);
     const prefix = segments.length === 0 ? "" : `${segments.join("/")}/`;
     const seen = new Map<string, DirEntry>();
     for (const f of tree) {
@@ -170,9 +171,9 @@ export const entries$: Readable<DirEntry[]> = derive(() => {
 });
 
 export const selectedEntry$: Readable<DirEntry | null> = derive(() => {
-    const path = get(selectedPath$);
+    const path = store.get(selectedPath$);
     if (!path) return null;
-    return get(entries$).find((e) => e.path === path) ?? null;
+    return store.get(entries$).find((e) => e.path === path) ?? null;
 });
 
 // ---------------------------------------------------------------------------
@@ -280,11 +281,11 @@ function pickVersion(body: JsDelivrVersion): string | null {
 /** Fetch the flat file tree for a repo, stash it, and switch to the explorer.
  *  Runs as two sequential HTTP calls (version resolve → tree). */
 function loadRepo(target: Repo): void {
-    set(loading$, true);
-    set(error$, null);
-    set(fileTree$, null);
-    set(selectedPath$, null);
-    set(version$, null);
+    store.set(loading$, true);
+    store.set(error$, null);
+    store.set(fileTree$, null);
+    store.set(selectedPath$, null);
+    store.set(version$, null);
 
     const base = `https://data.jsdelivr.com/v1/packages/gh/${encodeURIComponent(target.owner)}/${encodeURIComponent(target.repo)}`;
 
@@ -296,26 +297,32 @@ function loadRepo(target: Repo): void {
                 responseType: "text",
             })) as HttpResponse;
             if (rVer.status === 404) {
-                set(error$, `Repository not found: ${target.fullName}`);
+                store.set(error$, `Repository not found: ${target.fullName}`);
                 return;
             }
             if (rVer.status !== 200) {
-                set(error$, `HTTP ${rVer.status} ${rVer.statusText}`.trim());
+                store.set(
+                    error$,
+                    `HTTP ${rVer.status} ${rVer.statusText}`.trim(),
+                );
                 return;
             }
             let parsed: JsDelivrVersion;
             try {
                 parsed = JSON.parse(rVer.bodyText ?? "{}");
             } catch {
-                set(error$, "Bad response from jsDelivr");
+                store.set(error$, "Bad response from jsDelivr");
                 return;
             }
             const ver = pickVersion(parsed);
             if (!ver) {
-                set(error$, `No published versions for ${target.fullName}`);
+                store.set(
+                    error$,
+                    `No published versions for ${target.fullName}`,
+                );
                 return;
             }
-            set(version$, ver);
+            store.set(version$, ver);
             const rTree = (yield http({
                 method: "GET",
                 url: `${base}@${encodeURIComponent(ver)}?structure=flat`,
@@ -339,21 +346,21 @@ function loadRepo(target: Repo): void {
                 } catch {
                     /* keep HTTP status string */
                 }
-                set(error$, msg);
+                store.set(error$, msg);
                 return;
             }
             let parsedTree: JsDelivrTree;
             try {
                 parsedTree = JSON.parse(rTree.bodyText ?? "{}");
             } catch {
-                set(error$, "Bad file-tree response from jsDelivr");
+                store.set(error$, "Bad file-tree response from jsDelivr");
                 return;
             }
-            set(fileTree$, parsedTree.files ?? []);
+            store.set(fileTree$, parsedTree.files ?? []);
         } catch (e) {
-            set(error$, errMsg(e));
+            store.set(error$, errMsg(e));
         } finally {
-            set(loading$, false);
+            store.set(loading$, false);
         }
     });
 }
@@ -373,7 +380,7 @@ export function openRepo(ctx: StoreCtx, repo: Repo): void {
 /** Landing-screen submit: parse the draft and open the repo, or surface
  *  an inline format error. Runs inside a mutation context. */
 export function openRepoFromDraft(ctx: StoreCtx): void {
-    const draft = get(repoDraft$);
+    const draft = store.get(repoDraft$);
     const repo = parseRepo(draft);
     if (!repo) {
         ctx.set(
@@ -390,48 +397,48 @@ export function backToLanding(): void {
     spinCtrl.stop();
     statusTask?.cancel();
     statusTask = null;
-    set(view$, "landing");
-    set(repo$, null);
-    set(version$, null);
-    set(fileTree$, null);
-    set(pathSegments$, []);
-    set(selectedPath$, null);
-    set(error$, null);
-    set(downloadStatus$, "idle");
+    store.set(view$, "landing");
+    store.set(repo$, null);
+    store.set(version$, null);
+    store.set(fileTree$, null);
+    store.set(pathSegments$, []);
+    store.set(selectedPath$, null);
+    store.set(error$, null);
+    store.set(downloadStatus$, "idle");
 }
 
 /** Navigate into a sub-folder (a row click on a directory). Local. */
 export function openFolder(entry: DirEntry): void {
     if (!entry.isDir) return;
-    set(pathSegments$, [...get(pathSegments$), entry.name]);
-    set(selectedPath$, null);
+    store.set(pathSegments$, [...get(pathSegments$), entry.name]);
+    store.set(selectedPath$, null);
 }
 
 /** Up one folder level; if already at the repo root, return to landing. */
 export function navigateUp(): void {
-    const segs = get(pathSegments$);
+    const segs = store.get(pathSegments$);
     if (segs.length === 0) {
         backToLanding();
         return;
     }
-    set(pathSegments$, segs.slice(0, -1));
-    set(selectedPath$, null);
+    store.set(pathSegments$, segs.slice(0, -1));
+    store.set(selectedPath$, null);
 }
 
 /** Navigate to the repo root (the breadcrumb's repo-name crumb). */
 export function navigateToRoot(): void {
-    set(pathSegments$, []);
-    set(selectedPath$, null);
+    store.set(pathSegments$, []);
+    store.set(selectedPath$, null);
 }
 
 /** Re-fetch the tree (the only nav-adjacent HTTP call). */
 export function refresh(): void {
-    const repo = get(repo$);
+    const repo = store.get(repo$);
     if (repo) loadRepo(repo);
 }
 
 export function selectEntry(entry: DirEntry): void {
-    set(selectedPath$, entry.path);
+    store.set(selectedPath$, entry.path);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,7 +452,7 @@ const STATUS_FLASH_MS = 1800;
 let statusTask: Task | null = null;
 function flashStatus(status: DownloadStatus): void {
     statusTask?.cancel();
-    set(downloadStatus$, status);
+    store.set(downloadStatus$, status);
     if (status === "error") {
         // Keep error$ set — the banner will show it.
     }
@@ -453,21 +460,21 @@ function flashStatus(status: DownloadStatus): void {
         statusTask = launch(function* () {
             yield sleep(STATUS_FLASH_MS);
             statusTask = null;
-            set(downloadStatus$, "idle");
+            store.set(downloadStatus$, "idle");
         });
     }
 }
 
 export function doDownload(): void {
     // Guard re-entry: ignore clicks while a download or its flash is active.
-    if (get(downloadStatus$) !== "idle") return;
+    if (store.get(downloadStatus$) !== "idle") return;
     const save = filePicker.saveFile;
-    const entry = get(selectedEntry$);
+    const entry = store.get(selectedEntry$);
     if (!entry || entry.isDir || !entry.downloadUrl) return;
     // Capture the narrowed string before the closure — TS does not preserve
     // property narrowing across generator/callback boundaries.
     const downloadUrl = entry.downloadUrl;
-    set(error$, null);
+    store.set(error$, null);
     flashStatus("loading");
     spinCtrl.forward();
     launch(function* () {
@@ -491,12 +498,12 @@ export function doDownload(): void {
                 yield sleep(500);
                 save(name, bytes as ArrayBuffer);
             } else {
-                set(error$, `Download failed: HTTP ${r.status}`);
+                store.set(error$, `Download failed: HTTP ${r.status}`);
                 flashStatus("error");
             }
         } catch (e) {
             spinCtrl.stop();
-            set(error$, errMsg(e));
+            store.set(error$, errMsg(e));
             flashStatus("error");
         }
     });

@@ -2,10 +2,11 @@ use tur_engine::builtin_plugins::text::elements::EditableTextElement;
 use tur_engine::core::element::{ElementKind, ElementNodeId};
 use tur_integration_tests::TurTestApp;
 
-const INPUT_BUNDLE: &str = r#"
-    import { createTextEditingController, mount, Container, Input } from "tur:std";
+const INPUT_BUNDLE: &str = r#"const store = createStore();
+
+    import { createStore, createTextEditingController, mount, Container, Input } from "tur:std";
     const controller = createTextEditingController({});
-    mount(Container({
+    mount(store, Container({
         children: [
             Input({
                 controller: controller,

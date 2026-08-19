@@ -1,9 +1,11 @@
 use tur_integration_tests::TurTestApp;
 
 const RUNTIME: &str = r#"
-import { source, set, Switch, Text, mount } from "tur:std";
+import { createStore, source, Switch, Text, mount } from "tur:std";
+const store = createStore();
+
 globalThis.__key = source("a");
-globalThis.__set = set;
+globalThis.__store = store;
 const root = Switch({
     value: globalThis.__key,
     cases: [
@@ -12,7 +14,7 @@ const root = Switch({
     ],
     fallback: () => Text({ text: "FALL", queryKey: ["case_fallback"] }),
 });
-mount(root);
+mount(store, root);
 "#;
 
 #[test]
@@ -46,7 +48,7 @@ fn switch_swaps_branch_on_value_change() {
 
     // Flip the value atom to "b" (module reload would tear down the tree,
     // so mutate via the stashed bridge fn instead).
-    app.eval_js(r#"globalThis.__set(globalThis.__key, "b");"#);
+    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "b");"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(
@@ -66,7 +68,7 @@ fn switch_uses_fallback_when_no_case_matches() {
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     // Value with no matching case → fallback branch.
-    app.eval_js(r#"globalThis.__set(globalThis.__key, "zzz");"#);
+    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "zzz");"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(app.query_element(&["case_a"]).is_none());
@@ -85,17 +87,19 @@ fn switch_no_rebuild_when_value_re_emits_same_key() {
 
     let a_id = app.query_element(&["case_a"]).unwrap();
     // Re-set the same key — the mounted node identity should be unchanged.
-    app.eval_js(r#"globalThis.__set(globalThis.__key, "a");"#);
+    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "a");"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
     let a_id_after = app.query_element(&["case_a"]).unwrap();
     assert_eq!(a_id, a_id_after, "same key must not trigger a rebuild");
 }
 
 const DERIVED_RUNTIME: &str = r#"
-import { source, derive, get, set, Switch, Text, mount } from "tur:std";
+import { createStore, source, derive, Switch, Text, mount } from "tur:std";
+const store = createStore();
+
 globalThis.__key = source("a");
-globalThis.__set = set;
-globalThis.__derived = derive(() => get(globalThis.__key));
+globalThis.__store = store;
+globalThis.__derived = derive(() => store.get(globalThis.__key));
 const root = Switch({
     value: globalThis.__derived,
     cases: [
@@ -104,7 +108,7 @@ const root = Switch({
     ],
     fallback: () => Text({ text: "FALL", queryKey: ["d_case_fallback"] }),
 });
-mount(root);
+mount(store, root);
 "#;
 
 #[test]
@@ -120,7 +124,7 @@ fn switch_swaps_branch_on_derived_value_change() {
 
     // Flip the source atom — the derived should go stale and the Switch
     // should swap via the subscriber graph (not a full-scan try_rebuild).
-    app.eval_js(r#"globalThis.__set(globalThis.__key, "b");"#);
+    app.eval_js(r#"globalThis.__store.set(globalThis.__key, "b");"#);
     app.wait_for_timeout(std::time::Duration::ZERO);
 
     assert!(

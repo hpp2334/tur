@@ -1,4 +1,6 @@
-import { Column, Container, Expanded, Text, view } from "tur:std";
+import { Column, Container, createStore, Expanded, Text, view } from "tur:std";
+
+export const store = createStore();
 
 // Repro #5: Container(no explicit size, padding:48) sized from a Text child,
 // wrapped in Expanded, inside a Column with MainAxisSize.Max. Expected: the

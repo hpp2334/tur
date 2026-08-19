@@ -4,11 +4,14 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    createStore,
     Positioned,
     SizedBox,
     Stack,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Regression: `followerAnchor` must be honored. Target (blue, 60×40) sits at
 // (100, 80) → its bottom-right is (160, 120). The follower (red, 60×40) with

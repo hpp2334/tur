@@ -3,8 +3,8 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    createStore,
     derive,
-    get,
     type Mutation,
     mutate,
     PointerInteract,
@@ -12,10 +12,10 @@ import {
     Positioned,
     SizedBox,
     Stack,
-    set,
     source,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // Reproduces the follower "flash to top-left" bug. The follower is a
 // non-positioned child of the root Stack, so layout assigns it offset (0,0);
@@ -47,7 +47,7 @@ export default view(() => {
             // Stack's max child height changes, forcing a genuine relayout.
             Container({
                 width: 40,
-                height: derive(() => (get(tall$) ? 120 : 10)),
+                height: derive(() => (store.get(tall$) ? 120 : 10)),
                 color: "#4f46e5",
             }),
             // Button (Positioned, away from the follower/target) to flip tall$.
@@ -56,7 +56,7 @@ export default view(() => {
                 top: 540,
                 child: PointerInteract({
                     onClick: mutate(() =>
-                        set(tall$, true),
+                        store.set(tall$, true),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
                     child: Container({
                         width: 60,

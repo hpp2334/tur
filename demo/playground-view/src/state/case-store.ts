@@ -2,11 +2,9 @@ import {
     createTextEditingController,
     createUndoController,
     type Element,
-    get,
     type KeyEvent,
     launch,
     mutate,
-    set,
     sleep,
     type Task,
 } from "tur:std";
@@ -26,6 +24,7 @@ import {
     selectedFile$,
     status$,
 } from "./sources";
+import { store } from "./store";
 import { triggerFadeIn } from "./transitions";
 import type { CaseFileMap, EditorController } from "./types";
 
@@ -93,7 +92,7 @@ export const editorCtrl = createTextEditingController({
         editorCtrl.setSpansPreserveCursor(buildHighlightSpans(editorCtrl.text));
         saveCurrentFileText();
         refreshEditedState();
-        if (get(autoRun$)) {
+        if (store.get(autoRun$)) {
             autoRunTask?.cancel();
             autoRunTask = launch(function* () {
                 yield sleep(300);
@@ -114,8 +113,8 @@ export const editorUndo = createUndoController();
 
 /** Save the current editor text back to the per-case file cache. */
 function saveCurrentFileText(): void {
-    const name = get(selectedCase$);
-    const filename = get(selectedFile$);
+    const name = store.get(selectedCase$);
+    const filename = store.get(selectedFile$);
     let cache = caseFileCache.get(name);
     if (!cache) {
         cache = {};
@@ -125,10 +124,10 @@ function saveCurrentFileText(): void {
 }
 
 function refreshEditedState(): void {
-    const name = get(selectedCase$);
-    const filename = get(selectedFile$);
+    const name = store.get(selectedCase$);
+    const filename = store.get(selectedFile$);
     const baseline = lastCompiledFiles.get(name)?.[filename] ?? "";
-    set(edited$, editorCtrl.text !== baseline);
+    store.set(edited$, editorCtrl.text !== baseline);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,13 +136,13 @@ function refreshEditedState(): void {
 
 export function loadCase(name: string): void {
     if (!CASE_SOURCES[name]) return;
-    set(selectedCase$, name);
-    set(selectedFile$, "index.ts");
+    store.set(selectedCase$, name);
+    store.set(selectedFile$, "index.ts");
 
     // On mobile, jump to the viewer so the user sees the rendered case right
     // after picking it from the Cases tab.
-    if (get(isMobile$)) {
-        set(mobileTab$, "view");
+    if (store.get(isMobile$)) {
+        store.set(mobileTab$, "view");
     }
 
     // Ensure file cache is populated.
@@ -154,8 +153,8 @@ export function loadCase(name: string): void {
     const files = caseFileCache.get(name) ?? {};
     const entryText = files["index.ts"] ?? "";
     editorCtrl.setSpans(buildHighlightSpans(entryText));
-    set(status$, "ready");
-    set(errorMsg$, "");
+    store.set(status$, "ready");
+    store.set(errorMsg$, "");
     refreshEditedState();
     triggerFadeIn();
 }
@@ -164,10 +163,10 @@ export function loadCase(name: string): void {
  *  editor text, loads the new file. */
 export function selectFile(filename: string): void {
     saveCurrentFileText();
-    const name = get(selectedCase$);
+    const name = store.get(selectedCase$);
     const files = caseFileCache.get(name) ?? {};
     const text = files[filename] ?? "";
-    set(selectedFile$, filename);
+    store.set(selectedFile$, filename);
     editorCtrl.setSpans(buildHighlightSpans(text));
     refreshEditedState();
 }
@@ -175,7 +174,7 @@ export function selectFile(filename: string): void {
 export function recompile(): void {
     autoRunTask?.cancel();
     autoRunTask = null;
-    const name = get(selectedCase$);
+    const name = store.get(selectedCase$);
 
     // Save current editor text to the file cache before compiling.
     saveCurrentFileText();
@@ -183,26 +182,26 @@ export function recompile(): void {
 
     const result = compileCase(files);
     if (result.error || !result.start) {
-        set(status$, "error");
-        set(errorMsg$, result.error ?? "unknown error");
+        store.set(status$, "error");
+        store.set(errorMsg$, result.error ?? "unknown error");
         return;
     }
     invokeCaseStart(name, result.start);
     lastCompiledFiles.set(name, { ...files });
-    set(lastCompiledAtMs$, Date.now());
-    set(status$, "ready");
-    set(errorMsg$, "");
-    set(edited$, false);
-    set(compileVersion$, get(compileVersion$) + 1);
+    store.set(lastCompiledAtMs$, Date.now());
+    store.set(status$, "ready");
+    store.set(errorMsg$, "");
+    store.set(edited$, false);
+    store.set(compileVersion$, store.get(compileVersion$) + 1);
     triggerFadeIn();
 }
 
 export function resetCase(): void {
-    const name = get(selectedCase$);
+    const name = store.get(selectedCase$);
     const original = CASE_SOURCES[name] ?? {};
     caseFileCache.set(name, { ...original });
     lastCompiledFiles.set(name, { ...original });
-    const filename = get(selectedFile$);
+    const filename = store.get(selectedFile$);
     editorCtrl.setSpans(buildHighlightSpans(original[filename] ?? ""));
     recompile();
 }

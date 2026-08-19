@@ -2,10 +2,13 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     Expanded,
     Row,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Test: Row with crossAlignment=Stretch should give non-flex children the
 // row's full height, even when those children have no explicit height prop.

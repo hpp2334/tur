@@ -8,7 +8,6 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -17,7 +16,6 @@ import {
     Row,
     ScrollView,
     SizedBox,
-    set,
     Text,
     type Val,
 } from "tur:std";
@@ -34,6 +32,7 @@ import {
     selectFile,
     sidebarWidth$,
 } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 /** Sidebar header: small uppercase label + count of available cases. */
@@ -64,7 +63,7 @@ function SidebarHeader(): Element {
  *  bar when selected; multi-file cases expand an indented file list below
  *  the row when active. */
 function NavItem(name: string): Element {
-    const isSelected = () => get(selectedCase$) === name;
+    const isSelected = () => store.get(selectedCase$) === name;
 
     return Column({
         crossAlignment: CrossAxisAlignment.Stretch,
@@ -72,8 +71,8 @@ function NavItem(name: string): Element {
             SizedBox({ height: 2 }),
             MouseRegion({
                 cursor: "pointer",
-                onEnter: mutate((_ctx, _ev) => set(hoveredCase$, name)),
-                onExit: mutate((_ctx, _ev) => set(hoveredCase$, null)),
+                onEnter: mutate((_ctx, _ev) => store.set(hoveredCase$, name)),
+                onExit: mutate((_ctx, _ev) => store.set(hoveredCase$, null)),
                 child: PointerInteract({
                     onClick: mutate((_ctx, _ev) => loadCase(name)),
                     child: Container({
@@ -106,7 +105,8 @@ function NavItem(name: string): Element {
                                             color: derive(() => {
                                                 const selected = isSelected();
                                                 const hovered =
-                                                    get(hoveredCase$) === name;
+                                                    store.get(hoveredCase$) ===
+                                                    name;
                                                 if (selected)
                                                     return hovered
                                                         ? tokens.bg.strongHover
@@ -128,7 +128,7 @@ function NavItem(name: string): Element {
                                                                     ? tokens
                                                                           .text
                                                                           .primary
-                                                                    : get(
+                                                                    : store.get(
                                                                             hoveredCase$,
                                                                         ) ===
                                                                         name
@@ -149,7 +149,7 @@ function NavItem(name: string): Element {
                                                         Condition({
                                                             condition: derive(
                                                                 () =>
-                                                                    get(
+                                                                    store.get(
                                                                         edited$,
                                                                     ) &&
                                                                     isSelected(),
@@ -228,11 +228,11 @@ function NavItem(name: string): Element {
 
 /** A file tab in the nested file list. Only shown for multi-file cases. */
 function FileItem(filename: string): Element {
-    const isSelected = () => get(selectedFile$) === filename;
+    const isSelected = () => store.get(selectedFile$) === filename;
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(hoveredFile$, filename)),
-        onExit: mutate((_ctx, _ev) => set(hoveredFile$, null)),
+        onEnter: mutate((_ctx, _ev) => store.set(hoveredFile$, filename)),
+        onExit: mutate((_ctx, _ev) => store.set(hoveredFile$, null)),
         child: PointerInteract({
             onClick: mutate((_ctx, _ev) => selectFile(filename)),
             child: Container({
@@ -240,7 +240,7 @@ function FileItem(filename: string): Element {
                 borderRadius: 4,
                 color: derive(() => {
                     const selected = isSelected();
-                    const hovered = get(hoveredFile$) === filename;
+                    const hovered = store.get(hoveredFile$) === filename;
                     if (selected) return tokens.bg.strongHover;
                     return hovered ? tokens.bg.hover : null;
                 }) as unknown as Brush,
@@ -254,7 +254,7 @@ function FileItem(filename: string): Element {
                                 color: derive(() =>
                                     isSelected()
                                         ? tokens.text.primary
-                                        : get(hoveredFile$) === filename
+                                        : store.get(hoveredFile$) === filename
                                           ? tokens.text.primary
                                           : tokens.text.secondary,
                                 ),
@@ -287,7 +287,7 @@ export function Sidebar(): Element {
         // parent's main axis. The cast escapes the `number | null` type since
         // `Val<number>` isn't nullable in the prop signature.
         width: derive(() =>
-            get(isMobile$) ? null : get(sidebarWidth$),
+            store.get(isMobile$) ? null : store.get(sidebarWidth$),
         ) as unknown as Val<number>,
         color: tokens.bg.panel,
         children: [

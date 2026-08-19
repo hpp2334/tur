@@ -1,19 +1,19 @@
 import {
     Condition,
     Container,
+    createStore,
     derive,
-    get,
     type Mutation,
     mutate,
     PointerInteract,
     type PointerInteractEvent,
     SizedBox,
     Stack,
-    set,
     source,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // A clickable box is laid out at (0,0) but painted at (100,80) via `Transform`
 // `translateX`/`translateY` (a paint-only translate). Its painted center is
@@ -34,7 +34,7 @@ export default view(() =>
                 translateY: 80,
                 child: PointerInteract({
                     onClick: mutate(() =>
-                        set(hit$, true),
+                        store.set(hit$, true),
                     ) as unknown as Mutation<[PointerInteractEvent], void>,
                     child: Container({
                         width: 40,
@@ -46,7 +46,7 @@ export default view(() =>
             // A second box appears once the click landed — observable from the
             // element tree so the test can assert the hit-test found the box.
             Condition({
-                condition: derive(() => get(hit$)),
+                condition: derive(() => store.get(hit$)),
                 child: () =>
                     Container({ width: 10, height: 10, color: "#dc2626" }),
             }),

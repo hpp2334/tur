@@ -10,10 +10,10 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
@@ -25,12 +25,12 @@ import {
     Row,
     SizedBox,
     Stack,
-    set,
     source,
     Text,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Animated Card Studio" — a demo of tur's animation API.
@@ -70,10 +70,10 @@ function createController(
         curve,
         repeat: looping ? "infinite" : 1,
         onTick: mutate((_ctx, v: number) => {
-            set(progress$, v);
+            store.set(progress$, v);
         }),
         onEnd: mutate(() => {
-            set(status$, ctrl.status);
+            store.set(status$, ctrl.status);
         }),
     });
 }
@@ -95,45 +95,45 @@ const colorTween = ColorTween({
 
 const playForward = mutate(() => {
     ctrl.forward();
-    set(status$, ctrl.status);
+    store.set(status$, ctrl.status);
 });
 const playReverse = mutate(() => {
     ctrl.reverse();
-    set(status$, ctrl.status);
+    store.set(status$, ctrl.status);
 });
 const pause = mutate(() => {
     ctrl.pause();
-    set(status$, ctrl.status);
+    store.set(status$, ctrl.status);
 });
 const resume = mutate(() => {
     ctrl.resume();
-    set(status$, ctrl.status);
+    store.set(status$, ctrl.status);
 });
 const stop = mutate(() => {
     ctrl.stop();
-    set(status$, ctrl.status);
-    set(progress$, ctrl.value);
+    store.set(status$, ctrl.status);
+    store.set(progress$, ctrl.value);
 });
 const setSpeed = mutate((_ctx, factor: number, label: string) => {
     ctrl.setSpeed(factor);
-    set(speedLabel$, label);
+    store.set(speedLabel$, label);
 });
 const setCurve = mutate(
     (_ctx, curve: "linear" | "easeIn" | "easeOut" | "easeInOut") => {
-        const t = get(progress$);
-        ctrl = createController(curve, get(looping$));
+        const t = store.get(progress$);
+        ctrl = createController(curve, store.get(looping$));
         ctrl.seek(t);
-        set(curveLabel$, curve);
-        set(status$, ctrl.status);
+        store.set(curveLabel$, curve);
+        store.set(status$, ctrl.status);
     },
 );
 const toggleLooping = mutate(() => {
-    const next = !get(looping$);
-    const t = get(progress$);
-    ctrl = createController(get(curveLabel$), next);
+    const next = !store.get(looping$);
+    const t = store.get(progress$);
+    ctrl = createController(store.get(curveLabel$), next);
     ctrl.seek(t);
-    set(looping$, next);
-    set(status$, ctrl.status);
+    store.set(looping$, next);
+    store.set(status$, ctrl.status);
 });
 
 // ---------------------------------------------------------------------------
@@ -147,10 +147,10 @@ function Card(): Element {
     // the value interpolation that previously needed hand-rolled `lerp`.
     return Container({
         // Width: 120 → 280
-        width: derive(() => widthTween.lerp(get(progress$))),
+        width: derive(() => widthTween.lerp(store.get(progress$))),
         height: 160,
-        borderRadius: derive(() => radiusTween.lerp(get(progress$))),
-        color: derive(() => colorTween.lerp(get(progress$))),
+        borderRadius: derive(() => radiusTween.lerp(store.get(progress$))),
+        color: derive(() => colorTween.lerp(store.get(progress$))),
         shadowColor: Color.rgba(15, 23, 42, 80),
         shadowBlur: 24,
         shadowOffset: [0, 8],
@@ -158,7 +158,7 @@ function Card(): Element {
         children: [
             // Rotating inner shape — demonstrates the Transform element.
             Transform({
-                rotate: derive(() => get(progress$) * 2 * Math.PI),
+                rotate: derive(() => store.get(progress$) * 2 * Math.PI),
                 child: Container({
                     width: 60,
                     height: 60,
@@ -173,8 +173,12 @@ function Card(): Element {
 function OrbitingDot(): Element {
     // A dot that orbits around the card center.
     return Positioned({
-        left: derive(() => 140 + 80 * Math.cos(2 * Math.PI * get(progress$))),
-        top: derive(() => 80 + 80 * Math.sin(2 * Math.PI * get(progress$))),
+        left: derive(
+            () => 140 + 80 * Math.cos(2 * Math.PI * store.get(progress$)),
+        ),
+        top: derive(
+            () => 80 + 80 * Math.sin(2 * Math.PI * store.get(progress$)),
+        ),
         child: Container({
             width: 20,
             height: 20,
@@ -189,7 +193,7 @@ function OrbitingDot(): Element {
 
 function ProgressReadout(): Element {
     return Text({
-        text: derive(() => `${Math.round(get(progress$) * 100)}%`),
+        text: derive(() => `${Math.round(store.get(progress$) * 100)}%`),
         fontSize: 12,
         color: Color.rgba(71, 85, 105, 255),
     });
@@ -200,7 +204,7 @@ function StatusBadge(): Element {
         padding: 6,
         borderRadius: 999,
         color: derive(() => {
-            const s = get(status$);
+            const s = store.get(status$);
             if (s === "forward" || s === "reverse") {
                 return Color.rgba(34, 197, 94, 255);
             }
@@ -210,7 +214,7 @@ function StatusBadge(): Element {
         }),
         children: [
             Text({
-                text: derive(() => get(status$).toUpperCase()),
+                text: derive(() => store.get(status$).toUpperCase()),
                 fontSize: 10,
                 color: Color.rgba(255, 255, 255, 255),
             }),
@@ -251,13 +255,13 @@ function SpeedButton(factor: number, label: string): Element {
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate(() =>
-                set(setSpeed, factor, label),
+                store.set(setSpeed, factor, label),
             ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(speedLabel$) === label
+                    store.get(speedLabel$) === label
                         ? Color.hex("#1e293b")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -266,7 +270,7 @@ function SpeedButton(factor: number, label: string): Element {
                         text: label,
                         fontSize: 10,
                         color: derive(() =>
-                            get(speedLabel$) === label
+                            store.get(speedLabel$) === label
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -284,15 +288,14 @@ function CurveButton(
     return MouseRegion({
         cursor: "pointer",
         child: PointerInteract({
-            onClick: mutate(() => set(setCurve, curve)) as unknown as Mutation<
-                [PointerInteractEvent],
-                void
-            >,
+            onClick: mutate(() =>
+                store.set(setCurve, curve),
+            ) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(curveLabel$) === curve
+                    store.get(curveLabel$) === curve
                         ? Color.hex("#0d9488")
                         : Color.hex("#e2e8f0"),
                 ),
@@ -301,7 +304,7 @@ function CurveButton(
                         text: label,
                         fontSize: 10,
                         color: derive(() =>
-                            get(curveLabel$) === curve
+                            store.get(curveLabel$) === curve
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),
@@ -317,20 +320,24 @@ function LoopButton(): Element {
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate(() => {
-                set(toggleLooping);
+                store.set(toggleLooping);
             }) as unknown as Mutation<[PointerInteractEvent], void>,
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(looping$) ? Color.hex("#db2777") : Color.hex("#e2e8f0"),
+                    store.get(looping$)
+                        ? Color.hex("#db2777")
+                        : Color.hex("#e2e8f0"),
                 ),
                 children: [
                     Text({
-                        text: derive(() => (get(looping$) ? "Loop ✓" : "Loop")),
+                        text: derive(() =>
+                            store.get(looping$) ? "Loop ✓" : "Loop",
+                        ),
                         fontSize: 10,
                         color: derive(() =>
-                            get(looping$)
+                            store.get(looping$)
                                 ? Color.hex("#ffffff")
                                 : Color.hex("#475569"),
                         ),

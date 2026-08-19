@@ -5,7 +5,6 @@ import {
     derive,
     Each,
     type Element,
-    get,
     SizedBox,
     Switch,
     Text,
@@ -17,6 +16,7 @@ import {
     selectedCase$,
     status$,
 } from "../state";
+import { store } from "../state/store";
 import { FadeIn } from "../state/transitions";
 import { tokens } from "../theme/tokens";
 
@@ -47,8 +47,8 @@ function ReadyViewer(): Element {
             Each({
                 items: derive(() => [
                     {
-                        name: get(selectedCase$),
-                        v: get(compileVersion$),
+                        name: store.get(selectedCase$),
+                        v: store.get(compileVersion$),
                     },
                 ]),
                 build: (item) =>
@@ -90,7 +90,7 @@ function ErrorPanel(): Element {
                     }),
                     SizedBox({ height: 8 }),
                     Text({
-                        text: derive(() => get(errorMsg$)),
+                        text: derive(() => store.get(errorMsg$)),
                         fontSize: 12,
                         color: tokens.text.onDanger,
                     }),

@@ -4,7 +4,6 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -14,7 +13,6 @@ import {
     Row,
     SizedBox,
     Stack,
-    set,
     Text,
 } from "tur:std";
 import {
@@ -29,6 +27,7 @@ import {
     runHovered$,
     selectedCase$,
 } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { resetIconId, runIconId } from "./icons";
 
@@ -37,15 +36,15 @@ import { resetIconId, runIconId } from "./icons";
 function RunButton(): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(runHovered$, true)),
-        onExit: mutate((_ctx, _ev) => set(runHovered$, false)),
+        onEnter: mutate((_ctx, _ev) => store.set(runHovered$, true)),
+        onExit: mutate((_ctx, _ev) => store.set(runHovered$, false)),
         child: PointerInteract({
             onClick: mutate((_ctx, _ev) => recompile()),
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(runHovered$)
+                    store.get(runHovered$)
                         ? tokens.bg.button.primaryHover
                         : tokens.bg.button.primary,
                 ),
@@ -77,15 +76,15 @@ function RunButton(): Element {
 function ResetButton(): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(resetHovered$, true)),
-        onExit: mutate((_ctx, _ev) => set(resetHovered$, false)),
+        onEnter: mutate((_ctx, _ev) => store.set(resetHovered$, true)),
+        onExit: mutate((_ctx, _ev) => store.set(resetHovered$, false)),
         child: PointerInteract({
             onClick: mutate((_ctx, _ev) => resetCase()),
             child: Container({
                 padding: 6,
                 borderRadius: 6,
                 color: derive(() =>
-                    get(resetHovered$)
+                    store.get(resetHovered$)
                         ? tokens.bg.hover
                         : tokens.bg.button.ghost,
                 ),
@@ -128,14 +127,14 @@ function AutoRunToggle(): Element {
                 cursor: "pointer",
                 child: PointerInteract({
                     onClick: mutate((_ctx, _ev) =>
-                        set(autoRun$, !get(autoRun$)),
+                        store.set(autoRun$, !store.get(autoRun$)),
                     ),
                     child: Container({
                         width: 28,
                         height: 16,
                         borderRadius: 999,
                         color: derive(() =>
-                            get(autoRun$)
+                            store.get(autoRun$)
                                 ? tokens.bg.button.primary
                                 : tokens.bg.hover,
                         ),
@@ -145,7 +144,7 @@ function AutoRunToggle(): Element {
                                     Positioned({
                                         top: 2,
                                         left: derive(() =>
-                                            get(autoRun$) ? 14 : 2,
+                                            store.get(autoRun$) ? 14 : 2,
                                         ),
                                         child: Container({
                                             width: 12,
@@ -169,15 +168,15 @@ function AutoRunToggle(): Element {
 function LayoutButton(mode: LayoutMode, label: string): Element {
     return MouseRegion({
         cursor: "pointer",
-        onEnter: mutate((_ctx, _ev) => set(layoutHovered$, mode)),
-        onExit: mutate((_ctx, _ev) => set(layoutHovered$, null)),
+        onEnter: mutate((_ctx, _ev) => store.set(layoutHovered$, mode)),
+        onExit: mutate((_ctx, _ev) => store.set(layoutHovered$, null)),
         child: PointerInteract({
-            onClick: mutate((_ctx, _ev) => set(layoutMode$, mode)),
+            onClick: mutate((_ctx, _ev) => store.set(layoutMode$, mode)),
             child: Container({
                 padding: 6,
                 color: derive(() => {
-                    const selected = get(layoutMode$) === mode;
-                    const hovered = get(layoutHovered$) === mode;
+                    const selected = store.get(layoutMode$) === mode;
+                    const hovered = store.get(layoutHovered$) === mode;
                     if (selected) return tokens.bg.controlSelected;
                     if (hovered) return tokens.bg.controlTrayHover;
                     return tokens.bg.controlTray;
@@ -187,7 +186,7 @@ function LayoutButton(mode: LayoutMode, label: string): Element {
                         text: label,
                         fontSize: 11,
                         color: derive(() =>
-                            get(layoutMode$) === mode
+                            store.get(layoutMode$) === mode
                                 ? tokens.text.primary
                                 : tokens.text.secondary,
                         ),
@@ -217,7 +216,7 @@ function LayoutControl(): Element {
 // --- Toolbar (composite) ---------------------------------------------------
 
 export function Toolbar(): Element {
-    const pad = (): number => (get(isMobile$) ? 8 : 12);
+    const pad = (): number => (store.get(isMobile$) ? 8 : 12);
     return Container({
         color: tokens.bg.elevated,
         borderColor: tokens.border.subtle,
@@ -241,7 +240,7 @@ export function Toolbar(): Element {
                                     // to reclaim horizontal space.
                                     Condition({
                                         condition: derive(
-                                            () => !get(isMobile$),
+                                            () => !store.get(isMobile$),
                                         ),
                                         child: () =>
                                             Row({
@@ -268,7 +267,9 @@ export function Toolbar(): Element {
                             padding: derive(pad),
                             children: [
                                 Text({
-                                    text: derive(() => get(selectedCase$)),
+                                    text: derive(() =>
+                                        store.get(selectedCase$),
+                                    ),
                                     fontSize: 13,
                                     color: tokens.text.body,
                                 }),
@@ -291,7 +292,7 @@ export function Toolbar(): Element {
                                     // (mobile uses the bottom tab bar).
                                     Condition({
                                         condition: derive(
-                                            () => !get(isMobile$),
+                                            () => !store.get(isMobile$),
                                         ),
                                         child: () =>
                                             Row({

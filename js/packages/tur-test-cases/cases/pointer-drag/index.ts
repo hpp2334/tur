@@ -4,6 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -11,6 +12,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const lastX$ = source(0);
 const lastY$ = source(0);
@@ -21,20 +23,20 @@ export default view(() =>
         crossAlignment: CrossAxisAlignment.Start,
         children: [
             PointerInteract({
-                onPointerDown: mutate(({ set }, ev) => {
-                    set(lastX$, Math.round(ev.global.x));
-                    set(lastY$, Math.round(ev.global.y));
-                    set(phase$, "down");
+                onPointerDown: mutate((_ctx, ev) => {
+                    store.set(lastX$, Math.round(ev.global.x));
+                    store.set(lastY$, Math.round(ev.global.y));
+                    store.set(phase$, "down");
                 }),
-                onPointerMove: mutate(({ set }, ev) => {
-                    set(lastX$, Math.round(ev.global.x));
-                    set(lastY$, Math.round(ev.global.y));
-                    set(phase$, "move");
+                onPointerMove: mutate((_ctx, ev) => {
+                    store.set(lastX$, Math.round(ev.global.x));
+                    store.set(lastY$, Math.round(ev.global.y));
+                    store.set(phase$, "move");
                 }),
-                onPointerUp: mutate(({ set }, ev) => {
-                    set(lastX$, Math.round(ev.global.x));
-                    set(lastY$, Math.round(ev.global.y));
-                    set(phase$, "up");
+                onPointerUp: mutate((_ctx, ev) => {
+                    store.set(lastX$, Math.round(ev.global.x));
+                    store.set(lastY$, Math.round(ev.global.y));
+                    store.set(phase$, "up");
                 }),
                 child: Container({
                     width: 100,

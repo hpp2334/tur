@@ -4,10 +4,10 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     type Element,
     Expanded,
-    get,
     LazyGrid,
     MainAxisSize,
     MouseRegion,
@@ -18,11 +18,11 @@ import {
     type Readable,
     Row,
     SizedBox,
-    set,
     source,
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Lazy Grid Gallery" — a massive virtualized palette. 6,000 tiles, but only
@@ -92,7 +92,7 @@ function Pill(props: {
                 padding: 7,
                 borderRadius: 7,
                 color: derive(() =>
-                    get(props.active)
+                    store.get(props.active)
                         ? Color.hex("#6366f1")
                         : Color.hex("#1e293b"),
                 ),
@@ -134,26 +134,27 @@ export default view(() =>
                             Pill({
                                 label: "Square",
                                 active: derive(
-                                    () => Math.abs(get(aspect$) - 1) < 0.01,
+                                    () =>
+                                        Math.abs(store.get(aspect$) - 1) < 0.01,
                                 ),
                                 onClick: mutate(() => {
-                                    set(aspect$, 1);
+                                    store.set(aspect$, 1);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Wide",
-                                active: derive(() => get(aspect$) > 1),
+                                active: derive(() => store.get(aspect$) > 1),
                                 onClick: mutate(() => {
-                                    set(aspect$, 2);
+                                    store.set(aspect$, 2);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Tall",
-                                active: derive(() => get(aspect$) < 1),
+                                active: derive(() => store.get(aspect$) < 1),
                                 onClick: mutate(() => {
-                                    set(aspect$, 0.5);
+                                    store.set(aspect$, 0.5);
                                 }),
                             }),
                         ],
@@ -164,17 +165,17 @@ export default view(() =>
                         children: [
                             Pill({
                                 label: "Normal",
-                                active: derive(() => !get(dense$)),
+                                active: derive(() => !store.get(dense$)),
                                 onClick: mutate(() => {
-                                    set(dense$, false);
+                                    store.set(dense$, false);
                                 }),
                             }),
                             SizedBox({ width: 6 }),
                             Pill({
                                 label: "Dense",
-                                active: derive(() => get(dense$)),
+                                active: derive(() => store.get(dense$)),
                                 onClick: mutate(() => {
-                                    set(dense$, true);
+                                    store.set(dense$, true);
                                 }),
                             }),
                         ],
@@ -189,10 +190,10 @@ export default view(() =>
                                     axis: Axis.Vertical,
                                     itemCount: ITEM_COUNT,
                                     maxCrossAxisExtent: derive(() =>
-                                        get(dense$) ? 85 : 140,
+                                        store.get(dense$) ? 85 : 140,
                                     ),
                                     childAspectRatio: derive(() =>
-                                        get(aspect$),
+                                        store.get(aspect$),
                                     ),
                                     crossAxisSpacing: 4,
                                     mainAxisSpacing: 4,

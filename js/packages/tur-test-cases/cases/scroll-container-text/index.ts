@@ -1,4 +1,13 @@
-import { Column, Container, ScrollView, Text, view } from "tur:std";
+import {
+    Column,
+    Container,
+    createStore,
+    ScrollView,
+    Text,
+    view,
+} from "tur:std";
+
+export const store = createStore();
 
 // Repro #6: Container(no explicit size, padding:48) sized from a Text child,
 // wrapped in ScrollView(axis: Vertical) > Column. Expected: the container is

@@ -4,11 +4,11 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     Each,
     type Element,
     Expanded,
-    get,
     Image,
     MainAxisAlignment,
     MainAxisSize,
@@ -31,6 +31,7 @@ import {
     tasks$,
 } from "./state";
 import { AddTaskModal, ConfirmRemoveModal, TaskItem } from "./views";
+export const store = createStore();
 
 // --- Light theme palette (Notion / Linear-style) -------------------------
 
@@ -65,7 +66,7 @@ function Header(): Element {
                     SizedBox({ height: 4 }),
                     Text({
                         text: derive(() => {
-                            const tasks = get(tasks$);
+                            const tasks = store.get(tasks$);
                             const done = tasks.filter(
                                 (t) => t.completed,
                             ).length;
@@ -170,7 +171,7 @@ export default view(() =>
                         }),
                 }),
                 Condition({
-                    condition: derive(() => get(removeTarget$) !== null),
+                    condition: derive(() => store.get(removeTarget$) !== null),
                     child: () =>
                         Positioned({
                             top: 0,

@@ -2,6 +2,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     HitTestBehavior,
     MainAxisSize,
@@ -12,6 +13,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const outerClicks$ = source(0);
 const innerClicks$ = source(0);
@@ -24,8 +26,8 @@ export default view(() =>
         mainAxisSize: MainAxisSize.Min,
         children: [
             PointerInteract({
-                onClick: mutate(({ get, set }, _ev) =>
-                    set(outerClicks$, get(outerClicks$) + 1),
+                onClick: mutate((_ctx, _ev) =>
+                    store.set(outerClicks$, store.get(outerClicks$) + 1),
                 ),
                 child: Container({
                     queryKey: ["outer-opaque"],
@@ -35,10 +37,10 @@ export default view(() =>
                         Row({
                             children: [
                                 PointerInteract({
-                                    onClick: mutate(({ get, set }, _ev) =>
-                                        set(
+                                    onClick: mutate((_ctx, _ev) =>
+                                        store.set(
                                             innerClicks$,
-                                            get(innerClicks$) + 1,
+                                            store.get(innerClicks$) + 1,
                                         ),
                                     ),
                                     child: Container({
@@ -53,10 +55,10 @@ export default view(() =>
                 }),
             }),
             PointerInteract({
-                onClick: mutate(({ get, set }, _ev) =>
-                    set(
+                onClick: mutate((_ctx, _ev) =>
+                    store.set(
                         translucentOuterClicks$,
-                        get(translucentOuterClicks$) + 1,
+                        store.get(translucentOuterClicks$) + 1,
                     ),
                 ),
                 child: Container({
@@ -68,10 +70,11 @@ export default view(() =>
                             children: [
                                 PointerInteract({
                                     behavior: HitTestBehavior.Translucent,
-                                    onClick: mutate(({ get, set }, _ev) =>
-                                        set(
+                                    onClick: mutate((_ctx, _ev) =>
+                                        store.set(
                                             translucentInnerClicks$,
-                                            get(translucentInnerClicks$) + 1,
+                                            store.get(translucentInnerClicks$) +
+                                                1,
                                         ),
                                     ),
                                     child: Container({

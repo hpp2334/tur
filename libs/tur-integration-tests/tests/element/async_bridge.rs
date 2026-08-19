@@ -34,16 +34,17 @@ fn clipboard_read_resolves_and_drives_reactive_set() {
     // the source with the resolved text. `clipboard.readText` is exported
     // by `tur:clipboard` as a method on the `clipboard` object.
     app.eval_module_source(
-        r#"
-        import { source, set, get } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         import { clipboard } from "tur:clipboard";
         globalThis.__sink$ = source("initial");
         clipboard.readText().then((text) => {
-            set(globalThis.__sink$, text);
+            store.set(globalThis.__sink$, text);
             // Stash the resolved value as a plain string global so eval_js
             // (which runs as a script, not a module) can read it without
             // needing a bare `import`.
-            globalThis.__result_text = String(get(globalThis.__sink$));
+            globalThis.__result_text = String(store.get(globalThis.__sink$));
         });
         "#,
     )
@@ -89,15 +90,16 @@ fn http_request_resolves_with_canned_response() {
     app.set_http_response(text_response(200, "body bytes"));
 
     app.eval_module_source(
-        r#"
-        import { source, set } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         import { request } from "tur:net";
         globalThis.__status$ = source(0);
         globalThis.__body$ = source("");
         request({ url: "https://example.test/x", method: "GET" })
             .then((r) => {
-                set(globalThis.__status$, r.status);
-                set(globalThis.__body$, r.bodyText);
+                store.set(globalThis.__status$, r.status);
+                store.set(globalThis.__body$, r.bodyText);
                 // Stash resolved values as plain string globals so eval_js
                 // can read them without imports.
                 globalThis.__result_status = String(r.status);

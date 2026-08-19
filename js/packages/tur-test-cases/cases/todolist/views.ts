@@ -5,10 +5,10 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     type Element,
     Expanded,
-    get,
     HitTestBehavior,
     Image,
     Input,
@@ -36,6 +36,8 @@ import {
     titleCtrl,
     toggleTask,
 } from "./state";
+
+const store = createStore();
 
 // --- Light palette (Notion / Linear-style) --------------------------------
 
@@ -363,9 +365,9 @@ export function ConfirmRemoveModal(): Element {
                         SizedBox({ height: 8 }),
                         Text({
                             text: derive(() => {
-                                const idx = get(removeTarget$);
+                                const idx = store.get(removeTarget$);
                                 if (idx === null) return "";
-                                const tasks = get(tasks$);
+                                const tasks = store.get(tasks$);
                                 return tasks[idx]
                                     ? `"${tasks[idx].title}" will be permanently removed.`
                                     : "";

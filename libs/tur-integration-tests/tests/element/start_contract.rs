@@ -27,11 +27,12 @@ fn start_is_called_and_cleanup_runs_before_reload() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         globalThis.__log = [];
         export function start() {
             globalThis.__log.push("start1");
-            mount(Text({ text: "one", queryKey: ["one"] }));
+            mount(store, Text({ text: "one", queryKey: ["one"] }));
         }
     "#,
     )
@@ -44,10 +45,11 @@ fn start_is_called_and_cleanup_runs_before_reload() {
 
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         export function start() {
             globalThis.__log.push("start2");
-            mount(Text({ text: "two", queryKey: ["two"] }));
+            mount(store, Text({ text: "two", queryKey: ["two"] }));
             return () => {
                 globalThis.__log.push("cleanup2");
             };
@@ -112,9 +114,10 @@ fn reload_clears_leftover_root_tree() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         export function start() {
-            mount(Text({ text: "one", queryKey: ["one"] }));
+            mount(store, Text({ text: "one", queryKey: ["one"] }));
         }
     "#,
     )
@@ -123,9 +126,10 @@ fn reload_clears_leftover_root_tree() {
 
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         export function start() {
-            mount(Text({ text: "two", queryKey: ["two"] }));
+            mount(store, Text({ text: "two", queryKey: ["two"] }));
         }
     "#,
     )
@@ -149,11 +153,13 @@ fn remount_replaces_previous_root() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         globalThis.__mount = mount;
+        globalThis.__store = store;
         globalThis.__Text = Text;
         export function start() {
-            mount(Text({ text: "first", queryKey: ["first"] }));
+            mount(store, Text({ text: "first", queryKey: ["first"] }));
         }
     "#,
     )
@@ -163,7 +169,7 @@ fn remount_replaces_previous_root() {
 
     // Second mount via the stashed reference (same module still loaded).
     app.eval_js(
-        r#"globalThis.__mount(globalThis.__Text({ text: "second", queryKey: ["second"] }));"#,
+        r#"globalThis.__mount(globalThis.__store, globalThis.__Text({ text: "second", queryKey: ["second"] }));"#,
     );
     app.wait_for_timeout(Duration::ZERO);
 
@@ -212,9 +218,10 @@ fn start_returning_non_function_is_ok() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         export function start() {
-            mount(Text({ text: "plain", queryKey: ["plain"] }));
+            mount(store, Text({ text: "plain", queryKey: ["plain"] }));
             // No cleanup — returning undefined is fine.
         }
     "#,
@@ -231,9 +238,10 @@ fn dev_tool_tree_reflects_reload() {
     let mut app = TurTestApp::new(400.0, 300.0).unwrap();
     app.load_module_raw(
         r#"
-        import { mount, Text } from "tur:std";
+        import { createStore, mount, Text } from "tur:std";
+        const store = createStore();
         export function start() {
-            mount(Text({ text: "x" }));
+            mount(store, Text({ text: "x" }));
         }
     "#,
     )

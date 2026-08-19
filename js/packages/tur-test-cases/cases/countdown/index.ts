@@ -5,11 +5,11 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    createStore,
     createTextEditingController,
     derive,
     type Element,
     Expanded,
-    get,
     HitTestBehavior,
     Input,
     launch,
@@ -31,6 +31,7 @@ import {
     type TextController,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // --- Light theme palette (slate + emerald accents) -----------------------
 
@@ -67,67 +68,67 @@ function stopCountdown() {
     countdownTask = null;
 }
 
-const start$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    if (get(running$)) return;
-    set(running$, true);
+const start$ = mutate((_ctx, _ev: PointerInteractEvent) => {
+    if (store.get(running$)) return;
+    store.set(running$, true);
     stopCountdown();
     countdownTask = launch(function* () {
-        while (get(running$)) {
+        while (store.get(running$)) {
             yield sleep(1000);
-            const r = get(remaining$);
+            const r = store.get(remaining$);
             if (r <= 1) {
-                set(running$, false);
-                set(remaining$, 0);
+                store.set(running$, false);
+                store.set(remaining$, 0);
                 return;
             }
-            set(remaining$, r - 1);
+            store.set(remaining$, r - 1);
         }
     });
 });
 
-const pause$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    if (!get(running$)) return;
+const pause$ = mutate((_ctx, _ev: PointerInteractEvent) => {
+    if (!store.get(running$)) return;
     stopCountdown();
-    set(running$, false);
+    store.set(running$, false);
 });
 
-const reset$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
+const reset$ = mutate((_ctx, _ev: PointerInteractEvent) => {
     stopCountdown();
-    set(running$, false);
-    set(remaining$, get(initial$));
+    store.set(running$, false);
+    store.set(remaining$, store.get(initial$));
 });
 
-const openEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
+const openEdit$ = mutate((_ctx, _ev: PointerInteractEvent) => {
     stopCountdown();
-    set(running$, false);
-    set(editText$, String(get(initial$)));
+    store.set(running$, false);
+    store.set(editText$, String(store.get(initial$)));
     // Pre-fill the field with the current initial value so the user can
     // edit it in place rather than retyping. `initialText` is honoured at
     // controller construction time and shows up as soon as the Input
     // mounts the new controller.
     const ctrl = createTextEditingController({
-        initialText: String(get(initial$)),
-        onInput: mutate(({ set }, text: string, _enter: boolean) =>
-            set(editText$, text),
+        initialText: String(store.get(initial$)),
+        onInput: mutate((_ctx, text: string, _enter: boolean) =>
+            store.set(editText$, text),
         ),
     });
-    set(editController$, ctrl);
-    set(editing$, true);
+    store.set(editController$, ctrl);
+    store.set(editing$, true);
 });
 
-const cancelEdit$ = mutate(({ set }, _ev: PointerInteractEvent) => {
-    set(editing$, false);
-    set(editController$, null);
+const cancelEdit$ = mutate((_ctx, _ev: PointerInteractEvent) => {
+    store.set(editing$, false);
+    store.set(editController$, null);
 });
 
-const confirmEdit$ = mutate(({ get, set }, _ev: PointerInteractEvent) => {
-    const parsed = parseInt(get(editText$), 10);
+const confirmEdit$ = mutate((_ctx, _ev: PointerInteractEvent) => {
+    const parsed = parseInt(store.get(editText$), 10);
     if (!Number.isNaN(parsed) && parsed > 0) {
-        set(initial$, parsed);
-        set(remaining$, parsed);
+        store.set(initial$, parsed);
+        store.set(remaining$, parsed);
     }
-    set(editing$, false);
-    set(editController$, null);
+    store.set(editing$, false);
+    store.set(editController$, null);
 });
 
 // Format a remaining seconds count as `m:ss` (e.g. 65 -> "1:05", 5 -> "0:05").
@@ -138,24 +139,27 @@ function formatTime(totalSeconds: number): string {
 }
 
 const isUrgent$ = derive(
-    () => get(running$) && get(remaining$) <= 10 && get(remaining$) > 0,
+    () =>
+        store.get(running$) &&
+        store.get(remaining$) <= 10 &&
+        store.get(remaining$) > 0,
 );
 
 const displayColor$ = derive(() =>
-    get(isUrgent$) ? COLORS.urgent : COLORS.text,
+    store.get(isUrgent$) ? COLORS.urgent : COLORS.text,
 );
 
 const statusLabel$ = derive(() => {
-    if (get(running$)) return "Running";
-    if (get(remaining$) === 0) return "Done";
-    if (get(remaining$) === get(initial$)) return "Ready";
+    if (store.get(running$)) return "Running";
+    if (store.get(remaining$) === 0) return "Done";
+    if (store.get(remaining$) === store.get(initial$)) return "Ready";
     return "Paused";
 });
 
 const statusColor$ = derive(() => {
-    if (get(running$)) return COLORS.start;
-    if (get(remaining$) === 0) return COLORS.textFaint;
-    if (get(remaining$) === get(initial$)) return COLORS.textMuted;
+    if (store.get(running$)) return COLORS.start;
+    if (store.get(remaining$) === 0) return COLORS.textFaint;
+    if (store.get(remaining$) === store.get(initial$)) return COLORS.textMuted;
     return COLORS.pause;
 });
 
@@ -278,7 +282,7 @@ function TimerView(): Element {
             }),
             SizedBox({ height: 10 }),
             Text({
-                text: derive(() => formatTime(get(remaining$))),
+                text: derive(() => formatTime(store.get(remaining$))),
                 fontSize: 72,
                 color: displayColor$,
                 queryKey: ["display"],
@@ -307,7 +311,8 @@ function Controls(): Element {
                     }),
                 elseChild: () =>
                     PrimaryButton({
-                        label: get(remaining$) === 0 ? "Restart" : "Start",
+                        label:
+                            store.get(remaining$) === 0 ? "Restart" : "Start",
                         bg: COLORS.start,
                         shadowColor: COLORS.startShadow,
                         onClick: start$,
@@ -391,7 +396,9 @@ function EditModal(): Element {
                                             children: [
                                                 Input({
                                                     controller: derive(() =>
-                                                        get(editController$),
+                                                        store.get(
+                                                            editController$,
+                                                        ),
                                                     ) as unknown as TextController,
                                                     placeholder:
                                                         "Positive integer",

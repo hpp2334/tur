@@ -6,11 +6,9 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     Row,
     Stack,
     Switch,
-    set,
     view,
 } from "tur:std";
 import {
@@ -20,6 +18,7 @@ import {
     mobileTab$,
     sidebarWidth$,
 } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 import { ContextMenuOverlay } from "./context-menu";
 import { VDivider } from "./divider";
@@ -42,13 +41,13 @@ function EditorAndViewer(): Element {
         children: [
             // Editor pane
             Switch({
-                value: derive(() => get(layoutMode$)),
+                value: derive(() => store.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
                         child: () =>
                             Container({
-                                width: derive(() => get(editorWidth$)),
+                                width: derive(() => store.get(editorWidth$)),
                                 children: [Editor()],
                             }),
                     },
@@ -61,21 +60,21 @@ function EditorAndViewer(): Element {
             }),
             // Divider — only in split mode
             Condition({
-                condition: derive(() => get(layoutMode$) === "split"),
+                condition: derive(() => store.get(layoutMode$) === "split"),
                 child: () =>
                     VDivider({
                         onDrag: (ev) => {
                             const next = Math.max(
                                 100,
-                                get(editorWidth$) + ev.deltaFromLast.x,
+                                store.get(editorWidth$) + ev.deltaFromLast.x,
                             );
-                            set(editorWidth$, next);
+                            store.set(editorWidth$, next);
                         },
                     }),
             }),
             // Viewer pane
             Switch({
-                value: derive(() => get(layoutMode$)),
+                value: derive(() => store.get(layoutMode$)),
                 cases: [
                     {
                         key: "split",
@@ -110,7 +109,7 @@ export const Shell: Element = view(() =>
                                     Expanded({
                                         child: Switch({
                                             value: derive(() =>
-                                                get(mobileTab$),
+                                                store.get(mobileTab$),
                                             ),
                                             cases: [
                                                 {
@@ -148,7 +147,7 @@ export const Shell: Element = view(() =>
                                                             120,
                                                             Math.min(
                                                                 480,
-                                                                get(
+                                                                store.get(
                                                                     sidebarWidth$,
                                                                 ) +
                                                                     ev
@@ -156,7 +155,7 @@ export const Shell: Element = view(() =>
                                                                         .x,
                                                             ),
                                                         );
-                                                        set(
+                                                        store.set(
                                                             sidebarWidth$,
                                                             next,
                                                         );

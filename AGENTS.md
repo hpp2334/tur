@@ -11,7 +11,7 @@ A JavaScript rendering engine built with vello-hybrid and boa_engine. JS calls i
 - The root-tree lifecycle is ENGINE-OWNED — there is no `unmount`: `mount` replaces any existing root, and module teardown clears it. A module's cleanup only disposes its own non-tree resources (animation controllers, subscriptions, handles).
 - Cleanup also runs (best-effort) at instance destroy.
 
-Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell; the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup); `tur-test-cases` dist wrappers mount inside `start`. The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
+Entry points follow the contract: `demo/playground-view/src/index.ts` exports `start` that mounts the Shell with the shared root store (`mount(store, Shell)` — the store from `src/state/store.ts`); the playground's in-realm case compiler (`compile.ts`) generates a `start()` around each case's default export (advanced cases may declare `export function start()` themselves, call the injected `setCaseView(...)`, and return a cleanup — embedded cases share the host's store via `getStore()`, rewritten by `scripts/gen-cases.cjs`); `tur-test-cases` dist wrappers mount inside `start` (`mount(store, Case)` with each case's exported `store`). The Rust integration-test harness auto-wraps legacy inline fixtures (`eval_module_source`); contract tests use `load_module_raw`.
 
 ## Architecture
 
@@ -302,7 +302,8 @@ fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
     let clock: Source<JsValue> = bridge.source(JsValue::new(0.0));
 
     // Expose to JS — handles cross the boundary via IntoJs (opaque JsObject).
-    // JS reads via the unchanged `get(mySource)` from `tur:core` / `tur:std`.
+    // JS reads via `store.get(mySource)` on any store of the instance (the
+    // atom is owned by the engine store, so reads route there).
     let js_handle = clock.into_js(ctx.boa_mut());
     ctx.register_global("clock$", js_handle);
 
@@ -314,8 +315,22 @@ fn register(&self, ctx: &mut PluginContext<'_>) -> Result<(), TurError> {
 ```
 
 The JS side is unchanged — atoms minted by Rust are indistinguishable from
-atoms minted by JS. JS reads/writes via `get(atom)` / `set(source, v)` /
-`set(mutation, ...args)` / `ReadableSubscribe(...)`.
+atoms minted by JS. JS reads/writes via `store.get(atom)` /
+`store.set(source, v)` / `store.set(mutation, ...args)` /
+`ReadableSubscribe(...)`.
+
+**The store is the KV.** JS `source(v)` / `derive(fn)` / `mutate(fn)` return
+*pure declarations* — no state is stored at call time; the seed (initial
+value / closure) lives in the instance-wide registry. A `Store` (from
+`createStore()`, or `getStore()` for the currently mounted one) materializes
+each declaration on first read/write — the same declaration in two stores is
+two independent atoms. `mount(store, view)` binds the tree's declarations to
+that store (free module-level `get`/`set` exports are gone). Rust-minted
+atoms (`bridge.source(...)` etc.) are *owned* by the engine store: one value
+home, readable through any store via the shared owner map. Atom ids come
+from one per-instance counter, so the derived graph / subscriber index /
+flush state are shared across all stores of the instance (a write in one
+store invalidates deriveds materialized in another).
 
 **Rust-native closures** (`build_derive` / `build_mutate`) skip the `{get, set}`
 JsObject round-trip that JS `derive(fn)` / `mutate(fn)` closures pay. The
@@ -337,20 +352,19 @@ let toggle = bridge.build_mutate(move |b, _args, boa| {
     bridge_for_closure.set_source(flag_for_closure, JsValue::new(!current));
     Ok(JsValue::undefined())
 });
-// JS invokes via `set(globalThis.toggle)` — invoke_mutation detects the
+// JS invokes via `store.set(globalThis.toggle)` — invoke_mutation detects the
 // MutateRust variant and hands the closure the bridge face + user args.
 ```
 
 Implementation notes:
-- The `Js` and Rust closure variants share `ReactiveCore` storage as a
-  `Closure` enum (`Js(JsFunction)` / `DeriveRust(Rc<dyn Fn>)` /
-  `MutateRust(Rc<dyn Fn>)`); the kind is encoded in the variant so cross-kind
-  dispatch is unreachable via the public API (handle types `Derived<T>` vs
-  `Mutation` make it impossible to mismatch; defensive panics guard engine
-  bugs).
+- The `Js` and Rust closure variants share the seed registry as a `Closure`
+  enum (`Js(JsFunction)` / `DeriveRust(Rc<dyn Fn>)` / `MutateRust(Rc<dyn Fn>)`);
+  the kind is encoded in the variant so cross-kind dispatch is unreachable
+  via the public API (handle types `Derived<T>` vs `Mutation` make it
+  impossible to mismatch; defensive panics guard engine bugs).
 - `invoke_mutation` builds the per-store `{get, set}` JsObject **internally**
   only for `Js`-variant closures. Callers pass user args verbatim (no
-  prepend) — see `core::edgy/reactive/store.rs::ReactiveCore::invoke_mutation`.
+  prepend) — see `core::edgy/reactive/store.rs::SharedReactive::invoke_mutation_by_id`.
 - Rust closures are `Rc<dyn Fn>` (not `Box<dyn Fn>`) so the existing
   clone-out-before-call discipline (matching `JsFunction::clone()`) is
   preserved — this is what makes nested `ensure_computed` (a derive closure
@@ -604,12 +618,14 @@ libs/
         capability.rs        # Capability trait, Capabilities view,
                              #   CapabilityDecls
         dev/                 # Dev tooling: turDevTool bridge
-        edgy/                # Reactive substrate: reactive/ (Store/Source/
-                             #   Derived/AnyReadable) + mutation/
-                             #   (MutationHandle/PendingMutationInvocationQueue)
-                             #   + source/derive/mutate/get/set/view bridge +
-                             #   ReadableSubscribe (the engine's own
-                             #   tur:core)
+        edgy/                # Reactive substrate: reactive/ (SharedReactive
+                             #   shared per instance + per-store StoreKv +
+                             #   Source/Derived/AnyReadable handles) +
+                             #   mutation/ (MutationHandle/
+                             #   PendingMutationInvocationQueue) +
+                             #   source/derive/mutate/createStore/getStore/
+                             #   view bridge + ReadableSubscribe (the
+                             #   engine's own tur:core)
         element.rs           # ElementKind / ElementNodeId / NodeId /
                              #   FragmentNodeId
         elements/            # AnyElement, ElementObject, ElementTree

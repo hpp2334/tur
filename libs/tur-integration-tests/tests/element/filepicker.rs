@@ -41,16 +41,17 @@ fn pick_resolves_with_files_and_drives_reactive_set() {
     ]);
 
     app.eval_module_source(
-        r#"
-        import { source, set } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         import { filePicker } from "tur:filepicker";
         globalThis.__count$ = source(0);
         globalThis.__first$ = source("");
         globalThis.__size$ = source(0);
         filePicker.pick({ multiple: true }).then((files) => {
-            set(globalThis.__count$, files.length);
-            set(globalThis.__first$, files[0].name);
-            set(globalThis.__size$, files[0].size);
+            store.set(globalThis.__count$, files.length);
+            store.set(globalThis.__first$, files[0].name);
+            store.set(globalThis.__size$, files[0].size);
             globalThis.__result_count = String(files.length);
             globalThis.__result_name = files[0].name;
             globalThis.__result_size = String(files[0].size);
@@ -74,12 +75,13 @@ fn pick_returns_empty_array_when_cancelled() {
     // No canned pick → backend resolves with an empty Vec (cancelled).
 
     app.eval_module_source(
-        r#"
-        import { source, set } from "tur:std";
+        r#"const store = createStore();
+
+        import { createStore, source } from "tur:std";
         import { filePicker } from "tur:filepicker";
         globalThis.__len$ = source(-1);
         filePicker.pick().then((files) => {
-            set(globalThis.__len$, files.length);
+            store.set(globalThis.__len$, files.length);
             globalThis.__result_len = String(files.length);
         });
         "#,

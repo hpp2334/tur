@@ -9,10 +9,10 @@ import {
     Condition,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MouseRegion,
     mutate,
@@ -21,12 +21,12 @@ import {
     Positioned,
     Row,
     Stack,
-    set,
     source,
     Text,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // "Jigsaw puzzle" — a 3x3 drag-and-drop game.
@@ -180,15 +180,17 @@ const liftCtrl: AnimationController = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
     onTick: mutate((_ctx, v: number) => {
-        set(dragScale$, 1 + v * (LIFT_MAX - 1));
+        store.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
 // --- Reactive state --------------------------------------------------------
 
 const pieces$ = source<Piece[]>(initialPieces());
-const placedCount$ = derive(() => get(pieces$).filter((p) => p.placed).length);
-const done$ = derive(() => get(placedCount$) === GRID * GRID);
+const placedCount$ = derive(
+    () => store.get(pieces$).filter((p) => p.placed).length,
+);
+const done$ = derive(() => store.get(placedCount$) === GRID * GRID);
 
 // Drag tracking lives in plain module state, NOT reactive sources. Mutation
 // handlers fire synchronously back-to-back (down → move → move → … → up) and
@@ -206,13 +208,15 @@ let dragOffset = { dx: 0, dy: 0 };
 // for the actively-dragged piece AND the just-released piece (during settle),
 // 1.0 for everything else.
 function pieceScale(id: number): number {
-    const scale = get(dragScale$);
+    const scale = store.get(dragScale$);
     if (dragId === id || lastDragId === id) return scale;
     return 1;
 }
 
 function pieceDragging(id: number): boolean {
-    return (dragId === id || lastDragId === id) && get(dragScale$) > 1.001;
+    return (
+        (dragId === id || lastDragId === id) && store.get(dragScale$) > 1.001
+    );
 }
 
 // --- Per-piece drag handlers (close over `id`) -----------------------------
@@ -271,7 +275,7 @@ const resetPuzzle = mutate((ctx, _ev: PointerInteractEvent) => {
     dragId = null;
     lastDragId = null;
     liftCtrl.stop();
-    set(dragScale$, 1);
+    store.set(dragScale$, 1);
 });
 
 // --- View helpers ----------------------------------------------------------
@@ -280,7 +284,7 @@ function pieceById(id: number): Piece {
     // `pieces$` is created in id order (initialPieces uses `.map((slot, id))`)
     // and every mutation uses `.map((p) => p.id === id ? ... : p)` which
     // preserves array order — so indexing by id is always correct.
-    return get(pieces$)[id];
+    return store.get(pieces$)[id];
 }
 
 function makePiece(id: number): Element {
@@ -445,7 +449,7 @@ function TopBar(): Element {
                     children: [
                         Text({
                             text: derive(
-                                () => `${get(placedCount$)} / 9 placed`,
+                                () => `${store.get(placedCount$)} / 9 placed`,
                             ),
                             fontSize: 14,
                             color: Color.hex("#e2e8f0"),

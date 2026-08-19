@@ -1,6 +1,7 @@
 import { clipboard } from "tur:clipboard";
-import { launch, mutate, set, source } from "tur:std";
+import { launch, mutate, source } from "tur:std";
 import { editorCtrl } from "./case-store";
+import { store } from "./store";
 
 // ---------------------------------------------------------------------------
 // Context menu state for the code editor. Right-click on the editor
@@ -33,14 +34,14 @@ interface ContextMenuEvent {
  *  `set` calls. */
 export const openContextMenu = mutate((_ctx, ev: ContextMenuEvent) => {
     const g = ev?.global ?? { x: 0, y: 0 };
-    set(contextMenuX$, Number(g.x) || 0);
-    set(contextMenuY$, Number(g.y) || 0);
-    set(contextMenuOpen$, true);
+    store.set(contextMenuX$, Number(g.x) || 0);
+    store.set(contextMenuY$, Number(g.y) || 0);
+    store.set(contextMenuOpen$, true);
 });
 
 /** Close the menu (click-outside, escape, or after an action runs). */
 export const closeContextMenu = mutate(() => {
-    set(contextMenuOpen$, false);
+    store.set(contextMenuOpen$, false);
 });
 
 /** Cut: copy selection to clipboard then delete it. The actual clipboard
@@ -56,7 +57,7 @@ export const cutSelection = mutate(() => {
             yield clipboard.writeText(text);
         });
     }
-    set(contextMenuOpen$, false);
+    store.set(contextMenuOpen$, false);
 });
 
 export const copySelection = mutate(() => {
@@ -66,7 +67,7 @@ export const copySelection = mutate(() => {
             yield clipboard.writeText(text);
         });
     }
-    set(contextMenuOpen$, false);
+    store.set(contextMenuOpen$, false);
 });
 
 export const pasteFromClipboard = mutate(() => {
@@ -83,10 +84,10 @@ export const pasteFromClipboard = mutate(() => {
             /* clipboard denied — ignore */
         }
     });
-    set(contextMenuOpen$, false);
+    store.set(contextMenuOpen$, false);
 });
 
 export const selectAll = mutate(() => {
     editorCtrl.setSelection(0, editorCtrl.text.length);
-    set(contextMenuOpen$, false);
+    store.set(contextMenuOpen$, false);
 });

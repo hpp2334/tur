@@ -1123,6 +1123,24 @@ impl NodeTree {
         }
     }
 
+    /// The **mounted** store — the store `mount(store, view)` bound to this
+    /// tree (the engine store until the first mount). Declarations read or
+    /// subscribed by tree-driven code materialize into this store's KV.
+    pub fn store(&self) -> Store {
+        self.data.borrow().store.clone()
+    }
+
+    /// Bind a new mounted store (`mount(store, view)`), swapping the cached
+    /// read face with it. All stores of one instance share the reactive
+    /// machinery (atom routing, derived graph, subscriber index), so existing
+    /// atoms/subscriptions keep working — this only changes where **fresh
+    /// declarations** materialize.
+    pub fn set_store(&self, store: Store) {
+        let mut data = self.data.borrow_mut();
+        data.read_face = store.read_only();
+        data.store = store;
+    }
+
     /// Borrow the interior immutably. Prefer the delegating methods below for
     /// single ops; use this when you need to hold the borrow across several
     /// reads (the returned `Ref` derefs to `&NodeTreeData`).

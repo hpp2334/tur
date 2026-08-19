@@ -6,7 +6,6 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
     Input,
     MouseRegion,
     type Mutation,
@@ -15,7 +14,6 @@ import {
     Row,
     Scrollbar,
     ScrollView,
-    set,
     source,
 } from "tur:std";
 import {
@@ -25,6 +23,7 @@ import {
     selectedCase$,
     selectedFile$,
 } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 const editorInput: Element = Input({
@@ -56,16 +55,16 @@ function scrollableEditor(): Element {
             // Dedicated 10px scrollbar column.
             MouseRegion({
                 onEnter: mutate(() =>
-                    set(trackHovered$, true),
+                    store.set(trackHovered$, true),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
                 onExit: mutate(() =>
-                    set(trackHovered$, false),
+                    store.set(trackHovered$, false),
                 ) as unknown as Mutation<[PointerRegionEvent], void>,
                 child: Scrollbar({
                     controller,
                     color: tokens.text.placeholder,
                     trackColor: derive(() =>
-                        get(trackHovered$)
+                        store.get(trackHovered$)
                             ? tokens.bg.strongHover
                             : Color.rgba(0, 0, 0, 0),
                     ),
@@ -88,7 +87,10 @@ export function Editor(): Element {
             // loadCase / selectFile).
             Each({
                 items: derive(() => [
-                    { case: get(selectedCase$), file: get(selectedFile$) },
+                    {
+                        case: store.get(selectedCase$),
+                        file: store.get(selectedFile$),
+                    },
                 ]),
                 build: () => scrollableEditor(),
             }),

@@ -2,15 +2,16 @@ import {
     Color,
     Column,
     Container,
+    createStore,
     createTextEditingController,
     derive,
-    get,
     Input,
     mutate,
     source,
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // Demonstrates `obscureText` (password mode): each character of the value is
 // rendered as `obscuringCharacter` (default "•") while the controller keeps
@@ -19,7 +20,7 @@ import {
 const value$ = source("hunter2");
 const pwCtrl = createTextEditingController({
     initialText: "hunter2",
-    onInput: mutate(({ set }, text: string) => set(value$, text)),
+    onInput: mutate((_ctx, text: string) => store.set(value$, text)),
 });
 const plainCtrl = createTextEditingController({});
 
@@ -52,7 +53,7 @@ export default view(() =>
                         queryKey: ["password"],
                     }),
                     Text({
-                        text: derive(() => `value: "${get(value$)}"`),
+                        text: derive(() => `value: "${store.get(value$)}"`),
                         fontSize: 12,
                         color: Color.rgb(100, 116, 139),
                     }),

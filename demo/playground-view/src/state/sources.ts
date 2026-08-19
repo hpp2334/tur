@@ -1,15 +1,14 @@
 import {
     derive,
-    get,
     launch,
     type Source,
-    set,
     sleep,
     source,
     type ViewportSize,
     viewportSize$,
 } from "tur:std";
 import { CASE_SOURCES } from "../cases";
+import { store } from "./store";
 import type { LayoutMode, MobileTab } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -97,6 +96,6 @@ export const now$: Source<number> = source<number>(Date.now());
 launch(function* () {
     for (;;) {
         yield sleep(5000);
-        set(now$, Date.now());
+        store.set(now$, Date.now());
     }
 });

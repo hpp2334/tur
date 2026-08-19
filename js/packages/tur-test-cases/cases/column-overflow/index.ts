@@ -1,4 +1,6 @@
-import { Column, MainAxisSize, SizedBox, view } from "tur:std";
+import { Column, createStore, MainAxisSize, SizedBox, view } from "tur:std";
+
+export const store = createStore();
 
 // Three 300px children in a Min column — total 900px overflows the 600px
 // viewport. Children should keep their natural height (not squish to 0).

@@ -1,4 +1,6 @@
-import { Column, Container, Text, view } from "tur:std";
+import { Column, Container, createStore, Text, view } from "tur:std";
+
+export const store = createStore();
 
 // Repro #3/#4: Container(no explicit size, padding:48) as child of Column,
 // sizing from a Text child's intrinsic measurement. Expected: container has

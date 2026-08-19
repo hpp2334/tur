@@ -650,18 +650,20 @@ impl TurAppInternal {
 
     /// Drain the pending-mutation queue and invoke each mutation via the
     /// reactive store. The per-store `{get, set}` JsObject is built inside
-    /// [`ReactiveCore::invoke_mutation`] only for `Js`-variant closures, so
-    /// here we pass only the user args. No element tree access is needed:
-    /// every entry is a self-contained `(Mutation, args)`.
+    /// [`crate::core::edgy::reactive::SharedReactive::invoke_mutation_by_id`]
+    /// only for `Js`-variant closures, so here we pass only the user args.
+    /// Invocations run against the **mounted** store (the tree's store), so
+    /// declaration atoms touched by the mutation's closure materialize there;
+    /// engine-owned atoms route to their owner either way.
     fn flush_pending_mutations(&self, boa_context: &mut boa_engine::Context) -> bool {
         let invs = self.js_context.mutation_queue.borrow_mut().drain();
         if invs.is_empty() {
             return false;
         }
-        let store = self.js_context.store.clone();
+        let mounted = self.js_context.element_tree.store();
         for inv in invs {
             let args = inv.args.to_js_args(boa_context);
-            let _ = store.invoke_mutation(inv.mutation, &args, boa_context);
+            let _ = mounted.invoke_mutation(inv.mutation, &args, boa_context);
         }
         true
     }

@@ -31,9 +31,8 @@ import {
     Transform,
     colorLerp,
     derive,
-    get,
+    getStore,
     mutate,
-    set,
     source,
 } from "tur:std";
 
@@ -101,14 +100,15 @@ export function ColorTween(opts) {
 // AnimatedContainer / AnimatedOpacity / AnimatedPositioned
 // ---------------------------------------------------------------------------
 
-// Precisely detects reactive atom handles by probing `get`, which the bridge
+// Precisely detects reactive atom handles by probing `get`, which the store
 // validates and rejects (throws) for non-atoms. Carries the current value so
-// callers avoid a second read.
+// callers avoid a second read. Reads through the mounted store — factory fns
+// run during view build, when the mounted store is the widget's store.
 function probeAtom(v) {
     if (typeof v !== "object" || v === null) return { atom: false };
     try {
         const handle = v;
-        return { atom: true, handle, value: get(handle) };
+        return { atom: true, handle, value: getStore().get(handle) };
     } catch {
         return { atom: false };
     }
@@ -130,10 +130,13 @@ function animChannel(target, progress, makeTween, retargets, readables) {
     const tween = makeTween(probe.value);
     const handle = probe.handle;
     retargets.push(() => {
-        tween.begin = tween.lerp(get(progress));
-        tween.end = get(handle);
+        const store = getStore();
+        tween.begin = tween.lerp(store.get(progress));
+        tween.end = store.get(handle);
     });
-    return derive(() => tween.lerp(get(progress)));
+    // The derive closure reads through its ctx, so `progress` materializes
+    // into the owning atom's store (the mounted store for tree-driven flows).
+    return derive((ctx) => tween.lerp(ctx.get(progress)));
 }
 
 function runRetargets(retargets, ctrl) {
@@ -176,7 +179,7 @@ export function AnimatedContainer(props) {
     const ctrl = createAnimationController({
         duration,
         curve,
-        onTick: mutate((_c, t) => set(progress$, t)),
+        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
         onEnd: props.onEnd,
     });
 
@@ -205,7 +208,7 @@ export function AnimatedOpacity(props) {
     const ctrl = createAnimationController({
         duration,
         curve,
-        onTick: mutate((_c, t) => set(progress$, t)),
+        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
         onEnd: props.onEnd,
     });
 
@@ -241,7 +244,7 @@ export function AnimatedPositioned(props) {
     const ctrl = createAnimationController({
         duration,
         curve,
-        onTick: mutate((_c, t) => set(progress$, t)),
+        onTick: mutate((ctx, t) => ctx.set(progress$, t)),
         onEnd: props.onEnd,
     });
 

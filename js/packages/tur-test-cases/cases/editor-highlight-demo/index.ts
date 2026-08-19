@@ -3,6 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     createTextEditingController,
     Expanded,
     Input,
@@ -10,6 +11,8 @@ import {
     Text,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // A controller pre-populated with a code-like snippet, split into spans whose
 // colors simulate syntax highlighting (keyword / identifier / number / punct).

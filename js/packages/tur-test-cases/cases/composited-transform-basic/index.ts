@@ -3,11 +3,14 @@ import {
     CompositedTransformTarget,
     Container,
     createLayerLink,
+    createStore,
     Positioned,
     SizedBox,
     Stack,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Target sits at (100, 80) via a Positioned wrapper; the follower (default
 // TopLeft/TopLeft anchors, zero targetOffset) should land its top-left at the

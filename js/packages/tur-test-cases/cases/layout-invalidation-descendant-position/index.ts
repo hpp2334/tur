@@ -1,14 +1,14 @@
 import {
     Color,
     Container,
+    createStore,
     derive,
-    get,
     MainAxisAlignment,
     Row,
-    set,
     source,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // Reactive width of the outer container. Exposed to Rust tests via globalThis
 // so the test can change it without a click (a click would mark extra nodes
@@ -17,7 +17,7 @@ const width$ = source(100);
 
 Object.assign(globalThis, {
     __setWidth: (w: number): void => {
-        set(width$, w);
+        store.set(width$, w);
     },
 });
 
@@ -43,7 +43,7 @@ Object.assign(globalThis, {
 // position after a divider drag).
 export default view(() =>
     Container({
-        width: derive(() => get(width$)),
+        width: derive(() => store.get(width$)),
         children: [
             Row({
                 mainAlignment: MainAxisAlignment.End,

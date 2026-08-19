@@ -2,16 +2,16 @@ import { createAnimationController } from "tur:animation";
 import {
     Color,
     Container,
+    createStore,
     derive,
-    get,
     mutate,
     PointerInteract,
-    set,
     source,
     Text,
     Transform,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Drag-and-drop with a lift animation — mirrors the jigsaw-puzzle's drag
@@ -33,7 +33,7 @@ const liftCtrl = createAnimationController({
     duration: LIFT_MS,
     curve: "easeOut",
     onTick: mutate((_ctx, v: number) => {
-        set(dragScale$, 1 + v * (LIFT_MAX - 1));
+        store.set(dragScale$, 1 + v * (LIFT_MAX - 1));
     }),
 });
 
@@ -50,7 +50,7 @@ Object.assign(globalThis, {
 
 export default view(() =>
     Transform({
-        scale: derive(() => get(dragScale$)),
+        scale: derive(() => store.get(dragScale$)),
         child: PointerInteract({
             onPointerDown: mutate((_ctx, ev) => {
                 dragStart = { x: ev.global.x, y: ev.global.y };

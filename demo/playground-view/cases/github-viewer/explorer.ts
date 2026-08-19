@@ -10,7 +10,7 @@ import {
     Each,
     type Element,
     Expanded,
-    get,
+    getStore,
     Image,
     MainAxisSize,
     MouseRegion,
@@ -21,7 +21,6 @@ import {
     SizedBox,
     type StoreCtx,
     Switch,
-    set,
     source,
     Text,
     Transform,
@@ -49,6 +48,8 @@ import {
 import { COLORS } from "./theme";
 import { IconButton } from "./ui";
 
+const store = getStore();
+
 // Per-row hover state (single source, not per-instance — keeps the
 // subscription graph flat).
 const hoveredPath$ = source<string | null>(null);
@@ -72,10 +73,10 @@ function FileRow({
             MouseRegion({
                 cursor: "pointer",
                 onEnter: mutate((_ctx: StoreCtx, _ev) => {
-                    set(hoveredPath$, entry.path);
+                    store.set(hoveredPath$, entry.path);
                 }),
                 onExit: mutate((_ctx: StoreCtx, _ev) => {
-                    set(hoveredPath$, null);
+                    store.set(hoveredPath$, null);
                 }),
                 child: PointerInteract({
                     onClick: mutate((_ctx: StoreCtx, _ev) => {
@@ -86,8 +87,8 @@ function FileRow({
                         padding: 9,
                         borderRadius: 8,
                         color: derive(() => {
-                            const sel = get(selectedPath$);
-                            const hov = get(hoveredPath$);
+                            const sel = store.get(selectedPath$);
+                            const hov = store.get(hoveredPath$);
                             if (sel === entry.path) return COLORS.rowSelected;
                             if (hov === entry.path) return COLORS.rowHover;
                             return COLORS.panel;
@@ -140,7 +141,7 @@ function RepoCrumb(): Element {
                 padding: 4,
                 children: [
                     Text({
-                        text: derive(() => get(repo$)?.fullName ?? ""),
+                        text: derive(() => store.get(repo$)?.fullName ?? ""),
                         fontSize: 13,
                         color: COLORS.accent,
                     }),
@@ -157,7 +158,7 @@ function RepoCrumb(): Element {
 
 function Spinner(): Element {
     return Transform({
-        rotate: derive(() => get(spinProgress$) * 2 * Math.PI),
+        rotate: derive(() => store.get(spinProgress$) * 2 * Math.PI),
         child: Image({
             resourceId: getIcon("spinner"),
             width: 14,
@@ -204,12 +205,12 @@ function DownloadButton(): Element {
         cursor: "pointer",
         child: PointerInteract({
             onClick: mutate((_ctx: StoreCtx, _ev) => {
-                if (get(downloadStatus$) !== "idle") return;
-                const e = get(selectedEntry$);
+                if (store.get(downloadStatus$) !== "idle") return;
+                const e = store.get(selectedEntry$);
                 if (e && !e.isDir) doDownload();
             }),
             child: Switch({
-                value: derive(() => get(downloadStatus$)),
+                value: derive(() => store.get(downloadStatus$)),
                 cases: [
                     {
                         key: "loading",
@@ -245,13 +246,13 @@ function DownloadButton(): Element {
                 fallback: () =>
                     dlShell(
                         derive(() => {
-                            const e = get(selectedEntry$);
+                            const e = store.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accent
                                 : COLORS.subtleButton;
                         }),
                         derive(() => {
-                            const e = get(selectedEntry$);
+                            const e = store.get(selectedEntry$);
                             return e && !e.isDir
                                 ? COLORS.accentFg
                                 : COLORS.textSubtle;
@@ -287,7 +288,7 @@ export function ExplorerScreen(): Element {
                     // inflating this content-sized Row).
                     Text({
                         text: derive(() => {
-                            const segs = get(pathSegments$);
+                            const segs = store.get(pathSegments$);
                             return segs.length ? ` / ${segs.join(" / ")}` : "";
                         }),
                         fontSize: 13,
@@ -311,7 +312,7 @@ export function ExplorerScreen(): Element {
             }),
             SizedBox({ height: 8 }),
             Condition({
-                condition: derive(() => get(error$) !== null),
+                condition: derive(() => store.get(error$) !== null),
                 child: () =>
                     Container({
                         padding: 10,
@@ -319,7 +320,7 @@ export function ExplorerScreen(): Element {
                         color: COLORS.dangerSoft,
                         children: [
                             Text({
-                                text: derive(() => get(error$) ?? ""),
+                                text: derive(() => store.get(error$) ?? ""),
                                 fontSize: 12,
                                 color: COLORS.danger,
                             }),
@@ -344,10 +345,10 @@ function fileListView(): Element {
         children: [
             Switch({
                 value: derive(() => {
-                    if (get(loading$) && get(entries$).length === 0)
+                    if (store.get(loading$) && store.get(entries$).length === 0)
                         return "loading";
-                    if (get(entries$).length === 0)
-                        return get(error$) !== null ? "blank" : "empty";
+                    if (store.get(entries$).length === 0)
+                        return store.get(error$) !== null ? "blank" : "empty";
                     return "list";
                 }),
                 cases: [

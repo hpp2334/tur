@@ -3,6 +3,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     mutate,
     PointerInteract,
@@ -11,6 +12,7 @@ import {
     view,
 } from "tur:std";
 import { COLORS } from "./utils";
+export const store = createStore();
 
 const count$ = source(0);
 
@@ -29,8 +31,8 @@ export default view(() =>
                         color: COLORS.text,
                     }),
                     PointerInteract({
-                        onClick: mutate(({ get, set }, _ev) =>
-                            set(count$, get(count$) + 1),
+                        onClick: mutate((_ctx, _ev) =>
+                            store.set(count$, store.get(count$) + 1),
                         ),
                         child: Container({
                             width: 120,

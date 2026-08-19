@@ -8,8 +8,8 @@ import {
     Container,
     CrossAxisAlignment,
     createLayerLink,
+    createStore,
     derive,
-    get,
     HitTestBehavior,
     MainAxisSize,
     MouseRegion,
@@ -22,11 +22,11 @@ import {
     Row,
     SizedBox,
     Stack,
-    set,
     source,
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 // ---------------------------------------------------------------------------
 // Composited-transform anchor playground.
@@ -149,11 +149,11 @@ export default view(() => {
             // 3. The follower — anchors + offset are fully reactive.
             CompositedTransformFollower({
                 link,
-                targetAnchor: derive(() => get(targetAnchor$)),
-                followerAnchor: derive(() => get(followerAnchor$)),
+                targetAnchor: derive(() => store.get(targetAnchor$)),
+                followerAnchor: derive(() => store.get(followerAnchor$)),
                 targetOffset: derive(() => ({
-                    x: get(offsetX$),
-                    y: get(offsetY$),
+                    x: store.get(offsetX$),
+                    y: store.get(offsetY$),
                 })),
                 child: Container({
                     width: 48,
@@ -170,7 +170,7 @@ export default view(() => {
             // 4. Click-outside backdrop (below the panel so triggers stay
             //    clickable while a menu is open; catches canvas clicks).
             Condition({
-                condition: derive(() => get(openMenu$) !== null),
+                condition: derive(() => store.get(openMenu$) !== null),
                 child: () =>
                     Positioned({
                         left: 0,
@@ -179,7 +179,9 @@ export default view(() => {
                         height: 600,
                         child: PointerInteract({
                             behavior: HitTestBehavior.Opaque,
-                            onClick: click(mutate(() => set(openMenu$, null))),
+                            onClick: click(
+                                mutate(() => store.set(openMenu$, null)),
+                            ),
                             child: SizedBox({ width: 400, height: 600 }),
                         }),
                     }),
@@ -197,7 +199,7 @@ export default view(() => {
                 left: MENU1_X,
                 top: MENU1_Y,
                 child: Condition({
-                    condition: derive(() => get(openMenu$) === "target"),
+                    condition: derive(() => store.get(openMenu$) === "target"),
                     child: () => MenuList(targetAnchor$),
                 }),
             }),
@@ -205,7 +207,9 @@ export default view(() => {
                 left: MENU2_X,
                 top: MENU2_Y,
                 child: Condition({
-                    condition: derive(() => get(openMenu$) === "follower"),
+                    condition: derive(
+                        () => store.get(openMenu$) === "follower",
+                    ),
                     child: () => MenuList(followerAnchor$),
                 }),
             }),
@@ -239,7 +243,7 @@ function ControlsPanel() {
                     Text({
                         text: derive(
                             () =>
-                                `t:${labelFor(get(targetAnchor$))}  f:${labelFor(get(followerAnchor$))}  off:(${get(offsetX$)},${get(offsetY$)})`,
+                                `t:${labelFor(store.get(targetAnchor$))}  f:${labelFor(store.get(followerAnchor$))}  off:(${store.get(offsetX$)},${store.get(offsetY$)})`,
                         ),
                         fontSize: 10,
                         color: C.textMuted,
@@ -258,7 +262,10 @@ function TriggerChip(
     return PointerInteract({
         onClick: click(
             mutate(() =>
-                set(openMenu$, get(openMenu$) === menuKey ? null : menuKey),
+                store.set(
+                    openMenu$,
+                    store.get(openMenu$) === menuKey ? null : menuKey,
+                ),
             ),
         ),
         child: Container({
@@ -268,7 +275,7 @@ function TriggerChip(
             borderWidth: 1,
             borderColor: C.slate,
             color: derive(() =>
-                get(openMenu$) === menuKey ? C.indigoSoft : C.white,
+                store.get(openMenu$) === menuKey ? C.indigoSoft : C.white,
             ),
             padding: 6,
             alignment: Alignment.CenterLeft,
@@ -281,7 +288,7 @@ function TriggerChip(
                             color: C.textMid,
                         }),
                         Text({
-                            text: derive(() => labelFor(get(value$))),
+                            text: derive(() => labelFor(store.get(value$))),
                             fontSize: 11,
                             color: C.text,
                         }),
@@ -318,23 +325,24 @@ function OptionRow(
     opt: { label: string; value: Alignment },
     value$: typeof targetAnchor$,
 ) {
-    const isSel = () => get(value$) === opt.value;
-    const isHover = () => get(hoveredOpt$) === opt.label;
+    const isSel = () => store.get(value$) === opt.value;
+    const isHover = () => store.get(hoveredOpt$) === opt.label;
     return MouseRegion({
         cursor: "pointer",
         behavior: HitTestBehavior.Translucent,
-        onEnter: hover(mutate(() => set(hoveredOpt$, opt.label))),
+        onEnter: hover(mutate(() => store.set(hoveredOpt$, opt.label))),
         onExit: hover(
             mutate(() => {
-                if (get(hoveredOpt$) === opt.label) set(hoveredOpt$, null);
+                if (store.get(hoveredOpt$) === opt.label)
+                    store.set(hoveredOpt$, null);
             }),
         ),
         child: PointerInteract({
             onClick: click(
                 mutate(() => {
-                    set(value$, opt.value);
-                    set(openMenu$, null);
-                    set(hoveredOpt$, null);
+                    store.set(value$, opt.value);
+                    store.set(openMenu$, null);
+                    store.set(hoveredOpt$, null);
                 }),
             ),
             child: Container({
@@ -363,18 +371,18 @@ function Stepper(label: string, value$: typeof offsetX$, step: number) {
             SizedBox({ width: 6 }),
             SmallButton(
                 "−",
-                mutate(() => set(value$, get(value$) - step)),
+                mutate(() => store.set(value$, store.get(value$) - step)),
             ),
             SizedBox({ width: 6 }),
             Text({
-                text: derive(() => `${get(value$)}`),
+                text: derive(() => `${store.get(value$)}`),
                 fontSize: 11,
                 color: C.text,
             }),
             SizedBox({ width: 6 }),
             SmallButton(
                 "+",
-                mutate(() => set(value$, get(value$) + step)),
+                mutate(() => store.set(value$, store.get(value$) + step)),
             ),
         ],
     });

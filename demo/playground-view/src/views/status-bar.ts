@@ -3,7 +3,6 @@ import {
     Container,
     derive,
     type Element,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     Row,
@@ -18,6 +17,7 @@ import {
     relativeTime,
     status$,
 } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 function StatusDot(): Element {
@@ -26,7 +26,7 @@ function StatusDot(): Element {
         height: 6,
         borderRadius: 999,
         color: derive(() =>
-            get(status$) === "error"
+            store.get(status$) === "error"
                 ? tokens.status.error
                 : tokens.status.success,
         ),
@@ -53,10 +53,10 @@ export function StatusBar(): Element {
                                     StatusDot(),
                                     SizedBox({ width: 6 }),
                                     Text({
-                                        text: derive(() => get(status$)),
+                                        text: derive(() => store.get(status$)),
                                         fontSize: 11,
                                         color: derive(() =>
-                                            get(status$) === "error"
+                                            store.get(status$) === "error"
                                                 ? tokens.status.error
                                                 : tokens.status.success,
                                         ),
@@ -91,7 +91,7 @@ export function StatusBar(): Element {
                                     Text({
                                         text: derive(
                                             () =>
-                                                `compiled ${relativeTime(get(lastCompiledAtMs$), get(now$))}`,
+                                                `compiled ${relativeTime(store.get(lastCompiledAtMs$), store.get(now$))}`,
                                         ),
                                         fontSize: 11,
                                         color: tokens.text.tertiary,
@@ -109,7 +109,7 @@ export function StatusBar(): Element {
                                 children: [
                                     Text({
                                         text: derive(() =>
-                                            get(autoRun$)
+                                            store.get(autoRun$)
                                                 ? "auto-run on"
                                                 : "\u2318S to run",
                                         ),

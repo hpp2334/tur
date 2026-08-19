@@ -4,6 +4,7 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     derive,
     Expanded,
     MainAxisAlignment,
@@ -15,6 +16,7 @@ import {
     Text,
     view,
 } from "tur:std";
+export const store = createStore();
 
 const count$ = source(0);
 
@@ -37,8 +39,11 @@ export default view(() =>
                             mainAlignment: MainAxisAlignment.Center,
                             children: [
                                 PointerInteract({
-                                    onClick: mutate(({ get, set }, _ev) =>
-                                        set(count$, get(count$) - 1),
+                                    onClick: mutate((_ctx, _ev) =>
+                                        store.set(
+                                            count$,
+                                            store.get(count$) - 1,
+                                        ),
                                     ),
                                     child: Container({
                                         width: 100,
@@ -58,8 +63,11 @@ export default view(() =>
                                 SizedBox({ width: 12 }),
                                 PointerInteract({
                                     queryKey: ["inc"],
-                                    onClick: mutate(({ get, set }, _ev) =>
-                                        set(count$, get(count$) + 1),
+                                    onClick: mutate((_ctx, _ev) =>
+                                        store.set(
+                                            count$,
+                                            store.get(count$) + 1,
+                                        ),
                                     ),
                                     child: Container({
                                         width: 100,

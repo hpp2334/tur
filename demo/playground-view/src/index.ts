@@ -7,8 +7,9 @@
 // no cleanup is needed here.
 
 import { mount } from "tur:std";
+import { store } from "./state/store";
 import { Shell } from "./views/shell";
 
 export function start() {
-    mount(Shell);
+    mount(store, Shell);
 }

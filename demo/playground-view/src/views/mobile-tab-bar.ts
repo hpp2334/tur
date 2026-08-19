@@ -6,29 +6,28 @@ import {
     derive,
     type Element,
     Expanded,
-    get,
     MainAxisAlignment,
     MainAxisSize,
     MouseRegion,
     mutate,
     PointerInteract,
     Row,
-    set,
     Text,
 } from "tur:std";
 import { type MobileTab, mobileTab$ } from "../state";
+import { store } from "../state/store";
 import { tokens } from "../theme/tokens";
 
 /** A single bottom-tab button. Fills an equal third of the bar (`Expanded`);
  *  the active tab shows a 2px accent indicator at the top and an
  *  accent-colored label. Tapping sets `mobileTab$`. */
 function MobileTabButton(tab: MobileTab, label: string): Element {
-    const isActive = () => get(mobileTab$) === tab;
+    const isActive = () => store.get(mobileTab$) === tab;
     return Expanded({
         child: MouseRegion({
             cursor: "pointer",
             child: PointerInteract({
-                onClick: mutate((_ctx, _ev) => set(mobileTab$, tab)),
+                onClick: mutate((_ctx, _ev) => store.set(mobileTab$, tab)),
                 child: Container({
                     children: [
                         Column({

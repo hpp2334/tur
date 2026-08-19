@@ -3,9 +3,12 @@ import {
     Column,
     Container,
     CrossAxisAlignment,
+    createStore,
     Text,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Repro: Column(crossAlignment: Stretch) > Container(padding, color, no size)
 // > Text. Expected: full-width red strip with white text, visible.

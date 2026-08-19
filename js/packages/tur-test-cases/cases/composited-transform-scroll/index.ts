@@ -5,12 +5,15 @@ import {
     Container,
     CrossAxisAlignment,
     createLayerLink,
+    createStore,
     Positioned,
     ScrollView,
     SizedBox,
     Stack,
     view,
 } from "tur:std";
+
+export const store = createStore();
 
 // Target lives inside a scrollable Column (at content offset y=100). The
 // follower is at the root overlay. Scrolling shifts the target's absolute
