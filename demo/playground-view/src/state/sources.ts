@@ -73,7 +73,7 @@ export const layoutMode$ = source<LayoutMode>("split");
 // the canvas resize handler). Below 720px CSS width the playground switches to
 // the mobile single-pane + bottom-tab layout (see views/shell.ts).
 export const isMobile$ = derive(
-    () => get<ViewportSize>(viewportSize$).width < 720,
+    (ctx) => ctx.get<ViewportSize>(viewportSize$).width < 720,
 );
 
 // Active pane on mobile (bottom tab bar). Desktop uses `layoutMode$` instead.

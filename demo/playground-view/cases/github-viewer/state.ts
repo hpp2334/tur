@@ -410,7 +410,7 @@ export function backToLanding(): void {
 /** Navigate into a sub-folder (a row click on a directory). Local. */
 export function openFolder(entry: DirEntry): void {
     if (!entry.isDir) return;
-    store.set(pathSegments$, [...get(pathSegments$), entry.name]);
+    store.set(pathSegments$, [...store.get(pathSegments$), entry.name]);
     store.set(selectedPath$, null);
 }
 

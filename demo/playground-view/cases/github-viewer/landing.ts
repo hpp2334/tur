@@ -50,9 +50,11 @@ const SUGGESTIONS: Repo[] = [
 // Responsive: cap the card to the available width (viewport minus the outer
 // padding from index.ts) so it never overflows on mobile. Desktop viewports
 // are wide enough that this stays at 440.
-const isMobile = derive(() => get<ViewportSize>(viewportSize$).width < 720);
-const cardWidth = derive(() =>
-    Math.min(440, get<ViewportSize>(viewportSize$).width - 44),
+const isMobile = derive(
+    (ctx) => ctx.get<ViewportSize>(viewportSize$).width < 720,
+);
+const cardWidth = derive((ctx) =>
+    Math.min(440, ctx.get<ViewportSize>(viewportSize$).width - 44),
 );
 
 function Suggestion({ repo }: { repo: Repo }): Element {
